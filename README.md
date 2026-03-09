@@ -1,2 +1,2 @@
-# opendigitalproductfactory
-This is the official open digital product factory
+# Open Digital Product Factory
+This is the official open digital product factory site
