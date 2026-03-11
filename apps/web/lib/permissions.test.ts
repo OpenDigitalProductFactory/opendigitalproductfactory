@@ -23,6 +23,14 @@ describe("can()", () => {
     expect(can(hr500, "view_portfolio")).toBe(false);
   });
 
+  it("HR-500 can manage_backlog", () => {
+    expect(can(hr500, "manage_backlog")).toBe(true);
+  });
+
+  it("HR-300 cannot manage_backlog", () => {
+    expect(can(hr300, "manage_backlog")).toBe(false);
+  });
+
   it("user with no role cannot view admin", () => {
     expect(can(noRole, "view_admin")).toBe(false);
   });

@@ -1,5 +1,6 @@
 "use server";
 
+import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
