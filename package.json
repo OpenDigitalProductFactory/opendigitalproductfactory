@@ -1,0 +1,15 @@
+{
+  "name": "dpf",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "test": "pnpm --filter web test",
+    "typecheck": "pnpm --filter web typecheck && pnpm --filter @dpf/db typecheck",
+    "db:generate": "pnpm --filter @dpf/db generate",
+    "db:migrate": "pnpm --filter @dpf/db migrate",
+    "db:seed": "pnpm --filter @dpf/db seed",
+    "db:studio": "pnpm --filter @dpf/db studio"
+  },
+  "engines": { "node": ">=20", "pnpm": ">=9" }
+}

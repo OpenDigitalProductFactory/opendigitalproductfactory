@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  isActive     Boolean       @default(true)
+  isSuperuser  Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  groups       UserGroup[]
+  agentThreads AgentThread[]
+}
+
+model UserGroup {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformRoleId String
+  platformRole   PlatformRole @relation(fields: [platformRoleId], references: [id])
+
+  @@unique([userId, platformRoleId])
+}
+
+model CustomerContact {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String?
+  accountId    String
+  account      CustomerAccount @relation(fields: [accountId], references: [id])
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+}
+
+// ─── Roles ──────────────────────────────────────────────────────────────────
+
+model PlatformRole {
+  id            String      @id @default(cuid())
+  roleId        String      @unique // HR-000 … HR-500
+  name          String
+  description   String?
+  hitlTierMin   Int         @default(1)
+  slaDurationH  Int?
+  users         UserGroup[]
+}
+
+// ─── Portfolios & Products ───────────────────────────────────────────────────
+
+model Portfolio {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  description String?
+  rootNodeId  String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  products    DigitalProduct[]
+}
+
+model DigitalProduct {
+  id          String     @id @default(cuid())
+  productId   String     @unique
+  name        String
+  status      String     @default("active")
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// ─── Taxonomy ────────────────────────────────────────────────────────────────
+
+model TaxonomyNode {
+  id          String         @id @default(cuid())
+  nodeId      String         @unique
+  name        String
+  portfolioId String?
+  parentId    String?
+  parent      TaxonomyNode?  @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children    TaxonomyNode[] @relation("TaxonomyTree")
+  status      String         @default("active")
+  governance  Json?
+}
+
+// ─── Backlog ─────────────────────────────────────────────────────────────────
+
+model BacklogItem {
+  id        String   @id @default(cuid())
+  itemId    String   @unique
+  title     String
+  status    String
+  type      String   // product | portfolio
+  body      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Branding ────────────────────────────────────────────────────────────────
+
+model BrandingConfig {
+  id          String   @id @default(cuid())
+  scope       String   @unique // "organization" | portfolio slug
+  companyName String
+  tokens      Json
+  logoUrl     String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Platform Config ─────────────────────────────────────────────────────────
+
+model PlatformCapability {
+  id           String   @id @default(cuid())
+  capabilityId String   @unique
+  name         String
+  description  String?
+  state        String   @default("inactive")
+  manifest     Json
+  updatedAt    DateTime @updatedAt
+}
+
+model McpServer {
+  id        String   @id @default(cuid())
+  serverId  String   @unique
+  name      String
+  config    Json
+  status    String   @default("unconfigured")
+  updatedAt DateTime @updatedAt
+}
+
+model CredentialEntry {
+  id         String   @id @default(cuid())
+  providerId String   @unique
+  secretRef  String?
+  status     String   @default("unconfigured")
+  updatedAt  DateTime @updatedAt
+}
+
+model ModelProvider {
+  id         String   @id @default(cuid())
+  providerId String   @unique
+  name       String
+  families   Json
+  status     String   @default("inactive")
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Agents ──────────────────────────────────────────────────────────────────
+
+model Agent {
+  id          String   @id @default(cuid())
+  agentId     String   @unique
+  name        String
+  tier        Int
+  type        String   // orchestrator | specialist | cross-cutting
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+}
+
+// ─── CRM ─────────────────────────────────────────────────────────────────────
+
+model CustomerAccount {
+  id        String            @id @default(cuid())
+  accountId String            @unique
+  name      String
+  status    String            @default("prospect")
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  contacts  CustomerContact[]
+}
+
+// ─── Runtime Advisory ────────────────────────────────────────────────────────
+
+model RuntimeAdvisory {
+  id          String   @id @default(cuid())
+  content     Json
+  generatedAt DateTime @default(now())
+}
+
+// ─── Agent Threads ───────────────────────────────────────────────────────────
+
+model AgentThread {
+  id         String         @id @default(cuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contextKey String
+  messages   AgentMessage[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([userId, contextKey])
+}
+
+model AgentMessage {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role      String      // user | assistant | system
+  content   String
+  tone      String?
+  createdAt DateTime    @default(now())
+}
