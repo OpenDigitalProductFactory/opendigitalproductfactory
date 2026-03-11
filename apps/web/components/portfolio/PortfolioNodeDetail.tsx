@@ -11,6 +11,7 @@ type Props = {
   subNodes: PortfolioTreeNode[];
   products: Product[];
   breadcrumbs: Array<{ nodeId: string; name: string }>;
+  agentCount: number;
 };
 
 function getRootSlug(nodeId: string): string {
@@ -22,6 +23,7 @@ export function PortfolioNodeDetail({
   subNodes,
   products,
   breadcrumbs,
+  agentCount,
 }: Props) {
   const rootSlug = getRootSlug(node.nodeId);
   const colour = PORTFOLIO_COLOURS[rootSlug] ?? "#7c8cf8";
@@ -60,7 +62,7 @@ export function PortfolioNodeDetail({
       <div className="flex flex-wrap gap-3 mb-6">
         <StatBox label="Products" value={String(node.totalCount)} colour="#e2e2f0" />
         <StatBox label="Owner" value={ownerRole} colour={colour} />
-        <StatBox label="Agents" value="—" colour="#555566" dashed />
+        <StatBox label="Agents" value={String(agentCount)} colour={colour} />
         <StatBox label="Health" value="—" colour="#555566" dashed />
         <StatBox label="Investment" value="—" colour="#555566" dashed />
       </div>
@@ -105,10 +107,9 @@ export function PortfolioNodeDetail({
         </p>
       )}
 
-      {/* People + Agents placeholders */}
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* People placeholder */}
+      <div className="mt-8">
         <PlaceholderPanel label="People" description="Human role assignments — coming soon" />
-        <PlaceholderPanel label="Agents" description="AI agent assignments — coming soon" />
       </div>
     </div>
   );
