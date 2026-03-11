@@ -66,27 +66,30 @@ model Portfolio {
 }
 
 model DigitalProduct {
-  id          String     @id @default(cuid())
-  productId   String     @unique
-  name        String
-  status      String     @default("active")
-  portfolioId String?
-  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String        @id @default(cuid())
+  productId      String        @unique
+  name           String
+  status         String        @default("active")
+  portfolioId    String?
+  portfolio      Portfolio?    @relation(fields: [portfolioId], references: [id])
+  taxonomyNodeId String?
+  taxonomyNode   TaxonomyNode? @relation(fields: [taxonomyNodeId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
 
 model TaxonomyNode {
-  id          String         @id @default(cuid())
-  nodeId      String         @unique
+  id          String           @id @default(cuid())
+  nodeId      String           @unique
   name        String
   portfolioId String?
   parentId    String?
-  parent      TaxonomyNode?  @relation("TaxonomyTree", fields: [parentId], references: [id])
-  children    TaxonomyNode[] @relation("TaxonomyTree")
-  status      String         @default("active")
+  parent      TaxonomyNode?    @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children    TaxonomyNode[]   @relation("TaxonomyTree")
+  products    DigitalProduct[]
+  status      String           @default("active")
   governance  Json?
 }
 
