@@ -6,8 +6,8 @@ import type { PortfolioTreeNode } from "./portfolio";
 const NODES = [
   { id: "root1", nodeId: "foundational",          name: "Foundational",      parentId: null,    portfolioId: "port1" },
   { id: "l1a",   nodeId: "foundational/compute",   name: "Compute",           parentId: "root1", portfolioId: null },
-  { id: "l2a",   nodeId: "foundational/compute/physical-compute", name: "Physical Compute", parentId: "l1a", portfolioId: null },
-  { id: "l1b",   nodeId: "foundational/platform-services", name: "Platform Services", parentId: "root1", portfolioId: null },
+  { id: "l2a",   nodeId: "foundational/compute/physical_compute", name: "Physical Compute", parentId: "l1a", portfolioId: null },
+  { id: "l1b",   nodeId: "foundational/platform_services", name: "Platform Services", parentId: "root1", portfolioId: null },
   { id: "root2", nodeId: "for_employees",          name: "For Employees",     parentId: null,    portfolioId: "port2" },
 ];
 
@@ -28,7 +28,7 @@ describe("buildPortfolioTree()", () => {
     const foundational = roots.find((r) => r.nodeId === "foundational")!;
     expect(foundational.children).toHaveLength(2);
     expect(foundational.children.map((c) => c.nodeId)).toContain("foundational/compute");
-    expect(foundational.children.map((c) => c.nodeId)).toContain("foundational/platform-services");
+    expect(foundational.children.map((c) => c.nodeId)).toContain("foundational/platform_services");
   });
 
   it("builds a 3-level subtree correctly", () => {
@@ -36,7 +36,7 @@ describe("buildPortfolioTree()", () => {
     const foundational = roots.find((r) => r.nodeId === "foundational")!;
     const compute = foundational.children.find((c) => c.nodeId === "foundational/compute")!;
     expect(compute.children).toHaveLength(1);
-    expect(compute.children[0]?.nodeId).toBe("foundational/compute/physical-compute");
+    expect(compute.children[0]?.nodeId).toBe("foundational/compute/physical_compute");
   });
 
   it("sets directCount from counts array (matching on .id, not .nodeId)", () => {
@@ -82,8 +82,8 @@ describe("resolveNodeFromSlug()", () => {
 
   it("finds an L2 node by three slug segments", () => {
     const roots = buildPortfolioTree(NODES, COUNTS);
-    const node = resolveNodeFromSlug(roots, ["foundational", "compute", "physical-compute"]);
-    expect(node?.nodeId).toBe("foundational/compute/physical-compute");
+    const node = resolveNodeFromSlug(roots, ["foundational", "compute", "physical_compute"]);
+    expect(node?.nodeId).toBe("foundational/compute/physical_compute");
   });
 
   it("returns null for a slug that doesn't exist", () => {
