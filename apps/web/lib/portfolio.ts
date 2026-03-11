@@ -13,6 +13,13 @@ export type PortfolioTreeNode = {
   children: PortfolioTreeNode[];
 };
 
+export type OwnerRoleInfo = {
+  roleId: string;
+  name: string;
+  description: string | null;
+  userCount: number;
+};
+
 /** Portfolio root accent colours (keyed by nodeId). */
 export const PORTFOLIO_COLOURS: Record<string, string> = {
   foundational: "#7c8cf8",
