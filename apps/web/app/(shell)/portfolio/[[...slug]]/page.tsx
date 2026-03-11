@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { getPortfolioTree, getAgentCounts, getPortfolioBudgets } from "@/lib/portfolio-data";
+import { getPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolioOwnerRoles } from "@/lib/portfolio-data";
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
@@ -12,10 +12,11 @@ type Props = {
 
 export default async function PortfolioPage({ params }: Props) {
   const slugs = params.slug ?? [];
-  const [roots, agentCounts, budgets] = await Promise.all([
+  const [roots, agentCounts, budgets, ownerRoles] = await Promise.all([
     getPortfolioTree(),
     getAgentCounts(),
     getPortfolioBudgets(),
+    getPortfolioOwnerRoles(),
   ]);
 
   // Overview: /portfolio
@@ -43,6 +44,7 @@ export default async function PortfolioPage({ params }: Props) {
   const rootSlug = slugs[0] ?? ""; // slugs.length === 0 handled above; ?? "" satisfies noUncheckedIndexedAccess
   const agentCount = agentCounts[rootSlug] ?? 0;
   const investment = budgets[rootSlug] ?? "—";
+  const ownerRole = ownerRoles[rootSlug] ?? null;
   const healthStr = computeHealth(node.activeCount, node.totalCount);
 
   return (
@@ -54,6 +56,7 @@ export default async function PortfolioPage({ params }: Props) {
       agentCount={agentCount}
       health={healthStr}
       investment={investment}
+      ownerRole={ownerRole}
     />
   );
 }
