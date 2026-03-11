@@ -5,8 +5,9 @@ import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType } from "./seed-helpers.js";
 import * as crypto from "crypto";
 
-// Repo root is 4 levels up from packages/db/src → packages/db → packages → dpf → repo root
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
+// Repo root: prefer DPF_DATA_ROOT env var (needed when running from a worktree),
+// otherwise fall back to 4 levels up (packages/db/src → packages/db → packages → repo root → data root)
+const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..", "..");
 
 function readJson<T>(relPath: string): T {
   return JSON.parse(readFileSync(join(REPO_ROOT, relPath), "utf-8")) as T;
@@ -101,6 +102,82 @@ async function seedPortfolios(): Promise<void> {
   console.log(`Seeded ${registry.portfolios.length} portfolios`);
 }
 
+async function seedTaxonomyNodes(): Promise<void> {
+  const DATA_PATH = join(__dirname, "..", "data", "taxonomy_v2.json");
+  type Row = { portfolio: string; portfolio_id: string; level_1: string; level_2: string; level_3: string };
+  const rows: Row[] = JSON.parse(readFileSync(DATA_PATH, "utf-8"));
+
+  function slugify(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  }
+
+  // Collect all unique nodes in insertion order (root → L1 → L2 → L3)
+  const seen = new Set<string>();
+  type NodeEntry = { nodeId: string; name: string; parentNodeId: string | null; portfolioId: string };
+
+  const entries: NodeEntry[] = [];
+
+  for (const row of rows) {
+    const pid = row.portfolio_id;
+    if (!seen.has(pid)) {
+      seen.add(pid);
+      entries.push({ nodeId: pid, name: row.portfolio, parentNodeId: null, portfolioId: pid });
+    }
+    if (!row.level_1) continue;
+    const l1id = `${pid}/${slugify(row.level_1)}`;
+    if (!seen.has(l1id)) {
+      seen.add(l1id);
+      entries.push({ nodeId: l1id, name: row.level_1, parentNodeId: pid, portfolioId: pid });
+    }
+    if (!row.level_2) continue;
+    const l2id = `${l1id}/${slugify(row.level_2)}`;
+    if (!seen.has(l2id)) {
+      seen.add(l2id);
+      entries.push({ nodeId: l2id, name: row.level_2, parentNodeId: l1id, portfolioId: pid });
+    }
+    if (!row.level_3) continue;
+    const l3id = `${l2id}/${slugify(row.level_3)}`;
+    if (!seen.has(l3id)) {
+      seen.add(l3id);
+      entries.push({ nodeId: l3id, name: row.level_3, parentNodeId: l2id, portfolioId: pid });
+    }
+  }
+
+  // Look up Portfolio.id values by portfolioId slug
+  const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
+  const portfolioIdMap = new Map<string, string>(); // portfolio slug → Portfolio.id
+  for (const p of portfolios) {
+    portfolioIdMap.set(p.slug, p.id);
+  }
+
+  // Insert in order so parent always exists before child
+  const nodeIdToCuid = new Map<string, string>();
+  for (const entry of entries) {
+    const parentCuid = entry.parentNodeId ? (nodeIdToCuid.get(entry.parentNodeId) ?? null) : null;
+    const portfolioCuid = portfolioIdMap.get(entry.portfolioId) ?? null;
+    const node = await prisma.taxonomyNode.upsert({
+      where: { nodeId: entry.nodeId },
+      create: {
+        nodeId:      entry.nodeId,
+        name:        entry.name,
+        parentId:    parentCuid,
+        portfolioId: portfolioCuid,
+        status:      "active",
+      },
+      update: {
+        name:        entry.name,
+        parentId:    parentCuid,
+        portfolioId: portfolioCuid,
+        status:      "active",
+      },
+      select: { id: true },
+    });
+    nodeIdToCuid.set(entry.nodeId, node.id);
+  }
+
+  console.log(`Seeded ${entries.length} taxonomy nodes`);
+}
+
 async function seedDigitalProducts(): Promise<void> {
   const registry = readJson<{
     digital_products: Array<{
@@ -162,6 +239,7 @@ async function main(): Promise<void> {
   await seedRoles();
   await seedAgents();
   await seedPortfolios();
+  await seedTaxonomyNodes();
   await seedDigitalProducts();
   await seedDefaultAdminUser();
   console.log("Seed complete.");
