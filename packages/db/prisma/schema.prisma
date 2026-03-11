@@ -60,6 +60,7 @@ model Portfolio {
   name        String
   description String?
   rootNodeId  String?
+  budgetKUsd  Int?             // annual budget in $k — null means unset/unknown
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   products    DigitalProduct[]
