@@ -18,13 +18,6 @@ export type DpfSession = {
   };
 };
 
-export function extractPlatformRole(
-  session: { user: { groups: Array<{ platform_role: string }> } } | null
-): string | null {
-  if (!session?.user?.groups?.length) return null;
-  return session.user.groups[0]?.platform_role ?? null;
-}
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
