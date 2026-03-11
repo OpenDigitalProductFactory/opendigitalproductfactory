@@ -22,7 +22,7 @@ export default async function WorkspacePage() {
   });
 
   const [productCount, portfolioCount, agentCount] = await Promise.all([
-    prisma.digitalProduct.count({ where: { status: "active" } }),
+    prisma.digitalProduct.count({ where: { lifecycleStatus: "active" } }),
     prisma.portfolio.count(),
     prisma.agent.count({ where: { status: "active" } }),
   ]);

@@ -4,8 +4,9 @@ import { prisma } from "@dpf/db";
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 
 const STATUS_COLOURS: Record<string, string> = {
-  active: "#4ade80",   // green-400
-  planned: "#fbbf24",  // amber-400
+  active:   "#4ade80",  // green-400
+  draft:    "#fbbf24",  // amber-400
+  inactive: "#555566",  // muted
 };
 
 export default async function InventoryPage() {
@@ -14,7 +15,7 @@ export default async function InventoryPage() {
     select: {
       id: true,
       name: true,
-      status: true,
+      lifecycleStatus: true,
       portfolio: { select: { slug: true, name: true } },
       taxonomyNode: { select: { nodeId: true } },
     },
@@ -32,7 +33,7 @@ export default async function InventoryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {products.map((p) => {
           const colour = p.portfolio ? (PORTFOLIO_COLOURS[p.portfolio.slug] ?? "#7c8cf8") : "#555566";
-          const statusColour = STATUS_COLOURS[p.status] ?? "#555566";
+          const statusColour = STATUS_COLOURS[p.lifecycleStatus] ?? "#555566";
           const href = p.taxonomyNode
             ? `/portfolio/${p.taxonomyNode.nodeId}`
             : p.portfolio
@@ -53,7 +54,7 @@ export default async function InventoryPage() {
                   className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
                   style={{ background: `${statusColour}20`, color: statusColour }}
                 >
-                  {p.status}
+                  {p.lifecycleStatus}
                 </span>
               </div>
               {p.portfolio && (

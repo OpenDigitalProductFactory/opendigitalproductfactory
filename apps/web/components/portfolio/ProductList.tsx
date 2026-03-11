@@ -3,7 +3,7 @@ type Product = {
   id: string;
   productId: string;
   name: string;
-  status: string;
+  lifecycleStatus: string;
 };
 
 type Props = {
@@ -13,10 +13,9 @@ type Props = {
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  active:  "#4ade80",
-  review:  "#fb923c",
-  retired: "#555566",
-  idea:    "#a78bfa",
+  active:   "#4ade80",
+  draft:    "#fbbf24",
+  inactive: "#555566",
 };
 
 export function ProductList({ products, colour, className = "" }: Props) {
@@ -27,7 +26,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
       </p>
       <div className="flex flex-col gap-2">
         {products.map((product) => {
-          const statusColour = STATUS_COLOURS[product.status] ?? "#555566";
+          const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#555566";
           return (
             <div
               key={product.id}
@@ -39,7 +38,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
                   className="text-[9px] px-1.5 py-0.5 rounded-full"
                   style={{ background: `${statusColour}20`, color: statusColour }}
                 >
-                  {product.status}
+                  {product.lifecycleStatus}
                 </span>
               </div>
               <p className="text-[10px] text-[var(--dpf-muted)]">{product.productId}</p>
