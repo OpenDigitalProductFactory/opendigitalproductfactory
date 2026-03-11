@@ -2,11 +2,14 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@dpf/db";
-import * as crypto from "crypto";
-
 // Simple SHA-256 hash check (matches seed.ts — upgrade to bcrypt for production)
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
+// Uses Web Crypto API (available in both Node.js and Edge Runtime)
+async function hashPassword(password: string): Promise<string> {
+  const data = new TextEncoder().encode(password);
+  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export type DpfSession = {
@@ -35,7 +38,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           include: { groups: { include: { platformRole: true } } },
         });
         if (!user || !user.isActive) return null;
-        const hash = hashPassword(credentials.password as string);
+        const hash = await hashPassword(credentials.password as string);
         if (hash !== user.passwordHash) return null;
         return {
           id: user.id,
