@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractPlatformRole } from "./auth.js";
+import { extractPlatformRole } from "./auth-utils.js";
 
 describe("extractPlatformRole", () => {
   it("returns the platform_role from the first group", () => {

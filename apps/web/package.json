@@ -13,7 +13,7 @@
   "dependencies": {
     "@dpf/db": "workspace:*",
     "next": "^16",
-    "next-auth": "5.0.0-beta.19",
+    "next-auth": "5.0.0-beta.30",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "bcryptjs": "^2.4.3"
