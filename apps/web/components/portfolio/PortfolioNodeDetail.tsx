@@ -12,6 +12,7 @@ type Props = {
   products: Product[];
   breadcrumbs: Array<{ nodeId: string; name: string }>;
   agentCount: number;
+  health: string;
 };
 
 function getRootSlug(nodeId: string): string {
@@ -24,6 +25,7 @@ export function PortfolioNodeDetail({
   products,
   breadcrumbs,
   agentCount,
+  health,
 }: Props) {
   const rootSlug = getRootSlug(node.nodeId);
   const colour = PORTFOLIO_COLOURS[rootSlug] ?? "#7c8cf8";
@@ -63,7 +65,7 @@ export function PortfolioNodeDetail({
         <StatBox label="Products" value={String(node.totalCount)} colour="#e2e2f0" />
         <StatBox label="Owner" value={ownerRole} colour={colour} />
         <StatBox label="Agents" value={String(agentCount)} colour={colour} />
-        <StatBox label="Health" value="—" colour="#555566" dashed />
+        <StatBox label="Health" value={health} colour={colour} />
         <StatBox label="Investment" value="—" colour="#555566" dashed />
       </div>
 
