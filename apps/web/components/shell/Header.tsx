@@ -9,8 +9,8 @@ type Props = {
 
 const NAV_ITEMS = [
   { label: "My Workspace", href: "/workspace" },
-  { label: "Directory", href: "/directory" },
-  { label: "Activity", href: "/activity" },
+  { label: "Portfolio", href: "/portfolio" },
+  { label: "Inventory", href: "/inventory" },
 ];
 
 export function Header({ activePath, platformRole }: Props) {
@@ -20,7 +20,9 @@ export function Header({ activePath, platformRole }: Props) {
         <span className="font-extrabold text-[var(--dpf-accent)] tracking-tight text-sm">DPF</span>
         <nav className="flex gap-1">
           {NAV_ITEMS.map((item) => {
-            const active = activePath === item.href;
+            const active = item.href === "/workspace"
+              ? activePath === item.href
+              : activePath.startsWith(item.href);
             return (
               <Link
                 key={item.href}
