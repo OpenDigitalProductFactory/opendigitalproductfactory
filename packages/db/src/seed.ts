@@ -231,6 +231,73 @@ async function seedDigitalProducts(): Promise<void> {
   console.log(`Seeded ${products.length} digital products`);
 }
 
+async function seedDpfSelfRegistration(): Promise<void> {
+  // Resolve the manufacturing_and_delivery portfolio and taxonomy node
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { slug: "manufacturing_and_delivery" },
+  });
+  if (!portfolio) throw new Error("manufacturing_and_delivery portfolio not seeded");
+
+  const taxonomyNode = await prisma.taxonomyNode.findUnique({
+    where: { nodeId: "manufacturing_and_delivery" },
+  });
+  if (!taxonomyNode) throw new Error("manufacturing_and_delivery taxonomy node not seeded");
+
+  // Register DPF Portal as a DigitalProduct
+  const dpfPortal = await prisma.digitalProduct.upsert({
+    where: { productId: "dpf-portal" },
+    update: {
+      name:            "Digital Product Factory Portal",
+      lifecycleStage:  "production",
+      lifecycleStatus: "active",
+      portfolioId:     portfolio.id,
+      taxonomyNodeId:  taxonomyNode.id,
+    },
+    create: {
+      productId:       "dpf-portal",
+      name:            "Digital Product Factory Portal",
+      lifecycleStage:  "production",
+      lifecycleStatus: "active",
+      portfolioId:     portfolio.id,
+      taxonomyNodeId:  taxonomyNode.id,
+    },
+    select: { id: true },
+  });
+
+  // Portfolio-type backlog items — strategic, domain-wide
+  const portfolioItems = [
+    { itemId: "BI-PORT-001", title: "Establish Digital Product Factory in Manufacture and Delivery Portfolio", status: "done",        priority: 1 },
+    { itemId: "BI-PORT-002", title: "Implement DPPM taxonomy — 481-node portfolio ownership graph",          status: "done",        priority: 2 },
+    { itemId: "BI-PORT-003", title: "Portfolio route — browsable portfolio tree with node detail",           status: "done",        priority: 3 },
+    { itemId: "BI-PORT-004", title: "Backlog system — portfolio and product context per IT4IT",              status: "in-progress", priority: 4 },
+  ];
+
+  for (const item of portfolioItems) {
+    await prisma.backlogItem.upsert({
+      where:  { itemId: item.itemId },
+      update: { title: item.title, status: item.status, priority: item.priority, type: "portfolio", taxonomyNodeId: taxonomyNode.id },
+      create: { itemId: item.itemId, title: item.title, status: item.status, priority: item.priority, type: "portfolio", taxonomyNodeId: taxonomyNode.id },
+    });
+  }
+
+  // Product-type backlog items — linked to dpf-portal
+  const productItems = [
+    { itemId: "BI-PROD-001", title: "Phase 5A — Backlog CRUD in /ops",                                    status: "in-progress", priority: 1 },
+    { itemId: "BI-PROD-002", title: "Phase 5B — DPF self-registration as managed digital product",        status: "in-progress", priority: 2 },
+    { itemId: "BI-PROD-003", title: "Phase 2B — Live Agent counts and Health metrics in portfolio panels", status: "open",        priority: 3 },
+  ];
+
+  for (const item of productItems) {
+    await prisma.backlogItem.upsert({
+      where:  { itemId: item.itemId },
+      update: { title: item.title, status: item.status, priority: item.priority, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxonomyNode.id },
+      create: { itemId: item.itemId, title: item.title, status: item.status, priority: item.priority, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxonomyNode.id },
+    });
+  }
+
+  console.log("Seeded DPF Portal digital product and 7 backlog items");
+}
+
 async function seedDefaultAdminUser(): Promise<void> {
   // Creates a default HR-000 user for initial access. Change password immediately.
   const adminRole = await prisma.platformRole.findUnique({ where: { roleId: "HR-000" } });
@@ -261,6 +328,7 @@ async function main(): Promise<void> {
   await seedAgents();
   await seedTaxonomyNodes();
   await seedDigitalProducts();
+  await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   console.log("Seed complete.");
 }
