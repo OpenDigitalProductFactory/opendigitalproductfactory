@@ -212,15 +212,15 @@ async function seedDigitalProducts(): Promise<void> {
       const portfolio = await prisma.portfolio.findUnique({ where: { slug: p.portfolio_id } });
       portfolioDbId = portfolio?.id;
     }
-    const status = p.lifecycle?.stage_status ?? "active";
+    const lifecycleStatus = p.lifecycle?.stage_status ?? "active";
 
     await prisma.digitalProduct.upsert({
       where: { productId: p.product_id },
-      update: { name: p.name, status, portfolioId: portfolioDbId ?? null },
+      update: { name: p.name, lifecycleStatus, portfolioId: portfolioDbId ?? null },
       create: {
         productId: p.product_id,
         name: p.name,
-        status,
+        lifecycleStatus,
         portfolioId: portfolioDbId ?? null,
       },
     });
