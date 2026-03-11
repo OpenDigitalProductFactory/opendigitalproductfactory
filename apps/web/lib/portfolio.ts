@@ -9,6 +9,7 @@ export type PortfolioTreeNode = {
   portfolioId: string | null;
   directCount: number;
   totalCount: number;
+  activeCount: number;   // ← new: active products in subtree, rolled up
   children: PortfolioTreeNode[];
 };
 
@@ -44,12 +45,18 @@ type CountRow = {
 /** Build a tree from flat node rows + product count rows. */
 export function buildPortfolioTree(
   nodes: RawNode[],
-  counts: CountRow[]
+  totalCounts: CountRow[],        // all products regardless of status
+  activeCounts: CountRow[] = []   // active products only; defaults to [] so existing call sites compile
 ): PortfolioTreeNode[] {
-  // Build count lookup keyed by node.id (cuid PK)
+  // Build lookup keyed by node.id (cuid PK)
   const countById = new Map<string, number>();
-  for (const c of counts) {
+  for (const c of totalCounts) {
     if (c.taxonomyNodeId) countById.set(c.taxonomyNodeId, c._count.id);
+  }
+
+  const activeCountById = new Map<string, number>();
+  for (const c of activeCounts) {
+    if (c.taxonomyNodeId) activeCountById.set(c.taxonomyNodeId, c._count.id);
   }
 
   // Build a map of id → node (with empty children array)
@@ -63,6 +70,7 @@ export function buildPortfolioTree(
       portfolioId: n.portfolioId ?? null,
       directCount: countById.get(n.id) ?? 0,
       totalCount: 0,
+      activeCount: 0,   // populated during DFS below
       children: [],
     });
   }
@@ -78,11 +86,18 @@ export function buildPortfolioTree(
     }
   }
 
-  // Compute totalCount bottom-up via DFS
-  function sumSubtree(node: PortfolioTreeNode): number {
-    const childSum = node.children.reduce((acc, c) => acc + sumSubtree(c), 0);
-    node.totalCount = node.directCount + childSum;
-    return node.totalCount;
+  // Compute totalCount and activeCount bottom-up via DFS
+  function sumSubtree(node: PortfolioTreeNode): { total: number; active: number } {
+    const childTotals = node.children.reduce(
+      (acc, c) => {
+        const sub = sumSubtree(c);
+        return { total: acc.total + sub.total, active: acc.active + sub.active };
+      },
+      { total: 0, active: 0 }
+    );
+    node.totalCount  = node.directCount + childTotals.total;
+    node.activeCount = (activeCountById.get(node.id) ?? 0) + childTotals.active;
+    return { total: node.totalCount, active: node.activeCount };
   }
   for (const root of roots) sumSubtree(root);
 
