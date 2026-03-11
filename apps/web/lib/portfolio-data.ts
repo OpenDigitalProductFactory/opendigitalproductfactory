@@ -19,7 +19,7 @@ export const getPortfolioTree = cache(async () => {
     prisma.digitalProduct.groupBy({
       by: ["taxonomyNodeId"],
       _count: { id: true },
-      where: { status: "active" },
+      where: { lifecycleStatus: "active" },
     }),
   ]);
   return buildPortfolioTree(nodes, totalCounts, activeCounts);

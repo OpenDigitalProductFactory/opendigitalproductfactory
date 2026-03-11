@@ -18,7 +18,8 @@ export type CapabilityKey =
   | "manage_agents"
   | "manage_capabilities"
   | "manage_users"
-  | "manage_provider_connections";
+  | "manage_provider_connections"
+  | "manage_backlog";
 
 type Permission = {
   roles: PlatformRoleId[];
@@ -39,6 +40,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_capabilities:         { roles: ["HR-000"] },
   manage_users:                { roles: ["HR-000"] },
   manage_provider_connections: { roles: ["HR-000"] },
+  manage_backlog:              { roles: ["HR-000", "HR-500"] },
 };
 
 type UserContext = {
