@@ -68,16 +68,18 @@ model Portfolio {
 }
 
 model DigitalProduct {
-  id             String        @id @default(cuid())
-  productId      String        @unique
-  name           String
-  status         String        @default("active")
-  portfolioId    String?
-  portfolio      Portfolio?    @relation(fields: [portfolioId], references: [id])
-  taxonomyNodeId String?
-  taxonomyNode   TaxonomyNode? @relation(fields: [taxonomyNodeId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  productId       String        @unique
+  name            String
+  lifecycleStage  String        @default("plan")   // plan | design | build | production | retirement
+  lifecycleStatus String        @default("draft")  // draft | active | inactive
+  portfolioId     String?
+  portfolio       Portfolio?    @relation(fields: [portfolioId], references: [id])
+  taxonomyNodeId  String?
+  taxonomyNode    TaxonomyNode? @relation(fields: [taxonomyNodeId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  backlogItems    BacklogItem[]
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
@@ -91,6 +93,7 @@ model TaxonomyNode {
   parent      TaxonomyNode?    @relation("TaxonomyTree", fields: [parentId], references: [id])
   children    TaxonomyNode[]   @relation("TaxonomyTree")
   products    DigitalProduct[]
+  backlogItems BacklogItem[]
   status      String           @default("active")
   governance  Json?
 }
@@ -98,14 +101,19 @@ model TaxonomyNode {
 // ─── Backlog ─────────────────────────────────────────────────────────────────
 
 model BacklogItem {
-  id        String   @id @default(cuid())
-  itemId    String   @unique
-  title     String
-  status    String
-  type      String   // product | portfolio
-  body      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String          @id @default(cuid())
+  itemId           String          @unique
+  title            String
+  status           String          // open | in-progress | done | deferred
+  type             String          // product | portfolio
+  body             String?
+  priority         Int?
+  digitalProductId String?
+  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id])
+  taxonomyNodeId   String?
+  taxonomyNode     TaxonomyNode?   @relation(fields: [taxonomyNodeId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
 
 // ─── Branding ────────────────────────────────────────────────────────────────
