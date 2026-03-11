@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { getPortfolioTree } from "@/lib/portfolio-data";
+import { getPortfolioTree, getAgentCounts } from "@/lib/portfolio-data";
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs } from "@/lib/portfolio";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
@@ -12,11 +12,14 @@ type Props = {
 
 export default async function PortfolioPage({ params }: Props) {
   const slugs = params.slug ?? [];
-  const roots = await getPortfolioTree(); // deduplicated by React cache()
+  const [roots, agentCounts] = await Promise.all([
+    getPortfolioTree(),
+    getAgentCounts(),
+  ]);
 
   // Overview: /portfolio
   if (slugs.length === 0) {
-    return <PortfolioOverview roots={roots} />;
+    return <PortfolioOverview roots={roots} agentCounts={agentCounts} />;
   }
 
   // Node detail: /portfolio/[...slug]
@@ -36,12 +39,16 @@ export default async function PortfolioPage({ params }: Props) {
 
   const breadcrumbs = buildBreadcrumbs(roots, slugs);
 
+  const rootSlug = slugs[0] ?? ""; // slugs.length === 0 handled above; ?? "" satisfies noUncheckedIndexedAccess
+  const agentCount = agentCounts[rootSlug] ?? 0;
+
   return (
     <PortfolioNodeDetail
       node={node}
       subNodes={node.children}
       products={products}
       breadcrumbs={breadcrumbs}
+      agentCount={agentCount}
     />
   );
 }

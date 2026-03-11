@@ -3,9 +3,9 @@ import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
 import { PORTFOLIO_COLOURS, PORTFOLIO_OWNER_ROLES } from "@/lib/portfolio";
 
-type Props = { roots: PortfolioTreeNode[] };
+type Props = { roots: PortfolioTreeNode[]; agentCounts: Record<string, number> };
 
-export function PortfolioOverview({ roots }: Props) {
+export function PortfolioOverview({ roots, agentCounts }: Props) {
   const totalProducts = roots.reduce((sum, r) => sum + r.totalCount, 0);
 
   return (
@@ -49,6 +49,14 @@ export function PortfolioOverview({ roots }: Props) {
                   </p>
                   <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">
                     Owner
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold" style={{ color: colour }}>
+                    {agentCounts[root.nodeId] ?? 0}
+                  </p>
+                  <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">
+                    Agents
                   </p>
                 </div>
               </div>

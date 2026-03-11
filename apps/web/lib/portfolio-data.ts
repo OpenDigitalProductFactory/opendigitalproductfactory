@@ -19,3 +19,22 @@ export const getPortfolioTree = cache(async () => {
   ]);
   return buildPortfolioTree(nodes, counts);
 });
+
+/**
+ * Returns agent count per portfolio slug, e.g. { foundational: 14, ... }.
+ * Cross-cutting agents (portfolioId = null) are excluded.
+ * React cache() deduplicates across layout + page within one request.
+ */
+export const getAgentCounts = cache(async (): Promise<Record<string, number>> => {
+  const portfolios = await prisma.portfolio.findMany({
+    select: { id: true, slug: true },
+  });
+  const counts = await prisma.agent.groupBy({
+    by: ["portfolioId"],
+    _count: { id: true },
+    where: { status: "active", portfolioId: { not: null } },
+  });
+  // portfolioId! is safe: where clause already excludes null
+  const countById = new Map(counts.map((c) => [c.portfolioId!, c._count.id]));
+  return Object.fromEntries(portfolios.map((p) => [p.slug, countById.get(p.id) ?? 0]));
+});

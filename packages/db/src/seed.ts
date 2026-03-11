@@ -2,7 +2,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { prisma } from "./client.js";
-import { parseRoleId, parseAgentTier, parseAgentType } from "./seed-helpers.js";
+import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import * as crypto from "crypto";
 
 // Repo root: prefer DPF_DATA_ROOT env var (needed when running from a worktree),
@@ -57,10 +57,18 @@ async function seedAgents(): Promise<void> {
       agent_name: string;
       capability_domain?: string;
       status?: string;
+      human_supervisor_id?: string;
     }>;
   }>("AGENTS/agent_registry.json");
 
+  // Build portfolio slug → cuid lookup (portfolios must already be seeded)
+  const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
+  const portfolioIdBySlug = new Map(portfolios.map((p) => [p.slug, p.id]));
+
   for (const a of registry.agents) {
+    const portfolioSlug = parseAgentPortfolioSlug(a.human_supervisor_id ?? "");
+    const portfolioId = portfolioSlug ? (portfolioIdBySlug.get(portfolioSlug) ?? null) : null;
+
     await prisma.agent.upsert({
       where: { agentId: a.agent_id },
       update: {
@@ -68,7 +76,8 @@ async function seedAgents(): Promise<void> {
         tier: parseAgentTier(a.agent_id),
         type: parseAgentType(a.agent_id),
         description: a.capability_domain ?? null,
-        status: a.status ?? "active",
+        status: "active", // normalise: registry uses "defined" which means the same thing
+        portfolioId,
       },
       create: {
         agentId: a.agent_id,
@@ -76,7 +85,8 @@ async function seedAgents(): Promise<void> {
         tier: parseAgentTier(a.agent_id),
         type: parseAgentType(a.agent_id),
         description: a.capability_domain ?? null,
-        status: a.status ?? "active",
+        status: "active",
+        portfolioId,
       },
     });
   }
@@ -237,8 +247,8 @@ async function seedDefaultAdminUser(): Promise<void> {
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
-  await seedAgents();
   await seedPortfolios();
+  await seedAgents();
   await seedTaxonomyNodes();
   await seedDigitalProducts();
   await seedDefaultAdminUser();
