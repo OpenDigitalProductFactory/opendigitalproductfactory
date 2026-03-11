@@ -134,3 +134,11 @@ export function buildBreadcrumbs(
   }
   return breadcrumbs;
 }
+
+/** Compute health percentage string from active vs total product counts.
+ *  Returns "—" if no products exist in the subtree. */
+export function computeHealth(active: number, total: number): string {
+  if (total === 0) return "—";
+  const clamped = Math.min(active, total);
+  return Math.round((clamped / total) * 100) + "%";
+}

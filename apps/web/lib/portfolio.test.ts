@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPortfolioTree, resolveNodeFromSlug } from "./portfolio";
+import { buildPortfolioTree, resolveNodeFromSlug, computeHealth } from "./portfolio";
 import type { PortfolioTreeNode } from "./portfolio";
 
 // Minimal fixture: 2 portfolio roots, one with a 2-level subtree
@@ -90,5 +90,28 @@ describe("resolveNodeFromSlug()", () => {
     const roots = buildPortfolioTree(NODES, COUNTS);
     const result = resolveNodeFromSlug(roots, ["foundational", "nonexistent"]);
     expect(result).toBeNull();
+  });
+});
+
+describe("computeHealth()", () => {
+  it("returns '—' when total is 0", () => {
+    expect(computeHealth(0, 0)).toBe("—");
+  });
+
+  it("returns '100%' when all products are active", () => {
+    expect(computeHealth(10, 10)).toBe("100%");
+  });
+
+  it("returns '0%' when no products are active", () => {
+    expect(computeHealth(0, 5)).toBe("0%");
+  });
+
+  it("rounds to nearest integer", () => {
+    expect(computeHealth(1, 3)).toBe("33%");  // 33.33... rounds down
+    expect(computeHealth(2, 3)).toBe("67%");  // 66.66... rounds up
+  });
+
+  it("clamps to 100% when active exceeds total (data inconsistency guard)", () => {
+    expect(computeHealth(12, 10)).toBe("100%");
   });
 });
