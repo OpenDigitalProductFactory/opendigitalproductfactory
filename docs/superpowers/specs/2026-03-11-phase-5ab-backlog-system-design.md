@@ -105,7 +105,7 @@ deleteBacklogItem(id: string): Promise<void>
 
 **Auth gate:** session required; action rejected if no session. Role check: `isSuperuser` or `platformRole` HR-100 and above. (Consistent with existing admin patterns.)
 
-**Validation:** `type === "product"` requires `digitalProductId` — enforced in the action, not only the form.
+**Validation:** `type === "product"` requires `digitalProductId` — enforced in the action, not only the form. `type === "portfolio"` does not hard-require `taxonomyNodeId`, but the form should preselect it when context is available (e.g., when creating from within a taxonomy node view). Grounding portfolio-type items in the ownership map is the correct behaviour per the architectural principle; the soft treatment allows data entry flexibility.
 
 ### UI
 
