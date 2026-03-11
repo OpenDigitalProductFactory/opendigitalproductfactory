@@ -63,6 +63,7 @@ model Portfolio {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   products    DigitalProduct[]
+  agents       Agent[]
 }
 
 model DigitalProduct {
@@ -166,6 +167,8 @@ model Agent {
   description String?
   status      String   @default("active")
   createdAt   DateTime @default(now())
+  portfolioId  String?
+  portfolio    Portfolio?  @relation(fields: [portfolioId], references: [id])
 }
 
 // ─── CRM ─────────────────────────────────────────────────────────────────────
