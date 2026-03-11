@@ -1,28 +1,33 @@
 // apps/web/components/shell/Header.tsx
 import Link from "next/link";
 import { signOutAction } from "@/lib/actions";
+import { can, type CapabilityKey } from "@/lib/permissions";
 
 type Props = {
   activePath: string;
   platformRole: string | null;
+  isSuperuser: boolean;
 };
 
-const NAV_ITEMS = [
-  { label: "My Workspace", href: "/workspace" },
-  { label: "Portfolio", href: "/portfolio" },
-  { label: "Inventory", href: "/inventory" },
+const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey | null }> = [
+  { label: "My Workspace", href: "/workspace", capability: null },
+  { label: "Portfolio",    href: "/portfolio",  capability: "view_portfolio" },
+  { label: "Inventory",    href: "/inventory",  capability: "view_inventory" },
+  { label: "EA",           href: "/ea",         capability: "view_ea_modeler" },
 ];
 
-export function Header({ activePath, platformRole }: Props) {
+export function Header({ activePath, platformRole, isSuperuser }: Props) {
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => item.capability === null || can({ platformRole, isSuperuser }, item.capability)
+  );
+
   return (
     <header className="flex items-center justify-between px-4 py-2 bg-[var(--dpf-surface-1)] border-b border-[var(--dpf-border)]">
       <div className="flex items-center gap-3">
         <span className="font-extrabold text-[var(--dpf-accent)] tracking-tight text-sm">DPF</span>
         <nav className="flex gap-1">
-          {NAV_ITEMS.map((item) => {
-            const active = item.href === "/workspace"
-              ? activePath === item.href
-              : activePath.startsWith(item.href);
+          {visibleItems.map((item) => {
+            const active = activePath === item.href || activePath.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.href}
