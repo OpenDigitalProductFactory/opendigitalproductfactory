@@ -157,3 +157,11 @@ export function computeHealth(active: number, total: number): string {
   const clamped = Math.min(active, total);
   return Math.round((clamped / total) * 100) + "%";
 }
+
+/** Format a portfolio budget (thousands USD) as a display string.
+ *  Returns "—" when null, zero, or negative. */
+export function formatBudget(kUsd: number | null | undefined): string {
+  if (kUsd == null || kUsd <= 0) return "\u2014";
+  if (kUsd >= 1000) return `$${(kUsd / 1000).toFixed(1)}M`;
+  return `$${kUsd}k`;
+}
