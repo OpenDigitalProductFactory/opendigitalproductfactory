@@ -13,7 +13,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
-      <Header activePath={pathname} platformRole={session.user.platformRole} />
+      <Header activePath={pathname} platformRole={session.user.platformRole} isSuperuser={session.user.isSuperuser} />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
     </div>
   );
