@@ -3,7 +3,7 @@
 // Both layout.tsx and page.tsx call getPortfolioTree() — React deduplicates automatically.
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import { buildPortfolioTree } from "./portfolio";
+import { buildPortfolioTree, formatBudget } from "./portfolio";
 
 export const getPortfolioTree = cache(async () => {
   const [nodes, totalCounts, activeCounts] = await Promise.all([
@@ -42,4 +42,18 @@ export const getAgentCounts = cache(async (): Promise<Record<string, number>> =>
   // portfolioId! is safe: where clause already excludes null
   const countById = new Map(counts.map((c) => [c.portfolioId!, c._count.id]));
   return Object.fromEntries(portfolios.map((p) => [p.slug, countById.get(p.id) ?? 0]));
+});
+
+/**
+ * Returns annual budget per portfolio slug, e.g. { foundational: "$2.5M", ... }.
+ * Returns "—" for portfolios with null budget.
+ * React cache() deduplicates across layout + page within one request.
+ */
+export const getPortfolioBudgets = cache(async (): Promise<Record<string, string>> => {
+  const portfolios = await prisma.portfolio.findMany({
+    select: { slug: true, budgetKUsd: true },
+  });
+  return Object.fromEntries(
+    portfolios.map((p) => [p.slug, formatBudget(p.budgetKUsd)])
+  );
 });
