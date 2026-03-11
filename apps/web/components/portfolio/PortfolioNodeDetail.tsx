@@ -4,7 +4,7 @@ import type { PortfolioTreeNode } from "@/lib/portfolio";
 import { PORTFOLIO_COLOURS, type OwnerRoleInfo } from "@/lib/portfolio";
 import { ProductList } from "./ProductList";
 
-type Product = { id: string; productId: string; name: string; status: string };
+type Product = { id: string; productId: string; name: string; lifecycleStatus: string };
 
 type Props = {
   node: PortfolioTreeNode;

@@ -33,9 +33,9 @@ export default async function PortfolioPage({ params }: Props) {
   const products = await prisma.digitalProduct.findMany({
     where: {
       taxonomyNodeId: { in: subtreeIds },
-      status: "active",
+      lifecycleStatus: "active",
     },
-    select: { id: true, productId: true, name: true, status: true },
+    select: { id: true, productId: true, name: true, lifecycleStatus: true },
     orderBy: { name: "asc" },
   });
 
