@@ -2,7 +2,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { getPortfolioTree, getAgentCounts } from "@/lib/portfolio-data";
-import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs } from "@/lib/portfolio";
+import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 
@@ -41,6 +41,7 @@ export default async function PortfolioPage({ params }: Props) {
 
   const rootSlug = slugs[0] ?? ""; // slugs.length === 0 handled above; ?? "" satisfies noUncheckedIndexedAccess
   const agentCount = agentCounts[rootSlug] ?? 0;
+  const healthStr = computeHealth(node.activeCount, node.totalCount);
 
   return (
     <PortfolioNodeDetail
@@ -49,6 +50,7 @@ export default async function PortfolioPage({ params }: Props) {
       products={products}
       breadcrumbs={breadcrumbs}
       agentCount={agentCount}
+      health={healthStr}
     />
   );
 }

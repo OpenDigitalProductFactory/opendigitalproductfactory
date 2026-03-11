@@ -6,7 +6,7 @@ import { prisma } from "@dpf/db";
 import { buildPortfolioTree } from "./portfolio";
 
 export const getPortfolioTree = cache(async () => {
-  const [nodes, counts] = await Promise.all([
+  const [nodes, totalCounts, activeCounts] = await Promise.all([
     prisma.taxonomyNode.findMany({
       where: { status: "active" },
       select: { id: true, nodeId: true, name: true, parentId: true, portfolioId: true },
@@ -14,10 +14,15 @@ export const getPortfolioTree = cache(async () => {
     prisma.digitalProduct.groupBy({
       by: ["taxonomyNodeId"],
       _count: { id: true },
+      // no status filter — counts all products in the taxonomy regardless of lifecycle stage
+    }),
+    prisma.digitalProduct.groupBy({
+      by: ["taxonomyNodeId"],
+      _count: { id: true },
       where: { status: "active" },
     }),
   ]);
-  return buildPortfolioTree(nodes, counts);
+  return buildPortfolioTree(nodes, totalCounts, activeCounts);
 });
 
 /**
