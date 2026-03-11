@@ -3,7 +3,7 @@
 // Both layout.tsx and page.tsx call getPortfolioTree() — React deduplicates automatically.
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import { buildPortfolioTree, formatBudget } from "./portfolio";
+import { buildPortfolioTree, formatBudget, PORTFOLIO_OWNER_ROLES, type OwnerRoleInfo } from "./portfolio";
 
 export const getPortfolioTree = cache(async () => {
   const [nodes, totalCounts, activeCounts] = await Promise.all([
@@ -55,5 +55,36 @@ export const getPortfolioBudgets = cache(async (): Promise<Record<string, string
   });
   return Object.fromEntries(
     portfolios.map((p) => [p.slug, formatBudget(p.budgetKUsd)])
+  );
+});
+
+/**
+ * Returns owner role detail per portfolio slug.
+ * React cache() deduplicates within one request.
+ */
+export const getPortfolioOwnerRoles = cache(async (): Promise<Record<string, OwnerRoleInfo>> => {
+  const ownerRoleIds = Object.values(PORTFOLIO_OWNER_ROLES);
+  const roles = await prisma.platformRole.findMany({
+    where: { roleId: { in: ownerRoleIds } },
+    select: {
+      roleId: true,
+      name: true,
+      description: true,
+      _count: { select: { users: true } },
+    },
+  });
+
+  const roleById = new Map(
+    roles.map((r) => [
+      r.roleId,
+      { roleId: r.roleId, name: r.name, description: r.description, userCount: r._count.users },
+    ])
+  );
+
+  return Object.fromEntries(
+    Object.entries(PORTFOLIO_OWNER_ROLES).map(([slug, roleId]) => [
+      slug,
+      roleById.get(roleId) ?? { roleId, name: roleId, description: null, userCount: 0 },
+    ])
   );
 });

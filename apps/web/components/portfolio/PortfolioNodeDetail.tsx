@@ -1,7 +1,7 @@
 // apps/web/components/portfolio/PortfolioNodeDetail.tsx
 import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
-import { PORTFOLIO_COLOURS, PORTFOLIO_OWNER_ROLES } from "@/lib/portfolio";
+import { PORTFOLIO_COLOURS, type OwnerRoleInfo } from "@/lib/portfolio";
 import { ProductList } from "./ProductList";
 
 type Product = { id: string; productId: string; name: string; status: string };
@@ -14,6 +14,7 @@ type Props = {
   agentCount: number;
   health: string;
   investment: string;
+  ownerRole: OwnerRoleInfo | null;
 };
 
 function getRootSlug(nodeId: string): string {
@@ -28,10 +29,10 @@ export function PortfolioNodeDetail({
   agentCount,
   health,
   investment,
+  ownerRole,
 }: Props) {
   const rootSlug = getRootSlug(node.nodeId);
   const colour = PORTFOLIO_COLOURS[rootSlug] ?? "#7c8cf8";
-  const ownerRole = PORTFOLIO_OWNER_ROLES[rootSlug] ?? "—";
   const subLabel = node.parentId === null ? "Capability Domains" : "Functional Groups";
 
   return (
@@ -65,7 +66,7 @@ export function PortfolioNodeDetail({
       {/* Stats strip */}
       <div className="flex flex-wrap gap-3 mb-6">
         <StatBox label="Products" value={String(node.totalCount)} colour="#e2e2f0" />
-        <StatBox label="Owner" value={ownerRole} colour={colour} />
+        <StatBox label="Owner" value={ownerRole?.roleId ?? "—"} colour={colour} />
         <StatBox label="Agents" value={String(agentCount)} colour={colour} />
         <StatBox label="Health" value={health} colour={colour} />
         <StatBox label="Budget" value={investment} colour={colour} />
@@ -111,9 +112,9 @@ export function PortfolioNodeDetail({
         </p>
       )}
 
-      {/* People placeholder */}
+      {/* People */}
       <div className="mt-8">
-        <PlaceholderPanel label="People" description="Human role assignments — coming soon" />
+        <PeoplePanel ownerRole={ownerRole} colour={colour} />
       </div>
     </div>
   );
@@ -146,19 +147,40 @@ function StatBox({
   );
 }
 
-function PlaceholderPanel({
-  label,
-  description,
+function PeoplePanel({
+  ownerRole,
+  colour,
 }: {
-  label: string;
-  description: string;
+  ownerRole: OwnerRoleInfo | null;
+  colour: string;
 }) {
   return (
-    <div className="bg-[var(--dpf-surface-1)] border border-dashed border-[var(--dpf-border)] rounded-lg p-4 opacity-50">
-      <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-widest mb-1">
-        {label}
+    <div>
+      <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
+        People
       </p>
-      <p className="text-xs text-[var(--dpf-muted)]">{description}</p>
+      {ownerRole === null ? (
+        <p className="text-xs text-[var(--dpf-muted)]">No owner role assigned.</p>
+      ) : (
+        <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg px-4 py-3">
+          <div className="flex items-baseline gap-2 mb-1">
+            <p className="text-sm font-semibold text-white">{ownerRole.name}</p>
+            <p className="text-[10px] font-mono" style={{ color: colour }}>
+              {ownerRole.roleId}
+            </p>
+          </div>
+          {ownerRole.description !== null && (
+            <p className="text-xs text-[var(--dpf-muted)] mb-2">{ownerRole.description}</p>
+          )}
+          <p className="text-[10px] text-[var(--dpf-muted)]">
+            {ownerRole.userCount === 0
+              ? "No users assigned"
+              : ownerRole.userCount === 1
+              ? "1 person"
+              : `${ownerRole.userCount} people`}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
