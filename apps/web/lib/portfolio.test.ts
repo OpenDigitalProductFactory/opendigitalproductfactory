@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPortfolioTree, resolveNodeFromSlug, computeHealth } from "./portfolio";
+import { buildPortfolioTree, resolveNodeFromSlug, computeHealth, formatBudget } from "./portfolio";
 import type { PortfolioTreeNode } from "./portfolio";
 
 // Minimal fixture: 2 portfolio roots, one with a 2-level subtree
@@ -147,5 +147,29 @@ describe("buildPortfolioTree() — activeCount", () => {
     const roots = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS);
     const foundational = roots.find((r) => r.nodeId === "foundational")!;
     expect(foundational.totalCount).toBe(4);
+  });
+});
+
+describe("formatBudget()", () => {
+  it("returns \u2014 for null", () => {
+    expect(formatBudget(null)).toBe("\u2014");
+  });
+  it("returns \u2014 for undefined", () => {
+    expect(formatBudget(undefined)).toBe("\u2014");
+  });
+  it("returns \u2014 for 0", () => {
+    expect(formatBudget(0)).toBe("\u2014");
+  });
+  it("returns \u2014 for negative values", () => {
+    expect(formatBudget(-1)).toBe("\u2014");
+  });
+  it("returns $800k for sub-million values", () => {
+    expect(formatBudget(800)).toBe("$800k");
+  });
+  it("returns $1.0M at the boundary (1000)", () => {
+    expect(formatBudget(1000)).toBe("$1.0M");
+  });
+  it("returns $2.5M for 2500", () => {
+    expect(formatBudget(2500)).toBe("$2.5M");
   });
 });
