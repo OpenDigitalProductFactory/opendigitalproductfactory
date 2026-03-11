@@ -83,6 +83,8 @@ Portfolio root  (portfolioId set, parentId null, nodeId = portfolio slug)
 
 Node `nodeId` values are URL-safe slugs (e.g. `compute`, `platform-services`, `container-platform`) — stable across seeds.
 
+`TaxonomyNode.id` is the cuid primary key used for all FK references (including `DigitalProduct.taxonomyNodeId` and `TaxonomyNode.parentId`). `TaxonomyNode.nodeId` is the human-readable URL slug — a separate unique field used only for routing. Do not use `nodeId` as a FK target.
+
 ---
 
 ## Component Architecture
@@ -109,7 +111,7 @@ apps/web/
 Responsibilities:
 - Receive the full annotated tree from layout as a prop (serialised, no Prisma calls)
 - Manage expand/collapse state in `useState` — initialised from `?open=` search param
-- Sync open state back to URL via `router.replace` (shallow, no navigation)
+- Sync open state back to URL via `window.history.replaceState` (not `router.replace` — App Router's replace triggers a server re-render; `replaceState` updates the URL client-side only, preserving deep-link behaviour without unnecessary Prisma round-trips)
 - Highlight the active node derived from `usePathname()`
 - Render `PortfolioTreeNode` recursively
 
@@ -131,9 +133,13 @@ const [nodes, counts] = await Promise.all([
     where: { status: 'active' }
   })
 ])
-// Build tree in memory, roll product counts up to parents bottom-up
+// counts[n].taxonomyNodeId is a cuid matching TaxonomyNode.id
+// In-memory join: directCount = counts.find(c => c.taxonomyNodeId === node.id)?._count.id ?? 0
+// Roll cumulative counts up to parents bottom-up after building the tree
 // Pass annotated tree to PortfolioTree
 ```
+
+The layout also checks `can(user, 'view_portfolio')` and calls `notFound()` if false, preventing direct URL access by roles without this capability (e.g. HR-500).
 
 ~379 nodes, in-memory tree build — negligible overhead.
 
@@ -149,9 +155,9 @@ Renders differently by depth:
 | 3/4 — L2/L3 leaf | Breadcrumb, stats strip, product/service list |
 
 **Stats strip** (all non-overview levels):
-- Products count (filled)
-- Agents count — matched to portfolio slug via `Agent.description` or portfolio association (filled)
-- Owner role — mapped from `Portfolio.slug` → static role map (filled)
+- Products count — filled (Prisma count)
+- Agents count — **placeholder (dashed)** in Phase 2A; the `Agent` model has no portfolio association yet; wired up when `Agent.portfolioId` is added in a future phase
+- Owner role — mapped from `Portfolio.slug` → static role map (filled; no DB query needed)
 - Health slot — dashed placeholder, wired up in a future phase
 - Investment slot — dashed placeholder, wired up in a future phase
 
@@ -187,10 +193,10 @@ Deep links work by default. Sharing `/portfolio/foundational/platform-services?o
 
 | Condition | Handling |
 |---|---|
-| Slug not found in taxonomy | `notFound()` → Next.js 404 |
+| User lacks `view_portfolio` capability | `notFound()` in `portfolio/layout.tsx` — checked via `can(user, 'view_portfolio')` |
+| Slug not found in taxonomy | `notFound()` in page.tsx via `resolveNodeFromSlug` returning null |
 | No taxonomy seeded | Sidebar shows 4 portfolio root names only (graceful degradation) |
 | Node has no products | "No products classified here yet" message in right panel |
-| No agents matched | Agent count shows 0, no error |
 
 ---
 
@@ -200,12 +206,13 @@ Following existing project patterns (Vitest, synchronous, no asyncio):
 
 | Test | Type | File |
 |---|---|---|
-| `buildPortfolioTree(nodes, counts)` — correct parent-child wiring | Unit | `lib/portfolio.test.ts` |
-| `buildPortfolioTree()` — count roll-up to parents | Unit | `lib/portfolio.test.ts` |
-| `can(user, 'view_portfolio')` for all 6 roles | Already in `permissions.test.ts` | — |
-| `/portfolio` route renders sidebar + overview | Integration | `app/(shell)/portfolio/portfolio.test.tsx` |
-| `/portfolio/foundational` renders portfolio detail | Integration | same |
-| `/portfolio/invalid-slug` returns 404 | Integration | same |
+| `buildPortfolioTree(nodes, counts)` — correct parent-child wiring | Unit | `apps/web/lib/portfolio.test.ts` |
+| `buildPortfolioTree()` — count roll-up to parents | Unit | `apps/web/lib/portfolio.test.ts` |
+| `can(user, 'view_portfolio')` for all 6 roles | Already covered | `apps/web/lib/permissions.test.ts` |
+| `resolveNodeFromSlug(tree, slug)` — valid slug returns node | Unit | `apps/web/lib/portfolio.test.ts` |
+| `resolveNodeFromSlug(tree, unknownSlug)` — returns null | Unit | `apps/web/lib/portfolio.test.ts` |
+
+**Note on integration tests:** The existing vitest config (`apps/web/vitest.config.ts`) uses `environment: "node"` with no jsdom/happy-dom setup — React component rendering tests are not supported without additional config. Integration-style coverage for the portfolio route is therefore provided via unit tests of the pure functions (`buildPortfolioTree`, `resolveNodeFromSlug`) that contain all routing and data-shaping logic. Full component render tests are deferred until the project adds a DOM test environment.
 
 ---
 
@@ -234,6 +241,5 @@ Following existing project patterns (Vitest, synchronous, no asyncio):
 | `apps/web/components/portfolio/PortfolioOverview.tsx` | New — all-portfolios overview panel |
 | `apps/web/components/portfolio/PortfolioNodeDetail.tsx` | New — single-node detail panel |
 | `apps/web/components/portfolio/ProductList.tsx` | New — product/service list |
-| `apps/web/lib/portfolio.test.ts` | New — unit tests for tree builder |
-| `apps/web/app/(shell)/portfolio/portfolio.test.tsx` | New — integration tests |
-| `.gitignore` | Add `.superpowers/` if not present |
+| `apps/web/lib/portfolio.test.ts` | New — unit tests for `buildPortfolioTree` and `resolveNodeFromSlug` |
+| `.gitignore` | Add `.superpowers/` if not present (done) |
