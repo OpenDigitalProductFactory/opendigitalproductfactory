@@ -212,14 +212,17 @@ async function seedDigitalProducts(): Promise<void> {
       const portfolio = await prisma.portfolio.findUnique({ where: { slug: p.portfolio_id } });
       portfolioDbId = portfolio?.id;
     }
+    // Treat registry stage_status as the operational lifecycleStatus.
+    // All registry products are assumed to be in production.
     const lifecycleStatus = p.lifecycle?.stage_status ?? "active";
 
     await prisma.digitalProduct.upsert({
       where: { productId: p.product_id },
-      update: { name: p.name, lifecycleStatus, portfolioId: portfolioDbId ?? null },
+      update: { name: p.name, lifecycleStage: "production", lifecycleStatus, portfolioId: portfolioDbId ?? null },
       create: {
         productId: p.product_id,
         name: p.name,
+        lifecycleStage: "production",
         lifecycleStatus,
         portfolioId: portfolioDbId ?? null,
       },
