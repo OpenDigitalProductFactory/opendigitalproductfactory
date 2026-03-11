@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPortfolioTree, resolveNodeFromSlug } from "./portfolio";
+import { buildPortfolioTree, resolveNodeFromSlug, computeHealth } from "./portfolio";
 import type { PortfolioTreeNode } from "./portfolio";
 
 // Minimal fixture: 2 portfolio roots, one with a 2-level subtree
@@ -15,6 +15,13 @@ const COUNTS = [
   { taxonomyNodeId: "root1", _count: { id: 2 } },
   { taxonomyNodeId: "l1a",   _count: { id: 1 } },
   { taxonomyNodeId: "l2a",   _count: { id: 1 } },
+];
+
+// Active-products fixture: root1 has 1 direct active, l1a has 1 direct active, l2a and l1b have none.
+// Expected activeCount roll-up: root1 = 1+1+0 = 2, l1a = 1+0 = 1, l2a = 0, l1b = 0, root2 = 0
+const ACTIVE_COUNTS = [
+  { taxonomyNodeId: "root1", _count: { id: 1 } },
+  { taxonomyNodeId: "l1a",   _count: { id: 1 } },
 ];
 
 describe("buildPortfolioTree()", () => {
@@ -90,5 +97,55 @@ describe("resolveNodeFromSlug()", () => {
     const roots = buildPortfolioTree(NODES, COUNTS);
     const result = resolveNodeFromSlug(roots, ["foundational", "nonexistent"]);
     expect(result).toBeNull();
+  });
+});
+
+describe("computeHealth()", () => {
+  it("returns '—' when total is 0", () => {
+    expect(computeHealth(0, 0)).toBe("—");
+  });
+
+  it("returns '100%' when all products are active", () => {
+    expect(computeHealth(10, 10)).toBe("100%");
+  });
+
+  it("returns '0%' when no products are active", () => {
+    expect(computeHealth(0, 5)).toBe("0%");
+  });
+
+  it("rounds to nearest integer", () => {
+    expect(computeHealth(1, 3)).toBe("33%");  // 33.33... rounds down
+    expect(computeHealth(2, 3)).toBe("67%");  // 66.66... rounds up
+  });
+
+  it("clamps to 100% when active exceeds total (data inconsistency guard)", () => {
+    expect(computeHealth(12, 10)).toBe("100%");
+  });
+});
+
+describe("buildPortfolioTree() — activeCount", () => {
+  it("rolls activeCount up from children to root (root1 = 1 direct + 1 from l1a)", () => {
+    const roots = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS);
+    const foundational = roots.find((r) => r.nodeId === "foundational")!;
+    expect(foundational.activeCount).toBe(2);
+  });
+
+  it("sets activeCount on intermediate nodes (l1a = 1 direct, l2a has none)", () => {
+    const roots = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS);
+    const foundational = roots.find((r) => r.nodeId === "foundational")!;
+    const compute = foundational.children.find((c) => c.nodeId === "foundational/compute")!;
+    expect(compute.activeCount).toBe(1);
+  });
+
+  it("defaults activeCount to 0 for every node when third arg is omitted", () => {
+    const roots = buildPortfolioTree(NODES, COUNTS);
+    const foundational = roots.find((r) => r.nodeId === "foundational")!;
+    expect(foundational.activeCount).toBe(0);
+  });
+
+  it("totalCount is driven by totalCounts arg, not activeCounts (counts all products regardless of status)", () => {
+    const roots = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS);
+    const foundational = roots.find((r) => r.nodeId === "foundational")!;
+    expect(foundational.totalCount).toBe(4);
   });
 });

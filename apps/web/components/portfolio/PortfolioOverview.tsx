@@ -1,7 +1,7 @@
 // apps/web/components/portfolio/PortfolioOverview.tsx
 import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
-import { PORTFOLIO_COLOURS, PORTFOLIO_OWNER_ROLES } from "@/lib/portfolio";
+import { PORTFOLIO_COLOURS, PORTFOLIO_OWNER_ROLES, computeHealth } from "@/lib/portfolio";
 
 type Props = { roots: PortfolioTreeNode[]; agentCounts: Record<string, number> };
 
@@ -57,6 +57,17 @@ export function PortfolioOverview({ roots, agentCounts }: Props) {
                   </p>
                   <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">
                     Agents
+                  </p>
+                </div>
+                <div>
+                  <p
+                    className="text-sm font-bold"
+                    style={{ color: colour }}
+                  >
+                    {computeHealth(root.activeCount, root.totalCount)}
+                  </p>
+                  <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">
+                    Health
                   </p>
                 </div>
               </div>
