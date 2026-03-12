@@ -67,6 +67,7 @@ model Portfolio {
   products        DigitalProduct[]
   agents          Agent[]
   epicPortfolios  EpicPortfolio[]
+  eaElements      EaElement[]
 }
 
 model DigitalProduct {
@@ -82,6 +83,7 @@ model DigitalProduct {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   backlogItems    BacklogItem[]
+  eaElements      EaElement[]
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ model TaxonomyNode {
   children    TaxonomyNode[]   @relation("TaxonomyTree")
   products    DigitalProduct[]
   backlogItems BacklogItem[]
+  eaElements  EaElement[]
   status      String           @default("active")
   governance  Json?
 }
@@ -251,4 +254,139 @@ model AgentMessage {
   content   String
   tone      String?
   createdAt DateTime    @default(now())
+}
+
+// ─── EA Modeling ─────────────────────────────────────────────────────────────
+
+model EaNotation {
+  id           String               @id @default(cuid())
+  slug         String               @unique  // "archimate4" | "uml2" | "bpmn2"
+  name         String               // "ArchiMate 4"
+  version      String               // "4.0"
+  elementTypes EaElementType[]
+  relTypes     EaRelationshipType[]
+  dqRules      EaDqRule[]
+  views        EaView[]
+}
+
+model EaElementType {
+  id                     String               @id @default(cuid())
+  notationId             String
+  notation               EaNotation           @relation(fields: [notationId], references: [id])
+  slug                   String               // "business_capability"
+  name                   String               // "Business Capability"
+  neoLabel               String               // "ArchiMate__BusinessCapability" — set in seed
+  domain                 String               // "business"|"application"|"technology"|"strategy"|"motivation"|"common"|"impl_migration"
+  description            String?
+  validLifecycleStages   String[]
+  validLifecycleStatuses String[]
+  elements               EaElement[]
+  dqRules                EaDqRule[]
+  fromRules              EaRelationshipRule[] @relation("FromType")
+  toRules                EaRelationshipRule[] @relation("ToType")
+  @@unique([notationId, slug])
+}
+
+model EaRelationshipType {
+  id            String               @id @default(cuid())
+  notationId    String
+  notation      EaNotation           @relation(fields: [notationId], references: [id])
+  slug          String               // "realizes"
+  name          String               // "Realizes"
+  neoType       String               // "REALIZES"
+  description   String?
+  rules         EaRelationshipRule[]
+  relationships EaRelationship[]
+  @@unique([notationId, slug])
+}
+
+model EaRelationshipRule {
+  id                 String             @id @default(cuid())
+  fromElementTypeId  String
+  fromElementType    EaElementType      @relation("FromType", fields: [fromElementTypeId], references: [id])
+  toElementTypeId    String
+  toElementType      EaElementType      @relation("ToType", fields: [toElementTypeId], references: [id])
+  relationshipTypeId String
+  relationshipType   EaRelationshipType @relation(fields: [relationshipTypeId], references: [id])
+  @@unique([fromElementTypeId, toElementTypeId, relationshipTypeId])
+}
+
+model EaDqRule {
+  id              String         @id @default(cuid())
+  notationId      String
+  notation        EaNotation     @relation(fields: [notationId], references: [id])
+  elementTypeId   String?
+  elementType     EaElementType? @relation(fields: [elementTypeId], references: [id])
+  name            String
+  description     String?
+  lifecycleStage  String
+  severity        String         @default("error")  // "error" | "warn"
+  rule            Json
+}
+
+model EaElement {
+  id               String             @id @default(cuid())
+  elementTypeId    String
+  elementType      EaElementType      @relation(fields: [elementTypeId], references: [id])
+  name             String
+  description      String?
+  properties       Json               @default("{}")
+  lifecycleStage   String             @default("plan")
+  lifecycleStatus  String             @default("draft")
+  createdById      String?
+  digitalProductId String?
+  digitalProduct   DigitalProduct?    @relation(fields: [digitalProductId], references: [id])
+  infraCiKey       String?
+  portfolioId      String?
+  portfolio        Portfolio?         @relation(fields: [portfolioId], references: [id])
+  taxonomyNodeId   String?
+  taxonomyNode     TaxonomyNode?      @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships EaRelationship[]  @relation("FromElement")
+  toRelationships   EaRelationship[]  @relation("ToElement")
+  viewElements      EaViewElement[]
+  syncedAt          DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model EaRelationship {
+  id                 String             @id @default(cuid())
+  fromElementId      String
+  fromElement        EaElement          @relation("FromElement", fields: [fromElementId], references: [id])
+  toElementId        String
+  toElement          EaElement          @relation("ToElement", fields: [toElementId], references: [id])
+  relationshipTypeId String
+  relationshipType   EaRelationshipType @relation(fields: [relationshipTypeId], references: [id])
+  notationSlug       String
+  properties         Json               @default("{}")
+  createdById        String?
+  syncedAt           DateTime?
+  createdAt          DateTime           @default(now())
+}
+
+model EaView {
+  id          String          @id @default(cuid())
+  notationId  String
+  notation    EaNotation      @relation(fields: [notationId], references: [id])
+  name        String
+  description String?
+  layoutType  String          // "graph"|"swimlane"|"matrix"|"layered"
+  scopeType   String          // "portfolio"|"domain"|"custom"
+  scopeRef    String?
+  createdById String?
+  elements    EaViewElement[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model EaViewElement {
+  viewId    String
+  view      EaView    @relation(fields: [viewId], references: [id])
+  elementId String
+  element   EaElement @relation(fields: [elementId], references: [id])
+  x         Float     @default(0)
+  y         Float     @default(0)
+  width     Float?
+  height    Float?
+  @@id([viewId, elementId])
 }
