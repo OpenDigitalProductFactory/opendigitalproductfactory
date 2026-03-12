@@ -7,16 +7,17 @@ import { deleteEpic } from "@/lib/actions/backlog";
 import {
   EPIC_STATUS_COLOURS,
   type EpicWithRelations,
+  type BacklogItemWithRelations,
 } from "@/lib/backlog";
 import { BacklogItemRow } from "./BacklogItemRow";
-import type { BacklogItemWithRelations } from "@/lib/backlog";
 
 type Props = {
   epic: EpicWithRelations;
   onEdit: (epic: EpicWithRelations) => void;
+  onItemEdit: (item: BacklogItemWithRelations) => void;
 };
 
-export function EpicCard({ epic, onEdit }: Props) {
+export function EpicCard({ epic, onEdit, onItemEdit }: Props) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -36,9 +37,6 @@ export function EpicCard({ epic, onEdit }: Props) {
     });
   }
 
-  function handleItemEdit(_item: BacklogItemWithRelations) {
-    // editing items from within epic card is handled by OpsClient
-  }
 
   return (
     <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] mb-3">
@@ -131,7 +129,7 @@ export function EpicCard({ epic, onEdit }: Props) {
                 <BacklogItemRow
                   key={item.id}
                   item={item}
-                  onEdit={handleItemEdit}
+                  onEdit={onItemEdit}
                 />
               ))}
             </div>
