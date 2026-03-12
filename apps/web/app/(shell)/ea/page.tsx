@@ -28,9 +28,9 @@ export default async function EaPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Enterprise Architecture</h1>
+        <h1 className="text-xl font-bold text-white">Agents</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {agents.length} agent{agents.length !== 1 ? "s" : ""}
+          {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
         </p>
       </div>
 
