@@ -63,8 +63,9 @@ model Portfolio {
   budgetKUsd  Int?             // annual budget in $k — null means unset/unknown
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
-  products    DigitalProduct[]
-  agents       Agent[]
+  products        DigitalProduct[]
+  agents          Agent[]
+  epicPortfolios  EpicPortfolio[]
 }
 
 model DigitalProduct {
@@ -114,6 +115,33 @@ model BacklogItem {
   taxonomyNode     TaxonomyNode?   @relation(fields: [taxonomyNodeId], references: [id])
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  epicId           String?
+  epic             Epic?           @relation(fields: [epicId], references: [id], onDelete: SetNull)
+}
+
+// ─── Epics ───────────────────────────────────────────────────────────────────
+
+model Epic {
+  id          String          @id @default(cuid())
+  epicId      String          @unique
+  title       String
+  description String?
+  status      String          @default("open")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  portfolios  EpicPortfolio[]
+  items       BacklogItem[]
+}
+
+model EpicPortfolio {
+  epicId      String
+  portfolioId String
+
+  epic        Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@id([epicId, portfolioId])
 }
 
 // ─── Branding ────────────────────────────────────────────────────────────────
