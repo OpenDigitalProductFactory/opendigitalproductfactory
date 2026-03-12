@@ -95,7 +95,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
           <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>
         ) : (
           epics.map((epic) => (
-            <EpicCard key={epic.id} epic={epic} onEdit={openEditEpic} />
+            <EpicCard key={epic.id} epic={epic} onEdit={openEditEpic} onItemEdit={openEdit} />
           ))
         )}
       </div>
