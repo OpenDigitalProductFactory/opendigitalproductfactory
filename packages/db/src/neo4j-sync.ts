@@ -137,7 +137,10 @@ export async function syncDependsOn(dep: {
 // ─── EA Modeling sync ─────────────────────────────────────────────────────────
 
 /** Upsert an EaElement node with dual labels (:EaElement:NeoLabel).
- *  Also creates EA_REPRESENTS edges to any bridge entities that are set. */
+ *  Also creates EA_REPRESENTS edges to any bridge entities that are set.
+ *  Note: infraCiKey is stored as a scalar property on the node — there is
+ *  no EA_REPRESENTS bridge edge to InfraCI (the key is denormalised for
+ *  direct lookup in queries without requiring an extra hop). */
 export async function syncEaElement(element: {
   id: string;
   neoLabel: string;         // from EaElementType.neoLabel
@@ -160,7 +163,7 @@ export async function syncEaElement(element: {
          n.name            = $name,
          n.lifecycleStage  = $lifecycleStage,
          n.lifecycleStatus = $lifecycleStatus,
-         n.infraCiKey      = coalesce($infraCiKey, null),
+         n.infraCiKey      = $infraCiKey,
          n.syncedAt        = datetime()`,
     {
       id: element.id,
@@ -179,8 +182,9 @@ export async function syncEaElement(element: {
      CALL apoc.create.addLabels(n, [$neoLabel]) YIELD node
      RETURN node`,
     { id: element.id, neoLabel: element.neoLabel },
-  ).catch(() => {
+  ).catch((err: unknown) => {
     // Any error (e.g. APOC not installed) — type-specific label skipped; :EaElement label still present
+    console.warn('[neo4j-sync] APOC dual-label failed for element', element.id, ':', err);
   });
 
   // EA_REPRESENTS → DigitalProduct
@@ -252,6 +256,7 @@ export async function deleteEaElement(elementId: string): Promise<void> {
 /** Remove a single EaRelationship edge by its relationshipId property. */
 export async function deleteEaRelationship(relationshipId: string): Promise<void> {
   await runCypher(
+    // No rel-type filter — matches any type by relationshipId (low volume, intentional)
     `MATCH ()-[r {relationshipId: $relationshipId}]->()
      DELETE r`,
     { relationshipId },
