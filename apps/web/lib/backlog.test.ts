@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   validateBacklogInput,
+  validateEpicInput,
   BACKLOG_STATUS_COLOURS,
+  EPIC_STATUS_COLOURS,
+  EPIC_STATUSES,
   LIFECYCLE_STAGE_LABELS,
   type BacklogItemInput,
+  type EpicInput,
 } from "./backlog";
 
 describe("validateBacklogInput()", () => {
@@ -46,6 +50,44 @@ describe("LIFECYCLE_STAGE_LABELS", () => {
   it("has a label for every stage", () => {
     for (const stage of ["plan", "design", "build", "production", "retirement"]) {
       expect(LIFECYCLE_STAGE_LABELS[stage]).toBeDefined();
+    }
+  });
+});
+
+describe("EPIC_STATUSES", () => {
+  it("contains exactly open, in-progress, done", () => {
+    expect(EPIC_STATUSES).toContain("open");
+    expect(EPIC_STATUSES).toContain("in-progress");
+    expect(EPIC_STATUSES).toContain("done");
+    expect(EPIC_STATUSES).toHaveLength(3);
+  });
+});
+
+describe("validateEpicInput()", () => {
+  it("returns null for a valid epic", () => {
+    const input: EpicInput = {
+      title: "My epic",
+      status: "open",
+      portfolioIds: [],
+    };
+    expect(validateEpicInput(input)).toBeNull();
+  });
+
+  it("returns an error for blank title", () => {
+    const input: EpicInput = { title: "   ", status: "open", portfolioIds: [] };
+    expect(validateEpicInput(input)).toMatch(/title/i);
+  });
+
+  it("returns an error for invalid status", () => {
+    const input = { title: "My epic", status: "invalid", portfolioIds: [] } as unknown as EpicInput;
+    expect(validateEpicInput(input)).toMatch(/status/i);
+  });
+});
+
+describe("EPIC_STATUS_COLOURS", () => {
+  it("has a colour for every EPIC_STATUS", () => {
+    for (const s of EPIC_STATUSES) {
+      expect(EPIC_STATUS_COLOURS[s]).toBeDefined();
     }
   });
 });
