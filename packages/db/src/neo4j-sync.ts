@@ -146,6 +146,7 @@ export async function syncEaElement(element: {
   name: string;
   lifecycleStage: string;
   lifecycleStatus: string;
+  infraCiKey?: string | null;
   digitalProductId?: string | null;
   portfolioId?: string | null;
   taxonomyNodeId?: string | null;
@@ -159,6 +160,7 @@ export async function syncEaElement(element: {
          n.name            = $name,
          n.lifecycleStage  = $lifecycleStage,
          n.lifecycleStatus = $lifecycleStatus,
+         n.infraCiKey      = coalesce($infraCiKey, null),
          n.syncedAt        = datetime()`,
     {
       id: element.id,
@@ -167,6 +169,7 @@ export async function syncEaElement(element: {
       name: element.name,
       lifecycleStage: element.lifecycleStage,
       lifecycleStatus: element.lifecycleStatus,
+      infraCiKey: element.infraCiKey ?? null,
     },
   );
 
