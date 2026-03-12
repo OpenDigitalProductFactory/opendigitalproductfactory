@@ -4,7 +4,7 @@
 // Usage: pnpm --filter @dpf/db neo4j:rebuild-ea
 
 import { prisma } from "./client.js";
-import { runCypher } from "./neo4j.js";
+import { closeNeo4j, runCypher } from "./neo4j.js";
 import { syncEaElement, syncEaRelationship } from "./neo4j-sync.js";
 
 async function rebuildEa(): Promise<void> {
@@ -22,7 +22,6 @@ async function rebuildEa(): Promise<void> {
       lifecycleStage: true,
       lifecycleStatus: true,
       digitalProductId: true,
-      infraCiKey: true,
       portfolioId: true,
       taxonomyNodeId: true,
       elementType: {
@@ -32,7 +31,6 @@ async function rebuildEa(): Promise<void> {
           notation: { select: { slug: true } },
         },
       },
-      portfolio: { select: { slug: true } },
     },
   });
 
@@ -46,8 +44,7 @@ async function rebuildEa(): Promise<void> {
       lifecycleStage:   el.lifecycleStage,
       lifecycleStatus:  el.lifecycleStatus,
       digitalProductId: el.digitalProductId,
-      infraCiKey:       el.infraCiKey,
-      portfolioSlug:    el.portfolio?.slug ?? null,
+      portfolioId:      el.portfolioId,
       taxonomyNodeId:   el.taxonomyNodeId,
     });
   }
@@ -81,4 +78,4 @@ async function rebuildEa(): Promise<void> {
 
 rebuildEa()
   .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .finally(() => Promise.all([prisma.$disconnect(), closeNeo4j()]));

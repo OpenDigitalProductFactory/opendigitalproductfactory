@@ -147,9 +147,7 @@ export async function syncEaElement(element: {
   lifecycleStage: string;
   lifecycleStatus: string;
   digitalProductId?: string | null;
-  infraCiKey?: string | null;
   portfolioId?: string | null;
-  portfolioSlug?: string | null;
   taxonomyNodeId?: string | null;
 }): Promise<void> {
   // Upsert the node — Cypher MERGE requires exact label set; we use apoc.merge.node
@@ -192,23 +190,13 @@ export async function syncEaElement(element: {
     );
   }
 
-  // EA_REPRESENTS → InfraCI (by ciId key)
-  if (element.infraCiKey) {
-    await runCypher(
-      `MATCH (ea:EaElement {elementId: $id})
-       MATCH (ci:InfraCI {ciId: $ciId})
-       MERGE (ea)-[:EA_REPRESENTS]->(ci)`,
-      { id: element.id, ciId: element.infraCiKey },
-    );
-  }
-
   // EA_REPRESENTS → Portfolio
-  if (element.portfolioSlug) {
+  if (element.portfolioId) {
     await runCypher(
       `MATCH (ea:EaElement {elementId: $id})
-       MATCH (p:Portfolio {slug: $slug})
+       MATCH (p:Portfolio {id: $portfolioId})
        MERGE (ea)-[:EA_REPRESENTS]->(p)`,
-      { id: element.id, slug: element.portfolioSlug },
+      { id: element.id, portfolioId: element.portfolioId },
     );
   }
 
