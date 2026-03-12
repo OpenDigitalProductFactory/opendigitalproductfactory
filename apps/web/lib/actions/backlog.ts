@@ -4,7 +4,12 @@ import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { validateBacklogInput, type BacklogItemInput } from "@/lib/backlog";
+import {
+  validateBacklogInput,
+  validateEpicInput,
+  type BacklogItemInput,
+  type EpicInput,
+} from "@/lib/backlog";
 
 async function requireManageBacklog(): Promise<void> {
   const session = await auth();
@@ -20,19 +25,22 @@ async function requireManageBacklog(): Promise<void> {
   }
 }
 
+// ─── BacklogItem actions ──────────────────────────────────────────────────────
+
 export async function createBacklogItem(input: BacklogItemInput): Promise<void> {
   await requireManageBacklog();
   const error = validateBacklogInput(input);
   if (error) throw new Error(error);
 
   const createData = {
-    itemId:          `BI-${crypto.randomUUID()}`,
-    title:           input.title.trim(),
-    type:            input.type,
-    status:          input.status,
-    priority:        input.priority ?? null,
-    taxonomyNodeId:  input.taxonomyNodeId ?? null,
+    itemId:           `BI-${crypto.randomUUID()}`,
+    title:            input.title.trim(),
+    type:             input.type,
+    status:           input.status,
+    priority:         input.priority ?? null,
+    taxonomyNodeId:   input.taxonomyNodeId ?? null,
     digitalProductId: input.digitalProductId ?? null,
+    epicId:           input.epicId ?? null,
     ...(input.body !== undefined && { body: input.body.trim() || null }),
   };
   await prisma.backlogItem.create({ data: createData });
@@ -44,12 +52,13 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   if (error) throw new Error(error);
 
   const updateData = {
-    title:           input.title.trim(),
-    type:            input.type,
-    status:          input.status,
-    priority:        input.priority ?? null,
-    taxonomyNodeId:  input.taxonomyNodeId ?? null,
+    title:            input.title.trim(),
+    type:             input.type,
+    status:           input.status,
+    priority:         input.priority ?? null,
+    taxonomyNodeId:   input.taxonomyNodeId ?? null,
     digitalProductId: input.digitalProductId ?? null,
+    epicId:           input.epicId ?? null,
     ...(input.body !== undefined && { body: input.body.trim() || null }),
   };
   await prisma.backlogItem.update({ where: { id }, data: updateData });
@@ -58,4 +67,65 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
 export async function deleteBacklogItem(id: string): Promise<void> {
   await requireManageBacklog();
   await prisma.backlogItem.delete({ where: { id } });
+}
+
+// ─── Epic actions ─────────────────────────────────────────────────────────────
+
+export async function createEpic(input: EpicInput): Promise<void> {
+  await requireManageBacklog();
+  const error = validateEpicInput(input);
+  if (error) throw new Error(error);
+
+  await prisma.$transaction(async (tx) => {
+    const epic = await tx.epic.create({
+      data: {
+        epicId:      `EP-${crypto.randomUUID()}`,
+        title:       input.title.trim(),
+        status:      input.status,
+        ...(input.description !== undefined && {
+          description: input.description.trim() || null,
+        }),
+      },
+    });
+    if (input.portfolioIds.length > 0) {
+      await tx.epicPortfolio.createMany({
+        data: input.portfolioIds.map((portfolioId) => ({
+          epicId:      epic.id,
+          portfolioId,
+        })),
+      });
+    }
+  });
+}
+
+export async function updateEpic(id: string, input: EpicInput): Promise<void> {
+  await requireManageBacklog();
+  const error = validateEpicInput(input);
+  if (error) throw new Error(error);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.epic.update({
+      where: { id },
+      data: {
+        title:  input.title.trim(),
+        status: input.status,
+        ...(input.description !== undefined && {
+          description: input.description.trim() || null,
+        }),
+      },
+    });
+    // Replace portfolio links atomically
+    await tx.epicPortfolio.deleteMany({ where: { epicId: id } });
+    if (input.portfolioIds.length > 0) {
+      await tx.epicPortfolio.createMany({
+        data: input.portfolioIds.map((portfolioId) => ({ epicId: id, portfolioId })),
+      });
+    }
+  });
+}
+
+export async function deleteEpic(id: string): Promise<void> {
+  await requireManageBacklog();
+  await prisma.epic.delete({ where: { id } });
+  // onDelete: SetNull in schema handles nullifying BacklogItem.epicId automatically
 }
