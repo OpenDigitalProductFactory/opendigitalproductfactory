@@ -16,7 +16,7 @@ const FULL_STAGES   = ["plan", "design", "build", "production", "retirement"];
 const FULL_STATUSES = ["draft", "active", "inactive"];
 
 // ─── Element type definitions ──────────────────────────────────────────────────
-// Representative subset: 29 of 42 ArchiMate 4 element types are seeded here.
+// Representative subset: 30 of 42 ArchiMate 4 element types are seeded here.
 // The full catalog (additional common-layer types: process, function, interaction, event,
 // application service variants) is deferred to Phase EA-2 seed expansion.
 
@@ -230,7 +230,6 @@ export async function seedEaArchimate4(): Promise<void> {
   console.log(`Seeded ${REL_TYPES.length} EaRelationshipTypes`);
 
   // 4. Upsert relationship rules
-  let ruleCount = 0;
   for (const [fromSlug, toSlug, relSlug] of RULES) {
     const fromId = etMap.get(fromSlug);
     const toId   = etMap.get(toSlug);
@@ -241,12 +240,11 @@ export async function seedEaArchimate4(): Promise<void> {
     }
     await prisma.eaRelationshipRule.upsert({
       where: { fromElementTypeId_toElementTypeId_relationshipTypeId: { fromElementTypeId: fromId, toElementTypeId: toId, relationshipTypeId: relId } },
-      update: {},
+      update: {}, // no mutable fields — presence of the triple is the invariant
       create: { fromElementTypeId: fromId, toElementTypeId: toId, relationshipTypeId: relId },
     });
-    ruleCount++;
   }
-  console.log(`Seeded ${ruleCount} EaRelationshipRules`);
+  console.log(`Seeded ${RULES.length} EaRelationshipRules`);
 
   // 5. Upsert DQ rules
   for (const dq of DQ_RULES) {
@@ -255,7 +253,8 @@ export async function seedEaArchimate4(): Promise<void> {
       console.warn(`Skipping DQ rule "${dq.name}": element type "${dq.elementTypeSlug}" not found`);
       continue;
     }
-    // Use name as upsert key (unique enough within this notation)
+    // Use name as upsert key (unique enough within this notation).
+    // Non-atomic findFirst/create — safe for sequential seed runs; not safe for concurrent seeds.
     const existing = await prisma.eaDqRule.findFirst({
       where: { notationId: notation.id, elementTypeId: etId, name: dq.name },
     });
