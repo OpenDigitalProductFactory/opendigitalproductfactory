@@ -12,6 +12,7 @@ type Props = {
 const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey | null }> = [
   { label: "My Workspace", href: "/workspace", capability: null },
   { label: "Portfolio",    href: "/portfolio",  capability: "view_portfolio" },
+  { label: "Operations",   href: "/ops",        capability: "view_operations" },
   { label: "Inventory",    href: "/inventory",  capability: "view_inventory" },
   { label: "EA",           href: "/ea",         capability: "view_ea_modeler" },
 ];
