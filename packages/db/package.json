@@ -14,7 +14,8 @@
     "seed": "tsx src/seed.ts",
     "studio": "prisma studio",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "neo4j:rebuild-ea": "tsx src/neo4j-rebuild-ea.ts"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
