@@ -347,6 +347,11 @@ model EaElement {
   syncedAt          DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+  @@index([elementTypeId])
 }
 
 model EaRelationship {
@@ -362,6 +367,11 @@ model EaRelationship {
   createdById        String?
   syncedAt           DateTime?
   createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([fromElementId])
+  @@index([toElementId])
+  @@index([relationshipTypeId])
 }
 
 model EaView {
@@ -389,4 +399,5 @@ model EaViewElement {
   width     Float?
   height    Float?
   @@id([viewId, elementId])
+  @@index([elementId])
 }
