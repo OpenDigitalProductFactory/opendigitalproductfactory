@@ -86,6 +86,7 @@ export async function checkEaDqRules(
     select: {
       id: true,
       elementTypeId: true,
+      lifecycleStage: true,
       digitalProductId: true,
       elementType: { select: { notationId: true } },
     },
@@ -123,6 +124,7 @@ export async function checkEaDqRules(
 type ElementContext = {
   id: string;
   elementTypeId: string;
+  lifecycleStage: string;
   digitalProductId: string | null;
   elementType: { notationId: string };
 };
@@ -137,7 +139,7 @@ async function evaluateDqRule(
 
     if (typeof req["bridge"] === "string") {
       if (req["bridge"] === "digitalProductId") return element.digitalProductId != null;
-      return false; // unknown bridge field
+      return true; // unknown bridge field — pass by default (conservative, consistent with unknown-shape fallthrough)
     }
 
     // { requires: { relationshipType: "realizes", toElementType: "application_component", minCount: 1 } }
