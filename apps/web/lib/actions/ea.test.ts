@@ -141,7 +141,10 @@ describe("advanceEaLifecycle", () => {
   };
 
   it("advances stage when no error violations", async () => {
-    mockPrisma.eaElement.findUnique.mockResolvedValue(element);
+    // First findUnique: preliminary fetch for validateEaLifecycle
+    mockPrisma.eaElement.findUnique.mockResolvedValueOnce({ elementTypeId: "et-1", lifecycleStatus: "active" });
+    // Second findUnique: full element fetch for update
+    mockPrisma.eaElement.findUnique.mockResolvedValueOnce(element);
     mockCheckDqRules.mockResolvedValue([]); // no violations
     mockValidateLifecycle.mockResolvedValue({ valid: true });
     mockPrisma.eaElement.update.mockResolvedValue({ ...element, lifecycleStage: "build" });
@@ -165,7 +168,10 @@ describe("advanceEaLifecycle", () => {
   });
 
   it("advances with warnings when only warn violations exist", async () => {
-    mockPrisma.eaElement.findUnique.mockResolvedValue(element);
+    // First findUnique: preliminary fetch for validateEaLifecycle
+    mockPrisma.eaElement.findUnique.mockResolvedValueOnce({ elementTypeId: "et-1", lifecycleStatus: "active" });
+    // Second findUnique: full element fetch for update
+    mockPrisma.eaElement.findUnique.mockResolvedValueOnce(element);
     mockCheckDqRules.mockResolvedValue([
       { ruleId: "dq-2", name: "Collision warning", description: null, severity: "warn" },
     ]);

@@ -18,7 +18,7 @@ import {
 
 // ─── Auth helper ──────────────────────────────────────────────────────────────
 
-async function requireManageEaModel(): Promise<void> {
+async function requireManageEaModel(): Promise<{ userId: string | null }> {
   const session = await auth();
   const user = session?.user;
   if (
@@ -27,6 +27,7 @@ async function requireManageEaModel(): Promise<void> {
   ) {
     throw new Error("Unauthorized");
   }
+  return { userId: user.id ?? null };
 }
 
 // ─── Element actions ──────────────────────────────────────────────────────────
@@ -45,12 +46,11 @@ type CreateEaElementInput = {
 };
 
 export async function createEaElement(input: CreateEaElementInput): Promise<void> {
-  await requireManageEaModel();
+  const { userId } = await requireManageEaModel();
 
   const validation = await validateEaLifecycle(input.elementTypeId, input.lifecycleStage, input.lifecycleStatus);
   if (!validation.valid) throw new Error(validation.reason);
 
-  const session = await auth();
   const element = await prisma.eaElement.create({
     data: {
       elementTypeId:   input.elementTypeId,
@@ -59,7 +59,7 @@ export async function createEaElement(input: CreateEaElementInput): Promise<void
       lifecycleStage:  input.lifecycleStage,
       lifecycleStatus: input.lifecycleStatus,
       properties:      input.properties ?? {},
-      createdById:     session?.user?.id ?? null,
+      createdById:     userId,
       digitalProductId: input.digitalProductId ?? null,
       infraCiKey:       input.infraCiKey ?? null,
       portfolioId:      input.portfolioId ?? null,
@@ -93,7 +93,7 @@ export async function createEaElement(input: CreateEaElementInput): Promise<void
   }
 }
 
-type UpdateEaElementInput = Partial<CreateEaElementInput>;
+type UpdateEaElementInput = Partial<Omit<CreateEaElementInput, "elementTypeId">>;
 
 export async function updateEaElement(id: string, input: UpdateEaElementInput): Promise<void> {
   await requireManageEaModel();
@@ -162,7 +162,7 @@ type CreateEaRelationshipInput = {
 };
 
 export async function createEaRelationship(input: CreateEaRelationshipInput): Promise<void> {
-  await requireManageEaModel();
+  const { userId } = await requireManageEaModel();
 
   const validation = await validateEaRelationship(
     input.fromElementId,
@@ -171,7 +171,6 @@ export async function createEaRelationship(input: CreateEaRelationshipInput): Pr
   );
   if (!validation.valid) throw new Error(validation.reason);
 
-  const session = await auth();
   const rt = await prisma.eaRelationshipType.findUnique({
     where: { id: input.relationshipTypeId },
     select: { neoType: true, slug: true, notation: { select: { slug: true } } },
@@ -185,7 +184,7 @@ export async function createEaRelationship(input: CreateEaRelationshipInput): Pr
       relationshipTypeId: input.relationshipTypeId,
       notationSlug:       rt.notation.slug,
       properties:         input.properties ?? {},
-      createdById:        session?.user?.id ?? null,
+      createdById:        userId,
     },
   });
 
@@ -220,6 +219,21 @@ export async function advanceEaLifecycle(
   if (hasErrors) {
     return { advanced: false, canProceed: false, violations };
   }
+
+  // Structurally validate the target stage/status before fetching the element
+  // We need the elementTypeId — fetch it first
+  const elementForValidation = await prisma.eaElement.findUnique({
+    where: { id },
+    select: { elementTypeId: true, lifecycleStatus: true },
+  });
+  if (!elementForValidation) throw new Error("Element not found");
+
+  const stageValidation = await validateEaLifecycle(
+    elementForValidation.elementTypeId,
+    targetStage,
+    elementForValidation.lifecycleStatus,
+  );
+  if (!stageValidation.valid) throw new Error(stageValidation.reason);
 
   const element = await prisma.eaElement.findUnique({
     where: { id },
