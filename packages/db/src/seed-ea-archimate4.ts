@@ -4,6 +4,7 @@
 // Safe to re-run (upsert pattern throughout).
 
 import { prisma } from "./client.js";
+import type { Prisma } from "../generated/client";
 
 // ─── Lifecycle constraint sets ────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ type DqRuleDef = {
   description: string;
   lifecycleStage: string;       // fires when element advances TO this stage
   severity: "error" | "warn";
-  rule: Record<string, unknown>;
+  rule: Prisma.InputJsonValue;
 };
 
 const DQ_RULES: DqRuleDef[] = [
