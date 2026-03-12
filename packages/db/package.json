@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "5.22.0"
+    "@prisma/client": "5.22.0",
+    "neo4j-driver": "^5.27.0"
   },
   "devDependencies": {
     "prisma": "5.22.0",
