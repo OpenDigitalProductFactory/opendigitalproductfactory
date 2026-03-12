@@ -322,6 +322,75 @@ async function seedDefaultAdminUser(): Promise<void> {
   console.log(`Created default admin: ${user.email} (default password set — CHANGE THIS IMMEDIATELY)`);
 }
 
+async function seedEaViewpoints(): Promise<void> {
+  // Resolve the ArchiMate notation id (seeded in seedEaNotations)
+  const notation = await prisma.eaNotation.findUniqueOrThrow({
+    where: { slug: "archimate4" },
+    select: { id: true },
+  });
+  const nId = notation.id;
+
+  // Helper: look up element type slugs → throws if not found
+  async function resolveElementSlugs(slugs: string[]): Promise<string[]> {
+    for (const slug of slugs) {
+      await prisma.eaElementType.findUniqueOrThrow({
+        where: { notationId_slug: { notationId: nId, slug } },
+        select: { id: true },
+      });
+    }
+    return slugs;
+  }
+
+  // Helper: look up rel type slugs → throws if not found
+  async function resolveRelSlugs(slugs: string[]): Promise<string[]> {
+    for (const slug of slugs) {
+      await prisma.eaRelationshipType.findUniqueOrThrow({
+        where: { notationId_slug: { notationId: nId, slug } },
+        select: { id: true },
+      });
+    }
+    return slugs;
+  }
+
+  const viewpoints = [
+    {
+      name: "Application Architecture",
+      description: "Application components, services, data objects, and their relationships.",
+      elementSlugs: ["application_component", "application_service", "data_object", "technology_node", "technology_service", "system_software"],
+      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
+    },
+    {
+      name: "Business Architecture",
+      description: "Business capabilities, roles, actors, and value streams.",
+      elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream"],
+      relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "associated_with"],
+    },
+    {
+      name: "Technology Architecture",
+      description: "Infrastructure nodes, services, and their deployment relationships.",
+      elementSlugs: ["technology_node", "technology_service", "system_software", "application_component"],
+      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
+    },
+    {
+      name: "Capability Map",
+      description: "Business capability hierarchy.",
+      elementSlugs: ["business_capability"],
+      relSlugs: ["composed_of", "associated_with"],
+    },
+  ];
+
+  for (const vp of viewpoints) {
+    const allowedElementTypeSlugs = await resolveElementSlugs(vp.elementSlugs);
+    const allowedRelTypeSlugs = await resolveRelSlugs(vp.relSlugs);
+    await prisma.viewpointDefinition.upsert({
+      where: { name: vp.name },
+      update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
+      create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
+    });
+  }
+  console.log("Seeded 4 viewpoint definitions");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -330,6 +399,7 @@ async function main(): Promise<void> {
   await seedTaxonomyNodes();
   await seedDigitalProducts();
   await seedEaArchimate4();
+  await seedEaViewpoints();
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   console.log("Seed complete.");
