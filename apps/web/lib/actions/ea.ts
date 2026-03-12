@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
@@ -58,7 +58,7 @@ export async function createEaElement(input: CreateEaElementInput): Promise<void
       description:     input.description ?? null,
       lifecycleStage:  input.lifecycleStage,
       lifecycleStatus: input.lifecycleStatus,
-      properties:      input.properties ?? {},
+      properties:      (input.properties ?? {}) as Prisma.InputJsonValue,
       createdById:     userId,
       digitalProductId: input.digitalProductId ?? null,
       infraCiKey:       input.infraCiKey ?? null,
@@ -119,13 +119,21 @@ export async function updateEaElement(id: string, input: UpdateEaElementInput): 
       ...(input.description     !== undefined && { description: input.description }),
       ...(input.lifecycleStage  !== undefined && { lifecycleStage: input.lifecycleStage }),
       ...(input.lifecycleStatus !== undefined && { lifecycleStatus: input.lifecycleStatus }),
-      ...(input.properties      !== undefined && { properties: input.properties }),
+      ...(input.properties      !== undefined && { properties: input.properties as Prisma.InputJsonValue }),
       ...(input.digitalProductId !== undefined && { digitalProductId: input.digitalProductId }),
       ...(input.infraCiKey       !== undefined && { infraCiKey: input.infraCiKey }),
       ...(input.portfolioId      !== undefined && { portfolioId: input.portfolioId }),
       ...(input.taxonomyNodeId   !== undefined && { taxonomyNodeId: input.taxonomyNodeId }),
     },
-    include: {
+    select: {
+      id:               true,
+      name:             true,
+      lifecycleStage:   true,
+      lifecycleStatus:  true,
+      digitalProductId: true,
+      infraCiKey:       true,
+      portfolioId:      true,
+      taxonomyNodeId:   true,
       elementType: { select: { neoLabel: true, slug: true, notation: { select: { slug: true } } } },
       portfolio:   { select: { slug: true } },
     },
@@ -183,7 +191,7 @@ export async function createEaRelationship(input: CreateEaRelationshipInput): Pr
       toElementId:        input.toElementId,
       relationshipTypeId: input.relationshipTypeId,
       notationSlug:       rt.notation.slug,
-      properties:         input.properties ?? {},
+      properties:         (input.properties ?? {}) as Prisma.InputJsonValue,
       createdById:        userId,
     },
   });
@@ -294,8 +302,7 @@ type CreateEaViewInput = {
 };
 
 export async function createEaView(input: CreateEaViewInput): Promise<void> {
-  await requireManageEaModel();
-  const session = await auth();
+  const { userId } = await requireManageEaModel();
   await prisma.eaView.create({
     data: {
       notationId:  input.notationId,
@@ -304,7 +311,7 @@ export async function createEaView(input: CreateEaViewInput): Promise<void> {
       layoutType:  input.layoutType,
       scopeType:   input.scopeType,
       scopeRef:    input.scopeRef ?? null,
-      createdById: session?.user?.id ?? null,
+      createdById: userId,
     },
   });
 }
