@@ -24,6 +24,7 @@ async function rebuildEa(): Promise<void> {
       infraCiKey: true,
       digitalProductId: true,
       portfolioId: true,
+      portfolio: { select: { slug: true } },
       taxonomyNodeId: true,
       elementType: {
         select: {
@@ -46,7 +47,7 @@ async function rebuildEa(): Promise<void> {
       lifecycleStatus:  el.lifecycleStatus,
       infraCiKey:       el.infraCiKey,
       digitalProductId: el.digitalProductId,
-      portfolioId:      el.portfolioId,
+      portfolioSlug:    el.portfolio?.slug ?? null,
       taxonomyNodeId:   el.taxonomyNodeId,
     });
   }
