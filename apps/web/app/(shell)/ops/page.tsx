@@ -1,12 +1,14 @@
 // apps/web/app/(shell)/ops/page.tsx
-import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat } from "@/lib/backlog-data";
+import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, getEpics, getPortfoliosForSelect } from "@/lib/backlog-data";
 import { OpsClient } from "@/components/ops/OpsClient";
 
 export default async function OpsPage() {
-  const [items, digitalProducts, taxonomyNodes] = await Promise.all([
+  const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),
     getTaxonomyNodesFlat(),
+    getEpics(),
+    getPortfoliosForSelect(),
   ]);
 
   return (
@@ -14,7 +16,7 @@ export default async function OpsPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white">Operations</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {items.length} item{items.length !== 1 ? "s" : ""}
+          {epics.length} epic{epics.length !== 1 ? "s" : ""} · {items.length} item{items.length !== 1 ? "s" : ""}
         </p>
       </div>
 
@@ -22,6 +24,8 @@ export default async function OpsPage() {
         items={items}
         digitalProducts={digitalProducts}
         taxonomyNodes={taxonomyNodes}
+        epics={epics}
+        portfolios={portfolios}
       />
     </div>
   );
