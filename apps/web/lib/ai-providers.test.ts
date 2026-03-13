@@ -4,6 +4,7 @@ import {
   computeComputeCost,
   computeNextRunAt,
   SCHEDULE_INTERVALS_MS,
+  getTestUrl,
 } from "./ai-provider-types";
 
 describe("computeTokenCost", () => {
@@ -64,5 +65,27 @@ describe("computeNextRunAt", () => {
     const now = new Date("2026-03-12T00:00:00Z");
     const next = computeNextRunAt("monthly", now);
     expect(next?.getTime()).toBe(now.getTime() + SCHEDULE_INTERVALS_MS.monthly);
+  });
+});
+
+describe("getTestUrl", () => {
+  it("returns baseUrl + /models for standard provider", () => {
+    expect(getTestUrl({ providerId: "openai", baseUrl: "https://api.openai.com/v1", endpoint: null }))
+      .toBe("https://api.openai.com/v1/models");
+  });
+
+  it("returns baseUrl + /api/tags for ollama", () => {
+    expect(getTestUrl({ providerId: "ollama", baseUrl: "http://localhost:11434", endpoint: null }))
+      .toBe("http://localhost:11434/api/tags");
+  });
+
+  it("returns endpoint + /models when baseUrl is null", () => {
+    expect(getTestUrl({ providerId: "azure-openai", baseUrl: null, endpoint: "https://my-instance.openai.azure.com" }))
+      .toBe("https://my-instance.openai.azure.com/models");
+  });
+
+  it("returns null when both baseUrl and endpoint are null", () => {
+    expect(getTestUrl({ providerId: "azure-openai", baseUrl: null, endpoint: null }))
+      .toBeNull();
   });
 });
