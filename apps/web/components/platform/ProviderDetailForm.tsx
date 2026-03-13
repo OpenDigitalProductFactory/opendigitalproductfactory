@@ -12,17 +12,30 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [secretRef, setSecretRef]                 = useState(credential?.secretRef ?? "");
-  const [endpoint, setEndpoint]                   = useState(provider.endpoint ?? "");
-  const [computeWatts, setComputeWatts]           = useState(String(provider.computeWatts ?? 150));
-  const [electricityRate, setElectricityRate]     = useState(String(provider.electricityRateKwh ?? 0.12));
-  const [enabledFamilies, setEnabledFamilies]     = useState<string[]>(provider.enabledFamilies);
-  const [testResult, setTestResult]               = useState<{ ok: boolean; message: string } | null>(null);
-  const [saveMessage, setSaveMessage]             = useState<string | null>(null);
+  const [secretRef, setSecretRef]                   = useState(credential?.secretRef ?? "");
+  const [endpoint, setEndpoint]                     = useState(provider.endpoint ?? "");
+  const [computeWatts, setComputeWatts]             = useState(String(provider.computeWatts ?? 150));
+  const [electricityRate, setElectricityRate]       = useState(String(provider.electricityRateKwh ?? 0.12));
+  const [enabledFamilies, setEnabledFamilies]       = useState<string[]>(provider.enabledFamilies);
+  const [testResult, setTestResult]                 = useState<{ ok: boolean; message: string } | null>(null);
+  const [saveMessage, setSaveMessage]               = useState<string | null>(null);
 
-  const isKeyed      = provider.authHeader !== null;
-  const needsEndpoint = provider.baseUrl === null;
-  const isCompute    = provider.costModel === "compute";
+  const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
+  const [clientSecret, setClientSecret]             = useState(credential?.clientSecret ?? "");
+  const [tokenEndpoint, setTokenEndpoint]           = useState(credential?.tokenEndpoint ?? "");
+  const [scope, setScope]                           = useState(credential?.scope ?? "");
+  const [selectedAuthMethod, setSelectedAuthMethod] = useState(provider.authMethod);
+
+  const needsCredential = provider.authMethod !== "none";
+  const isOAuth         = provider.authMethod === "oauth2_client_credentials";
+  const isApiKey        = provider.authMethod === "api_key";
+  const needsEndpoint   = provider.baseUrl === null;
+  const hasDualAuth     = provider.supportedAuthMethods.length > 1;
+  const isCompute       = provider.costModel === "compute";
+
+  void needsCredential;
+  void isOAuth;
+  void isApiKey;
 
   function toggleFamily(family: string) {
     setEnabledFamilies((prev) =>
@@ -32,13 +45,19 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
 
   function handleSave() {
     startTransition(async () => {
-      const result = await configureProvider({
+      const saveInput = {
         providerId: provider.providerId,
         enabledFamilies,
-        ...(isKeyed && secretRef ? { secretRef } : {}),
+        ...(hasDualAuth && { authMethod: selectedAuthMethod }),
+        ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
+        ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
+        ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
+        ...(selectedAuthMethod === "oauth2_client_credentials" && tokenEndpoint  ? { tokenEndpoint }  : {}),
+        ...(selectedAuthMethod === "oauth2_client_credentials" && scope          ? { scope }          : {}),
         ...(needsEndpoint && endpoint ? { endpoint } : {}),
         ...(isCompute ? { computeWatts: Number(computeWatts), electricityRateKwh: Number(electricityRate) } : {}),
-      });
+      };
+      const result = await configureProvider(saveInput);
       setSaveMessage(result.error ? `Error: ${result.error}` : "Saved");
       router.refresh();
     });
@@ -53,6 +72,23 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
   }
 
   const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#555566" : "#fbbf24";
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    background: "#1a1a2e",
+    border: "1px solid #2a2a40",
+    color: "#e0e0ff",
+    fontSize: 11,
+    padding: "6px 8px",
+    borderRadius: 4,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    color: "#555566",
+    fontSize: 10,
+    marginBottom: 4,
+  };
 
   return (
     <div style={{ maxWidth: 560 }}>
@@ -85,7 +121,7 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
       {/* Custom endpoint (Azure OpenAI etc.) */}
       {needsEndpoint && (
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", color: "#555566", fontSize: 10, marginBottom: 4 }}>
+          <label style={labelStyle}>
             Custom endpoint URL
           </label>
           <input
@@ -93,52 +129,125 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
             onChange={(e) => setEndpoint(e.target.value)}
             disabled={!canWrite || isPending}
             placeholder="https://my-resource.openai.azure.com"
-            style={{ width: "100%", background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4 }}
+            style={inputStyle}
           />
         </div>
       )}
 
-      {/* API key env var name */}
-      {isKeyed && (
+      {/* Auth method selector (for dual-auth providers) */}
+      {hasDualAuth && (
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", color: "#555566", fontSize: 10, marginBottom: 4 }}>
-            Environment variable name
+          <label style={labelStyle}>
+            Authentication method
+          </label>
+          <select
+            value={selectedAuthMethod}
+            onChange={(e) => setSelectedAuthMethod(e.target.value)}
+            disabled={!canWrite || isPending}
+            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4 }}
+          >
+            {provider.supportedAuthMethods.map((m) => (
+              <option key={m} value={m}>
+                {m === "api_key" ? "API Key" : m === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* API key credential field */}
+      {selectedAuthMethod === "api_key" && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>
+            API Key
           </label>
           <input
             value={secretRef}
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
             placeholder="ANTHROPIC_API_KEY"
-            style={{ width: "100%", background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4, fontFamily: "monospace" }}
+            style={{ ...inputStyle, fontFamily: "monospace" }}
           />
-          <p style={{ color: "#555566", fontSize: 9, marginTop: 3 }}>
-            Enter the name of the env var that holds the API key — not the key itself.
-          </p>
         </div>
+      )}
+
+      {/* OAuth2 Client Credentials fields */}
+      {selectedAuthMethod === "oauth2_client_credentials" && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>
+              Client ID
+            </label>
+            <input
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              disabled={!canWrite || isPending}
+              placeholder="client_id"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>
+              Client Secret
+            </label>
+            <input
+              type="password"
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.target.value)}
+              disabled={!canWrite || isPending}
+              placeholder="client_secret"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>
+              Token Endpoint
+            </label>
+            <input
+              value={tokenEndpoint}
+              onChange={(e) => setTokenEndpoint(e.target.value)}
+              disabled={!canWrite || isPending}
+              placeholder="https://provider.example.com/oauth/token"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>
+              Scope
+            </label>
+            <input
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              disabled={!canWrite || isPending}
+              placeholder="openid profile"
+              style={inputStyle}
+            />
+          </div>
+        </>
       )}
 
       {/* Compute settings */}
       {isCompute && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div>
-            <label style={{ display: "block", color: "#555566", fontSize: 10, marginBottom: 4 }}>GPU/CPU wattage</label>
+            <label style={labelStyle}>GPU/CPU wattage</label>
             <input
               type="number"
               value={computeWatts}
               onChange={(e) => setComputeWatts(e.target.value)}
               disabled={!canWrite || isPending}
-              style={{ width: "100%", background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4 }}
+              style={inputStyle}
             />
           </div>
           <div>
-            <label style={{ display: "block", color: "#555566", fontSize: 10, marginBottom: 4 }}>Electricity rate ($/kWh)</label>
+            <label style={labelStyle}>Electricity rate ($/kWh)</label>
             <input
               type="number"
               step="0.01"
               value={electricityRate}
               onChange={(e) => setElectricityRate(e.target.value)}
               disabled={!canWrite || isPending}
-              style={{ width: "100%", background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4 }}
+              style={inputStyle}
             />
           </div>
         </div>
