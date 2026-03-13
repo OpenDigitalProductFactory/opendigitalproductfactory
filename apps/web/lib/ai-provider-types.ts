@@ -145,6 +145,29 @@ export type RegistryProviderEntry = {
   electricityRateKwh?: number;
 };
 
+// ─── Model discovery ──────────────────────────────────────────────────────────
+
+export function parseModelsResponse(
+  providerId: string,
+  json: unknown,
+): { modelId: string; rawMetadata: Record<string, unknown> }[] {
+  if (typeof json !== "object" || json === null) return [];
+
+  // Ollama + Cohere: { models: [...] }
+  if (providerId === "ollama" || providerId === "cohere") {
+    const obj = json as { models?: { name?: string }[] };
+    return (obj.models ?? [])
+      .filter((m) => typeof m.name === "string")
+      .map((m) => ({ modelId: m.name as string, rawMetadata: m as Record<string, unknown> }));
+  }
+
+  // OpenAI-compatible: { data: [...] }
+  const obj = json as { data?: { id?: string }[] };
+  return (obj.data ?? [])
+    .filter((m) => typeof m.id === "string")
+    .map((m) => ({ modelId: m.id as string, rawMetadata: m as Record<string, unknown> }));
+}
+
 // ─── URL helpers ──────────────────────────────────────────────────────────────
 
 /**
