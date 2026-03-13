@@ -101,6 +101,8 @@ model Portfolio {
   agents          Agent[]
   epicPortfolios  EpicPortfolio[]
   eaElements      EaElement[]
+  inventoryEntities      InventoryEntity[]
+  portfolioQualityIssues PortfolioQualityIssue[]
 }
 
 model DigitalProduct {
@@ -117,6 +119,8 @@ model DigitalProduct {
   updatedAt       DateTime      @updatedAt
   backlogItems    BacklogItem[]
   eaElements      EaElement[]
+  inventoryEntities      InventoryEntity[]
+  portfolioQualityIssues PortfolioQualityIssue[]
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
@@ -132,6 +136,8 @@ model TaxonomyNode {
   products    DigitalProduct[]
   backlogItems BacklogItem[]
   eaElements  EaElement[]
+  inventoryEntities      InventoryEntity[]
+  portfolioQualityIssues PortfolioQualityIssue[]
   status      String           @default("active")
   governance  Json?
 }
@@ -214,11 +220,17 @@ model McpServer {
 }
 
 model CredentialEntry {
-  id         String   @id @default(cuid())
-  providerId String   @unique
-  secretRef  String?
-  status     String   @default("unconfigured")
-  updatedAt  DateTime @updatedAt
+  id             String    @id @default(cuid())
+  providerId     String    @unique
+  secretRef      String?
+  clientId       String?
+  clientSecret   String?
+  tokenEndpoint  String?
+  scope          String?
+  cachedToken    String?
+  tokenExpiresAt DateTime?
+  status         String    @default("unconfigured")
+  updatedAt      DateTime  @updatedAt
 }
 
 model ModelProvider {
@@ -228,7 +240,6 @@ model ModelProvider {
   families             Json
   enabledFamilies      Json     @default("[]")
   status               String   @default("unconfigured")
-  authEndpoint         String?
   authHeader           String?
   endpoint             String?
   costModel            String   @default("token")
@@ -236,7 +247,40 @@ model ModelProvider {
   outputPricePerMToken Float?
   computeWatts         Float?
   electricityRateKwh   Float?
+  category             String   @default("direct")
+  baseUrl              String?
+  authMethod           String   @default("api_key")
+  supportedAuthMethods Json     @default("[\"api_key\"]")
   updatedAt            DateTime @updatedAt
+}
+
+model DiscoveredModel {
+  id           String   @id @default(cuid())
+  providerId   String
+  modelId      String
+  rawMetadata  Json
+  discoveredAt DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+
+  @@unique([providerId, modelId])
+}
+
+model ModelProfile {
+  id             String   @id @default(cuid())
+  providerId     String
+  modelId        String
+  friendlyName   String
+  summary        String
+  capabilityTier String
+  costTier       String
+  bestFor        Json
+  avoidFor       Json
+  contextWindow  String?
+  speedRating    String?
+  generatedBy    String
+  generatedAt    DateTime @default(now())
+
+  @@unique([providerId, modelId])
 }
 
 model TokenUsage {
@@ -413,6 +457,150 @@ model RuntimeAdvisory {
 }
 
 // ─── Agent Threads ───────────────────────────────────────────────────────────
+
+model DiscoveryRun {
+  id                  String                  @id @default(cuid())
+  runKey              String                  @unique
+  sourceSlug          String
+  trigger             String                  @default("bootstrap")
+  status              String                  @default("running")
+  startedAt           DateTime                @default(now())
+  completedAt         DateTime?
+  itemCount           Int                     @default(0)
+  relationshipCount   Int                     @default(0)
+  notes               Json?
+  discoveredItems     DiscoveredItem[]
+  discoveredRelations DiscoveredRelationship[]
+  confirmedEntities   InventoryEntity[]       @relation("InventoryEntityConfirmedRun")
+  confirmedRelations  InventoryRelationship[] @relation("InventoryRelationshipConfirmedRun")
+}
+
+model DiscoveredItem {
+  id                 String                   @id @default(cuid())
+  discoveryRunId     String
+  discoveryRun       DiscoveryRun             @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
+  observedKey        String
+  itemType           String
+  name               String
+  sourcePath         String?
+  confidence         Float?
+  attributionStatus  String                   @default("unmapped")
+  rawData            Json
+  firstSeenAt        DateTime                 @default(now())
+  lastSeenAt         DateTime                 @default(now())
+  inventoryEntityId  String?
+  inventoryEntity    InventoryEntity?         @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  fromRelationships  DiscoveredRelationship[] @relation("DiscoveredRelationshipFromItem")
+  toRelationships    DiscoveredRelationship[] @relation("DiscoveredRelationshipToItem")
+
+  @@unique([discoveryRunId, observedKey])
+  @@index([itemType])
+  @@index([attributionStatus])
+}
+
+model DiscoveredRelationship {
+  id                      String                 @id @default(cuid())
+  discoveryRunId          String
+  discoveryRun            DiscoveryRun           @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
+  relationshipKey         String
+  relationshipType        String
+  fromDiscoveredItemId    String
+  fromDiscoveredItem      DiscoveredItem         @relation("DiscoveredRelationshipFromItem", fields: [fromDiscoveredItemId], references: [id], onDelete: Cascade)
+  toDiscoveredItemId      String
+  toDiscoveredItem        DiscoveredItem         @relation("DiscoveredRelationshipToItem", fields: [toDiscoveredItemId], references: [id], onDelete: Cascade)
+  confidence              Float?
+  rawData                 Json?
+  inventoryRelationshipId String?
+  inventoryRelationship   InventoryRelationship? @relation(fields: [inventoryRelationshipId], references: [id], onDelete: SetNull)
+
+  @@unique([discoveryRunId, relationshipKey])
+  @@index([relationshipType])
+}
+
+model InventoryEntity {
+  id                 String                  @id @default(cuid())
+  entityKey          String                  @unique
+  entityType         String
+  name               String
+  status             String                  @default("active")
+  attributionStatus  String                  @default("needs_review")
+  confidence         Float?
+  providerView       String                  @default("foundational")
+  properties         Json                    @default("{}")
+  firstSeenAt        DateTime                @default(now())
+  lastSeenAt         DateTime                @default(now())
+  lastConfirmedRunId String?
+  lastConfirmedRun   DiscoveryRun?           @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id], onDelete: SetNull)
+  portfolioId        String?
+  portfolio          Portfolio?              @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  taxonomyNodeId     String?
+  taxonomyNode       TaxonomyNode?           @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  digitalProductId   String?
+  digitalProduct     DigitalProduct?         @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  discoveredItems    DiscoveredItem[]
+  fromRelationships  InventoryRelationship[] @relation("InventoryRelationshipFromEntity")
+  toRelationships    InventoryRelationship[] @relation("InventoryRelationshipToEntity")
+  qualityIssues      PortfolioQualityIssue[]
+
+  @@index([entityType])
+  @@index([attributionStatus])
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+}
+
+model InventoryRelationship {
+  id                      String                   @id @default(cuid())
+  relationshipKey         String                   @unique
+  relationshipType        String
+  status                  String                   @default("active")
+  confidence              Float?
+  properties              Json?
+  firstSeenAt             DateTime                 @default(now())
+  lastSeenAt              DateTime                 @default(now())
+  lastConfirmedRunId      String?
+  lastConfirmedRun        DiscoveryRun?            @relation("InventoryRelationshipConfirmedRun", fields: [lastConfirmedRunId], references: [id], onDelete: SetNull)
+  fromEntityId            String
+  fromEntity              InventoryEntity          @relation("InventoryRelationshipFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntityId              String
+  toEntity                InventoryEntity          @relation("InventoryRelationshipToEntity", fields: [toEntityId], references: [id], onDelete: Cascade)
+  discoveredRelationships DiscoveredRelationship[]
+  qualityIssues           PortfolioQualityIssue[]
+
+  @@unique([fromEntityId, toEntityId, relationshipType])
+  @@index([relationshipType])
+  @@index([status])
+}
+
+model PortfolioQualityIssue {
+  id                      String                 @id @default(cuid())
+  issueKey                String                 @unique
+  issueType               String
+  status                  String                 @default("open")
+  severity                String                 @default("warn")
+  summary                 String
+  details                 Json?
+  firstDetectedAt         DateTime               @default(now())
+  lastDetectedAt          DateTime               @default(now())
+  resolvedAt              DateTime?
+  inventoryEntityId       String?
+  inventoryEntity         InventoryEntity?       @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  inventoryRelationshipId String?
+  inventoryRelationship   InventoryRelationship? @relation(fields: [inventoryRelationshipId], references: [id], onDelete: SetNull)
+  portfolioId             String?
+  portfolio               Portfolio?             @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  taxonomyNodeId          String?
+  taxonomyNode            TaxonomyNode?          @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  digitalProductId        String?
+  digitalProduct          DigitalProduct?        @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+
+  @@index([issueType])
+  @@index([status])
+  @@index([severity])
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+}
 
 model AgentThread {
   id         String         @id @default(cuid())
