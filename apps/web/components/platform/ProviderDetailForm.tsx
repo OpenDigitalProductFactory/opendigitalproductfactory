@@ -19,7 +19,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [secretRef, setSecretRef]                   = useState(credential?.secretRef ?? "");
+  // Secrets are write-only — never sent from server. Empty = no change on save.
+  const [secretRef, setSecretRef]                   = useState("");
   const [endpoint, setEndpoint]                     = useState(provider.endpoint ?? "");
   const [computeWatts, setComputeWatts]             = useState(String(provider.computeWatts ?? 150));
   const [electricityRate, setElectricityRate]       = useState(String(provider.electricityRateKwh ?? 0.12));
@@ -30,7 +31,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
-  const [clientSecret, setClientSecret]             = useState(credential?.clientSecret ?? "");
+  const [clientSecret, setClientSecret]             = useState("");  // write-only
   const [tokenEndpoint, setTokenEndpoint]           = useState(credential?.tokenEndpoint ?? "");
   const [scope, setScope]                           = useState(credential?.scope ?? "");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState(provider.authMethod);
@@ -174,12 +175,12 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </div>
       )}
 
-      {/* Auth method selector (for dual-auth providers) */}
-      {hasDualAuth && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>
-            Authentication method
-          </label>
+      {/* Auth method */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={labelStyle}>
+          Authentication method
+        </label>
+        {hasDualAuth ? (
           <select
             value={selectedAuthMethod}
             onChange={(e) => setSelectedAuthMethod(e.target.value)}
@@ -192,20 +193,28 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </option>
             ))}
           </select>
-        </div>
-      )}
+        ) : (
+          <span style={{ color: "#e0e0ff", fontSize: 11 }}>
+            {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
+          </span>
+        )}
+      </div>
 
       {/* API key credential field */}
       {selectedAuthMethod === "api_key" && (
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>
             API Key
+            {credential?.secretHint && !secretRef && (
+              <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.secretHint}</span>
+            )}
           </label>
           <input
+            type="password"
             value={secretRef}
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
-            placeholder="ANTHROPIC_API_KEY"
+            placeholder={credential?.secretHint ? "Enter new key to replace" : "Enter API key"}
             style={{ ...inputStyle, fontFamily: "monospace" }}
           />
         </div>
@@ -229,13 +238,16 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>
               Client Secret
+              {credential?.clientSecretHint && !clientSecret && (
+                <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.clientSecretHint}</span>
+              )}
             </label>
             <input
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               disabled={!canWrite || isPending}
-              placeholder="client_secret"
+              placeholder={credential?.clientSecretHint ? "Enter new secret to replace" : "Enter client secret"}
               style={inputStyle}
             />
           </div>

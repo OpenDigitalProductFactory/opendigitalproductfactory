@@ -4,14 +4,10 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs } from "@/lib/ai-provider-data";
-import { syncProviderRegistry, triggerProviderSync } from "@/lib/actions/ai-providers";
+import { syncProviderRegistry } from "@/lib/actions/ai-providers";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
-
-async function syncAction(_formData: FormData): Promise<void> {
-  "use server";
-  await triggerProviderSync();
-}
+import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
@@ -61,16 +57,7 @@ export default async function PlatformAiPage() {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Providers</div>
-          {canWrite && (
-            <form action={syncAction}>
-              <button
-                type="submit"
-                style={{ fontSize: 10, padding: "3px 10px", background: "transparent", border: "1px solid #2a2a40", color: "#555566", borderRadius: 3, cursor: "pointer" }}
-              >
-                ↻ Sync from registry
-              </button>
-            </form>
-          )}
+          {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
         </div>
 
         {/* Direct Providers */}
@@ -97,12 +84,24 @@ export default async function PlatformAiPage() {
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
-                    <Link
-                      href={`/platform/ai/providers/${provider.providerId}`}
-                      style={{ color: "#7c8cf8", fontSize: 9 }}
-                    >
-                      Configure →
-                    </Link>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/platform/ai/providers/${provider.providerId}`}
+                        style={{ color: "#7c8cf8", fontSize: 9 }}
+                      >
+                        Configure →
+                      </Link>
+                      {provider.docsUrl && (
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                          Docs
+                        </a>
+                      )}
+                      {provider.consoleUrl && (
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                          Console
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -134,12 +133,24 @@ export default async function PlatformAiPage() {
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
-                    <Link
-                      href={`/platform/ai/providers/${provider.providerId}`}
-                      style={{ color: "#7c8cf8", fontSize: 9 }}
-                    >
-                      Configure →
-                    </Link>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/platform/ai/providers/${provider.providerId}`}
+                        style={{ color: "#7c8cf8", fontSize: 9 }}
+                      >
+                        Configure →
+                      </Link>
+                      {provider.docsUrl && (
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                          Docs
+                        </a>
+                      )}
+                      {provider.consoleUrl && (
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                          Console
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -148,7 +159,7 @@ export default async function PlatformAiPage() {
         )}
 
         {providers.length === 0 && (
-          <p style={{ color: "#555566", fontSize: 11 }}>No providers registered. Click &quot;Sync from registry&quot; to import.</p>
+          <p style={{ color: "#555566", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
         )}
       </div>
 

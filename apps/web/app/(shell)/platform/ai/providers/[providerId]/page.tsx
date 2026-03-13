@@ -29,7 +29,19 @@ export default async function ProviderDetailPage({ params }: Props) {
       <div style={{ marginBottom: 20 }}>
         <Link href="/platform/ai" style={{ color: "#555566", fontSize: 10 }}>← AI Providers</Link>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
-        <p style={{ fontSize: 10, color: "#555566", margin: 0, fontFamily: "monospace" }}>{pw.provider.providerId}</p>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
+          <span style={{ fontSize: 10, color: "#555566", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
+          {pw.provider.docsUrl && (
+            <a href={pw.provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#7c8cf8", fontSize: 10 }}>
+              Docs
+            </a>
+          )}
+          {pw.provider.consoleUrl && (
+            <a href={pw.provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#7c8cf8", fontSize: 10 }}>
+              Console
+            </a>
+          )}
+        </div>
       </div>
 
       <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>

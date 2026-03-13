@@ -59,13 +59,16 @@ export type ProviderRow = {
   outputPricePerMToken: number | null;
   computeWatts: number | null;
   electricityRateKwh: number | null;
+  docsUrl: string | null;
+  consoleUrl: string | null;
 };
 
+/** Client-safe credential info — secrets are never sent to the browser. */
 export type CredentialRow = {
   providerId: string;
-  secretRef: string | null;
+  secretHint: string | null;
   clientId: string | null;
-  clientSecret: string | null;
+  clientSecretHint: string | null;
   tokenEndpoint: string | null;
   scope: string | null;
   status: string;
@@ -143,6 +146,8 @@ export type RegistryProviderEntry = {
   outputPricePerMToken?: number;
   computeWatts?: number;
   electricityRateKwh?: number;
+  docsUrl?: string | null;
+  consoleUrl?: string | null;
 };
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
@@ -153,7 +158,7 @@ export function parseModelsResponse(
 ): { modelId: string; rawMetadata: Record<string, unknown> }[] {
   if (typeof json !== "object" || json === null) return [];
 
-  // Ollama + Cohere: { models: [...] }
+  // Ollama + Cohere: { models: [{ name: "..." }] }
   if (providerId === "ollama" || providerId === "cohere") {
     const obj = json as { models?: { name?: string }[] };
     return (obj.models ?? [])
@@ -161,7 +166,19 @@ export function parseModelsResponse(
       .map((m) => ({ modelId: m.name as string, rawMetadata: m as Record<string, unknown> }));
   }
 
-  // OpenAI-compatible: { data: [...] }
+  // Gemini: { models: [{ name: "models/gemini-2.0-flash", ... }] }
+  if (providerId === "gemini") {
+    const obj = json as { models?: { name?: string }[] };
+    return (obj.models ?? [])
+      .filter((m) => typeof m.name === "string")
+      .map((m) => ({
+        // Strip the "models/" prefix — Gemini returns "models/gemini-2.0-flash" but the API expects just "gemini-2.0-flash"
+        modelId: (m.name as string).replace(/^models\//, ""),
+        rawMetadata: m as Record<string, unknown>,
+      }));
+  }
+
+  // OpenAI-compatible: { data: [{ id: "..." }] }
   const obj = json as { data?: { id?: string }[] };
   return (obj.data ?? [])
     .filter((m) => typeof m.id === "string")

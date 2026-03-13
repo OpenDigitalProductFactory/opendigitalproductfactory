@@ -19,6 +19,7 @@ import {
   parseProfilingResponse,
   type ProfileResult,
 } from "@/lib/ai-profiling";
+import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.outputPricePerMToken !== undefined && { outputPricePerMToken: entry.outputPricePerMToken }),
           ...(entry.computeWatts !== undefined         && { computeWatts:         entry.computeWatts }),
           ...(entry.electricityRateKwh !== undefined   && { electricityRateKwh:   entry.electricityRateKwh }),
+          docsUrl:              entry.docsUrl ?? null,
+          consoleUrl:           entry.consoleUrl ?? null,
         },
       });
       updated++;
@@ -105,6 +108,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           outputPricePerMToken: entry.outputPricePerMToken ?? null,
           computeWatts:         entry.computeWatts ?? null,
           electricityRateKwh:   entry.electricityRateKwh ?? null,
+          docsUrl:              entry.docsUrl ?? null,
+          consoleUrl:           entry.consoleUrl ?? null,
         },
       });
       added++;
@@ -131,6 +136,23 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
 export async function triggerProviderSync(): Promise<{ added: number; updated: number; error?: string }> {
   await requireManageProviders();
   return syncProviderRegistry();
+}
+
+/** Decrypt the API key / client secret for a provider (server-only). */
+async function getDecryptedCredential(providerId: string) {
+  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  if (!cred) return null;
+  return {
+    ...cred,
+    secretRef:    cred.secretRef    ? decryptSecret(cred.secretRef)    : null,
+    clientSecret: cred.clientSecret ? decryptSecret(cred.clientSecret) : null,
+  };
+}
+
+/** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
+function getProviderExtraHeaders(providerId: string): Record<string, string> {
+  if (providerId === "anthropic") return { "anthropic-version": "2023-06-01" };
+  return {};
 }
 
 // ─── Configure provider ───────────────────────────────────────────────────────
@@ -164,23 +186,26 @@ export async function configureProvider(input: {
     || input.scope !== undefined;
 
   if (hasCredentialFields) {
+    const encSecretRef    = input.secretRef    !== undefined ? encryptSecret(input.secretRef)    : undefined;
+    const encClientSecret = input.clientSecret !== undefined ? encryptSecret(input.clientSecret) : undefined;
+
     await prisma.credentialEntry.upsert({
       where: { providerId: input.providerId },
       create: {
         providerId: input.providerId,
-        ...(input.secretRef !== undefined      && { secretRef: input.secretRef }),
-        ...(input.clientId !== undefined       && { clientId: input.clientId }),
-        ...(input.clientSecret !== undefined   && { clientSecret: input.clientSecret }),
-        ...(input.tokenEndpoint !== undefined  && { tokenEndpoint: input.tokenEndpoint }),
-        ...(input.scope !== undefined          && { scope: input.scope }),
+        ...(encSecretRef !== undefined             && { secretRef: encSecretRef }),
+        ...(input.clientId !== undefined           && { clientId: input.clientId }),
+        ...(encClientSecret !== undefined          && { clientSecret: encClientSecret }),
+        ...(input.tokenEndpoint !== undefined      && { tokenEndpoint: input.tokenEndpoint }),
+        ...(input.scope !== undefined              && { scope: input.scope }),
         status: "pending",
       },
       update: {
-        ...(input.secretRef !== undefined      && { secretRef: input.secretRef }),
-        ...(input.clientId !== undefined       && { clientId: input.clientId }),
-        ...(input.clientSecret !== undefined   && { clientSecret: input.clientSecret }),
-        ...(input.tokenEndpoint !== undefined  && { tokenEndpoint: input.tokenEndpoint }),
-        ...(input.scope !== undefined          && { scope: input.scope }),
+        ...(encSecretRef !== undefined             && { secretRef: encSecretRef }),
+        ...(input.clientId !== undefined           && { clientId: input.clientId }),
+        ...(encClientSecret !== undefined          && { clientSecret: encClientSecret }),
+        ...(input.tokenEndpoint !== undefined      && { tokenEndpoint: input.tokenEndpoint }),
+        ...(input.scope !== undefined              && { scope: input.scope }),
         status: "pending",
       },
     });
@@ -203,7 +228,7 @@ export async function configureProvider(input: {
 // ─── OAuth token exchange ─────────────────────────────────────────────────────
 
 async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
-  const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  const credential = await getDecryptedCredential(providerId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
     return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
@@ -266,10 +291,12 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   const testUrl = getTestUrl(providerRow);
   if (!testUrl) return { ok: false, message: "No base URL or custom endpoint configured" };
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    ...getProviderExtraHeaders(providerId),
+  };
 
   if (provider.authMethod === "api_key") {
-    const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    const credential = await getDecryptedCredential(providerId);
     if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
     if (provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
@@ -314,9 +341,11 @@ export async function discoverModels(providerId: string): Promise<{ discovered: 
   if (!testUrl) return { discovered: 0, newCount: 0, error: "No base URL configured" };
 
   // Build auth headers (same logic as testProviderAuth)
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    ...getProviderExtraHeaders(providerId),
+  };
   if (provider.authMethod === "api_key") {
-    const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    const cred = await getDecryptedCredential(providerId);
     if (cred?.secretRef && provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
@@ -381,6 +410,53 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
 
 // ─── Model profiling ──────────────────────────────────────────────────────────
 
+/** Known cheap models per provider for profiling tasks. */
+const PROFILING_MODELS: Record<string, string> = {
+  anthropic:      "claude-haiku-4-5-20251001",
+  openai:         "gpt-4o-mini",
+  "azure-openai": "gpt-4o-mini",
+  gemini:         "gemini-2.0-flash",
+  cohere:         "command-r",
+  mistral:        "mistral-small-latest",
+  deepseek:       "deepseek-chat",
+  groq:           "llama-3.1-8b-instant",
+  together:       "meta-llama/Llama-3-8b-chat-hf",
+  fireworks:      "accounts/fireworks/models/llama-v3p1-8b-instruct",
+  xai:            "grok-2-latest",
+  openrouter:     "meta-llama/llama-3.1-8b-instruct:free",
+};
+
+/** Pick a model for profiling: prefer discovered models (proven valid), then known defaults. */
+async function getProfilingModel(providerId: string): Promise<string> {
+  // Prefer a discovered model — we know the account has access to it
+  const discovered = await prisma.discoveredModel.findMany({
+    where: { providerId },
+    orderBy: { modelId: "asc" },
+    select: { modelId: true },
+  });
+
+  if (discovered.length > 0) {
+    // Try to match a known cheap model from the discovered list
+    const known = PROFILING_MODELS[providerId];
+    if (known && discovered.some((d) => d.modelId === known)) return known;
+
+    // Otherwise pick the first discovered model that looks like a chat model
+    // (skip embedding-only, whisper, tts, dall-e, etc.)
+    const skipPatterns = /embed|whisper|tts|dall-e|moderation|babbage|davinci-00/i;
+    const chatModel = discovered.find((d) => !skipPatterns.test(d.modelId));
+    if (chatModel) return chatModel.modelId;
+
+    // Last resort: first discovered model
+    return discovered[0]!.modelId;
+  }
+
+  // No discovered models — use the hardcoded default
+  const known = PROFILING_MODELS[providerId];
+  if (known) return known;
+
+  throw new Error(`No known or discovered model for profiling on ${providerId}`);
+}
+
 async function callProviderForProfiling(
   profilingProviderId: string,
   prompt: string,
@@ -391,10 +467,15 @@ async function callProviderForProfiling(
   const baseUrl = prov.baseUrl ?? prov.endpoint;
   if (!baseUrl) throw new Error("No base URL");
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const model = await getProfilingModel(profilingProviderId);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...getProviderExtraHeaders(profilingProviderId),
+  };
 
   if (prov.authMethod === "api_key") {
-    const cred = await prisma.credentialEntry.findUnique({ where: { providerId: profilingProviderId } });
+    const cred = await getDecryptedCredential(profilingProviderId);
     if (!cred?.secretRef || !prov.authHeader) throw new Error("No credential");
     headers[prov.authHeader] = prov.authHeader === "Authorization"
       ? `Bearer ${cred.secretRef}` : cred.secretRef;
@@ -404,18 +485,33 @@ async function callProviderForProfiling(
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
   }
 
-  // Anthropic uses /messages; Cohere uses /chat; all others use OpenAI-compatible /chat/completions
-  const chatUrl = profilingProviderId === "anthropic"
-    ? `${baseUrl}/messages`
-    : profilingProviderId === "cohere"
-    ? `${baseUrl}/chat`
-    : `${baseUrl}/chat/completions`;
+  // Each provider family has its own endpoint + request/response shape
+  let chatUrl: string;
+  let body: Record<string, unknown>;
+  let extractText: (data: Record<string, unknown>) => string;
 
-  const body = profilingProviderId === "anthropic"
-    ? { model: "claude-haiku-4-5-20251001", max_tokens: 4096, messages: [{ role: "user", content: prompt }] }
-    : profilingProviderId === "cohere"
-    ? { model: "command-r", message: prompt, max_tokens: 4096 }
-    : { model: "auto", messages: [{ role: "user", content: prompt }], max_tokens: 4096 };
+  if (profilingProviderId === "anthropic") {
+    chatUrl = `${baseUrl}/messages`;
+    body = { model, max_tokens: 4096, messages: [{ role: "user", content: prompt }] };
+    extractText = (d) => (d.content as Array<{ text?: string }>)?.[0]?.text ?? "";
+  } else if (profilingProviderId === "cohere") {
+    chatUrl = `${baseUrl}/chat`;
+    body = { model, message: prompt, max_tokens: 4096 };
+    extractText = (d) => (d.text as string) ?? "";
+  } else if (profilingProviderId === "gemini") {
+    // Gemini uses generateContent endpoint with different structure
+    chatUrl = `${baseUrl}/models/${model}:generateContent`;
+    body = { contents: [{ parts: [{ text: prompt }] }] };
+    extractText = (d) => {
+      const candidates = d.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined;
+      return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    };
+  } else {
+    // OpenAI-compatible (OpenAI, Azure, Mistral, Groq, Together, Fireworks, xAI, OpenRouter, LiteLLM, etc.)
+    chatUrl = `${baseUrl}/chat/completions`;
+    body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096 };
+    extractText = (d) => (d.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "";
+  }
 
   const res = await fetch(chatUrl, {
     method: "POST",
@@ -424,15 +520,13 @@ async function callProviderForProfiling(
     signal: AbortSignal.timeout(30_000),
   });
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} from ${profilingProviderId}: ${errBody.slice(0, 200)}`);
+  }
+  const data = await res.json() as Record<string, unknown>;
 
-  // Normalize response across providers
-  const text = profilingProviderId === "anthropic"
-    ? data.content?.[0]?.text ?? ""
-    : profilingProviderId === "cohere"
-    ? data.text ?? ""
-    : data.choices?.[0]?.message?.content ?? "";
+  const text = extractText(data);
 
   return {
     text,
@@ -481,6 +575,7 @@ export async function profileModels(
 
     let profiles: ProfileResult[] = [];
     let usedProviderId: string | null = null;
+    let lastError: string | null = null;
 
     // Try each provider in cost order
     for (const candidateId of ranked) {
@@ -498,7 +593,6 @@ export async function profileModels(
 
           if (profiles.length > 0) {
             usedProviderId = candidateId;
-            // Log token usage for successful retry
             await logTokenUsage({
               agentId: "system:model-profiler",
               providerId: candidateId,
@@ -506,22 +600,21 @@ export async function profileModels(
               inputTokens: (result.inputTokens ?? 0) + (retryResult.inputTokens ?? 0),
               outputTokens: (result.outputTokens ?? 0) + (retryResult.outputTokens ?? 0),
             });
-            break; // Success after retry
+            break;
           }
 
-          // Retry also failed — log failure and try next provider
+          lastError = `${candidateId}: response was not valid JSON`;
           await logTokenUsage({
             agentId: "system:model-profiler",
             providerId: candidateId,
             contextKey: `profile-${providerId}-batch-${i}-failed`,
             inputTokens: 0,
             outputTokens: 0,
-          }).catch(() => {}); // Don't let logging failure block fallback
-          continue; // Try next provider
+          }).catch(() => {});
+          continue;
         }
 
         usedProviderId = candidateId;
-        // Log token usage (success on first attempt)
         await logTokenUsage({
           agentId: "system:model-profiler",
           providerId: candidateId,
@@ -529,18 +622,24 @@ export async function profileModels(
           inputTokens: result.inputTokens ?? 0,
           outputTokens: result.outputTokens ?? 0,
         });
-        break; // Success
+        break;
       } catch (err) {
-        // Log failed attempt for cost tracking
+        lastError = `${candidateId}: ${err instanceof Error ? err.message : "Unknown error"}`;
+        console.error(`[profiling] ${lastError}`);
         await logTokenUsage({
           agentId: "system:model-profiler",
           providerId: candidateId,
           contextKey: `profile-${providerId}-batch-${i}-failed`,
           inputTokens: 0,
           outputTokens: 0,
-        }).catch(() => {}); // Don't let logging failure block fallback
-        continue; // Try next provider
+        }).catch(() => {});
+        continue;
       }
+    }
+
+    // If all providers failed for this batch, return the last error
+    if (profiles.length === 0 && lastError) {
+      return { profiled: totalProfiled, failed: batch.length, error: lastError };
     }
 
     // Save successful profiles

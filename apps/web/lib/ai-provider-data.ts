@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import type {
   ProviderWithCredential,
   ProviderRow,
+  CredentialRow,
   SpendByProvider,
   SpendByAgent,
   ScheduledJobRow,
@@ -12,21 +13,54 @@ import type {
   ModelProfileRow,
 } from "./ai-provider-types";
 
+/** Mask a secret to `••••••1234` (last 4 chars visible). */
+function maskSecret(value: string | null): string | null {
+  if (!value) return null;
+  // Encrypted values start with "enc:" — we can't show the last 4 meaningfully
+  if (value.startsWith("enc:")) return "••••••••";
+  if (value.length <= 4) return "••••";
+  return "••••••" + value.slice(-4);
+}
+
+/** Strip secrets before sending credential data to the client. */
+function maskCredential(cred: {
+  providerId: string;
+  secretRef: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
+  tokenEndpoint: string | null;
+  scope: string | null;
+  status: string;
+}): CredentialRow {
+  return {
+    providerId:       cred.providerId,
+    secretHint:       maskSecret(cred.secretRef),
+    clientId:         cred.clientId,
+    clientSecretHint: maskSecret(cred.clientSecret),
+    tokenEndpoint:    cred.tokenEndpoint,
+    scope:            cred.scope,
+    status:           cred.status,
+  };
+}
+
 export const getProviders = cache(async (): Promise<ProviderWithCredential[]> => {
   const providers = await prisma.modelProvider.findMany({ orderBy: { name: "asc" } });
   const credentials = await prisma.credentialEntry.findMany({
     where: { providerId: { in: providers.map((p) => p.providerId) } },
   });
   const credMap = new Map(credentials.map((c) => [c.providerId, c]));
-  return providers.map((p) => ({
-    provider: {
-      ...p,
-      families:             p.families as string[],
-      enabledFamilies:      p.enabledFamilies as string[],
-      supportedAuthMethods: p.supportedAuthMethods as string[],
-    } satisfies ProviderRow,
-    credential: credMap.get(p.providerId) ?? null,
-  }));
+  return providers.map((p) => {
+    const raw = credMap.get(p.providerId);
+    return {
+      provider: {
+        ...p,
+        families:             p.families as string[],
+        enabledFamilies:      p.enabledFamilies as string[],
+        supportedAuthMethods: p.supportedAuthMethods as string[],
+      } satisfies ProviderRow,
+      credential: raw ? maskCredential(raw) : null,
+    };
+  });
 });
 
 export const getProviderById = cache(async (providerId: string): Promise<ProviderWithCredential | null> => {
@@ -40,7 +74,7 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       enabledFamilies:      provider.enabledFamilies as string[],
       supportedAuthMethods: provider.supportedAuthMethods as string[],
     } satisfies ProviderRow,
-    credential: credential ?? null,
+    credential: credential ? maskCredential(credential) : null,
   };
 });
 
