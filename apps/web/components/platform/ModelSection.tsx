@@ -43,10 +43,13 @@ export function ModelSection({
     profiles.map((p) => [p.modelId, p])
   );
 
-  // Stale detection: models where lastSeenAt < latestDiscovery
+  // Stale detection: models not seen in the most recent discovery run.
+  // Use a 5-minute tolerance so models upserted sequentially in the same
+  // run aren't falsely marked stale due to slight timestamp differences.
+  const STALE_TOLERANCE_MS = 5 * 60 * 1000;
   function isModelStale(model: DiscoveredModelRow): boolean {
     if (!latestDiscovery) return false;
-    return model.lastSeenAt < latestDiscovery;
+    return latestDiscovery.getTime() - model.lastSeenAt.getTime() > STALE_TOLERANCE_MS;
   }
 
   // Filtered models based on search query
