@@ -3,6 +3,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import type { CanvasState } from "@/lib/ea-types";
 import {
   validateEaLifecycle,
   validateEaRelationship,
@@ -167,10 +168,30 @@ type CreateEaRelationshipInput = {
   toElementId: string;
   relationshipTypeId: string;
   properties?: Record<string, unknown>;
+  viewId?: string;
 };
 
-export async function createEaRelationship(input: CreateEaRelationshipInput): Promise<void> {
+export async function createEaRelationship(
+  input: CreateEaRelationshipInput,
+): Promise<{ error: string } | void> {
   const { userId } = await requireManageEaModel();
+
+  const rt = await prisma.eaRelationshipType.findUnique({
+    where: { id: input.relationshipTypeId },
+    select: { neoType: true, slug: true, notation: { select: { slug: true } } },
+  });
+  if (!rt) throw new Error("Relationship type not found");
+
+  // Validate against viewpoint if a view context is provided
+  if (input.viewId) {
+    const view = await prisma.eaView.findUnique({
+      where: { id: input.viewId },
+      select: { viewpoint: { select: { allowedRelTypeSlugs: true } } },
+    });
+    if (view?.viewpoint && !view.viewpoint.allowedRelTypeSlugs.includes(rt.slug)) {
+      return { error: "RelationshipTypeNotAllowedByViewpoint" };
+    }
+  }
 
   const validation = await validateEaRelationship(
     input.fromElementId,
@@ -178,12 +199,6 @@ export async function createEaRelationship(input: CreateEaRelationshipInput): Pr
     input.relationshipTypeId,
   );
   if (!validation.valid) throw new Error(validation.reason);
-
-  const rt = await prisma.eaRelationshipType.findUnique({
-    where: { id: input.relationshipTypeId },
-    select: { neoType: true, slug: true, notation: { select: { slug: true } } },
-  });
-  if (!rt) throw new Error("Relationship type not found");
 
   const rel = await prisma.eaRelationship.create({
     data: {
@@ -299,6 +314,7 @@ type CreateEaViewInput = {
   layoutType: string;
   scopeType: string;
   scopeRef?: string;
+  viewpointId?: string;
 };
 
 export async function createEaView(input: CreateEaViewInput): Promise<void> {
@@ -311,6 +327,7 @@ export async function createEaView(input: CreateEaViewInput): Promise<void> {
       layoutType:  input.layoutType,
       scopeType:   input.scopeType,
       scopeRef:    input.scopeRef ?? null,
+      viewpointId: input.viewpointId ?? null,
       createdById: userId,
     },
   });
@@ -328,4 +345,180 @@ export async function updateEaView(id: string, input: Partial<CreateEaViewInput>
       ...(input.scopeRef    !== undefined && { scopeRef: input.scopeRef }),
     },
   });
+}
+
+// ─── View element actions ─────────────────────────────────────────────────────
+
+export async function addElementToView(input: {
+  viewId: string;
+  mode: "new" | "reference" | "propose";
+  elementTypeId?: string;
+  name?: string;
+  elementId?: string;
+  initialX: number;
+  initialY: number;
+}): Promise<{ viewElement: { id: string; mode: string; elementId: string } } | { error: string }> {
+  const { userId } = await requireManageEaModel();
+
+  // Fetch view + viewpoint
+  const view = await prisma.eaView.findUnique({
+    where: { id: input.viewId },
+    select: {
+      viewpoint: { select: { allowedElementTypeSlugs: true, allowedRelTypeSlugs: true } },
+      canvasState: true,
+    },
+  });
+  if (!view) return { error: "ViewNotFound" };
+
+  try {
+    let resolvedElementId: string;
+
+    if (input.mode === "new") {
+      if (!input.elementTypeId || !input.name) return { error: "MissingRequiredFields" };
+
+      // Validate element type against viewpoint
+      const et = await prisma.eaElementType.findUnique({
+        where: { id: input.elementTypeId },
+        select: { slug: true, neoLabel: true, notation: { select: { slug: true } } },
+      });
+      if (!et) return { error: "ElementTypeNotFound" };
+
+      if (
+        view.viewpoint &&
+        !view.viewpoint.allowedElementTypeSlugs.includes(et.slug)
+      ) {
+        return { error: "ElementTypeNotAllowedByViewpoint" };
+      }
+
+      const validation = await validateEaLifecycle(input.elementTypeId, "plan", "draft");
+      if (!validation.valid) return { error: validation.reason ?? "InvalidLifecycle" };
+
+      const element = await prisma.eaElement.create({
+        data: {
+          elementTypeId:   input.elementTypeId,
+          name:            input.name,
+          lifecycleStage:  "plan",
+          lifecycleStatus: "draft",
+          properties:      {} as Prisma.InputJsonValue,
+          createdById:     userId,
+        },
+      });
+      resolvedElementId = element.id;
+    } else {
+      if (!input.elementId) return { error: "MissingRequiredFields" };
+
+      // Validate element type against viewpoint
+      const element = await prisma.eaElement.findUnique({
+        where: { id: input.elementId },
+        select: { elementType: { select: { slug: true } } },
+      });
+      if (!element) return { error: "ElementNotFound" };
+
+      if (
+        view.viewpoint &&
+        !view.viewpoint.allowedElementTypeSlugs.includes(element.elementType.slug)
+      ) {
+        return { error: "ElementTypeNotAllowedByViewpoint" };
+      }
+
+      resolvedElementId = input.elementId;
+    }
+
+    // Wrap viewElement create + canvasState update in a transaction for atomicity.
+    const viewElement = await prisma.$transaction(async (tx) => {
+      const ve = await tx.eaViewElement.create({
+        data: {
+          viewId:    input.viewId,
+          elementId: resolvedElementId,
+          mode:      input.mode,
+        },
+        select: { id: true, mode: true, elementId: true },
+      });
+
+      // Write initial position into canvasState in the same transaction
+      const existing = (view.canvasState as CanvasState | null) ?? {
+        viewport: { x: 0, y: 0, zoom: 1 },
+        nodes: {},
+      };
+      const updated: CanvasState = {
+        ...existing,
+        nodes: { ...existing.nodes, [ve.id]: { x: input.initialX, y: input.initialY } },
+      };
+      await tx.eaView.update({
+        where: { id: input.viewId },
+        data: { canvasState: updated as unknown as Prisma.InputJsonValue },
+      });
+
+      return ve;
+    });
+
+    return { viewElement };
+  } catch (err) {
+    const prismaErr = err as { code?: string };
+    if (prismaErr.code === "P2002") return { error: "ElementAlreadyOnView" };
+    throw err;
+  }
+}
+
+export async function removeElementFromView(input: {
+  viewElementId: string;
+}): Promise<{ error?: string }> {
+  await requireManageEaModel();
+  try {
+    await prisma.eaViewElement.delete({ where: { id: input.viewElementId } });
+    return {};
+  } catch (err) {
+    const prismaErr = err as { code?: string };
+    if (prismaErr.code === "P2025") return { error: "ViewElementNotFound" };
+    throw err;
+  }
+}
+
+export async function updateProposedProperties(input: {
+  viewElementId: string;
+  properties: Record<string, unknown>;
+}): Promise<{ error?: string }> {
+  await requireManageEaModel();
+
+  const ve = await prisma.eaViewElement.findUnique({
+    where: { id: input.viewElementId },
+    select: { mode: true },
+  });
+  if (!ve) return { error: "ViewElementNotFound" };
+  if (ve.mode === "reference") return { error: "CannotEditReference" };
+
+  await prisma.eaViewElement.update({
+    where: { id: input.viewElementId },
+    data: { proposedProperties: input.properties as Prisma.InputJsonValue },
+  });
+  return {};
+}
+
+export async function saveCanvasState(input: {
+  viewId: string;
+  canvasState: CanvasState;
+}): Promise<void> {
+  await requireManageEaModel();
+  await prisma.eaView.update({
+    where: { id: input.viewId },
+    data: { canvasState: input.canvasState as unknown as Prisma.InputJsonValue },
+  });
+}
+
+export async function getDefaultRelTypeIdForView(viewId: string): Promise<string | null> {
+  const view = await prisma.eaView.findUnique({
+    where: { id: viewId },
+    select: {
+      notation: { select: { id: true } },
+      viewpoint: { select: { allowedRelTypeSlugs: true } },
+    },
+  });
+  if (!view?.viewpoint?.allowedRelTypeSlugs.length) return null;
+  const slug = view.viewpoint.allowedRelTypeSlugs[0];
+  if (!slug) return null;
+  const rt = await prisma.eaRelationshipType.findUnique({
+    where: { notationId_slug: { notationId: view.notation.id, slug } },
+    select: { id: true },
+  });
+  return rt?.id ?? null;
 }

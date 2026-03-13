@@ -23,9 +23,17 @@ vi.mock("@dpf/db", () => ({
       delete:     vi.fn(),
       findUnique: vi.fn(),
     },
-    eaView:    { create: vi.fn(), update: vi.fn() },
+    eaView:    { create: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
     eaElementType: { findUnique: vi.fn() },
     eaRelationshipType: { findUnique: vi.fn() },
+    eaViewElement: {
+      create:     vi.fn(),
+      delete:     vi.fn(),
+      findUnique: vi.fn(),
+      update:     vi.fn(),
+    },
+    viewpointDefinition: { findUnique: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -53,6 +61,10 @@ import {
   createEaRelationship,
   advanceEaLifecycle,
   deleteEaElement,
+  addElementToView,
+  removeElementFromView,
+  updateProposedProperties,
+  saveCanvasState,
 } from "./ea";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -68,6 +80,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.mockResolvedValue(authorizedSession);
   mockCan.mockReturnValue(true);
+  (prisma.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+    (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma)
+  );
 });
 
 // ─── createEaElement ──────────────────────────────────────────────────────────
@@ -198,5 +213,227 @@ describe("deleteEaElement", () => {
     expect(mockPrisma.eaElement.delete).toHaveBeenCalledWith({ where: { id: "el-1" } });
     // Neo4j delete is fire-and-forget; assert it was called (the mock returns void)
     expect(neoDeleteSpy).toHaveBeenCalledWith("el-1");
+  });
+});
+
+describe("addElementToView", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("mode=new — valid type — creates element and view element", async () => {
+    const mockElementType = { id: "et1", slug: "app_component", neoLabel: "AppComponent" };
+    const mockView = {
+      id: "v1",
+      viewpoint: { allowedElementTypeSlugs: ["app_component"], allowedRelTypeSlugs: [] },
+      canvasState: null,
+    };
+    const mockElement = { id: "e1", name: "Order API", elementTypeId: "et1", portfolioId: null, infraCiKey: null };
+    const mockViewElement = { id: "ve1", mode: "new", elementId: "e1" };
+
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    (prisma.eaElementType.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockElementType);
+    mockValidateLifecycle.mockResolvedValue({ valid: true });
+    (prisma.eaElement.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockElement);
+    (prisma.eaViewElement.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockViewElement);
+    (prisma.eaView.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const result = await addElementToView({
+      viewId: "v1",
+      mode: "new",
+      elementTypeId: "et1",
+      name: "Order API",
+      initialX: 100,
+      initialY: 200,
+    });
+
+    expect(result).toEqual({ viewElement: { id: "ve1", mode: "new", elementId: "e1" } });
+    expect(prisma.eaElement.create).toHaveBeenCalledOnce();
+    expect(prisma.eaViewElement.create).toHaveBeenCalledOnce();
+    expect(prisma.eaView.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "v1" } })
+    );
+  });
+
+  it("type not allowed by viewpoint — returns error", async () => {
+    const mockView = {
+      id: "v1",
+      viewpoint: { allowedElementTypeSlugs: ["business_capability"], allowedRelTypeSlugs: [] },
+      canvasState: null,
+    };
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    (prisma.eaElementType.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ slug: "app_component" });
+
+    const result = await addElementToView({
+      viewId: "v1",
+      mode: "new",
+      elementTypeId: "et1",
+      name: "Order API",
+      initialX: 0,
+      initialY: 0,
+    });
+
+    expect(result).toEqual({ error: "ElementTypeNotAllowedByViewpoint" });
+  });
+
+  it("mode=reference — duplicate — returns ElementAlreadyOnView", async () => {
+    const mockView = {
+      id: "v1",
+      viewpoint: { allowedElementTypeSlugs: ["app_component"], allowedRelTypeSlugs: [] },
+      canvasState: null,
+    };
+    const mockElement = { id: "e1", elementType: { slug: "app_component" } };
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    (prisma.eaElement.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockElement);
+    const prismaUniqueError = Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    (prisma.eaViewElement.create as ReturnType<typeof vi.fn>).mockRejectedValue(prismaUniqueError);
+
+    const result = await addElementToView({
+      viewId: "v1",
+      mode: "reference",
+      elementId: "e1",
+      initialX: 0,
+      initialY: 0,
+    });
+
+    expect(result).toEqual({ error: "ElementAlreadyOnView" });
+  });
+
+  it("mode=propose — creates viewElement with mode=propose", async () => {
+    const mockView = {
+      id: "v1",
+      viewpoint: { allowedElementTypeSlugs: ["application_component"], allowedRelTypeSlugs: [] },
+      canvasState: null,
+    };
+    const mockElement = { id: "e1", elementType: { slug: "application_component" } };
+    const mockViewElement = { id: "ve1", mode: "propose", elementId: "e1" };
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    (prisma.eaElement.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockElement);
+    (prisma.eaViewElement.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockViewElement);
+    (prisma.eaView.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const result = await addElementToView({
+      viewId: "v1",
+      mode: "propose",
+      elementId: "e1",
+      initialX: 50,
+      initialY: 75,
+    });
+    expect(result).toEqual({ viewElement: { id: "ve1", mode: "propose", elementId: "e1" } });
+    expect(prisma.eaViewElement.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ mode: "propose" }) })
+    );
+  });
+
+  it("mode=new — initial position written into canvasState", async () => {
+    const mockElementType = { id: "et1", slug: "application_component", neoLabel: "ArchiMate__ApplicationComponent", notation: { slug: "archimate4" } };
+    const mockView = {
+      id: "v1",
+      viewpoint: { allowedElementTypeSlugs: ["application_component"], allowedRelTypeSlugs: [] },
+      canvasState: null,
+    };
+    const mockElement = { id: "e1", name: "Order API", elementTypeId: "et1", portfolioId: null, infraCiKey: null };
+    const mockViewElement = { id: "ve1", mode: "new", elementId: "e1" };
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    (prisma.eaElementType.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockElementType);
+    mockValidateLifecycle.mockResolvedValue({ valid: true });
+    (prisma.eaElement.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockElement);
+    (prisma.eaViewElement.create as ReturnType<typeof vi.fn>).mockResolvedValue(mockViewElement);
+    (prisma.eaView.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    await addElementToView({
+      viewId: "v1",
+      mode: "new",
+      elementTypeId: "et1",
+      name: "Order API",
+      initialX: 120,
+      initialY: 300,
+    });
+    expect(prisma.eaView.update).toHaveBeenCalledWith({
+      where: { id: "v1" },
+      data: expect.objectContaining({
+        canvasState: expect.objectContaining({
+          nodes: { ve1: { x: 120, y: 300 } },
+        }),
+      }),
+    });
+  });
+});
+
+describe("removeElementFromView", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("existing id — deletes and returns no error", async () => {
+    (prisma.eaViewElement.delete as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const result = await removeElementFromView({ viewElementId: "ve1" });
+    expect(result).toEqual({});
+    expect(prisma.eaViewElement.delete).toHaveBeenCalledWith({ where: { id: "ve1" } });
+  });
+
+  it("unknown id — returns ViewElementNotFound", async () => {
+    const notFoundError = Object.assign(new Error("Record not found"), { code: "P2025" });
+    (prisma.eaViewElement.delete as ReturnType<typeof vi.fn>).mockRejectedValue(notFoundError);
+    const result = await removeElementFromView({ viewElementId: "nope" });
+    expect(result).toEqual({ error: "ViewElementNotFound" });
+  });
+});
+
+describe("updateProposedProperties", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("mode=reference — returns CannotEditReference", async () => {
+    (prisma.eaViewElement.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "ve1", mode: "reference",
+    });
+    const result = await updateProposedProperties({
+      viewElementId: "ve1",
+      properties: { name: "new name" },
+    });
+    expect(result).toEqual({ error: "CannotEditReference" });
+  });
+});
+
+describe("saveCanvasState", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("persists canvasState JSON to EaView", async () => {
+    (prisma.eaView.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const canvasState = { viewport: { x: 0, y: 0, zoom: 1 }, nodes: { ve1: { x: 100, y: 200 } } };
+    await saveCanvasState({ viewId: "v1", canvasState });
+    expect(prisma.eaView.update).toHaveBeenCalledWith({
+      where: { id: "v1" },
+      data: { canvasState: canvasState as unknown as import("@dpf/db").Prisma.InputJsonValue },
+    });
+  });
+});
+
+describe("createEaRelationship — viewpoint check", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("viewId + rel type not allowed by viewpoint → returns error", async () => {
+    const mockRelType = { id: "rt1", slug: "depends_on" };
+    const mockView = {
+      viewpoint: { allowedRelTypeSlugs: ["realizes", "associated_with"] },
+    };
+    (prisma.eaRelationshipType.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockRelType);
+    (prisma.eaView.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockView);
+    const result = await createEaRelationship({
+      fromElementId: "e1",
+      toElementId: "e2",
+      relationshipTypeId: "rt1",
+      viewId: "v1",
+    });
+    expect(result).toEqual({ error: "RelationshipTypeNotAllowedByViewpoint" });
   });
 });
