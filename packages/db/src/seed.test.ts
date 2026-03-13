@@ -22,4 +22,9 @@ describe("seed helpers", () => {
     expect(parseAgentType("AGT-100")).toBe("specialist");
     expect(parseAgentType("AGT-900")).toBe("cross-cutting");
   });
+
+  it("exports seedEaReferenceModels", async () => {
+    const mod = await import("./index.js");
+    expect(typeof mod.seedEaReferenceModels).toBe("function");
+  });
 });
