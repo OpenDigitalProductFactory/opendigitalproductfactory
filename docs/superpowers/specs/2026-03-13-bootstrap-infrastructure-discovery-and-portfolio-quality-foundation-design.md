@@ -30,6 +30,11 @@ Implementation slice 1 persistence models:
 - `InventoryRelationship`
 - `PortfolioQualityIssue`
 
+Implementation status:
+
+- slice 1 delivered: local bootstrap discovery, normalized inventory, foundational attribution, graph projection, quality issue surfacing
+- deferred: remote customer discovery, topology expansion, external discovery connectors, full reconciliation
+
 ---
 
 ## Implementation Status Target
