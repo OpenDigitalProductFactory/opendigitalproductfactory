@@ -487,9 +487,41 @@ export async function profileModels(
       try {
         const result = await callProviderForProfiling(candidateId, prompt);
         profiles = parseProfilingResponse(result.text);
-        usedProviderId = candidateId;
 
-        // Log token usage (success)
+        // If JSON parse failed, retry once with a stricter prompt
+        if (profiles.length === 0) {
+          const stricterPrompt =
+            "IMPORTANT: Respond ONLY with a valid JSON array. No markdown code fences, no explanation text.\n\n" +
+            prompt;
+          const retryResult = await callProviderForProfiling(candidateId, stricterPrompt);
+          profiles = parseProfilingResponse(retryResult.text);
+
+          if (profiles.length > 0) {
+            usedProviderId = candidateId;
+            // Log token usage for successful retry
+            await logTokenUsage({
+              agentId: "system:model-profiler",
+              providerId: candidateId,
+              contextKey: `profile-${providerId}-batch-${i}`,
+              inputTokens: (result.inputTokens ?? 0) + (retryResult.inputTokens ?? 0),
+              outputTokens: (result.outputTokens ?? 0) + (retryResult.outputTokens ?? 0),
+            });
+            break; // Success after retry
+          }
+
+          // Retry also failed — log failure and try next provider
+          await logTokenUsage({
+            agentId: "system:model-profiler",
+            providerId: candidateId,
+            contextKey: `profile-${providerId}-batch-${i}-failed`,
+            inputTokens: 0,
+            outputTokens: 0,
+          }).catch(() => {}); // Don't let logging failure block fallback
+          continue; // Try next provider
+        }
+
+        usedProviderId = candidateId;
+        // Log token usage (success on first attempt)
         await logTokenUsage({
           agentId: "system:model-profiler",
           providerId: candidateId,
@@ -497,8 +529,7 @@ export async function profileModels(
           inputTokens: result.inputTokens ?? 0,
           outputTokens: result.outputTokens ?? 0,
         });
-
-        if (profiles.length > 0) break; // Success
+        break; // Success
       } catch (err) {
         // Log failed attempt for cost tracking
         await logTokenUsage({
