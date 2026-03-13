@@ -2,12 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { configureProvider, testProviderAuth } from "@/lib/actions/ai-providers";
-import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
+import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 
-type Props = { pw: ProviderWithCredential; canWrite: boolean };
+type Props = {
+  pw: ProviderWithCredential;
+  canWrite: boolean;
+  models: DiscoveredModelRow[];
+  profiles: ModelProfileRow[];
+};
 
-export function ProviderDetailForm({ pw, canWrite }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles }: Props) {
   const { provider, credential } = pw;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -19,6 +24,7 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
   const [enabledFamilies, setEnabledFamilies]       = useState<string[]>(provider.enabledFamilies);
   const [testResult, setTestResult]                 = useState<{ ok: boolean; message: string } | null>(null);
   const [saveMessage, setSaveMessage]               = useState<string | null>(null);
+  const [discoveryResult, setDiscoveryResult]       = useState<{ discovered: number; newCount: number; error?: string } | null>(null);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
   const [clientSecret, setClientSecret]             = useState(credential?.clientSecret ?? "");
@@ -67,6 +73,18 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
     startTransition(async () => {
       const result = await testProviderAuth(provider.providerId);
       setTestResult(result);
+      if (result.ok) {
+        const discovery = await discoverModels(provider.providerId);
+        setDiscoveryResult(discovery);
+      }
+      router.refresh();
+    });
+  }
+
+  function handleRefreshModels() {
+    startTransition(async () => {
+      const discovery = await discoverModels(provider.providerId);
+      setDiscoveryResult(discovery);
       router.refresh();
     });
   }
@@ -277,6 +295,33 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
           )}
         </div>
       )}
+
+      {canWrite && provider.status === "active" && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            onClick={handleRefreshModels}
+            disabled={isPending}
+            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}
+          >
+            Refresh Models
+          </button>
+          {discoveryResult && (
+            <span style={{ marginLeft: 8, fontSize: 10, color: discoveryResult.error ? "#f87171" : "#4ade80" }}>
+              {discoveryResult.error
+                ? `Error: ${discoveryResult.error}`
+                : `${discoveryResult.discovered} model${discoveryResult.discovered !== 1 ? "s" : ""} discovered (${discoveryResult.newCount} new)`}
+            </span>
+          )}
+        </div>
+      )}
+
+      {models.length > 0 && (
+        <p style={{ color: "#555566", fontSize: 10, marginTop: 8 }}>
+          {models.length} model{models.length !== 1 ? "s" : ""} discovered
+        </p>
+      )}
+
+      {void profiles}
     </div>
   );
 }
