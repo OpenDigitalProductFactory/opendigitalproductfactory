@@ -21,18 +21,25 @@ export type DqViolation = {
 
 /** Check that (fromElementType, toElementType, relationshipType) is a permitted combination
  *  per EaRelationshipRule. Called before createEaRelationship. */
+// Relationship type slugs that ArchiMate defines as universal (no element-type constraints).
+const UNIVERSAL_REL_TYPE_SLUGS = new Set(["associated_with", "influences"]);
+
 export async function validateEaRelationship(
   fromElementId: string,
   toElementId: string,
   relationshipTypeId: string,
 ): Promise<ValidationResult> {
-  const [from, to] = await Promise.all([
+  const [from, to, relType] = await Promise.all([
     prisma.eaElement.findUnique({ where: { id: fromElementId }, select: { elementTypeId: true } }),
     prisma.eaElement.findUnique({ where: { id: toElementId },   select: { elementTypeId: true } }),
+    prisma.eaRelationshipType.findUnique({ where: { id: relationshipTypeId }, select: { slug: true } }),
   ]);
 
   if (!from) return { valid: false, reason: `Source element "${fromElementId}" not found` };
   if (!to)   return { valid: false, reason: `Target element "${toElementId}" not found` };
+
+  // Universal relationship types (ArchiMate Association, Influence) may connect any two elements.
+  if (relType && UNIVERSAL_REL_TYPE_SLUGS.has(relType.slug)) return { valid: true };
 
   const rule = await prisma.eaRelationshipRule.findFirst({
     where: {
