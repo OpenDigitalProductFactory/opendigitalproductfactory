@@ -19,6 +19,11 @@ This spec treats HR workforce data as a domain overlay on top of:
 
 The workforce layer is not just "HR admin". It becomes the human operating model that AI coworkers will attach to. Employee identity and reporting structure are therefore product-critical, not back-office decoration.
 
+Implementation status:
+
+- slice 1 delivered: employee profile core, org references, manager links, lifecycle events, employee route visibility
+- deferred: payroll, benefits, attendance, leave execution, performance workflows
+
 Implementation slice 1 models:
 
 - `EmployeeProfile`
