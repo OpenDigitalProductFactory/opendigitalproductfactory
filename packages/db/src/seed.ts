@@ -4,6 +4,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
+import { seedGovernanceReferenceData } from "./governance-seed.js";
 import * as crypto from "crypto";
 
 // Repo root: prefer DPF_DATA_ROOT env var (needed when running from a worktree),
@@ -621,6 +622,7 @@ async function seedScheduledJobs(): Promise<void> {
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
+  await seedGovernanceReferenceData(prisma);
   await seedPortfolios();
   await seedAgents();
   await seedTaxonomyNodes();
