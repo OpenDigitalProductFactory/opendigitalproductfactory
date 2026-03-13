@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { collectDockerDiscovery } from "./discovery-collectors/docker";
 import { collectHostDiscovery } from "./discovery-collectors/host";
 import { collectKubernetesDiscovery } from "./discovery-collectors/kubernetes";
-import { mergeCollectorOutputs, runBootstrapCollectors } from "./discovery-runner";
+import {
+  executeBootstrapDiscovery,
+  mergeCollectorOutputs,
+  runBootstrapCollectors,
+} from "./discovery-runner";
 
 describe("mergeCollectorOutputs", () => {
   it("combines collector outputs without dropping items or relationships", () => {
@@ -72,5 +76,38 @@ describe("runBootstrapCollectors", () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.warnings).toContain("docker_unavailable");
+  });
+});
+
+describe("executeBootstrapDiscovery", () => {
+  it("creates a run through the orchestration path and returns a stable summary", async () => {
+    const persist = vi.fn().mockResolvedValue({
+      runId: "run-1",
+      createdEntities: 1,
+      updatedEntities: 0,
+      staleEntities: 0,
+      createdRelationships: 0,
+      updatedRelationships: 0,
+      staleRelationships: 0,
+      createdIssues: 0,
+    });
+
+    const summary = await executeBootstrapDiscovery({} as never, {
+      collectors: [
+        async () => ({
+          items: [{ sourceKind: "dpf_bootstrap", itemType: "host", name: "dpf-dev", externalRef: "host:dpf-dev" }],
+          relationships: [],
+        }),
+      ],
+      persist,
+      runKey: "DISC-001",
+      trigger: "bootstrap",
+    });
+
+    expect(persist).toHaveBeenCalledOnce();
+    expect(summary).toMatchObject({
+      runId: "run-1",
+      createdEntities: 1,
+    });
   });
 });

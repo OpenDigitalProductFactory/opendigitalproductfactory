@@ -1,11 +1,9 @@
 "use server";
 
-import * as crypto from "crypto";
 import {
-  normalizeDiscoveredFacts,
+  executeBootstrapDiscovery,
   persistBootstrapDiscoveryRun,
   prisma,
-  runBootstrapCollectors,
 } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
@@ -39,11 +37,7 @@ export async function triggerBootstrapDiscovery(): Promise<
   }
 
   try {
-    const collected = await runBootstrapCollectors();
-    const normalized = normalizeDiscoveredFacts(collected);
-    const summary = await persistBootstrapDiscoveryRun(prisma as never, normalized, {
-      runKey: `DISC-${crypto.randomUUID()}`,
-      sourceSlug: "dpf_bootstrap",
+    const summary = await executeBootstrapDiscovery(prisma as never, {
       trigger: "manual",
     });
 

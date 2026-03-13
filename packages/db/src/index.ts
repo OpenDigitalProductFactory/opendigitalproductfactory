@@ -37,7 +37,10 @@ export {
   type NormalizedInventoryEntity,
   type NormalizedInventoryRelationship,
 } from "./discovery-normalize";
-export { runBootstrapCollectors } from "./discovery-runner";
+export {
+  executeBootstrapDiscovery,
+  runBootstrapCollectors,
+} from "./discovery-runner";
 export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,

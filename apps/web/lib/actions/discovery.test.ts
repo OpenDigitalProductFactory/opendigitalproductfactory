@@ -11,8 +11,7 @@ vi.mock("next/cache", () => ({
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {},
-  runBootstrapCollectors: vi.fn(),
-  normalizeDiscoveredFacts: vi.fn(),
+  executeBootstrapDiscovery: vi.fn(),
   persistBootstrapDiscoveryRun: vi.fn(),
 }));
 
