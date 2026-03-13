@@ -9,7 +9,7 @@ vi.mock("./client.js", () => ({
     eaElementType:     { findUnique: vi.fn(), findFirst: vi.fn() },
     eaDqRule:          { findMany: vi.fn() },
     eaRelationship:    { count: vi.fn() },
-    eaRelationshipType: { findFirst: vi.fn() },
+    eaRelationshipType: { findUnique: vi.fn(), findFirst: vi.fn() },
   },
 }));
 
@@ -26,7 +26,7 @@ const mockPrisma = prisma as unknown as {
   eaElementType:       { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   eaDqRule:            { findMany:   ReturnType<typeof vi.fn> };
   eaRelationship:      { count:      ReturnType<typeof vi.fn> };
-  eaRelationshipType:  { findFirst:  ReturnType<typeof vi.fn> };
+  eaRelationshipType:  { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => { vi.clearAllMocks(); });
@@ -38,6 +38,7 @@ describe("validateEaRelationship", () => {
     mockPrisma.eaElement.findUnique
       .mockResolvedValueOnce({ elementTypeId: "et-app" })
       .mockResolvedValueOnce({ elementTypeId: "et-biz" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "serves" });
     mockPrisma.eaRelationshipRule.findFirst.mockResolvedValueOnce({ id: "rule-1" });
 
     const result = await validateEaRelationship("el-1", "el-2", "rt-1");
@@ -48,6 +49,7 @@ describe("validateEaRelationship", () => {
     mockPrisma.eaElement.findUnique
       .mockResolvedValueOnce({ elementTypeId: "et-app" })
       .mockResolvedValueOnce({ elementTypeId: "et-biz" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "serves" });
     mockPrisma.eaRelationshipRule.findFirst.mockResolvedValueOnce(null);
 
     const result = await validateEaRelationship("el-1", "el-2", "rt-1");
@@ -58,6 +60,7 @@ describe("validateEaRelationship", () => {
     mockPrisma.eaElement.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ elementTypeId: "et-biz" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "serves" });
 
     const result = await validateEaRelationship("el-missing", "el-2", "rt-1");
     expect(result.valid).toBe(false);
@@ -67,6 +70,7 @@ describe("validateEaRelationship", () => {
     mockPrisma.eaElement.findUnique
       .mockResolvedValueOnce({ elementTypeId: "et-app" })
       .mockResolvedValueOnce(null);
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "serves" });
 
     const result = await validateEaRelationship("el-1", "el-missing", "rt-1");
     expect(result.valid).toBe(false);
