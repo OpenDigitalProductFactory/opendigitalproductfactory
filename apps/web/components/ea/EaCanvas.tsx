@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls,
+  ReactFlow, Background, Controls, ConnectionMode,
   useNodesState, useEdgesState, addEdge,
   type Node, type Edge, type Connection, type OnNodesChange,
 } from "@xyflow/react";
@@ -118,8 +118,9 @@ export function EaCanvas({
     const fromElementId = (sourceNode.data as SerializedViewElement).elementId;
     const toElementId = (targetNode.data as SerializedViewElement).elementId;
 
-    // Resolve the default relationship type ID for this viewpoint (first allowed slug → DB ID).
-    const relTypeId = await getDefaultRelTypeIdForView(viewId);
+    // Resolve a relationship type that has a rule for this specific element pair.
+    // Falls back to associated_with (or first allowed) if no specific rule matches.
+    const relTypeId = await getDefaultRelTypeIdForView(viewId, fromElementId, toElementId);
     if (!relTypeId) {
       console.warn("No allowed relationship types for this viewpoint");
       return;
@@ -215,10 +216,12 @@ export function EaCanvas({
             onNodeClick={handleNodeClick}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
+            connectionMode={ConnectionMode.Loose}
+            colorMode="dark"
             fitView
           >
             <Background color="#2a2a40" gap={20} />
-            <Controls />
+            <Controls style={{ background: "#1a1a2e", border: "1px solid #2a2a40" }} />
           </ReactFlow>
         </div>
       </div>

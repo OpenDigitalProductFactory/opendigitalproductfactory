@@ -6,7 +6,8 @@ import { getEaView } from "@/lib/ea-data";
 import { prisma } from "@dpf/db";
 import { EaCanvas } from "@/components/ea/EaCanvas";
 
-export default async function EaViewPage({ params }: { params: { id: string } }) {
+export default async function EaViewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   const user = session?.user;
 
@@ -15,7 +16,7 @@ export default async function EaViewPage({ params }: { params: { id: string } })
     notFound();
   }
 
-  const view = await getEaView(params.id);
+  const view = await getEaView(id);
   if (!view) notFound();
 
   const isReadOnly = !can(

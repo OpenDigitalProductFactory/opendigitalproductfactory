@@ -286,17 +286,176 @@ async function seedDpfSelfRegistration(): Promise<void> {
     { itemId: "BI-PROD-001", title: "Phase 5A — Backlog CRUD in /ops",                                    status: "in-progress", priority: 1 },
     { itemId: "BI-PROD-002", title: "Phase 5B — DPF self-registration as managed digital product",        status: "in-progress", priority: 2 },
     { itemId: "BI-PROD-003", title: "Phase 2B — Live Agent counts and Health metrics in portfolio panels", status: "open",        priority: 3 },
+    {
+      itemId: "BI-PROD-004",
+      title: "Add a resilient theme option library with branding presets from 10+ companies",
+      status: "open",
+      priority: 4,
+      body: [
+        "Branding source references:",
+        "- ServiceNow",
+        "- TeamLogicIT",
+        "- The Open Group",
+        "- state of TX",
+        "- Rudys",
+        "- Buccees",
+        "- Great Clips",
+        "- Dunkin' Donuts",
+        "- Floyds Glass Co.",
+        "- Atlassian",
+        "- Adobe",
+        "",
+        "Acceptance criteria:",
+        "- Theme presets are stored as structured JSON with palette, typography, spacing, and radius variables.",
+        "- Users can switch themes at runtime and see immediate, consistent UI updates.",
+        "- The application has graceful fallback defaults if a preset is missing one or more tokens.",
+        "- Presets render correctly in dark and light modes where supported.",
+        "- Preset selection is persisted per user and applied on next login.",
+        "- New preset files can be added without code changes to core theme logic.",
+      ].join("\n"),
+    },
+    {
+      itemId: "BI-PROD-005",
+      title: "Define theme token schema and preset packaging contract",
+      status: "open",
+      priority: 5,
+      body: [
+        "Scope:",
+        "- Define a versioned JSON contract for theme presets (palette, typography, spacing, radius, shadows, surfaces, states).",
+        "- Add validation to ensure required tokens exist before publish.",
+        "- Store presets in a repo/config path and load through shared runtime service.",
+        "- Provide migration path for old presets.",
+        "",
+        "Acceptance criteria:",
+        "- Contract is documented and versioned (v1+).",
+        "- CI validation rejects malformed preset objects.",
+        "- No hard-coded theme constants remain outside preset source.",
+      ].join("\n"),
+    },
+    {
+      itemId: "BI-PROD-006",
+      title: "Implement theme provider and runtime theme switching",
+      status: "open",
+      priority: 6,
+      body: [
+        "Scope:",
+        "- Add a centralized ThemeProvider for app-wide CSS variable injection.",
+        "- Render immediate switch between presets without full-page refresh.",
+        "- Support both light and dark mode variants for every preset where available.",
+        "",
+        "Acceptance criteria:",
+        "- Changing preset updates key surfaces within <300ms in normal conditions.",
+        "- Preset fallbacks apply automatically on missing tokens.",
+        "- No visual regression on default app pages.",
+      ].join("\n"),
+    },
+    {
+      itemId: "BI-PROD-007",
+      title: "Persist theme preference per user and add admin preset management",
+      status: "open",
+      priority: 7,
+      body: [
+        "Scope:",
+        "- Persist selected preset to user profile and restore on login.",
+        "- Add admin UI/API to preview and enable/disable preset availability.",
+        "- Add governance metadata (owner, approval, enabled, deprecation date).",
+        "",
+        "Acceptance criteria:",
+        "- User selection is recovered after refresh and across sessions.",
+        "- Admin can toggle preset visibility without redeploy.",
+        "- Deactivated preset is never selectable by regular users.",
+      ].join("\n"),
+    },
+    {
+      itemId: "BI-PROD-008",
+      title: "AI co-worker branding setup from admin prompt or website URL",
+      status: "open",
+      priority: 8,
+      body: [
+        "Scope:",
+        "- Add an admin action where a user can provide either plain-language branding instructions or a public website URL.",
+        "- Route that request through the co-worker layer to generate a draft branding configuration.",
+        "- Populate theme tokens, logo candidates, and metadata with confidence indicators.",
+        "- Keep a human-in-the-loop approval step before publishing any generated branding profile.",
+        "",
+        "Acceptance criteria:",
+        "- Admin can submit either free-text instructions or URL input from the admin page.",
+        "- Generated branding draft includes primary/secondary colors, accent, and logo recommendation.",
+        "- Admin can review, edit, and approve the generated draft before it becomes active.",
+        "- Rejected drafts remain saved with traceability for later revision.",
+      ].join("\n"),
+    },
   ];
 
   for (const item of productItems) {
+    const backlogBody = item.body ?? null;
     await prisma.backlogItem.upsert({
       where:  { itemId: item.itemId },
-      update: { title: item.title, status: item.status, priority: item.priority, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxonomyNode.id },
-      create: { itemId: item.itemId, title: item.title, status: item.status, priority: item.priority, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxonomyNode.id },
+      update: {
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        body: backlogBody,
+        type: "product",
+        digitalProductId: dpfPortal.id,
+        taxonomyNodeId: taxonomyNode.id,
+      },
+      create: {
+        itemId: item.itemId,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        body: backlogBody,
+        type: "product",
+        digitalProductId: dpfPortal.id,
+        taxonomyNodeId: taxonomyNode.id,
+      },
     });
   }
 
-  console.log("Seeded DPF Portal digital product and 7 backlog items");
+  console.log(`Seeded DPF Portal digital product and ${portfolioItems.length + productItems.length} backlog items`);
+}
+
+async function seedThemeBrandingEpic(): Promise<void> {
+  const portfolio = await prisma.portfolio.findUnique({ where: { slug: "manufacturing_and_delivery" } });
+  if (!portfolio) throw new Error("manufacturing_and_delivery portfolio not seeded");
+
+  const epic = await prisma.epic.upsert({
+    where: { epicId: "EP-UI-THEME-001" },
+    update: {
+      title: "Theme & Branding Modernization",
+      description:
+        "Create a resilient theme-system foundation with configurable color/branding presets from a curated set of company styles.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-UI-THEME-001",
+      title: "Theme & Branding Modernization",
+      description:
+        "Create a resilient theme-system foundation with configurable color/branding presets from a curated set of company styles.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: epic.id, portfolioId: portfolio.id } },
+    update: {},
+    create: { epicId: epic.id, portfolioId: portfolio.id },
+  });
+
+  await prisma.backlogItem.update({
+    where: { itemId: "BI-PROD-004" },
+    data: { epicId: epic.id },
+  });
+
+  await Promise.all([
+    prisma.backlogItem.update({ where: { itemId: "BI-PROD-005" }, data: { epicId: epic.id } }),
+    prisma.backlogItem.update({ where: { itemId: "BI-PROD-006" }, data: { epicId: epic.id } }),
+    prisma.backlogItem.update({ where: { itemId: "BI-PROD-007" }, data: { epicId: epic.id } }),
+    prisma.backlogItem.update({ where: { itemId: "BI-PROD-008" }, data: { epicId: epic.id } }),
+  ]);
+
+  console.log(`Seeded theme epic ${epic.epicId} and linked BI-PROD-004/005/006/007/008`);
 }
 
 async function seedDefaultAdminUser(): Promise<void> {
@@ -391,6 +550,74 @@ async function seedEaViewpoints(): Promise<void> {
   console.log("Seeded 4 viewpoint definitions");
 }
 
+async function seedEaViews(): Promise<void> {
+  const notation = await prisma.eaNotation.findUniqueOrThrow({
+    where: { slug: "archimate4" },
+    select: { id: true },
+  });
+  const appVp = await prisma.viewpointDefinition.findUnique({
+    where: { name: "Application Architecture" },
+    select: { id: true },
+  });
+  const bizVp = await prisma.viewpointDefinition.findUnique({
+    where: { name: "Business Architecture" },
+    select: { id: true },
+  });
+  const views = [
+    {
+      name: "DPF Platform — Application Architecture",
+      description: "Application components and services that make up the Digital Product Factory platform.",
+      layoutType: "graph",
+      scopeType: "portfolio",
+      scopeRef: "foundational",
+      viewpointId: appVp?.id ?? null,
+    },
+    {
+      name: "Business Capability Map",
+      description: "Top-level business capabilities across the organisation.",
+      layoutType: "graph",
+      scopeType: "custom",
+      scopeRef: null,
+      viewpointId: bizVp?.id ?? null,
+    },
+  ];
+  for (const v of views) {
+    const existing = await prisma.eaView.findFirst({ where: { name: v.name }, select: { id: true } });
+    if (!existing) {
+      await prisma.eaView.create({
+        data: {
+          notationId: notation.id,
+          name: v.name,
+          description: v.description,
+          layoutType: v.layoutType,
+          scopeType: v.scopeType,
+          ...(v.scopeRef != null && { scopeRef: v.scopeRef }),
+          ...(v.viewpointId != null && { viewpointId: v.viewpointId }),
+          status: "draft",
+        },
+      });
+    }
+  }
+  console.log(`Seeded ${views.length} EA views`);
+}
+
+async function seedScheduledJobs(): Promise<void> {
+  await prisma.scheduledJob.upsert({
+    where:  { jobId: "provider-registry-sync" },
+    create: {
+      jobId:     "provider-registry-sync",
+      name:      "Provider registry sync",
+      schedule:  "weekly",
+      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    update: {
+      // Only reset schedule — preserve operational state on re-seed
+      schedule: "weekly",
+    },
+  });
+  console.log("Seeded scheduled jobs");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -400,8 +627,11 @@ async function main(): Promise<void> {
   await seedDigitalProducts();
   await seedEaArchimate4();
   await seedEaViewpoints();
+  await seedEaViews();
   await seedDpfSelfRegistration();
+  await seedThemeBrandingEpic();
   await seedDefaultAdminUser();
+  await seedScheduledJobs();
   console.log("Seed complete.");
 }
 

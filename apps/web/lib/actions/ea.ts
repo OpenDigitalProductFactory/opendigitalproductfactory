@@ -505,7 +505,11 @@ export async function saveCanvasState(input: {
   });
 }
 
-export async function getDefaultRelTypeIdForView(viewId: string): Promise<string | null> {
+export async function getDefaultRelTypeIdForView(
+  viewId: string,
+  fromElementId?: string,
+  toElementId?: string,
+): Promise<string | null> {
   await requireManageEaModel();
   const view = await prisma.eaView.findUnique({
     where: { id: viewId },
@@ -515,10 +519,48 @@ export async function getDefaultRelTypeIdForView(viewId: string): Promise<string
     },
   });
   if (!view?.viewpoint?.allowedRelTypeSlugs.length) return null;
-  const slug = view.viewpoint.allowedRelTypeSlugs[0];
+  const allowedSlugs = view.viewpoint.allowedRelTypeSlugs;
+  const notationId = view.notation.id;
+
+  // If element IDs are supplied, find the first allowed rel type that has a rule for this pair.
+  if (fromElementId && toElementId) {
+    const [fromEl, toEl] = await Promise.all([
+      prisma.eaElement.findUnique({ where: { id: fromElementId }, select: { elementTypeId: true } }),
+      prisma.eaElement.findUnique({ where: { id: toElementId },   select: { elementTypeId: true } }),
+    ]);
+    if (fromEl && toEl) {
+      for (const slug of allowedSlugs) {
+        const rt = await prisma.eaRelationshipType.findUnique({
+          where: { notationId_slug: { notationId, slug } },
+          select: { id: true },
+        });
+        if (!rt) continue;
+        const rule = await prisma.eaRelationshipRule.findFirst({
+          where: {
+            fromElementTypeId:  fromEl.elementTypeId,
+            toElementTypeId:    toEl.elementTypeId,
+            relationshipTypeId: rt.id,
+          },
+          select: { id: true },
+        });
+        if (rule) return rt.id;
+      }
+      // No specific rule found — fall back to associated_with if it's allowed
+      const fallbackSlug = allowedSlugs.includes("associated_with") ? "associated_with" : allowedSlugs[0];
+      if (!fallbackSlug) return null;
+      const fallback = await prisma.eaRelationshipType.findUnique({
+        where: { notationId_slug: { notationId, slug: fallbackSlug } },
+        select: { id: true },
+      });
+      return fallback?.id ?? null;
+    }
+  }
+
+  // No element context — return first allowed rel type.
+  const slug = allowedSlugs[0];
   if (!slug) return null;
   const rt = await prisma.eaRelationshipType.findUnique({
-    where: { notationId_slug: { notationId: view.notation.id, slug } },
+    where: { notationId_slug: { notationId, slug } },
     select: { id: true },
   });
   return rt?.id ?? null;
