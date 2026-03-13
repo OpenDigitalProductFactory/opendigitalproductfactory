@@ -506,6 +506,7 @@ export async function saveCanvasState(input: {
 }
 
 export async function getDefaultRelTypeIdForView(viewId: string): Promise<string | null> {
+  await requireManageEaModel();
   const view = await prisma.eaView.findUnique({
     where: { id: viewId },
     select: {
