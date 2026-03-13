@@ -601,6 +601,23 @@ async function seedEaViews(): Promise<void> {
   console.log(`Seeded ${views.length} EA views`);
 }
 
+async function seedScheduledJobs(): Promise<void> {
+  await prisma.scheduledJob.upsert({
+    where:  { jobId: "provider-registry-sync" },
+    create: {
+      jobId:     "provider-registry-sync",
+      name:      "Provider registry sync",
+      schedule:  "weekly",
+      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    update: {
+      // Only reset schedule — preserve operational state on re-seed
+      schedule: "weekly",
+    },
+  });
+  console.log("Seeded scheduled jobs");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -614,6 +631,7 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedThemeBrandingEpic();
   await seedDefaultAdminUser();
+  await seedScheduledJobs();
   console.log("Seed complete.");
 }
 
