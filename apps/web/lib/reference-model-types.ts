@@ -33,3 +33,26 @@ export type ReferenceModelPortfolioRollup = {
   };
   rows: ReferenceModelPortfolioRollupRow[];
 };
+
+export type ReferenceModelDetail = {
+  id: string;
+  slug: string;
+  name: string;
+  version: string;
+  status: string;
+  authorityType: string;
+  description: string | null;
+  artifacts: Array<{
+    id: string;
+    path: string;
+    kind: string;
+    authority: string;
+  }>;
+  proposals: Array<{
+    id: string;
+    proposalType: string;
+    status: string;
+    proposedByType: string;
+    reviewNotes: string | null;
+  }>;
+};
