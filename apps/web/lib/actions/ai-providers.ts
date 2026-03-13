@@ -2,7 +2,7 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
@@ -346,11 +346,11 @@ export async function discoverModels(providerId: string): Promise<{ discovered: 
     if (existing) {
       await prisma.discoveredModel.update({
         where: { id: existing.id },
-        data: { rawMetadata: m.rawMetadata },
+        data: { rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
       });
     } else {
       await prisma.discoveredModel.create({
-        data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata },
+        data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
       });
       newCount++;
     }
