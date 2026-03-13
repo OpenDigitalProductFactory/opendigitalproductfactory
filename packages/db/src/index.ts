@@ -23,3 +23,9 @@ export {
   syncInfraCI,
   syncDependsOn,
 } from "./neo4j-sync";
+export {
+  buildDiscoveredKey,
+  buildInventoryEntityKey,
+  type DiscoveredKeyInput,
+  type InventoryEntityKeyInput,
+} from "./discovery-identity";
