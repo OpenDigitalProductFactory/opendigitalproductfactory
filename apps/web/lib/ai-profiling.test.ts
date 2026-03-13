@@ -53,7 +53,7 @@ describe("parseProfilingResponse", () => {
     }]);
     const result = parseProfilingResponse(text);
     expect(result).toHaveLength(1);
-    expect(result[0].friendlyName).toBe("Smart Worker");
+    expect(result[0]!.friendlyName).toBe("Smart Worker");
   });
 
   it("returns empty array for malformed JSON", () => {
@@ -74,6 +74,6 @@ describe("parseProfilingResponse", () => {
     ]);
     const result = parseProfilingResponse(text);
     expect(result).toHaveLength(1);
-    expect(result[0].modelId).toBe("good");
+    expect(result[0]!.modelId).toBe("good");
   });
 });
