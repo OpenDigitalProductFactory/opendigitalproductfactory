@@ -30,6 +30,17 @@ What is missing is the shared governance layer above those models:
 
 This spec adds that shared layer without rewriting the current `User` and `Agent` models. The design is intentionally additive: it keeps the current data model intact and introduces a governance overlay that can evolve toward a more unified principal model later if needed.
 
+Implementation slice 1 models:
+
+- `Team`
+- `TeamMembership`
+- `AgentOwnership`
+- `AgentCapabilityClass`
+- `DirectivePolicyClass`
+- `AgentGovernanceProfile`
+- `DelegationGrant`
+- `AuthorizationDecisionLog`
+
 ---
 
 ## Design Goals
