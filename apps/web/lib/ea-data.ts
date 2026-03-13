@@ -120,3 +120,11 @@ export const getViewpoints = cache(async () => {
     select: { id: true, name: true, description: true },
   });
 });
+
+export const getRelationshipTypeId = cache(async (notationId: string, slug: string) => {
+  const rt = await prisma.eaRelationshipType.findUnique({
+    where: { notationId_slug: { notationId, slug } },
+    select: { id: true },
+  });
+  return rt?.id ?? null;
+});
