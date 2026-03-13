@@ -585,7 +585,7 @@ export async function profileModels(
 
 // ─── Token usage logging ──────────────────────────────────────────────────────
 
-export async function logTokenUsage(input: {
+async function logTokenUsage(input: {
   agentId: string;
   providerId: string;
   contextKey: string;
@@ -593,7 +593,7 @@ export async function logTokenUsage(input: {
   outputTokens: number;
   inferenceMs?: number;
 }): Promise<void> {
-  await requireSession();
+  // Internal helper — callers (profileModels) already guard with requireManageProviders()
 
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
 

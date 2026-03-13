@@ -69,8 +69,9 @@ describe("parseProfilingResponse", () => {
 
   it("filters out items missing required fields", () => {
     const text = JSON.stringify([
-      { modelId: "good", friendlyName: "Good", summary: "S" },
+      { modelId: "good", friendlyName: "Good", summary: "S", bestFor: ["a"], avoidFor: ["b"] },
       { modelId: "bad" },
+      { modelId: "no-arrays", friendlyName: "X", summary: "S", bestFor: "not-array", avoidFor: [] },
     ]);
     const result = parseProfilingResponse(text);
     expect(result).toHaveLength(1);
