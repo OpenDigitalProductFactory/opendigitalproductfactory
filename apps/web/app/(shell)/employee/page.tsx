@@ -1,9 +1,19 @@
 // apps/web/app/(shell)/employee/page.tsx
 import { prisma } from "@dpf/db";
+import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryPanel";
+import { EmployeeProfilePanel } from "@/components/employee/EmployeeProfilePanel";
 import { HrUserLifecyclePanel } from "@/components/employee/HrUserLifecyclePanel";
+import { LifecycleEventPanel } from "@/components/employee/LifecycleEventPanel";
+import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
+import {
+  getEmployeeDirectoryRows,
+  getEmployeeLifecycleEvents,
+  getEmployeeProfileByUserId,
+  getWorkforceReferenceData,
+} from "@/lib/workforce-data";
 
 export default async function EmployeePage() {
-  const [roles, users] = await Promise.all([
+  const [roles, users, employees, workforceReferenceData] = await Promise.all([
     prisma.platformRole.findMany({
       orderBy: { roleId: "asc" },
       select: {
@@ -34,7 +44,17 @@ export default async function EmployeePage() {
         },
       },
     }),
+    getEmployeeDirectoryRows(),
+    getWorkforceReferenceData(),
   ]);
+
+  const primaryEmployeeUserId = employees.find((employee) => employee.userId)?.userId ?? null;
+  const selectedEmployee = primaryEmployeeUserId
+    ? await getEmployeeProfileByUserId(primaryEmployeeUserId)
+    : null;
+  const lifecycleEvents = selectedEmployee
+    ? await getEmployeeLifecycleEvents(selectedEmployee.id)
+    : [];
 
   return (
     <div>
@@ -87,6 +107,21 @@ export default async function EmployeePage() {
       {roles.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
       )}
+
+      <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <EmployeeDirectoryPanel employees={employees} />
+        <EmployeeProfilePanel employee={selectedEmployee} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <OrgAssignmentPanel
+          employee={selectedEmployee}
+          departments={workforceReferenceData.departments}
+          positions={workforceReferenceData.positions}
+          workLocations={workforceReferenceData.workLocations}
+        />
+        <LifecycleEventPanel events={lifecycleEvents} />
+      </div>
 
       {users.length > 0 && (
         <div className="mt-8">
