@@ -131,18 +131,51 @@ export async function triggerProviderSync(): Promise<{ added: number; updated: n
 export async function configureProvider(input: {
   providerId: string;
   enabledFamilies: string[];
+  authMethod?: string;
   secretRef?: string;
+  clientId?: string;
+  clientSecret?: string;
+  tokenEndpoint?: string;
+  scope?: string;
   endpoint?: string;
   computeWatts?: number;
   electricityRateKwh?: number;
 }): Promise<{ error?: string }> {
   await requireManageProviders();
 
-  if (input.secretRef !== undefined) {
+  // Validate OAuth fields: if any OAuth field is provided, require the essential ones
+  const hasOAuthField = input.clientId !== undefined || input.clientSecret !== undefined || input.tokenEndpoint !== undefined;
+  if (hasOAuthField && (!input.clientId || !input.clientSecret || !input.tokenEndpoint)) {
+    return { error: "OAuth requires Client ID, Client Secret, and Token Endpoint" };
+  }
+
+  // Upsert credential with whatever fields are provided
+  const hasCredentialFields = input.secretRef !== undefined
+    || input.clientId !== undefined
+    || input.clientSecret !== undefined
+    || input.tokenEndpoint !== undefined
+    || input.scope !== undefined;
+
+  if (hasCredentialFields) {
     await prisma.credentialEntry.upsert({
-      where:  { providerId: input.providerId },
-      create: { providerId: input.providerId, secretRef: input.secretRef, status: "pending" },
-      update: { secretRef: input.secretRef, status: "pending" },
+      where: { providerId: input.providerId },
+      create: {
+        providerId: input.providerId,
+        ...(input.secretRef !== undefined      && { secretRef: input.secretRef }),
+        ...(input.clientId !== undefined       && { clientId: input.clientId }),
+        ...(input.clientSecret !== undefined   && { clientSecret: input.clientSecret }),
+        ...(input.tokenEndpoint !== undefined  && { tokenEndpoint: input.tokenEndpoint }),
+        ...(input.scope !== undefined          && { scope: input.scope }),
+        status: "pending",
+      },
+      update: {
+        ...(input.secretRef !== undefined      && { secretRef: input.secretRef }),
+        ...(input.clientId !== undefined       && { clientId: input.clientId }),
+        ...(input.clientSecret !== undefined   && { clientSecret: input.clientSecret }),
+        ...(input.tokenEndpoint !== undefined  && { tokenEndpoint: input.tokenEndpoint }),
+        ...(input.scope !== undefined          && { scope: input.scope }),
+        status: "pending",
+      },
     });
   }
 
@@ -150,6 +183,7 @@ export async function configureProvider(input: {
     where: { providerId: input.providerId },
     data: {
       enabledFamilies: input.enabledFamilies,
+      ...(input.authMethod !== undefined         && { authMethod:         input.authMethod }),
       ...(input.endpoint !== undefined           && { endpoint:           input.endpoint }),
       ...(input.computeWatts !== undefined       && { computeWatts:       input.computeWatts }),
       ...(input.electricityRateKwh !== undefined && { electricityRateKwh: input.electricityRateKwh }),
