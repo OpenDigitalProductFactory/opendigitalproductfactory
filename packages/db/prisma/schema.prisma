@@ -19,6 +19,8 @@ model User {
   createdAt    DateTime      @default(now())
   groups       UserGroup[]
   agentThreads AgentThread[]
+  teamMemberships     TeamMembership[]
+  grantedDelegations  DelegationGrant[] @relation("DelegationGrantGrantor")
 }
 
 model UserGroup {
@@ -51,6 +53,37 @@ model PlatformRole {
   hitlTierMin   Int         @default(1)
   slaDurationH  Int?
   users         UserGroup[]
+}
+
+// ─── Identity Governance ─────────────────────────────────────────────────────
+
+model Team {
+  id          String   @id @default(cuid())
+  teamId      String   @unique
+  name        String
+  slug        String   @unique
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships TeamMembership[]
+  ownerships  AgentOwnership[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      String   // member | manager | approver | operator
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
 }
 
 // ─── Portfolios & Products ───────────────────────────────────────────────────
@@ -244,6 +277,119 @@ model Agent {
   createdAt   DateTime @default(now())
   portfolioId  String?
   portfolio    Portfolio?  @relation(fields: [portfolioId], references: [id])
+  ownerships          AgentOwnership[]
+  governanceProfile   AgentGovernanceProfile?
+  delegationGrants    DelegationGrant[]
+}
+
+model AgentOwnership {
+  id             String   @id @default(cuid())
+  agentId        String
+  teamId         String
+  responsibility String   // owning_team | operating_team | approving_team
+  createdAt      DateTime @default(now())
+
+  agent          Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  team           Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, teamId, responsibility])
+  @@index([teamId])
+}
+
+model AgentCapabilityClass {
+  id                 String   @id @default(cuid())
+  capabilityClassId  String   @unique
+  name               String
+  description        String?
+  riskBand           String   // low | medium | high | critical
+  defaultActionScope Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  governanceProfiles AgentGovernanceProfile[]
+}
+
+model DirectivePolicyClass {
+  id                String   @id @default(cuid())
+  policyClassId     String   @unique
+  name              String
+  description       String?
+  configCategory    String   // persona | workflow | tool_access | compliance | domain_rules
+  approvalMode      String   // self_service | manager_approval | admin_approval
+  allowedRiskBand   String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  governanceProfiles AgentGovernanceProfile[]
+}
+
+model AgentGovernanceProfile {
+  id                     String   @id @default(cuid())
+  agentId                String   @unique
+  capabilityClassId      String
+  directivePolicyClassId String
+  autonomyLevel          String   // advisory | constrained_execute | supervised_execute | elevated_execute
+  hitlPolicy             String   // always | risk_based | never_without_grant
+  allowDelegation        Boolean  @default(true)
+  maxDelegationRiskBand  String?  // low | medium | high | critical
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  agent                  Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityClass        AgentCapabilityClass @relation(fields: [capabilityClassId], references: [id])
+  directivePolicyClass   DirectivePolicyClass @relation(fields: [directivePolicyClassId], references: [id])
+
+  @@index([capabilityClassId])
+  @@index([directivePolicyClassId])
+}
+
+model DelegationGrant {
+  id                 String   @id @default(cuid())
+  grantId            String   @unique
+  grantorUserId      String
+  granteeAgentId     String
+  targetUserId       String?
+  scopeJson          Json
+  reason             String?
+  riskBand           String
+  status             String   @default("active") // active | expired | revoked | consumed
+  validFrom          DateTime
+  expiresAt          DateTime
+  maxUses            Int?
+  useCount           Int      @default(0)
+  workflowKey        String?
+  objectRef          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  grantorUser        User  @relation("DelegationGrantGrantor", fields: [grantorUserId], references: [id])
+  granteeAgent       Agent @relation(fields: [granteeAgentId], references: [id], onDelete: Cascade)
+  decisionLogs       AuthorizationDecisionLog[]
+
+  @@index([grantorUserId])
+  @@index([granteeAgentId])
+  @@index([status, expiresAt])
+}
+
+model AuthorizationDecisionLog {
+  id                String   @id @default(cuid())
+  decisionId        String   @unique
+  actorType         String   // user | customer_contact | agent
+  actorRef          String
+  humanContextRef   String?
+  agentContextRef   String?
+  delegationGrantId String?
+  actionKey         String
+  objectRef         String?
+  decision          String   // allow | deny | require_approval
+  rationale         Json
+  createdAt         DateTime @default(now())
+
+  delegationGrant   DelegationGrant? @relation(fields: [delegationGrantId], references: [id], onDelete: SetNull)
+
+  @@index([decision])
+  @@index([createdAt])
+  @@index([actorRef])
 }
 
 // ─── CRM ─────────────────────────────────────────────────────────────────────
