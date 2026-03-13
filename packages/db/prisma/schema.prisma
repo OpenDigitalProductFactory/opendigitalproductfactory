@@ -384,20 +384,54 @@ model EaView {
   scopeType   String          // "portfolio"|"domain"|"custom"
   scopeRef    String?
   createdById String?
-  elements    EaViewElement[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  viewElements EaViewElement[]
+  status       String          @default("draft")
+  submittedAt  DateTime?
+  submittedById String?
+  approvedAt   DateTime?
+  approvedById String?
+  canvasState  Json?
+  viewpointId  String?
+  viewpoint    ViewpointDefinition? @relation(fields: [viewpointId], references: [id])
+  snapshots    EaSnapshot[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 }
 
 model EaViewElement {
-  viewId    String
-  view      EaView    @relation(fields: [viewId], references: [id])
-  elementId String
-  element   EaElement @relation(fields: [elementId], references: [id])
-  x         Float     @default(0)
-  y         Float     @default(0)
-  width     Float?
-  height    Float?
-  @@id([viewId, elementId])
+  id                 String    @id @default(cuid())
+  viewId             String
+  view               EaView    @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  elementId          String
+  element            EaElement @relation(fields: [elementId], references: [id])
+  mode               String    @default("new")
+  proposedProperties Json?
+
+  @@unique([viewId, elementId])
   @@index([elementId])
+}
+
+model ViewpointDefinition {
+  id                      String   @id @default(cuid())
+  name                    String   @unique
+  description             String?
+  allowedElementTypeSlugs String[]
+  allowedRelTypeSlugs     String[]
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  views EaView[]
+}
+
+model EaSnapshot {
+  id                String    @id @default(cuid())
+  viewId            String
+  view              EaView    @relation(fields: [viewId], references: [id])
+  approvedById      String?
+  submittedById     String?
+  approvedAt        DateTime?
+  changeSummary     String?
+  elementCount      Int
+  relationshipCount Int
+  graphJson         Json
 }
