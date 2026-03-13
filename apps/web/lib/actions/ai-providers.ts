@@ -9,6 +9,7 @@ import {
   computeTokenCost,
   computeComputeCost,
   computeNextRunAt,
+  getTestUrl,
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
 
@@ -214,55 +215,41 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { ok: false, message: "Provider not found" };
 
-  const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  const providerRow = {
+    ...provider,
+    families: provider.families as string[],
+    enabledFamilies: provider.enabledFamilies as string[],
+    supportedAuthMethods: provider.supportedAuthMethods as string[],
+  };
 
-  // Guard: keyed providers need a credential with an API key
-  if (provider.authHeader !== null) {
-    if (!credential || credential.secretRef === null) {
-      return { ok: false, message: "No credential configured" };
-    }
-  }
-
-  // Guard: providers that have neither a fixed baseUrl nor a custom endpoint cannot be tested
-  if (provider.baseUrl === null && provider.endpoint === null) {
-    return { ok: false, message: "Custom endpoint required" };
-  }
-
-  const base = provider.endpoint ?? (provider.baseUrl as string);
-  const authUrl = provider.providerId === "ollama"
-    ? `${base}/api/tags`
-    : `${base}/models`;
+  const testUrl = getTestUrl(providerRow);
+  if (!testUrl) return { ok: false, message: "No base URL or custom endpoint configured" };
 
   const headers: Record<string, string> = {};
-  if (provider.authHeader !== null && credential?.secretRef) {
-    const apiKey = credential.secretRef;
-    headers[provider.authHeader] = provider.authHeader === "Authorization"
-      ? `Bearer ${apiKey}`
-      : apiKey;
+
+  if (provider.authMethod === "api_key") {
+    const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
+    if (provider.authHeader) {
+      headers[provider.authHeader] = provider.authHeader === "Authorization"
+        ? `Bearer ${credential.secretRef}`
+        : credential.secretRef;
+    }
+  } else if (provider.authMethod === "oauth2_client_credentials") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
   }
+  // authMethod === "none" → no headers needed
 
   try {
-    const res = await fetch(authUrl, {
-      headers,
-      signal: AbortSignal.timeout(8_000),
-    });
-
+    const res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
       await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
-      if (credential) {
-        await prisma.credentialEntry.update({ where: { providerId }, data: { status: "ok" } });
-      }
       return { ok: true, message: `Connected — HTTP ${res.status}` };
-    } else {
-      if (credential) {
-        await prisma.credentialEntry.update({ where: { providerId }, data: { status: "error" } });
-      }
-      return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
     }
+    return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
   } catch (err) {
-    if (credential) {
-      await prisma.credentialEntry.update({ where: { providerId }, data: { status: "error" } });
-    }
     return { ok: false, message: err instanceof Error ? err.message : "Network error" };
   }
 }
