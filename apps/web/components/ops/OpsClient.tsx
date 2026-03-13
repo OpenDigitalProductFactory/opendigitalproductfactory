@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { BacklogPanel } from "./BacklogPanel";
 import { BacklogItemRow } from "./BacklogItemRow";
-import { EpicCard } from "./EpicCard";
+import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import type {
   BacklogItemWithRelations,
@@ -40,9 +40,62 @@ const TYPE_LABELS: Record<string, string> = {
   product:   "Product Backlog",
 };
 
+type SortField = "title" | "status" | "progress" | "stories";
+type SortState = EpicSort;
+
+const STATUS_ORDER: Record<string, number> = { open: 0, "in-progress": 1, done: 2 };
+
+function sortEpics(epics: EpicWithRelations[], sort: SortState): EpicWithRelations[] {
+  if (!sort) return epics;
+  return [...epics].sort((a, b) => {
+    let cmp = 0;
+    if (sort.field === "title") {
+      cmp = a.title.localeCompare(b.title);
+    } else if (sort.field === "status") {
+      cmp = (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0);
+    } else if (sort.field === "progress") {
+      const pctA = a.items.length > 0 ? a.items.filter((i) => i.status === "done").length / a.items.length : 0;
+      const pctB = b.items.length > 0 ? b.items.filter((i) => i.status === "done").length / b.items.length : 0;
+      cmp = pctA - pctB;
+    } else if (sort.field === "stories") {
+      cmp = a.items.length - b.items.length;
+    }
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
+}
+
+function nextSort(current: SortState, field: SortField): SortState {
+  if (!current || current.field !== field) return { field, dir: "asc" };
+  if (current.dir === "asc") return { field, dir: "desc" };
+  return null;
+}
+
+function SortButton({ label, field, sort, onSort }: {
+  label: string;
+  field: SortField;
+  sort: SortState;
+  onSort: (s: SortState) => void;
+}) {
+  const active = sort?.field === field;
+  const icon = !active ? "" : sort.dir === "asc" ? " ▲" : " ▼";
+  return (
+    <button
+      onClick={() => onSort(nextSort(sort, field))}
+      className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+        active
+          ? "border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
+          : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white hover:border-[var(--dpf-muted)]"
+      }`}
+    >
+      {label}{icon}
+    </button>
+  );
+}
+
 export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios }: Props) {
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
+  const [epicSort, setEpicSort] = useState<SortState>(null);
 
   // Unassigned items only (not belonging to any epic)
   const unassigned = items.filter((i) => i.epicId === null);
@@ -78,7 +131,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
     <>
       {/* ── Epics section ──────────────────────────────────── */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest">
             Epics
             <span className="ml-2 normal-case font-normal">{epics.length}</span>
@@ -94,9 +147,34 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
         {epics.length === 0 ? (
           <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>
         ) : (
-          epics.map((epic) => (
-            <EpicCard key={epic.id} epic={epic} onEdit={openEditEpic} onItemEdit={openEdit} />
-          ))
+          <div className="rounded border border-[var(--dpf-border)] overflow-hidden">
+            {/* Column headers — widths must match EpicCard row columns */}
+            <div className="flex items-center gap-2 px-2 py-1 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]">
+              <div className="w-4 shrink-0" />
+              {/* col: status — w-14 */}
+              <div className="w-14 shrink-0">
+                <SortButton label="Status" field="status" sort={epicSort} onSort={setEpicSort} />
+              </div>
+              {/* col: title — flex-1 */}
+              <div className="flex-1 min-w-0">
+                <SortButton label="Title" field="title" sort={epicSort} onSort={setEpicSort} />
+              </div>
+              {/* col: portfolio — w-36 hidden sm */}
+              <div className="hidden sm:block w-36 shrink-0">
+                <span className="text-[9px] text-[var(--dpf-muted)]">Portfolio</span>
+              </div>
+              {/* col: progress — w-28 */}
+              <div className="w-28 shrink-0 flex items-center gap-1">
+                <SortButton label="Progress" field="progress" sort={epicSort} onSort={setEpicSort} />
+                <SortButton label="Stories"  field="stories"  sort={epicSort} onSort={setEpicSort} />
+              </div>
+              <div className="w-14 shrink-0" />
+            </div>
+
+            {sortEpics(epics, epicSort).map((epic) => (
+              <EpicCard key={epic.id} epic={epic} sort={epicSort} onEdit={openEditEpic} onItemEdit={openEdit} />
+            ))}
+          </div>
         )}
       </div>
 

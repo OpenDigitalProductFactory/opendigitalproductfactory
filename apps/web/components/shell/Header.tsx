@@ -1,10 +1,9 @@
 // apps/web/components/shell/Header.tsx
-import Link from "next/link";
 import { signOutAction } from "@/lib/actions";
 import { can, type CapabilityKey } from "@/lib/permissions";
+import { NavBar } from "./NavBar";
 
 type Props = {
-  activePath: string;
   platformRole: string | null;
   isSuperuser: boolean;
 };
@@ -12,11 +11,12 @@ type Props = {
 const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey | null }> = [
   { label: "My Workspace", href: "/workspace", capability: null },
   { label: "Portfolio",    href: "/portfolio",  capability: "view_portfolio" },
+  { label: "Backlog",      href: "/ops",        capability: "view_operations" },
   { label: "Inventory",    href: "/inventory",  capability: "view_inventory" },
-  { label: "EA",           href: "/ea",         capability: "view_ea_modeler" },
+  { label: "Agents",       href: "/ea",         capability: "view_ea_modeler" },
 ];
 
-export function Header({ activePath, platformRole, isSuperuser }: Props) {
+export function Header({ platformRole, isSuperuser }: Props) {
   const visibleItems = NAV_ITEMS.filter(
     (item) => item.capability === null || can({ platformRole, isSuperuser }, item.capability)
   );
@@ -25,24 +25,7 @@ export function Header({ activePath, platformRole, isSuperuser }: Props) {
     <header className="flex items-center justify-between px-4 py-2 bg-[var(--dpf-surface-1)] border-b border-[var(--dpf-border)]">
       <div className="flex items-center gap-3">
         <span className="font-extrabold text-[var(--dpf-accent)] tracking-tight text-sm">DPF</span>
-        <nav className="flex gap-1">
-          {visibleItems.map((item) => {
-            const active = activePath === item.href || activePath.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  active
-                    ? "bg-[var(--dpf-accent)] text-white"
-                    : "text-[var(--dpf-muted)] hover:text-white border border-[var(--dpf-border)]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <NavBar items={visibleItems} />
       </div>
       <div className="flex items-center gap-3">
         <button
