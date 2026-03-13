@@ -19,8 +19,9 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
   return providers.map((p) => ({
     provider: {
       ...p,
-      families:        p.families as string[],
-      enabledFamilies: p.enabledFamilies as string[],
+      families:             p.families as string[],
+      enabledFamilies:      p.enabledFamilies as string[],
+      supportedAuthMethods: p.supportedAuthMethods as string[],
     } satisfies ProviderRow,
     credential: credMap.get(p.providerId) ?? null,
   }));
@@ -33,8 +34,9 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
   return {
     provider: {
       ...provider,
-      families:        provider.families as string[],
-      enabledFamilies: provider.enabledFamilies as string[],
+      families:             provider.families as string[],
+      enabledFamilies:      provider.enabledFamilies as string[],
+      supportedAuthMethods: provider.supportedAuthMethods as string[],
     } satisfies ProviderRow,
     credential: credential ?? null,
   };
