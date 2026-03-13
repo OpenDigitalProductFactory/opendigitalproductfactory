@@ -1,0 +1,849 @@
+The Shift to Digital Product
+A Full Lifecycle Perspective
+A White Paper by:
+Primary Authors: Mark Bodman, ServiceNow and Dan Warfield, CC&C Europe Co-authors: Dr. Lars Rossen, Micro Focus, Dr. Michelle Supper, ServiceNow, and Sue Desiderio, Invited Expert
+December 2020
+
+The Shift to Digital Product
+Copyright © 2020, The Open Group The Open Group hereby authorizes you to use this document for any purpose, PROVIDED THAT any copy of this document, or any part thereof, which you make shall retain all copyright and other proprietary notices contained herein. This document may contain other proprietary notices and copyright information. Nothing contained herein shall be construed as conferring by implication, estoppel, or otherwise any license or right under any patent or trademark of The Open Group or any third party. Except as expressly provided above, nothing contained herein shall be construed as conferring any license or right under any copyright of The Open Group. Note that any product, process, or technology in this document may be the subject of other intellectual property rights reserved by The Open Group, and may not be licensed hereunder. This document is provided "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. Some jurisdictions do not allow the exclusion of implied warranties, so the above exclusion may not apply to you. Any publication of The Open Group may include technical inaccuracies or typographical errors. Changes may be periodically made to these publications; these changes will be incorporated in new editions of these publications. The Open Group may make improvements and/or changes in the products and/or the programs described in these publications at any time without notice. Should any viewer of this document respond with information including feedback data, such as questions, comments, suggestions, or the like regarding the content of this document, such information shall be deemed to be non-confidential and The Open Group shall have no obligation of any kind with respect to such information and shall be free to reproduce, use, disclose, and distribute the information to others without limitation. Further, The Open Group shall be free to use any ideas, concepts, know-how, or techniques contained in such information for any purpose whatsoever including but not limited to developing, manufacturing, and marketing products incorporating such information. If you did not obtain this copy through The Open Group, it may not be the latest version. For your convenience, the latest version of this publication may be downloaded at www.opengroup.org/library.
+ArchiMate, DirecNet, Making Standards Work, Open O logo, Open O and Check Certification logo, Platform 3.0, The Open Group, TOGAF, UNIX, UNIXWARE, and the Open Brand X logo are registered trademarks and Boundaryless Information Flow, Build with Integrity Buy with Confidence, Commercial Aviation Reference Architecture, Dependability Through Assuredness, Digital Practitioner Body of Knowledge, DPBoK, EMMM, FACE, the FACE logo, FHIM Profile Builder, the FHIM logo, FPB, Future Airborne Capability Environment, IT4IT, the IT4IT logo, O-AA, O-DEF, O-HERA, O-PAS, Open Agile Architecture, Open FAIR, Open Footprint, Open Process Automation, Open Subsurface Data Universe, Open Trusted Technology Provider, OSDU, Sensor Integration Simplified, SOSA, and the SOSA logo are trademarks of The Open Group. Amazon Web Services is a trademark of Amazon.com, Inc. or its affiliates in the United States and/or other countries. Android is a trademark of Google LLC. Apple is a registered trademark of Apple Inc., registered in the US and other countries. Azure is a trademark of Microsoft Corporation. ITIL is a registered trademark of AXELOS Limited. All other brands, company, and product names are used for identification purposes only and may be trademarks that are the sole property of their respective owners.
+The Shift to Digital Product Document No.: W205
+Published by The Open Group, December 2020. Any comments relating to the material contained in this document may be submitted to:
+The Open Group, Apex Plaza, Forbury Road, Reading, Berkshire, RG1 1AX, United Kingdom or by email to:
+ogpubs@opengroup.org
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+2
+
+The Shift to Digital Product
+
+Table of Contents
+Executive Summary................................................................... 5
+Introduction: The Room Where It Happens ............................... 6
+Product, Service, or Application?............................................... 7
+Why "Digital Product"? ............................................................ 8
+A Few Points of Clarity ........................................................................... 9 The System ............................................................................................. 9 The Service Offer .................................................................................... 9 The Contract ......................................................................................... 10 The Price .............................................................................................. 11
+Examples of Digital Products ................................................... 13
+Interplay Among Digital Products........................................................... 14
+Recursion and Granularity in Digital Products......................... 16
+When Should In-House Software and Services be Treated as Digital Products? ................................................................................... 16 Example: Digital Product Granularity ..................................................... 17 Benefits of Formalism ........................................................................... 17
+Managing the Digital Product .................................................. 19
+The Digital Product Manager.................................................................. 20 Shared Resources .................................................................................. 20 Digital Product Lifecycle Concerns......................................................... 21 Code, Dependencies, and Instance Resource Management ........................ 22 Data-Driven Opportunities and Concerns ................................................ 22 Contract Lifecyle Concerns .................................................................... 22 Digital Product Fulfilment and Lifecycle Management ............................. 23
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+3
+
+The Shift to Digital Product
+The Digital Product Instance .................................................................. 23 Consumer Types and Interaction Methods ............................................... 24 Complex Product Systems...................................................................... 25
+Conclusion .............................................................................. 27 References............................................................................... 28 Acronyms and Abbreviations................................................... 29 Acknowledgements .................................................................. 30 About the Authors ................................................................... 31
+Primary Authors .................................................................................... 31 Co-Authors ........................................................................................... 31
+About the IT4ITTM Forum ....................................................... 33 About The Open Group ........................................................... 33
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+4
+
+The Shift to Digital Product
+
+Boundaryless Information Flow achieved through global interoperability in a secure, reliable, and timely manner
+Executive Summary
+This document is a position paper describing current thinking on how Digital Product can be viewed as the single, simple, unifying element to manage IT and "smart" products and services. This document is being published to solicit feedback and comment. It has no formal status. It illustrates how a shift to Digital Product thinking supports modern Agile and DevOps IT management practices and integrates traditional product management acumen with IT management disciplines. The Digital Product concept presented here is designed to be consistent with other digital standards of The Open Group, including the DPBoKTM Standard.
+The authors put forward a position that the Service Model Backbone in the IT4ITTM Reference Architecture, Version 2.1, a Standard of The Open Group, be re-imagined as a Digital Product Backbone, with the Service Portfolio becoming the Digital Product Portfolio. It proposes an approach to formal Digital Product Portfolio Management that applies to product lines for both internal and external consumers.
+Perhaps most importantly, the authors propose a formal definition of the concept of Digital Product for use in effective lifecycle management discipline. This definition combines elements from an end-to-end IT operational management model and the traditional concerns of IT Service Management (ITSM) with the financial and marketing concerns of traditional product management.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+5
+
+The Shift to Digital Product
+Introduction: The Room Where It Happens
+As IT-enabled products and services become the norm in every market, it is increasingly less credible for IT culture to treat "the business" as an opaque internal customer, or for the business to think of IT primarily as project brokers, order takers, and machine operators.
+In the digital economy, IT and business leaders belong together "in the room where it happens" ­ active participants in managing the full lifecycle of technical and financial outcomes of every IT investment, with a common understanding of the "factory" and a clear line of sight to customer value.
+Choosing to change the fundamental job description of enterprise IT management to be Digital Product Portfolio Management instead of Project Broker & Operations Service changes the way we think about lifecycle management, dependencies, accountability, IT investment practices, IT financial management, and the IT Return on Investment (ROI).
+We propose that a well-defined concept of Digital Product becomes the fulcrum of this cooperation by combining an end-to-end IT operational management model and the traditional concerns of IT Service Management (ITSM) with the financial and marketing concerns of traditional product management.
+In the IT management dimension, the IT4IT Standard provides a model for managing the complexity of modern digital value delivery and the supporting networks of organizations that supply, assemble, and service components. Multiple contracts and metrics can be found at many points in this supply chain.
+Re-imagining the Service Model Backbone concept in the IT4IT Standard as the Digital Product Backbone, as proposed in this document, supports the transformation to end-to-end management of Digital Products. It provides a language for describing Digital Product Management that resonates with modern IT methods and with the semantics of the digital age.
+In this proposed mapping to the IT4IT Standard, the Digital Product integrates IT management practices and digital value delivery.
+Strategy to Portfolio
+
+DIGITAL PRODUCT
+
+Requirement to Deploy
+Figure 1: Digital Product and Value Streams
+
+Request to Fulfill
+
+Detect to Correct
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+6
+
+The Shift to Digital Product
+Product, Service, or Application?
+In the IT4IT Standard, as well as in ITIL® and other mainstream IT management best practices, the term "service" has been used to describe the core element that IT should be managing throughout its lifecycle.
+For example, "service" is often used in the sense of ITSM and ITIL practices. It also appears in terms such as Service Broker, Service-Oriented Architecture (SOA), and Enterprise Service Bus (ESB). None of these uses of "service" exactly matches the others.
+We put forward the position that as digital becomes more mainstream, "Digital Product" has become a much better terminology than "service" which, in the IT management context, is more ambiguous.
+Using "Digital Product" rather than "service" aligns with the semantics of trends such as DevOps and Agile, "Shift to Product" initiatives, reorganization of software development work into cross-functional teams, and the evolving language of Digital Transformation.
+This proposed change in semantics also brings product management as a practice into the foreground. Product management is a more proven and mature competency than Service Management and Application Management: product management roles, activities, frameworks, lifecycle management, and so on are quite standardized. By adopting "product" as a governing metaphor, executives in digital enterprises are adopting a common vocabulary that will improve communication between business and IT.
+One pivotal influence on our understanding is the book Project to Product by Mik Kersten (see References), which describes the practical effects of digital disruption on traditional models of enterprise IT. In the foreword, DevOps evangelist Gene Kim describes the situation:
+"... in the Age of Software, the methods that served us well for over a century are truly coming to an end: project management, managing technology as a cost center, traditional outsourcing strategies, and relying on software architecture as the primary means to increase developer productivity."
+Kersten argues that IT's primary focus must shift to end-to-end management of Digital Products.
+For the most successful organizations, he says, product management and IT management roles will converge and unite into a new competency called Digital Product Management. We agree.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+7
+
+The Shift to Digital Product
+Why "Digital Product"?
+"Digital Product" has become a widely used term but without a widely agreed definition. The major technology analyst firms admit that business leaders agonize over the definition of Digital Product.1
+We propose a definition of Digital Product that highlights the distinction between digital and non-digital products and provides clarity about use of this term, both in an IT management context and when describing the expanding universe of "smart" products ranging from roller bearings to cars.
+Our definition flows from widely accepted definitions of both "digital" and "product": Merriam-Webster defines "digital" as "characterized by electronics, especially computerized technology". The Business Dictionary defines "product" as "a good or service that most closely meets the requirements of a particular market and yields enough profit to justify its continued existence". The Economic Times defines "product" in more detail as: "A product is the item offered for sale. A product can be a service or an item. It can be physical or in virtual or cyber form. Every product is made at a cost and each is sold at a price. The price that can be charged depends on the market, the quality, the marketing, and the segment that is targeted. Each product has a useful life after which it needs replacement, and a lifecycle after which it has to be re-invented."
+We propose the following definition for Digital Product: A service, physical item, or digital item that provides an agreed and specific outcome for a consumer; that incorporates and requires software to realize that outcome; that is expected to require active management of the software by the provider over its lifecycle; and that is described by a formal offer of value that typically includes explicit pricing. Typical characteristics of a Digital Product defined in this way are that it:
+· Includes one or more Service Offers that define Contract options for consumers · Is delivered as a Digital Product Instance (defined below) described in a Contract that is based on a
+Service Offer · Has a Digital Product Instance that includes a System containing technology resources and software · May be consumed within an organization or externally · May have dependencies on other Digital Products and non-digital products · Provides interactions via a machine and/or human interface
+
+1 Gartner Research: Summary Translation: Don't Get Stuck Defining `Product' ­ Success Requires Designing your Product Portfolio Instead; refer to: https://www.gartner.com/en/documents/3989071/summary-translation-don-t-get-stuck-defining-product-suc.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+8
+
+The Shift to Digital Product
+A Few Points of Clarity
+To avoid misinterpretation, note the intention of terms as used in this document.
+Digital Product addresses the perspective of a product manager and represents a complete product line over its lifetime, to include product variants, types and locations of consumers, annual and lifetime financial models, dependencies on other products and services, supplier relationships, capacity, service-level options, distribution models, pricing and usage rules, delivery and management of Digital Product Instances, and so on.
+Digital Product Instance refers to a single Instance of the Digital Product, which is described in the Contract created when a discrete Service Offer (see below) is accepted by a consumer. The Instance is often a system or part of a system that includes assets, physical goods and services (e.g., food delivery), seats, licenses, or other resources and access controls specific to the consumer's entitlement under a Contract.
+Product ­ we may simply use "product" instead of Digital Product or Digital Product Instance where the meaning is clear. We distinguish "digital" products from non-digital products when required.
+The System
+The System comprises those technology components of a Digital Product Instance that will be managed by the provider.
+The system may recursively include any configured supporting resources or assets upon which the system relies, including other digital or non-digital products. Resources might be as simple as a few intangible lines of code to be deployed on hosted infrastructure in the cloud, or might be comprised of a large and complex number of interrelated components, or separate Digital Products accessed through a network connection and program interface, for example.
+The Service Offer
+The Service Offer (sometimes shortened to Offer) describes Contract terms available to the potential consumer of a Digital Product Instance. The full set of possible Offers will be filtered for presentation to specific consumers. Offers may be time-limited. A well-formed Offer formalizes the value statement for the consumer/provider interaction and must include all terms that will become part of the Contract if the Offer is accepted.
+Promises articulated in the Service Offer are recorded in the Contract as part of the agreed criteria for how the Digital Product and its systems will be managed. Longer-term contracts may be defined as subscriptions that track ongoing consumption and billing.
+Offers are derived from the specific definition of the Digital Product, which is documented by product managers and must describe all available consumable product variants and all possible Contract terms per consumer or consumer type. This can include specific prices or pricing rules as well as specific Offer configurations or features. The example in Figure 2 shows the presentation of a Digital Product Offer for business software.
+Complex product rules can give rise to thousands of potential Offers for a single Digital Product. In this example product management has determined a set of options to be presented to US Dollar-based customers
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+9
+
+The Shift to Digital Product
+
+and includes a time-limited configuration option. Sophisticated products may vary the modularity and pricing of Offers shown, based on factors such as consumer characteristics, time of day, regulatory jurisdiction, currency chosen, regional support availability, etc.
+
+Lite
+Starting at:
+9$ /mo
+Paid yearly (USD)
+Sign Up Now
+
+Plus
+
+Starting at:
+
+49 $
+
+/mo
+
+Paid yearly (USD)
+
+Sign Up Now
+
+Professional
+MOST POPULAR
+
+Enterprise
+
+Starting at:
+
+129 $
+
+/mo
+
+Paid yearly (USD)
+
+Starting at:
+
+229 $
+
+/mo
+
+Paid yearly (USD)
+
+Sign Up Now
+
+Sign Up Now
+
+Includes:
+
+Includes:
+
+Includes:
+
+Includes:
+
+· Unlimited Sending · Email Marketing · Send Newsletters · Subscription Forms · Marketing Automation · Chat & Email Support · Up to 3 Users
+
+LIMITED TIME: CRM with Sales Automation included FREE
+
+· Everything from Lite
+· CRM with Sales Automation
+· Social Media Custom Audiences
+· Lead & Contact Scoring
+· Integrations
+
+· Everything from Plus
+· Predictive Sending with Machine Learning
+· Predictive Content with Machine Learning
+· Customer Attribution & Path to Purchase
+
+· Everything from Pro
+· Custom Reporting (Beta)
+· Custom Mail Server Domain
+· Custom Domain
+· Dedicated Account Rep
+
+Figure 2: Example of Four Related Service Offers
+The consumer of a Digital Product can be a human or organizational actor, or alternatively a machine actor such as another Digital Product.2 The structure of both Offer and Contract may vary significantly based on the type of actor involved.
+
+The Contract
+When an Offer is accepted by a consumer, an Instance of the Digital Product is created in which the relationship between provider and consumer is captured in a Contract based on the relevant Offer. The Contract includes all the details required for financial recording, governance, measurement, charging, support, and servicing of the Digital Product Instance.
+The Contract may include a subscription in the usual sense of the word, describing ongoing usage rights with a periodic charge. However, the Digital Product Manager's toolkit can contain many styles of delivery, warranty, usage rules, and pricing.
+
+2 This aligns with the TOGAF® metamodel definition of Actor.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+10
+
+The Shift to Digital Product
+For example, a Wi-Fi network in a public place is made available to consumers. When a consumer logs on to the network using credentials supplied by the network owner, a Digital Product Instance is created. The Product is not the Wi-Fi network itself. The Product is provision of access to the network and its resources. The Contract may be implied or explicit and will probably be governed by a range of legal and technical constraints, all of which form part of the Contract.
+In its simplest form, a Contract may record a single transaction that is not normally expected to have recurring charges, usage charges, or to require support. However, even such a one-off transaction will typically include mutual commitments to rules and metrics about possible future circumstances governed by the Contract terms, such as regulatory compliance, warranty, repair, refunds, Service-Level Agreements (SLAs), consumer support, product recalls, offers on related items, commitments to keep the software up-todate, and so on.
+The Contract structure includes Offer terms as agreed for the Instance which may include things such as:
+· Warranties and SLAs
+· A record of transactional commitments made by both parties For a consumer product sold online this may be an identifier for a series of web page interactions in which terms are accepted and money is taken. For an internal machine-to-machine Contract, this may be the digital record of a "handshake" acknowledgement between two systems.
+· Usage and financial rules, especially where there is a recurring financial payment In the IT4IT Standard, this Contract data forms the basis for managing chargeback/showback and penalties for breach of SLAs.
+· A description of the usage monitors needed for governing the Instance to ensure operational status Depending on the relationship between provider and consumer of the product, this may include legally binding terms with provisions for events such as returns, subscription renewal, refunds, warranty claims, recourse for breach, and so on.
+· A right for the provider to audit the consumer, for such things as license compliance audits or conformance to usage rules
+· Long-term ownership rights and maintenance obligations regarding physical components as well as intangible assets such as intellectual property (e.g., software)
+The Price
+Each Offer and Contract describe an explicit Price which, depending on product rules and what is agreed, may require direct payment by a consumer, or indirect payment through mechanisms such as usage-based chargeback, a payment plan, an agreement to receive advertising, a value exchange, or a less specific pricing mechanism such as corporate overhead expense allocation.
+Price need not be related to cost.
+In some cases, the price may consist entirely of indirect benefits anticipated by the provider. This often applies in the public sector, for Digital Products supplied within an organization, or to online services such as social media platforms.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+11
+
+The Shift to Digital Product
+The element of price is still meaningful for effective product management. In every case the product manager should be able to describe the ROI over the product lifecycle. Offering a Digital Product Instance with no direct price should always be a deliberate pricing decision that is explained in the product's lifetime financial model.
+Even in cases where the Digital Product is perceived by the consumer primarily as software, it will always include other components defined by the Digital Product Manager including those required by the business or legal context of product delivery, as well as provision of supporting infrastructure.
+These other associated components ­ which may not be explicit in the Offer or Contract ­ may include, for example, hardware in which software is embedded (disk drive, smartphone, IoT doorbell, automobile). They may also include contractual elements (SLAs, chargeback terms, warranties, software maintenance commitments, customer support).
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+12
+
+The Shift to Digital Product
+Examples of Digital Products
+The following list is far from being inclusive of every type of Digital Product found now, or in the future. We are illustrating some of the more common types that are recognizable by most readers. For a further discussion of Digital Products, refer to the DPBoK Standard; §6.1.1.1: Digital Context (see References).
+eCommerce Websites
+A website that provides functionality for consumers (for example, to place orders) and sellers (for example, to fulfill those orders), is a typical Digital Product. The consumer of this Digital Product (website) is the Sales Department, not the end customer.
+Applications in the website owner's ecosystem may provide specific services for other users such as those who maintain site data or website visitors. Each such application may also be managed as a Digital Product.
+Mobile Applications
+Smartphone apps are Digital Products in their own right, provided through a "store" and managed remotely by the provider. They may also be channels to other Digital Products such as a newspaper subscription or online banking. Both are examples of Digital Products, dependent on others to provide a complete outcome.
+Operational Technology (OT) Products
+These Digital Products monitor and manage industrial equipment, processes, and events in automated environments such as manufacturing, logistics, transportation, etc. For the purposes of this discussion, OT Digital Products include both Internet of Things (IoT) technology using embedded systems for industrial control as well as digitized industrial control software and systems.
+For example, wind farm production management must address failing parts, predict maintenance, and manage changes in output based on weather forecasts.
+Smart Devices with Application Program Interfaces (APIs)
+This is a rapidly growing category of Digital Product resulting from commoditized embedded software, ubiquitous connectivity, and endless product creativity. Examples include smart appliances which connect to the Internet, requiring external IT systems and mobile applications to fully deliver value to users.
+For example, digital ovens (a type of oven that uses digital controls as the interface) can now be programmed by scanning the barcode on a food package using a mobile app, which provides the oven with cooking instructions via a cloud-based cooking instruction look-up system. Later, alerts can be sent to a smart watch to inform the user that cooking is complete. Multiple Digital Products interact to deliver outcomes.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+13
+
+The Shift to Digital Product
+
+Figure 3: Time to Eat! Example of the IT Interface of a Digital Product that is a Smart Device (Digital Oven)
+Digital Platforms
+An important category of Digital Product is the Digital Platform; refer to Jeanne Ross et al, Designed for Digital (see References). This is a product designed to enable creation or hosting of other Digital Products which can be sold or shared with consumers. Common examples of how this works in practice include the App Stores available to Apple® and AndroidTM customers, or the AzureTM and Amazon Web ServicesTM platforms that provide a range of easily orderable plugins and also the ability for users to create their own.
+Many types of platform use similar Offer models:
+· Platform as a Service (PaaS) raw compute and virtual compute
+· Software as a Service (SaaS) platforms accessed in the cloud
+· Low code/no code development
+· Content platforms such as for music, videos, and documents
+· Digital services such as those that connect drivers, passengers, and deliveries
+· Software applications that rely on a shared platform's capabilities such as smartphones, TVs, and platforms built for sales, HR, or IT management
+Many Digital Platforms incorporate shared resources such as platform-specific development tools, an integrated store for configuring or adding features through plugins, platform-dependent application management, self-service interactions for purchase, and knowledge and support features.
+
+Interplay Among Digital Products
+The digital oven example illustrates an accelerating trend: collaboration between Digital Products that adds greater value when interacting than when they function independently.
+The oven example of an IoT-based product reflects marketing collaboration among multiple product managers of the oven, the watch app, the phone app, and the food-cooking instruction suppliers. This functionality is embodied in software created by each company involved and supported by interoperability
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+14
+
+The Shift to Digital Product
+standards such as The Open Group O-DEFTM and O-MI Standards (see References). The result is a valueadded ecosystem.
+This interplay creates opportunities and data for all parties. The data and ongoing consumer feedback received helps the Digital Product Manager make decisions such as adding features, improving performance, adjusting pricing models, and updating market strategies.
+Digital Product design must anticipate these collaboration opportunities to minimize unintended obstacles to integration and data sharing.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+15
+
+The Shift to Digital Product
+
+Recursion and Granularity in Digital Products
+A Digital Product is frequently composed of, or relies upon, other Digital Products. For example:
+· An app that offers room booking or transportation may rely on a cloud-based Digital Product providing mapping-as-a-service
+· A web or mobile app-based streaming video service may rely on a separate platform of web services products to manage and provide streaming content
+An ecosystem of interconnected Digital Products can be deep and complex, similar to the parts and assemblies in complex physical products.
+Each product manager in the stack must take inbound and outbound dependencies into account when setting pricing rules, to meet profit and loss goals, to support and manage changes, and to meter consumption and capacity of their own Digital Product.
+As components in such stacks, traditional outputs of IT departments ­ such as applications, websites, and other hosted software solutions, as well as infrastructure resources such as compute, storage, and network ­ can all be treated as Digital Products. They often have Service Offers and pricing mechanisms, though sometimes not explicitly defined.
+When all projects and infrastructure expense can be assigned to a holistic product-oriented financial model, the traditional IT budget disappears into a portfolio of product budgets that can be much more readily optimized to support strategic business value.
+How does the concept of setting prices apply when one Digital Product is a component of a more complex ecosystem of Digital Products?
+When Should In-House Software and Services be Treated as Digital Products?
+Each organization must determine where and when to impose formality in Digital Product Management and where to be less formal. The line should be drawn carefully between systems, software, and services provided internally for which formalism provides significant efficiency and control, and those for which such formality is too expensive.
+What if two interconnected Digital Products are owned by the same organization? Do we need prices and Contracts for "internal" usage scenarios? When does the overhead of managing a formal Contract for an internal product make sense?
+That overhead becomes lower with modern IT toolchains designed for detailed operational measurement, as is standard in modern cloud platforms. A corollary is that traditional resistance to useful measurement of infrastructure costs may be much less persuasive when all such costs can be applied to the Profit and Loss (P&L) statement of a well-defined Digital Product.
+Formally defining an internal software-based system as a Digital Product is indicated when a well-rounded, coherent financial view of the software system is needed in order to make associated costs clear and to enable objective chargeback or showback.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+16
+
+The Shift to Digital Product
+Example: Digital Product Granularity
+Consider an insurance policy (a type of Digital Product) that relies on specialist actuarial software to calculate complex premiums and valuations.
+Case A
+The insurance company uses a third-party software package for this calculation functionality. It signs a license agreement for the software. This license agreement is a Contract for a Digital Product Instance and defines the exact details of how the insurance company may use the software, including pricing and payment terms. The Contract will also include vendor guarantees of calculation accuracy and system performance and may define penalties and liability for failures.
+Information about this Contract should be easy to incorporate into the design of insurance products that must meet requirements for compliance and audit, consumer needs, and warranty. The cost of the software license as well as risk management for possible errors will be factors in setting valuation and pricing rules for the insurance "book" that represents affected insurance product lines.
+Case B
+Instead of purchasing licensed software, the insurance company chooses to use software created, managed, and supported by an internal team. Is this a "product"? Should it still be managed as a Digital Product? If not, will we have the same confident understanding of long-term cost and risk for this software over the life of the insurance "book"?
+Does using in-house software make it any less important to track full lifecycle costs of the calculation package to define and manage expected performance, or to analyze the risk and liability of incorrect calculations?
+Benefits of Formalism
+Many notional Digital Products are expected to be used in this way ­ only as a component in a more complex Digital Product. This is notably reflected in microservices architectures, an approach that breaks down monolithic applications into more manageable subcomponents.
+For a Digital Product that is an "internal" subcomponent or dependency of another Digital Product, opting for formalism in pricing rules and formal Contracts help in three ways:
+1. It creates an objective basis for understanding financial outcomes and value for the subcomponent products. Increased formalism and consequential measurement practices provide continuous visibility of the operational and financial data needed to support full lifecycle product management, providing the same level of insight and routine control provided by Enterprise Resource Planning (ERP) systems or by cloud platform providers.
+2. It sets in motion management and data collection processes needed to understand internal products by the same standards used for externally sourced products. This can result in more objective comparison of options. In some cases, an internally sourced product may be a candidate external product in its own right. Alternatively, apples-to-apples comparison of well-defined internal and external products could support a case for replacing internal products with more viable or cost-effective external options.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+17
+
+The Shift to Digital Product
+3. It supports long-term planning of the product lifecycle and the management of technology risks. Roadmapping and investment planning can be more proactive and long-term (as opposed to reactive and ad hoc). The use of automated reports can reveal concerns about the full stack of components such as end-of-life, security vulnerabilities, and compliance.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+18
+
+The Shift to Digital Product
+
+Managing the Digital Product
+
+Digital Product Portfolios, sometimes referred to as product lines, are typically managed from three perspectives, as depicted in Figure 4:
+· Market-facing: primarily for use by external customers, sometimes referred to as "digital offerings"; refer to Jeanne Ross et al, Designed for Digital (see References)
+· Internal-facing: primarily used by employees or automated processes to drive internal productivity, sometimes referred to as "digitalizing processes"
+· Foundational: a combination of both
+In the book Designed for Digital, Jeanne Ross et al explain that organizations should focus on two areas in their Digital Transformation strategy:
+· Digitizing3 internal processes that improve employee productivity and experience
+· Creating digital offerings for the market to improve customer experience
+Figure 4 captures these two perspectives as subsets of the overall Digital Product Portfolio. A third portfolio captures those shared, foundational Digital Products used in both contexts.
+
+Strategy & Investment
+
+Market-facing
+
+Digital Product Portfolio Used by Customers
+Digital Products Digital Product Digital Product
+
+Shared /Foundational Digital Products Digital Product Digital Product
+
+Product Manager
+
+Manages
+
+Used by Employees Digital Products
+Digital Product Digital Product
+
+Figure 4: Digital Product Portfolios
+
+3 Sometimes "digitalizing".
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+19
+
+The Shift to Digital Product
+Directly linking Digital Product Portfolios to strategy in this way provides clarity on investment priority and should reduce suboptimal outcomes in competition for funding. Management agility is improved when analyzing costs, and investment decisions become more strategically aligned.
+The Digital Product Manager
+A career and competency of Digital Product Management is emerging, in which two previously distinct professional competencies are combined:
+· An IT management competency based on functional understanding of a relevant set of technologies, including a meaningful understanding of how those technologies are created and managed
+· A product management marketing competency that includes an understanding of relevant markets, consumers, distribution, logistics, customer value propositions, and the financial aspects of products
+The Digital Product Manager must understand software development, deployment, and management processes, including DevOps processes. They should also have an eye on the future: the technology that underpins their products may change rapidly, leading to much shorter lifetimes for product versions. The lifecycle of a Digital Product may have a greater variety of features and provide greater flexibility than for non-digital products.
+Understanding all underlying resources, their versions, and their lifecycles is a critical task for the Digital Product Manager. For example, obsolete technology subcomponents can have a detrimental impact if they are not updated or removed when vulnerabilities are identified if support is no longer available from the provider, or when consumers demand more current experiences.
+Digital Products can rely heavily on IT infrastructure such as networking, computers, databases, and software to realize value. Digital Product Managers must track underlying technologies, resources, configurations, and maintenance concerns throughout the product lifecycle of their own Digital Product.
+The full stack of resources on which the Digital Product is dependent must also be managed as core to the Digital Product, with clearly defined goals, roadmaps, owners, cost models, and other managed dependencies. This includes IT infrastructure such as networking, computers, databases, and so on, and is true whether critical technology resources are integrated in the system or obtained via external subscription.
+The Digital Product Manager must be able to define Service Offer models that include the full set of options for delivering and tracking desired outcomes for consumers, and work with relevant technical teams to make the model realizable in the system design and support process.
+Shared Resources
+The design of a Digital Product must consider and include shared resources such as people, marketing, and lifecycle processes. Digital Products may have tightly integrated shared resources dedicated to facilitating delivery, support, and lifecycle management processes for the systems and consumer interactions. Shared functionality could include self-updating apps, in-app support processes, in-app usage monitoring, and update processes within a smart device, and so on.
+External and shared system APIs used by a Digital Product are an important element that might lie beyond the Digital Product Manager's direct control, such as Single Sign-On (SSO) interfaces, real-time credit
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+20
+
+The Shift to Digital Product
+
+inquiries, address validation, or currency exchange rate lookup. These dependencies must be managed and tracked with indirect controls and mitigation plans through supplier Contracts and ongoing subscriptions to those external suppliers.
+If external dependencies are not tracked properly, unintended consequences might arise due to changes or failures of critical dependencies. Microservices architectures have more granular and loosely-coupled components and more dependencies that must be understood and managed at scale. This might amplify the problem of management complexity in the Digital Product technology stack.4
+A key to managing critical dependencies is to ensure they are bound by a formal Contract for which the agreed governance is sufficiently defined to ensure successful value outcomes. For external Digital Products, this may include ensuring effective API governance, for example.
+
+Digital Product Lifecycle Concerns
+Digital Product Management must address two lifecycle concerns that map to the IT4IT value streams: · System lifecycle (the managed IT component of the product) · Contract lifecycle (governs consumed instances, warranties, commitments, and dependent systems and resources)
+
+Digital Product
+
+Contract Lifecycle
+
+Offer
+System Lifecycle
+
+Strategy to Portfolio
+
+Requirement to Deploy
+
+Request to Fulfill
+Deploy
+
+Purchase/ Subscribe
+
+Bill/ Support
+
+Detect to Correct
+
+Figure 5: Digital Product Lifecycle Management
+
+The IT4IT Value Streams Strategy to Portfolio, Requirement to Deploy, Request to Fulfill, and Detect to Correct are part of The Open Group IT4ITTM Reference Architecture.
+
+4 To Microservices and Back Again ­ Why Segment Went Back to a Monolith, by Thomas Betts, InfoQ Article, April 2020; refer to: https://www.infoq.com/news/2020/04/microservices-backagain/#:~:text=Microservices%20were%20first%20introduced%20to,fault%20isolation%20of%20Segment's%20monolith.&text=The%20decision%20 to%20move%20back,scaling%20related%20to%20company%20growth.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+21
+
+The Shift to Digital Product
+Code, Dependencies, and Instance Resource Management
+Until a system is retired, it has underlying resources and dependencies that must be managed until no active consumers depend on it and all instances have been retired, and perhaps longer depending on factors such as regulatory requirements for data retention.
+To maintain the operational integrity of a Digital Product, the code, hardware, third-party software (each has its own support lifecycle), and integrations must be managed. Often, dependencies have their own upgrade and maintenance cycles that should be tracked as well.
+Unlike non-digital products, the supply chain for a Digital Product is real-time: code and data drive functionality. The Digital Product Manager must ensure that dependencies on other Digital Products are managed along with any contractual, financial, and technical requirements.
+Rapid cycle time for changes in Digital Products requires a level of automation not needed for more traditional products. Many products receive software updates weekly or even daily. This can only be managed using automated toolchain and support processes. The IT4IT Standard describes an architectural framework for managing rapidly changing product definitions at scale.
+Data-Driven Opportunities and Concerns
+Data ­ both generated and used within a Digital Product ­ presents unique opportunities and advantages, as well as risks if improperly managed. Data can be collected from a wide range of sources to include the consumer, sourced externally, or gathered automatically through embedded sensors or related Digital Products in complex systems. Insights for the consumer or product manager can be generated as data is analyzed to provide reports and recommendations, and to trigger proactive action.
+For effective full lifecycle management, policies and controls should be put in place to ensure that the information created in the design, creation, management, and support of the Digital Product, and operational support systems, remain available for a much longer period than is typical in a project-oriented operating model.
+The design, planning, source code, and other information created to define and manage the Digital Product's technical components should be retained for future planning and support purposes. Without this, it is impossible for the product manager to track technical, operational, and financial aspects of the Digital Product over time.
+Contract Lifecyle Concerns
+The Contract exists separately from the digital and physical components of the Product and may be required long after all active users of the Product are gone. Product management models must include this concern in the overall Product financial and support model, to ensure that residual Contract obligations, such as compliance requirements, are correctly dealt with.
+Simple examples include regulatory financial and customer records retention requirements as well as company data governance and legal requirements regarding disposition of historical contract and customer data.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+22
+
+The Shift to Digital Product
+Digital Product Fulfilment and Lifecycle Management
+The fulfillment flow illustrated in Figure 6 demonstrates consumer integration with the Offer. An initial Request to Fulfill process captures the steps involved in fulfilling a request to consume a Digital Product. This often results in allocating devices and resources specific to the consumer, shared resources, and resources from an external dependency such as another Digital Product.
+
+Commits to
+
+Consumer
+
+Interacts with
+
+Triggers
+
+Offer 1 Offer 2 Offer 3
+
+Defines
+
+Digital Product
+
+Fulfilment Process
+
+Process Request
+
+...
+
+Manages
+
+Product Instance
+May include: · Physical Device · Seat /Login · Shared Resource
+
+Governs
+
+Contract
+Creates
+
+Provides
+
+Provide Instance
+
+Figure 6: Digital Product Fulfilment Event
+This is consistent with the IT4IT Reference Architecture, Version 2.1 which describes how an Offer exposes the consumable elements of the Digital Product/IT Service and is rationalized into Subscriptions (renamed Contracts in this document) which then spawn chargeback activity, SLAs, and Request for Fulfillment processes.
+The Contract concept described in this document aggregates information represented in the IT4IT Reference Architecture, Version 2.1 Offer Catalog, Shopping Cart, Subscription, Service Contract, Chargeback Contract, and Desired Service data objects.
+A responsibility of the Digital Product Manager is to ensure that the Product specification is sufficient for instantiation and that fulfillment works as expected.
+
+The Digital Product Instance
+Figure 7 shows the elements of a more detailed Digital Product Instance. This Digital Product Manager's perspective includes the Contract as well as common concerns such as dependencies on other Digital Products, the product team, market and distribution factors, and lifecycle management processes.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+23
+
+The Shift to Digital Product
+
+Digital Product Instance
+
+Contract
+Defines contract: price, SLA, interaction, governance & security requirements, outcomes & value
+Scopes Resources
+
+Defines Enables
+
+Interaction Methods
+Provides interaction, delivers outcomes
+
+Human Interface
+Machine Interface
+
+System(s)
+Code, compute, device, technology, information,
+integrations, assets
+
+Shared Resources (needed by all systems/instances) Team (development, engineering, sales, delivery, support) Marketing & Distribution (catalogs, stores, platforms) Lifecycle Management (build, CI/CD, release tools)
+
+Consumer
+Other Digital Product(s)
+
+Contracts and Interacts with
+
+Other Digital Product
+
+Other Digital Product
+
+Figure 7: Digital Product Instance Structure
+
+Consumer Types and Interaction Methods
+Different types of consumer have different expectations and interaction methods for the Digital Product. A robust Digital Product includes a well-defined, detailed Service Offer structure that defines all anticipated interaction methods, and that can be expressed in an appropriate form of consumer Contract.
+
+4 Consumer Types
+Internal External
+
+Machines People
+
+Digital Product
+
+Digital Product
+
+Figure 8: Four Typical Consumer Archetypes
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+24
+
+The Shift to Digital Product
+Figure 8 suggests a classification of the key consumer archetypes to consider when defining the Digital Product Offers, interaction methods, and system design: consumers of a Service Offer may be internal or external (or both), and may be machine or person/organization (or both):
+· Internal actors such as employees or departments
+· External actors such as individual or corporate customers and partners
+· Internal APIs, microservices, and processes
+· External APIs, integrations, and processes
+It is important to set proper expectations for both human and machine consumers in the Offer, such as response time, resolution to issues, notification of planned down-time, etc. Characteristics may vary across this landscape, requiring different cost models, SLA templates, consumption rules (e.g., maximum data per month), security requirements, and business criticality commitments. This can result in very complex Offers and subscription management practices.
+The authors have not tried in this document to delineate a comprehensive model for Offer and Contract types and data structures.
+A Digital Product Manager should explore and explicitly define the details and range of permitted Service Offer variants for the interaction. For example, allowable templates for SLAs should be part of the Product definition and rules. These become available at the point of purchase (such as choosing the gold, silver, or bronze support plans for humans, or a machine response time and transaction volume limits for other Digital Products subscribing to use APIs).
+Complex Product Systems
+As mentioned above, the resources within the system may include Contracts to use other internal or external Digital Products, with both technical and financial dependencies. These third-party dependencies and their explicit or implied Contracts are an integral part of the product definition and a consideration in pricing and other management concerns.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+25
+
+The Shift to Digital Product
+
+Figure 9 shows a complex view of the possible dependency mesh of a Digital Product.
+
+Digital Product A
+Product Rules
+System
+Integrated Resources Contracts Contract Contract Contract
+
+Digital Product B
+Product Rules
+System
+Integrated Resources Contracts Contract Contract Contract
+
+2 FTEs
+Entitled Digital Product
+Internal Customers
+
+Customer
+
+Digital Product
+External Suppliers
+
+Contract Details: · Ownership/Entitlement · Usage & Warranty Criteria · Billing/Subscriptions
+
+Owned Digital Product
+External Customers
+
+Figure 9: Typical Contractual Mesh Among Digital Products
+
+When elaborate Digital Product systems are deployed and connected using Service Management models such as ITIL, some resources can be managed as Configuration Items (CIs), representing the system's underlying and integrated resources. These are discoverable within data centers or on the enterprise network and can be managed in a Configuration Management Database (CMDB).
+
+System resources identified in a CMDB can be made traceable to specific consumers and Contracts via the instantiation records created when Contracts and system entitlements are fulfilled. A data and functional architecture for systems that plan, build, deliver, and run the deployed systems within the Digital Product Portfolio is described in the IT4IT Reference Architecture.
+
+As suggested in Figure 9, interaction among collaborating Digital Products, through Contracts such as subscriptions pertaining to both human and machine interfaces, entitlements, ownership, and access to systems, is common in Digital Product systems.
+
+In all cases, underlying code may be required to run in interconnected systems to complete an interaction for internal or external consumers and may involve external suppliers as well.
+
+A system meeting these characteristics is a candidate to be managed as a Digital Product in a granular and prescriptive manner so that organizations can measure cost and performance, assess completeness, manage consumption, and ensure compliance of Digital Product Management functions, processes, and practices.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+26
+
+The Shift to Digital Product
+Conclusion
+A key message of this document is that by allocating all IT spend to specific Digital Products we can achieve a clear understanding of the entire IT investment portfolio and make a clean break from project-based budgeting. When IT dependencies and spend roll up allocated costs to an equally defined Digital Product Portfolio based on consumer/provider interaction, accountability for IT spend can be financially transparent and its purpose made clear.
+The aim is to transform traditional "internal" IT management practices and vague financial understanding into a single Digital Product Portfolio Management approach, with associated working practices for financial and management accountability. This path eliminates outdated, fragmented ways of working, with their attendant friction, that can obstruct Digital Transformation.
+Organizations wishing to adopt the Digital Product Management approach should ensure that follow-on changes in management and cost accounting practices are validated with leadership and communicated carefully to financial stakeholders. There are also cultural issues to consider: moving to a single portfolio view at scale can be a significant workplace change, with its own risks and costs.
+The problem of aligning business goals with IT investment has been the focus of many changes to IT management practices over the years, with mixed and incomplete results; refer to the White Paper: Why Business and IT Must Co-Create Strategy for a Digital Enterprise (see References). Access to credible decomposed operating costs of IT systems remains an ongoing, significant concern at the heart of understanding and managing IT investments.
+Treating all IT output as Digital Products and managing each in the same way, whether they are for external sale or internal use, has the potential to illuminate many of the details needed to get a firmer understanding of and control over IT spend and to align that spend explicitly to quantifiable business value.
+The digital economy is forcing Digital Transformations that require IT management and product management disciplines to converge, supporting a shift in the purpose of IT management from project brokering to product management.
+The Digital Product concept proposed in this document simplifies and strengthens the core IT management concepts that are described in the IT4IT Standard and provides a semantic context for aligning business and technology leaders responsible for Digital Products.
+The unified Digital Product Portfolio focus described here, jointly managed by business and technology leaders, creates financial transparency, enables genuine Digital Transformation, and can add significant value to all organizations.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+27
+
+The Shift to Digital Product
+References
+(Please note that the links below are good at the time of writing but cannot be guaranteed for the future.) · Designed for Digital: How to Architect your Business for Sustained Success (Management on the Cutting Edge), Jeanne W. Ross, Cynthia M. Beath, Martin Mocker, September 2019, published by MIT Press
+· Digital Practitioner Body of KnowledgeTM Standard (also known as the DPBoKTM Standard), a Standard of The Open Group (C196), January 2020, published by The Open Group; refer to: www.opengroup.org/library/c196
+· O-DEFTM, the Open Data Element Framework, Version 2.0, a Standard of The Open Group (C202), February 2020, published by The Open Group; refer to: www.opengroup.org/library/c202
+· Open Messaging Interface (O-MI), The Open Group Standard for the Internet of Things (IoT), Version 2.0 (C19E), December 2019, published by The Open Group; refer to: www.opengroup.org/library/c19e
+· Project to Product: How to Survive and Thrive in the Age of Digital Disruption with the Flow Framework, Mik Kersten, November 2018, published by IT Revolution Press
+· The Open Group IT4ITTM Reference Architecture, Version 2.1, a Standard of The Open Group (C171), January 2017, published by The Open Group; refer to: www.opengroup.org/library/c171
+· The TOGAF® Standard, Version 9.2, a Standard of The Open Group (C182), April 2018, published by The Open Group; refer to: www.opengroup.org/library/c182
+· Why Business and IT Must Co-Create Strategy for a Digital Enterprise, White Paper (W203), January 2020, published by The Open Group; refer to: www.opengroup.org/library/w203
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+28
+
+The Shift to Digital Product
+
+Acronyms and Abbreviations
+
+API
+
+Application Program Interface
+
+CI
+
+Configuration Item
+
+CMDB
+
+Configuration Management Database
+
+CSDM
+
+Common Service Data Model
+
+DevOps
+
+A set of practices that combines software development and IT operations which aims to shorten the system's development lifecycle and provide continuous delivery with high software quality.
+
+ERP
+
+Enterprise Resource Planning
+
+ESB
+
+Enterprise Service Bus
+
+FTE
+
+Full-Time Equivalent
+
+IoT
+
+Internet of Things
+
+ITSM
+
+IT Service Management
+
+OT
+
+Operational Technology
+
+P&L
+
+Profit and Loss
+
+PaaS
+
+Platform as a Service
+
+ROI
+
+Return on Investment
+
+SaaS
+
+Software as a Service
+
+SLA
+
+Service-Level Agreement. Part of a Service Contract where a service is formally
+
+defined and particular aspects of the service ­ scope, quality, responsibilities ­ are
+
+agreed upon between the service provider and service consumer.
+
+SOA
+
+Service-Oriented Architecture
+
+SSO
+
+Single Sign-On
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+29
+
+The Shift to Digital Product
+Acknowledgements
+The authors gratefully acknowledge the following people in the development of this document:
+Contributors · Peter Beijer, DXC · Charles T. Betz, University of St. Thomas · Chris Frost, Fujitsu · Mike Fulton, Nationwide Insurance · Trey Harris, ExxonMobil · David Hornford, Conexiam · Hari Krishnan, Nationwide Insurance · Chris Madden, ValueFlow IT · Andrew Platt, Fujitsu · Andy Ruth, Sustainable Evolution · Jan Stobbe, Sykehuspartner HF · Etienne Terpstra-Hollander, Micro Focus · Jason Thurmond, Boeing · Mark Whiting, ValueFlow IT · Erik van Busschbach, Invited Expert · Karel van Zeeland, Fruition Partners
+Reviewers · Emmanuel Amamoo-Otchere, Huawei · David Lounsbury, The Open Group · Brian Moore, Raytheon · Rosemary Peh, Hawaiian Electric Company
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+30
+
+The Shift to Digital Product
+About the Authors
+Primary Authors
+Mark Bodman, ServiceNow
+Mark is currently a Common Service Data Model (CSDM) Senior Product Manager at ServiceNow, responsible for the outbound management of the data model used across ServiceNow products. Previously at ServiceNow, Mark managed the Application Portfolio Management product. Mark has leveraged the IT4IT Standard at more than 100 engagements since 2013. Mark is IT4IT Certified and has a long history in the Enterprise Architecture practice. Mark is an executive advisor, thought leader, and mentor to many in the IT industry. Prior to ServiceNow, Mark worked on cross-portfolio strategies to shape Hewlett Packard Enterprise (HPE) products and services to include multi-source service brokering and to leverage the IT4IT Standard.
+Dan Warfield, CC&C Europe
+Dan is Chief Digital Officer for CC and C Solutions (CC&C), a global training and consulting group specializing in Enterprise Architecture and IT transformation. He has held senior strategy, architecture, marketing, and other IT-related leadership roles in Fortune 100 organizations including Lincoln Financial, Walmart, IBM, CSC, and FIS. He is Chairman of the Association of Enterprise Architects London Chapter, an active member of The Open Group IT4IT Forum, and holds TOGAF, IT4IT, and ITIL certifications, among others.
+Co-Authors
+Dr. Lars Rossen, Micro Focus
+Lars is CTO at Micro Focus. His current focus area is the convergence of Agile, Security, and Operations; that is, creating the Factory for Digital. While at Hewlett Packard Enterprise (HPE), Lars was the Chief Architect leading the development of the first draft of the IT4IT Reference Architecture with founding members of the IT4IT Consortium. This work became the basis for the IT4IT Standard in The Open Group. In Micro Focus this is the basis for blueprinting the development of the end-to-end integration of the Micro Focus portfolio of products. Lars is Vice-Chair of The Open Group Governing Board.
+Dr. Michelle Supper, ServiceNow
+Michelle is Senior Executive Architect at ServiceNow, and leader of the ServiceNow Enterprise Architecture Forum. Michelle has worked with The Open Group for more than ten years as a member, and for two years as a Forum Director. She has contributed to the development of seven standards, along with associated white papers, guides, and books. As a practicing Enterprise Architect, she is engaged in multiple industry verticals, guiding the development of complex systems and the delivery of major transformation programs.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+31
+
+The Shift to Digital Product
+Sue Desiderio, Invited Expert
+Sue has worked to continuously improve the business of IT for internal IT organizations over the last 22 years and is an Invited Expert to the IT4IT Forum. Sue has led enterprise tool implementations for several internal IT organizations with a focus on process integration and a common data model to enable the full IT Value Chain. She was among the founding members of the IT4IT Consortium before it progressed to become The Open Group IT4IT Forum, making key contributions to the development and maintenance of the IT4IT Standard with special focus on the Requirement to Deploy and Detect to Correct capabilities. Additionally, Sue has spent significant effort on updating the IT4IT Version 2.1 Service Model which has been critical in evolving the IT4IT Standard.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+32
+
+The Shift to Digital Product
+About the IT4ITTM Forum
+The IT4IT Forum is a membership-based group comprised of organizations from multiple industry segments from around the world. IT management professionals from these member organizations come together to share their experiences for the purpose of developing and publishing future-safe prescriptive guidance. The IT4IT Forum members focus on developing an end-to-end reference architecture ­ the IT4IT Reference Architecture Standard ­ for designing and delivering Digital Products as services. For more information on the IT4IT Forum, please visit www.opengroup.org/it4it-forum and view our IT4IT Forum Members List.
+About The Open Group
+The Open Group is a global consortium that enables the achievement of business objectives through technology standards. Our diverse membership of more than 800 organizations includes customers, systems and solutions suppliers, tools vendors, integrators, academics, and consultants across multiple industries. The mission of The Open Group is to drive the creation of Boundaryless Information FlowTM achieved by:
+· Working with customers to capture, understand, and address current and emerging requirements, establish policies, and share best practices
+· Working with suppliers, consortia, and standards bodies to develop consensus and facilitate interoperability, to evolve and integrate specifications and open source technologies
+· Offering a comprehensive set of services to enhance the operational efficiency of consortia · Developing and operating the industry's premier certification service and encouraging procurement of
+certified products Further information on The Open Group is available at www.opengroup.org.
+
+www.opengroup.org
+
+A White Paper Published by The Open Group
+
+33
+
+

@@ -212,6 +212,8 @@ model ModelProvider {
   baseUrl              String?
   authMethod           String   @default("api_key")
   supportedAuthMethods Json     @default("[\"api_key\"]")
+  docsUrl              String?
+  consoleUrl           String?
   updatedAt            DateTime @updatedAt
 }
 

@@ -10,7 +10,9 @@
     "costModel": "token",
     "families": ["claude-3-5", "claude-4"],
     "inputPricePerMToken": 3.00,
-    "outputPricePerMToken": 15.00
+    "outputPricePerMToken": 15.00,
+    "docsUrl": "https://docs.anthropic.com",
+    "consoleUrl": "https://console.anthropic.com/settings/billing"
   },
   {
     "providerId": "openai",
@@ -23,7 +25,9 @@
     "costModel": "token",
     "families": ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini"],
     "inputPricePerMToken": 2.50,
-    "outputPricePerMToken": 10.00
+    "outputPricePerMToken": 10.00,
+    "docsUrl": "https://platform.openai.com/docs",
+    "consoleUrl": "https://platform.openai.com/settings/organization/billing"
   },
   {
     "providerId": "azure-openai",
@@ -36,7 +40,9 @@
     "costModel": "token",
     "families": ["gpt-4o", "gpt-4-turbo"],
     "inputPricePerMToken": 5.00,
-    "outputPricePerMToken": 15.00
+    "outputPricePerMToken": 15.00,
+    "docsUrl": "https://learn.microsoft.com/en-us/azure/ai-services/openai/",
+    "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI"
   },
   {
     "providerId": "gemini",
@@ -49,7 +55,9 @@
     "costModel": "token",
     "families": ["gemini-1.5-pro", "gemini-2.0"],
     "inputPricePerMToken": 1.25,
-    "outputPricePerMToken": 5.00
+    "outputPricePerMToken": 5.00,
+    "docsUrl": "https://ai.google.dev/docs",
+    "consoleUrl": "https://aistudio.google.com/apikey"
   },
   {
     "providerId": "bedrock",
@@ -62,7 +70,9 @@
     "costModel": "token",
     "families": ["claude", "titan", "llama"],
     "inputPricePerMToken": 3.00,
-    "outputPricePerMToken": 15.00
+    "outputPricePerMToken": 15.00,
+    "docsUrl": "https://docs.aws.amazon.com/bedrock/",
+    "consoleUrl": "https://console.aws.amazon.com/bedrock/"
   },
   {
     "providerId": "ollama",
@@ -75,7 +85,9 @@
     "costModel": "compute",
     "families": ["llama3", "mistral", "phi3", "gemma2"],
     "computeWatts": 150,
-    "electricityRateKwh": 0.12
+    "electricityRateKwh": 0.12,
+    "docsUrl": "https://github.com/ollama/ollama/blob/main/docs/api.md",
+    "consoleUrl": null
   },
   {
     "providerId": "xai",
@@ -86,7 +98,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["grok-2", "grok-3"]
+    "families": ["grok-2", "grok-3"],
+    "docsUrl": "https://docs.x.ai",
+    "consoleUrl": "https://console.x.ai"
   },
   {
     "providerId": "mistral",
@@ -97,7 +111,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["mistral-large", "mistral-small", "codestral"]
+    "families": ["mistral-large", "mistral-small", "codestral"],
+    "docsUrl": "https://docs.mistral.ai",
+    "consoleUrl": "https://console.mistral.ai/billing"
   },
   {
     "providerId": "cohere",
@@ -108,7 +124,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["command-r-plus", "command-r", "embed"]
+    "families": ["command-r-plus", "command-r", "embed"],
+    "docsUrl": "https://docs.cohere.com",
+    "consoleUrl": "https://dashboard.cohere.com/billing"
   },
   {
     "providerId": "deepseek",
@@ -119,7 +137,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["deepseek-chat", "deepseek-coder"]
+    "families": ["deepseek-chat", "deepseek-coder"],
+    "docsUrl": "https://platform.deepseek.com/api-docs",
+    "consoleUrl": "https://platform.deepseek.com/top_up"
   },
   {
     "providerId": "groq",
@@ -130,7 +150,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mixtral", "gemma"]
+    "families": ["llama3", "mixtral", "gemma"],
+    "docsUrl": "https://console.groq.com/docs",
+    "consoleUrl": "https://console.groq.com/settings/billing"
   },
   {
     "providerId": "together",
@@ -141,7 +163,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mistral", "qwen"]
+    "families": ["llama3", "mistral", "qwen"],
+    "docsUrl": "https://docs.together.ai",
+    "consoleUrl": "https://api.together.ai/settings/billing"
   },
   {
     "providerId": "fireworks",
@@ -152,7 +176,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mixtral", "qwen"]
+    "families": ["llama3", "mixtral", "qwen"],
+    "docsUrl": "https://docs.fireworks.ai",
+    "consoleUrl": "https://fireworks.ai/account/billing"
   },
   {
     "providerId": "openrouter",
@@ -163,7 +189,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"]
+    "families": ["multi-provider"],
+    "docsUrl": "https://openrouter.ai/docs",
+    "consoleUrl": "https://openrouter.ai/credits"
   },
   {
     "providerId": "litellm",
@@ -174,7 +202,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"]
+    "families": ["multi-provider"],
+    "docsUrl": "https://docs.litellm.ai",
+    "consoleUrl": null
   },
   {
     "providerId": "portkey",
@@ -185,7 +215,9 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "x-portkey-api-key",
     "costModel": "token",
-    "families": ["multi-provider"]
+    "families": ["multi-provider"],
+    "docsUrl": "https://docs.portkey.ai",
+    "consoleUrl": "https://app.portkey.ai/organisation/billing"
   },
   {
     "providerId": "martian",
@@ -196,6 +228,8 @@
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"]
+    "families": ["multi-provider"],
+    "docsUrl": "https://docs.withmartian.com",
+    "consoleUrl": "https://app.withmartian.com/billing"
   }
 ]
