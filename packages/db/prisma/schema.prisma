@@ -189,12 +189,46 @@ model CredentialEntry {
 }
 
 model ModelProvider {
-  id         String   @id @default(cuid())
-  providerId String   @unique
+  id                   String   @id @default(cuid())
+  providerId           String   @unique
+  name                 String
+  families             Json
+  enabledFamilies      Json     @default("[]")
+  status               String   @default("unconfigured")
+  authEndpoint         String?
+  authHeader           String?
+  endpoint             String?
+  costModel            String   @default("token")
+  inputPricePerMToken  Float?
+  outputPricePerMToken Float?
+  computeWatts         Float?
+  electricityRateKwh   Float?
+  updatedAt            DateTime @updatedAt
+}
+
+model TokenUsage {
+  id           String   @id @default(cuid())
+  agentId      String
+  providerId   String
+  contextKey   String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  inferenceMs  Int?
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model ScheduledJob {
+  id         String    @id @default(cuid())
+  jobId      String    @unique
   name       String
-  families   Json
-  status     String   @default("inactive")
-  updatedAt  DateTime @updatedAt
+  schedule   String    @default("weekly")
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+  lastStatus String?
+  lastError  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────────────
