@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-types";
 import type {
   CoverageStatus,
+  ReferenceModelDetail,
   ReferenceModelPortfolioRollup,
   ReferenceModelPortfolioRollupRow,
   ReferenceModelSummary,
@@ -239,5 +240,44 @@ export const getReferenceModelPortfolioRollup = cache(
       model,
       rows: Array.from(rowsByScope.values()),
     };
+  }
+);
+
+export const getReferenceModelDetail = cache(
+  async (slug: string): Promise<ReferenceModelDetail> => {
+    const model = await prisma.eaReferenceModel.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        version: true,
+        status: true,
+        authorityType: true,
+        description: true,
+        artifacts: {
+          orderBy: [{ authority: "asc" }, { path: "asc" }],
+          select: {
+            id: true,
+            path: true,
+            kind: true,
+            authority: true,
+          },
+        },
+        proposals: {
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            proposalType: true,
+            status: true,
+            proposedByType: true,
+            reviewNotes: true,
+          },
+        },
+      },
+    });
+
+    if (!model) throw new Error("Reference model not found");
+    return model;
   }
 );

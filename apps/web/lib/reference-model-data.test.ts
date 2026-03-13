@@ -13,6 +13,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  getReferenceModelDetail,
   getReferenceModelsSummary,
   getReferenceModelPortfolioRollup,
 } from "./ea-data";
@@ -102,6 +103,40 @@ describe("getReferenceModelPortfolioRollup", () => {
           outOfMvpCount: 1,
         }),
       ])
+    );
+  });
+});
+
+describe("getReferenceModelDetail", () => {
+  it("returns model metadata with artifacts and proposals", async () => {
+    mockPrisma.eaReferenceModel.findUnique.mockResolvedValue({
+      id: "rm-1",
+      slug: "it4it_v3_0_1",
+      name: "IT4IT",
+      version: "3.0.1",
+      status: "active",
+      authorityType: "standard",
+      description: "IT4IT reference model",
+      artifacts: [
+        { id: "a1", path: "docs/Reference/IT4IT v3.0.1.pdf", kind: "pdf", authority: "authoritative" },
+      ],
+      proposals: [
+        { id: "p1", proposalType: "guidance", status: "proposed", proposedByType: "agent", reviewNotes: null },
+      ],
+    });
+
+    const result = await getReferenceModelDetail("it4it_v3_0_1");
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        slug: "it4it_v3_0_1",
+        artifacts: expect.arrayContaining([
+          expect.objectContaining({ kind: "pdf", authority: "authoritative" }),
+        ]),
+        proposals: expect.arrayContaining([
+          expect.objectContaining({ proposalType: "guidance", status: "proposed" }),
+        ]),
+      })
     );
   });
 });
