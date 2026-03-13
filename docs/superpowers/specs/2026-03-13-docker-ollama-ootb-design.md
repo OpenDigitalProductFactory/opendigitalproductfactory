@@ -1,5 +1,7 @@
 # Docker Ollama OOTB Local AI — Design Spec
 
+**Depends on:** Phase 7A (AI provider registry + model discovery) and Phase 7B (provider security + profiling). This spec builds on the existing provider infrastructure — `ModelProvider`, `DiscoveredModel`, `discoverModels()`, `profileModels()`, and the `/platform/ai` page must already be in place.
+
 ## Goal
 
 Bundle Ollama as a Docker Compose sidecar so the platform ships with local AI inference out of the box. Zero configuration — `docker compose up` starts Ollama, auto-detects GPU, pulls a default model, and the platform auto-discovers, activates, and profiles it on first page load.
@@ -173,12 +175,16 @@ The web app reaches Ollama via different URLs depending on context:
 The helper resolves the **root** Ollama URL (without `/v1` suffix) for health checks and native API calls:
 
 ```typescript
-/** Returns the root Ollama URL for native API calls (health, /api/tags, /api/ps). */
+/**
+ * Returns the root Ollama URL for native API calls (/api/tags, /api/ps).
+ * The registry baseUrl is "http://localhost:11434/v1" (OpenAI-compatible),
+ * but native health/management endpoints live at the root without /v1.
+ */
 function getOllamaBaseUrl(provider?: Pick<ProviderRow, "providerId" | "baseUrl" | "endpoint">): string {
   if (process.env.OLLAMA_INTERNAL_URL) {
-    return process.env.OLLAMA_INTERNAL_URL;
+    return process.env.OLLAMA_INTERNAL_URL; // e.g., "http://ollama:11434" (no /v1)
   }
-  // Strip /v1 suffix if present (baseUrl points at OpenAI-compatible endpoint)
+  // Strip /v1 suffix — registry baseUrl is ".../v1" but native API is at root
   const raw = provider?.endpoint ?? provider?.baseUrl ?? "http://localhost:11434";
   return raw.replace(/\/v1\/?$/, "");
 }
@@ -209,8 +215,10 @@ Extend `packages/db/scripts/init-neo4j.ts` to register an Ollama infrastructure 
 ciId: "CI-ollama-01"
 name: "Ollama"
 ciType: "ai-inference"
-status: "discovered"       // updated to "active"/"inactive" by health check
+status: "offline"          // updated to "operational"/"offline" by health check
 ```
+
+**Status vocabulary**: Uses the existing InfraCI status taxonomy (`operational | degraded | offline`), not the AI provider status (`active | unconfigured | inactive`). The initial seed value is `"offline"` — the page-load health check sets it to `"operational"` when Ollama responds, and back to `"offline"` when unreachable.
 
 Relationship: `(:InfraCI {ciId: "CI-ollama-01"}) -[:DEPENDS_ON]-> (:InfraCI {ciId: "CI-docker-host-01"})`
 
