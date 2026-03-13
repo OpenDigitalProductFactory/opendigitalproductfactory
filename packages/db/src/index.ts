@@ -22,4 +22,27 @@ export {
   syncPortfolio,
   syncInfraCI,
   syncDependsOn,
+  syncInventoryEntityAsInfraCI,
+  syncInventoryRelationship,
 } from "./neo4j-sync";
+export {
+  buildDiscoveredKey,
+  buildInventoryEntityKey,
+  type DiscoveredKeyInput,
+  type InventoryEntityKeyInput,
+} from "./discovery-identity";
+export {
+  normalizeDiscoveredFacts,
+  type NormalizedDiscoveryOutput,
+  type NormalizedInventoryEntity,
+  type NormalizedInventoryRelationship,
+} from "./discovery-normalize";
+export {
+  executeBootstrapDiscovery,
+  runBootstrapCollectors,
+} from "./discovery-runner";
+export {
+  persistBootstrapDiscoveryRun,
+  summarizeDiscoveryPersistence,
+  type DiscoveryPersistenceSummary,
+} from "./discovery-sync";

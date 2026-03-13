@@ -8,6 +8,8 @@ import type {
   SpendByProvider,
   SpendByAgent,
   ScheduledJobRow,
+  DiscoveredModelRow,
+  ModelProfileRow,
 } from "./ai-provider-types";
 
 export const getProviders = cache(async (): Promise<ProviderWithCredential[]> => {
@@ -19,8 +21,9 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
   return providers.map((p) => ({
     provider: {
       ...p,
-      families:        p.families as string[],
-      enabledFamilies: p.enabledFamilies as string[],
+      families:             p.families as string[],
+      enabledFamilies:      p.enabledFamilies as string[],
+      supportedAuthMethods: p.supportedAuthMethods as string[],
     } satisfies ProviderRow,
     credential: credMap.get(p.providerId) ?? null,
   }));
@@ -33,8 +36,9 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
   return {
     provider: {
       ...provider,
-      families:        provider.families as string[],
-      enabledFamilies: provider.enabledFamilies as string[],
+      families:             provider.families as string[],
+      enabledFamilies:      provider.enabledFamilies as string[],
+      supportedAuthMethods: provider.supportedAuthMethods as string[],
     } satisfies ProviderRow,
     credential: credential ?? null,
   };
@@ -87,4 +91,27 @@ export const getTokenSpendByAgent = cache(
 
 export const getScheduledJobs = cache(async (): Promise<ScheduledJobRow[]> => {
   return prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } });
+});
+
+export const getDiscoveredModels = cache(async (providerId: string): Promise<DiscoveredModelRow[]> => {
+  const models = await prisma.discoveredModel.findMany({
+    where: { providerId },
+    orderBy: { modelId: "asc" },
+  });
+  return models.map((m) => ({
+    ...m,
+    rawMetadata: m.rawMetadata as Record<string, unknown>,
+  }));
+});
+
+export const getModelProfiles = cache(async (providerId: string): Promise<ModelProfileRow[]> => {
+  const profiles = await prisma.modelProfile.findMany({
+    where: { providerId },
+    orderBy: { modelId: "asc" },
+  });
+  return profiles.map((p) => ({
+    ...p,
+    bestFor: p.bestFor as string[],
+    avoidFor: p.avoidFor as string[],
+  }));
 });

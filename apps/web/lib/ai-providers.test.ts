@@ -4,6 +4,8 @@ import {
   computeComputeCost,
   computeNextRunAt,
   SCHEDULE_INTERVALS_MS,
+  getTestUrl,
+  parseModelsResponse,
 } from "./ai-provider-types";
 
 describe("computeTokenCost", () => {
@@ -64,5 +66,62 @@ describe("computeNextRunAt", () => {
     const now = new Date("2026-03-12T00:00:00Z");
     const next = computeNextRunAt("monthly", now);
     expect(next?.getTime()).toBe(now.getTime() + SCHEDULE_INTERVALS_MS.monthly);
+  });
+});
+
+describe("getTestUrl", () => {
+  it("returns baseUrl + /models for standard provider", () => {
+    expect(getTestUrl({ providerId: "openai", baseUrl: "https://api.openai.com/v1", endpoint: null }))
+      .toBe("https://api.openai.com/v1/models");
+  });
+
+  it("returns baseUrl + /api/tags for ollama", () => {
+    expect(getTestUrl({ providerId: "ollama", baseUrl: "http://localhost:11434", endpoint: null }))
+      .toBe("http://localhost:11434/api/tags");
+  });
+
+  it("returns endpoint + /models when baseUrl is null", () => {
+    expect(getTestUrl({ providerId: "azure-openai", baseUrl: null, endpoint: "https://my-instance.openai.azure.com" }))
+      .toBe("https://my-instance.openai.azure.com/models");
+  });
+
+  it("returns null when both baseUrl and endpoint are null", () => {
+    expect(getTestUrl({ providerId: "azure-openai", baseUrl: null, endpoint: null }))
+      .toBeNull();
+  });
+});
+
+describe("parseModelsResponse", () => {
+  it("parses OpenAI-compatible format", () => {
+    const json = { data: [{ id: "gpt-4o" }, { id: "gpt-4-turbo" }] };
+    const result = parseModelsResponse("openai", json);
+    expect(result).toEqual([
+      { modelId: "gpt-4o", rawMetadata: { id: "gpt-4o" } },
+      { modelId: "gpt-4-turbo", rawMetadata: { id: "gpt-4-turbo" } },
+    ]);
+  });
+
+  it("parses Ollama format", () => {
+    const json = { models: [{ name: "llama3" }, { name: "mistral" }] };
+    const result = parseModelsResponse("ollama", json);
+    expect(result).toEqual([
+      { modelId: "llama3", rawMetadata: { name: "llama3" } },
+      { modelId: "mistral", rawMetadata: { name: "mistral" } },
+    ]);
+  });
+
+  it("parses Cohere format", () => {
+    const json = { models: [{ name: "command-r-plus" }] };
+    const result = parseModelsResponse("cohere", json);
+    expect(result).toEqual([{ modelId: "command-r-plus", rawMetadata: { name: "command-r-plus" } }]);
+  });
+
+  it("returns empty array for empty response", () => {
+    expect(parseModelsResponse("openai", {})).toEqual([]);
+    expect(parseModelsResponse("openai", { data: [] })).toEqual([]);
+  });
+
+  it("returns empty array for missing data key", () => {
+    expect(parseModelsResponse("openai", { models: [] })).toEqual([]);
   });
 });

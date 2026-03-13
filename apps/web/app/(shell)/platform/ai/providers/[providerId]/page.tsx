@@ -3,15 +3,22 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { getProviderById } from "@/lib/ai-provider-data";
+import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 
 type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const pw = await getProviderById(providerId);
+  const [pw, models, profiles, allProviders] = await Promise.all([
+    getProviderById(providerId),
+    getDiscoveredModels(providerId),
+    getModelProfiles(providerId),
+    getProviders(),
+  ]);
   if (!pw) notFound();
+
+  const hasActiveProvider = allProviders.some((p) => p.provider.status === "active");
 
   const session = await auth();
   const user = session?.user;
@@ -26,7 +33,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       </div>
 
       <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
-        <ProviderDetailForm pw={pw} canWrite={canWrite} />
+        <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
       </div>
     </div>
   );
