@@ -1,19 +1,40 @@
 // apps/web/app/(shell)/employee/page.tsx
 import { prisma } from "@dpf/db";
+import { HrUserLifecyclePanel } from "@/components/employee/HrUserLifecyclePanel";
 
 export default async function EmployeePage() {
-  const roles = await prisma.platformRole.findMany({
-    orderBy: { roleId: "asc" },
-    select: {
-      id: true,
-      roleId: true,
-      name: true,
-      description: true,
-      hitlTierMin: true,
-      slaDurationH: true,
-      _count: { select: { users: true } },
-    },
-  });
+  const [roles, users] = await Promise.all([
+    prisma.platformRole.findMany({
+      orderBy: { roleId: "asc" },
+      select: {
+        id: true,
+        roleId: true,
+        name: true,
+        description: true,
+        hitlTierMin: true,
+        slaDurationH: true,
+        _count: { select: { users: true } },
+      },
+    }),
+    prisma.user.findMany({
+      orderBy: { email: "asc" },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        isSuperuser: true,
+        groups: {
+          select: {
+            platformRole: {
+              select: {
+                roleId: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
 
   return (
     <div>
@@ -65,6 +86,21 @@ export default async function EmployeePage() {
 
       {roles.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
+      )}
+
+      {users.length > 0 && (
+        <div className="mt-8">
+          <HrUserLifecyclePanel
+            roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
+            users={users.map((user) => ({
+              id: user.id,
+              email: user.email,
+              isActive: user.isActive,
+              isSuperuser: user.isSuperuser,
+              roleId: user.groups[0]?.platformRole.roleId ?? null,
+            }))}
+          />
+        </div>
       )}
     </div>
   );

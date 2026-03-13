@@ -53,7 +53,7 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).not.toContain("admin");
   });
 
-  it("HR-300 gets EA Modeler, Portfolio, Inventory", () => {
+  it("HR-300 gets Agents, Portfolio, Inventory", () => {
     const tiles = getWorkspaceTiles(hr300).map((t) => t.key);
     expect(tiles).toContain("agents");
     expect(tiles).toContain("portfolio");

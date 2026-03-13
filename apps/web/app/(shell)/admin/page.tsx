@@ -1,22 +1,33 @@
 // apps/web/app/(shell)/admin/page.tsx
 import { prisma } from "@dpf/db";
+import { AdminUserAccessPanel } from "@/components/admin/AdminUserAccessPanel";
 
 export default async function AdminPage() {
-  const users = await prisma.user.findMany({
-    orderBy: { email: "asc" },
-    select: {
-      id: true,
-      email: true,
-      isActive: true,
-      isSuperuser: true,
-      createdAt: true,
-      groups: {
-        select: {
-          platformRole: { select: { roleId: true, name: true } },
+  const [users, roles] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { email: "asc" },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        isSuperuser: true,
+        createdAt: true,
+        groups: {
+          select: {
+            platformRole: { select: { roleId: true, name: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.platformRole.findMany({
+      orderBy: { roleId: "asc" },
+      select: {
+        id: true,
+        roleId: true,
+        name: true,
+      },
+    }),
+  ]);
 
   return (
     <div>
@@ -80,6 +91,15 @@ export default async function AdminPage() {
 
       {users.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No users registered yet.</p>
+      )}
+
+      {roles.length > 0 && users.length > 0 && (
+        <div className="mt-8">
+          <AdminUserAccessPanel
+            roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
+            users={users.map((user) => ({ id: user.id, email: user.email }))}
+          />
+        </div>
       )}
     </div>
   );
