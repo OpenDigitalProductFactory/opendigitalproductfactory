@@ -2,7 +2,7 @@
 // Validation functions for EA model writes.
 // All functions read from Postgres meta-model; never write.
 
-import { prisma } from "./client.js";
+import { prisma } from "./client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
