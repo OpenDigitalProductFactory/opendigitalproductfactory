@@ -18,6 +18,7 @@ export type CapabilityKey =
   | "manage_agents"
   | "manage_capabilities"
   | "manage_users"
+  | "manage_user_lifecycle"
   | "manage_provider_connections"
   | "manage_backlog"
   | "manage_ea_model";
@@ -40,6 +41,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_agents:               { roles: ["HR-000"] },
   manage_capabilities:         { roles: ["HR-000"] },
   manage_users:                { roles: ["HR-000"] },
+  manage_user_lifecycle:       { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
   manage_provider_connections: { roles: ["HR-000"] },
   manage_backlog:              { roles: ["HR-000", "HR-500"] },
   manage_ea_model:             { roles: ["HR-000", "HR-300"] },
