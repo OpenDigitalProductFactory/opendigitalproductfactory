@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, triggerProviderSync } from "@/lib/actions/ai-providers";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
@@ -33,14 +34,12 @@ export default async function PlatformAiPage() {
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
-  // Second getScheduledJobs() call — not deduplicated by React cache because
-  // syncProviderRegistry() may have mutated the DB between the two calls.
-  // freshJobs reflects the updated lastRunAt/nextRunAt after any auto-sync.
+  // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
   const [providers, byProvider, byAgent, freshJobs] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
-    getScheduledJobs(),
+    prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
