@@ -49,8 +49,8 @@ export default async function EaAgentsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {tierAgents.map((a) => {
                 const colour = a.portfolio
-                  ? (PORTFOLIO_COLOURS[a.portfolio.slug] ?? "#555566")
-                  : "#555566";
+                  ? (PORTFOLIO_COLOURS[a.portfolio.slug] ?? "#8888a0")
+                  : "#8888a0";
 
                 return (
                   <div

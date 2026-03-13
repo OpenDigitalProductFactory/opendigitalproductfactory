@@ -35,7 +35,7 @@ export function ScheduledJobsTable({ jobs, canWrite }: Props) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
       <thead>
-        <tr style={{ color: "#555566", textAlign: "left" }}>
+        <tr style={{ color: "#8888a0", textAlign: "left" }}>
           <th style={{ padding: "4px 8px", fontWeight: 500 }}>Job</th>
           <th style={{ padding: "4px 8px", fontWeight: 500 }}>Schedule</th>
           <th style={{ padding: "4px 8px", fontWeight: 500 }}>Last run</th>
@@ -54,7 +54,7 @@ export function ScheduledJobsTable({ jobs, canWrite }: Props) {
                   value={job.schedule}
                   disabled={isPending}
                   onChange={(e) => handleScheduleChange(job.jobId, e.target.value)}
-                  style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#7c8cf8", fontSize: 9, padding: "1px 4px", borderRadius: 3 }}
+                  style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#7c8cf8", fontSize: 10, padding: "1px 4px", borderRadius: 3 }}
                 >
                   {SCHEDULES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -62,19 +62,19 @@ export function ScheduledJobsTable({ jobs, canWrite }: Props) {
                 <span style={{ color: "#7c8cf8" }}>{job.schedule}</span>
               )}
             </td>
-            <td style={{ padding: "6px 8px", color: "#555566" }}>{formatDate(job.lastRunAt)}</td>
-            <td style={{ padding: "6px 8px", color: "#555566" }}>{formatDate(job.nextRunAt)}</td>
+            <td style={{ padding: "6px 8px", color: "#8888a0" }}>{formatDate(job.lastRunAt)}</td>
+            <td style={{ padding: "6px 8px", color: "#8888a0" }}>{formatDate(job.nextRunAt)}</td>
             <td style={{ padding: "6px 8px" }}>
               {job.lastStatus === "ok"    && <span style={{ color: "#4ade80" }}>✓ ok</span>}
               {job.lastStatus === "error" && <span style={{ color: "#f87171" }}>✗ error</span>}
-              {!job.lastStatus            && <span style={{ color: "#555566" }}>—</span>}
+              {!job.lastStatus            && <span style={{ color: "#8888a0" }}>—</span>}
             </td>
             <td style={{ padding: "6px 8px", textAlign: "right" }}>
               {canWrite && (
                 <button
                   onClick={() => handleRunNow(job.jobId)}
                   disabled={isPending}
-                  style={{ color: "#7c8cf8", background: "none", border: "none", fontSize: 9, cursor: "pointer" }}
+                  style={{ color: "#7c8cf8", background: "none", border: "none", fontSize: 10, cursor: "pointer" }}
                 >
                   Run now
                 </button>

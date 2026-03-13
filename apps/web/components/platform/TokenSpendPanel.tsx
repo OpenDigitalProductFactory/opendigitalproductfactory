@@ -51,10 +51,10 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
               key={t}
               onClick={() => setTab(t)}
               style={{
-                fontSize: 9, padding: "2px 8px", borderRadius: 3, cursor: "pointer",
+                fontSize: 10, padding: "2px 8px", borderRadius: 3, cursor: "pointer",
                 background: tab === t ? "#2a2a50" : "transparent",
                 border: `1px solid ${tab === t ? "#7c8cf8" : "#2a2a40"}`,
-                color: tab === t ? "#7c8cf8" : "#555566",
+                color: tab === t ? "#7c8cf8" : "#8888a0",
               }}
             >
               {t === "provider" ? "By Provider" : "By Agent"}
@@ -64,7 +64,7 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
       </div>
 
       {isEmpty && (
-        <p style={{ color: "#555566", fontSize: 11 }}>No spend data yet — token usage will appear here once agents are active.</p>
+        <p style={{ color: "#8888a0", fontSize: 11 }}>No spend data yet — token usage will appear here once agents are active.</p>
       )}
 
       {!isEmpty && tab === "provider" && (
@@ -73,9 +73,9 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
             const pct = totalCost > 0 ? Math.round((r.totalCostUsd / totalCost) * 100) : 0;
             return (
               <div key={r.providerId} style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 6, padding: 10 }}>
-                <div style={{ color: "#555566", fontSize: 9, marginBottom: 2 }}>{r.providerId}</div>
+                <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 2 }}>{r.providerId}</div>
                 <div style={{ color: "#e0e0ff", fontSize: 16, fontWeight: 700 }}>{formatCost(r.totalCostUsd)}</div>
-                <div style={{ color: "#555566", fontSize: 9, marginTop: 2 }}>
+                <div style={{ color: "#8888a0", fontSize: 10, marginTop: 2 }}>
                   {formatTokens(r.totalInputTokens)} in · {formatTokens(r.totalOutputTokens)} out
                 </div>
                 <div style={{ height: 4, background: "#2a2a40", borderRadius: 2, marginTop: 6 }}>
@@ -90,7 +90,7 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
       {!isEmpty && tab === "agent" && (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
           <thead>
-            <tr style={{ color: "#555566", textAlign: "left" }}>
+            <tr style={{ color: "#8888a0", textAlign: "left" }}>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Agent</th>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Input</th>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Output</th>
@@ -101,8 +101,8 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
             {byAgent.map((r) => (
               <tr key={r.agentId} style={{ borderTop: "1px solid #2a2a40", color: "#e0e0ff" }}>
                 <td style={{ padding: "6px 8px" }}>{r.agentName}</td>
-                <td style={{ padding: "6px 8px", color: "#555566" }}>{formatTokens(r.totalInputTokens)}</td>
-                <td style={{ padding: "6px 8px", color: "#555566" }}>{formatTokens(r.totalOutputTokens)}</td>
+                <td style={{ padding: "6px 8px", color: "#8888a0" }}>{formatTokens(r.totalInputTokens)}</td>
+                <td style={{ padding: "6px 8px", color: "#8888a0" }}>{formatTokens(r.totalOutputTokens)}</td>
                 <td style={{ padding: "6px 8px", fontWeight: 600 }}>{formatCost(r.totalCostUsd)}</td>
               </tr>
             ))}

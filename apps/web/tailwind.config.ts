@@ -11,7 +11,7 @@ const config: Config = {
           surface1: "#1a1a2e",
           surface2: "#161625",
           accent: "#7c8cf8",
-          muted: "#555566",
+          muted: "#8888a0",
           border: "#2a2a40",
         },
       },

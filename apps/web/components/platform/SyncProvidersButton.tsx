@@ -64,12 +64,12 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
         {isPending ? "Updating…" : "Update Providers"}
       </button>
       {result && (
-        <span style={{ fontSize: 9, color: result.ok ? "#4ade80" : "#f87171" }}>
+        <span style={{ fontSize: 10, color: result.ok ? "#4ade80" : "#f87171" }}>
           {result.ok ? "✓" : "✗"} {result.message}
         </span>
       )}
       {!result && isStale && !isPending && (
-        <span style={{ fontSize: 9, color: "#fbbf24" }}>
+        <span style={{ fontSize: 10, color: "#fbbf24" }}>
           {lastSyncAt ? "Last updated over a month ago" : "Never synced"}
         </span>
       )}

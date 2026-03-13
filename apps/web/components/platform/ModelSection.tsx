@@ -133,7 +133,7 @@ export function ModelSection({
 
   if (models.length === 0) {
     return (
-      <div style={{ color: "#555566", fontSize: 12, padding: "16px 0" }}>
+      <div style={{ color: "#8888a0", fontSize: 12, padding: "16px 0" }}>
         No models discovered yet. Use the provider configuration above to run discovery.
       </div>
     );
@@ -170,7 +170,7 @@ export function ModelSection({
         />
 
         {/* Count label */}
-        <span style={{ color: "#555566", fontSize: 10, flexGrow: 1 }}>
+        <span style={{ color: "#8888a0", fontSize: 10, flexGrow: 1 }}>
           {filtered.length} model{filtered.length !== 1 ? "s" : ""}
           {searchLower ? " matching" : ""}
           {" — "}
@@ -242,7 +242,7 @@ export function ModelSection({
           ))}
         </div>
       ) : (
-        <div style={{ color: "#555566", fontSize: 12, padding: "12px 0" }}>
+        <div style={{ color: "#8888a0", fontSize: 12, padding: "12px 0" }}>
           No models match your search.
         </div>
       )}
@@ -263,7 +263,7 @@ export function ModelSection({
               padding: "4px 10px",
               background: "transparent",
               border: "1px solid #2a2a40",
-              color: clampedPage === 0 ? "#555566" : "#e0e0ff",
+              color: clampedPage === 0 ? "#8888a0" : "#e0e0ff",
               borderRadius: 4,
               fontSize: 11,
               cursor: clampedPage === 0 ? "not-allowed" : "pointer",
@@ -272,7 +272,7 @@ export function ModelSection({
             Prev
           </button>
 
-          <span style={{ color: "#555566", fontSize: 10 }}>
+          <span style={{ color: "#8888a0", fontSize: 10 }}>
             Page {clampedPage + 1} of {totalPages}
           </span>
 
@@ -283,7 +283,7 @@ export function ModelSection({
               padding: "4px 10px",
               background: "transparent",
               border: "1px solid #2a2a40",
-              color: clampedPage >= totalPages - 1 ? "#555566" : "#e0e0ff",
+              color: clampedPage >= totalPages - 1 ? "#8888a0" : "#e0e0ff",
               borderRadius: 4,
               fontSize: 11,
               cursor: clampedPage >= totalPages - 1 ? "not-allowed" : "pointer",

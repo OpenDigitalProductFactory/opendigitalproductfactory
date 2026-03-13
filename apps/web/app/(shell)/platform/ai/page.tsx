@@ -12,7 +12,7 @@ import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
   unconfigured:  "#fbbf24",
-  inactive:      "#555566",
+  inactive:      "#8888a0",
 };
 
 export default async function PlatformAiPage() {
@@ -47,7 +47,7 @@ export default async function PlatformAiPage() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>AI Providers</h1>
-        <p style={{ fontSize: 11, color: "#555566", marginTop: 2 }}>
+        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
           {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({directProviders.length} direct, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
@@ -68,7 +68,7 @@ export default async function PlatformAiPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
               {directProviders.map(({ provider }) => {
-                const colour = STATUS_COLOURS[provider.status] ?? "#555566";
+                const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
                   <div
                     key={provider.providerId}
@@ -76,28 +76,28 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 8, padding: "1px 5px", borderRadius: 3 }}>
+                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
                         {provider.status}
                       </span>
                     </div>
-                    <div style={{ color: "#555566", fontSize: 9, marginBottom: 6 }}>
+                    <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <Link
                         href={`/platform/ai/providers/${provider.providerId}`}
-                        style={{ color: "#7c8cf8", fontSize: 9 }}
+                        style={{ color: "#7c8cf8", fontSize: 10 }}
                       >
                         Configure →
                       </Link>
                       {provider.docsUrl && (
-                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
                           Docs
                         </a>
                       )}
                       {provider.consoleUrl && (
-                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
                           Console
                         </a>
                       )}
@@ -117,7 +117,7 @@ export default async function PlatformAiPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
               {routerProviders.map(({ provider }) => {
-                const colour = STATUS_COLOURS[provider.status] ?? "#555566";
+                const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
                   <div
                     key={provider.providerId}
@@ -125,28 +125,28 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 8, padding: "1px 5px", borderRadius: 3 }}>
+                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
                         {provider.status}
                       </span>
                     </div>
-                    <div style={{ color: "#555566", fontSize: 9, marginBottom: 6 }}>
+                    <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <Link
                         href={`/platform/ai/providers/${provider.providerId}`}
-                        style={{ color: "#7c8cf8", fontSize: 9 }}
+                        style={{ color: "#7c8cf8", fontSize: 10 }}
                       >
                         Configure →
                       </Link>
                       {provider.docsUrl && (
-                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
                           Docs
                         </a>
                       )}
                       {provider.consoleUrl && (
-                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#555566", fontSize: 9 }}>
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
                           Console
                         </a>
                       )}
@@ -159,7 +159,7 @@ export default async function PlatformAiPage() {
         )}
 
         {providers.length === 0 && (
-          <p style={{ color: "#555566", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
+          <p style={{ color: "#8888a0", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
         )}
       </div>
 
