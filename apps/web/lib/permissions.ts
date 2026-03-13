@@ -19,7 +19,8 @@ export type CapabilityKey =
   | "manage_capabilities"
   | "manage_users"
   | "manage_provider_connections"
-  | "manage_backlog";
+  | "manage_backlog"
+  | "manage_ea_model";
 
 type Permission = {
   roles: PlatformRoleId[];
@@ -41,6 +42,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_users:                { roles: ["HR-000"] },
   manage_provider_connections: { roles: ["HR-000"] },
   manage_backlog:              { roles: ["HR-000", "HR-500"] },
+  manage_ea_model:             { roles: ["HR-000", "HR-300"] },
 };
 
 type UserContext = {
@@ -75,12 +77,12 @@ export type WorkspaceTile = {
 };
 
 const ALL_TILES: WorkspaceTile[] = [
-  { key: "ea_modeler", label: "EA Modeler", route: "/ea",        capabilityKey: "view_ea_modeler",  accentColor: "#7c8cf8" },
+  { key: "agents",     label: "Agents",     route: "/ea",        capabilityKey: "view_ea_modeler",  accentColor: "#7c8cf8" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "#4ade80" },
   { key: "inventory",  label: "Inventory",  route: "/inventory", capabilityKey: "view_inventory",   accentColor: "#fb923c" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "#a78bfa" },
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "#f472b6" },
-  { key: "operations", label: "Operations", route: "/ops",       capabilityKey: "view_operations",  accentColor: "#38bdf8" },
+  { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "#38bdf8" },
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
   { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#555566" },
 ];

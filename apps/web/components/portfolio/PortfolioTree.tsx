@@ -27,23 +27,21 @@ export function PortfolioTree({ roots }: Props) {
     : null;
 
   function toggle(nodeId: string) {
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
-      // Sync to URL without triggering a server re-render
-      const url = new URL(window.location.href);
-      if (next.size > 0) {
-        url.searchParams.set("open", [...next].join(","));
-      } else {
-        url.searchParams.delete("open");
-      }
-      window.history.replaceState(null, "", url.toString());
-      return next;
-    });
+    const next = new Set(openIds);
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else {
+      next.add(nodeId);
+    }
+    // Sync to URL without triggering a server re-render
+    const url = new URL(window.location.href);
+    if (next.size > 0) {
+      url.searchParams.set("open", [...next].join(","));
+    } else {
+      url.searchParams.delete("open");
+    }
+    window.history.replaceState(null, "", url.toString());
+    setOpenIds(next);
   }
 
   return (

@@ -4,19 +4,24 @@
   "private": true,
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ea-validation": "./src/ea-validation.ts",
+    "./neo4j-sync": "./src/neo4j-sync.ts"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed.ts",
     "studio": "prisma studio",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "neo4j:rebuild-ea": "tsx src/neo4j-rebuild-ea.ts"
   },
   "dependencies": {
-    "@prisma/client": "5.22.0"
+    "@prisma/client": "5.22.0",
+    "neo4j-driver": "^5.27.0"
   },
   "devDependencies": {
     "prisma": "5.22.0",
