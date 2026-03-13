@@ -158,6 +158,54 @@ export async function configureProvider(input: {
   return {};
 }
 
+// ─── OAuth token exchange ─────────────────────────────────────────────────────
+
+async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
+  const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  if (!credential) return { error: "No credential configured" };
+  if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
+    return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
+  }
+
+  // Return cached token if still valid (5-minute buffer)
+  if (credential.cachedToken && credential.tokenExpiresAt) {
+    const buffer = 5 * 60 * 1000;
+    if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
+      return { token: credential.cachedToken };
+    }
+  }
+
+  // Exchange for new token
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: credential.clientId,
+    client_secret: credential.clientSecret,
+    ...(credential.scope ? { scope: credential.scope } : {}),
+  });
+
+  try {
+    const res = await fetch(credential.tokenEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return { error: `Token exchange failed: HTTP ${res.status}` };
+
+    const body = await res.json() as { access_token: string; expires_in: number };
+    const expiresAt = new Date(Date.now() + body.expires_in * 1000);
+
+    await prisma.credentialEntry.update({
+      where: { providerId },
+      data: { cachedToken: body.access_token, tokenExpiresAt: expiresAt, status: "ok" },
+    });
+
+    return { token: body.access_token };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Token exchange error" };
+  }
+}
+
 // ─── Test provider auth ───────────────────────────────────────────────────────
 
 export async function testProviderAuth(providerId: string): Promise<{ ok: boolean; message: string }> {
