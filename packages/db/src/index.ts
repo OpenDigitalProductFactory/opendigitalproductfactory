@@ -22,6 +22,8 @@ export {
   syncPortfolio,
   syncInfraCI,
   syncDependsOn,
+  syncInventoryEntityAsInfraCI,
+  syncInventoryRelationship,
 } from "./neo4j-sync";
 export {
   buildDiscoveredKey,
@@ -29,3 +31,8 @@ export {
   type DiscoveredKeyInput,
   type InventoryEntityKeyInput,
 } from "./discovery-identity";
+export {
+  persistBootstrapDiscoveryRun,
+  summarizeDiscoveryPersistence,
+  type DiscoveryPersistenceSummary,
+} from "./discovery-sync";
