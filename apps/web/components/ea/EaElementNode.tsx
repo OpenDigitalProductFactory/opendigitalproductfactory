@@ -4,6 +4,15 @@ import { memo } from "react";
 import { Handle, Position, useConnection, type NodeProps } from "@xyflow/react";
 import { layerFromNeoLabel, LAYER_COLOURS, type SerializedViewElement } from "@/lib/ea-types";
 
+// Each side has a source and target handle so React Flow can route edges in any direction.
+// IDs are unique per handle to avoid React Flow warnings.
+const SIDES = [
+  { position: Position.Top,    sourceId: "t-s", targetId: "t-t" },
+  { position: Position.Right,  sourceId: "r-s", targetId: "r-t" },
+  { position: Position.Bottom, sourceId: "b-s", targetId: "b-t" },
+  { position: Position.Left,   sourceId: "l-s", targetId: "l-t" },
+];
+
 export const EaElementNode = memo(function EaElementNode({ id, data, selected }: NodeProps) {
   const nodeData = data as SerializedViewElement;
   const layer = layerFromNeoLabel(nodeData.elementType.neoLabel);
@@ -11,7 +20,6 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
 
   const connection = useConnection();
   const isConnecting = connection.inProgress;
-  // This node is the source of the drag — don't highlight it as a target
   const isThisSource = isConnecting && connection.fromNode?.id === id;
 
   const isReference = nodeData.mode === "reference";
@@ -23,7 +31,6 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
     ? `2px solid #7c8cf8`
     : `2px solid ${colours.border}`;
 
-  // Glow potential targets while a connection is being drawn
   const targetGlow = isConnecting && !isThisSource
     ? `0 0 0 2px ${colours.border}, 0 0 10px 3px ${colours.border}55`
     : undefined;
@@ -33,14 +40,17 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
     ? String(nodeData.proposedProperties["name"])
     : nodeData.element.name;
 
-  // All handles are typed "source" — ReactFlow connectionMode="loose" lets them act as targets too.
-  // This enables connections from/to any side.
+  // Handles visible on hover or while connecting
+  const handleVisible = isConnecting && !isThisSource;
   const handleStyle = {
-    width: 10, height: 10, borderRadius: "50%",
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
     background: colours.border,
     border: `1px solid ${colours.bg}`,
-    opacity: isConnecting ? 1 : 0,
-    transition: "opacity 0.15s ease",
+    opacity: handleVisible ? 1 : 0,
+    transition: "opacity 0.12s ease",
+    zIndex: 10,
   };
 
   return (
@@ -59,7 +69,6 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
         transition: "box-shadow 0.15s ease",
       }}
       onMouseEnter={(e) => {
-        // Show handles on hover even when not connecting
         e.currentTarget.querySelectorAll<HTMLElement>(".react-flow__handle").forEach((h) => {
           h.style.opacity = "1";
         });
@@ -72,10 +81,24 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
         }
       }}
     >
-      <Handle type="source" position={Position.Top}    style={handleStyle} />
-      <Handle type="source" position={Position.Right}  style={handleStyle} />
-      <Handle type="source" position={Position.Bottom} style={handleStyle} />
-      <Handle type="source" position={Position.Left}   style={handleStyle} />
+      {SIDES.map(({ position, sourceId, targetId }) => (
+        <>
+          <Handle
+            key={sourceId}
+            type="source"
+            id={sourceId}
+            position={position}
+            style={handleStyle}
+          />
+          <Handle
+            key={targetId}
+            type="target"
+            id={targetId}
+            position={position}
+            style={{ ...handleStyle, opacity: 0, pointerEvents: "none" }}
+          />
+        </>
+      ))}
 
       <div style={{ fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#336", marginBottom: 2 }}>
         {nodeData.elementType.name} · {nodeData.mode}
