@@ -181,11 +181,17 @@ model McpServer {
 }
 
 model CredentialEntry {
-  id         String   @id @default(cuid())
-  providerId String   @unique
-  secretRef  String?
-  status     String   @default("unconfigured")
-  updatedAt  DateTime @updatedAt
+  id             String    @id @default(cuid())
+  providerId     String    @unique
+  secretRef      String?
+  clientId       String?
+  clientSecret   String?
+  tokenEndpoint  String?
+  scope          String?
+  cachedToken    String?
+  tokenExpiresAt DateTime?
+  status         String    @default("unconfigured")
+  updatedAt      DateTime  @updatedAt
 }
 
 model ModelProvider {
@@ -195,7 +201,6 @@ model ModelProvider {
   families             Json
   enabledFamilies      Json     @default("[]")
   status               String   @default("unconfigured")
-  authEndpoint         String?
   authHeader           String?
   endpoint             String?
   costModel            String   @default("token")
@@ -203,7 +208,40 @@ model ModelProvider {
   outputPricePerMToken Float?
   computeWatts         Float?
   electricityRateKwh   Float?
+  category             String   @default("direct")
+  baseUrl              String?
+  authMethod           String   @default("api_key")
+  supportedAuthMethods Json     @default("[\"api_key\"]")
   updatedAt            DateTime @updatedAt
+}
+
+model DiscoveredModel {
+  id           String   @id @default(cuid())
+  providerId   String
+  modelId      String
+  rawMetadata  Json
+  discoveredAt DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+
+  @@unique([providerId, modelId])
+}
+
+model ModelProfile {
+  id             String   @id @default(cuid())
+  providerId     String
+  modelId        String
+  friendlyName   String
+  summary        String
+  capabilityTier String
+  costTier       String
+  bestFor        Json
+  avoidFor       Json
+  contextWindow  String?
+  speedRating    String?
+  generatedBy    String
+  generatedAt    DateTime @default(now())
+
+  @@unique([providerId, modelId])
 }
 
 model TokenUsage {
