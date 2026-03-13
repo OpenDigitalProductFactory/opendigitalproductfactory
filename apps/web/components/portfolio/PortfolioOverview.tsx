@@ -23,7 +23,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets }: Props) {
           const ownerRole = PORTFOLIO_OWNER_ROLES[root.nodeId] ?? "—";
           return (
             <Link
-              key={root.nodeId}
+              key={root.id}
               href={`/portfolio/${root.nodeId}`}
               className="block p-5 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
               style={{ borderLeftColor: colour }}

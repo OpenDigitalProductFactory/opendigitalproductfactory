@@ -30,7 +30,7 @@ export default async function CustomerPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {accounts.map((a) => {
           const contactCount = a._count.contacts;
-          const statusColour = STATUS_COLOURS[a.status] ?? "#555566";
+          const statusColour = STATUS_COLOURS[a.status] ?? "#8888a0";
 
           return (
             <div

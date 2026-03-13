@@ -47,7 +47,7 @@ export function PortfolioTree({ roots }: Props) {
   return (
     <nav className="py-2" aria-label="Portfolio navigation">
       {roots.map((root, i) => (
-        <div key={root.nodeId}>
+        <div key={root.id}>
           {i > 0 && (
             <div className="border-t border-[var(--dpf-border)] my-1.5 mx-3" />
           )}

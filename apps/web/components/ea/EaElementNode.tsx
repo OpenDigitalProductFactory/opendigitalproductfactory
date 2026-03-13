@@ -4,13 +4,13 @@ import { memo } from "react";
 import { Handle, Position, useConnection, type NodeProps } from "@xyflow/react";
 import { layerFromNeoLabel, LAYER_COLOURS, type SerializedViewElement } from "@/lib/ea-types";
 
-// Each side has a source and target handle so React Flow can route edges in any direction.
-// IDs are unique per handle to avoid React Flow warnings.
+// One source handle per side. ConnectionMode.Loose allows source→source connections,
+// so target handles are unnecessary. Floating edge routing uses node intersection, not handle IDs.
 const SIDES = [
-  { position: Position.Top,    sourceId: "t-s", targetId: "t-t" },
-  { position: Position.Right,  sourceId: "r-s", targetId: "r-t" },
-  { position: Position.Bottom, sourceId: "b-s", targetId: "b-t" },
-  { position: Position.Left,   sourceId: "l-s", targetId: "l-t" },
+  { position: Position.Top,    id: "t" },
+  { position: Position.Right,  id: "r" },
+  { position: Position.Bottom, id: "b" },
+  { position: Position.Left,   id: "l" },
 ];
 
 export const EaElementNode = memo(function EaElementNode({ id, data, selected }: NodeProps) {
@@ -81,37 +81,28 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
         }
       }}
     >
-      {SIDES.map(({ position, sourceId, targetId }) => (
-        <>
-          <Handle
-            key={sourceId}
-            type="source"
-            id={sourceId}
-            position={position}
-            style={handleStyle}
-          />
-          <Handle
-            key={targetId}
-            type="target"
-            id={targetId}
-            position={position}
-            style={{ ...handleStyle, opacity: 0, pointerEvents: "none" }}
-          />
-        </>
+      {SIDES.map(({ position, id }) => (
+        <Handle
+          key={id}
+          type="source"
+          id={id}
+          position={position}
+          style={handleStyle}
+        />
       ))}
 
       <div style={{ fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#336", marginBottom: 2 }}>
         {nodeData.elementType.name} · {nodeData.mode}
       </div>
       <div style={{ fontSize: 11, fontWeight: 600, color: "#112" }}>{displayName}</div>
-      <div style={{ fontSize: 8, color: "#446", marginTop: 2 }}>
+      <div style={{ fontSize: 10, color: "#446", marginTop: 2 }}>
         {nodeData.element.lifecycleStage} · {nodeData.element.lifecycleStatus}
       </div>
       {isReference && (
-        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 9, color: "#336", opacity: 0.7 }}>🔒</div>
+        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 10, color: "#336", opacity: 0.7 }}>🔒</div>
       )}
       {isPropose && (
-        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 9, color: "#7c8cf8" }}>✏️</div>
+        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 10, color: "#7c8cf8" }}>✏️</div>
       )}
     </div>
   );

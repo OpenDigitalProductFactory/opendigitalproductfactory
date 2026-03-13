@@ -18,6 +18,7 @@ export type CapabilityKey =
   | "manage_agents"
   | "manage_capabilities"
   | "manage_users"
+  | "manage_user_lifecycle"
   | "manage_provider_connections"
   | "manage_backlog"
   | "manage_ea_model";
@@ -40,6 +41,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_agents:               { roles: ["HR-000"] },
   manage_capabilities:         { roles: ["HR-000"] },
   manage_users:                { roles: ["HR-000"] },
+  manage_user_lifecycle:       { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
   manage_provider_connections: { roles: ["HR-000"] },
   manage_backlog:              { roles: ["HR-000", "HR-500"] },
   manage_ea_model:             { roles: ["HR-000", "HR-300"] },
@@ -84,7 +86,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "#f472b6" },
   { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "#38bdf8" },
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
-  { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#555566" },
+  { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
 ];
 
 export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {
