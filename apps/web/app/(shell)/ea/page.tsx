@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/ea/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
+import { EaTabNav } from "@/components/ea/EaTabNav";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -38,6 +39,8 @@ export default async function EaPage() {
           {views.length} view{views.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      <EaTabNav />
 
       {views.length > 0 ? (
         <>
