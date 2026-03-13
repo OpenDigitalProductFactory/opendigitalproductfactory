@@ -122,6 +122,7 @@ function normalizeItem(item: DiscoveredItemInput): {
 
 function normalizeRelationship(
   relationship: DiscoveredRelationshipInput,
+  discoveredKeyByExternalRef: Map<string, string>,
 ): NormalizedInventoryRelationship {
   const normalizedRelationship: NormalizedInventoryRelationship = {
     relationshipKey: buildDiscoveredKey({
@@ -134,11 +135,15 @@ function normalizeRelationship(
   };
 
   if (relationship.fromExternalRef) {
-    normalizedRelationship.fromDiscoveredKey = relationship.fromExternalRef;
+    normalizedRelationship.fromDiscoveredKey =
+      discoveredKeyByExternalRef.get(relationship.fromExternalRef)
+      ?? relationship.fromExternalRef;
   }
 
   if (relationship.toExternalRef) {
-    normalizedRelationship.toDiscoveredKey = relationship.toExternalRef;
+    normalizedRelationship.toDiscoveredKey =
+      discoveredKeyByExternalRef.get(relationship.toExternalRef)
+      ?? relationship.toExternalRef;
   }
 
   if (relationship.confidence != null) {
@@ -152,10 +157,20 @@ export function normalizeDiscoveredFacts(
   output: CollectorOutput,
 ): NormalizedDiscoveryOutput {
   const normalizedItems = output.items.map(normalizeItem);
+  const discoveredKeyByExternalRef = new Map<string, string>();
+
+  for (const entry of normalizedItems) {
+    discoveredKeyByExternalRef.set(
+      entry.discoveredItem.externalRef,
+      entry.discoveredItem.discoveredKey,
+    );
+  }
 
   return {
     discoveredItems: normalizedItems.map((entry) => entry.discoveredItem),
     inventoryEntities: normalizedItems.map((entry) => entry.inventoryEntity),
-    inventoryRelationships: output.relationships.map(normalizeRelationship),
+    inventoryRelationships: output.relationships.map((relationship) =>
+      normalizeRelationship(relationship, discoveredKeyByExternalRef),
+    ),
   };
 }
