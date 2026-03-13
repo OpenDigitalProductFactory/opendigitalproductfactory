@@ -32,6 +32,13 @@ export {
   type InventoryEntityKeyInput,
 } from "./discovery-identity";
 export {
+  normalizeDiscoveredFacts,
+  type NormalizedDiscoveryOutput,
+  type NormalizedInventoryEntity,
+  type NormalizedInventoryRelationship,
+} from "./discovery-normalize";
+export { runBootstrapCollectors } from "./discovery-runner";
+export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,

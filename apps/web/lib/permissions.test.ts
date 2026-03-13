@@ -48,14 +48,14 @@ describe("getWorkspaceTiles()", () => {
 
   it("HR-500 only gets tiles they can access", () => {
     const tiles = getWorkspaceTiles(hr500).map((t) => t.key);
-    expect(tiles).toContain("operations");
-    expect(tiles).not.toContain("ea_modeler");
+    expect(tiles).toContain("backlog");
+    expect(tiles).not.toContain("agents");
     expect(tiles).not.toContain("admin");
   });
 
   it("HR-300 gets EA Modeler, Portfolio, Inventory", () => {
     const tiles = getWorkspaceTiles(hr300).map((t) => t.key);
-    expect(tiles).toContain("ea_modeler");
+    expect(tiles).toContain("agents");
     expect(tiles).toContain("portfolio");
     expect(tiles).toContain("inventory");
   });

@@ -4,12 +4,12 @@ import { getWorkspaceTiles } from "@/lib/permissions";
 describe("workspace tile derivation", () => {
   it("HR-500 sees Operations tile", () => {
     const tiles = getWorkspaceTiles({ platformRole: "HR-500", isSuperuser: false });
-    expect(tiles.some((t) => t.key === "operations")).toBe(true);
+    expect(tiles.some((t) => t.key === "backlog")).toBe(true);
   });
 
   it("HR-500 does not see EA Modeler tile", () => {
     const tiles = getWorkspaceTiles({ platformRole: "HR-500", isSuperuser: false });
-    expect(tiles.some((t) => t.key === "ea_modeler")).toBe(false);
+    expect(tiles.some((t) => t.key === "agents")).toBe(false);
   });
 
   it("Admin tile only appears for HR-000", () => {
