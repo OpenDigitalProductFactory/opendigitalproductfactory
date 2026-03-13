@@ -49,6 +49,7 @@ This spec adds that shared layer without rewriting the current `User` and `Agent
 - Replacing the current `User`, `CustomerContact`, `PlatformRole`, or `Agent` tables
 - Defining the raw prompt/config schema for agents
 - Building the agent configuration editor or approval UI for config payloads
+- Agent-to-agent delegation in slice 1
 - Designing payroll, benefits, or full HRIS workflows
 - Designing CRM/customer portal flows in detail
 - Implementing every object-level authorization rule in the platform
@@ -296,6 +297,34 @@ model AgentCapabilityClass {
 }
 ```
 
+`defaultActionScope` must not be treated as arbitrary JSON in implementation code. For slice 1, use this draft application shape:
+
+```ts
+type DefaultActionScope = {
+  actionFamilies: string[];
+  resourceTypes: string[];
+  maxRiskBand: "low" | "medium" | "high" | "critical";
+  constraints?: {
+    tenantScoped?: boolean;
+    teamScoped?: boolean;
+    objectRefs?: string[];
+  };
+};
+```
+
+Worked example:
+
+```json
+{
+  "actionFamilies": ["user.lifecycle.read", "user.lifecycle.update"],
+  "resourceTypes": ["user", "employee"],
+  "maxRiskBand": "medium",
+  "constraints": {
+    "teamScoped": true
+  }
+}
+```
+
 ### New: `AgentGovernanceProfile`
 
 Defines the baseline control envelope for an agent.
@@ -364,6 +393,38 @@ model DelegationGrant {
 }
 ```
 
+`scopeJson` also needs a stable application shape. For slice 1, use this draft:
+
+```ts
+type DelegationGrantScope = {
+  actionFamilies: string[];
+  resourceTypes: string[];
+  maxRiskBand: "low" | "medium" | "high" | "critical";
+  objectRefs?: string[];
+  workflowKeys?: string[];
+  constraints?: {
+    tenantScoped?: boolean;
+    teamScoped?: boolean;
+    singleTargetUserId?: string;
+  };
+};
+```
+
+Worked example:
+
+```json
+{
+  "actionFamilies": ["user.lifecycle.update"],
+  "resourceTypes": ["user"],
+  "maxRiskBand": "high",
+  "objectRefs": ["user:cma1abc123"],
+  "workflowKeys": ["hr-offboarding"],
+  "constraints": {
+    "singleTargetUserId": "cma1abc123"
+  }
+}
+```
+
 ### New: `DirectivePolicyClass`
 
 Defines categories and governance semantics for agent directives without storing raw prompt/config payloads.
@@ -418,6 +479,13 @@ model AuthorizationDecisionLog {
 }
 ```
 
+Operational note: this table will grow quickly on an agent-driven platform. Slice 1 should add the indexes needed for immediate query safety, but not attempt full retention engineering yet. A follow-on operational design should cover:
+
+- retention window by decision type
+- archival and export strategy
+- possible partitioning by time
+- summarized reporting tables if decision volume becomes high
+
 ### Application concept: `PrincipalContext`
 
 This does not need to be a table in the first phase. It should exist as a runtime object assembled at request time.
@@ -441,6 +509,14 @@ type PrincipalContext = {
 ```
 
 This gives the authorization layer one consistent runtime envelope even while persistence remains split across current tables.
+
+Near term, `authenticatedSubject` and `actingHuman` are expected to be the same for normal workforce and customer-contact sessions. They are separate fields because later platform modes may need them to differ, for example:
+
+- admin impersonation or support-on-behalf-of workflows
+- delegated execution where one authenticated operator is acting on behalf of another accountable human
+- future service-account or brokered workflow scenarios
+
+Slice 1 does not implement those differentiated modes, but the naming should preserve room for them.
 
 ---
 
@@ -533,6 +609,13 @@ Implication:
 
 This avoids coupling personnel lifecycle rules directly to authorization mechanics.
 
+Downstream contract for HR:
+
+- HR may assume `Team` and `TeamMembership` are the organizational authority layer for internal workforce users
+- HR may add `EmployeeProfile` and relationship or lifecycle fields on top of `User`
+- HR should not create a separate agent-supervision model; it should consume ownership, governance profile, and delegation-grant semantics from this foundation
+- in slice 1, `TeamMembership` is for internal `User` records, not `CustomerContact`
+
 ---
 
 ## Customer And CRM Relationship To This Foundation
@@ -552,6 +635,12 @@ Foundation contract:
 - team ownership and agent governance remain reusable for customer-facing agents
 
 This is why the foundation must be broader than employee-only identity.
+
+Downstream contract for CRM and customer portal work:
+
+- `CustomerContact` remains outside `TeamMembership` in slice 1
+- customer-side users participate through `PrincipalContext`, account scoping, and later customer-governance mappings rather than being treated as internal workforce teammates
+- if a future phase needs customer-facing teams, that should be a distinct extension rather than overloading internal workforce team semantics too early
 
 ---
 

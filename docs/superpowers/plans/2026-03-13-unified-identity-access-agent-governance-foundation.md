@@ -19,6 +19,7 @@ This plan intentionally implements only the first working slice from the spec:
 - delegation grant creation and audit logging
 - HR/admin action integration
 - governance visibility in `/platform` and `/ea/agents`
+- typed application shapes for `AgentCapabilityClass.defaultActionScope` and `DelegationGrant.scopeJson`
 
 This plan does **not** implement:
 
@@ -26,6 +27,7 @@ This plan does **not** implement:
 - CRM/customer portal flows
 - raw agent config payloads/editor
 - end-to-end agent execution integration with prompt/tool runtime
+- agent-to-agent delegation
 
 Those remain separate follow-on plans.
 
@@ -337,9 +339,13 @@ Create `apps/web/lib/governance-types.ts` with:
 ```ts
 export type RiskBand = "low" | "medium" | "high" | "critical";
 export type GovernanceDecision = "allow" | "deny" | "require_approval";
+export type DefaultActionScope = { ... };
+export type DelegationGrantScope = { ... };
 export type PrincipalContext = { ... };
 export type AuthorityRequest = { actionKey: string; objectRef?: string; riskBand: RiskBand; actingAgentId?: string | null; };
 ```
+
+`DefaultActionScope` and `DelegationGrantScope` must match the draft shapes documented in the spec. Do not leave these as untyped `Record<string, unknown>`.
 
 - [ ] **Step 4: Implement `buildPrincipalContext`**
 
