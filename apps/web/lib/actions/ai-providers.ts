@@ -1,5 +1,7 @@
 "use server";
 
+import { readFileSync } from "fs";
+import { join } from "path";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -27,22 +29,21 @@ async function requireSession(): Promise<void> {
 
 // ─── Registry sync ────────────────────────────────────────────────────────────
 
-const REGISTRY_URL =
-  "https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/packages/db/data/providers-registry.json";
+const REGISTRY_PATH = join(process.cwd(), "..", "..", "packages", "db", "data", "providers-registry.json");
 
 /**
- * Sync provider registry from GitHub. No auth guard — called from server component
- * on page load for any view_platform holder. Use triggerProviderSync() for the
- * admin button (which adds the manage_provider_connections check).
+ * Sync provider registry from local JSON file. No auth guard — called from
+ * server component on page load for any view_platform holder. Use
+ * triggerProviderSync() for the admin button (which adds the
+ * manage_provider_connections check).
  */
 export async function syncProviderRegistry(): Promise<{ added: number; updated: number; error?: string }> {
   const job = await prisma.scheduledJob.findUnique({ where: { jobId: "provider-registry-sync" } });
   let entries: RegistryProviderEntry[];
 
   try {
-    const res = await fetch(REGISTRY_URL, { signal: AbortSignal.timeout(5_000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    entries = (await res.json()) as RegistryProviderEntry[];
+    const raw = readFileSync(REGISTRY_PATH, "utf-8");
+    entries = JSON.parse(raw) as RegistryProviderEntry[];
   } catch (err) {
     const error = err instanceof Error ? err.message : "Unknown error";
     if (job) {
@@ -65,14 +66,16 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
         data: {
           name:                 entry.name,
           families:             entry.families,
-          authEndpoint:         entry.authEndpoint ?? null,
           authHeader:           entry.authHeader ?? null,
           costModel:            entry.costModel,
+          category:             entry.category,
+          baseUrl:              entry.baseUrl ?? null,
+          supportedAuthMethods: entry.supportedAuthMethods,
+          // authMethod, status, enabledFamilies, endpoint NOT overwritten — preserve admin config
           ...(entry.inputPricePerMToken !== undefined  && { inputPricePerMToken:  entry.inputPricePerMToken }),
           ...(entry.outputPricePerMToken !== undefined && { outputPricePerMToken: entry.outputPricePerMToken }),
           ...(entry.computeWatts !== undefined         && { computeWatts:         entry.computeWatts }),
           ...(entry.electricityRateKwh !== undefined   && { electricityRateKwh:   entry.electricityRateKwh }),
-          // status and enabledFamilies deliberately NOT updated — preserve admin config
         },
       });
       updated++;
@@ -84,7 +87,10 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           families:             entry.families,
           enabledFamilies:      [],
           status:               "unconfigured",
-          authEndpoint:         entry.authEndpoint ?? null,
+          category:             entry.category,
+          baseUrl:              entry.baseUrl ?? null,
+          authMethod:           entry.authMethod,
+          supportedAuthMethods: entry.supportedAuthMethods,
           authHeader:           entry.authHeader ?? null,
           costModel:            entry.costModel,
           inputPricePerMToken:  entry.inputPricePerMToken ?? null,
@@ -162,33 +168,29 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
   const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
 
-  // Guard: keyed providers need a credential with a secretRef
+  // Guard: keyed providers need a credential with an API key
   if (provider.authHeader !== null) {
     if (!credential || credential.secretRef === null) {
       return { ok: false, message: "No credential configured" };
     }
-    if (process.env[credential.secretRef] === undefined) {
-      return { ok: false, message: `Environment variable not set: ${credential.secretRef}` };
-    }
   }
 
-  // Guard: Azure OpenAI-style providers need a custom endpoint
-  if (provider.authEndpoint === null && provider.endpoint === null) {
+  // Guard: providers that have neither a fixed baseUrl nor a custom endpoint cannot be tested
+  if (provider.baseUrl === null && provider.endpoint === null) {
     return { ok: false, message: "Custom endpoint required" };
   }
 
-  const authUrl = provider.endpoint
-    ? `${provider.endpoint}/openai/models?api-version=2024-02-01`
-    : (provider.authEndpoint as string);
+  const base = provider.endpoint ?? (provider.baseUrl as string);
+  const authUrl = provider.providerId === "ollama"
+    ? `${base}/api/tags`
+    : `${base}/models`;
 
   const headers: Record<string, string> = {};
   if (provider.authHeader !== null && credential?.secretRef) {
-    const apiKey = process.env[credential.secretRef];
-    if (apiKey !== undefined) {
-      headers[provider.authHeader] = provider.authHeader === "Authorization"
-        ? `Bearer ${apiKey}`
-        : apiKey;
-    }
+    const apiKey = credential.secretRef;
+    headers[provider.authHeader] = provider.authHeader === "Authorization"
+      ? `Bearer ${apiKey}`
+      : apiKey;
   }
 
   try {

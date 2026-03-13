@@ -21,7 +21,7 @@ export function ProviderDetailForm({ pw, canWrite }: Props) {
   const [saveMessage, setSaveMessage]             = useState<string | null>(null);
 
   const isKeyed      = provider.authHeader !== null;
-  const needsEndpoint = provider.authEndpoint === null;
+  const needsEndpoint = provider.baseUrl === null;
   const isCompute    = provider.costModel === "compute";
 
   function toggleFamily(family: string) {
