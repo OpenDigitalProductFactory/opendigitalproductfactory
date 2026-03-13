@@ -49,7 +49,10 @@ export type ProviderRow = {
   enabledFamilies: string[];
   status: string;
   costModel: string;
-  authEndpoint: string | null;
+  category: string;
+  baseUrl: string | null;
+  authMethod: string;
+  supportedAuthMethods: string[];
   authHeader: string | null;
   endpoint: string | null;
   inputPricePerMToken: number | null;
@@ -61,6 +64,10 @@ export type ProviderRow = {
 export type CredentialRow = {
   providerId: string;
   secretRef: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
+  tokenEndpoint: string | null;
+  scope: string | null;
   status: string;
 };
 
@@ -95,13 +102,41 @@ export type ScheduledJobRow = {
   lastError: string | null;
 };
 
+export type DiscoveredModelRow = {
+  id: string;
+  providerId: string;
+  modelId: string;
+  rawMetadata: Record<string, unknown>;
+  discoveredAt: Date;
+  lastSeenAt: Date;
+};
+
+export type ModelProfileRow = {
+  id: string;
+  providerId: string;
+  modelId: string;
+  friendlyName: string;
+  summary: string;
+  capabilityTier: string;
+  costTier: string;
+  bestFor: string[];
+  avoidFor: string[];
+  contextWindow: string | null;
+  speedRating: string | null;
+  generatedBy: string;
+  generatedAt: Date;
+};
+
 // ─── Registry JSON shape ──────────────────────────────────────────────────────
 
 export type RegistryProviderEntry = {
   providerId: string;
   name: string;
   families: string[];
-  authEndpoint: string | null;
+  category: "direct" | "router";
+  baseUrl: string | null;
+  authMethod: "api_key" | "oauth2_client_credentials" | "none";
+  supportedAuthMethods: string[];
   authHeader: string | null;
   costModel: string;
   inputPricePerMToken?: number;
@@ -109,3 +144,17 @@ export type RegistryProviderEntry = {
   computeWatts?: number;
   electricityRateKwh?: number;
 };
+
+// ─── URL helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns the connectivity-test URL for a provider.
+ * Ollama uses /api/tags; all others use /models.
+ * Returns null when neither baseUrl nor endpoint is available.
+ */
+export function getTestUrl(provider: Pick<ProviderRow, "providerId" | "baseUrl" | "endpoint">): string | null {
+  const base = provider.baseUrl ?? provider.endpoint;
+  if (!base) return null;
+  if (provider.providerId === "ollama") return `${base}/api/tags`;
+  return `${base}/models`;
+}
