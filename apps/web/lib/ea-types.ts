@@ -47,10 +47,12 @@ export const LAYER_COLOURS: Record<string, { bg: string; border: string }> = {
   technology:  { bg: "#CCFFCC", border: "#4a9460" },
 };
 
-// Infer layer from elementType.neoLabel prefix
+// Infer ArchiMate layer from neoLabel.
+// Labels follow the pattern "ArchiMate__<Domain><Concept>", e.g. "ArchiMate__BusinessCapability".
+// Strip the vendor prefix before the __ then match on the domain name.
 export function layerFromNeoLabel(neoLabel: string): keyof typeof LAYER_COLOURS {
-  const lower = neoLabel.toLowerCase();
-  if (lower.startsWith("business")) return "business";
-  if (lower.startsWith("app") || lower.startsWith("data") || lower.startsWith("interface")) return "application";
+  const part = neoLabel.replace(/^[^_]+__/, "").toLowerCase();
+  if (part.startsWith("business") || part.startsWith("value")) return "business";
+  if (part.startsWith("application") || part.startsWith("data") || part.startsWith("interface")) return "application";
   return "technology";
 }

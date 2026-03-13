@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls,
+  ReactFlow, Background, Controls, ConnectionMode,
   useNodesState, useEdgesState, addEdge,
   type Node, type Edge, type Connection, type OnNodesChange,
 } from "@xyflow/react";
@@ -216,6 +216,7 @@ export function EaCanvas({
             onNodeClick={handleNodeClick}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
+            connectionMode={ConnectionMode.Loose}
             colorMode="dark"
             fitView
           >
