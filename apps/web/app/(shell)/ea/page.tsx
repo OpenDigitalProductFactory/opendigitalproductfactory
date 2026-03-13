@@ -1,4 +1,5 @@
 // apps/web/app/(shell)/ea/page.tsx
+import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 const LAYOUT_LABELS: Record<string, string> = {
@@ -39,30 +40,40 @@ export default async function EaPage() {
       </div>
 
       {views.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {views.map((v) => (
-            <div
-              key={v.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
+        <>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <button
+              disabled
+              style={{ padding: "6px 14px", background: "#7c8cf8", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "not-allowed", opacity: 0.5 }}
+              title="New view creation coming soon"
             >
-              <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
-                {v.notation.name} · {LAYOUT_LABELS[v.layoutType] ?? v.layoutType}
-              </p>
-              <p className="text-sm font-semibold text-white leading-tight mb-1">
-                {v.name}
-              </p>
-              {v.description != null && (
-                <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-1.5">
-                  {v.description}
-                </p>
-              )}
-              <p className="text-[10px] text-[var(--dpf-muted)]">
-                {SCOPE_LABELS[v.scopeType] ?? v.scopeType}
-                {v.scopeRef != null ? ` · ${v.scopeRef}` : ""}
-              </p>
-            </div>
-          ))}
-        </div>
+              + New view
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {views.map((v) => (
+              <Link key={v.id} href={`/ea/views/${v.id}`} style={{ textDecoration: "none" }}>
+                <div className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+                  <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
+                    {v.notation.name} · {LAYOUT_LABELS[v.layoutType] ?? v.layoutType}
+                  </p>
+                  <p className="text-sm font-semibold text-white leading-tight mb-1">
+                    {v.name}
+                  </p>
+                  {v.description != null && (
+                    <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-1.5">
+                      {v.description}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-[var(--dpf-muted)]">
+                    {SCOPE_LABELS[v.scopeType] ?? v.scopeType}
+                    {v.scopeRef != null ? ` · ${v.scopeRef}` : ""}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
       ) : (
         <p className="text-sm text-[var(--dpf-muted)]">
           No views yet. Views will appear here once the modeling canvas is available.
