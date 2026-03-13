@@ -1,24 +1,43 @@
 // apps/web/app/(shell)/ea/agents/page.tsx
 import { prisma } from "@dpf/db";
-import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
+import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 
 const TIER_LABELS: Record<number, string> = {
-  1: "Tier 1 — Orchestrators",
-  2: "Tier 2 — Specialists",
-  3: "Tier 3 — Cross-cutting",
+  1: "Tier 1 - Orchestrators",
+  2: "Tier 2 - Specialists",
+  3: "Tier 3 - Cross-cutting",
 };
 
 export default async function EaAgentsPage() {
+  const now = new Date();
   const agents = await prisma.agent.findMany({
     orderBy: [{ tier: "asc" }, { name: "asc" }],
     select: {
-      id:          true,
-      agentId:     true,
-      name:        true,
-      tier:        true,
+      id: true,
+      agentId: true,
+      name: true,
+      tier: true,
       description: true,
-      portfolio:   { select: { slug: true, name: true } },
+      portfolio: { select: { slug: true, name: true } },
+      ownerships: {
+        where: { responsibility: "owning_team" },
+        select: { team: { select: { name: true } } },
+        take: 1,
+      },
+      governanceProfile: {
+        select: {
+          autonomyLevel: true,
+          capabilityClass: { select: { name: true } },
+        },
+      },
+      delegationGrants: {
+        where: {
+          status: "active",
+          expiresAt: { gt: now },
+        },
+        select: { id: true },
+      },
     },
   });
 
@@ -47,34 +66,24 @@ export default async function EaAgentsPage() {
               {tierLabel}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {tierAgents.map((a) => {
-                const colour = a.portfolio
-                  ? (PORTFOLIO_COLOURS[a.portfolio.slug] ?? "#555566")
-                  : "#555566";
-
-                return (
-                  <div
-                    key={a.id}
-                    className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
-                    style={{ borderLeftColor: colour }}
-                  >
-                    <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">{a.agentId}</p>
-                    <p className="text-sm font-semibold text-white leading-tight mb-1">{a.name}</p>
-                    {a.description != null && (
-                      <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-1.5">
-                        {a.description}
-                      </p>
-                    )}
-                    {a.portfolio != null ? (
-                      <p className="text-[10px] font-medium" style={{ color: colour }}>
-                        {a.portfolio.name}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-[var(--dpf-muted)]">Cross-cutting</p>
-                    )}
-                  </div>
-                );
-              })}
+              {tierAgents.map((a) => (
+                <AgentGovernanceCard
+                  key={a.id}
+                  agent={{
+                    id: a.id,
+                    agentId: a.agentId,
+                    name: a.name,
+                    description: a.description,
+                    tier: a.tier,
+                    portfolioName: a.portfolio?.name ?? null,
+                    portfolioSlug: a.portfolio?.slug ?? null,
+                    capabilityClassName: a.governanceProfile?.capabilityClass.name ?? null,
+                    autonomyLevel: a.governanceProfile?.autonomyLevel ?? null,
+                    owningTeamName: a.ownerships[0]?.team.name ?? null,
+                    activeGrantCount: a.delegationGrants.length,
+                  }}
+                />
+              ))}
             </div>
           </section>
         );
