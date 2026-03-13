@@ -13,6 +13,12 @@ import {
   parseModelsResponse,
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
+import {
+  rankProvidersByCost,
+  buildProfilingPrompt,
+  parseProfilingResponse,
+  type ProfileResult,
+} from "@/lib/ai-profiling";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -371,6 +377,179 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
     return;
   }
   console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);
+}
+
+// ─── Model profiling ──────────────────────────────────────────────────────────
+
+async function callProviderForProfiling(
+  profilingProviderId: string,
+  prompt: string,
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const prov = await prisma.modelProvider.findUnique({ where: { providerId: profilingProviderId } });
+  if (!prov) throw new Error("Provider not found");
+
+  const baseUrl = prov.baseUrl ?? prov.endpoint;
+  if (!baseUrl) throw new Error("No base URL");
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  if (prov.authMethod === "api_key") {
+    const cred = await prisma.credentialEntry.findUnique({ where: { providerId: profilingProviderId } });
+    if (!cred?.secretRef || !prov.authHeader) throw new Error("No credential");
+    headers[prov.authHeader] = prov.authHeader === "Authorization"
+      ? `Bearer ${cred.secretRef}` : cred.secretRef;
+  } else if (prov.authMethod === "oauth2_client_credentials") {
+    const tokenResult = await getProviderBearerToken(profilingProviderId);
+    if ("error" in tokenResult) throw new Error(tokenResult.error);
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
+  }
+
+  // Anthropic uses /messages; Cohere uses /chat; all others use OpenAI-compatible /chat/completions
+  const chatUrl = profilingProviderId === "anthropic"
+    ? `${baseUrl}/messages`
+    : profilingProviderId === "cohere"
+    ? `${baseUrl}/chat`
+    : `${baseUrl}/chat/completions`;
+
+  const body = profilingProviderId === "anthropic"
+    ? { model: "claude-haiku-4-5-20251001", max_tokens: 4096, messages: [{ role: "user", content: prompt }] }
+    : profilingProviderId === "cohere"
+    ? { model: "command-r", message: prompt, max_tokens: 4096 }
+    : { model: "auto", messages: [{ role: "user", content: prompt }], max_tokens: 4096 };
+
+  const res = await fetch(chatUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+
+  // Normalize response across providers
+  const text = profilingProviderId === "anthropic"
+    ? data.content?.[0]?.text ?? ""
+    : profilingProviderId === "cohere"
+    ? data.text ?? ""
+    : data.choices?.[0]?.message?.content ?? "";
+
+  return {
+    text,
+    inputTokens: data.usage?.input_tokens ?? data.usage?.prompt_tokens,
+    outputTokens: data.usage?.output_tokens ?? data.usage?.completion_tokens,
+  };
+}
+
+export async function profileModels(
+  providerId: string,
+  modelIds?: string[],
+): Promise<{ profiled: number; failed: number; error?: string }> {
+  await requireManageProviders();
+
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  if (!provider) return { profiled: 0, failed: 0, error: "Provider not found" };
+
+  // Get models to profile
+  const whereClause = modelIds
+    ? { providerId, modelId: { in: modelIds } }
+    : { providerId };
+  const models = await prisma.discoveredModel.findMany({ where: whereClause });
+  if (models.length === 0) return { profiled: 0, failed: 0, error: "No models to profile" };
+
+  // Find cheapest active provider to do the profiling
+  const allProviders = await prisma.modelProvider.findMany({
+    select: { providerId: true, status: true, outputPricePerMToken: true },
+  });
+  const ranked = rankProvidersByCost(allProviders);
+  if (ranked.length === 0) return { profiled: 0, failed: 0, error: "No active AI provider available for profiling" };
+
+  // Build prompt
+  const modelEntries = models.map((m) => ({
+    modelId: m.modelId,
+    providerName: provider.name,
+    rawMetadata: m.rawMetadata as Record<string, unknown>,
+  }));
+
+  // Batch in groups of 20
+  let totalProfiled = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < modelEntries.length; i += 20) {
+    const batch = modelEntries.slice(i, i + 20);
+    const prompt = buildProfilingPrompt(batch);
+
+    let profiles: ProfileResult[] = [];
+    let usedProviderId: string | null = null;
+
+    // Try each provider in cost order
+    for (const candidateId of ranked) {
+      try {
+        const result = await callProviderForProfiling(candidateId, prompt);
+        profiles = parseProfilingResponse(result.text);
+        usedProviderId = candidateId;
+
+        // Log token usage (success)
+        await logTokenUsage({
+          agentId: "system:model-profiler",
+          providerId: candidateId,
+          contextKey: `profile-${providerId}-batch-${i}`,
+          inputTokens: result.inputTokens ?? 0,
+          outputTokens: result.outputTokens ?? 0,
+        });
+
+        if (profiles.length > 0) break; // Success
+      } catch (err) {
+        // Log failed attempt for cost tracking
+        await logTokenUsage({
+          agentId: "system:model-profiler",
+          providerId: candidateId,
+          contextKey: `profile-${providerId}-batch-${i}-failed`,
+          inputTokens: 0,
+          outputTokens: 0,
+        }).catch(() => {}); // Don't let logging failure block fallback
+        continue; // Try next provider
+      }
+    }
+
+    // Save successful profiles
+    for (const profile of profiles) {
+      await prisma.modelProfile.upsert({
+        where: { providerId_modelId: { providerId, modelId: profile.modelId } },
+        create: {
+          providerId,
+          modelId: profile.modelId,
+          friendlyName: profile.friendlyName,
+          summary: profile.summary,
+          capabilityTier: profile.capabilityTier,
+          costTier: profile.costTier,
+          bestFor: profile.bestFor,
+          avoidFor: profile.avoidFor,
+          contextWindow: profile.contextWindow ?? null,
+          speedRating: profile.speedRating ?? null,
+          generatedBy: usedProviderId ?? "unknown",
+        },
+        update: {
+          friendlyName: profile.friendlyName,
+          summary: profile.summary,
+          capabilityTier: profile.capabilityTier,
+          costTier: profile.costTier,
+          bestFor: profile.bestFor,
+          avoidFor: profile.avoidFor,
+          contextWindow: profile.contextWindow ?? null,
+          speedRating: profile.speedRating ?? null,
+          generatedBy: usedProviderId ?? "unknown",
+          generatedAt: new Date(),
+        },
+      });
+      totalProfiled++;
+    }
+
+    const profiledIds = new Set(profiles.map((p) => p.modelId));
+    totalFailed += batch.filter((b) => !profiledIds.has(b.modelId)).length;
+  }
+
+  return { profiled: totalProfiled, failed: totalFailed };
 }
 
 // ─── Token usage logging ──────────────────────────────────────────────────────
