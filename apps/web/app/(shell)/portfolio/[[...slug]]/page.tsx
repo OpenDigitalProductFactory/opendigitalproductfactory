@@ -7,11 +7,12 @@ import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 
 type Props = {
-  params: { slug?: string[] };
+  params: Promise<{ slug?: string[] }>;
 };
 
 export default async function PortfolioPage({ params }: Props) {
-  const slugs = params.slug ?? [];
+  const { slug } = await params;
+  const slugs = slug ?? [];
   const [roots, agentCounts, budgets, ownerRoles] = await Promise.all([
     getPortfolioTree(),
     getAgentCounts(),
