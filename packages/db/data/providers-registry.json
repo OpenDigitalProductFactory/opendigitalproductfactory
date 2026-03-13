@@ -1,0 +1,62 @@
+[
+  {
+    "providerId": "anthropic",
+    "name": "Anthropic",
+    "families": ["claude-3-5", "claude-4"],
+    "authEndpoint": "https://api.anthropic.com/v1/models",
+    "authHeader": "x-api-key",
+    "costModel": "token",
+    "inputPricePerMToken": 3.00,
+    "outputPricePerMToken": 15.00
+  },
+  {
+    "providerId": "openai",
+    "name": "OpenAI",
+    "families": ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini"],
+    "authEndpoint": "https://api.openai.com/v1/models",
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "inputPricePerMToken": 2.50,
+    "outputPricePerMToken": 10.00
+  },
+  {
+    "providerId": "azure-openai",
+    "name": "Azure OpenAI",
+    "families": ["gpt-4o", "gpt-4-turbo"],
+    "authEndpoint": null,
+    "authHeader": "api-key",
+    "costModel": "token",
+    "inputPricePerMToken": 5.00,
+    "outputPricePerMToken": 15.00
+  },
+  {
+    "providerId": "gemini",
+    "name": "Google Gemini",
+    "families": ["gemini-1.5-pro", "gemini-2.0"],
+    "authEndpoint": "https://generativelanguage.googleapis.com/v1/models",
+    "authHeader": "x-goog-api-key",
+    "costModel": "token",
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.00
+  },
+  {
+    "providerId": "ollama",
+    "name": "Ollama (local)",
+    "families": ["llama3", "mistral", "phi3", "gemma2"],
+    "authEndpoint": "http://localhost:11434/api/tags",
+    "authHeader": null,
+    "costModel": "compute",
+    "computeWatts": 150,
+    "electricityRateKwh": 0.12
+  },
+  {
+    "providerId": "bedrock",
+    "name": "AWS Bedrock",
+    "families": ["claude", "titan", "llama"],
+    "authEndpoint": null,
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "inputPricePerMToken": 3.00,
+    "outputPricePerMToken": 15.00
+  }
+]
