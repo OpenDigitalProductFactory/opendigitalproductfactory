@@ -10,6 +10,7 @@ import {
   computeComputeCost,
   computeNextRunAt,
   getTestUrl,
+  parseModelsResponse,
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
 
@@ -286,6 +287,70 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Network error" };
   }
+}
+
+// ─── Model discovery ─────────────────────────────────────────────────────────
+
+export async function discoverModels(providerId: string): Promise<{ discovered: number; newCount: number; error?: string }> {
+  await requireManageProviders();
+
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
+
+  const providerRow = {
+    ...provider,
+    families: provider.families as string[],
+    enabledFamilies: provider.enabledFamilies as string[],
+    supportedAuthMethods: provider.supportedAuthMethods as string[],
+  };
+
+  const testUrl = getTestUrl(providerRow);
+  if (!testUrl) return { discovered: 0, newCount: 0, error: "No base URL configured" };
+
+  // Build auth headers (same logic as testProviderAuth)
+  const headers: Record<string, string> = {};
+  if (provider.authMethod === "api_key") {
+    const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    if (cred?.secretRef && provider.authHeader) {
+      headers[provider.authHeader] = provider.authHeader === "Authorization"
+        ? `Bearer ${cred.secretRef}` : cred.secretRef;
+    }
+  } else if (provider.authMethod === "oauth2_client_credentials") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) return { discovered: 0, newCount: 0, error: tokenResult.error };
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
+  }
+
+  let json: unknown;
+  try {
+    const res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return { discovered: 0, newCount: 0, error: `HTTP ${res.status}` };
+    json = await res.json();
+  } catch (err) {
+    return { discovered: 0, newCount: 0, error: err instanceof Error ? err.message : "Fetch error" };
+  }
+
+  const models = parseModelsResponse(providerId, json);
+  let newCount = 0;
+
+  for (const m of models) {
+    const existing = await prisma.discoveredModel.findUnique({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+    });
+    if (existing) {
+      await prisma.discoveredModel.update({
+        where: { id: existing.id },
+        data: { rawMetadata: m.rawMetadata },
+      });
+    } else {
+      await prisma.discoveredModel.create({
+        data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata },
+      });
+      newCount++;
+    }
+  }
+
+  return { discovered: models.length, newCount };
 }
 
 // ─── Scheduled jobs ───────────────────────────────────────────────────────────
