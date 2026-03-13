@@ -9,7 +9,7 @@ vi.mock("./client.js", () => ({
     eaElementType:     { findUnique: vi.fn(), findFirst: vi.fn() },
     eaDqRule:          { findMany: vi.fn() },
     eaRelationship:    { count: vi.fn() },
-    eaRelationshipType: { findFirst: vi.fn() },
+    eaRelationshipType: { findFirst: vi.fn(), findUnique: vi.fn() },
   },
 }));
 
@@ -26,7 +26,7 @@ const mockPrisma = prisma as unknown as {
   eaElementType:       { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   eaDqRule:            { findMany:   ReturnType<typeof vi.fn> };
   eaRelationship:      { count:      ReturnType<typeof vi.fn> };
-  eaRelationshipType:  { findFirst:  ReturnType<typeof vi.fn> };
+  eaRelationshipType:  { findFirst:  ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => { vi.clearAllMocks(); });
