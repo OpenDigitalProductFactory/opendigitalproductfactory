@@ -21,6 +21,15 @@ The first slice is intentionally limited to the local platform environment:
 
 Remote customer network discovery, enterprise topology discovery, and multi-source reconciliation are explicitly deferred.
 
+Implementation slice 1 persistence models:
+
+- `DiscoveryRun`
+- `DiscoveredItem`
+- `DiscoveredRelationship`
+- `InventoryEntity`
+- `InventoryRelationship`
+- `PortfolioQualityIssue`
+
 ---
 
 ## Implementation Status Target
