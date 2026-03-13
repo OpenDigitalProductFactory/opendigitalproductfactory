@@ -17,6 +17,22 @@ import {
   deleteEaRelationship as neo4jDeleteEaRelationship,
 } from "@dpf/db/neo4j-sync";
 
+const REFERENCE_COVERAGE_STATUSES = [
+  "implemented",
+  "partial",
+  "planned",
+  "not_started",
+  "out_of_mvp",
+] as const;
+
+const REFERENCE_PROPOSAL_STATUSES = [
+  "proposed",
+  "reviewed",
+  "approved",
+  "rejected",
+  "promoted",
+] as const;
+
 // ─── Auth helper ──────────────────────────────────────────────────────────────
 
 async function requireManageEaModel(): Promise<{ userId: string | null }> {
@@ -29,6 +45,21 @@ async function requireManageEaModel(): Promise<{ userId: string | null }> {
     throw new Error("Unauthorized");
   }
   return { userId: user.id ?? null };
+}
+
+type ReferenceCoverageStatus = (typeof REFERENCE_COVERAGE_STATUSES)[number];
+type ReferenceProposalStatus = (typeof REFERENCE_PROPOSAL_STATUSES)[number];
+
+function assertCoverageStatus(value: string): asserts value is ReferenceCoverageStatus {
+  if (!REFERENCE_COVERAGE_STATUSES.includes(value as ReferenceCoverageStatus)) {
+    throw new Error("Invalid coverage status");
+  }
+}
+
+function assertProposalStatus(value: string): asserts value is ReferenceProposalStatus {
+  if (!REFERENCE_PROPOSAL_STATUSES.includes(value as ReferenceProposalStatus)) {
+    throw new Error("Invalid proposal status");
+  }
 }
 
 // ─── Element actions ──────────────────────────────────────────────────────────
@@ -348,6 +379,62 @@ export async function updateEaView(id: string, input: Partial<CreateEaViewInput>
 }
 
 // ─── View element actions ─────────────────────────────────────────────────────
+
+type UpdateReferenceAssessmentInput = {
+  assessmentId: string;
+  coverageStatus: ReferenceCoverageStatus;
+  rationale?: string;
+  evidenceSummary?: string;
+  mvpIncluded?: boolean;
+  confidence?: string;
+};
+
+export async function updateReferenceAssessment(input: UpdateReferenceAssessmentInput) {
+  await requireManageEaModel();
+  assertCoverageStatus(input.coverageStatus);
+
+  return prisma.eaReferenceAssessment.update({
+    where: { id: input.assessmentId },
+    data: {
+      coverageStatus: input.coverageStatus,
+      ...(input.rationale !== undefined && { rationale: input.rationale }),
+      ...(input.evidenceSummary !== undefined && { evidenceSummary: input.evidenceSummary }),
+      ...(input.mvpIncluded !== undefined && { mvpIncluded: input.mvpIncluded }),
+      ...(input.confidence !== undefined && { confidence: input.confidence }),
+    },
+    select: {
+      id: true,
+      coverageStatus: true,
+      rationale: true,
+      mvpIncluded: true,
+      confidence: true,
+    },
+  });
+}
+
+type ReviewReferenceProposalInput = {
+  proposalId: string;
+  status: ReferenceProposalStatus;
+  reviewNotes?: string;
+};
+
+export async function reviewReferenceProposal(input: ReviewReferenceProposalInput) {
+  await requireManageEaModel();
+  assertProposalStatus(input.status);
+
+  return prisma.eaReferenceProposal.update({
+    where: { id: input.proposalId },
+    data: {
+      status: input.status,
+      ...(input.reviewNotes !== undefined && { reviewNotes: input.reviewNotes }),
+    },
+    select: {
+      id: true,
+      status: true,
+      reviewNotes: true,
+    },
+  });
+}
 
 export async function addElementToView(input: {
   viewId: string;

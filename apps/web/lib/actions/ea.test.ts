@@ -23,6 +23,12 @@ vi.mock("@dpf/db", () => ({
       delete:     vi.fn(),
       findUnique: vi.fn(),
     },
+    eaReferenceAssessment: {
+      update: vi.fn(),
+    },
+    eaReferenceProposal: {
+      update: vi.fn(),
+    },
     eaView:    { create: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
     eaElementType: { findUnique: vi.fn() },
     eaRelationshipType: { findUnique: vi.fn() },
@@ -65,6 +71,8 @@ import {
   removeElementFromView,
   updateProposedProperties,
   saveCanvasState,
+  updateReferenceAssessment,
+  reviewReferenceProposal,
 } from "./ea";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -213,6 +221,54 @@ describe("deleteEaElement", () => {
     expect(mockPrisma.eaElement.delete).toHaveBeenCalledWith({ where: { id: "el-1" } });
     // Neo4j delete is fire-and-forget; assert it was called (the mock returns void)
     expect(neoDeleteSpy).toHaveBeenCalledWith("el-1");
+  });
+});
+
+describe("updateReferenceAssessment", () => {
+  it("updates an assessment coverage status", async () => {
+    mockPrisma.eaReferenceAssessment.update.mockResolvedValue({
+      id: "asmt-1",
+      coverageStatus: "partial",
+      rationale: "workflow exists but is incomplete",
+      mvpIncluded: true,
+    });
+
+    const result = await updateReferenceAssessment({
+      assessmentId: "asmt-1",
+      coverageStatus: "partial",
+      rationale: "workflow exists but is incomplete",
+    });
+
+    expect(result.coverageStatus).toBe("partial");
+    expect(mockPrisma.eaReferenceAssessment.update).toHaveBeenCalledOnce();
+  });
+
+  it("rejects unsupported coverage statuses", async () => {
+    await expect(
+      updateReferenceAssessment({
+        assessmentId: "asmt-1",
+        coverageStatus: "unknown" as "implemented",
+      })
+    ).rejects.toThrow("Invalid coverage status");
+  });
+});
+
+describe("reviewReferenceProposal", () => {
+  it("updates proposal review status", async () => {
+    mockPrisma.eaReferenceProposal.update.mockResolvedValue({
+      id: "prop-1",
+      status: "approved",
+      reviewNotes: "looks correct",
+    });
+
+    const result = await reviewReferenceProposal({
+      proposalId: "prop-1",
+      status: "approved",
+      reviewNotes: "looks correct",
+    });
+
+    expect(result.status).toBe("approved");
+    expect(mockPrisma.eaReferenceProposal.update).toHaveBeenCalledOnce();
   });
 });
 
