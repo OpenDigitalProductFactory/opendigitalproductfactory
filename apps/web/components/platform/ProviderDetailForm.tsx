@@ -73,10 +73,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         const discovery = await discoverModels(provider.providerId);
         setDiscoveryResult(discovery);
         if (discovery.newCount > 0 && hasActiveProvider) {
-          const unprofiledCount = discovery.discovered - (profiles?.length ?? 0);
-          if (unprofiledCount > 50) {
+          if (discovery.newCount > 50) {
             const ok = window.confirm(
-              `Profile ${unprofiledCount} models? This may take a moment and incur AI costs.`
+              `Profile ${discovery.newCount} new models? This may take a moment and incur AI costs.`
             );
             if (!ok) {
               router.refresh();
@@ -96,10 +95,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       const discovery = await discoverModels(provider.providerId);
       setDiscoveryResult(discovery);
       if (discovery.newCount > 0 && hasActiveProvider) {
-        const unprofiledCount = discovery.discovered - (profiles?.length ?? 0);
-        if (unprofiledCount > 50) {
+        if (discovery.newCount > 50) {
           const ok = window.confirm(
-            `Profile ${unprofiledCount} models? This may take a moment and incur AI costs.`
+            `Profile ${discovery.newCount} new models? This may take a moment and incur AI costs.`
           );
           if (!ok) {
             router.refresh();

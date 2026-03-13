@@ -62,10 +62,13 @@ export function parseProfilingResponse(text: string): ProfileResult[] {
 
   if (!Array.isArray(parsed)) return [];
 
-  return parsed.filter((item): item is ProfileResult =>
-    typeof item === "object" && item !== null
-    && typeof (item as Record<string, unknown>).modelId === "string"
-    && typeof (item as Record<string, unknown>).friendlyName === "string"
-    && typeof (item as Record<string, unknown>).summary === "string"
-  );
+  return parsed.filter((item): item is ProfileResult => {
+    if (typeof item !== "object" || item === null) return false;
+    const r = item as Record<string, unknown>;
+    return typeof r.modelId === "string"
+      && typeof r.friendlyName === "string"
+      && typeof r.summary === "string"
+      && Array.isArray(r.bestFor)
+      && Array.isArray(r.avoidFor);
+  });
 }

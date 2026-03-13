@@ -12,15 +12,27 @@ type Props = {
   onProfile: (modelId: string) => void;
 };
 
-const TIER_COLOURS: Record<string, string> = {
-  premium:    "#7c8cf8",
-  standard:   "#4ade80",
-  economy:    "#fbbf24",
-  unknown:    "#555566",
+const CAPABILITY_COLOURS: Record<string, string> = {
+  "deep-thinker": "#7c8cf8",
+  "fast-worker":  "#4ade80",
+  "specialist":   "#38bdf8",
+  "budget":       "#fbbf24",
+  "embedding":    "#a78bfa",
 };
 
-function tierColour(tier: string): string {
-  return TIER_COLOURS[tier.toLowerCase()] ?? "#555566";
+const COST_COLOURS: Record<string, string> = {
+  "$":    "#4ade80",
+  "$$":   "#38bdf8",
+  "$$$":  "#fbbf24",
+  "$$$$": "#f87171",
+};
+
+function capabilityColour(tier: string): string {
+  return CAPABILITY_COLOURS[tier] ?? "#555566";
+}
+
+function costColour(tier: string): string {
+  return COST_COLOURS[tier] ?? "#555566";
 }
 
 function Badge({ label, colour }: { label: string; colour: string }) {
@@ -107,8 +119,8 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
 
   // ── Profiled ──────────────────────────────────────────────────────────────
   if (profile !== null) {
-    const costColour  = tierColour(profile.costTier);
-    const capColour   = tierColour(profile.capabilityTier);
+    const cColour = costColour(profile.costTier);
+    const capColour = capabilityColour(profile.capabilityTier);
 
     return (
       <div style={cardStyle}>
@@ -138,7 +150,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
 
         {/* Cost / speed / context badges */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          <Badge label={`Cost: ${profile.costTier}`}         colour={costColour} />
+          <Badge label={`Cost: ${profile.costTier}`}         colour={cColour} />
           <Badge label={`Capability: ${profile.capabilityTier}`} colour={capColour} />
           {profile.speedRating   && <Badge label={`Speed: ${profile.speedRating}`}     colour="#38bdf8" />}
           {profile.contextWindow && <Badge label={`Context: ${profile.contextWindow}`} colour="#a78bfa" />}
