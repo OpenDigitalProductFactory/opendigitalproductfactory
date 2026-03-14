@@ -201,7 +201,7 @@ export async function callProvider(
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60_000), // 60s for local models
+      signal: AbortSignal.timeout(180_000), // 3min — local models need time to load on first call
     });
   } catch (e) {
     throw new InferenceError(
