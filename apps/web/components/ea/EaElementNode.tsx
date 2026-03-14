@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Handle, Position, useConnection, type NodeProps } from "@xyflow/react";
 import { layerFromNeoLabel, LAYER_COLOURS, type SerializedViewElement } from "@/lib/ea-types";
+import { StructuredValueStreamNode } from "./StructuredValueStreamNode";
 
 // One source handle per side. ConnectionMode.Loose allows source→source connections,
 // so target handles are unnecessary. Floating edge routing uses node intersection, not handle IDs.
@@ -52,6 +53,23 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
     transition: "opacity 0.12s ease",
     zIndex: 10,
   };
+
+  if (nodeData.rendererHint === "nested_chevron_sequence") {
+    return (
+      <div style={{ position: "relative" }}>
+        {SIDES.map(({ position, id: handleId }) => (
+          <Handle
+            key={handleId}
+            type="source"
+            id={handleId}
+            position={position}
+            style={handleStyle}
+          />
+        ))}
+        <StructuredValueStreamNode data={nodeData} selected={selected} />
+      </div>
+    );
+  }
 
   return (
     <div

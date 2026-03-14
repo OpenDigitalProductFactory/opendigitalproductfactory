@@ -43,6 +43,17 @@ export {
   runBootstrapCollectors,
 } from "./discovery-runner";
 export {
+  deriveNestedChevronSequenceWarnings,
+  sortStructuredChildren,
+  type StructuredChildRecord,
+  type StructureConformanceWarning,
+} from "./ea-structure";
+export {
+  getDefaultEaStructureRules,
+  seedEaStructureRules,
+  type EaStructureRuleSeed,
+} from "./seed-ea-structure-rules";
+export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
