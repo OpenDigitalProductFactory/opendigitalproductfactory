@@ -159,7 +159,12 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
         console.warn("sendMessage error:", result.error);
         return;
       }
-      setMessages((prev) => [...prev, result.userMessage, result.agentMessage]);
+      const newMessages = [result.userMessage];
+      if ("systemMessage" in result && result.systemMessage) {
+        newMessages.push(result.systemMessage);
+      }
+      newMessages.push(result.agentMessage);
+      setMessages((prev) => [...prev, ...newMessages]);
     });
   }
 
@@ -222,6 +227,24 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
             />
           );
         })}
+        {isPending && (
+          <div style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 2,
+            marginBottom: 8,
+          }}>
+            <div style={{
+              padding: "8px 16px",
+              borderRadius: "12px 12px 12px 2px",
+              fontSize: 13,
+              background: "var(--dpf-surface-2)",
+              color: "var(--dpf-muted)",
+            }}>
+              <span className="animate-pulse">Thinking...</span>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
