@@ -1,28 +1,25 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: dpf
-      POSTGRES_PASSWORD: dpf_dev
+      POSTGRES_USER: ${POSTGRES_USER:-dpf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dpf_dev}
       POSTGRES_DB: dpf
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dpf"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dpf}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   neo4j:
     image: neo4j:5-community
+    restart: unless-stopped
     environment:
-      NEO4J_AUTH: neo4j/dpf_dev_password
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dpf_dev_password}
       NEO4J_PLUGINS: '["apoc"]'
-    ports:
-      - "7474:7474"
-      - "7687:7687"
     volumes:
       - neo4jdata:/data
     healthcheck:
@@ -32,6 +29,57 @@ services:
       retries: 5
       start_period: 30s
 
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    # GPU passthrough — the installer generates a docker-compose.override.yml
+    # with deploy.resources.reservations.devices when NVIDIA GPU is detected.
+    # Without the override, Ollama runs on CPU only.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  portal-init:
+    build:
+      context: .
+      target: init
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
+      DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  portal:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
+      AUTH_SECRET: ${AUTH_SECRET:-dev_secret_change_me}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 volumes:
   pgdata:
   neo4jdata:
+  ollama_models:
