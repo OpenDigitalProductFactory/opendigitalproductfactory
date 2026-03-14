@@ -6,6 +6,9 @@ import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import { resolveAgentForRoute, generateCannedResponse } from "@/lib/agent-routing";
 import { serializeMessage } from "@/lib/agent-coworker-data";
+import { callWithFailover, NoProvidersAvailableError } from "@/lib/ai-provider-priority";
+import { logTokenUsage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/ai-inference";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -43,7 +46,7 @@ export async function sendMessage(input: {
   content: string;
   routeContext: string;
 }): Promise<
-  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow }
+  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow }
   | { error: string }
 > {
   const user = await requireAuthUser();
@@ -81,17 +84,80 @@ export async function sendMessage(input: {
     },
   });
 
-  // Resolve agent and generate canned response
+  // Resolve agent
   const agent = resolveAgentForRoute(input.routeContext, {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   });
 
-  const responseContent = generateCannedResponse(
-    agent.agentId,
-    input.routeContext,
-    user.platformRole,
-  );
+  // Build inference context
+  const recentMessages = await prisma.agentMessage.findMany({
+    where: { threadId: input.threadId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { role: true, content: true },
+  });
+  const chatHistory: ChatMessage[] = recentMessages.reverse().map((m) => ({
+    role: m.role as ChatMessage["role"],
+    content: m.content,
+  }));
+
+  // Inject route context and user role into system prompt
+  const populatedPrompt = `${agent.systemPrompt}\n\nCurrent context:\n- Route: ${input.routeContext}\n- User role: ${user.platformRole ?? "none"}`;
+
+  let responseContent: string;
+  let responseProviderId: string | null = null;
+  let systemMessage: AgentMessageRow | undefined;
+
+  try {
+    const result = await callWithFailover(chatHistory, populatedPrompt);
+    responseContent = result.content;
+    responseProviderId = result.providerId;
+
+    // Log token usage (fire-and-forget with error logging)
+    logTokenUsage({
+      agentId: agent.agentId,
+      providerId: result.providerId,
+      contextKey: "coworker",
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      inferenceMs: result.inferenceMs,
+    }).catch((err) => console.error("[logTokenUsage]", err));
+
+    // Downgrade notification
+    if (result.downgraded && result.downgradeMessage) {
+      const sysMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "system",
+          content: result.downgradeMessage,
+          agentId: agent.agentId,
+          routeContext: input.routeContext,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+      systemMessage = serializeMessage(sysMsg);
+    }
+  } catch (e) {
+    if (e instanceof NoProvidersAvailableError) {
+      // Fall back to canned response
+      responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
+
+      const sysMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "system",
+          content: "AI providers are currently unavailable. Showing a pre-configured response.",
+          agentId: agent.agentId,
+          routeContext: input.routeContext,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+      systemMessage = serializeMessage(sysMsg);
+    } else {
+      throw e;
+    }
+  }
 
   // Persist agent response
   const agentMsg = await prisma.agentMessage.create({
@@ -101,6 +167,7 @@ export async function sendMessage(input: {
       content: responseContent,
       agentId: agent.agentId,
       routeContext: input.routeContext,
+      providerId: responseProviderId,
     },
     select: {
       id: true,
@@ -115,6 +182,7 @@ export async function sendMessage(input: {
   return {
     userMessage: serializeMessage(userMsg),
     agentMessage: serializeMessage(agentMsg),
+    ...(systemMessage !== undefined && { systemMessage }),
   };
 }
 
