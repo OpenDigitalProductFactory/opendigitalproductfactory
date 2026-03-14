@@ -21,19 +21,14 @@ async function requireAuthUser() {
 export async function getOrCreateThread(): Promise<{ threadId: string }> {
   const user = await requireAuthUser();
 
-  const existing = await prisma.agentThread.findUnique({
+  const thread = await prisma.agentThread.upsert({
     where: { userId_contextKey: { userId: user.id, contextKey: "coworker" } },
+    update: {},
+    create: { userId: user.id, contextKey: "coworker" },
     select: { id: true },
   });
 
-  if (existing) return { threadId: existing.id };
-
-  const created = await prisma.agentThread.create({
-    data: { userId: user.id, contextKey: "coworker" },
-    select: { id: true },
-  });
-
-  return { threadId: created.id };
+  return { threadId: thread.id };
 }
 
 export async function sendMessage(input: {
