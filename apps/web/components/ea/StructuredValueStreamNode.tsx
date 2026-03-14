@@ -1,6 +1,10 @@
 "use client";
 
+import { useState, type DragEvent } from "react";
+
 import type { SerializedViewElement } from "@/lib/ea-types";
+
+import { buildValueStreamLayout } from "./value-stream-layout";
 
 type Props = {
   data: SerializedViewElement;
@@ -20,144 +24,255 @@ function chevronClipPath(inset = 14): string {
   return `polygon(0 0, calc(100% - ${inset}px) 0, 100% 50%, calc(100% - ${inset}px) 100%, 0 100%, ${inset}px 50%)`;
 }
 
+const DRAG_MIME = "application/x-dpf-structured-stage-id";
+
 export function StructuredValueStreamNode({ data, selected = false }: Props) {
   const stages = sortStages(data.childViewElements ?? []);
+  const layout = buildValueStreamLayout(stages.map((stage) => stage.element.name));
   const childIssueCount = stages.reduce((sum, stage) => sum + stage.structureIssueCount, 0);
   const issueCount = data.structureIssueCount > 0 ? data.structureIssueCount : childIssueCount;
-  const canReorderStages = !data.isReadOnly && typeof data.onMoveStructuredChild === "function" && stages.length > 1;
+  const canReorderStages =
+    !data.isReadOnly &&
+    typeof data.onMoveStructuredChild === "function" &&
+    stages.length > 1;
+  const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
+  const [activeDropIndex, setActiveDropIndex] = useState<number | null>(null);
+
+  function handleDragStart(event: DragEvent<HTMLDivElement>, stageViewElementId: string) {
+    if (!canReorderStages) return;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(DRAG_MIME, stageViewElementId);
+    setDraggedStageId(stageViewElementId);
+  }
+
+  function handleDragEnd() {
+    setDraggedStageId(null);
+    setActiveDropIndex(null);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>, targetOrderIndex: number) {
+    if (!canReorderStages) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setActiveDropIndex(targetOrderIndex);
+  }
+
+  async function handleDrop(event: DragEvent<HTMLDivElement>, targetOrderIndex: number) {
+    if (!canReorderStages) return;
+    event.preventDefault();
+    const childViewElementId =
+      event.dataTransfer.getData(DRAG_MIME) || draggedStageId;
+    setDraggedStageId(null);
+    setActiveDropIndex(null);
+    if (!childViewElementId) return;
+
+    await data.onMoveStructuredChild?.({
+      childViewElementId,
+      targetOrderIndex,
+    });
+  }
+
+  const bandBorder = issueCount > 0 ? "#f97316" : "#d97706";
+  const bandShadow = selected
+    ? "0 0 0 3px rgba(245, 158, 11, 0.18)"
+    : "0 14px 28px rgba(120, 53, 15, 0.14)";
 
   return (
     <div
       style={{
-        width: 440,
+        width: layout.bandWidth + 24,
         padding: 12,
-        border: selected ? "2px solid #f59e0b" : "2px solid #c8b400",
-        borderRadius: 10,
-        background: "linear-gradient(135deg, #fff8bf 0%, #f3ea9e 100%)",
-        boxShadow: selected ? "0 0 0 3px rgba(245, 158, 11, 0.18)" : undefined,
       }}
     >
       <div
+        data-value-stream-band="true"
         style={{
-          clipPath: chevronClipPath(18),
-          background: "linear-gradient(90deg, #ffe58f 0%, #facc15 100%)",
-          padding: "14px 48px 14px 22px",
-          border: "1px solid #c8b400",
+          clipPath: chevronClipPath(28),
+          border: `2px solid ${bandBorder}`,
+          background:
+            "linear-gradient(135deg, #ffd6a0 0%, #ffbf72 45%, #f7a74d 100%)",
+          boxShadow: bandShadow,
+          padding: "16px 70px 18px 40px",
+          minHeight: 178,
         }}
       >
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6a5400" }}>
-          Value Stream
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#3b2f00", marginTop: 2 }}>
-          {data.element.name}
-        </div>
-        <div style={{ fontSize: 11, color: "#5f4b00", marginTop: 4 }}>
-          {data.element.lifecycleStage} / {data.element.lifecycleStatus}
-        </div>
-      </div>
-
-      {issueCount > 0 ? (
         <div
           style={{
-            marginTop: 10,
-            padding: "6px 10px",
-            borderRadius: 8,
-            background: "#fff1d6",
-            border: "1px solid #f59e0b",
-            color: "#92400e",
-            fontSize: 11,
-            fontWeight: 600,
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            color: "#7c2d12",
           }}
         >
-          Structural warning: {issueCount} issue{issueCount === 1 ? "" : "s"}
+          Value Stream
         </div>
-      ) : null}
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 700,
+            color: "#431407",
+            marginTop: 4,
+          }}
+        >
+          {data.element.name}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#7c2d12",
+            marginTop: 6,
+          }}
+        >
+          {data.element.lifecycleStage} / {data.element.lifecycleStatus}
+        </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(stages.length, 1)}, minmax(0, 1fr))`, gap: 8, marginTop: 12 }}>
-        {stages.map((stage, index) => (
+        {issueCount > 0 ? (
           <div
-            key={stage.viewElementId}
-            className="value-stream-stage"
             style={{
-              clipPath: chevronClipPath(12),
-              background: stage.structureIssueCount > 0
-                ? "linear-gradient(90deg, #ffd9bf 0%, #fdba74 100%)"
-                : "linear-gradient(90deg, #fff7d6 0%, #fde68a 100%)",
-              border: `1px solid ${stage.structureIssueCount > 0 ? "#f97316" : "#d4b106"}`,
-              padding: "12px 24px 12px 18px",
-              minHeight: 84,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
+              marginTop: 12,
+              width: "fit-content",
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: "rgba(255, 247, 237, 0.86)",
+              border: "1px solid #f97316",
+              color: "#9a3412",
+              fontSize: 11,
+              fontWeight: 600,
             }}
           >
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#7c5f00", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Stage {index + 1}
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#3b2f00", marginTop: 4 }}>
-              {stage.element.name}
-            </div>
-            <div style={{ fontSize: 10, color: "#6a5400", marginTop: 8 }}>
-              {stage.element.lifecycleStage} / {stage.element.lifecycleStatus}
-            </div>
-            {canReorderStages ? (
-              <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                {index > 0 ? (
-                  <button
-                    type="button"
-                    title="Move stage left"
-                    onClick={() => {
-                      void Promise.resolve(
-                        data.onMoveStructuredChild?.({
-                          childViewElementId: stage.viewElementId,
-                          targetOrderIndex: index - 1,
-                        }),
-                      );
-                    }}
-                    style={{
-                      border: "1px solid #c8b400",
-                      background: "#fff8bf",
-                      borderRadius: 999,
-                      color: "#6a5400",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Left
-                  </button>
-                ) : null}
-                {index < stages.length - 1 ? (
-                  <button
-                    type="button"
-                    title="Move stage right"
-                    onClick={() => {
-                      void Promise.resolve(
-                        data.onMoveStructuredChild?.({
-                          childViewElementId: stage.viewElementId,
-                          targetOrderIndex: index + 1,
-                        }),
-                      );
-                    }}
-                    style={{
-                      border: "1px solid #c8b400",
-                      background: "#fff8bf",
-                      borderRadius: 999,
-                      color: "#6a5400",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Right
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+            Structural warning: {issueCount} issue{issueCount === 1 ? "" : "s"}
           </div>
-        ))}
+        ) : null}
+
+        <div
+          style={{
+            marginTop: issueCount > 0 ? 18 : 22,
+            display: "flex",
+            alignItems: "stretch",
+            gap: layout.stageGap,
+          }}
+        >
+          {stages.map((stage, index) => {
+            const stageIsActiveDrop = activeDropIndex === index;
+            const isDragged = draggedStageId === stage.viewElementId;
+            return (
+              <div
+                key={stage.viewElementId}
+                style={{ display: "flex", alignItems: "stretch", gap: layout.stageGap }}
+              >
+                {canReorderStages ? (
+                  <div
+                    className="nodrag nopan"
+                    data-stage-drop-target={index}
+                    onDragOver={(event) => handleDragOver(event, index)}
+                    onDrop={(event) => {
+                      void handleDrop(event, index);
+                    }}
+                    onDragEnter={() => setActiveDropIndex(index)}
+                    onDragLeave={() => {
+                      if (activeDropIndex === index) setActiveDropIndex(null);
+                    }}
+                    style={{
+                      width: 10,
+                      alignSelf: "stretch",
+                      borderRadius: 999,
+                      background: stageIsActiveDrop ? "#c2410c" : "rgba(124, 45, 18, 0.14)",
+                      boxShadow: stageIsActiveDrop
+                        ? "0 0 0 2px rgba(255, 237, 213, 0.85)"
+                        : undefined,
+                      transition: "background 0.12s ease, box-shadow 0.12s ease",
+                    }}
+                  />
+                ) : null}
+
+                <div
+                  draggable={canReorderStages}
+                  className="value-stream-stage nodrag nopan"
+                  onDragStart={(event) => handleDragStart(event, stage.viewElementId)}
+                  onDragEnd={handleDragEnd}
+                  style={{
+                    width: layout.stageWidths[index],
+                    minHeight: 92,
+                    clipPath: chevronClipPath(18),
+                    background:
+                      stage.structureIssueCount > 0
+                        ? "linear-gradient(135deg, #fed7aa 0%, #fb923c 100%)"
+                        : "linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%)",
+                    border: `1px solid ${stage.structureIssueCount > 0 ? "#ea580c" : "#c2410c"}`,
+                    padding: "14px 28px 14px 20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    opacity: isDragged ? 0.7 : 1,
+                    cursor: canReorderStages ? "grab" : "default",
+                    boxShadow: isDragged ? "0 6px 14px rgba(120, 53, 15, 0.22)" : undefined,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "#9a3412",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    Stage {index + 1}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#431407",
+                      marginTop: 6,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {stage.element.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "#7c2d12",
+                      marginTop: 10,
+                    }}
+                  >
+                    {stage.element.lifecycleStage} / {stage.element.lifecycleStatus}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {canReorderStages ? (
+            <div
+              className="nodrag nopan"
+              data-stage-drop-target={stages.length}
+              onDragOver={(event) => handleDragOver(event, stages.length)}
+              onDrop={(event) => {
+                void handleDrop(event, stages.length);
+              }}
+              onDragEnter={() => setActiveDropIndex(stages.length)}
+              onDragLeave={() => {
+                if (activeDropIndex === stages.length) setActiveDropIndex(null);
+              }}
+              style={{
+                width: 10,
+                borderRadius: 999,
+                background:
+                  activeDropIndex === stages.length
+                    ? "#c2410c"
+                    : "rgba(124, 45, 18, 0.14)",
+                boxShadow:
+                  activeDropIndex === stages.length
+                    ? "0 0 0 2px rgba(255, 237, 213, 0.85)"
+                    : undefined,
+                transition: "background 0.12s ease, box-shadow 0.12s ease",
+              }}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
