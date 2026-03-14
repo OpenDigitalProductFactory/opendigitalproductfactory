@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+echo "=== DPF Portal Init ==="
+
+echo "[1/3] Running database migrations..."
+cd /app
+npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma
+echo "  ✓ Migrations complete"
+
+echo "[2/3] Seeding reference data..."
+cd /app/packages/db
+npx tsx src/seed.ts || echo "  ⚠ Seed had warnings (non-fatal)"
+echo "  ✓ Seed complete"
+
+echo "[3/3] Detecting hardware..."
+if [ -n "$DPF_HOST_PROFILE" ]; then
+  cd /app
+  npx tsx scripts/detect-hardware.ts || echo "  ⚠ Hardware detection had warnings (non-fatal)"
+  echo "  ✓ Hardware profile saved"
+else
+  echo "  → No host profile provided, skipping"
+fi
+
+echo "=== Init complete ==="
