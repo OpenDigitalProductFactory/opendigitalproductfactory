@@ -27,12 +27,20 @@ function loadOpen(): boolean {
   }
 }
 
+function clampPosition(pos: { x: number; y: number }): { x: number; y: number } {
+  if (typeof window === "undefined") return pos;
+  return {
+    x: Math.max(0, Math.min(pos.x, window.innerWidth - PANEL_W)),
+    y: Math.max(0, Math.min(pos.y, window.innerHeight - PANEL_H)),
+  };
+}
+
 function loadPosition(): { x: number; y: number } {
   try {
     const raw = localStorage.getItem(LS_KEY_POS);
     if (raw) {
       const parsed = JSON.parse(raw) as { x: number; y: number };
-      if (typeof parsed.x === "number" && typeof parsed.y === "number") return parsed;
+      if (typeof parsed.x === "number" && typeof parsed.y === "number") return clampPosition(parsed);
     }
   } catch { /* ignore */ }
   return {
@@ -56,6 +64,17 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
     positionRef.current = pos;
     setPosition(pos);
     setHydrated(true);
+
+    // Keep panel in viewport on window resize
+    function handleResize() {
+      const clamped = clampPosition(positionRef.current);
+      if (clamped.x !== positionRef.current.x || clamped.y !== positionRef.current.y) {
+        positionRef.current = clamped;
+        setPosition(clamped);
+      }
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   function handleOpen() {
@@ -115,7 +134,7 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
             width: PANEL_W,
             height: PANEL_H,
             borderRadius: 12,
-            background: "rgba(26, 26, 46, 0.85)",
+            background: "rgba(26, 26, 46, 0.7)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             border: "1px solid rgba(42, 42, 64, 0.6)",
