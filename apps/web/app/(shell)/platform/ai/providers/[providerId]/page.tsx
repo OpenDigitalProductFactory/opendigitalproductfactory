@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
+import { getInfraCIs } from "@dpf/db";
+import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -23,6 +25,20 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
+
+  // Fetch hardware info for Ollama
+  let hardwareInfo: { gpu: string; vramGb: number | null; modelCount: number } | null = null;
+  if (providerId === "ollama") {
+    const infraCIs = await getInfraCIs("ai-inference");
+    const ollamaCI = infraCIs.find((ci) => ci.id === "CI-ollama-01");
+    if (ollamaCI?.properties.gpu) {
+      hardwareInfo = {
+        gpu: ollamaCI.properties.gpu as string,
+        vramGb: (ollamaCI.properties.vramGb as number) ?? null,
+        modelCount: (ollamaCI.properties.modelCount as number) ?? 0,
+      };
+    }
+  }
 
   return (
     <div>
@@ -43,6 +59,14 @@ export default async function ProviderDetailPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {hardwareInfo && (
+        <OllamaHardwareInfo
+          gpu={hardwareInfo.gpu}
+          vramGb={hardwareInfo.vramGb}
+          modelCount={hardwareInfo.modelCount}
+        />
+      )}
 
       <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
         <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />

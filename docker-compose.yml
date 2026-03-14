@@ -32,6 +32,32 @@ services:
       retries: 5
       start_period: 30s
 
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
+    # GPU passthrough: requires NVIDIA Container Toolkit.
+    # If this block causes errors on CPU-only hosts, remove or comment out
+    # the entire 'deploy' section — Ollama will still work in CPU-only mode.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   pgdata:
   neo4jdata:
+  ollama_models:
