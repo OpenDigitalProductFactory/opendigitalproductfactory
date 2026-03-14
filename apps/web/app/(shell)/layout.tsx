@@ -5,8 +5,6 @@ import { auth } from "@/lib/auth";
 import { resolveBrandingLogoUrl } from "@/lib/branding";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
-import { getOrCreateThread } from "@/lib/actions/agent-coworker";
-import { getRecentMessages } from "@/lib/agent-coworker-data";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +13,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding, threadResult] = await Promise.all([
+  const [latestDiscoveryRun, activeBranding] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
       select: { id: true },
@@ -27,11 +25,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         logoUrl: true,
       },
     }),
-    getOrCreateThread(),
   ]);
-
-  const threadId = threadResult?.threadId ?? null;
-  const initialMessages = threadId ? await getRecentMessages(threadId) : [];
 
   if (!latestDiscoveryRun) {
     await executeBootstrapDiscovery(prisma as never, {
@@ -53,13 +47,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         )}
       />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
-      {threadId && (
-        <AgentCoworkerShell
-          threadId={threadId}
-          initialMessages={initialMessages}
-          userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
-        />
-      )}
+      <AgentCoworkerShell
+        userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+      />
     </div>
   );
 }

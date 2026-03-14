@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
+import { getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 
 type Props = {
-  threadId: string;
-  initialMessages: AgentMessageRow[];
   userContext: UserContext;
 };
 
@@ -42,17 +42,22 @@ function loadPosition(): { x: number; y: number } {
       const parsed = JSON.parse(raw) as { x: number; y: number };
       if (typeof parsed.x === "number" && typeof parsed.y === "number") return clampPosition(parsed);
     }
-  } catch { /* ignore */ }
+  } catch {
+    // ignore localStorage parsing issues
+  }
   return {
     x: typeof window !== "undefined" ? window.innerWidth - PANEL_W - EDGE_GAP : EDGE_GAP,
     y: typeof window !== "undefined" ? window.innerHeight - PANEL_H - EDGE_GAP : EDGE_GAP,
   };
 }
 
-export function AgentCoworkerShell({ threadId, initialMessages, userContext }: Props) {
+export function AgentCoworkerShell({ userContext }: Props) {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [hydrated, setHydrated] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
   const positionRef = useRef(position);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
 
@@ -65,7 +70,6 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
     setPosition(pos);
     setHydrated(true);
 
-    // Keep panel in viewport on window resize
     function handleResize() {
       const clamped = clampPosition(positionRef.current);
       if (clamped.x !== positionRef.current.x || clamped.y !== positionRef.current.y) {
@@ -73,9 +77,32 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
         setPosition(clamped);
       }
     }
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setThreadId(null);
+    setInitialMessages([]);
+
+    (async () => {
+      const snapshot = await getOrCreateThreadSnapshot({ routeContext: pathname });
+      if (!active) return;
+      setThreadId(snapshot?.threadId ?? null);
+      setInitialMessages(snapshot?.messages ?? []);
+    })().catch((error) => {
+      console.warn("getOrCreateThreadSnapshot error:", error);
+      if (!active) return;
+      setThreadId(null);
+      setInitialMessages([]);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   function handleOpen() {
     setIsOpen(true);
