@@ -52,6 +52,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
+        token.id = user.id;
         token.platformRole = user.platformRole ?? null;
         token.isSuperuser = user.isSuperuser ?? false;
       }
@@ -59,6 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     session({ session, token }) {
       if (session.user) {
+        session.user.id = typeof token.id === "string" ? token.id : token.sub ?? "";
         session.user.platformRole = token.platformRole ?? null;
         session.user.isSuperuser = token.isSuperuser ?? false;
       }
