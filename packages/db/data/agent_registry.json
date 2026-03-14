@@ -1,0 +1,2086 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-02-28",
+  "agents": [
+    {
+      "agent_id": "AGT-ORCH-000",
+      "agent_name": "coo-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Strategic alignment, budget authority delegation, cross-orchestrator coordination, constitutional governance; Policy FC (6.1.1), Strategy FC (6.1.2), Portfolio Backlog FC (6.2.1)",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [
+        "AGT-100",
+        "AGT-101",
+        "AGT-102"
+      ],
+      "escalates_to": "HR-000",
+      "it4it_sections": [
+        "6.1.1 Policy FC",
+        "6.1.2 Strategy FC",
+        "6.2.1 Portfolio Backlog FC"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "policy_read",
+          "strategy_read",
+          "budget_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-100",
+      "agent_name": "evaluate-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "evaluate",
+      "capability_domain": "Portfolio investment decisions, gap analysis, scope agreement production, rationalization; Evaluate Value Stream §5.1 stages 5.1.1-5.1.6",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-110",
+        "AGT-111",
+        "AGT-112",
+        "AGT-113"
+      ],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.1 Evaluate Value Stream",
+        "5.1.1-5.1.6"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "investment_proposal_create",
+          "gap_analysis_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-200",
+      "agent_name": "explore-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "explore",
+      "capability_domain": "Product lifecycle, backlog prioritization, architecture definition, roadmap assembly; Explore Value Stream §5.2 stages 5.2.1-5.2.5",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-120",
+        "AGT-121",
+        "AGT-122"
+      ],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.2 Explore Value Stream",
+        "5.2.1-5.2.5"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "backlog_write",
+          "roadmap_create",
+          "architecture_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-300",
+      "agent_name": "integrate-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "integrate",
+      "capability_domain": "Build coordination, release planning, SBOM management, release acceptance gate; Integrate Value Stream §5.3 stages 5.3.1-5.3.5",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-130",
+        "AGT-131",
+        "AGT-132"
+      ],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.1-5.3.5",
+        "MUST-0031",
+        "MUST-0033",
+        "MUST-0034"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "sbom_read",
+          "release_gate_create",
+          "build_plan_write"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-400",
+      "agent_name": "deploy-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "deploy",
+      "capability_domain": "Deployment automation, IaC execution, resource reservation, rollback coordination; Deploy Value Stream §5.4 stages 5.4.1-5.4.3",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-140",
+        "AGT-141",
+        "AGT-142"
+      ],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.4 Deploy Value Stream",
+        "5.4.1-5.4.3",
+        "MUST-0036",
+        "MUST-0037",
+        "MUST-0038"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "iac_execute",
+          "deployment_plan_create",
+          "resource_reservation_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-500",
+      "agent_name": "release-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "release",
+      "capability_domain": "Service offer catalog management, offer publication, subscription lifecycle; Release Value Stream §5.5 stages 5.5.1-5.5.4",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-150",
+        "AGT-151",
+        "AGT-152"
+      ],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.5 Release Value Stream",
+        "5.5.1-5.5.4",
+        "MUST-0016",
+        "MUST-0039"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "service_offer_read",
+          "catalog_publish",
+          "subscription_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-600",
+      "agent_name": "consume-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "consume",
+      "capability_domain": "Consumer onboarding, order fulfillment, contract management, service support, CLIP routing; Consume Value Stream §5.6 stages 5.6.1-5.6.5",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 2,
+      "delegates_to": [
+        "AGT-160",
+        "AGT-161",
+        "AGT-162"
+      ],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.6 Consume Value Stream",
+        "5.6.1-5.6.5",
+        "MUST-0040"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "consumer_onboard",
+          "order_create",
+          "incident_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-700",
+      "agent_name": "operate-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "operate",
+      "capability_domain": "Monitoring, incident detection, diagnosis, resolution, post-incident review, ITSM/ITOM; Operate Value Stream §5.7 stages 5.7.1-5.7.5",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-170",
+        "AGT-171",
+        "AGT-172"
+      ],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.7 Operate Value Stream",
+        "5.7.1-5.7.5"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "telemetry_read",
+          "incident_create",
+          "change_event_emit"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-ORCH-800",
+      "agent_name": "governance-orchestrator",
+      "tier": "orchestrator",
+      "value_stream": "governance",
+      "capability_domain": "Enterprise Architecture FC, value stream data object enforcement, constraint validation, promotion workflow; EA FC §6.1.3",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 0,
+      "delegates_to": [
+        "AGT-180",
+        "AGT-181",
+        "AGT-182"
+      ],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "6.1.3 Enterprise Architecture FC",
+        "MUST-0047-0053"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 500000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "decision_record_create",
+          "agent_control_read",
+          "role_registry_read",
+          "constraint_validate",
+          "architecture_guardrail_read",
+          "evidence_chain_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
+      "agent_id": "AGT-100",
+      "agent_name": "policy-enforcement-agent",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Reads policies/ directory; validates policy data object attributes per MUST-0042/0043; flags policy-backlog linkage violations; outputs machine-readable violations",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "6.1.1 Policy FC",
+        "MUST-0042",
+        "MUST-0043"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "policy_read",
+          "policy_write",
+          "violation_report_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-101",
+      "agent_name": "strategy-alignment-agent",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Manages Strategic Theme and Strategic Objective data objects (MUST-0044-0046); validates backlog alignment to strategic objectives; produces scope agreement drafts",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-000",
+      "it4it_sections": [
+        "6.1.2 Strategy FC",
+        "MUST-0044",
+        "MUST-0045",
+        "MUST-0046"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "strategy_read",
+          "strategy_write",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-102",
+      "agent_name": "portfolio-backlog-agent",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Manages Portfolio Backlog Item lifecycle per MUST-0054-0057; validates Architecture Roadmap Item alignment; maintains BACKLOG/backlog_items.csv and .jsonl",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "6.2.1 Portfolio Backlog FC",
+        "MUST-0054",
+        "MUST-0057"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "portfolio_backlog_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-110",
+      "agent_name": "portfolio-rationalization-agent",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Analyzes portfolio for duplication, technical debt, underperformance; produces rationalization candidates ranked by score; outputs decision_record drafts; §5.1.5 Define Backlog Mandates",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.1.5 Define Backlog Mandates"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "portfolio_read",
+          "rationalization_report_create",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-111",
+      "agent_name": "investment-analysis-agent",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Scores Portfolio Backlog Items by business value, risk, cost, time (SHOULD-0017/0018); produces prioritized investment proposals for Portfolio Manager review; §5.1.4 Propose Investments",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.1.4 Propose Investments",
+        "SHOULD-0017",
+        "SHOULD-0018"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "investment_proposal_create",
+          "financial_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-112",
+      "agent_name": "gap-analysis-agent",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Reads IT4IT criteria against maturity backlog; identifies gap heat maps; surfaces environmental scan inputs (SHOULD-0016); §5.1.3 Identify Gaps",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.1.3 Identify Gaps Stage",
+        "SHOULD-0016"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "criteria_read",
+          "gap_analysis_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-113",
+      "agent_name": "scope-agreement-agent",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Assembles Scope Agreement artifact from approved investment proposals; validates funding allocation; produces canonical decision_record; §5.1.1 Evaluate Scenarios",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "HR-000",
+      "it4it_sections": [
+        "5.1.1 Evaluate Scenarios"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "scope_agreement_create",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-120",
+      "agent_name": "product-backlog-prioritization-agent",
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "Manages Product Backlog Item scoring and ordering per governance criteria (SHOULD-0023); §5.2.2 Prioritize Backlog Items",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.2.2 Prioritize Backlog Items",
+        "SHOULD-0023"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "scoring_model_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-121",
+      "agent_name": "architecture-definition-agent",
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "Generates architectural attribute proposals and BIA inputs (SHOULD-0024); validates against guardrails defined by Enterprise Architect; §5.2.3 Define Digital Product Architecture",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "5.2.3 Define Digital Product Architecture",
+        "SHOULD-0024"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "architecture_read",
+          "architecture_write",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-122",
+      "agent_name": "roadmap-assembly-agent",
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "Assembles Release Roadmap; prepares stakeholder buy-in package (MUST-0029); surfaces for Digital Product Manager sign-off; §5.2.5 Finalize Roadmap",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.2.5 Finalize Roadmap",
+        "MUST-0029"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "roadmap_create",
+          "release_plan_read",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-130",
+      "agent_name": "release-planning-agent",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Plans development and testing activities; coordinates multi-team scheduling (MUST-0031); §5.3.2 Plan Product Release",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.3.2 Plan Product Release",
+        "MUST-0031"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "release_plan_create",
+          "schedule_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-131",
+      "agent_name": "sbom-management-agent",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Manages SBOM composition (CycloneDX); validates sbom_component nodes; tracks dependency lifecycle (MUST-0022/0023); §5.3.3 Design & Develop",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.3.3 Design & Develop",
+        "MUST-0022",
+        "MUST-0023"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "sbom_read",
+          "sbom_write",
+          "dependency_graph_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-132",
+      "agent_name": "release-acceptance-agent",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Prepares Release Gate Package for change authority review (MUST-0033/0034); validates Tier 0 gate checks before surfacing to Digital Product Manager; §5.3.5 Accept & Publish Release",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.3.5 Accept & Publish Release",
+        "MUST-0033",
+        "MUST-0034"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "release_gate_create",
+          "acceptance_package_write",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-140",
+      "agent_name": "deployment-planning-agent",
+      "tier": "specialist",
+      "value_stream": "deploy",
+      "capability_domain": "Plans deployment schedule; generates rollback plan (SHOULD-0028); creates deployment approval package (MUST-0036); §5.4.2 Plan & Approve Deployment",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.4.2 Plan & Approve Deployment",
+        "MUST-0036",
+        "SHOULD-0028"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "deployment_plan_create",
+          "rollback_plan_create",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-141",
+      "agent_name": "resource-reservation-agent",
+      "tier": "specialist",
+      "value_stream": "deploy",
+      "capability_domain": "Reserves hardware/cloud/license resources; creates Orders for dependent services (MUST-0037/0038); §5.4.3 Fulfill Deployment",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.4.3 Fulfill Deployment",
+        "MUST-0037",
+        "MUST-0038"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "resource_reservation_write",
+          "order_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-142",
+      "agent_name": "iac-execution-agent",
+      "tier": "specialist",
+      "value_stream": "deploy",
+      "capability_domain": "Executes approved IaC pipelines; emits change_event nodes; updates product_instance status; §5.4.3 Fulfill Deployment",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.4.3 Fulfill Deployment"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "iac_execute",
+          "change_event_emit",
+          "product_instance_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-150",
+      "agent_name": "service-offer-definition-agent",
+      "tier": "specialist",
+      "value_stream": "release",
+      "capability_domain": "Assembles service_offer nodes; validates offer includes all contract elements (MUST-0016, MUST-0039); §5.5.2 Define Service Offer",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.5.2 Define Service Offer",
+        "MUST-0016",
+        "MUST-0039"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "service_offer_write",
+          "contract_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-151",
+      "agent_name": "catalog-publication-agent",
+      "tier": "specialist",
+      "value_stream": "release",
+      "capability_domain": "Publishes approved offers to service catalog; manages multi-channel availability (SHOULD-0032/0033); §5.5 Release VS",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "5.5 Release Value Stream",
+        "SHOULD-0032",
+        "SHOULD-0033"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "catalog_publish",
+          "service_offer_read"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-152",
+      "agent_name": "subscription-management-agent",
+      "tier": "specialist",
+      "value_stream": "release",
+      "capability_domain": "Manages subscription lifecycle; produces contract node updates; tracks chargeback records; §5.5 Release VS",
+      "human_supervisor_id": "HR-400",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-400",
+      "it4it_sections": [
+        "5.5 Release Value Stream",
+        "MUST-0017"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "subscription_write",
+          "contract_write",
+          "chargeback_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-160",
+      "agent_name": "consumer-onboarding-agent",
+      "tier": "specialist",
+      "value_stream": "consume",
+      "capability_domain": "Manages consumer node creation; validates contract terms; automates entitlement provisioning; §5.6.1 Onboard Consumer",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.6.1 Onboard Consumer"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "consumer_write",
+          "entitlement_provision"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-161",
+      "agent_name": "order-fulfillment-agent",
+      "tier": "specialist",
+      "value_stream": "consume",
+      "capability_domain": "Orchestrates product_instance instantiation; routes to deploy-orchestrator for resource allocation; §5.6.2 Fulfill Order",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.6.2 Fulfill Order"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "product_instance_write",
+          "order_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-162",
+      "agent_name": "service-support-agent",
+      "tier": "specialist",
+      "value_stream": "consume",
+      "capability_domain": "Manages incident intake; routes CLIP items; escalates P1 candidates; produces SLA compliance evidence (MUST-0040); §5.6.5 Provide Service Support",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.6.5 Provide Service Support",
+        "MUST-0040"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "incident_create",
+          "sla_compliance_write",
+          "clip_route"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-170",
+      "agent_name": "monitoring-agent",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "Continuous monitoring of product_instance nodes; emits change_event on threshold breach; §5.7.1 Monitor",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.7.1 Monitor"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "telemetry_read",
+          "change_event_emit"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-171",
+      "agent_name": "incident-detection-agent",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "Classifies issues by severity; auto-creates P2/P3 incidents; escalates P1 candidates with full impact brief to Operations Manager; §5.7.2 Detect Issue",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.7.2 Detect Issue"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "incident_create",
+          "telemetry_read",
+          "escalation_trigger"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-172",
+      "agent_name": "incident-resolution-agent",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "Executes approved runbooks (SHOULD-0034); coordinates resolution; produces post-incident evidence_artifact; §5.7.4 Resolve Issue",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-500",
+      "it4it_sections": [
+        "5.7.4 Resolve Issue",
+        "SHOULD-0034"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "runbook_execute",
+          "incident_write",
+          "evidence_artifact_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-180",
+      "agent_name": "constraint-validation-agent",
+      "tier": "specialist",
+      "value_stream": "governance",
+      "capability_domain": "Runs promote_candidate_to_published.py equivalent checks; outputs machine-readable constraint violations; supports GATE-001 through GATE-008",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "MUST criteria enforcement"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "constraint_validate",
+          "violation_report_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-181",
+      "agent_name": "architecture-guardrail-agent",
+      "tier": "specialist",
+      "value_stream": "governance",
+      "capability_domain": "Validates architecture_roadmap_item alignment; checks Architecture Blueprint conformance (MUST-0047-0053); Enterprise Architecture FC §6.1.3",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "6.1.3 Enterprise Architecture FC",
+        "MUST-0047",
+        "MUST-0053"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "architecture_read",
+          "guardrail_validate",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-182",
+      "agent_name": "evidence-chain-agent",
+      "tier": "specialist",
+      "value_stream": "governance",
+      "capability_domain": "Validates completeness of criterion -> maturity -> backlog -> evidence chain; produces audit reports showing gap coverage",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "Governance chain v1.0.0"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "evidence_chain_validate",
+          "audit_report_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-S2P-POL",
+      "agent_name": "policy-specialist",
+      "tier": "specialist",
+      "value_stream": "Strategy to Portfolio",
+      "capability_domain": "Manages the POLICIES/ directory and the lifecycle of Policy data objects, ensuring they trace to external frameworks like DORA.",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "6.1.1 Policy FC"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "policy_read",
+          "policy_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-900",
+      "agent_name": "finance-agent",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Budget cap enforcement, chargeback record management, P&L attribution per portfolio, subscription billing, weekly financial reporting; ITFM / SHOULD-0005",
+      "human_supervisor_id": "HR-400",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-400",
+      "it4it_sections": [
+        "ITFM",
+        "SHOULD-0005"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 2048,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "budget_read",
+          "chargeback_write",
+          "financial_report_create"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 8
+      }
+    },
+    {
+      "agent_id": "AGT-901",
+      "agent_name": "architecture-agent",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Validates unit_owns_product Conway's Law conformance; checks org structure alignment; produces ADR draft documents using DECISIONS/ADR_TEMPLATE.md",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "Conway's Law alignment",
+        "ADR governance"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 2048,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "architecture_read",
+          "adr_create",
+          "conway_validate"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 8
+      }
+    },
+    {
+      "agent_id": "AGT-902",
+      "agent_name": "data-governance-agent",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Enforces data governance across product lifecycle (MUST-0024); manages data retention records; validates SBOM data lineage; flags privacy compliance triggers",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "MUST-0024"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 2048,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "data_governance_validate",
+          "retention_record_write",
+          "sbom_read"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 8
+      }
+    },
+    {
+      "agent_id": "AGT-S2P-PFB",
+      "agent_name": "portfolio-backlog-specialist",
+      "tier": "specialist",
+      "value_stream": "Strategy to Portfolio",
+      "capability_domain": "Reads, lists, and manages Portfolio Backlog Items (PBI-YYYY-NNNN) in BACKLOGS/portfolio/; enforces PBI schema and status workflow as defined in BACKLOGS/README.md; escalates proposed→approved transitions to HR-100.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 2,
+      "delegates_to": [],
+      "escalates_to": "HR-100",
+      "it4it_sections": [
+        "6.2.1 Portfolio Backlog FC",
+        "MUST-0054",
+        "MUST-0057"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "portfolio_backlog_write",
+          "pbi_status_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-R2D-PB",
+      "agent_name": "product-backlog-specialist",
+      "tier": "specialist",
+      "value_stream": "Request to Deploy",
+      "capability_domain": "Reads, lists, and claims Product Backlog Items (PROD-YYYY-NNNN) in BACKLOGS/product/; enforces PROD schema and status workflow as defined in BACKLOGS/README.md; escalates blocked items to HR-200.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-200",
+      "it4it_sections": [
+        "5.2.2 Prioritize Backlog Items",
+        "MUST-0021"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "prod_status_write"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-903",
+      "agent_name": "ux-accessibility-agent",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Reviews UI implementations for WCAG 2.1 AA compliance on dark themes; validates contrast ratios (4.5:1 normal text, 3:1 large text) against platform surfaces; enforces minimum font-size policy (10px floor, 12px labels, 13px inputs); checks focus indicators, disabled-state contrast, and surface separation hierarchy; flags accessibility regressions during code review",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "SHOULD-0012"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 150000,
+          "per_task_limit": 15000
+        },
+        "tool_grants": [
+          "registry_read",
+          "file_read",
+          "contrast_check",
+          "style_audit"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    }
+  ]
+}

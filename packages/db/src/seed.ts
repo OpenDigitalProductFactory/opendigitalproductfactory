@@ -9,12 +9,10 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import * as crypto from "crypto";
 
-// Repo root: prefer DPF_DATA_ROOT env var (needed when running from a worktree),
-// otherwise fall back to 4 levels up (packages/db/src → packages/db → packages → repo root → data root)
-const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..", "..");
+const DATA_DIR = join(__dirname, "..", "data");
 
-function readJson<T>(relPath: string): T {
-  return JSON.parse(readFileSync(join(REPO_ROOT, relPath), "utf-8")) as T;
+function readJson<T>(filename: string): T {
+  return JSON.parse(readFileSync(join(DATA_DIR, filename), "utf-8")) as T;
 }
 
 async function seedRoles(): Promise<void> {
@@ -26,7 +24,7 @@ async function seedRoles(): Promise<void> {
       hitl_tier_min?: number;
       escalation_sla_hours?: number;
     }>;
-  }>("ROLES/role_registry.json");
+  }>("role_registry.json");
 
   for (const r of registry.roles) {
     const slaDurationH =
@@ -63,7 +61,7 @@ async function seedAgents(): Promise<void> {
       status?: string;
       human_supervisor_id?: string;
     }>;
-  }>("AGENTS/agent_registry.json");
+  }>("agent_registry.json");
 
   // Build portfolio slug → cuid lookup (portfolios must already be seeded)
   const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
@@ -111,7 +109,7 @@ async function seedPortfolios(): Promise<void> {
       name: string;
       description?: string;
     }>;
-  }>("MODEL/portfolio_registry.json");
+  }>("portfolio_registry.json");
 
   for (const p of registry.portfolios) {
     await prisma.portfolio.upsert({
@@ -207,7 +205,7 @@ async function seedDigitalProducts(): Promise<void> {
       portfolio_id?: string;
       lifecycle?: { stage_status?: string };
     }>;
-  }>("MODEL/digital_product_registry.json");
+  }>("digital_product_registry.json");
 
   const products = registry.digital_products;
   for (const p of products) {
@@ -708,7 +706,8 @@ async function seedDefaultAdminUser(): Promise<void> {
     return;
   }
 
-  const hash = crypto.createHash("sha256").update("changeme123").digest("hex");
+  const password = process.env.ADMIN_PASSWORD ?? "changeme123";
+  const hash = crypto.createHash("sha256").update(password).digest("hex");
   const user = await prisma.user.create({
     data: {
       email: "admin@dpf.local",
@@ -874,7 +873,9 @@ async function main(): Promise<void> {
   await seedPortfolios();
   await seedAgents();
   await seedTaxonomyNodes();
-  await seedEaReferenceModels();
+  await seedEaReferenceModels().catch((err: unknown) => {
+    console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
+  });
   await seedDigitalProducts();
   await seedEaArchimate4();
   await seedEaStructureRules();

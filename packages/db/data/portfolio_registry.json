@@ -1,0 +1,38 @@
+{
+  "schema_version": "2.2.0",
+  "description": "Canonical portfolio root nodes. These four portfolios are the anchor points for orphan detection: any graph node that cannot be traced to one of these portfolio roots via a qualifying path is flagged is_orphan: true by the Sprint 2 orphan detector.",
+  "portfolios": [
+    {
+      "id": "foundational",
+      "portfolio_id": "foundational",
+      "name": "Foundational",
+      "description": "IT infrastructure, platform services, and architectural building blocks that underpin all value streams. Includes compute, network, data platforms, and security capabilities.",
+      "owner_role": "HR-300",
+      "it4it_reference": "IT4IT §6.1 Foundational Portfolio"
+    },
+    {
+      "id": "manufacturing_and_delivery",
+      "portfolio_id": "manufacturing_and_delivery",
+      "name": "Manufacturing and Delivery",
+      "description": "Products and capabilities that support the internal manufacture and delivery pipeline: CI/CD, build tooling, release orchestration, and deployment automation.",
+      "owner_role": "HR-500",
+      "it4it_reference": "IT4IT §6.2 Manufacturing and Delivery Portfolio"
+    },
+    {
+      "id": "for_employees",
+      "portfolio_id": "for_employees",
+      "name": "For Employees",
+      "description": "Digital products and services consumed internally by employees: productivity tools, ITSM, HR systems, and internal portals.",
+      "owner_role": "HR-200",
+      "it4it_reference": "IT4IT §6.3 For Employees Portfolio"
+    },
+    {
+      "id": "products_and_services_sold",
+      "portfolio_id": "products_and_services_sold",
+      "name": "Products and Services Sold",
+      "description": "Revenue-generating digital products and service offers delivered to external consumers. Includes all commercially contracted service offers.",
+      "owner_role": "HR-100",
+      "it4it_reference": "IT4IT §6.4 Products and Services Sold Portfolio"
+    }
+  ]
+}

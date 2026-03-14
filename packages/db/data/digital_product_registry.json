@@ -1,0 +1,277 @@
+{
+    "schema_version":  "2.3.0",
+    "description":  "Canonical digital product inventory with lifecycle, revision, and feature tracking for internal dependencies and external offers.",
+    "lifecycle_stage_vocabulary":  [
+                                       "idea",
+                                       "evaluate",
+                                       "build",
+                                       "operate",
+                                       "retire"
+                                   ],
+    "lifecycle_stage_status_vocabulary":  [
+                                              "planned",
+                                              "active",
+                                              "deprecated",
+                                              "retired"
+                                          ],
+    "product_models":  [
+                           {
+                               "model_id":  "mdl-neo4j-enterprise-5",
+                               "name":  "Neo4j Enterprise 5",
+                               "supplier":  "Neo4j",
+                               "procurement_type":  "external_purchase",
+                               "edition":  "Enterprise",
+                               "license_basis":  "instance"
+                           },
+                           {
+                               "model_id":  "mdl-docker-business",
+                               "name":  "Docker Business",
+                               "supplier":  "Docker",
+                               "procurement_type":  "external_purchase",
+                               "edition":  "Business",
+                               "license_basis":  "seat"
+                           },
+                           {
+                               "model_id":  "mdl-dpf-platform-standard",
+                               "name":  "Digital Product Factory Platform - Standard",
+                               "supplier":  "Digital Product Factory",
+                               "procurement_type":  "external_sale",
+                               "edition":  "Standard",
+                               "license_basis":  "subscription"
+                           }
+                       ],
+    "digital_products":  [
+                             {
+                                 "product_id":  "dpf-meta",
+                                 "name":  "Digital Product Factory",
+                                 "portfolio_id":  "manufacturing_and_delivery",
+                                 "product_kind":  "factory_meta",
+                                 "product_type":  "delivery_toolchain",
+                                 "toolchain_role":  "developer_platform",
+                                 "delivery_mode":  "digital",
+                                 "representation_level":  "logical",
+                                 "type_confidence":  "confirmed",
+                                 "canonical_product_code":  "dpf-meta",
+                                 "commercial_scope":  "internal_only",
+                                 "usage_mode":  "used",
+                                 "description":  "Self-referential digital product node representing the factory as a first-class product in its own operating portfolio.",
+                                 "depends_on_product_ids":  [
+                                                                "infra-neo4j-core",
+                                                                "infra-docker-runtime"
+                                                            ],
+                                 "is_part_of_product_ids":  [
+                                                                "dpf-platform-standard"
+                                                            ],
+                                 "realizes_model_ids":  [
+
+                                                        ],
+                                 "lifecycle":  {
+                                                   "stage":  "operate",
+                                                   "stage_status":  "active",
+                                                   "effective_from":  "2026-03-01",
+                                                   "next_review_at":  "2026-06-01",
+                                                   "owner_role":  "HR-200"
+                                               },
+                                 "revisions":  [
+                                                   {
+                                                       "revision_id":  "dpf-meta-r1",
+                                                       "version":  "1.0.0",
+                                                       "status":  "released",
+                                                       "released_at":  "2026-03-01",
+                                                       "summary":  "Initial dashboard and value-stream navigation baseline"
+                                                   },
+                                                   {
+                                                       "revision_id":  "dpf-meta-r2",
+                                                       "version":  "1.1.0",
+                                                       "status":  "active",
+                                                       "released_at":  "2026-03-03",
+                                                       "summary":  "Backlog workspace visibility and product inventory integration"
+                                                   }
+                                               ],
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-backlog-workspace",
+                                                      "name":  "Backlog Workspace",
+                                                      "status":  "active",
+                                                      "category":  "ux",
+                                                      "introduced_in_revision":  "1.1.0"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-product-inventory",
+                                                      "name":  "Product Inventory and Lifecycle",
+                                                      "status":  "active",
+                                                      "category":  "product_governance",
+                                                      "introduced_in_revision":  "1.1.0"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             },
+                             {
+                                 "product_id":  "infra-neo4j-core",
+                                 "name":  "Neo4j Graph Core",
+                                 "portfolio_id":  "foundational",
+                                 "product_kind":  "platform_dependency",
+                                 "product_type":  "infrastructure",
+                                 "criticality_tier":  "tier0_critical",
+                                 "delivery_mode":  "digital",
+                                 "representation_level":  "logical",
+                                 "type_confidence":  "confirmed",
+                                 "commercial_scope":  "internal_only",
+                                 "usage_mode":  "used",
+                                 "description":  "Primary graph traversal engine used for impact analysis and dependency management.",
+                                 "depends_on_product_ids":  [
+
+                                                            ],
+                                 "is_part_of_product_ids":  [
+                                                                "dpf-meta"
+                                                            ],
+                                 "realizes_model_ids":  [
+                                                            "mdl-neo4j-enterprise-5"
+                                                        ],
+                                 "foundational_component_ids":  [
+                                                                    "fc-azure-vm-neo4j-01",
+                                                                    "fc-azure-disk-neo4j-01",
+                                                                    "fc-windows-server-neo4j-01"
+                                                                ],
+                                 "lifecycle":  {
+                                                   "stage":  "operate",
+                                                   "stage_status":  "active",
+                                                   "effective_from":  "2026-02-20",
+                                                   "next_review_at":  "2026-05-15",
+                                                   "owner_role":  "HR-300"
+                                               },
+                                 "revisions":  [
+                                                   {
+                                                       "revision_id":  "infra-neo4j-core-r1",
+                                                       "version":  "5.20.0",
+                                                       "status":  "active",
+                                                       "released_at":  "2026-02-20",
+                                                       "summary":  "Baseline enterprise graph deployment for factory model"
+                                                   }
+                                               ],
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-graph-traversal",
+                                                      "name":  "Graph Traversal for IT4IT Criteria",
+                                                      "status":  "active",
+                                                      "category":  "capability",
+                                                      "introduced_in_revision":  "5.20.0"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             },
+                             {
+                                 "product_id":  "infra-docker-runtime",
+                                 "name":  "Docker Runtime Fabric",
+                                 "portfolio_id":  "foundational",
+                                 "product_kind":  "platform_dependency",
+                                 "product_type":  "infrastructure",
+                                 "criticality_tier":  "tier1_high",
+                                 "delivery_mode":  "digital",
+                                 "representation_level":  "logical",
+                                 "type_confidence":  "confirmed",
+                                 "commercial_scope":  "internal_only",
+                                 "usage_mode":  "used",
+                                 "description":  "Container runtime used for local and pipeline execution of the factory components.",
+                                 "depends_on_product_ids":  [
+
+                                                            ],
+                                 "is_part_of_product_ids":  [
+                                                                "dpf-meta"
+                                                            ],
+                                 "realizes_model_ids":  [
+                                                            "mdl-docker-business"
+                                                        ],
+                                 "foundational_component_ids":  [
+                                                                    "fc-docker-engine-host-01",
+                                                                    "fc-azure-vm-docker-01"
+                                                                ],
+                                 "lifecycle":  {
+                                                   "stage":  "operate",
+                                                   "stage_status":  "active",
+                                                   "effective_from":  "2026-02-20",
+                                                   "next_review_at":  "2026-05-15",
+                                                   "owner_role":  "HR-500"
+                                               },
+                                 "revisions":  [
+                                                   {
+                                                       "revision_id":  "infra-docker-runtime-r1",
+                                                       "version":  "26.1",
+                                                       "status":  "active",
+                                                       "released_at":  "2026-02-20",
+                                                       "summary":  "Standardized container runtime baseline"
+                                                   }
+                                               ],
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-container-orchestration",
+                                                      "name":  "Containerized Execution Support",
+                                                      "status":  "active",
+                                                      "category":  "platform",
+                                                      "introduced_in_revision":  "26.1"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             },
+                             {
+                                 "product_id":  "dpf-platform-standard",
+                                 "name":  "Digital Product Factory Platform - Standard",
+                                 "portfolio_id":  "products_and_services_sold",
+                                 "product_kind":  "commercial_offer",
+                                 "product_type":  "commercial_product",
+                                 "delivery_mode":  "digital",
+                                 "commercial_model":  "subscription",
+                                 "goods_or_services":  "services",
+                                 "primary_consumer_type":  "enterprise_b2b",
+                                 "representation_level":  "concept",
+                                 "type_confidence":  "provisional",
+                                 "commercial_scope":  "external_market",
+                                 "usage_mode":  "sold",
+                                 "description":  "Externally offered platform subscription for digital product portfolio and delivery governance.",
+                                 "depends_on_product_ids":  [
+                                                                "dpf-meta",
+                                                                "infra-neo4j-core"
+                                                            ],
+                                 "realizes_model_ids":  [
+                                                            "mdl-dpf-platform-standard"
+                                                        ],
+                                 "lifecycle":  {
+                                                   "stage":  "evaluate",
+                                                   "stage_status":  "planned",
+                                                   "effective_from":  "2026-03-03",
+                                                   "next_review_at":  "2026-04-15",
+                                                   "owner_role":  "HR-100"
+                                               },
+                                 "revisions":  [
+                                                   {
+                                                       "revision_id":  "dpf-platform-standard-r1",
+                                                       "version":  "0.9.0",
+                                                       "status":  "planned",
+                                                       "released_at":  "2026-04-01",
+                                                       "summary":  "Initial external package definition and service boundaries"
+                                                   }
+                                               ],
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-portfolio-insight",
+                                                      "name":  "Portfolio Insight Dashboard",
+                                                      "status":  "planned",
+                                                      "category":  "customer_value",
+                                                      "introduced_in_revision":  "0.9.0"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-value-stream-governance",
+                                                      "name":  "Value Stream Governance Controls",
+                                                      "status":  "planned",
+                                                      "category":  "customer_value",
+                                                      "introduced_in_revision":  "0.9.0"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             }
+                         ]
+}
