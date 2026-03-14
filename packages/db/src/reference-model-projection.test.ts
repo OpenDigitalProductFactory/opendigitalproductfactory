@@ -144,6 +144,30 @@ describe("projectReferenceModel", () => {
         }),
       }),
     );
+    expect(mockPrisma.eaElement.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          properties: expect.objectContaining({
+            projection: expect.objectContaining({
+              layoutRole: "stream_band",
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(mockPrisma.eaElement.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          properties: expect.objectContaining({
+            projection: expect.objectContaining({
+              layoutRole: "stream_stage",
+            }),
+          }),
+        }),
+      }),
+    );
 
     expect(mockPrisma.eaViewElement.create).toHaveBeenNthCalledWith(
       2,
