@@ -1,14 +1,12 @@
 // apps/web/proxy.ts
 import { auth } from "@/lib/auth";
+import { isPublicPath } from "@/lib/public-paths";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { Session } from "next-auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth"];
-
 export default auth(function proxy(req: NextRequest & { auth: Session | null }) {
-  const isPublic = PUBLIC_PATHS.some((p) => req.nextUrl.pathname.startsWith(p));
-  if (isPublic) return NextResponse.next();
+  if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
   if (!req.auth) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
