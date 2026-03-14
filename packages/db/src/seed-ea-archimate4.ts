@@ -34,6 +34,7 @@ type ElementTypeDef = {
 const ELEMENT_TYPES: ElementTypeDef[] = [
   // Strategy
   { slug: "value_stream",        name: "Value Stream",        neoLabel: "ArchiMate__ValueStream",      domain: "strategy",        description: "A sequence of activities creating overall value for a customer or stakeholder",  stages: LOGICAL_STAGES, statuses: LOGICAL_STATUSES },
+  { slug: "value_stream_stage",  name: "Value Stream Stage",  neoLabel: "ArchiMate__ValueStreamStage", domain: "strategy",        description: "An ordered stage within a value stream",                                            stages: LOGICAL_STAGES, statuses: LOGICAL_STATUSES },
   { slug: "capability",          name: "Capability",          neoLabel: "ArchiMate__Capability",       domain: "strategy",        description: "An ability of an active structure element",                                      stages: LOGICAL_STAGES, statuses: LOGICAL_STATUSES },
   { slug: "course_of_action",    name: "Course of Action",    neoLabel: "ArchiMate__CourseOfAction",   domain: "strategy",        description: "An approach or plan for configuring capabilities",                               stages: LOGICAL_STAGES, statuses: LOGICAL_STATUSES },
   // Business
@@ -120,6 +121,7 @@ const RULES: RuleDef[] = [
   ["business_actor",        "business_role",         "assigned_to"],
   ["business_capability",   "business_capability",   "associated_with"],
   ["business_capability",   "business_capability",   "composed_of"],
+  ["value_stream",          "value_stream_stage",    "composed_of"],
   ["value_stream",          "business_capability",   "associated_with"],
   // Motivation → Strategy / Business
   ["goal",                  "business_capability",   "influences"],
