@@ -473,3 +473,23 @@ Suggested implementation areas:
 - inventory quality/read surfaces as needed
 
 This slice should remain additive and should not attempt full product reconstruction or business-record restoration.
+
+---
+
+## Implemented Slice Status
+
+Implemented in this branch:
+
+- inventory entities now persist taxonomy attribution metadata including method, confidence, evidence, and review candidates
+- discovery includes deterministic-first taxonomy attribution with heuristic fallback and low-confidence quality issue generation
+- software evidence is captured for host installed software and Docker container images
+- software normalization supports deterministic rules, heuristic candidate scoring, and deterministic rule-candidate synthesis
+- bootstrap discovery now loads taxonomy nodes from the live database automatically when explicit taxonomy options are not provided
+- inventory UI surfaces taxonomy path, attribution method, confidence, and review-needed state
+
+Deferred:
+
+- automatic loading of software identities and normalization rules from runtime data stores
+- deeper package inspection inside containers beyond image-level evidence
+- AI-assisted attribution and normalization proposal execution
+- full digital-product reconstruction from discovered evidence

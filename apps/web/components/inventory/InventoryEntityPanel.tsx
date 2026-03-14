@@ -5,6 +5,8 @@ type InventoryEntity = {
   entityType: string;
   status: string;
   attributionStatus: string;
+  attributionMethod: string | null;
+  attributionConfidence: number | null;
   portfolio: { slug: string; name: string } | null;
   taxonomyNode: { nodeId: string; name: string } | null;
   digitalProduct: { productId: string; name: string } | null;
@@ -20,9 +22,9 @@ export function InventoryEntityPanel({
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
-            Foundational Inventory
+            Operational Inventory
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Discovered Infrastructure</h2>
+          <h2 className="mt-1 text-lg font-semibold text-white">Discovered Assets</h2>
         </div>
         <span className="text-sm text-[var(--dpf-muted)]">{entities.length} entities</span>
       </div>
@@ -41,7 +43,7 @@ export function InventoryEntityPanel({
                 </p>
               </div>
               <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] text-[var(--dpf-muted)]">
-                {entity.attributionStatus}
+                {entity.attributionStatus === "needs_review" ? "Review needed" : entity.attributionStatus}
               </span>
             </div>
 
@@ -49,9 +51,15 @@ export function InventoryEntityPanel({
 
             <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--dpf-muted)]">
               {entity.portfolio && <span>Portfolio: {entity.portfolio.name}</span>}
-              {entity.taxonomyNode && <span>Taxonomy: {entity.taxonomyNode.nodeId}</span>}
+              {entity.taxonomyNode && (
+                <span>Taxonomy: {entity.taxonomyNode.nodeId.replace(/\//g, " / ")}</span>
+              )}
               {entity.digitalProduct && <span>Product: {entity.digitalProduct.name}</span>}
               <span>Status: {entity.status}</span>
+              {entity.attributionMethod && <span>Method: {entity.attributionMethod}</span>}
+              {entity.attributionConfidence != null && (
+                <span>{Math.round(entity.attributionConfidence * 100)}% confidence</span>
+              )}
             </div>
           </article>
         ))}
