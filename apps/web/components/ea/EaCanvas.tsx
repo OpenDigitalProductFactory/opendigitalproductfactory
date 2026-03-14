@@ -8,6 +8,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "@/lib/ea-types";
+import { buildStructuredViewElements, filterStructuredEdges } from "@/lib/ea-structure";
 import { EaElementNode } from "./EaElementNode";
 import { EaRelationshipEdge } from "./EaRelationshipEdge";
 import { ElementPalette } from "./ElementPalette";
@@ -17,6 +18,7 @@ import {
   addElementToView,
   createEaRelationship,
   deleteEaRelationship,
+  moveStructuredViewElement,
   saveCanvasState,
   getDefaultRelTypeIdForView,
 } from "@/lib/actions/ea";
@@ -143,6 +145,45 @@ function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState 
   };
 }
 
+function buildStructuredProjection(elements: SerializedViewElement[]): {
+  visibleElements: SerializedViewElement[];
+  structuredRoots: ReturnType<typeof buildStructuredViewElements>;
+} {
+  const structuredRoots = buildStructuredViewElements(
+    elements.map((element) => ({
+      viewElementId: element.viewElementId,
+      elementId: element.elementId,
+      elementTypeSlug: element.elementType.slug,
+      parentViewElementId: element.parentViewElementId,
+      orderIndex: element.orderIndex,
+      rendererHint: element.rendererHint,
+    })),
+  );
+  const elementsByViewElementId = new Map(elements.map((element) => [element.viewElementId, element]));
+
+  const hydrateStructuredElement = (
+    structuredElement: (typeof structuredRoots)[number],
+  ): SerializedViewElement => {
+    const baseElement = elementsByViewElementId.get(structuredElement.viewElementId);
+    if (!baseElement) {
+      throw new Error(`Structured element ${structuredElement.viewElementId} was not found in the view payload`);
+    }
+
+    return {
+      ...baseElement,
+      parentViewElementId: structuredElement.parentViewElementId,
+      orderIndex: structuredElement.orderIndex,
+      rendererHint: structuredElement.rendererHint,
+      childViewElements: structuredElement.childViewElements.map(hydrateStructuredElement),
+    };
+  };
+
+  return {
+    visibleElements: structuredRoots.map(hydrateStructuredElement),
+    structuredRoots,
+  };
+}
+
 function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edgeVariant: EdgeVariant): Edge[] {
   return edges.map((e) => ({
     id: e.id,
@@ -185,9 +226,40 @@ export function EaCanvas({
     window.location.reload();
   }, [isReadOnly]);
 
-  const initialNodeLayout = buildNodes(initialElements, initialCanvasState);
+  const projection = buildStructuredProjection(initialElements);
+  const visibleElements = projection.visibleElements.map((element) => ({
+    ...element,
+    isReadOnly,
+    onMoveStructuredChild: async (input: { childViewElementId: string; targetOrderIndex: number }) => {
+      if (isReadOnly) return;
+      await moveStructuredViewElement({
+        viewElementId: input.childViewElementId,
+        targetParentViewElementId: element.viewElementId,
+        targetOrderIndex: input.targetOrderIndex,
+      });
+      window.location.reload();
+    },
+    childViewElements: (element.childViewElements ?? []).map((child) => ({
+      ...child,
+      isReadOnly,
+    })),
+  }));
+  const visibleEdgeIds = new Set(
+    filterStructuredEdges(
+      initialEdges.map((edge) => ({
+        id: edge.id,
+        fromViewElementId: edge.fromViewElementId,
+        toViewElementId: edge.toViewElementId,
+        relationshipTypeSlug: edge.relationshipType.slug,
+      })),
+      projection.structuredRoots,
+    ).map((edge) => edge.id),
+  );
+  const visibleEdges = initialEdges.filter((edge) => visibleEdgeIds.has(edge.id));
+
+  const initialNodeLayout = buildNodes(visibleElements, initialCanvasState);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodeLayout.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(initialEdges, handleDeleteEdge, edgeVariant));
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
   const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
