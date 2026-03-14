@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { adminResetUserPassword, createUserAccount, type UserActionResult } from "@/lib/actions/users";
+import {
+  adminIssuePasswordReset,
+  createUserAccount,
+  type PasswordResetIssueResult,
+  type UserActionResult,
+} from "@/lib/actions/users";
 
 type RoleOption = {
   roleId: string;
@@ -28,7 +33,7 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [createResult, setCreateResult] = useState<UserActionResult | null>(null);
-  const [resetResult, setResetResult] = useState<UserActionResult | null>(null);
+  const [resetResult, setResetResult] = useState<PasswordResetIssueResult | null>(null);
 
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
@@ -36,7 +41,6 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
   const [createSuperuser, setCreateSuperuser] = useState(false);
 
   const [resetUserId, setResetUserId] = useState(users[0]?.id ?? "");
-  const [resetPassword, setResetPassword] = useState("");
 
   function onCreate() {
     startTransition(async () => {
@@ -62,13 +66,11 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
         setResetResult({ ok: false, message: "Select a user to reset password." });
         return;
       }
-      const result = await adminResetUserPassword({
+      const result = await adminIssuePasswordReset({
         userId: resetUserId,
-        newPassword: resetPassword,
       });
       setResetResult(result);
       if (result.ok) {
-        setResetPassword("");
         router.refresh();
       }
     });
@@ -156,26 +158,22 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
               ))}
             </select>
           </label>
-          <label className="block">
-            <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">New password</span>
-            <input
-              value={resetPassword}
-              onChange={(e) => setResetPassword(e.target.value)}
-              type="password"
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-white"
-              placeholder="Set temporary reset password"
-            />
-          </label>
           <button
             type="button"
             disabled={isPending}
             onClick={onReset}
             className="rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
           >
-            {isPending ? "Saving..." : "Reset password"}
+            {isPending ? "Saving..." : "Issue recovery"}
           </button>
+          {resetResult?.recoveryLink ? (
+            <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+              <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Manual recovery link</span>
+              <p className="mt-1 break-all text-xs text-white">{resetResult.recoveryLink}</p>
+            </div>
+          ) : null}
           <p className={`text-xs ${resultClasses(resetResult)}`}>
-            {resetResult?.message ?? "Use strong temporary passwords and rotate them after first sign-in."}
+            {resetResult?.message ?? "Issue a recovery email when configured, or reveal a one-time manual link during bootstrap."}
           </p>
         </div>
       </div>
