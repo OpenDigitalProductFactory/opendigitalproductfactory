@@ -35,7 +35,7 @@ function buildStage(
 }
 
 describe("StructuredValueStreamNode", () => {
-  it("renders a directional value stream band with ordered nested stage chevrons", () => {
+  it("renders a directional value stream band with a compact header row and ordered nested stage chevrons", () => {
     const html = renderToStaticMarkup(
       <StructuredValueStreamNode
         selected={false}
@@ -74,6 +74,9 @@ describe("StructuredValueStreamNode", () => {
     expect(html.indexOf("Request")).toBeLessThan(html.indexOf("Support"));
     expect(html).toContain("value-stream-stage");
     expect(html).toContain("data-value-stream-band");
+    expect(html).toContain("data-value-stream-header");
+    expect(html).toContain("data-value-stream-title-block");
+    expect(html).toContain("data-value-stream-meta-block");
     expect(html).not.toContain("Move stage left");
     expect(html).not.toContain("Move stage right");
   });
@@ -149,6 +152,7 @@ describe("StructuredValueStreamNode", () => {
 
     expect(html).toContain('draggable="true"');
     expect(html).toContain("data-stage-drop-target");
+    expect(html).toContain("data-stage-drag-preview");
     expect(html).not.toContain("Move stage right");
     expect(html).not.toContain("Move stage left");
   });

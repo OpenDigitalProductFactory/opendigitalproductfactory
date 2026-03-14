@@ -26,4 +26,15 @@ describe("buildValueStreamLayout", () => {
 
     expect(longer.bandWidth).toBeGreaterThan(short.bandWidth);
   });
+
+  it("adds explicit end clearance so the final stage does not clip", () => {
+    const layout = buildValueStreamLayout(["Plan", "Build", "Run"]);
+    const rawStageSpan =
+      layout.stageWidths.reduce((sum, width) => sum + width, 0) +
+      layout.stageGap * 2 +
+      layout.bandInsetLeft +
+      layout.bandInsetRight;
+
+    expect(layout.bandWidth).toBeGreaterThan(rawStageSpan);
+  });
 });

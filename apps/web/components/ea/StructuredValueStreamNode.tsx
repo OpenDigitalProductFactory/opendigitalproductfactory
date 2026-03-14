@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 
 import type { SerializedViewElement } from "@/lib/ea-types";
 
@@ -25,6 +25,62 @@ function chevronClipPath(inset = 14): string {
 }
 
 const DRAG_MIME = "application/x-dpf-structured-stage-id";
+const DRAG_PREVIEW_ID = "structured-stage-drag-preview";
+
+function buildStagePreviewMarkup(input: {
+  stageNumber: number;
+  name: string;
+  lifecycleStage: string;
+  lifecycleStatus: string;
+  hasIssue: boolean;
+  width: number;
+}) {
+  const preview = document.createElement("div");
+  preview.setAttribute("data-stage-drag-preview", "true");
+  preview.style.position = "fixed";
+  preview.style.top = "-9999px";
+  preview.style.left = "-9999px";
+  preview.style.width = `${input.width}px`;
+  preview.style.minHeight = "92px";
+  preview.style.clipPath = chevronClipPath(18);
+  preview.style.background = input.hasIssue
+    ? "linear-gradient(135deg, #fed7aa 0%, #fb923c 100%)"
+    : "linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%)";
+  preview.style.border = `1px solid ${input.hasIssue ? "#ea580c" : "#c2410c"}`;
+  preview.style.padding = "14px 28px 14px 20px";
+  preview.style.display = "flex";
+  preview.style.flexDirection = "column";
+  preview.style.justifyContent = "space-between";
+  preview.style.boxShadow = "0 10px 24px rgba(120, 53, 15, 0.26)";
+  preview.style.color = "#431407";
+  preview.style.fontFamily = "inherit";
+  preview.style.pointerEvents = "none";
+
+  const stageLabel = document.createElement("div");
+  stageLabel.textContent = `Stage ${input.stageNumber}`;
+  stageLabel.style.fontSize = "10px";
+  stageLabel.style.fontWeight = "700";
+  stageLabel.style.color = "#9a3412";
+  stageLabel.style.textTransform = "uppercase";
+  stageLabel.style.letterSpacing = "0.05em";
+
+  const title = document.createElement("div");
+  title.textContent = input.name;
+  title.style.fontSize = "13px";
+  title.style.fontWeight = "700";
+  title.style.color = "#431407";
+  title.style.marginTop = "6px";
+  title.style.lineHeight = "1.3";
+
+  const lifecycle = document.createElement("div");
+  lifecycle.textContent = `${input.lifecycleStage} / ${input.lifecycleStatus}`;
+  lifecycle.style.fontSize = "10px";
+  lifecycle.style.color = "#7c2d12";
+  lifecycle.style.marginTop = "10px";
+
+  preview.append(stageLabel, title, lifecycle);
+  return preview;
+}
 
 export function StructuredValueStreamNode({ data, selected = false }: Props) {
   const stages = sortStages(data.childViewElements ?? []);
@@ -38,14 +94,48 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
   const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
   const [activeDropIndex, setActiveDropIndex] = useState<number | null>(null);
 
-  function handleDragStart(event: DragEvent<HTMLDivElement>, stageViewElementId: string) {
+  const stageWidthById = useMemo(
+    () =>
+      new Map(
+        stages.map((stage, index) => [stage.viewElementId, layout.stageWidths[index] ?? 120]),
+      ),
+    [layout.stageWidths, stages],
+  );
+
+  function cleanupDragPreview() {
+    if (typeof document === "undefined") return;
+    document.getElementById(DRAG_PREVIEW_ID)?.remove();
+  }
+
+  function handleDragStart(
+    event: DragEvent<HTMLDivElement>,
+    stage: SerializedViewElement,
+    stageNumber: number,
+  ) {
     if (!canReorderStages) return;
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(DRAG_MIME, stageViewElementId);
-    setDraggedStageId(stageViewElementId);
+    event.dataTransfer.setData(DRAG_MIME, stage.viewElementId);
+    cleanupDragPreview();
+
+    if (typeof document !== "undefined") {
+      const preview = buildStagePreviewMarkup({
+        stageNumber,
+        name: stage.element.name,
+        lifecycleStage: stage.element.lifecycleStage,
+        lifecycleStatus: stage.element.lifecycleStatus,
+        hasIssue: stage.structureIssueCount > 0,
+        width: stageWidthById.get(stage.viewElementId) ?? 120,
+      });
+      preview.id = DRAG_PREVIEW_ID;
+      document.body.appendChild(preview);
+      event.dataTransfer.setDragImage(preview, (stageWidthById.get(stage.viewElementId) ?? 120) / 2, 46);
+    }
+
+    setDraggedStageId(stage.viewElementId);
   }
 
   function handleDragEnd() {
+    cleanupDragPreview();
     setDraggedStageId(null);
     setActiveDropIndex(null);
   }
@@ -60,8 +150,8 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
   async function handleDrop(event: DragEvent<HTMLDivElement>, targetOrderIndex: number) {
     if (!canReorderStages) return;
     event.preventDefault();
-    const childViewElementId =
-      event.dataTransfer.getData(DRAG_MIME) || draggedStageId;
+    const childViewElementId = event.dataTransfer.getData(DRAG_MIME) || draggedStageId;
+    cleanupDragPreview();
     setDraggedStageId(null);
     setActiveDropIndex(null);
     if (!childViewElementId) return;
@@ -85,69 +175,97 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
       }}
     >
       <div
+        data-stage-drag-preview="template"
+        style={{ display: "none" }}
+      />
+      <div
         data-value-stream-band="true"
         style={{
           clipPath: chevronClipPath(28),
           border: `2px solid ${bandBorder}`,
-          background:
-            "linear-gradient(135deg, #ffd6a0 0%, #ffbf72 45%, #f7a74d 100%)",
+          background: "linear-gradient(135deg, #ffd6a0 0%, #ffbf72 45%, #f7a74d 100%)",
           boxShadow: bandShadow,
-          padding: "16px 70px 18px 40px",
-          minHeight: 178,
+          padding: "14px 88px 16px 36px",
+          minHeight: 150,
         }}
       >
         <div
+          data-value-stream-header="true"
           style={{
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            color: "#7c2d12",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 20,
           }}
         >
-          Value Stream
-        </div>
-        <div
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: "#431407",
-            marginTop: 4,
-          }}
-        >
-          {data.element.name}
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: "#7c2d12",
-            marginTop: 6,
-          }}
-        >
-          {data.element.lifecycleStage} / {data.element.lifecycleStatus}
-        </div>
+          <div data-value-stream-title-block="true" style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "#7c2d12",
+              }}
+            >
+              Value Stream
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#431407",
+                marginTop: 3,
+                lineHeight: 1.2,
+              }}
+            >
+              {data.element.name}
+            </div>
+          </div>
 
-        {issueCount > 0 ? (
           <div
+            data-value-stream-meta-block="true"
             style={{
-              marginTop: 12,
-              width: "fit-content",
-              padding: "6px 10px",
-              borderRadius: 999,
-              background: "rgba(255, 247, 237, 0.86)",
-              border: "1px solid #f97316",
-              color: "#9a3412",
-              fontSize: 11,
-              fontWeight: 600,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 8,
+              flexShrink: 0,
             }}
           >
-            Structural warning: {issueCount} issue{issueCount === 1 ? "" : "s"}
+            <div
+              style={{
+                fontSize: 11,
+                color: "#7c2d12",
+                textAlign: "right",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {data.element.lifecycleStage} / {data.element.lifecycleStatus}
+            </div>
+
+            {issueCount > 0 ? (
+              <div
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "rgba(255, 247, 237, 0.86)",
+                  border: "1px solid #f97316",
+                  color: "#9a3412",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Structural warning: {issueCount} issue{issueCount === 1 ? "" : "s"}
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
 
         <div
           style={{
-            marginTop: issueCount > 0 ? 18 : 22,
+            marginTop: issueCount > 0 ? 14 : 18,
             display: "flex",
             alignItems: "stretch",
             gap: layout.stageGap,
@@ -189,7 +307,7 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
                 <div
                   draggable={canReorderStages}
                   className="value-stream-stage nodrag nopan"
-                  onDragStart={(event) => handleDragStart(event, stage.viewElementId)}
+                  onDragStart={(event) => handleDragStart(event, stage, index + 1)}
                   onDragEnd={handleDragEnd}
                   style={{
                     width: layout.stageWidths[index],
@@ -204,7 +322,7 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
-                    opacity: isDragged ? 0.7 : 1,
+                    opacity: isDragged ? 0.78 : 1,
                     cursor: canReorderStages ? "grab" : "default",
                     boxShadow: isDragged ? "0 6px 14px rgba(120, 53, 15, 0.22)" : undefined,
                   }}
