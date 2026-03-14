@@ -7,6 +7,14 @@
 
 ---
 
+## Prerequisites
+
+All `BI-REST-*` items and `EP-*-FOUND-*` / `EP-AI-*` epics referenced in Part 1 are **runtime data in the live database**, created by a recovery process on 2026-03-14. They are not in `seed.ts`. The cleanup script in Part 4 queries items by `itemId` and epics by `epicId` — if they don't exist, the upsert/update is a no-op.
+
+The `BI-PORT-*` and `BI-PROD-*` items **are** in `seed.ts` (lines 273–276, 289–291). Status fixes in Part 1.2 must also update `seed.ts` to prevent re-seed regression.
+
+---
+
 ## Part 1: Backlog Cleanup
 
 ### 1.1 Deduplicate (retire 4 thin BI-REST items)
@@ -29,6 +37,8 @@ These restored items are covered by original items with richer detail:
 | BI-PROD-001 | in-progress | done | Phase 5A Backlog CRUD shipped |
 | BI-PROD-002 | in-progress | done | DPF Portal product exists, seed works |
 | BI-PROD-003 | open | done | Phase 2B/2C agent counts and health metrics shipped |
+
+**Note:** These statuses must also be updated in `packages/db/src/seed.ts` (lines 289–291) to prevent re-seed regression.
 
 ### 1.3 Assign Orphans to Existing Epics
 
@@ -60,48 +70,55 @@ These restored items are covered by original items with richer detail:
 
 ## Part 2: New MVP Epics
 
+All 3 new epics and their 17 backlog items are **seeded** in `seed.ts` (not created at runtime through the UI). This means human-readable epic IDs (`EP-LLM-LIVE-001`, etc.) and item IDs (`BI-LLM-001`, etc.) are consistent with the existing seed convention (`EP-UI-THEME-001`, `BI-PROD-004`).
+
 ### 2.1 EP-LLM-LIVE-001 — Live LLM Conversations
 
 **Goal:** Replace canned responses in the co-worker panel with real AI inference via configured providers.
 
-**Architecture:** The existing `callProviderForProfiling` function in `actions/ai-providers.ts` already makes provider-specific API calls (Anthropic `/messages`, OpenAI `/chat/completions`, Ollama `/api/chat`, Gemini `/generateContent`). This epic generalizes that into a chat-capable inference function and wires it into `sendMessage`.
+**Architecture:** The *private* `callProviderForProfiling` function in `lib/actions/ai-providers.ts` (line ~460) already makes provider-specific API calls (Anthropic `/messages`, OpenAI `/chat/completions`, Ollama `/api/chat`, Gemini `/generateContent`). This epic extracts and generalizes that private function into an exported, chat-capable inference module and wires it into `sendMessage`.
 
 **Prerequisite:** At least one provider must be configured and active (Ollama running locally, or a cloud API key entered).
 
 **Fallback:** When no provider is active, canned responses continue to work (graceful degradation).
 
+**Dependencies:** EP-LLM-LIVE-001 and EP-DEPLOY-001 are independent and can be developed in parallel. Only EP-AGENT-EXEC-001 requires EP-LLM-LIVE-001 as a prerequisite.
+
 #### Backlog Items
 
 **BI-LLM-001: Build `callProvider` generalized inference function**
 - Type: product | Priority: 1 | Status: open
-- Generalize `callProviderForProfiling` into `callProvider(providerId, modelId, messages[], systemPrompt)` supporting multi-turn chat format.
-- Provider-specific request/response formats already handled in profiling code.
+- Extract the *private* `callProviderForProfiling` function from `lib/actions/ai-providers.ts` into a new shared module (`lib/ai-inference.ts`) and generalize it into `callProvider(providerId, modelId, messages[], systemPrompt)` supporting multi-turn chat format.
+- Provider-specific request/response formats already handled in the profiling code.
 - Return `{ content: string, inputTokens: number, outputTokens: number, inferenceMs: number }`.
 - Handle errors gracefully: provider down, rate limited, model not found.
 
 **BI-LLM-002: Define agent system prompts for all 9 route agents**
 - Type: product | Priority: 2 | Status: open
-- Each route agent (portfolio-advisor, ea-architect, ops-coordinator, etc.) gets a system prompt stored in `ROUTE_AGENT_MAP` alongside existing `agentName`/`agentDescription`.
-- System prompts describe the agent's role, what it can help with, and the user's current route context.
-- Prompts include the user's `platformRole` and capabilities so the agent knows what the user can access.
+- Each route agent (portfolio-advisor, ea-architect, ops-coordinator, etc.) gets a system prompt.
+- Extend the `RouteAgentEntry` type in `agent-coworker-types.ts` to include a `systemPrompt: string` field, and add prompts to the (currently non-exported) `ROUTE_AGENT_MAP` in `agent-routing.ts`.
+- Extend the `AgentInfo` return type of `resolveAgentForRoute` to include `systemPrompt`, keeping encapsulation clean (callers don't need to import the map directly).
+- Prompts describe the agent's role, what it can help with, and include the user's `platformRole` and capabilities so the agent knows what the user can access.
 
 **BI-LLM-003: Add platform default provider/model selection**
 - Type: product | Priority: 3 | Status: open
 - New fields or config: which provider+model is the default for agent conversations.
 - Selection UI in `/platform/ai` — dropdown of active providers, dropdown of discovered models for that provider.
-- `rankProvidersByCost` already exists for auto-selection fallback.
+- `rankProvidersByCost` (exported from `lib/ai-profiling.ts`) already exists for auto-selection fallback.
 - Stored as a platform-level setting (not per-agent — that's a future enhancement).
 
 **BI-LLM-004: Replace canned responses with live inference in `sendMessage`**
 - Type: product | Priority: 4 | Status: open
 - In `sendMessage` server action: after resolving the agent, check if a default provider is configured and active.
-- If yes: build messages array (system prompt + recent thread history + user message), call `callProvider`, persist the response with `agentId` and token counts.
+- If yes: build messages array (system prompt + recent thread history + user message), call `callProvider`, persist the response with `agentId`.
 - If no: fall back to `generateCannedResponse` (existing behavior).
 - Thread history: include last N messages as context (configurable, default 20).
+- Token counts are logged via `TokenUsage` (see BI-LLM-005), not stored on the `AgentMessage` record. No schema change to `AgentMessage` is needed.
 
 **BI-LLM-005: Wire token usage logging into inference calls**
 - Type: product | Priority: 5 | Status: open
-- `logTokenUsage` already exists. Call it after every successful inference with agentId, providerId, contextKey="coworker", token counts, and computed cost.
+- The *private* `logTokenUsage` helper in `lib/actions/ai-providers.ts` (line ~700) must be extracted and exported (or moved to the shared `lib/ai-inference.ts` module from BI-LLM-001) so it can be called from `sendMessage` in `lib/actions/agent-coworker.ts`.
+- Call it after every successful inference with agentId, providerId, contextKey="coworker", token counts, and computed cost.
 - Token spend is already visible in `/platform/ai` spend dashboard (By Provider / By Agent tabs).
 
 ### 2.2 EP-DEPLOY-001 — Standalone Docker Deployment with Managed Ollama
@@ -110,11 +127,13 @@ These restored items are covered by original items with richer detail:
 
 **Architecture:** Three-service Docker Compose stack. The portal container mounts the Docker socket to manage the Ollama container. Auto-detection of host GPU/RAM selects an appropriate default model and pulls it automatically on first startup.
 
+**Dependencies:** Independent of EP-LLM-LIVE-001 — can be developed in parallel.
+
 #### Backlog Items
 
 **BI-DEPLOY-001: Create portal Dockerfile and Docker Compose stack**
 - Type: product | Priority: 1 | Status: open
-- Multi-stage Dockerfile: install deps → build Next.js standalone → production image.
+- Multi-stage Dockerfile: install deps, build Next.js standalone, production image.
 - Compose services: `portal` (Next.js, port 3000), `db` (Postgres 16, volume-mounted data), `ollama` (ollama/ollama image, GPU passthrough if available).
 - Environment variables for `DATABASE_URL`, `CREDENTIAL_ENCRYPTION_KEY`, `AUTH_SECRET`.
 - Prisma migrations run automatically on portal startup.
@@ -135,12 +154,12 @@ These restored items are covered by original items with richer detail:
 **BI-DEPLOY-004: Implement host capability detection and auto-model selection**
 - Type: product | Priority: 4 | Status: open
 - On startup or from platform UI: detect GPU presence (NVIDIA runtime in Docker), available RAM.
-- Model selection matrix: CPU-only + <8GB → `phi3:mini` (~2GB), CPU + 16GB+ → `llama3:8b` (~5GB), GPU + 8GB VRAM → `llama3:8b`, GPU + 16GB+ VRAM → `llama3:70b-q4`.
+- Model selection matrix: CPU-only + <8GB RAM -> `phi3:mini` (~2GB), CPU + 16GB+ -> `llama3:8b` (~5GB), GPU + 8GB VRAM -> `llama3:8b`, GPU + 16GB+ VRAM -> `llama3:70b-q4`.
 - Store detected capabilities and selected model as platform config.
 
 **BI-DEPLOY-005: Auto-pull default model and auto-configure provider on first startup**
 - Type: product | Priority: 5 | Status: open
-- Portal startup sequence: check if Ollama is reachable → check if any models are pulled → if not, trigger pull of auto-selected model → configure Ollama provider to `status: "active"` → set as default provider for agent conversations.
+- Portal startup sequence: check if Ollama is reachable, check if any models are pulled, if not trigger pull of auto-selected model, configure Ollama provider to `status: "active"`, set as default provider for agent conversations.
 - This makes the platform usable with zero manual configuration.
 
 **BI-DEPLOY-006: Add health check monitoring and status indicators**
@@ -153,7 +172,7 @@ These restored items are covered by original items with richer detail:
 
 **Goal:** Agents can propose real actions (create backlog items, modify products, update EA models). Humans approve before execution. Every action is audit-logged for regulated industry compliance.
 
-**Architecture:** New `AgentActionProposal` model captures what the agent wants to do. Proposals render as structured cards in the chat. Approval triggers execution of existing server actions. The `AuthorizationDecisionLog` model (already in schema) records the audit trail.
+**Architecture:** New `AgentActionProposal` Prisma model (requires a new migration) captures what the agent wants to do. Proposals render as structured cards in the chat. Approval triggers execution of existing server actions. The `AuthorizationDecisionLog` model (already in schema, with `decision`, `rationale` Json, `actionKey`, `objectRef`, `actorType`, `actorRef`, `delegationGrantId` FK) records the audit trail.
 
 **Prerequisite:** EP-LLM-LIVE-001 must be complete (agents need real LLM conversations to understand user intent and formulate proposals).
 
@@ -161,8 +180,9 @@ These restored items are covered by original items with richer detail:
 
 **BI-EXEC-001: Design AgentActionProposal schema**
 - Type: product | Priority: 1 | Status: open
-- New Prisma model: `AgentActionProposal` with fields: id, proposalId (unique), threadId FK, agentId, actionType (create_backlog_item | update_backlog_item | create_digital_product | update_digital_product | update_lifecycle | create_ea_element | create_ea_relationship), parameters (Json), status (proposed | approved | rejected | executed | failed), proposedAt, decidedAt, decidedBy (userId), executedAt, resultEntityId, resultError.
-- FK to AgentMessage (the message that proposed it) for traceability.
+- **New Prisma migration required.** New model: `AgentActionProposal` with fields: id, proposalId (unique), threadId (FK to `AgentThread`), messageId (FK to `AgentMessage` — the message that proposed it), agentId, actionType (create_backlog_item | update_backlog_item | create_digital_product | update_digital_product | update_lifecycle | create_ea_element | create_ea_relationship), parameters (Json), status (proposed | approved | rejected | executed | failed), proposedAt, decidedAt, decidedBy (userId FK), executedAt, resultEntityId, resultError.
+- `AgentMessage` model gains a reverse relation: `proposals AgentActionProposal[]`.
+- The `threadId` FK provides fast query for "all proposals in this conversation." The `messageId` FK provides traceability to the specific message.
 
 **BI-EXEC-002: Build proposal creation from agent inference**
 - Type: product | Priority: 2 | Status: open
@@ -172,7 +192,7 @@ These restored items are covered by original items with richer detail:
 
 **BI-EXEC-003: Create proposal card rendering in chat UX**
 - Type: product | Priority: 3 | Status: open
-- New message content type or `role: "proposal"` rendering in `AgentMessageBubble`.
+- New structured content type in `AgentMessageBubble` for messages with associated proposals (queried via the `messageId` FK on `AgentActionProposal`).
 - Card shows: action type (human-readable label), key parameters, affected entity.
 - Approve / Reject buttons inline. Edit button opens parameter adjustment.
 - Approved/rejected state renders differently (green check / red X with timestamp and approver).
@@ -186,8 +206,8 @@ These restored items are covered by original items with richer detail:
 
 **BI-EXEC-005: Wire approval events into AuthorizationDecisionLog**
 - Type: product | Priority: 5 | Status: open
-- `AuthorizationDecisionLog` model already exists with `decision` (allow|deny|require_approval), `rationale` (Json), and related fields.
-- Every proposal approval/rejection writes a log entry: who, when, what action, what parameters, decision, rationale (user can optionally add a note).
+- `AuthorizationDecisionLog` model already exists with fields: `decision` (allow|deny|require_approval), `rationale` (Json), `actionKey`, `objectRef`, `actorType`, `actorRef`, `delegationGrantId` (FK to `DelegationGrant`).
+- Every proposal approval/rejection writes a log entry: who (`actorRef`), when, what action (`actionKey`), what entity (`objectRef`), decision, rationale (user can optionally add a note).
 - This satisfies the regulated industry requirement: queryable, exportable audit evidence.
 
 **BI-EXEC-006: Add agent action history view in platform**
@@ -201,7 +221,7 @@ These restored items are covered by original items with richer detail:
 
 ## Part 3: Complete Epic Landscape
 
-### MVP-Critical (build order: A → B → C)
+### MVP-Critical (A and B are independent and can be parallel; C requires A)
 
 | Epic | Title | Status | Items |
 |------|-------|--------|-------|
@@ -220,10 +240,12 @@ These restored items are covered by original items with richer detail:
 
 ### Done
 
+These include epics whose status is updated by the cleanup script in Part 4, plus existing done epics that gain orphan items.
+
 | Epic | Title | Notes |
 |------|-------|-------|
-| EP-PORTAL-FOUND-001 | Portal Foundation | + 3 orphan items assigned |
-| EP-BACKLOG-FOUND-001 | Backlog Foundation | + 4 orphan items assigned, statuses fixed |
+| EP-PORTAL-FOUND-001 | Portal Foundation | + 3 orphan items assigned by cleanup |
+| EP-BACKLOG-FOUND-001 | Backlog Foundation | + 4 orphan items assigned, statuses fixed by cleanup |
 | EP-AI-PROVIDERS-001 | AI Provider Registry | BI-REST-042 subsumed by EP-DEPLOY-001 |
 | EP-AI-COWORKER-001 | AI Agent Co-worker UX | BI-REST-052 subsumed by EP-AGENT-EXEC-001 |
 
@@ -241,8 +263,9 @@ These restored items are covered by original items with richer detail:
 The following database mutations implement Parts 1.1–1.5:
 
 1. **Delete 4 duplicate items:** BI-REST-080, BI-REST-081, BI-REST-010, BI-REST-012
-2. **Fix 3 statuses:** BI-PROD-001→done, BI-PROD-002→done, BI-PROD-003→done
-3. **Assign 7 orphans:** BI-PORT-001/002/003→EP-PORTAL-FOUND-001, BI-PORT-004/BI-PROD-001/002/003→EP-BACKLOG-FOUND-001
-4. **Mark 2 subsumed:** BI-REST-042→done, BI-REST-052→done
-5. **Update 2 epic statuses:** EP-AI-PROVIDERS-001→done, EP-AI-COWORKER-001→done
-6. **Create 3 new epics** with 17 backlog items total
+2. **Fix 3 statuses:** BI-PROD-001->done, BI-PROD-002->done, BI-PROD-003->done
+3. **Assign 7 orphans:** BI-PORT-001/002/003->EP-PORTAL-FOUND-001, BI-PORT-004/BI-PROD-001/002/003->EP-BACKLOG-FOUND-001
+4. **Mark 2 subsumed:** BI-REST-042->done, BI-REST-052->done
+5. **Update 2 epic statuses:** EP-AI-PROVIDERS-001->done, EP-AI-COWORKER-001->done
+6. **Create 3 new epics** with 17 backlog items total (seeded in `seed.ts`)
+7. **Update `seed.ts`** — fix BI-PROD-001/002/003 statuses to `"done"` to prevent re-seed regression
