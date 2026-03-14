@@ -35,7 +35,7 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
       display: "flex",
       gap: 6,
       padding: "10px 12px",
-      borderTop: "1px solid var(--dpf-border)",
+      borderTop: "1px solid rgba(42, 42, 64, 0.6)",
     }}>
       <input
         ref={inputRef}
@@ -47,8 +47,8 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
         placeholder={disabled ? "Sending..." : "Ask your co-worker..."}
         style={{
           flex: 1,
-          background: "var(--dpf-bg)",
-          border: `1px solid ${overLimit ? "#ef4444" : "var(--dpf-border)"}`,
+          background: "rgba(15, 15, 26, 0.8)",
+          border: `1px solid ${overLimit ? "#ef4444" : "rgba(42, 42, 64, 0.6)"}`,
           borderRadius: 6,
           padding: "6px 10px",
           fontSize: 12,
