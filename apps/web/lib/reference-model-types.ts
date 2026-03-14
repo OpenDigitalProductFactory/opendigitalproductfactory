@@ -42,6 +42,11 @@ export type ReferenceModelDetail = {
   status: string;
   authorityType: string;
   description: string | null;
+  valueStreamProjection: {
+    viewId: string | null;
+    viewName: string | null;
+    isProjected: boolean;
+  };
   artifacts: Array<{
     id: string;
     path: string;

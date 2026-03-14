@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { ReferenceModelPortfolioTable } from "@/components/ea/ReferenceModelPortfolioTable";
+import { ReferenceProjectionActions } from "@/components/ea/ReferenceProjectionActions";
 import { ReferenceProposalQueue } from "@/components/ea/ReferenceProposalQueue";
+import { projectReferenceModelValueStreams } from "@/lib/actions/ea";
 import {
   getReferenceModelDetail,
   getReferenceModelPortfolioRollup,
@@ -20,6 +22,14 @@ export default async function ReferenceModelPage({ params }: Props) {
       getReferenceModelDetail(slug),
       getReferenceModelPortfolioRollup(slug),
     ]);
+
+    async function loadValueStreamProjection(formData: FormData) {
+      "use server";
+
+      const referenceModelSlug = String(formData.get("referenceModelSlug") ?? slug);
+      const result = await projectReferenceModelValueStreams({ referenceModelSlug });
+      redirect(`/ea/views/${result.viewId}`);
+    }
 
     return (
       <div>
@@ -41,6 +51,12 @@ export default async function ReferenceModelPage({ params }: Props) {
         </div>
 
         <EaTabNav />
+
+        <ReferenceProjectionActions
+          referenceModelSlug={slug}
+          valueStreamProjection={detail.valueStreamProjection}
+          loadValueStreamProjection={loadValueStreamProjection}
+        />
 
         <section className="mb-6">
           <div className="mb-3">

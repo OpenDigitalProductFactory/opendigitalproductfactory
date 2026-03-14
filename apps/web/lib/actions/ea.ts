@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma, type Prisma } from "@dpf/db";
+import { projectReferenceModel } from "@dpf/db/reference-model-projection";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import type { CanvasState } from "@/lib/ea-types";
@@ -376,6 +377,19 @@ export async function updateEaView(id: string, input: Partial<CreateEaViewInput>
       ...(input.scopeRef    !== undefined && { scopeRef: input.scopeRef }),
     },
   });
+}
+
+export async function projectReferenceModelValueStreams(input: {
+  referenceModelSlug: string;
+}): Promise<{ viewId: string }> {
+  await requireManageEaModel();
+
+  const result = await projectReferenceModel({
+    referenceModelSlug: input.referenceModelSlug,
+    projectionType: "value_stream_view",
+  });
+
+  return { viewId: result.viewId };
 }
 
 // ─── View element actions ─────────────────────────────────────────────────────
