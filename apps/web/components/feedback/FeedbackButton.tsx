@@ -37,7 +37,7 @@ export function FeedbackButton({ userId }: Props) {
         style={{
           position: "fixed",
           left: 16,
-          bottom: 16,
+          bottom: 60,
           padding: "6px 14px",
           borderRadius: 16,
           background: "rgba(136, 136, 160, 0.4)",
@@ -62,7 +62,7 @@ export function FeedbackButton({ userId }: Props) {
         <div style={{
           position: "fixed",
           left: 16,
-          bottom: 50,
+          bottom: 100,
           width: 300,
           background: "rgba(26, 26, 46, 0.9)",
           backdropFilter: "blur(12px)",
