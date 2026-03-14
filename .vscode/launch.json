@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Next.js: dev server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm --filter web dev",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "${workspaceFolder}/packages/db/generated/**"
+      ]
+    }
+  ]
+}
