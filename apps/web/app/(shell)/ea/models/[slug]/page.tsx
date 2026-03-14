@@ -25,7 +25,7 @@ export default async function ReferenceModelPage({ params }: Props) {
       <div>
         <div className="mb-6">
           <div className="mb-2">
-            <Link href="/ea" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+            <Link href="/ea/models" className="text-xs text-[var(--dpf-muted)] hover:text-white">
               EA / Reference Models
             </Link>
           </div>

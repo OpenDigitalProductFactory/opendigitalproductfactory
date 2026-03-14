@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { label: "Views",  href: "/ea" },
-  { label: "Agents", href: "/ea/agents" },
+  { label: "Views", href: "/ea" },
+  { label: "Reference Models", href: "/ea/models" },
 ];
 
 export function EaTabNav() {
