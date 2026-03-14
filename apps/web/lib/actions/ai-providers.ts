@@ -24,6 +24,7 @@ import {
   getProviderBearerToken,
   logTokenUsage,
 } from "@/lib/ai-inference";
+import { optimizeProviderPriority } from "@/lib/ai-provider-priority";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -342,6 +343,10 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
   await requireManageProviders();
   if (jobId === "provider-registry-sync") {
     await syncProviderRegistry();
+    return;
+  }
+  if (jobId === "provider-priority-optimizer") {
+    await optimizeProviderPriority();
     return;
   }
   console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);

@@ -591,7 +591,7 @@ async function seedMvpEpics(): Promise<void> {
   });
 
   const llmItems = [
-    { itemId: "BI-LLM-001", title: "Build callProvider generalized inference function", priority: 1, body: "Extract the private callProviderForProfiling from lib/actions/ai-providers.ts into a shared lib/ai-inference.ts module. Generalize into callProvider(providerId, modelId, messages[], systemPrompt) supporting multi-turn chat. Return { content, inputTokens, outputTokens, inferenceMs }." },
+    { itemId: "BI-LLM-001", title: "PlatformConfig schema + AgentMessage providerId + callProvider inference module", priority: 1, body: "Extract the private callProviderForProfiling from lib/actions/ai-providers.ts into a shared lib/ai-inference.ts module. Generalize into callProvider(providerId, modelId, messages[], systemPrompt) supporting multi-turn chat. Return { content, inputTokens, outputTokens, inferenceMs }." },
     { itemId: "BI-LLM-002", title: "Define agent system prompts for all 9 route agents", priority: 2, body: "Extend RouteAgentEntry and AgentInfo types with systemPrompt field. Add prompts to ROUTE_AGENT_MAP for each of the 9 route agents describing role, capabilities, and context awareness." },
     { itemId: "BI-LLM-003", title: "Add platform default provider and model selection", priority: 3, body: "Add platform-level default provider+model config for agent conversations. Selection UI in /platform/ai with dropdown of active providers and discovered models. rankProvidersByCost (lib/ai-profiling.ts) provides auto-selection fallback." },
     { itemId: "BI-LLM-004", title: "Replace canned responses with live inference in sendMessage", priority: 4, body: "In sendMessage server action: check for active default provider, build messages array (system prompt + last 20 thread messages + user message), call callProvider, persist response. Fall back to generateCannedResponse when no provider active. Token counts logged via TokenUsage, not stored on AgentMessage." },
@@ -852,6 +852,16 @@ async function seedScheduledJobs(): Promise<void> {
     update: {
       // Only reset schedule — preserve operational state on re-seed
       schedule: "weekly",
+    },
+  });
+  await prisma.scheduledJob.upsert({
+    where: { jobId: "provider-priority-optimizer" },
+    update: {},
+    create: {
+      jobId: "provider-priority-optimizer",
+      name: "Provider Priority Optimizer",
+      schedule: "weekly",
+      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
   console.log("Seeded scheduled jobs");
