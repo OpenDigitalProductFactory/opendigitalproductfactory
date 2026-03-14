@@ -547,6 +547,300 @@ export async function addElementToView(input: {
   }
 }
 
+type StructuredMutationRecord = {
+  id: string;
+  elementId: string;
+  parentViewElementId: string | null;
+  orderIndex: number | null;
+};
+
+type StructuredConformanceWarning = {
+  issueType: "missing_required_children" | "detached_child" | "duplicate_order_index";
+  severity: "warn" | "error";
+  message: string;
+  viewElementIds: string[];
+  details?: Record<string, unknown>;
+};
+
+function sortStructuredMutationRecords(records: StructuredMutationRecord[]): StructuredMutationRecord[] {
+  return [...records].sort((left, right) => {
+    const leftOrder = left.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return left.id.localeCompare(right.id);
+  });
+}
+
+function resequenceStructuredChildren(
+  records: StructuredMutationRecord[],
+  parentViewElementId: string,
+): StructuredMutationRecord[] {
+  return sortStructuredMutationRecords(records).map((record, index) => ({
+    ...record,
+    parentViewElementId,
+    orderIndex: index,
+  }));
+}
+
+function insertStructuredChild(
+  records: StructuredMutationRecord[],
+  movingRecord: StructuredMutationRecord,
+  parentViewElementId: string,
+  targetOrderIndex: number | null,
+): StructuredMutationRecord[] {
+  const ordered = sortStructuredMutationRecords(records.filter((record) => record.id !== movingRecord.id));
+  const insertionIndex = targetOrderIndex == null
+    ? ordered.length
+    : Math.max(0, Math.min(targetOrderIndex, ordered.length));
+
+  ordered.splice(insertionIndex, 0, {
+    ...movingRecord,
+    parentViewElementId,
+  });
+
+  return ordered.map((record, index) => ({
+    ...record,
+    parentViewElementId,
+    orderIndex: index,
+  }));
+}
+
+function deriveStructuredWarnings(input: {
+  parentViewElementId: string;
+  minChildren: number;
+  children: StructuredMutationRecord[];
+}): StructuredConformanceWarning[] {
+  const warnings: StructuredConformanceWarning[] = [];
+  const attachedChildren = input.children.filter(
+    (child) => child.parentViewElementId === input.parentViewElementId,
+  );
+  const detachedChildren = input.children.filter(
+    (child) => child.parentViewElementId !== input.parentViewElementId,
+  );
+
+  if (attachedChildren.length < input.minChildren) {
+    warnings.push({
+      issueType: "missing_required_children",
+      severity: "warn",
+      message: `Expected at least ${input.minChildren} structured child elements`,
+      viewElementIds: [input.parentViewElementId],
+      details: {
+        minChildren: input.minChildren,
+        attachedChildCount: attachedChildren.length,
+      },
+    });
+  }
+
+  for (const child of detachedChildren) {
+    warnings.push({
+      issueType: "detached_child",
+      severity: "warn",
+      message: "Structured child is detached from its expected parent",
+      viewElementIds: [child.id],
+      details: {
+        expectedParentViewElementId: input.parentViewElementId,
+        actualParentViewElementId: child.parentViewElementId,
+      },
+    });
+  }
+
+  const siblingsByOrderIndex = new Map<number, string[]>();
+  for (const child of attachedChildren) {
+    if (child.orderIndex == null) continue;
+    const siblings = siblingsByOrderIndex.get(child.orderIndex) ?? [];
+    siblings.push(child.id);
+    siblingsByOrderIndex.set(child.orderIndex, siblings);
+  }
+
+  for (const [orderIndex, siblings] of siblingsByOrderIndex) {
+    if (siblings.length < 2) continue;
+    warnings.push({
+      issueType: "duplicate_order_index",
+      severity: "warn",
+      message: `Multiple structured children share order index ${orderIndex}`,
+      viewElementIds: siblings,
+      details: { orderIndex },
+    });
+  }
+
+  return warnings;
+}
+
+export async function moveStructuredViewElement(input: {
+  viewElementId: string;
+  targetParentViewElementId: string | null;
+  targetOrderIndex: number | null;
+}): Promise<{ error?: string }> {
+  await requireManageEaModel();
+
+  const existing = await prisma.eaViewElement.findUnique({
+    where: { id: input.viewElementId },
+    select: {
+      id: true,
+      viewId: true,
+      elementId: true,
+      parentViewElementId: true,
+      orderIndex: true,
+      element: { select: { id: true } },
+    },
+  });
+
+  if (!existing) return { error: "ViewElementNotFound" };
+
+  const oldParentViewElementId = existing.parentViewElementId;
+  const targetParentViewElementId = input.targetParentViewElementId;
+
+  await prisma.$transaction(async (tx) => {
+    const affectedParentViewElementIds = Array.from(
+      new Set([oldParentViewElementId, targetParentViewElementId].filter((value): value is string => value != null)),
+    );
+
+    const siblingCandidates = affectedParentViewElementIds.length > 0
+      ? await tx.eaViewElement.findMany({
+          where: {
+            viewId: existing.viewId,
+            OR: affectedParentViewElementIds.map((parentViewElementId) => ({ parentViewElementId })),
+          },
+          select: {
+            id: true,
+            elementId: true,
+            parentViewElementId: true,
+            orderIndex: true,
+          },
+        })
+      : [];
+
+    const recordsById = new Map<string, StructuredMutationRecord>();
+    for (const record of siblingCandidates) {
+      recordsById.set(record.id, record);
+    }
+    recordsById.set(existing.id, {
+      id: existing.id,
+      elementId: existing.elementId,
+      parentViewElementId: existing.parentViewElementId,
+      orderIndex: existing.orderIndex,
+    });
+
+    const movingRecord = recordsById.get(existing.id)!;
+    const oldSiblings = oldParentViewElementId == null
+      ? []
+      : sortStructuredMutationRecords(
+          Array.from(recordsById.values()).filter((record) => record.parentViewElementId === oldParentViewElementId),
+        );
+    const targetSiblings = targetParentViewElementId == null
+      ? []
+      : oldParentViewElementId === targetParentViewElementId
+        ? oldSiblings
+        : sortStructuredMutationRecords(
+            Array.from(recordsById.values()).filter((record) => record.parentViewElementId === targetParentViewElementId),
+          );
+
+    const finalRecordsById = new Map<string, StructuredMutationRecord>();
+    const warningInputs = new Map<string, StructuredMutationRecord[]>();
+
+    if (oldParentViewElementId && oldParentViewElementId === targetParentViewElementId) {
+      const resequenced = insertStructuredChild(
+        oldSiblings,
+        movingRecord,
+        oldParentViewElementId,
+        input.targetOrderIndex,
+      );
+      warningInputs.set(oldParentViewElementId, resequenced);
+      for (const record of resequenced) {
+        finalRecordsById.set(record.id, record);
+      }
+    } else {
+      const movingFinalRecord: StructuredMutationRecord = {
+        ...movingRecord,
+        parentViewElementId: targetParentViewElementId,
+        orderIndex: targetParentViewElementId == null ? null : movingRecord.orderIndex,
+      };
+
+      if (oldParentViewElementId) {
+        const resequencedOldSiblings = resequenceStructuredChildren(
+          oldSiblings.filter((record) => record.id !== movingRecord.id),
+          oldParentViewElementId,
+        );
+        warningInputs.set(oldParentViewElementId, [...resequencedOldSiblings, movingFinalRecord]);
+        for (const record of resequencedOldSiblings) {
+          finalRecordsById.set(record.id, record);
+        }
+      }
+
+      if (targetParentViewElementId) {
+        const resequencedTargetSiblings = insertStructuredChild(
+          targetSiblings,
+          movingRecord,
+          targetParentViewElementId,
+          input.targetOrderIndex,
+        );
+        warningInputs.set(targetParentViewElementId, resequencedTargetSiblings);
+        for (const record of resequencedTargetSiblings) {
+          finalRecordsById.set(record.id, record);
+        }
+      } else {
+        finalRecordsById.set(movingRecord.id, movingFinalRecord);
+      }
+    }
+
+    if (affectedParentViewElementIds.length > 0) {
+      await tx.eaViewElement.updateMany({
+        where: {
+          viewId: existing.viewId,
+          OR: affectedParentViewElementIds.map((parentViewElementId) => ({ parentViewElementId })),
+        },
+        data: { orderIndex: null },
+      });
+    }
+
+    for (const record of finalRecordsById.values()) {
+      await tx.eaViewElement.update({
+        where: { id: record.id },
+        data: {
+          parentViewElementId: record.parentViewElementId,
+          orderIndex: record.orderIndex,
+        },
+      });
+    }
+
+    await tx.eaConformanceIssue.deleteMany({
+      where: {
+        viewId: existing.viewId,
+        issueType: {
+          in: ["missing_required_children", "detached_child", "duplicate_order_index"],
+        },
+      },
+    });
+
+    const warnings = Array.from(warningInputs.entries()).flatMap(([parentViewElementId, children]) =>
+      deriveStructuredWarnings({
+        parentViewElementId,
+        minChildren: 1,
+        children,
+      }),
+    );
+
+    if (warnings.length > 0) {
+      await tx.eaConformanceIssue.createMany({
+        data: warnings.map((warning) => {
+          const issueViewElementId = warning.viewElementIds[0] ?? null;
+          return {
+            viewId: existing.viewId,
+            elementId: issueViewElementId ? recordsById.get(issueViewElementId)?.elementId ?? null : null,
+            issueType: warning.issueType,
+            severity: warning.severity,
+            message: warning.message,
+            status: "open",
+            detailsJson: (warning.details ?? {}) as Prisma.InputJsonValue,
+          };
+        }),
+      });
+    }
+  });
+
+  return {};
+}
+
 export async function removeElementFromView(input: {
   viewElementId: string;
 }): Promise<{ error?: string }> {

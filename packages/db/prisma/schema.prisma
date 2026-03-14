@@ -636,6 +636,7 @@ model EaNotation {
   elementTypes EaElementType[]
   relTypes     EaRelationshipType[]
   dqRules      EaDqRule[]
+  structureRules EaStructureRule[]
   views        EaView[]
 }
 
@@ -764,6 +765,8 @@ model EaElementType {
   dqRules                EaDqRule[]
   fromRules              EaRelationshipRule[] @relation("FromType")
   toRules                EaRelationshipRule[] @relation("ToType")
+  parentStructureRules   EaStructureRule[]    @relation("EaStructureRuleParent")
+  childStructureRules    EaStructureRule[]    @relation("EaStructureRuleChild")
   @@unique([notationId, slug])
 }
 
@@ -824,6 +827,7 @@ model EaElement {
   fromRelationships EaRelationship[]  @relation("FromElement")
   toRelationships   EaRelationship[]  @relation("ToElement")
   viewElements      EaViewElement[]
+  conformanceIssues EaConformanceIssue[]
   syncedAt          DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -873,6 +877,7 @@ model EaView {
   canvasState  Json?
   viewpointId  String?
   viewpoint    ViewpointDefinition? @relation(fields: [viewpointId], references: [id])
+  conformanceIssues EaConformanceIssue[]
   snapshots    EaSnapshot[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -884,11 +889,57 @@ model EaViewElement {
   view               EaView    @relation(fields: [viewId], references: [id], onDelete: Cascade)
   elementId          String
   element            EaElement @relation(fields: [elementId], references: [id])
+  parentViewElementId String?
+  parentViewElement   EaViewElement?  @relation("EaViewElementParent", fields: [parentViewElementId], references: [id], onDelete: SetNull)
+  childViewElements   EaViewElement[] @relation("EaViewElementParent")
+  orderIndex          Int?
   mode               String    @default("new")
   proposedProperties Json?
 
   @@unique([viewId, elementId])
   @@index([elementId])
+  @@index([viewId, parentViewElementId, orderIndex])
+}
+
+model EaStructureRule {
+  id                     String        @id @default(cuid())
+  notationId             String
+  notation               EaNotation    @relation(fields: [notationId], references: [id])
+  parentElementTypeId    String
+  parentElementType      EaElementType @relation("EaStructureRuleParent", fields: [parentElementTypeId], references: [id])
+  childElementTypeId     String
+  childElementType       EaElementType @relation("EaStructureRuleChild", fields: [childElementTypeId], references: [id])
+  patternSlug            String
+  minChildren            Int?
+  maxChildren            Int?
+  orderedChildren        Boolean       @default(false)
+  impliedRelationshipSlug String?
+  defaultSeverity        String        @default("warn")
+  rendererHint           String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  @@unique([notationId, parentElementTypeId, childElementTypeId, patternSlug])
+  @@index([notationId, patternSlug])
+}
+
+model EaConformanceIssue {
+  id          String    @id @default(cuid())
+  viewId       String?
+  view         EaView?   @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  elementId    String?
+  element      EaElement? @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  issueType    String
+  severity     String    @default("warn")
+  message      String
+  status       String    @default("open")
+  detailsJson  Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([viewId, status])
+  @@index([elementId, status])
+  @@index([issueType, severity])
 }
 
 model ViewpointDefinition {

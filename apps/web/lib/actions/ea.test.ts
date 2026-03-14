@@ -36,7 +36,13 @@ vi.mock("@dpf/db", () => ({
       create:     vi.fn(),
       delete:     vi.fn(),
       findUnique: vi.fn(),
+      findMany:   vi.fn(),
       update:     vi.fn(),
+      updateMany: vi.fn(),
+    },
+    eaConformanceIssue: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
     },
     viewpointDefinition: { findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -68,6 +74,7 @@ import {
   advanceEaLifecycle,
   deleteEaElement,
   addElementToView,
+  moveStructuredViewElement,
   removeElementFromView,
   updateProposedProperties,
   saveCanvasState,
@@ -491,5 +498,64 @@ describe("createEaRelationship — viewpoint check", () => {
       viewId: "v1",
     });
     expect(result).toEqual({ error: "RelationshipTypeNotAllowedByViewpoint" });
+  });
+});
+describe("moveStructuredViewElement", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("resequences sibling stages under a value stream parent", async () => {
+    (prisma.eaViewElement.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "stage-ve-2",
+      viewId: "view-1",
+      elementId: "stage-el-2",
+      parentViewElementId: "stream-ve-1",
+      orderIndex: 1,
+      element: { id: "stage-el-2" },
+    });
+    (prisma.eaViewElement.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "stage-ve-1", elementId: "stage-el-1", parentViewElementId: "stream-ve-1", orderIndex: 0 },
+      { id: "stage-ve-2", elementId: "stage-el-2", parentViewElementId: "stream-ve-1", orderIndex: 1 },
+    ]);
+
+    await moveStructuredViewElement({
+      viewElementId: "stage-ve-2",
+      targetParentViewElementId: "stream-ve-1",
+      targetOrderIndex: 0,
+    });
+
+    expect(prisma.eaViewElement.updateMany).toHaveBeenCalled();
+    expect(prisma.eaConformanceIssue.deleteMany).toHaveBeenCalled();
+  });
+
+  it("creates a conformance warning when a stage is detached", async () => {
+    (prisma.eaViewElement.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "stage-ve-1",
+      viewId: "view-1",
+      elementId: "stage-el-1",
+      parentViewElementId: "stream-ve-1",
+      orderIndex: 0,
+      element: { id: "stage-el-1" },
+    });
+    (prisma.eaViewElement.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await moveStructuredViewElement({
+      viewElementId: "stage-ve-1",
+      targetParentViewElementId: null,
+      targetOrderIndex: null,
+    });
+
+    expect(prisma.eaConformanceIssue.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "detached_child",
+            severity: "warn",
+          }),
+        ]),
+      })
+    );
   });
 });
