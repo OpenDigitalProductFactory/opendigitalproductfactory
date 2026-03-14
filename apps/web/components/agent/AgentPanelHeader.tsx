@@ -9,11 +9,13 @@ type Props = {
   userContext: UserContext;
   onSend: (content: string) => void;
   onClose: () => void;
+  onDragStart: (e: React.MouseEvent) => void;
 };
 
-export function AgentPanelHeader({ agent, userContext, onSend, onClose }: Props) {
+export function AgentPanelHeader({ agent, userContext, onSend, onClose, onDragStart }: Props) {
   return (
     <div
+      onMouseDown={onDragStart}
       style={{
         display: "flex",
         alignItems: "center",
@@ -22,6 +24,7 @@ export function AgentPanelHeader({ agent, userContext, onSend, onClose }: Props)
         background: "rgba(22, 22, 37, 0.8)",
         borderBottom: "1px solid rgba(42, 42, 64, 0.6)",
         borderRadius: "12px 12px 0 0",
+        cursor: "grab",
         userSelect: "none",
       }}
     >
@@ -44,7 +47,7 @@ export function AgentPanelHeader({ agent, userContext, onSend, onClose }: Props)
 
       <button
         type="button"
-        onClick={onClose}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         title="Close"
         style={{
           background: "none",
