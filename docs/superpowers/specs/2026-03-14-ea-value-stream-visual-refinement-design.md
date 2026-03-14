@@ -46,6 +46,7 @@ The result is technically functional but visually misleading and not aligned wit
 - Replace the current card-like value-stream node with a true directional band layout.
 - Automatically size the value-stream band based on stage count and stage label lengths.
 - Preserve stage sequence as implied by containment and order, not explicit rendered edges.
+- Keep individual stages relationship-capable for external connections.
 - Add a structured layout model for contextual nodes around the stream.
 - Add first-class support for stage-aligned and shared supporting blocks below the stream.
 - Keep the core stream geometry automated so users do not resize or manually arrange the main structure.
@@ -82,6 +83,7 @@ Earlier design decisions still apply:
 - stage order is persisted in the model
 - the view renders stages in order
 - stage-to-stage flow relationships may exist in the graph, but they are hidden inside this projection because the container already implies the sequence
+- stages remain valid relationship endpoints for external connections outside that implied internal sequence
 
 ### 4. Context is part of the value-stream view
 
@@ -97,6 +99,16 @@ These are meaningful relationships in the architectural view and should be laid 
 ### 5. Automatic layout matters more than manual freedom for the core structure
 
 The visual model should be editable where it matters semantically, for example stage ordering. But the core stream geometry and placement should be derived by the renderer or layout helper so users do not “design” the notation by hand.
+
+---
+
+### 6. Drag-and-drop is the stage reorder interaction
+
+The stage body should not contain left/right reorder buttons. Reordering should happen by drag-and-drop:
+
+- dragging a stage within a value stream changes its sequence
+- dropping a stage into a value stream or between stages resequences the model
+- the parent stream band resizes automatically after reorder, insertion, or removal
 
 ---
 
@@ -119,6 +131,7 @@ Each stage should render as:
 - automatically sized within minimum and maximum bounds
 - spaced evenly with directional rhythm
 - aligned on a common centerline inside the parent band
+- still connection-capable for explicit external relationships
 
 The stage labels should remain readable without forcing a fixed equal-width grid.
 
@@ -205,6 +218,14 @@ Inside the stream band:
 - explicit flow edges may remain in the graph for synchronization and future use
 - explicit internal sequence edges stay hidden in this view
 
+### Relationship-capable stages
+
+Although internal sequence is implied, each stage still behaves as a real modeled element:
+
+- stages can be the source or target of explicit relationships to capabilities, controls, outcomes, stakeholders, or other EA elements
+- those relationships may render when they connect outside the internal stage-sequence path
+- the value-stream container implies order, not all semantics
+
 ### Explicit relationships
 
 Outside the stream band:
@@ -221,15 +242,17 @@ This gives the view the right balance of clarity and semantic economy.
 
 The user should be able to:
 
-- reorder stages
+- reorder stages by drag-and-drop
 - trigger a projection refresh
 - inspect context and supporting groups
+- connect external relationships to stages and the parent value stream
 
 The user should not need to:
 
 - resize the parent band
 - place stages manually
 - manually preserve stage spacing
+- use embedded left/right buttons inside stages
 
 For this phase, contextual nodes may remain more loosely placeable if the existing canvas demands it, but the projection should always regenerate a sensible default structured layout.
 
@@ -243,6 +266,7 @@ Recommended first implementation slice:
    - true parent band
    - inset stage chevrons
    - computed width from stage count and labels
+   - no embedded stage reorder buttons
 
 2. Add projection layout-role metadata
    - enough to distinguish stream band, stage, and initial context/support zones
@@ -254,6 +278,7 @@ Recommended first implementation slice:
 
 4. Keep stage ordering and hidden sequence behavior unchanged
    - do not rework the structural conformance logic in this slice unless visual needs expose a real defect
+   - move stage reorder interaction to drag-and-drop instead of in-node buttons
 
 This is the smallest slice that materially improves the visual semantics and user experience without turning into a broad EA layout rewrite.
 
@@ -266,14 +291,16 @@ The implementation should prove:
 1. parent stream width grows as stage count or label size grows
 2. nested stages render in a directional band rather than a fixed-width card
 3. stage sequence edges remain hidden in the structured view
-4. contextual/supporting layout roles render in their intended zones
-5. stage reorder behavior still works after the visual refinement
+4. stages still support explicit external relationships
+5. contextual/supporting layout roles render in their intended zones
+6. drag-and-drop stage reorder still works after the visual refinement
 
 Tests should include:
 
 - component tests for `StructuredValueStreamNode`
 - layout helper tests if geometry is moved into a pure helper
 - existing structured-edge tests to make sure hidden sequence behavior remains correct
+- interaction tests for drag-and-drop reordering if the current harness can support them, otherwise server-action and layout-state tests that prove resequencing behavior
 
 ---
 
