@@ -22,4 +22,5 @@ export {
   syncPortfolio,
   syncInfraCI,
   syncDependsOn,
+  type InfraCIExtendedProps,
 } from "./neo4j-sync";
