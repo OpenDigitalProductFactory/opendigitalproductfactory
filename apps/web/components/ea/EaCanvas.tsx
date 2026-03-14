@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls, ConnectionMode,
-  useNodesState, useEdgesState, addEdge,
+  ReactFlow, Background, Controls, ConnectionMode, MarkerType,
+  useNodesState, useEdgesState,
   type Node, type Edge, type Connection, type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -16,12 +16,15 @@ import { ReferencePopup } from "./ReferencePopup";
 import {
   addElementToView,
   createEaRelationship,
+  deleteEaRelationship,
   saveCanvasState,
   getDefaultRelTypeIdForView,
 } from "@/lib/actions/ea";
 
 const NODE_TYPES = { eaElement: EaElementNode };
 const EDGE_TYPES = { eaRelationship: EaRelationshipEdge };
+
+type EdgeVariant = "straight" | "bezier" | "step";
 
 type ElementTypeOption = { id: string; slug: string; name: string; neoLabel: string };
 
@@ -37,7 +40,7 @@ type Props = {
   viewName: string;
   viewStatus: string;
   viewpoint: ViewpointInfo | null;
-  allElementTypes: ElementTypeOption[];  // all types for this notation
+  allElementTypes: ElementTypeOption[];
   initialElements: SerializedViewElement[];
   initialEdges: SerializedEdge[];
   initialCanvasState: CanvasState | null;
@@ -53,7 +56,7 @@ function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState 
   }));
 }
 
-function buildEdges(edges: SerializedEdge[]): Edge[] {
+function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edgeVariant: EdgeVariant): Edge[] {
   return edges.map((e) => ({
     id: e.id,
     // IMPORTANT: use viewElementId (EaViewElement.id), not elementId (EaElement.id).
@@ -61,9 +64,16 @@ function buildEdges(edges: SerializedEdge[]): Edge[] {
     source: e.fromViewElementId,
     target: e.toViewElementId,
     type: "eaRelationship",
-    data: { relationshipType: e.relationshipType },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#7c8cf8" },
+    data: { relationshipType: e.relationshipType, onDelete: () => onDelete(e.id), edgeVariant },
   }));
 }
+
+const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
+  straight: "━ Straight",
+  bezier:   "⌒ Curved",
+  step:     "⌐ Angled",
+};
 
 export function EaCanvas({
   viewId, viewName, viewStatus, viewpoint, allElementTypes,
@@ -73,8 +83,23 @@ export function EaCanvas({
     ? allElementTypes.filter((et) => viewpoint.allowedElementTypeSlugs.includes(et.slug))
     : allElementTypes;
 
+  // Always start with "bezier" to match the server render, then hydrate from localStorage.
+  // Using localStorage in useState init causes a server/client style mismatch (hydration error).
+  const [edgeVariant, setEdgeVariant] = useState<EdgeVariant>("bezier");
+
+  useEffect(() => {
+    const v = localStorage.getItem("ea-edge-variant");
+    if (v === "straight" || v === "step") setEdgeVariant(v);
+  }, []);
+
+  const handleDeleteEdge = useCallback(async (relationshipId: string) => {
+    if (isReadOnly) return;
+    await deleteEaRelationship(relationshipId);
+    window.location.reload();
+  }, [isReadOnly]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes(initialElements, initialCanvasState));
-  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(initialEdges));
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(initialEdges, handleDeleteEdge, edgeVariant));
   const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
@@ -82,10 +107,21 @@ export function EaCanvas({
     x: number; y: number;
   } | null>(null);
 
+  // Propagate edgeVariant changes to all existing edges
+  useEffect(() => {
+    setEdges((eds) => eds.map((e) => ({
+      ...e,
+      data: { ...e.data, edgeVariant },
+    })));
+  }, [edgeVariant, setEdges]);
+
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCanvasStateRef = useRef<CanvasState>(
     initialCanvasState ?? { viewport: { x: 0, y: 0, zoom: 1 }, nodes: {} }
   );
+  // Track live viewport (pan + zoom) so handleDrop can convert screen → flow coordinates.
+  // Updated by onInit (after fitView) and onMove (during pan/zoom).
+  const viewportRef = useRef(initialCanvasState?.viewport ?? { x: 0, y: 0, zoom: 1 });
 
   function scheduleAutoSave(state: CanvasState) {
     latestCanvasStateRef.current = state;
@@ -97,7 +133,6 @@ export function EaCanvas({
 
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
     onNodesChange(changes);
-    // Build updated positions from current nodes after change
     setNodes((nds) => {
       const updatedNodes: Record<string, { x: number; y: number }> = {};
       nds.forEach((n) => { updatedNodes[n.id] = n.position; });
@@ -109,17 +144,12 @@ export function EaCanvas({
   const handleConnect = useCallback(async (connection: Connection) => {
     if (isReadOnly || !connection.source || !connection.target) return;
 
-    // connection.source/target are EaViewElement.id (React Flow node IDs).
-    // createEaRelationship needs EaElement.id, not EaViewElement.id.
-    // Look up elementId from the node's data.
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return;
     const fromElementId = (sourceNode.data as SerializedViewElement).elementId;
     const toElementId = (targetNode.data as SerializedViewElement).elementId;
 
-    // Resolve a relationship type that has a rule for this specific element pair.
-    // Falls back to associated_with (or first allowed) if no specific rule matches.
     const relTypeId = await getDefaultRelTypeIdForView(viewId, fromElementId, toElementId);
     if (!relTypeId) {
       console.warn("No allowed relationship types for this viewpoint");
@@ -132,12 +162,10 @@ export function EaCanvas({
       relationshipTypeId: relTypeId,
       viewId,
     });
-    // createEaRelationship returns { error: string } on failure, void on success.
     if (result && "error" in result) {
       console.warn("createEaRelationship error:", result.error);
       return;
     }
-    // On success, reload to get fresh server data including the new relationship.
     window.location.reload();
   }, [isReadOnly, viewId, nodes]);
 
@@ -153,9 +181,10 @@ export function EaCanvas({
     const typeName = e.dataTransfer.getData("application/ea-element-type-name");
     if (!typeId) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    // For net-new elements: directly add without popup
+    const { x: vpX, y: vpY, zoom } = viewportRef.current;
+    // Convert screen pixel offset to React Flow canvas coordinates (inverse viewport transform).
+    const x = (e.clientX - rect.left - vpX) / zoom;
+    const y = (e.clientY - rect.top - vpY) / zoom;
     void (async () => {
       const result = await addElementToView({
         viewId,
@@ -166,14 +195,17 @@ export function EaCanvas({
         initialY: y,
       });
       if ("error" in result) { console.warn("addElementToView error:", result.error); return; }
-      // Reload page to get fresh server data (simple approach for now)
       window.location.reload();
     })();
   }
 
   function handleNodeClick(_: React.MouseEvent, node: Node) {
-    const ve = (node.data as SerializedViewElement);
-    setSelectedViewElement(ve);
+    setSelectedViewElement(node.data as SerializedViewElement);
+  }
+
+  function handleSetEdgeVariant(v: EdgeVariant) {
+    localStorage.setItem("ea-edge-variant", v);
+    setEdgeVariant(v);
   }
 
   return (
@@ -181,24 +213,43 @@ export function EaCanvas({
       <ElementPalette
         elementTypes={paletteTypes}
         onDragStart={handleDragStart}
-        onSearchExisting={() => { /* ExistingElementSearch deferred to Phase EA-3 — no-op for now */ }}
+        onSearchExisting={() => { /* ExistingElementSearch deferred to Phase EA-3 */ }}
       />
 
       <div style={{ flex: 1, position: "relative" }}>
         {/* Status bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "#1a1a2e", borderBottom: "1px solid #2a2a40" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "#555566", fontSize: 10 }}>EA /</span>
+            <span style={{ color: "#8888a0", fontSize: 10 }}>EA /</span>
             <span style={{ color: "#e0e0ff", fontSize: 11, fontWeight: 600 }}>{viewName}</span>
             <span style={{
-              fontSize: 9, padding: "2px 6px", borderRadius: 3,
+              fontSize: 10, padding: "2px 6px", borderRadius: 3,
               background: viewStatus === "approved" ? "#1e3a2f" : "#1a1a2e",
               color: viewStatus === "approved" ? "#4ade80" : "#fbbf24",
               border: `1px solid ${viewStatus === "approved" ? "#4ade80" : "#fbbf24"}`,
             }}>
               {viewStatus.toUpperCase()}
             </span>
-            {viewpoint && <span style={{ color: "#555566", fontSize: 9 }}>Viewpoint: {viewpoint.name}</span>}
+            {viewpoint && <span style={{ color: "#8888a0", fontSize: 10 }}>Viewpoint: {viewpoint.name}</span>}
+          </div>
+
+          {/* Edge style toggle */}
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["straight", "bezier", "step"] as EdgeVariant[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => handleSetEdgeVariant(v)}
+                title={v.charAt(0).toUpperCase() + v.slice(1)}
+                style={{
+                  fontSize: 10, padding: "2px 7px", borderRadius: 3, cursor: "pointer",
+                  background: edgeVariant === v ? "#2a2a50" : "transparent",
+                  border: `1px solid ${edgeVariant === v ? "#7c8cf8" : "#2a2a40"}`,
+                  color: edgeVariant === v ? "#7c8cf8" : "#8888a0",
+                }}
+              >
+                {EDGE_VARIANT_LABELS[v]}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -219,6 +270,8 @@ export function EaCanvas({
             connectionMode={ConnectionMode.Loose}
             colorMode="dark"
             fitView
+            onInit={(rf) => { viewportRef.current = rf.getViewport(); }}
+            onMove={(_evt, vp) => { viewportRef.current = vp; }}
           >
             <Background color="#2a2a40" gap={20} />
             <Controls style={{ background: "#1a1a2e", border: "1px solid #2a2a40" }} />
@@ -231,9 +284,7 @@ export function EaCanvas({
         onUpdated={() => window.location.reload()}
       />
 
-      {/* Phase EA-2: anchorEl is null because ExistingElementSearch (which provides the DOM ref
-          for the ghost node) is deferred to Phase EA-3. The popup renders unanchored (near
-          viewport centre via FloatingPortal default). This is acceptable for Phase EA-2. */}
+      {/* Phase EA-2: anchorEl is null because ExistingElementSearch is deferred to Phase EA-3. */}
       {pendingDrop && (
         <ReferencePopup
           element={pendingDrop}

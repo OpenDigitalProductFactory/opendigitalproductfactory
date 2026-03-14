@@ -55,6 +55,15 @@ export function buildPortfolioTree(
   totalCounts: CountRow[],        // all products regardless of status
   activeCounts: CountRow[] = []   // active products only; defaults to [] so existing call sites compile
 ): PortfolioTreeNode[] {
+  // Deduplicate by nodeId — keeps first occurrence so duplicate DB rows don't produce
+  // two roots with the same nodeId (which would generate duplicate React keys).
+  const seenNodeIds = new Set<string>();
+  const deduped = nodes.filter((n) => {
+    if (seenNodeIds.has(n.nodeId)) return false;
+    seenNodeIds.add(n.nodeId);
+    return true;
+  });
+
   // Build lookup keyed by node.id (cuid PK)
   const countById = new Map<string, number>();
   for (const c of totalCounts) {
@@ -68,7 +77,7 @@ export function buildPortfolioTree(
 
   // Build a map of id → node (with empty children array)
   const nodeMap = new Map<string, PortfolioTreeNode>();
-  for (const n of nodes) {
+  for (const n of deduped) {
     nodeMap.set(n.id, {
       id: n.id,
       nodeId: n.nodeId,

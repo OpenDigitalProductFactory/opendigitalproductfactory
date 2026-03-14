@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { ReferenceModelSummary } from "@/components/ea/ReferenceModelSummary";
+import { getReferenceModelsSummary } from "@/lib/ea-data";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -17,19 +19,22 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 export default async function EaPage() {
-  const views = await prisma.eaView.findMany({
-    orderBy: [{ createdAt: "desc" }],
-    select: {
-      id:          true,
-      name:        true,
-      description: true,
-      layoutType:  true,
-      scopeType:   true,
-      scopeRef:    true,
-      createdAt:   true,
-      notation:    { select: { name: true } },
-    },
-  });
+  const [views, models] = await Promise.all([
+    prisma.eaView.findMany({
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id:          true,
+        name:        true,
+        description: true,
+        layoutType:  true,
+        scopeType:   true,
+        scopeRef:    true,
+        createdAt:   true,
+        notation:    { select: { name: true } },
+      },
+    }),
+    getReferenceModelsSummary(),
+  ]);
 
   return (
     <div>
@@ -41,6 +46,7 @@ export default async function EaPage() {
       </div>
 
       <EaTabNav />
+      <ReferenceModelSummary models={models} />
 
       {views.length > 0 ? (
         <>

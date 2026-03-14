@@ -86,7 +86,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "#f472b6" },
   { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "#38bdf8" },
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
-  { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#555566" },
+  { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
 ];
 
 export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {

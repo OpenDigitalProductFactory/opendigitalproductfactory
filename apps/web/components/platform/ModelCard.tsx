@@ -28,11 +28,11 @@ const COST_COLOURS: Record<string, string> = {
 };
 
 function capabilityColour(tier: string): string {
-  return CAPABILITY_COLOURS[tier] ?? "#555566";
+  return CAPABILITY_COLOURS[tier] ?? "#8888a0";
 }
 
 function costColour(tier: string): string {
-  return COST_COLOURS[tier] ?? "#555566";
+  return COST_COLOURS[tier] ?? "#8888a0";
 }
 
 function Badge({ label, colour }: { label: string; colour: string }) {
@@ -41,7 +41,7 @@ function Badge({ label, colour }: { label: string; colour: string }) {
       style={{
         background: `${colour}20`,
         color: colour,
-        fontSize: 9,
+        fontSize: 10,
         padding: "2px 6px",
         borderRadius: 3,
         whiteSpace: "nowrap",
@@ -59,7 +59,7 @@ function Chip({ label, variant }: { label: string; variant: "best" | "avoid" }) 
       style={{
         background: `${colour}15`,
         color: colour,
-        fontSize: 9,
+        fontSize: 10,
         padding: "2px 7px",
         borderRadius: 10,
         border: `1px solid ${colour}40`,
@@ -111,7 +111,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     border: "1px solid #2a2a40",
     borderRadius: 6,
     padding: "12px 14px",
-    opacity: isStale ? 0.5 : 1,
+    opacity: isStale ? 0.7 : 1,
     display: "flex",
     flexDirection: "column",
     gap: 8,
@@ -130,12 +130,12 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
             <div style={{ color: "#e0e0ff", fontSize: 12, fontWeight: 600, lineHeight: 1.3, wordBreak: "break-all" }}>
               {profile.friendlyName}
             </div>
-            <div style={{ color: "#555566", fontSize: 9, marginTop: 2, wordBreak: "break-all" }}>
+            <div style={{ color: "#8888a0", fontSize: 10, marginTop: 2, wordBreak: "break-all" }}>
               {model.modelId}
             </div>
           </div>
           {isStale && (
-            <span style={{ color: "#fbbf24", fontSize: 9, flexShrink: 0, whiteSpace: "nowrap" }}>
+            <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
               Last seen: {model.lastSeenAt.toLocaleDateString()}
             </span>
           )}
@@ -198,12 +198,12 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
             <div style={{ color: "#e0e0ff", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
               {model.modelId}
             </div>
-            <div style={{ color: "#f87171", fontSize: 9, marginTop: 4 }}>
+            <div style={{ color: "#f87171", fontSize: 10, marginTop: 4 }}>
               Profiling failed
             </div>
           </div>
           {isStale && (
-            <span style={{ color: "#fbbf24", fontSize: 9, flexShrink: 0, whiteSpace: "nowrap" }}>
+            <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
               Last seen: {model.lastSeenAt.toLocaleDateString()}
             </span>
           )}
@@ -232,12 +232,12 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           <div style={{ color: "#e0e0ff", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
             {model.modelId}
           </div>
-          <div style={{ color: "#555566", fontSize: 9, marginTop: 4 }}>
+          <div style={{ color: "#8888a0", fontSize: 10, marginTop: 4 }}>
             Not yet profiled
           </div>
         </div>
         {isStale && (
-          <span style={{ color: "#fbbf24", fontSize: 9, flexShrink: 0, whiteSpace: "nowrap" }}>
+          <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
             Last seen: {model.lastSeenAt.toLocaleDateString()}
           </span>
         )}

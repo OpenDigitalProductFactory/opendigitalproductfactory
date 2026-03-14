@@ -25,6 +25,7 @@ export {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./neo4j-sync";
+export { seedEaReferenceModels } from "./seed-ea-reference-models";
 export {
   buildDiscoveredKey,
   buildInventoryEntityKey,

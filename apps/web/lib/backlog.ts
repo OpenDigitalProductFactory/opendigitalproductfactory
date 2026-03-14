@@ -100,7 +100,7 @@ export const BACKLOG_STATUS_COLOURS: Record<string, string> = {
   "open":        "#38bdf8",
   "in-progress": "#fb923c",
   "done":        "#4ade80",
-  "deferred":    "#555566",
+  "deferred":    "#8888a0",
 };
 
 /** Epic status badge colours (inline styles). */

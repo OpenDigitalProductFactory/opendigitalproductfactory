@@ -15,7 +15,7 @@ type Props = {
 const STATUS_COLOURS: Record<string, string> = {
   active:   "#4ade80",
   draft:    "#fbbf24",
-  inactive: "#555566",
+  inactive: "#8888a0",
 };
 
 export function ProductList({ products, colour, className = "" }: Props) {
@@ -26,7 +26,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
       </p>
       <div className="flex flex-col gap-2">
         {products.map((product) => {
-          const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#555566";
+          const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#8888a0";
           return (
             <div
               key={product.id}
