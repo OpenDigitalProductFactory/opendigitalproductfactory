@@ -17,6 +17,15 @@ export type AgentInfo = {
   agentDescription: string;
   canAssist: boolean;
   systemPrompt: string;
+  skills: AgentSkill[];
+};
+
+/** A context-relevant action the agent can help with. */
+export type AgentSkill = {
+  label: string;
+  description: string;
+  capability: CapabilityKey | null;
+  prompt: string;
 };
 
 /** Entry in the route-to-agent map. */
@@ -26,6 +35,7 @@ export type RouteAgentEntry = {
   agentDescription: string;
   capability: CapabilityKey | null;
   systemPrompt: string;
+  skills: AgentSkill[];
 };
 
 /** Max message content length (chars). */

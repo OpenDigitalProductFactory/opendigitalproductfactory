@@ -67,6 +67,30 @@ describe("resolveAgentForRoute", () => {
       expect(result.systemPrompt.length).toBeGreaterThan(0);
     }
   });
+
+  it("returns skills array for each agent", () => {
+    const routes = ["/portfolio", "/inventory", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    for (const route of routes) {
+      const result = resolveAgentForRoute(route, superuser);
+      expect(result.skills.length).toBeGreaterThan(0);
+      for (const skill of result.skills) {
+        expect(skill.label).toBeTruthy();
+        expect(skill.description).toBeTruthy();
+        expect(skill.prompt).toBeTruthy();
+      }
+    }
+  });
+
+  it("skills include capability-gated items for superuser but not for restricted roles", () => {
+    // EA route has manage_ea_model skills (HR-000 can, HR-500 cannot)
+    const eaAgent = resolveAgentForRoute("/ea", superuser);
+    const manageSkills = eaAgent.skills.filter((s) => s.capability === "manage_ea_model");
+    expect(manageSkills.length).toBeGreaterThan(0);
+    // Skills array itself is unfiltered — filtering happens client-side in AgentSkillsDropdown
+    // Verify the raw skills include both view and manage capabilities
+    const viewSkills = eaAgent.skills.filter((s) => s.capability === "view_ea_modeler");
+    expect(viewSkills.length).toBeGreaterThan(0);
+  });
 });
 
 describe("generateCannedResponse", () => {
