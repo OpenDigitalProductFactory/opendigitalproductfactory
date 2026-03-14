@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { BrandingConfigurator } from "@/components/admin/BrandingConfigurator";
 import { AdminUserAccessPanel } from "@/components/admin/AdminUserAccessPanel";
 import { deleteThemePreset } from "@/lib/actions/branding";
@@ -519,6 +520,8 @@ export default async function AdminPage() {
           {users.length} user{users.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      <AdminTabNav />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {users.map((u) => {

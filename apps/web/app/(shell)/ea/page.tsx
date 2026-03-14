@@ -46,7 +46,24 @@ export default async function EaPage() {
       </div>
 
       <EaTabNav />
-      <ReferenceModelSummary models={models} />
+
+      <section className="mb-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
+              EA Conformance
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Reference Models</h2>
+          </div>
+          <Link
+            href="/ea/models"
+            className="text-xs font-medium text-[var(--dpf-accent)] hover:text-white"
+          >
+            Browse all
+          </Link>
+        </div>
+        <ReferenceModelSummary models={models} />
+      </section>
 
       {views.length > 0 ? (
         <>
