@@ -525,13 +525,26 @@ async function callProviderForProfiling(
     throw new Error(`HTTP ${res.status} from ${profilingProviderId}: ${errBody.slice(0, 200)}`);
   }
   const data = await res.json() as Record<string, unknown>;
+  const usage = typeof data.usage === "object" && data.usage !== null
+    ? data.usage as Record<string, unknown>
+    : {};
+
+  const readUsageNumber = (...keys: string[]): number | undefined => {
+    for (const key of keys) {
+      const value = usage[key];
+      if (typeof value === "number") return value;
+    }
+    return undefined;
+  };
 
   const text = extractText(data);
+  const inputTokens = readUsageNumber("input_tokens", "prompt_tokens");
+  const outputTokens = readUsageNumber("output_tokens", "completion_tokens");
 
   return {
     text,
-    inputTokens: data.usage?.input_tokens ?? data.usage?.prompt_tokens,
-    outputTokens: data.usage?.output_tokens ?? data.usage?.completion_tokens,
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
   };
 }
 
