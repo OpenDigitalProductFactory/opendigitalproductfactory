@@ -1,0 +1,12 @@
+node_modules
+.next
+.worktrees
+.superpowers
+.git
+.claude
+.vscode
+.env
+.env.local
+*.md
+!README.md
+docs/
