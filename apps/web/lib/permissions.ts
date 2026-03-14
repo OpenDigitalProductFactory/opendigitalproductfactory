@@ -48,6 +48,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
 };
 
 export type UserContext = {
+  userId?: string;
   platformRole: string | null;
   isSuperuser: boolean;
 };

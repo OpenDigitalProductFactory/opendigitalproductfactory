@@ -50,7 +50,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
       <AgentCoworkerShell
-        userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+        userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
       />
       <FeedbackButton userId={user.id} />
       <QueueFlusher />
