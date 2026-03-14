@@ -4,6 +4,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBacklogItem, updateBacklogItem } from "@/lib/actions/backlog";
+import { registerActiveFormAssist } from "@/lib/agent-form-assist";
 import {
   validateBacklogInput,
   type BacklogItemInput,
@@ -12,6 +13,7 @@ import {
   type TaxonomyNodeSelect,
   type EpicForSelect,
 } from "@/lib/backlog";
+import { applyBacklogFormAssistUpdates } from "./backlog-form-assist";
 
 type Props = {
   isOpen: boolean;
@@ -61,6 +63,31 @@ export function BacklogPanel({
     }
     setError(null);
   }, [item, isOpen, defaultType, defaultEpicId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    return registerActiveFormAssist({
+      routeContext: "/ops",
+      formId: "backlog-panel",
+      formName: item ? "Backlog item editor" : "New backlog item form",
+      fields: [
+        { key: "title", label: "Title", type: "text" },
+        { key: "type", label: "Type", type: "select", allowedValues: ["portfolio", "product"] },
+        { key: "status", label: "Status", type: "select", allowedValues: ["open", "in-progress", "done", "deferred"] },
+        { key: "priority", label: "Priority", type: "number", helperText: "Lower numbers mean higher priority." },
+        { key: "body", label: "Notes", type: "textarea" },
+      ],
+      getValues: () => ({
+        title: form.title,
+        type: form.type,
+        status: form.status,
+        priority: form.priority ?? null,
+        body: form.body ?? "",
+      }),
+      applyFieldUpdates: (updates) => setForm((prev) => applyBacklogFormAssistUpdates(prev, updates)),
+    });
+  }, [form, isOpen, item]);
 
   function set<K extends keyof BacklogItemInput>(key: K, value: BacklogItemInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

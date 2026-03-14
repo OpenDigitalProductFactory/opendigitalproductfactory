@@ -33,6 +33,13 @@ export class NoProvidersAvailableError extends Error {
   }
 }
 
+export class NoAllowedProvidersForSensitivityError extends Error {
+  constructor(public readonly sensitivity: RouteSensitivity) {
+    super(`No providers allowed for sensitivity ${sensitivity}`);
+    this.name = "NoAllowedProvidersForSensitivityError";
+  }
+}
+
 // ─── Skip patterns for non-chat models ───────────────────────────────────────
 
 const NON_CHAT_PATTERN = /embed|whisper|tts|dall-e|moderation|babbage|davinci-00|text-search|text-similarity|audio|image/i;
@@ -135,7 +142,7 @@ export async function callWithFailover(
   const providerPolicy = await getActiveProviderPolicyInfo();
   const filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
   if (filteredPriority.length === 0) {
-    throw new NoProvidersAvailableError([]);
+    throw new NoAllowedProvidersForSensitivityError(sensitivity);
   }
 
   const baselineTier = filteredPriority[0]!.capabilityTier;

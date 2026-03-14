@@ -9,6 +9,14 @@ import { clearConversation, sendMessage } from "@/lib/actions/agent-coworker";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
+import {
+  loadElevatedAssistPreference,
+  saveElevatedAssistPreference,
+} from "./agent-form-assist-prefs";
+import {
+  buildAgentFormAssistContext,
+  getActiveFormAssist,
+} from "@/lib/agent-form-assist";
 
 type Props = {
   threadId: string | null;
@@ -35,9 +43,11 @@ export function AgentCoworkerPanel({
   const [messages, setMessages] = useState<AgentMessageRow[]>(() => filterMessages(initialMessages));
   const [isPending, startTransition] = useTransition();
   const [isClearing, startClearing] = useTransition();
+  const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
+  const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -47,14 +57,30 @@ export function AgentCoworkerPanel({
     setMessages(filterMessages(initialMessages));
   }, [threadId, initialMessages]);
 
+  useEffect(() => {
+    setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
+  }, [pathname, preferenceUserKey]);
+
+  function handleToggleElevatedAssist() {
+    setElevatedAssistEnabled((prev) => {
+      const next = !prev;
+      saveElevatedAssistPreference(preferenceUserKey, pathname, next);
+      return next;
+    });
+  }
+
   function handleSend(content: string) {
     if (!threadId) return;
+    const activeFormAssist = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
+    const formAssistContext = activeFormAssist ? buildAgentFormAssistContext(activeFormAssist) : undefined;
 
     startTransition(async () => {
       const result = await sendMessage({
         threadId,
         content,
         routeContext: pathname,
+        elevatedFormFillEnabled: elevatedAssistEnabled,
+        ...(formAssistContext ? { formAssistContext } : {}),
       });
       if ("error" in result) {
         console.warn("sendMessage error:", result.error);
@@ -65,6 +91,17 @@ export function AgentCoworkerPanel({
         newMessages.push(result.systemMessage);
       }
       newMessages.push(result.agentMessage);
+      if ("formAssistUpdate" in result && result.formAssistUpdate && activeFormAssist) {
+        activeFormAssist.applyFieldUpdates(result.formAssistUpdate);
+        newMessages.push({
+          id: `local-form-assist-${Date.now()}`,
+          role: "system",
+          content: "Applied the agent's suggested field updates to the active form for your review.",
+          agentId: agent.agentId,
+          routeContext: pathname,
+          createdAt: new Date().toISOString(),
+        });
+      }
       setMessages((prev) => [...prev, ...newMessages]);
     });
   }
@@ -93,6 +130,8 @@ export function AgentCoworkerPanel({
         onSend={handleSend}
         onClear={handleClear}
         clearDisabled={!threadId || messages.length === 0 || isPending || isClearing}
+        elevatedAssistEnabled={elevatedAssistEnabled}
+        onToggleElevatedAssist={handleToggleElevatedAssist}
         onClose={onClose}
         onDragStart={onDragStart}
       />

@@ -11,18 +11,48 @@ describe("AgentPanelHeader", () => {
           agentName: "Ops Co-worker",
           agentDescription: "Helps with operations",
           canAssist: true,
+          sensitivity: "internal",
           systemPrompt: "prompt",
           skills: [],
         }}
-        userContext={{ platformRole: "OPS-100", isSuperuser: false }}
+        userContext={{ userId: "user-1", platformRole: "OPS-100", isSuperuser: false }}
         onSend={() => {}}
         onClear={() => {}}
         clearDisabled={false}
+        elevatedAssistEnabled={false}
+        onToggleElevatedAssist={() => {}}
         onClose={() => {}}
         onDragStart={() => {}}
       />,
     );
 
     expect(html).toContain("Erase");
+  });
+
+  it("renders a yellow elevated assist indicator when form fill is enabled", () => {
+    const html = renderToStaticMarkup(
+      <AgentPanelHeader
+        agent={{
+          agentId: "agent-1",
+          agentName: "Ops Co-worker",
+          agentDescription: "Helps with operations",
+          canAssist: true,
+          sensitivity: "restricted",
+          systemPrompt: "prompt",
+          skills: [],
+        }}
+        userContext={{ userId: "user-1", platformRole: "OPS-100", isSuperuser: false }}
+        onSend={() => {}}
+        onClear={() => {}}
+        clearDisabled={false}
+        elevatedAssistEnabled
+        onToggleElevatedAssist={() => {}}
+        onClose={() => {}}
+        onDragStart={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Form fill enabled");
+    expect(html).toContain("Restricted");
   });
 });
