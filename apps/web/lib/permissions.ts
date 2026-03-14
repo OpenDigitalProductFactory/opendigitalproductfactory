@@ -79,7 +79,8 @@ export type WorkspaceTile = {
 };
 
 const ALL_TILES: WorkspaceTile[] = [
-  { key: "agents",     label: "Agents",     route: "/ea",        capabilityKey: "view_ea_modeler",  accentColor: "#7c8cf8" },
+  { key: "ea_modeler",    label: "EA Modeler",    route: "/ea",           capabilityKey: "view_ea_modeler",  accentColor: "#7c8cf8" },
+  { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "#38bdf8" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "#4ade80" },
   { key: "inventory",  label: "Inventory",  route: "/inventory", capabilityKey: "view_inventory",   accentColor: "#fb923c" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "#a78bfa" },
