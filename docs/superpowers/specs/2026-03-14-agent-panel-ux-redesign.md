@@ -8,23 +8,26 @@
 ## 1. Floating Agent Button (FAB)
 
 ### Current State
-The Agent button lives in `Header.tsx` (line 73-79) as a pill-shaped button that dispatches `CustomEvent("toggle-agent-panel")`.
+The Agent button lives in `Header.tsx` (lines 73-80) as a pill-shaped button that dispatches `CustomEvent("toggle-agent-panel")`.
 
 ### New Behavior
-- **Remove** the Agent button from `Header.tsx` entirely.
+- **Remove** the Agent button from `Header.tsx` entirely (the `<button>` element, its `onClick`, and the associated `<span>` children).
 - **Add** a new floating action button (FAB) rendered in the shell layout, visually centered on the right edge of the viewport.
 - **Position:** `position: fixed`, `right: 16px`, `top: 50%`, `transform: translateY(-50%)`.
 - **Visual:** 44px circle, `background: rgba(124, 140, 248, 0.7)`, `backdrop-filter: blur(4px)`, green status dot centered, subtle box-shadow. On hover: opacity increases to 0.9, slight scale-up (`transform: scale(1.1)`).
 - **Hidden when panel is open** — the FAB disappears during the expanding/open states and reappears when the panel collapses back.
 
-### Morph Animation (FAB ↔ Panel)
+### Drag System Disposition
+The current `AgentCoworkerPanel` has a drag system (`handleDragStart`, `positionRef`, `dragRef`, `LS_KEY_POS`) that lets users reposition the panel. **This is removed.** The panel position is fixed (bottom-right, adjacent to the FAB origin). The `agent-panel-position` localStorage key becomes orphaned — the shell clears it on mount to avoid stale data.
+
+### Morph Animation (FAB <-> Panel)
 The FAB and panel are wrapped in a single `AgentCoworkerShell` component that manages the animation state machine:
 
-**States:** `closed → expanding → open → collapsing → closed`
+**States:** `closed -> expanding -> open -> collapsing -> closed`
 
 **Open animation (~300ms):**
 1. FAB begins transitioning: `width`, `height`, `border-radius`, `top`, `left`/`right` animate from circle (44px, 50% border-radius) to panel dimensions (380x480, 12px border-radius)
-2. Panel content (header, messages, input) fades in after expansion completes (opacity 0→1, ~150ms delay)
+2. Panel content (header, messages, input) fades in after expansion completes (opacity 0->1, ~150ms delay)
 
 **Close animation (~300ms):**
 1. Panel content fades out (~100ms)
@@ -33,7 +36,7 @@ The FAB and panel are wrapped in a single `AgentCoworkerShell` component that ma
 
 **Implementation:** CSS `transition` on the wrapper div's dimensional properties. React state drives the phase: `closed | expanding | open | collapsing`. `onTransitionEnd` advances to the next phase. No animation library needed.
 
-**localStorage:** The `agent-panel-open` key continues to persist open/closed state. On page load, if saved state is "open", skip the animation and render the panel directly (no animation on hydration).
+**localStorage:** The `agent-panel-open` key continues to persist open/closed state. On page load, if saved state is "open", skip the animation and render the panel directly (no animation on hydration). The orphaned `agent-panel-position` key is cleared on mount.
 
 ---
 
@@ -49,8 +52,10 @@ All solid backgrounds become alpha + blur:
 | Panel border | `var(--dpf-border)` solid | `rgba(42, 42, 64, 0.6)` |
 | Panel header | `var(--dpf-surface-2)` solid | `rgba(22, 22, 37, 0.8)` |
 | Assistant bubbles | `var(--dpf-surface-2)` solid | `rgba(22, 22, 37, 0.8)` |
+| Thinking bubble | `var(--dpf-surface-2)` solid | `rgba(22, 22, 37, 0.8)` |
 | Input area bg | `var(--dpf-bg)` solid | `rgba(15, 15, 26, 0.8)` |
 | Input border | `var(--dpf-border)` solid | `rgba(42, 42, 64, 0.6)` |
+| Input wrapper border-top | `var(--dpf-border)` solid | `rgba(42, 42, 64, 0.6)` |
 
 **Unchanged:** User message bubbles stay opaque `var(--dpf-accent)` — they should stand out clearly. System messages (muted italic text) are already transparent by nature.
 
@@ -62,11 +67,13 @@ All solid backgrounds become alpha + blur:
 When the user navigates to a different route, the panel inserts a system message like *"EA Architect has joined the conversation"* via an optimistic client-side insert + fire-and-forget `recordAgentTransition` server action. This clutters the conversation when navigating frequently.
 
 ### New Behavior
-- **Remove** the agent transition `useEffect` from `AgentCoworkerPanel` that watches `agent.agentId` changes and inserts system messages.
-- **Remove** the call to `recordAgentTransition` server action (the server action itself can remain for backward compatibility but is no longer called).
+- **Remove** the agent transition `useEffect` from `AgentCoworkerPanel` that watches `agent.agentId` changes and inserts system messages (the effect block with `lastAgentId` state, the optimistic message insertion, and the `void recordAgentTransition(...)` call).
+- **Remove** the `lastAgentId` state variable and the `recordAgentTransition` import.
+- **Remove** the `CustomEvent("toggle-agent-panel")` listener `useEffect` (no longer needed — the shell manages open/closed state directly).
 - The **panel header agent name** updates automatically when the route changes (it already does — `resolveAgentForRoute` runs on every render with the current pathname).
 - **No visual signal** beyond the header name change. The conversation flow stays clean.
 - Existing transition messages already stored in the DB continue to render normally as system messages — no migration needed to remove them.
+- The `recordAgentTransition` server action itself remains in `actions/agent-coworker.ts` for backward compatibility but is no longer called.
 
 ---
 
@@ -89,7 +96,7 @@ export type AgentSkill = {
 
 - `RouteAgentEntry` gains `skills: AgentSkill[]`
 - `AgentInfo` gains `skills: AgentSkill[]`
-- `resolveAgentForRoute` returns `skills` (already passes through all fields from the matched entry)
+- `resolveAgentForRoute` must be updated to explicitly include `skills: bestMatch.skills` in both return statements (it does NOT automatically pass through fields — each field is listed explicitly in the return object).
 
 ### Data Source
 
@@ -129,42 +136,58 @@ Other agents (inventory-specialist, hr-specialist, customer-advisor, admin-assis
 
 Skills are filtered client-side using `can(userContext, skill.capability)`. A skill with `capability: null` is visible to everyone. Higher-level HR roles see more skills because they have more capabilities.
 
+Note: `canAssist` (the route-level capability check) gates the entire agent. If `canAssist` is false, the user shouldn't be on that route at all (layout auth gates prevent it). So per-skill filtering only narrows within an already-authorized context.
+
 ### UX
 
-- In `AgentPanelHeader`, next to the agent name: a small "Skills ▼" label.
-- **Hover** on "Skills ▼" → dropdown appears below the header with skill labels and short descriptions.
-- **Click a skill** → dropdown closes, the skill's `prompt` is sent as a message (reuses the existing `onSend` callback from `AgentMessageInput`). The agent responds via normal inference.
-- **Mouse leave** → dropdown closes.
-- Dropdown is a positioned `<div>` with `onMouseEnter`/`onMouseLeave` on the trigger area. No external library.
+- In `AgentPanelHeader`, next to the agent name: a small "Skills" label with a down arrow.
+- **Hover OR focus** on the trigger -> dropdown appears below the header with skill labels and short descriptions. Both `onMouseEnter`/`onMouseLeave` and `onFocus`/`onBlur` are supported for keyboard accessibility (aligned with WCAG AA goals from EP-UI-A11Y-001).
+- **Click a skill** -> dropdown closes, the skill's `prompt` is sent as a message via the same `onSend` callback used by `AgentMessageInput`. No separate `onSendSkill` — same function, same flow.
+- **Mouse leave or blur** -> dropdown closes.
+- Dropdown is a positioned `<div>` with hover/focus handlers on the trigger area. No external library.
 
 ---
 
 ## 5. Component Architecture
 
+### State Ownership
+
+The `AgentCoworkerShell` component owns the open/closed state (currently in `AgentCoworkerPanel`). These items move **from** `AgentCoworkerPanel` **to** `AgentCoworkerShell`:
+- `isOpen` state + `setIsOpen`
+- `loadOpen()` helper function
+- `LS_KEY_OPEN` constant
+- localStorage read/write for open/closed
+- Cleanup of orphaned `LS_KEY_POS` (agent-panel-position) on mount
+
+`AgentCoworkerPanel` becomes a pure display component — it receives props and renders, with no internal open/closed management.
+
 ### New Components
 
 | Component | File | Responsibility |
 |-----------|------|---------------|
-| `AgentCoworkerShell` | `apps/web/components/agent/AgentCoworkerShell.tsx` | Wraps FAB + panel. Manages animation state machine (`closed/expanding/open/collapsing`). Renders FAB when closed, panel when open, animated transition between. |
-| `AgentFAB` | `apps/web/components/agent/AgentFAB.tsx` | The floating circle button. Green dot, semi-transparent. onClick triggers expansion. |
-| `AgentSkillsDropdown` | `apps/web/components/agent/AgentSkillsDropdown.tsx` | Hover-triggered dropdown listing filtered skills. Calls `onSelectSkill(prompt)` on click. |
+| `AgentCoworkerShell` | `apps/web/components/agent/AgentCoworkerShell.tsx` | Owns open/closed state + animation phase. Renders FAB when closed, animated container during transitions, panel when open. Passes `onClose` and `onSend` to panel. |
+| `AgentFAB` | `apps/web/components/agent/AgentFAB.tsx` | The floating circle button. Green dot, semi-transparent. onClick prop triggers expansion. |
+| `AgentSkillsDropdown` | `apps/web/components/agent/AgentSkillsDropdown.tsx` | Hover/focus-triggered dropdown listing filtered skills. Calls `onSend(prompt)` on click — same callback as message input. |
 
 ### Modified Components
 
 | Component | Change |
 |-----------|--------|
-| `AgentCoworkerPanel` | Remove transition `useEffect`. Semi-transparent styles. Accept `onClose` and `onSendSkill` props. |
-| `AgentPanelHeader` | Add skills dropdown trigger. Pass `skills` and `userContext` props. |
+| `AgentCoworkerPanel` | Remove: transition useEffect, CustomEvent listener, lastAgentId state, recordAgentTransition import, isOpen state, loadOpen, drag system (handleDragStart, positionRef, dragRef, LS_KEY_POS). Semi-transparent styles. Accept `onClose` and `onSend` props (onSend replaces internal handleSend). |
+| `AgentPanelHeader` | Add skills dropdown trigger. Accept `skills`, `userContext`, and `onSend` props. |
 | `AgentMessageBubble` | Semi-transparent background for assistant bubbles. |
-| `Header.tsx` | Remove Agent button (the `<button>` with `CustomEvent("toggle-agent-panel")`). |
+| `AgentMessageInput` | Semi-transparent input background and border styles. |
+| `Header.tsx` | Remove Agent button (the `<button>`, its onClick, and the two child `<span>` elements). |
 
 ### Removed
 
 | Item | Reason |
 |------|--------|
-| `CustomEvent("toggle-agent-panel")` listener in `AgentCoworkerPanel` | FAB and panel are now siblings in `AgentCoworkerShell`, no cross-component events needed |
-| Agent transition `useEffect` in `AgentCoworkerPanel` | No more transition system messages |
-| `document.addEventListener("toggle-agent-panel")` | Replaced by direct state management in shell |
+| `CustomEvent("toggle-agent-panel")` listener in `AgentCoworkerPanel` | FAB and panel are siblings in `AgentCoworkerShell`, direct state management |
+| Agent transition `useEffect` + `lastAgentId` state | No more transition system messages |
+| `recordAgentTransition` import in panel | No longer called |
+| Drag system (`handleDragStart`, `positionRef`, `dragRef`, `LS_KEY_POS`) | Panel position is fixed, not draggable |
+| `loadPosition()` / `LS_KEY_POS` localStorage | Orphaned — cleared on shell mount |
 
 ### Shell Layout Change
 
@@ -187,18 +210,19 @@ Same props — the shell component passes them through to the panel when it's op
 ### New Files
 | File | Responsibility |
 |------|---------------|
-| `apps/web/components/agent/AgentCoworkerShell.tsx` | Animation state machine, FAB ↔ panel morph |
+| `apps/web/components/agent/AgentCoworkerShell.tsx` | Animation state machine, FAB <-> panel morph, state ownership |
 | `apps/web/components/agent/AgentFAB.tsx` | Floating action button |
-| `apps/web/components/agent/AgentSkillsDropdown.tsx` | Hover dropdown for context skills |
+| `apps/web/components/agent/AgentSkillsDropdown.tsx` | Hover/focus dropdown for context skills |
 
 ### Modified Files
 | File | Change |
 |------|--------|
 | `apps/web/lib/agent-coworker-types.ts` | Add `AgentSkill` type; add `skills` to `RouteAgentEntry` and `AgentInfo` |
-| `apps/web/lib/agent-routing.ts` | Add `skills` arrays to `ROUTE_AGENT_MAP`; return via `resolveAgentForRoute` |
-| `apps/web/components/agent/AgentCoworkerPanel.tsx` | Semi-transparent styles; remove transition useEffect + CustomEvent listener; accept onClose/onSendSkill props |
-| `apps/web/components/agent/AgentPanelHeader.tsx` | Add skills dropdown trigger; accept skills/userContext props |
+| `apps/web/lib/agent-routing.ts` | Add `skills` arrays to `ROUTE_AGENT_MAP`; add `skills: bestMatch.skills` to both return statements in `resolveAgentForRoute` |
+| `apps/web/components/agent/AgentCoworkerPanel.tsx` | Semi-transparent styles; remove transition useEffect, CustomEvent listener, drag system, isOpen state; accept onClose/onSend props |
+| `apps/web/components/agent/AgentPanelHeader.tsx` | Add skills dropdown trigger; accept skills/userContext/onSend props |
 | `apps/web/components/agent/AgentMessageBubble.tsx` | Semi-transparent assistant bubble background |
+| `apps/web/components/agent/AgentMessageInput.tsx` | Semi-transparent input background, border, and wrapper border-top |
 | `apps/web/components/shell/Header.tsx` | Remove Agent button |
 | `apps/web/app/(shell)/layout.tsx` | Render `AgentCoworkerShell` instead of `AgentCoworkerPanel` |
 
@@ -210,7 +234,8 @@ No Prisma migrations. No new server actions. Skills use the existing `sendMessag
 ## 7. Testing Strategy
 
 - **Unit tests for skills filtering**: Verify `can()` correctly filters skills by user capability — HR-000 sees all, HR-500 sees ops skills, null-role sees only null-capability skills
-- **Unit test for AgentSkill on every agent**: Verify each agent in the map has at least 1 skill
+- **Unit test for AgentSkill on every agent**: Verify each agent in the map has at least 1 skill, and every skill has non-empty label/description/prompt
+- **Unit test for resolveAgentForRoute skills**: Verify skills are returned for each route
 - **Component tests**: Verify `AgentCoworkerShell` renders FAB when closed, panel when open (state transitions)
-- **Visual verification**: Animation smoothness, transparency effect, skills dropdown positioning
+- **Visual verification**: Animation smoothness, transparency effect, skills dropdown positioning, keyboard accessibility of dropdown
 - **No animation unit tests** — CSS transitions are verified visually, not programmatically
