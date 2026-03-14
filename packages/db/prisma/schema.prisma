@@ -608,7 +608,7 @@ model AgentThread {
   id         String         @id @default(cuid())
   userId     String
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contextKey String
+  contextKey String @default("coworker")
   messages   AgentMessage[]
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
@@ -617,13 +617,18 @@ model AgentThread {
 }
 
 model AgentMessage {
-  id        String      @id @default(cuid())
-  threadId  String
-  thread    AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  role      String      // user | assistant | system
-  content   String
-  tone      String?
-  createdAt DateTime    @default(now())
+  id           String      @id @default(cuid())
+  threadId     String
+  thread       AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role         String      // user | assistant | system
+  content      String
+  tone         String?
+  agentId      String?     // specialist agent that authored this response
+  routeContext String?     // route pathname when message was sent
+  createdAt    DateTime    @default(now())
+
+  @@index([threadId])
+  @@index([createdAt])
 }
 
 // ─── EA Modeling ─────────────────────────────────────────────────────────────
