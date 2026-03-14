@@ -8,12 +8,14 @@
   --dpf-surface-2: #161625;
   --dpf-accent: #7c8cf8;
   --dpf-border: #2a2a40;
-  --dpf-muted: #555566;
+  --dpf-muted: #8888a0;
+  --dpf-font-body: Inter, system-ui, sans-serif;
+  --dpf-font-heading: Inter, system-ui, sans-serif;
 }
 
 body {
   background: var(--dpf-bg);
   color: #e2e2f0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--dpf-font-body);
   -webkit-font-smoothing: antialiased;
 }

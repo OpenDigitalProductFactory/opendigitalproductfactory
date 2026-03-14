@@ -85,7 +85,7 @@ export function PortfolioTreeNodeItem({
       {isOpen &&
         node.children.map((child) => (
           <PortfolioTreeNodeItem
-            key={child.nodeId}
+            key={child.id}
             node={child}
             depth={depth + 1}
             openIds={openIds}

@@ -46,7 +46,7 @@ export function ElementPalette({ elementTypes, onDragStart, onSearchExisting }: 
           const colours = LAYER_COLOURS[layer]!;
           return (
             <div key={layer}>
-              <div style={{ padding: "3px 10px 1px", fontSize: 8, fontWeight: 700, color: "#555566", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <div style={{ padding: "3px 10px 1px", fontSize: 10, fontWeight: 700, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {layer}
               </div>
               {types.map((et) => (
@@ -71,7 +71,7 @@ export function ElementPalette({ elementTypes, onDragStart, onSearchExisting }: 
           onClick={onSearchExisting}
           disabled
           title="Search existing elements — coming in Phase EA-3"
-          style={{ width: "100%", padding: 4, background: "#1a1a2e", border: "1px dashed #555566", borderRadius: 3, color: "#555566", fontSize: 11, cursor: "not-allowed", opacity: 0.5 }}
+          style={{ width: "100%", padding: 4, background: "#1a1a2e", border: "1px dashed #8888a0", borderRadius: 3, color: "#8888a0", fontSize: 11, cursor: "not-allowed", opacity: 0.5 }}
         >
           + Search existing…
         </button>

@@ -60,7 +60,7 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
       >
         <div style={{ padding: "10px 12px 6px" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#e0e0ff", marginBottom: 1 }}>{element.name}</div>
-          <div style={{ fontSize: 8, color: "#555566", marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: "#8888a0", marginBottom: 10 }}>
             {element.typeName} · {element.lifecycleStage} · {element.lifecycleStatus}
           </div>
 
@@ -83,7 +83,7 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
                   {mode === "reference" ? "Reference" : "Propose change"}
                 </span>
               </div>
-              <div style={{ fontSize: 9, color: "#667788" }}>
+              <div style={{ fontSize: 10, color: "#667788" }}>
                 {mode === "reference"
                   ? "Read-only anchor. Shows operational context."
                   : "Editable copy. Describe how it changes."}
@@ -101,7 +101,7 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
           </button>
           <button
             onClick={onCancel}
-            style={{ padding: "5px 9px", background: "transparent", border: "1px solid #2a2a40", borderRadius: 4, color: "#555566", fontSize: 10, cursor: "pointer" }}
+            style={{ padding: "5px 9px", background: "transparent", border: "1px solid #2a2a40", borderRadius: 4, color: "#8888a0", fontSize: 10, cursor: "pointer" }}
           >
             Cancel
           </button>

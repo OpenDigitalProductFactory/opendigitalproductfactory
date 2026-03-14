@@ -4,19 +4,15 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs } from "@/lib/ai-provider-data";
-import { syncProviderRegistry, triggerProviderSync } from "@/lib/actions/ai-providers";
+import { syncProviderRegistry } from "@/lib/actions/ai-providers";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
-
-async function syncAction(_formData: FormData): Promise<void> {
-  "use server";
-  await triggerProviderSync();
-}
+import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
   unconfigured:  "#fbbf24",
-  inactive:      "#555566",
+  inactive:      "#8888a0",
 };
 
 export default async function PlatformAiPage() {
@@ -51,7 +47,7 @@ export default async function PlatformAiPage() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>AI Providers</h1>
-        <p style={{ fontSize: 11, color: "#555566", marginTop: 2 }}>
+        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
           {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({directProviders.length} direct, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
@@ -61,16 +57,7 @@ export default async function PlatformAiPage() {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Providers</div>
-          {canWrite && (
-            <form action={syncAction}>
-              <button
-                type="submit"
-                style={{ fontSize: 10, padding: "3px 10px", background: "transparent", border: "1px solid #2a2a40", color: "#555566", borderRadius: 3, cursor: "pointer" }}
-              >
-                ↻ Sync from registry
-              </button>
-            </form>
-          )}
+          {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
         </div>
 
         {/* Direct Providers */}
@@ -81,7 +68,7 @@ export default async function PlatformAiPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
               {directProviders.map(({ provider }) => {
-                const colour = STATUS_COLOURS[provider.status] ?? "#555566";
+                const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
                   <div
                     key={provider.providerId}
@@ -89,20 +76,32 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 8, padding: "1px 5px", borderRadius: 3 }}>
+                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
                         {provider.status}
                       </span>
                     </div>
-                    <div style={{ color: "#555566", fontSize: 9, marginBottom: 6 }}>
+                    <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
-                    <Link
-                      href={`/platform/ai/providers/${provider.providerId}`}
-                      style={{ color: "#7c8cf8", fontSize: 9 }}
-                    >
-                      Configure →
-                    </Link>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/platform/ai/providers/${provider.providerId}`}
+                        style={{ color: "#7c8cf8", fontSize: 10 }}
+                      >
+                        Configure →
+                      </Link>
+                      {provider.docsUrl && (
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
+                          Docs
+                        </a>
+                      )}
+                      {provider.consoleUrl && (
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
+                          Console
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -118,7 +117,7 @@ export default async function PlatformAiPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
               {routerProviders.map(({ provider }) => {
-                const colour = STATUS_COLOURS[provider.status] ?? "#555566";
+                const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
                   <div
                     key={provider.providerId}
@@ -126,20 +125,32 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 8, padding: "1px 5px", borderRadius: 3 }}>
+                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
                         {provider.status}
                       </span>
                     </div>
-                    <div style={{ color: "#555566", fontSize: 9, marginBottom: 6 }}>
+                    <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
                       {provider.families.length > 3 ? " +more" : ""}
                     </div>
-                    <Link
-                      href={`/platform/ai/providers/${provider.providerId}`}
-                      style={{ color: "#7c8cf8", fontSize: 9 }}
-                    >
-                      Configure →
-                    </Link>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/platform/ai/providers/${provider.providerId}`}
+                        style={{ color: "#7c8cf8", fontSize: 10 }}
+                      >
+                        Configure →
+                      </Link>
+                      {provider.docsUrl && (
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
+                          Docs
+                        </a>
+                      )}
+                      {provider.consoleUrl && (
+                        <a href={provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
+                          Console
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -148,7 +159,7 @@ export default async function PlatformAiPage() {
         )}
 
         {providers.length === 0 && (
-          <p style={{ color: "#555566", fontSize: 11 }}>No providers registered. Click &quot;Sync from registry&quot; to import.</p>
+          <p style={{ color: "#8888a0", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
         )}
       </div>
 

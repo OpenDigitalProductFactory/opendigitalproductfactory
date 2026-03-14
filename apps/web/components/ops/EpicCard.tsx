@@ -53,7 +53,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
   const totalCount = epic.items.length;
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
-  const statusColour = EPIC_STATUS_COLOURS[epic.status] ?? "#555566";
+  const statusColour = EPIC_STATUS_COLOURS[epic.status] ?? "#8888a0";
   const portfolioLabels = epic.portfolios.map((p) => p.portfolio.name).join(" · ");
 
   function handleDelete() {

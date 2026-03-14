@@ -19,7 +19,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [secretRef, setSecretRef]                   = useState(credential?.secretRef ?? "");
+  // Secrets are write-only — never sent from server. Empty = no change on save.
+  const [secretRef, setSecretRef]                   = useState("");
   const [endpoint, setEndpoint]                     = useState(provider.endpoint ?? "");
   const [computeWatts, setComputeWatts]             = useState(String(provider.computeWatts ?? 150));
   const [electricityRate, setElectricityRate]       = useState(String(provider.electricityRateKwh ?? 0.12));
@@ -30,7 +31,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
-  const [clientSecret, setClientSecret]             = useState(credential?.clientSecret ?? "");
+  const [clientSecret, setClientSecret]             = useState("");  // write-only
   const [tokenEndpoint, setTokenEndpoint]           = useState(credential?.tokenEndpoint ?? "");
   const [scope, setScope]                           = useState(credential?.scope ?? "");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState(provider.authMethod);
@@ -111,22 +112,22 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     });
   }
 
-  const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#555566" : "#fbbf24";
+  const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#8888a0" : "#fbbf24";
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
     background: "#1a1a2e",
     border: "1px solid #2a2a40",
     color: "#e0e0ff",
-    fontSize: 11,
-    padding: "6px 8px",
+    fontSize: 13,
+    padding: "8px 10px",
     borderRadius: 4,
   };
 
   const labelStyle: React.CSSProperties = {
     display: "block",
-    color: "#555566",
-    fontSize: 10,
+    color: "#c0c0d8",
+    fontSize: 12,
     marginBottom: 4,
   };
 
@@ -134,15 +135,15 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     <div style={{ maxWidth: 560 }}>
       {/* Status */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-        <span style={{ background: `${statusColour}20`, color: statusColour, fontSize: 9, padding: "2px 6px", borderRadius: 3 }}>
+        <span style={{ background: `${statusColour}20`, color: statusColour, fontSize: 12, padding: "3px 8px", borderRadius: 3 }}>
           {provider.status}
         </span>
-        <span style={{ color: "#555566", fontSize: 10 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
+        <span style={{ color: "#b0b0c8", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
       </div>
 
       {/* Enabled families */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ color: "#555566", fontSize: 10, marginBottom: 6 }}>Enabled model families</div>
+        <div style={{ color: "#c0c0d8", fontSize: 12, marginBottom: 6 }}>Enabled model families</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {provider.families.map((f) => (
             <label key={f} style={{ display: "flex", alignItems: "center", gap: 4, cursor: canWrite ? "pointer" : "default" }}>
@@ -152,7 +153,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 disabled={!canWrite || isPending}
                 onChange={() => toggleFamily(f)}
               />
-              <span style={{ fontSize: 10, color: "#e0e0ff" }}>{f}</span>
+              <span style={{ fontSize: 12, color: "#e0e0ff" }}>{f}</span>
             </label>
           ))}
         </div>
@@ -174,17 +175,17 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </div>
       )}
 
-      {/* Auth method selector (for dual-auth providers) */}
-      {hasDualAuth && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>
-            Authentication method
-          </label>
+      {/* Auth method */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={labelStyle}>
+          Authentication method
+        </label>
+        {hasDualAuth ? (
           <select
             value={selectedAuthMethod}
             onChange={(e) => setSelectedAuthMethod(e.target.value)}
             disabled={!canWrite || isPending}
-            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 8px", borderRadius: 4 }}
+            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 10px", borderRadius: 4 }}
           >
             {provider.supportedAuthMethods.map((m) => (
               <option key={m} value={m}>
@@ -192,20 +193,28 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </option>
             ))}
           </select>
-        </div>
-      )}
+        ) : (
+          <span style={{ color: "#e0e0ff", fontSize: 13 }}>
+            {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
+          </span>
+        )}
+      </div>
 
       {/* API key credential field */}
       {selectedAuthMethod === "api_key" && (
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>
             API Key
+            {credential?.secretHint && !secretRef && (
+              <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.secretHint}</span>
+            )}
           </label>
           <input
+            type="password"
             value={secretRef}
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
-            placeholder="ANTHROPIC_API_KEY"
+            placeholder={credential?.secretHint ? "Enter new key to replace" : "Enter API key"}
             style={{ ...inputStyle, fontFamily: "monospace" }}
           />
         </div>
@@ -229,13 +238,16 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>
               Client Secret
+              {credential?.clientSecretHint && !clientSecret && (
+                <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.clientSecretHint}</span>
+              )}
             </label>
             <input
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               disabled={!canWrite || isPending}
-              placeholder="client_secret"
+              placeholder={credential?.clientSecretHint ? "Enter new secret to replace" : "Enter client secret"}
               style={inputStyle}
             />
           </div>
@@ -298,20 +310,20 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleSave}
             disabled={isPending}
-            style={{ padding: "6px 14px", background: "#2a2a50", border: "1px solid #7c8cf8", color: "#7c8cf8", borderRadius: 4, fontSize: 11, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "#2a2a50", border: "1px solid #7c8cf8", color: "#7c8cf8", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
             Save
           </button>
           <button
             onClick={handleTest}
             disabled={isPending}
-            style={{ padding: "6px 14px", background: "transparent", border: "1px solid #2a2a40", color: "#e0e0ff", borderRadius: 4, fontSize: 11, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "transparent", border: "1px solid #2a2a40", color: "#e0e0ff", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
             Test connection
           </button>
-          {saveMessage && <span style={{ fontSize: 10, color: saveMessage.startsWith("Error") ? "#f87171" : "#4ade80" }}>{saveMessage}</span>}
+          {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "#f87171" : "#4ade80" }}>{saveMessage}</span>}
           {testResult && (
-            <span style={{ fontSize: 10, color: testResult.ok ? "#4ade80" : "#f87171" }}>
+            <span style={{ fontSize: 12, color: testResult.ok ? "#4ade80" : "#f87171" }}>
               {testResult.ok ? "✓" : "✗"} {testResult.message}
             </span>
           )}
@@ -323,19 +335,19 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleRefreshModels}
             disabled={isPending}
-            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 11, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}
+            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: "pointer" }}
           >
             Refresh Models
           </button>
           {discoveryResult && (
-            <span style={{ marginLeft: 8, fontSize: 10, color: discoveryResult.error ? "#f87171" : "#4ade80" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: discoveryResult.error ? "#f87171" : "#4ade80" }}>
               {discoveryResult.error
                 ? `Error: ${discoveryResult.error}`
                 : `${discoveryResult.discovered} model${discoveryResult.discovered !== 1 ? "s" : ""} discovered (${discoveryResult.newCount} new)`}
             </span>
           )}
           {profilingResult && (
-            <span style={{ marginLeft: 8, fontSize: 10, color: profilingResult.error ? "#f87171" : "#4ade80" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: profilingResult.error ? "#f87171" : "#4ade80" }}>
               {profilingResult.error
                 ? `Profiling error: ${profilingResult.error}`
                 : `${profilingResult.profiled} profiled, ${profilingResult.failed} failed`}
@@ -345,14 +357,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       )}
 
       {models.length > 0 && (
-        <p style={{ color: "#555566", fontSize: 10, marginTop: 8 }}>
+        <p style={{ color: "#b0b0c8", fontSize: 12, marginTop: 8 }}>
           {models.length} model{models.length !== 1 ? "s" : ""} discovered
         </p>
       )}
 
       {models.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+          <div style={{ color: "#7c8cf8", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
             Discovered Models
           </div>
           <ModelSection

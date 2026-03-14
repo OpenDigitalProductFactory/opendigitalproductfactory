@@ -22,7 +22,7 @@ export function BacklogItemRow({ item, onEdit }: Props) {
     });
   }
 
-  const statusColour = BACKLOG_STATUS_COLOURS[item.status] ?? "#555566";
+  const statusColour = BACKLOG_STATUS_COLOURS[item.status] ?? "#8888a0";
 
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">

@@ -13,9 +13,9 @@ import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPane
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
 
 const STATUS_COLOURS: Record<string, string> = {
-  active:   "#4ade80",  // green-400
-  draft:    "#fbbf24",  // amber-400
-  inactive: "#555566",  // muted
+  active: "#4ade80",
+  draft: "#fbbf24",
+  inactive: "#555566",
 };
 
 export default async function InventoryPage() {
@@ -41,11 +41,11 @@ export default async function InventoryPage() {
   });
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="flex flex-col h-full">
+      <div className="mb-4 shrink-0">
         <h1 className="text-xl font-bold text-white">Inventory</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {products.length} product{products.length !== 1 ? "s" : ""}
+          {products.length.toLocaleString()} product{products.length !== 1 ? "s" : ""}
         </p>
       </div>
 

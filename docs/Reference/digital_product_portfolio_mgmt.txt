@@ -1,0 +1,1500 @@
+The Open Group Guide Digital Product Portfolio Management in the Digital Enterprise
+
+Copyright © 2025, The Open Group
+No part of this publication may be reproduced, stored in a retrieval system, or transmitted, in any form or by any means, electronic, mechanical, photocopying, recording, or otherwise, without the prior permission of the copyright owners. Specifically, without such written permission, the use or incorporation of this publication, in whole or in part, is NOT PERMITTED for the purposes of training or developing large language models (LLMs) or any other generative artificial intelligence systems, or otherwise for the purposes of using, or in connection with the use of, such technologies, tools, or models to generate any data or content and/or to synthesize or combine with any other data or content.
+This specification has not been verified for avoidance of possible third-party proprietary rights. In implementing this specification, usual procedures to ensure the respect of possible third-party intellectual property rights should be followed.
+
+The Open Group Guide
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+ISBN:
+
+1-957866-58-1
+
+Document Number: G252
+
+Published by The Open Group, March 2025. Comments relating to the material contained in this document may be submitted to:
+The Open Group, Apex Plaza, Forbury Road, Reading, Berkshire, RG1 1AX, United Kingdom or by electronic mail to:
+ogspecs@opengroup.org
+
+ii
+
+The Open Group Guide (2025)
+
+Contents
+1 About this Guide: Purpose and Audience ................................................................. 1 1.1 Drivers for the Transformation: What Problem are we Solving? ................... 2 1.2 Project versus Product Mindsets..................................................................... 3 1.3 Practical Implications of a DPPM Transformation......................................... 6
+2 The Digital Product as Conceptual Focal Point ........................................................ 8 2.1 "Digital Product" Defined .............................................................................. 8 2.2 The Digital Product Specification................................................................... 8 2.3 Strategic Product Management Considerations .............................................. 9
+3 Research-Based Foundations for DPPM................................................................. 11
+4 The Four Digital Product Portfolio Types .............................................................. 13 4.1 The "Provided Externally" Portfolio ............................................................ 15 4.1.1 Approach to Provided Externally Portfolio Structure ................... 16 4.1.2 Characteristics of the Provided Externally Portfolio ..................... 16 4.2 The "Provided Internally" Portfolio.............................................................. 17 4.2.1 Approach to Portfolio Structure .................................................... 18 4.2.2 Financial Considerations ............................................................... 19 4.2.3 Characteristics of the Provided Internally Portfolio ...................... 20 4.3 "Foundational" Portfolio............................................................................... 20 4.3.1 Approach to Portfolio Structure .................................................... 21 4.3.2 Example: Storage as a Provided Internally Product ...................... 21 4.3.3 Characteristics of the Foundational Portfolio ................................ 22 4.4 "Manufacture and Delivery" Portfolio.......................................................... 23 4.4.1 Characteristics of the Manufacture and Delivery portfolio ......................................................................................... 24
+5 The IT4IT Reference Architecture Context ............................................................ 25 5.1 IT4IT Functional and Data View .................................................................. 25 5.2 IT4IT Value Stream View ............................................................................ 26
+6 The New Digital Product Manager ......................................................................... 27 6.1 Digital Product Management concerns ......................................................... 28
+7 The Enterprise Architecture Role............................................................................ 29 7.1 Aligning the Enterprise Architecture Capability to DPPM .......................... 30 7.2 The Business Architecture of DPPM Transformation .................................. 32 7.3 Architecture Governance in the DPPM Organization................................... 33
+8 IT Financial Management (ITFM) Leaders ............................................................ 35
+9 Development and DevOps Practitioners ................................................................. 38
+10 Accountability Rooted in Value Streams ................................................................ 41
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+iii
+
+10.1 An Architecture of Accountability................................................................ 41 10.2 "Evaluate": Supporting the Portfolio Manager............................................. 42 10.3 "Explore": Support for the Product Manager ............................................... 44 10.4 "Integrate": Support for Designing and Delivering a Release ...................... 47 10.5 "Deploy": Support for Provisioning and Deployment Teams ...................... 49 10.6 "Release": Support for Offer and Catalog Management .............................. 51 10.7 "Consume": Support for Digital Product Consumers ................................... 52 10.8 "Operate": Support for ITOM and ITSM Teams.......................................... 54
+11 Designing the DPPM Business Architecture .......................................................... 57 11.1 Conway's Law .............................................................................................. 57 11.2 The Architecture of the Empowered Team................................................... 58
+12 Getting Started: Toolchains and Scenarios ............................................................. 62 12.1 Portfolio Evaluations and Tooling ................................................................ 62 12.2 Three Scenarios for Applying DPPM ........................................................... 63 12.3 Scenario 1: Bootstrapping a Digital Product or Portfolio ............................. 63 12.4 Scenario 2: Piloting Digital Products............................................................ 63 12.5 Scenario 3: Enterprise Shift to Digital Products ........................................... 64
+
+iv
+
+The Open Group Guide (2025)
+
+Preface
+
+The Open Group
+
+The Open Group is a global consortium that enables the achievement of business objectives through technology standards and open source initiatives by fostering a culture of collaboration, inclusivity, and mutual respect among our diverse group of 900+ memberships. Our membership includes customers, systems and solutions suppliers, tool vendors, integrators, academics, and consultants across multiple industries.
+
+The mission of The Open Group is to drive the creation of Boundaryless Information FlowTM achieved by:
+· Working with customers to capture, understand, and address current and emerging requirements, establish policies, and share best practices
+· Working with suppliers, consortia, and standards bodies to develop consensus and facilitate interoperability, to evolve and integrate specifications and open source technologies
+· Offering a comprehensive set of services to enhance the operational efficiency of consortia
+· Developing and operating the industry's premier certification service and encouraging procurement of certified products
+
+Further information on The Open Group is available at www.opengroup.org.
+
+The Open Group publishes a wide range of technical documentation, most of which is focused on development of Standards and Guides, but which also includes white papers, technical studies, certification and testing documentation, and business titles. Full details are available at www.opengroup.org/library.
+
+Terminology
+
+For the purposes of Digital Product Portfolio Management in the Digital Enterprise, the following terminology definitions apply:
+
+May
+
+Describes a feature or behavior that is optional. To avoid ambiguity, the opposite of
+
+"may" is expressed as "need not", instead of "may not".
+
+Should Describes a feature or behavior that is recommended but not required.
+
+This Document
+This guide was developed to address the Enterprise Architecture implications of the IT4ITTM Standard architecture and its underlying basis in research done by the MIT Center for Information Systems Research, specifically:
+· What are the implications of the "shift-left" change from project to product as an organizing principle for IT management, as described in the IT4IT Standard?
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+v
+
+· What impact does this change have on the Business Architecture of the enterprise, especially in the organizational structure?
+· How will this impact the role of Enterprise Architects, Product Managers, IT Financial Management (ITFM) professionals, and IT development and operations managers?
+This document is The Open Group Guide to Digital Product Portfolio Management in the Digital Enterprise. It has been developed and approved by The Open Group.
+
+vi
+
+The Open Group Guide (2025)
+
+Trademarks
+ArchiMate, FACE, FACE logo, Future Airborne Capability Environment, Making Standards Work, Open Footprint, Open O logo, Open O and Check certification logo, Open Subsurface Data Universe, OSDU, SOSA, SOSA logo, The Open Group, TOGAF, UNIX, UNIXWARE, and X logo are registered trademarks and Boundaryless Information Flow, Build with Integrity Buy with Confidence, Commercial Aviation Reference Architecture, Dependability Through Assuredness, Digital Practitioner Body of Knowledge, DPBoK, EMMM, FHIM Profile Builder, FHIM logo, FPB, IT4IT, IT4IT logo, O-AA, O-DA, O-DEF, O-HERA, O-PAS, O-TTPS, O-VBA, Open Agile Architecture, Open FAIR, Open Process Automation, Open Trusted Technology Provider, Sensor Integration Simplified, and Sensor Open Systems Architecture are trademarks of The Open Group.
+Amazon is a registered trademark of Amazon, Inc.
+COBIT is a registered trademark of the Information Systems Audit and Control Association (ISACA).
+Forrester is a registered trademark of Forrester Research, Inc.
+HCL is a registered trademark of HCL Technologies Ltd.
+IBM is a registered trademark of International Business Machines Corporation.
+Microsoft is a registered trademark of Microsoft Corporation in the United States and/or other countries.
+OpenText is a trademark of OpenText.
+Oracle is a registered trademark of Oracle and/or its affiliates.
+All other brands, company, and product names are used for identification purposes only and may be trademarks that are the sole property of their respective owners.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+vii
+
+Acknowledgements
+(Please note affiliations were current at the time of approval.) The Open Group gratefully acknowledges the contribution of the following people in the development of this document:
+· Mark Bodman, ServiceNow · Dan Warfield, Managing Digital · Dave Lounsbury, TD Consulting · John Spirko, ServiceNow · David Mosko, RTX The Open Group gratefully acknowledges the following reviewers who participated in the review of this document: · Nilanjan Bose, Deloitte · Dr Abhishek Kumar, ServiceNow · Chris Frost, Fujitsu · Etienne Terpstra-Hollander, Eenpool B.V. · Bernd Ihnen, Bizzdesign · Corinne Brouch, The Open Group · Mark Dickson, Forum Director, The Open Group · Michelle Horrobin, Forum Director, The Open Group
+
+viii
+
+The Open Group Guide (2025)
+
+Referenced Documents
+
+The following documents are referenced in this guide.
+
+(Please note that the links below are good at the time of writing but cannot be guaranteed for the future.)
+
+Betz, 2019
+
+Yet More DevOps Trends For 2020, by Charles Betz, published by Forrester, November 2019; refer to: https://www.forrester.com/blogs/yet-more-devopstrends/
+
+Betz, 2021
+
+Expertise And The Shared Services Problem: A Conversation With Don Reinertsen, by Charles Betz, published by Forrester, May 2021; refer to: https://www.forrester.com/blogs/expertise-and-the-shared-services-problem-aconversation-with-don-reinertsen/
+
+C196
+
+The Digital Practitioner Body of KnowledgeTM Standard (also known as the DPBoKTM Standard), a standard of The Open Group (C196), published by The Open Group, January 2020; refer to: www.opengroup.org/library/c196
+
+C208
+
+The Open Agile ArchitectureTM Standard (also known as the O-AATM Standard), a standard of The Open Group (C208), published by The Open Group, September 2020; refer to: www.opengroup.org/library/c208
+
+C220
+
+The TOGAF® Standard, 10th Edition, a standard of The Open Group (C220), published by The Open Group, April 2022; refer to: www.opengroup.org/library/c220
+
+C24A
+
+The Open Group IT4ITTM Standard, Version 3.0.1: A Reference Architecture for Managing Digital (C24A), published by The Open Group, October 2024; refer to: www.opengroup.org/library/c24a
+
+G184
+
+TOGAF® Series Guide: The TOGAF® Leader's Guide to Establishing and Evolving an EA Capability (G184), published by The Open Group, April 2022; refer to: www.opengroup.org/library/g184
+
+G206
+
+TOGAF® Series Guide: Organization Mapping (G206), published by The Open Group, April 2022; refer to: www.opengroup.org/library/g206
+
+G217
+
+TOGAF® Series Guide: Using the TOGAF® Standard in the Digital Enterprise (G217), published by The Open Group, April 2022; refer to: www.opengroup.org/library/g217
+
+G21H
+
+TOGAF® Series Guide: TOGAF® Digital Business Reference Model (DBRM) (G21H), published by The Open Group, April 2022; refer to: www.opengroup.org/library/g21h
+
+Goldminz, 2016 Pioneers, Settlers, Town Planners (Wardley), by Itamar Goldminz, published by Org Hacking, April 2016; refer to: https://orghacking.com/pioneers-settlerstown-planners-wardley-9dcd3709cde7
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+ix
+
+Greiner, 1998 Evolution and Revolution as Organizations Grow, by Larry E. Greiner, 1998; refer to: https://hbr.org/1998/05/evolution-and-revolution-as-organizations-grow
+
+Harnish, 2014 Scaling Up: How a Few Companies Make It...and Why the Rest Don't, by Verne Harnish, published by Gazelles Inc., October 2014.
+
+Henderson, 1970 The Product Portfolio, by Bruce Henderson, published by Boston Consulting Group, January 1, 1970; refer to: https://www.bcg.com/publications/1970/strategy-the-product-portfolio
+
+Ross, 2018
+
+Goodbye Structure; Hello Accountability, by Jeanne Ross, published by MIT Sloan Management Review, June 2018; refer to: https://sloanreview.mit.edu/article/goodbye-structure-hello-accountability/
+
+Ross et al., 2016 Designed for Digital: How to Architect Your Business for Sustained Success, by Jeanne W. Ross, Cynthia M. Beath, and Martin Mocker, published by MIT Press, 2016.
+
+Sebastian et al., 2017 How Big Old Companies Navigate Digital Transformation, by Sebastian, Ina M, Jeanne W. Ross, Cynthia Beath, Martin Mocker, Kate G. Moloney, and Nils O. Fonstad, published by MIS Quarterly Executive, September 2017.
+
+Skelton & Pais, 2019 Team Topologies: Organizing Business and Technology Teams for Fast Flow, by Matthew Skelton and Manuel Pais, published by IT Revolution Press, September 2019; refer to: https://read.amazon.co.uk/kp/kshare?asin=B07NSF94PC&id=t4lm5qylizd5nmp az5blheh3mi&reshareId=Z55DMCJYZJQHDY37ZRS1&reshareChannel=syste m
+
+Weill & Woerner, 2023 Top-Performing Companies Focus on Customer Domains, by Peter Weill and Stephanie L. Woerner, published by MIT Center for Information Systems Research, No. XXIII-9, September 21, 2023; refer to: https://cisr.mit.edu/publication/2023_0901_DomainOriented_WeillWoerner
+
+The following documents are not referenced directly but also provide useful information:
+Aghina et al., 2020 Enterprise agility: Buzz or business impact?, by Wouter Aghina, Christopher Handscomb, Jesper Ludolph, Dániel Róna, and Dave West, published by McKinsey, March 2020; refer to: https://www.mckinsey.com/capabilities/people-and-organizationalperformance/our-insights/enterprise-agility-buzz-or-business-impact#/
+Aliber et al., 2019 Agile Works--but Are You Measuring the Impact?, by Matthew Aliber, Peter Hildebrandt, Mehran Islam, Andrew Jennings, Erik Lenhard, David Ritter, and
+
+x
+
+The Open Group Guide (2025)
+
+Narayan Wikipedia
+
+Filippo Scognamiglio, published by Boston Consulting Group (BCG), April 2019; refer to: https://www.bcg.com/publications/2019/agile-works-measuringimpact
+The Digital-Savvy Organization (Newsletter), by Sriram Narayan; refer to: https://www.linkedin.com/newsletters/the-digital-savvy-organization6871111491043639297/
+Conway's Law, published by Wikipedia (online); refer to: https://en.wikipedia.org/wiki/Conway's_law
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+xi
+
+1
+
+About this Guide: Purpose and Audience
+
+This document addresses the reasons for ­ and the impact of ­ migration to a Digital Product Portfolio Management (DPPM) operating model in the digital enterprise.
+This framework for implementing DPPM value streams, roles, and automation is based on:
+· The IT4ITTM Reference Architecture as a template for change · The TOGAF® Architecture Development Method (ADM) as a methodology
+As a DPPM migration evolves, it will drive the transformation of key technology leadership roles discussed in this document, especially:
+· Enterprise Architect
+· Product Manager (IT and non-IT)
+· IT Financial Management (ITFM) leaders
+· Development Operations (DevOps) practitioners
+· Managers responsible for planning and delivering DPPM-related people, process, and technology change
+This document addresses the impact of a DPPM transformation on those roles as well as on broader organizational design in such an enterprise.
+The following terminology is used to describe aspects of such a transformation:
+· IT investment
+All spending on IT related work in the enterprise. In a traditional operating model, this is usually the same thing as the IT budget.
+· Product mindset A way of conceptualizing the management of IT investment to support full-lifecycle Product Management rather than focusing on individual project budgets.
+· Digital Product Defined in detail in Section 2, the Digital Product is increasingly the main focus of IT investment as the operating model changes. Digital Products are the vehicle for softwarepowered value delivery in the digital enterprise. This value delivery usually takes the form of a Service as understood by IT Service Management practitioners.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+1
+
+1.1
+
+Drivers for the Transformation: What Problem are we Solving?
+
+Figure 1: Forrester® Research on Convergence of IT and Product Management Models [Source: Betz, 2021]
+DPPM is focused on the need for a business-oriented operating model that addresses the convergence (illustrated in Figure 1) of:
+· Widespread provision of products and services that include software requiring ongoing active management by the supplier
+This includes products and services aimed at both internal and external actors, where there is an explicit or implied assurance of long-term value delivery.
+· Widespread evolution of transformative IT practices for development, delivery, and management of software-enabled value
+These include Agile development; integrated development, delivery, and management teams (DevOps); and automated "digital factory" environments such as Continuous Integration/Continuous Deployment (CI/CD) toolchains. Aggressive automation of IT Operations Management (ITOM) and IT Service Management (ITSM) is also a disruptor.
+These developments have provided significant business value, but at the same time have weakened existing models for managing enterprise investment in the creation, delivery, and management of software.
+Small, Agile software product development teams can achieve better time to market and higher quality outcomes. But at the portfolio level, such teams can easily create new problems such as increased technical debt or significant integration problems.
+For example, a large European bank in 2024 had more than 200 DevOps toolchains in production ­ each created by an empowered, autonomous team, each doing essentially the identical functions
+
+2
+
+The Open Group Guide (2025)
+
+with a slightly different mix of technical products. This is a recipe for needless complexity and organizational inflexibility.
+A weakened operating model in this critical area is likely to lead to poorer outcomes for the enterprise.
+In response to this concern, new approaches have been widely adopted to accelerate the evolution of traditional software requirements management into a more Agile-relevant and transparent operating model.
+This is important, but addressing the convergence illustrated in Figure 1 requires more. Rethinking large-scale requirements management is just one step on the journey to a product-focused business organization.
+
+Figure 2: A Deloitte View of the Product-Focused Organization [Source: Deloitte]1
+This direction is illustrated in Figure 2, in which software provision and management is the result of value stream coordination within an integrated team of business and IT professionals. Pure IT roles disappear, merged into product owner and product team roles.
+IT as a distinct cost center, outside of the business, becomes an increasingly obsolete concept. DPPM helps to describe a future operating model based on a product mindset and transparent value management. It suggests a workable approach from incremental transformation to long term value delivery.
+
+1.2
+
+Project versus Product Mindsets
+
+Fundamental to this change is to move away from organizing IT spending into a set of development projects and a set of "business as usual" cost centers. This traditional financial structure lies at the heart of the "silo-based" operating models that frustrate so many organizations.
+Management of the operational expenses needed for customer success is treated separately and often cannot be allocated to specific value outcomes. This approach drives organizational decisions that reduce cost-benefit visibility.
+
+1 Refer to: https://www2.deloitte.com/us/en/insights/topics/digital-transformation/nine-big-shifts-business-of-technology.html.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+3
+
+Figure 3: Budgeting Based on Project Mindset
+Figure 3, showing a fictional company for visual purposes only, is a typical view of an IT budget based on project mindset. When IT investment is structured like this, it is difficult or impossible to tie budget lines to enterprise value.
+Product mindset suggests a different approach to budgets, management metrics, and organization. Effective management of a large number of Digital Products organized into portfolios of similar products can reduce complexity and increase control.
+
+4
+
+The Open Group Guide (2025)
+
+Figure 4: DPPM Based Budget Allocation
+Product mindset creates a much more transparent and meaningful metaphor for defining and measuring value outcomes.
+In a DPPM transformation journey, the same spending can begin to migrate toward a model more like the fictional one shown in Figure 4, in which the Product Management investment is assigned to meaningful product portfolios that can be managed with the same kind of P&L accountability that is expected in other parts of the business.
+It enables organizations to encapsulate most IT spending within specific products and product categories. They can begin to measure customer outcomes and product income (real or chargeback) against each Digital Product over its lifetime.
+Transforming established financial models of IT spending will not happen overnight, as there are good reasons to keep financial reporting consistent over time. However, there is also a strong interest in most organizations in removing the opaque nature of current IT cost accounting.
+What is needed is a standard way of understanding more granular cost allocation approaches. DPPM as a template for change can be part of the solution.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+5
+
+A DPPM transformation2 can evolve so that project-based IT planning and investment (the projectoriented demand/supply model) can incrementally give way to a unified, value-stream-driven operating model.
+Refining financial understanding of IT spending is an important factor for successful migration to new models for software development management, operations management, and IT and non-IT Product Management.
+
+1.3
+
+Practical Implications of a DPPM Transformation
+
+The DPPM-aligned operating model provides a top-down structure for grouping the organization's Digital Products into coherent portfolios aligned to target consumer domains. Using the IT4IT and TOGAF Standards, the DPPM approach describes the essential value streams and organizational practices needed to support this.
+Early adopter experience points to some key strategic focus points and opportunities:
+· Operating Model
+A DPPM transformation must be based on a clear Business Architecture target state that describes the changed organizational operating model. IT4IT functional and information models provide a template for deploying such a product-focused operating model. Standard process models such as those provided by APQC3 are helpful here. This is discussed in detail below.
+· Organizational Model
+A DPPM transformation includes re-thinking existing traditional product and IT management roles and responsibilities. Some roles will change, some may disappear, and new ones will emerge. Some key organizational change concerns are described in Chapter 10.
+· Financial Management Model
+A DPPM transformation should shift IT budget allocation away from a cost-center mindset toward a model that tracks full lifecycle costs against defined value realization metrics. Return on Investment (ROI) and Profit-and-Loss (P&L) models used for marketing products may be adapted to Digital Product management. Some impacts are described in Chapters 8 and 10.
+· Enterprise Architecture ways of working
+Organizational and governance practices described in the TOGAF ADM Preliminary Phase are likely to need a reset. This may include a refresh of architecture governance models, changes in baseline architecture partitioning and team alignments, and reworking of roles and skills. This is discussed further in Chapter 7.
+
+2 Also known as "shift-left," "Project-to-Product (P2P)", or "whole-product-focused" transformation. 3 Refer to: https://www.apqc.org/.
+
+6
+
+The Open Group Guide (2025)
+
+· Governance Models
+Governance oriented frameworks such as IT Service Management, Information Technology Infrastructure Library (ITIL), IT Audit, IT Governance, and COBIT® ­ as well as Enterprise Architecture Governance ­ must adapt to support changing organizational structures, Agile practices, and financial metrics. Major risk factors to consider include ungoverned technical debt creation, scalability of business and technical tools and practices, information security, implementation capability, and operational sustainability.
+· Digital and DevOps Toolchain Rationalization
+The wide variety of tools and methods implemented by DevOps and Agile early adopters must be refactored and often heavily rationalized to work within a standardized, scalable, well-governed enterprise "digital factory" architecture. The Enterprise Architect must engage with DevOps practitioners to find the right balance between standardization and innovation.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+7
+
+2
+
+The Digital Product as Conceptual Focal Point
+
+The core concept in DPPM, as described in the IT4IT Standard, is the Digital Product. Assigning Digital Products to portfolios aligned to consumer types is the essence of the DPPM approach.
+
+2.1
+
+"Digital Product" Defined
+
+The IT4IT Standard provides a formal definition of "Digital Product" used in this document:4
+We define a Digital Product as a service, physical item, or digital item that:
+· Provides an agreed and specific outcome for a consumer (human or machine)
+· Incorporates and requires software to realize that outcome
+· Is expected to require active management of that software and its required resources over its lifecycle, in a manner prescribed by the provider
+· Is presented to the consumer as a formal Offer (derived from the product definition) to be provided in exchange for an explicit price5
+· Is governed by a contract based on acceptance of a formal Offer
+· Is delivered to the consumer in a form that allows the automation of: -- Presentation of all allowable Offers -- Fulfillment, including all actions needed to deliver the Offer as a live instance -- Creation of the operating configuration needed for long term management and support (derived from the product definition)
+· Is monitored and managed for its full lifecycle using resources specified in the product definition
+
+2.2
+
+The Digital Product Specification
+
+A full business specification for a Digital Product should be a well-defined set of financial, technical, and operational elements (including deployable software).
+Business, financial, and technical design details will evolve as new versions of the product are developed and released. Design information for each version should be maintained during that version's full lifecycle.
+Digital product design must define how software components will be actively managed over time, as well as describing the ongoing business activities required to support consumers and to monitor and measure consumer value delivery, and return on investment for the product, the Product Portfolio, and the enterprise.
+
+4 Note that this definition is specific to the DPPM context and may differ from uses of "Digital Product" in other contexts. 5 It is important in this context that the agreed "price" is defined by the Product Manager and may be zero. It is not the same as cost, it may vary with product variations, and it may be determined dynamically based on rules.
+
+8
+
+The Open Group Guide (2025)
+
+Each Product Instance is governed by a Subscription (or other formal or informal contract) between the consumer and provider, on terms described in the Offer. As with any other type of product, the Digital Product should be managed to a financial plan showing planned and actual income and expense over standard accounting periods. The "income" side of the ledger should include actual or notional income in the form of chargeback/showback records for the entire set of all deployed Product Instances. The price for a specific consumer may be fixed or variable, may be a single payment or some form of recurring payments, may be based on measured usage or simply on an agreed amount, and (importantly) may be set to zero if this makes sense to the provider.
+The business may of course decide to operate a particular product at a loss for a particular period in the context of a larger portfolio of which it is a part. The "expense" side of the ledger will be populated with cost allocations from relevant elements of the deployed product environment. As the DPPM operating model gains traction, this will increasingly be based on real usage and support metrics. The business and resulting technical design of the Digital Product should define how contractual support and upgrade relationships with the customer are to be managed after customer tailoring or customizing of a Product Instance.
+
+2.3
+
+Strategic Product Management Considerations
+
+The responsibility of both business and technical design must extend to ensuring value over the full lifecycle. Some strategic factors for which the Product Manager is responsible in this broader idea of Digital Product management include:
+· Lifecycle management
+Product design must describe and specify the business and technical mechanisms needed to monitor, measure, and manage the portfolio of related contracts between consumer and provider across the full lifecycle.
+The Product Management lifecycle begins with an approved idea. It ends when the last Product Instance and any residual legal obligations of the parties have been fully retired.
+· DevOps at scale
+Product design must comprehend and embrace the integration of software and infrastructure perspectives as embodied in DevOps practices.
+Technical design must include all the information needed to support automated Offers to consumers and automated fulfillment of accepted or changed Offers.
+· Ongoing financial management
+Product design must specify how development and running costs (including distribution, support, and Product Management) are to be measured and at what level of detail. This includes how costs are to be recovered; aligned with the evolving financial understanding of DPPM.
+The income side of the ledger can be as simple as internal annual chargeback numbers or, at the other extreme, may include a very granular level of detail at the level found in telecoms bills, streaming services, or cloud platforms.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+9
+
+· Product ontology and Software Bill of Materials (SBOM)
+Digital Products are never monolithic, even if seen that way by the consumer. This has always been true of complex physical products. For instance, the buyer of a new car is presented with and pays for a single product comprised of many parts that are managed as products in their own right. The support for the customer depends on many third parties in a complicated web of relationships with the provider.
+A Digital Product described is likewise comprised of many parts which are products in their own right, often provided by a different internal product team or by third parties. This may include fully integrated parts (such as software components included in the release package) as well as external products required to realize consumer value (such as the third-party data service needed to present current share prices).
+As mentioned above, all of these roll up into a SBOM. As digital bad actors continue to find attack vectors via third parties, Digital Product Managers will increasingly be required to understand their SBOM structure, not just at the Point of Sale (POS) but as an evolving set of information during the lifetime of the product.
+
+10
+
+The Open Group Guide (2025)
+
+3
+
+Research-Based Foundations for DPPM
+
+Thought leaders in academia, IT management, and corporate strategy increasingly make strong arguments for pursuing portfolio-oriented thinking as a core technology management strategy.
+The DPPM-aligned operating model described in this document is partly grounded in work done at the MIT Center for Information Systems Research (CISR). In the CISR published book: Designed for Digital [Ross et al., 2016], Ross, et al. describes two key platforms (see Figure 5) as a model for understanding the digital enterprise: an Operational Backbone ensures efficiency and scalability, and a Digital Platform enables rapid innovation and new digital offerings.
+
+Figure 5: Two Key Types of Technology Assets in a Modern Digital Organization [Source: MIT CISR]
+The four DPPM Product Portfolio types described in Chapter 3 can be seen as a decomposition of the CISR Digital Platform concept into internally and externally supplied digital offerings of the Operational Backbone into two internally consumed digital offerings.
+The DPPM operating model is based on exactly this concept ­ organizing product offerings into groups aligned, in the first instance, around a well-defined consumer interest domain.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+11
+
+Figure 6: Domain-Oriented Companies Focused on Both Customer Outcomes and Curated Products Performed Better [Source: MIT CISR]
+The more recent CISR "2023 Future Ready Research Briefing"6 (see Figure 6) advocates managing Product Portfolios based on a consumer-domain orientation, characterized by "customer outcomes and product curation".
+An "outcomes and curation" based Product Mindset and domain orientation create the value dynamic represented as revenue and margin growth in Figure 6. The most immediate benefit of this approach is for products supplied to external consumers ­ what most of us think of when we hear the word "Product".
+One good example of domain-oriented customer engagement is at United Services Automobile Association (USAA) (a major US financial services group owned by its members), as described in the Management Information Systems (MIS) Quarterly Executive journal [Sebastian et al., 2017]:
+USAA's responsiveness to members' needs led it to change its website so that its financial products were listed according to a member's life events. This new arrangement was helpful, but it quickly became clear that members would find it even more helpful if those products were actually integrated. That led USAA to create integrated solutions like AutoCircle -- a one-stop shop for buying, insuring, and financing an automobile.
+The DPPM approach applies the same logic to Digital Products designed for consumption within the enterprise. We also identify two Digital Product portfolios that generally map to Certified Insurance Service Representative's (CISR's) Operational Backbone concept. The management dynamics of each portfolio has a different focus.
+The level of formality in financial record-keeping, Subscription management, and the use of formal Offer catalogs in the four portfolios may be different, but the same principles of managing portfolios for value still apply.
+
+6 "Top-Performing Companies Focus On Customer Domains", Weill and Woerner, Research Briefing v XXIII Number 9, September 2023, MIT Center for Information Systems Research (CISR); refer to: https://cisr.mit.edu/publication/2023_0901_DomainOriented_WeillWoerner.
+
+12
+
+The Open Group Guide (2025)
+
+4
+
+The Four Digital Product Portfolio Types
+
+The DPPM model is based around four digital product portfolio types, each focused on a particular consumer domain (see Figure 7).
+
+Figure 7: The Four Types of Digital Product Portfolio with Example Product Types
+The DPPM model includes four top-level portfolio categories7 as shown in Figure 7. The model is intended to be generic enough to work for most organizations. These are:
+· Provided Externally
+· Provided Internally
+· Manufacture and Delivery
+· Foundational
+Each portfolio has a distinct purpose, management imperatives, governance concerns, financial structure, and value outcomes. Its characteristics impact the architecture of each product in its scope and also of overall portfolio design, organizational structures, and management practices.
+Each requires a significantly different perspective in terms of expected usage, contractual terms, cost recovery models, and long-term support. A hierarchy of sub-portfolios is probable, including decomposition into more specific domains.
+
+7 This model is an evolution of the three portfolio types described in the IT4IT Standard, Version 3.0.1 [C24A].
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+13
+
+Some characteristics of this model:
+· All products and services should fit into these four classifications
+· This approach provides a taxonomy that can be applied to IT4IT Evaluate value stream activities aligned with the target consumer domain and outcome types
+· The four top-level portfolios may be decomposed into more granular sub-portfolios to align with specific customer domains
+· Organizations may find opportunities to move Digital Products from Provided Internally to Provided Externally, thus monetizing internal expertise
+· Portfolio Managers may choose to uplevel or outsource layers of a portfolio, or to use cloud hosting to remove internal responsibility for managing physical infrastructure
+Classification of a Digital Product into one of the four portfolios begins with two fundamental questions around common funding and consumption models:
+1. What is delivered? (Service, good, automation, building block)
+2. Who is the consumer? (Build teams, employees, manufacturing and delivery, end customer)
+Regardless of the current level of adherence to standards and common tools within each portfolio scope, the portfolio evaluation activities described in the IT4IT Evaluate value stream are a healthy and valuable place to begin even when executed individually.
+To get started with a transformation effort, organizations may assign transitional leaders as owners of each portfolio. This could be a suitable role for an Enterprise Architect experienced in Application Portfolio Management, Business Architecture, or similar areas.
+Each portfolio's characteristics are defined in more detail in the next sections.
+
+14
+
+The Open Group Guide (2025)
+
+4.1
+
+The "Provided Externally" Portfolio
+
+Figure 8: The Provided Externally Portfolio
+This Provided Externally Portfolio shown in Figure 8 is concerned with Digital Products provided to customers outside the organization. Examples include:
+· Streaming music/video services, downloadable software
+· Cars, phones, apps, POS systems
+· Software as a Service (SaaS) and Infrastructure as a Service (IaaS) services sold to customers
+For commercial products the emphasis is on profitability. This portfolio also includes Digital Products provided by public sector organizations, which may or may not charge a fee but who still have distinct external customer relationships to manage.
+Typical business drivers are speed to market, user experience, and market differentiation.
+Consistency of individual product designs is less important than for the other portfolios, especially if there is little overlap of components (including supply chain), target buyer persona, or market segment.
+Commercial products in this portfolio may contain custom or highly tailored software for which market differentiation and competitive advantage are more important than design governance concerns (such as use of standard tools and products) that would apply to other portfolios.
+On the other hand, information security concerns may be heightened, as financial and reputational risks may be harder to manage than for internal systems.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+15
+
+4.1.1 4.1.2
+
+Portfolio Management and Product Management roles for this portfolio should combine features of marketing Product Management with a robust understanding of practical Digital Factory, digital supply chain, and support/operations.
+Approach to Provided Externally Portfolio Structure
+Product investment decisions follow market opportunity; organizational constructs are likely to reflect the structure of the chosen target markets. A common starting point is market segmentation, which helps to define product families and the products for each.
+Marketing teams analyze market segments and demographic data to structure investment in these portfolios based on whether markets are growing, shrinking, or maintaining stable sales rates.
+The Provided Externally portfolio's top tier may be broken into domain-relevant categories of goods or services (e.g., trucks, sports cars, and SUVs in the automotive industry) using a CISR style domain focus as described in Section 1.1.
+Portfolio management for Provided Externally commercial products is commonly optimized for high share, high growth products that can evolve into sources of profit [Henderson, 1970]. The Product Manager's budget and plan are based on evaluation of the balance needed across the whole portfolio, with specific financial targets based on profit and loss or sales volume outcomes.
+The required level of consistency and interoperability of products in a portfolio or sub-portfolio is a decision for Product-Line and Portfolio Managers. The Evaluate value stream (Section 10.2) describes the recommended approach to defining this.
+Characteristics of the Provided Externally Portfolio
+Specific consideration in defining management activities for this portfolio include:
+· Should include robust pricing models, as mistakes can be difficult to overcome
+· Should address needs, risks, profit, and loss for all Digital Products in scope as well as for the connected digital supply chain
+· Should include ongoing investment planning to support improved outcomes for users and the enterprise throughout the product lifecycle
+· Should include sophisticated Offer management, sales interactions, contract management, and Subscription processes for ongoing support and upgrades
+· Should include a provision for support to scale up and down as customer adoption changes
+· Should ensure that technical design is as scalable (up and down) and as easy to evolve as possible
+· Should have a strong emphasis on market data-driven design and detailed financial modeling
+· Should ensure that product design is outside-in ­ driven by customer needs and problems, not internal perspectives
+
+16
+
+The Open Group Guide (2025)
+
+· May require managing data about individual subscribers such as licensing, usage, and billing details, granular service level management, sophisticated feedback from satisfaction metrics and customer activity
+· May include customer engagement/Customer Relationship Management (CRM)/marketing capabilities as part of the product design and management function
+· May require complex and flexible distribution models adapted to different market segments and varied distribution capabilities
+· May require complex, granular monitoring of consumer activity and Subscription related events
+· May require extensive ongoing work to support a good user experience throughout the product lifecycle
+
+4.2
+
+The "Provided Internally" Portfolio
+
+Figure 9: The Provided Internally Portfolio
+The Provided Internally Portfolio shown in Figure 9 is concerned with Digital Products provided to automate internal jobs and to provide services for employees. Examples include:
+· Human Resource (HR) systems, finance systems · Email, collaboration, document management · Project management
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+17
+
+4.2.1
+
+· ITSM tools
+· Intranet, WIKIs, Governance, Risk, and Compliance (GRC), Mobile Device Management (MDM) tools
+It includes Digital Products such as communication and collaboration tools, and Digital Products supporting corporate shared services. SaaS and/or Commercial Off The Shelf (COTS) offerings are usually found here.
+Commonality and economies of scale in the workplace are important objectives of portfolio management and governance.
+Like the Provided Externally portfolio, it depends on Foundational Portfolio products that are in turn deployed and supported by products in the Manufacture and Delivery portfolio.
+Approach to Portfolio Structure
+Top-level portfolio management should support the company's Business Architecture and operating model including value streams, processes, information governance, financial controls, and operating model.
+Companies with a distributed operating model are likely to have sub-portfolios specific to operating units, geographies, etc. These may also align to the CISR domain approach.
+Standard Business Architecture reference models are important for Provided Internally Portfolio Managers. An important example is the widely used Process Classification Framework (PCF)8 published by the APQC. This is plausible for a standard taxonomy of processes, that can be mapped to a taxonomy of supporting Digital Products/employee services.
+
+Figure 10: APQC Operating Processes Taxonomy [Source: APQC]9
+Sections 1 through 6 of APQC (see Figure 10) include Operating Processes for products and services sold to customers, to include delivery, market and sales, and managing customer service. In this approach we look at the technology used to produce and support the products and services sold.
+APQC provides generic models as well as industry-specific taxonomies10 (e.g., aerospace, banking, telecommunications).
+
+8 Refer to: https://www.apqc.org/process-frameworks. 9 Refer to: https://www.apqc.org/resource-library/resource-listing/apqc-process-classification-framework-pcf-cross-industry-excel-11. 10 Refer to: https://www.apqc.org/process-frameworks/industry-specific-process-frameworks.
+
+18
+
+The Open Group Guide (2025)
+
+The Management and Support Services section of APQC (See Figure 11) provides a view of supporting processes and services required to support each other and the operating processes.
+
+4.2.2
+
+Figure 11: APQC Management and Support Services [Source: APQC]11
+Financial Considerations
+Traditional broad-brush chargeback models may represent income as a high-level understanding of business service value, and cost captured as general ledger entries.
+Decisions about broad-based chargeback allocation of corporate services (including traditional IT services) are often made without reference to detailed usage of those services by different business units, even when the detail is available. For example, a payroll system charged to a finance function may appear on a business unit ledger as an "F&A" chargeback line.
+Whether, and if so how, to allocate all or part of the cost or value of that payroll system to a particular operating unit is a decision for the Portfolio Manager in collaboration with business operations leaders and ITFM leadership.
+However, the DPPM model enables a level of transparency that enables detailed chargeback allocation for software-driven services. Explicit, granular pricing based on measured usage can be used to create detailed chargeback or showback data, treating the perceived operational value of a product in much the same way as external pricing.
+This might be an important way to manage Provided Internally products that attract a significant per user license fee, for example.
+
+11 Refer to: https://www.apqc.org/resource-library/resource-listing/apqc-process-classification-framework-pcf-cross-industry-excel11.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+19
+
+4.2.3
+4.3
+
+Characteristics of the Provided Internally Portfolio Specific consideration in defining activities for this portfolio include:
+· Should be considered in all HR staff planning, insourcing, and acquisition activities · Should consider whether and where tracking individual Subscription or licensing
+information makes sense · May be segmented based on department, business unit, internal customer domains or
+groups, location or other factors based on the enterprise operating model · May be organized by business capability or function · May include product-specific consumption experiences · May not require product-specific consumption experiences
+"Foundational" Portfolio
+
+Figure 12: The Foundational Portfolio 20
+
+The Open Group Guide (2025)
+
+4.3.1 4.3.2
+
+The Foundational Portfolio shown in Figure 12 is concerned with technical services that comprise the building blocks used in creation and delivery of Digital Products in other portfolios. Examples include:
+· Network and storage services
+· Client compute, telephony, building management
+· IaaS, Platform as a Service (PaaS), database services, cloud management
+Foundational products contain common elements needed to support customer-facing, factory/Operational Technology (OT), and/or employee-facing Digital Products such as infrastructure, platform, middleware, and security.
+Build teams creating or configuring Provided Externally or Provided Internally Digital Products are the principal consumers of these Foundational elements.
+Products in the other three categories (as well as more complex Foundational products) can be decomposed into smaller, reusable Foundational building blocks: A Foundational product is always a decompositional element of other products in one or more of the portfolios.
+Approach to Portfolio Structure
+The Foundational portfolio is concerned with raw, reusable technologies that enable the other portfolios.
+Building blocks in this portfolio are critical foundation layers that represent a significant cost. Data Center Services, for example, are required for network, compute, and storage services that are typically consumed by Digital Product teams in the other portfolios.
+The portfolio should be organized around industry standard taxonomies where possible, that describes technology layers or building blocks commonly used in IT organizations such as data center management, platform, and cloud services. These become categories for decomposition and understanding of technology costs.
+Example: Storage as a Provided Internally Product
+In a DPPM context, a technology offering may be offered as a Foundational product included in the tech stack of a higher-level product and also packaged as a Provided Internally product in its own right.
+This could include technical offerings such as managed storage: A Storage Service sub-portfolio of Foundational could include products offered to build teams supporting all four portfolios. These could include a variety of offers with different price points and service levels. Pricing might be usage based. The charge might vary with the cost of components such as third-party cloud services brokered by the Storage Service Product Manager.
+The same infrastructure building block could also be packaged as a Provided Internally product by wrapping the Foundational product within an Offer of an Individual Storage service available to a wide variety of internal business units and charged back directly to an entitled subscriber. The consumption model would be governed by the Provided Internally playbook, designed for servicing and billing multiple internal users.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+21
+
+4.3.3
+
+Such a modular service-broker offering provides flexibility for the Individual Storage Product Manager to substitute the originally subscribed service for an alternative without disturbing the consumer interface and charging mechanism.
+Characteristics of the Foundational Portfolio
+Specific consideration in defining activities for this portfolio include:
+· Should consider and govern digital supply chain risks, as many Foundational products will be externally supplied
+· Should be designed to support economies of scale
+· Should provide tiers of service engineered for different usage scenarios such as high reliability versus development resources
+· Should contain common platforms, private and public cloud services
+· Should focus on capacity management monitoring and usage metrics
+· Should not be allocated to specific employees
+· Should have resources tracked in Asset Management systems, and their configuration and context tracked in a Configuration Management Database (CMDB)
+· Should encapsulate the more basic technology stack tiers into higher value, more consumable Digital Products (e.g., provide less server and storage components while packaging and providing full-stack platforms)
+· May manage similar Digital Products needed by multiple portfolios in the Foundational Digital Product portfolio rather than let each portfolio source and manage them separately
+· May include primitive Digital Product building blocks consumed only by other Foundational Digital Products (e.g., storage Digital Products exclusively used by platforms)
+· May be used as underpinning services such as networking or storage
+· May utilize self-service provisioning of infrastructure and platforms
+· May be managed as a fleet of resources such as storage, compute, containers or underpinning network services
+
+22
+
+The Open Group Guide (2025)
+
+4.4
+
+"Manufacture and Delivery" Portfolio
+
+Figure 13: The Manufacture and Delivery Portfolio
+Manufacture and Delivery Digital Products are delivered as services used to automate factory lifecycle processes and to control manufacturing (including manufacturing of Digital Products). Examples include:
+· Compliers, code management, and deployment tools
+· Robots and production line software and hardware
+· Compute controlled actuators, sensors, valves, switches
+· Electrical grid controls, monitoring
+· DevOps pipelines
+· Internet of Things (IoT) sensors and other devices used in the production process
+· Digital management tools for producing Digital Products
+The Manufacture and Delivery portfolio shown in Figure 13 is concerned with efficient, highquality production and support of Digital Products. This portfolio typically strives for standardized and repeatable production processes.
+Access may be provided to both internal and external participants in product development and management activities.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+23
+
+4.4.1
+
+Characteristics of the Manufacture and Delivery portfolio
+Key characteristics normally include:
+· Should adopt a Toyota Production System philosophy
+-- "A production system based on the philosophy of achieving the complete elimination of all waste in pursuit of the most efficient methods"12
+· Should be architected to accommodate producing other physical or Digital Products in the future
+· Should be managed as carefully as customer facing Digital Products
+· Should be managed in context of physical or Digital Products produced, delivered, and supported
+· May include Employee-used products specific to manufacturing or field distribution needs
+· May include operational technologies located outside the data centers and in the possession of partners and customers
+· May include technologies such as robots, sensors, actuators, telecommunications, and machines
+
+12 Refer to: https://global.toyota/en/company/vision-and-philosophy/production-system/. 24
+
+The Open Group Guide (2025)
+
+5
+
+The IT4IT Reference Architecture Context
+
+As the number and complexity of Digital Products and portfolios grows, the IT4IT Standard provides a strong framework for understanding and governance. It has been used at scale in large companies to automate, measure, and control the specification, funding, creation, distribution, and support of Digital Products.
+As such, the IT4IT Standard [C24A] describes a practical, proven template for a DPPM-based future state operating model. The architecture emphasizes:
+· Driving business value increments focused on cost, business agility, market share, profitability, and customer engagement
+· Reshaping IT organization structures and IT management behavior to provide meaningful IT spending transparency
+The IT4IT architecture offers two main views that relates to how to structure a minimum viable architecture for the Digital Enterprise:
+· The Functional and Data view
+· The Value Stream view
+These are summarized briefly below. Refer to the full text of the standard for more details.
+
+5.1
+
+IT4IT Functional and Data View
+
+Figure 14: The IT4IT Function and Data Model (Informal View) [Source: C24A]
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+25
+
+Figure 14 uses an informal notation to present the IT4IT Functional and Data view.13
+Thirty-three IT4IT Functional Components are shown as blue rectangles and represent the minimum viable set of Architecture Building Blocks (ABBs) for effective full lifecycle Digital Product management. Each function controls at least one key data object (shown as circles in the diagram). These IT4IT Data Objects represent essential systems of record.
+Integrations are shown as black lines and can be thought of as the minimum viable set of systemof-record integrations needed for end-to-end transparency and effective automation.
+Other IT4IT terms have specific meanings that should be noted by practitioners attempting to use the reference architecture for system or organizational design. Some have distinct architectural meanings in this context that may not be obvious. Refer to the full published standard for details.
+
+5.2
+
+IT4IT Value Stream View
+
+Continuous management of the DPPM-aligned operating model is achieved using the seven value streams defined in the IT4IT Standard (see Figure 15). These rely on the functions, information, and data integrations described in Section 5.1.
+
+Figure 15: The Seven Value Streams
+Hundreds of other value streams may be defined as part of a broad Business Architecture to describe enterprise operational flows. These seven are specific to DPPM.
+
+13 The IT4IT Standard [C24A] is stored as a formal ArchiMate® architecture model managed by The Open Group. Views from this model are used throughout this document.
+
+26
+
+The Open Group Guide (2025)
+
+6
+
+The New Digital Product Manager
+
+Actively managed software that requires support over many years is increasingly a component of almost every product offered to customers. To support this, a new hybrid Product Management role combining digital and marketing skills is emerging.
+
+Figure 16: The IT4IT Product Management Context
+Figure 16 shows the IT4IT functional model from the perspective of the Product Portfolio function, illustrating the most important functions and information for the Product Portfolio Manager and (new style) Product Manager roles.
+· Boxes with rounded edges and a chevron in the upper right corner represent functions with which Portfolio and Product Management must interact fully to define a Digital Product
+· Boxes with square edges represent information/data objects managed by those functions. These are important to ­ and must be aligned with ­ the definition of the Digital Product
+· Solid lines represent essential connections among data objects
+Their existence and quality is the key to end-to-end scalability, traceability, and control across the entire product lifecycle
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+27
+
+Figure 16 points out areas in which Product Managers should be fully engaged. Asking which functions, data objects, and data integrations exist will reveal opportunities for improved product planning, funding, and lifecycle management capabilities.
+Improving or automating information supporting the interactions can make rationalization, changes, investment, teams, and collaboration opportunities easier to address. The IT4IT Reference Architecture's Evaluate value stream (Section 10.2) outlines a detailed process for evaluating Digital Product portfolios within this broader scope. The Explore value stream (Section 10.3) describes the day-to-day activities of the Product Manager. A Product Manager role on this path may morph into a merger of existing IT and marketing Product Manager concepts into a single professional role spanning market, finance, and technology competencies. This may reside in one individual or evolve into a formal, closely coupled team structure as suggested in Chapter 1. This convergence is a challenge for organizational designers and for practitioners trying to understand their individual career paths. Product Managers should be alert to changes in skill expectations and performance objectives. This role is likely to acquire more explicit responsibility for financial outcomes, which may include full profit-and-loss accountability for the product over its lifecycle. A critical component is understanding the perspectives and interests of all of a product's stakeholders, in the marketplace, the enterprise, and the technology ecosystem.
+For those whose background is in IT, accountability for revenue or profit targets may be a new concept. They will need to develop competencies in constructing compelling business cases for investment. Conversely, Product Managers from a marketing background may find themselves being measured by how well their marketing design can be translated into economically sound technology products.
+
+6.1
+
+Digital Product Management concerns
+
+Software design competencies must expand to include understanding full lifecycle support and traceability to business concerns that may not be the traditional work of some technical designers or Solution Architects.
+The Product Manager must be able to express a business design that can be translated effectively into technical design and must be able to map backlogs and requirements into long-term roadmaps. This is a traditional area of Enterprise Architecture expertise from which Product Managers can learn.
+DPPM-aligned Product Management should create increasingly reliable metrics about Digital Product usage, cost, customers, and service delivery. The business design of a Digital Product must specify the information needed to support the technical design for automated service offering creation, service level measurement, provisioning scripts (infrastructure as code), pricing models, knowledge articles, policy and audit requirements, customer feedback, automated workarounds for known bugs, and much more.
+Long term consumer data management is needed to manage consumer facing products. The Product Manager must specify the granularity needed to capture product consumption details and to monitor operational and financial measurements.
+Supply chain product components must be incorporated in product design at both business and technical levels. Beyond traditional Product Management supply chain concerns, Digital Products in the supply chain Offer new risks and opportunities that must be governed.
+
+28
+
+The Open Group Guide (2025)
+
+7
+
+The Enterprise Architecture Role
+
+The shift to a DPPM-aligned operating model is the kind of large business transformation design problem that originally led to the formalization of the Enterprise Architecture discipline in the 1990s. The scale of this transformation can benefit greatly from a modernized Enterprise Architecture capability. Architects must describe minimum viable architectures suited to each Product Portfolio, optimizing long term and tactical value while supporting Agile innovation. Where to begin? Perhaps by looking in the mirror, as suggested by the guidance for the TOGAF ADM's preliminary phase. The TOGAF Business Capability Model for Architecture (Figure 17) is a good reference point.
+
+Figure 17: The TOGAF Business Capability Model for Architecture [Source: C220]
+A new Enterprise Architecture initiative starts by asking yourself: Does our team have the right skills, organizational model, tools, governance model, and methodology to guide this transformation? For many traditional Enterprise Architecture teams and practitioners, the answer is likely to be, "not yet". What is the right path for Enterprise Architecture capability improvement? Some likely areas to consider include:
+· New-World Business Architecture
+Business Architecture describes business activities (value streams and processes), organizational structures, information requirements, and other features of how the business operates. A DPPM transformation will lead to many changes in this space. Traditional approaches may need an update. The four portfolio types described in Chapter 4 define the structure of the Enterprise Architecture effort. The discussion of Conway's Law in Section 11.1 goes deeper into this concept.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+29
+
+For each IT4IT Value Stream described in Section 10, the Enterprise Architecture will have a role in defining processes to support the value streams, information requirements and interoperability, and most importantly the organization model.
+Enterprise Architecture Data, application and technology architecture work will address the design of the technical components that support Business Architecture. This applies to the operational Business Architecture of the Digital Factory as well as supporting the design and governance of specific Digital Products. This includes (at least) two specific architectural competencies that may be new territory:
+· Digital Product design
+Software, data, and infrastructure architecture support the design of fully defined Digital Products. What is the right data structure to describe not just the software design, but full lifecycle design for a Digital Product, that supports automated flows across the PlanBuild-Deploy-Run continuum?
+· Digital Factory design
+Software, data, and infrastructure architecture needed to support the DPPM value streams. Business architecture for the digital factory flow specifies the functions and flow as architecture building blocks (as in the IT4IT model). This supports the work of the Manufacture and Delivery Portfolio Manager, which is responsible for selecting the relevant products and processes for the organization.
+
+7.1
+
+Aligning the Enterprise Architecture Capability to DPPM
+
+Figure 18: TOGAF Enterprise Architecture Purpose Capability Map [Source: G184]
+
+30
+
+The Open Group Guide (2025)
+
+Several key points should be addressed when considering how to evolve the Enterprise Architecture team to support a DPPM-aligned operating model:
+· Continuous architecture refactoring
+Enterprise Architecture leaders should actively participate in continuous architecture refactoring [C208] as the Enterprise Architecture team undertakes TOGAF ADM Preliminary Phase work to identify and address gaps in the current Enterprise Architecture Capability. This may include both permanent and situational team structure changes, as well as changes to the Architecture Repository structure.
+· Purpose Capabilities
+Enterprise Architecture leaders should consider including the TOGAF Purpose Capabilities concept (Figure 18), especially Architecture to Support Portfolio.
+The hierarchy of superior architectures should be well delineated in segmentation and description of team roles and responsibilities. Portfolio-level architectures should be well-defined, kept up to date, and connected to strategic architecture and implementation governance models.
+
+Figure 19: Enterprise Architecture Partitioning May Need to be Revisited [Source: C220]
+Architecture Segmentation and Partitioning: Consider revisiting existing Enterprise Architecture Landscape segmentation and partitioning approaches (see Figure 19) to align with the four Digital Product Portfolio types.
+One approach may be to classify all products in the enterprise according to the four DPPM classifications, as a guide to structuring the Enterprise Architecture team and defining the refactored organizational models needed to support the transformation. This may extend to describing sub-portfolios based on customer groups and mapping to a target domain structure as described by Weill and Woerner [Weill & Woerner, 2023].
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+31
+
+Such an initial classification should be done as Architecture to Support Strategy ­ focusing on the enterprise level big picture in the short term, leaving room for realignment as the DPPM migration evolves.
+Shaping the Enterprise Architecture in this way enables a better understanding of the impacts of each product on its own and across portfolios, providing Enterprise Architectures with greater context to navigate and arbitrate investment choices among different stakeholders.
+The Enterprise Architecture can provide increasing clarity for the organization as standard artifacts, views, and viewpoints are developed, tailored to the needs of each portfolio.
+Product Managers can better understand where they fit in the current portfolio and product roadmaps by seeing their product's dependencies within a broader context:
+· Methodology: Consider how the architecture methodology (e.g., the TOGAF ADM) should be tailored or extended to support portfolio-specific Enterprise Architecture activities; this should include reviewing whether standard templates for artifacts and deliverables should be updated
+· Skills: Assess skills in the existing team against the portfolio-specific factors listed in this document; create a plan to address the gaps
+· Reference Architecture: Use concepts from the IT4IT Standard to understand the functional criteria, data management, and interoperability needed for Enterprise Architecture to work effectively in the DPPM context
+
+Figure 20: IT4IT view of Enterprise Architecture Functional and Data Interoperability
+The IT4IT view in Figure 20 represents a minimum viable architecture for those information objects and functions needed for interoperability with the Product Portfolio function.
+
+7.2
+
+The Business Architecture of DPPM Transformation
+
+Using the IT4IT Standard as a template for an optimal digital factory is a Business Architecture project in which IT4IT functional components may usefully represent business functions or, more specifically, ABBs.
+
+32
+
+The Open Group Guide (2025)
+
+The IT4IT model can be used as a common reference for process, organizational, and skills transformation discussions among Enterprise Architectures, Product Managers, business leaders, and other stakeholders:
+· Designing toolchains and organizations
+There are many examples of real-world IT4IT implementations at scale, including at OpenTextTM, Oracle®, HCL®, and other member organizations of The Open Group, some non-members, and most notably in implementations that have been kept confidential because the competitive advantage created is seen as a trade secret.
+· Risk reduction based on modularity
+The modularity of the IT4IT model, designed to be implementable in phases as granular as a single function or a single value stream, has been effectively demonstrated in real-world settings.
+· Application Portfolio Management for IT
+The reference architecture can be used as a template for the APM, applied across the whole model or in selected "hot spots". This should be a focus for Enterprise Architectures assigned to Manufacture and Delivery and Foundational portfolios.
+This can highlight overlaps and gaps in software tools, identify dead-end skills islands, and support an integrated operating model for end-to-end productivity.
+It is reasonable to target 15-20 percent reductions in maintenance, license, and integration costs.
+· Optimizing Silos and Flows
+The most effective DPPM models transform not just silo-based tools but also the flow and organization of work across the enterprise landscape. This can be executed in stages: A complete transformation may take many years, during which traditional "technology silo" teams remain in place. Even in that context, "silo optimization" can become a value-add activity on the path to the complete transformation.
+
+7.3
+
+Architecture Governance in the DPPM Organization
+
+A trend in the 2020s has been to embrace placing "empowered teams" at the center of software development. This is necessary for effective DPPM practice, allowing scalable and flexible organizational design.
+However, the empowered team must also work within defined organizational guardrails. This concern is a traditional focus of architecture governance. To adapt to DPPM, the Enterprise Architecture must define effective Enterprise Architecture governance aligned with the dynamics of the empowered team.
+Signs that point to governance gaps include:
+· An increase in shadow IT
+· Development tools and toolchains using antiquated Foundational technologies
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+33
+
+· Software teams building their own unique toolchains and flow management solutions
+· HR or finance relying on large spreadsheet systems to manage core functions and processes and to create ungoverned, de facto systems of record for critical business data
+· Product Portfolios that are poorly designed, tactical, and brittle, with limited or no design emphasis on reuse or interoperability
+· Software systems that are difficult to maintain, with manual software update processes as the norm
+Enterprise Architecture Governance should help define which parts of the Product Management flow should be based on enterprise-level standards and which should be the choice of individuals or teams.
+Some key considerations when updating the architecture governance approach include:
+· Portfolio-based variation
+Consider explicitly describing distinct governance practices appropriate to each portfolio. Differentiating factors may include the relative importance of security, data governance, technical debt, compliance, interoperability, or the necessary level of adherence to standards for example.
+· Principles
+Revisit Architecture and Business Principles; should these be updated? For example, an Architecture Principle relating to technical debt may need refinement to accommodate the speed-to-market requirements of the Provided Externally portfolio. A principle that encourages interoperability may need to be more forceful for the Manufacture and Delivery portfolio.
+· Bottom-up accountability
+Accountability for business results without a top-down governance structure can be challenging. If organizational changes remove top-down governance without specifying bottom-up accountability systems, the resulting open feedback loop14 will eventually go "out of limits", resulting in undesirable market outcomes or overuse/exhaustion of enterprise resources.
+· Just enough governance
+It is important to embrace the principle ­ found in the TOGAF Standard and in Agile, Lean, IT Governance, and DevOps best practice ­ that the focus of architecture governance should be limited to decisions that have architectural significance. Enterprise Architecture teams should ask whether their existing governance methods go too far in the direction of micro-management of decisions that are without architectural significance.
+
+14 Refer to: https://www.opengroup.org/system/files/digital-portfolio/dpbok/latest/2-context/05_systems-thinking.html#KLP-whatdoes-systems-thinking.
+
+34
+
+The Open Group Guide (2025)
+
+8
+
+IT Financial Management (ITFM) Leaders
+
+Traditional models for ITFM are based on treating most of the IT budget (often more than 90 percent) as a shared cost of operations for which detailed cost allocation is seen as impossible or too hard. In this model, management focus is strongly biased toward managing most IT activities as cost centers.
+
+Figure 21: Traditional Balance Between Business As Usual (BAU) and Discretionary IT Budgets
+In the fictional example shown in Figure 21, only a sliver of the annual IT budget is allocated as discretionary spending. This becomes the focus of financial planning and management discussions. IT departments are treated as cost centers in which the management design point is cost reduction.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+35
+
+This way of thinking places a low value on allocating spend to Digital Products and instead divides ITFM thinking into two large focus areas:
+· The efficiency zone
+The cost center component of the budget, managed with the reasonable assumption that there is always an opportunity to reduce costs. This impulse is usually fortified by a frustrating lack of transparency in how money is spent and why.
+· The innovation zone
+Spending on innovation, constrained to a tiny segment of the annual investment in IT, funneled into a list of projects/backlog items for which the aggregate price tag is much higher than the baseline discretionary budget. This leads to organizational friction, frustrated business users of IT, and budgeting emphasis on prioritizing projects rather than on value delivery. Shadow IT is an inevitable byproduct.
+A fundamental change in this paradigm is at the heart of the DPPM operating model. A clearer understanding of efficiency zone costs can benefit every portfolio.
+This is easiest in the Provided Externally portfolio, where there is a clear link to markets, and revenue expectations are measured in dollars. The job is to get better at breaking down underlying internal costs into units that can be allocated to a product P&L.
+· Can ITFM leaders define new ways of understanding IT spending consistent with accounting and financial market expectations?
+· What standards should be applied to a model in which most current cost-center spending is to be allocated to specific products or portfolios?
+· Can costs now treated as overhead be treated instead as specifically allocated supply chain costs as part of a coherent, value-based approach, making the zero-sum Innovation zone game obsolete?
+· How much Foundational portfolio cost allocation can be moved from Keep The Lights On (KTLO) cost centers to specific portfolios, products, or customer Subscriptions?
+Some companies try to bypass the difficulty of understanding Foundational unit cost by moving to cloud infrastructure, where granular pricing is more readily available. Even if this works, there will remain a residual and often substantial internal cost.
+IT4IT Modeling of ITFM
+The IT4IT Standard description of how ITFM functions and data interact with core IT4IT functions is shown in Figure 22. This can be a starting point for defining how a more valueoriented ITFM model can work.
+
+36
+
+The Open Group Guide (2025)
+
+Figure 22: IT4IT Financial Management Interactions
+Specifics of the interplay between ITFM and the IT4IT Value Streams are described in Chapter 10.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+37
+
+9
+
+Development and DevOps Practitioners
+
+The main impact of a DPPM-aligned technical design and build approach is a significant expansion in the scope and completeness of work done in this area.
+DevOps expert Gene Kim addressed this in his keynote presentation15 at the launch of the IT4IT Standard, Version 2.1. He said the only useful metric for software development productivity is the time it takes to deploy a new release after committing your code.
+The right answer should be no time at all.
+This can happen when everything needed for deployment is part of the release. In the IT4IT world, this includes not just code but also:
+· A complete description of how the product release will be offered to consumers
+· All information needed to automatically create a Product Instance (i.e., infrastructure as code, software bill of materials for every target platform)
+· All information needed to configure and measure support consumers at the expected quality of experience
+In Figure 23, the IT4IT model describes the relevant functions, data, and integrations needed to make this happen.16
+
+15 Refer to: https://youtu.be/I7khGOTyU8Q?si=5McRh_gqq47xyYSt. 16 The IT4IT model is silent on the content and methods of coding and configuration and is focused instead on functions needed to control this work and to manage the data needed for automated flow.
+
+38
+
+The Open Group Guide (2025)
+
+Figure 23: IT4IT Design and Build Functions [Source: C24A]
+To create a Product Release that fully defines how deployed instances are consumed and supported, the designer and developer must understand how the Release is consumed by the automated mechanisms for presenting an Offer, creating a Subscription, monitoring the operational environment, and providing support. The relevant functional model is shown in Figure 24.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+39
+
+Figure 24: IT4T Request to Fulfill Functions, Data, and Flows [Source: C24A]
+The implications for those who design, build and configure software and who are responsible for tools and methods used to support the Build functions are described in more detail in Chapter 10, in the context of the IT4IT Value Streams.
+
+40
+
+The Open Group Guide (2025)
+
+10 Accountability Rooted in Value Streams
+
+10.1
+
+An Architecture of Accountability
+In her work at the MIT Center for Information Systems Research, Jeanne Ross emphasized the role of empowered teams as drivers of flexible, innovative outcomes, saying that operating models based around rigidly predefined tasks can lead to "a fate like that of the Titanic" in a time of rapid technological change.
+In an article titled Goodbye Structure, Hello Accountability [Ross, 2018], she wrote:
+Leaders will be able to operate as true digital leaders only when they shake their reliance on structure as the primary tool of organizational design and instead start assigning accountabilities in ways that instigate focused responses to opportunities.
+Her thinking is aligned with ­ and partly responsible for ­ the mainstream acceptance of Agile methodology and the idea of the "empowered team". She says team decisions can create better outcomes than a micromanagement-oriented hierarchy.
+This speaks directly to the rethinking of traditional Enterprise Architecture practices described in Chapter 7.
+Any empowered team must still act with direction from above. Just as in the most rigidly hierarchical management schema, an accountable leader is expected to deliver a defined outcome.
+The difference, as described in an IBM® course,17 is that the team cannot be expected to operate like robots relying on pre-programmed work plans:
+Consider a design team that can quickly deliver mock-ups but has to wait for a separate engineering team to implement the work. Or consider a team bogged down in meetings, constantly trying to win stakeholder agreement for every little operational decision. Neither situation enables a team to move fast.
+In contrast, empowered teams have the agency to make everyday operational decisions on their own. They're equipped with the expertise and authority to deliver outcomes without relying on others for leadership or technical support. By pushing operational decisions down to the lowest level, we give our teams the ability to achieve the rapid iteration our users and clients demand.
+How does this work for the Enterprise Architect accustomed to more traditional governance models?
+How can Enterprise Architecture help the enterprise enforce stakeholder ownership of outcomes, assure compliance, and manage technical debt while at the same time supporting and adding value to an operating model built around the concept of Agile, empowered teams?
+An IT4IT based operational architecture redirects team innovation away from creating unique tooling and process solutions and moves toward a focus on valuable business outcomes.
+
+17 Source: https://www.ibm.com/design/thinking/page/framework/principles/diverse-empowered-teams.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+41
+
+10.2
+
+In the empowered team model, the focus shifts from controlling output to governing outcomes and feeding back learnings, and most importantly, market reactions:
+· Downward: Understanding of strategy in team/unit context
+· Downward: Desired business outcome · Upward: Progress toward outcome
+· Upward: Learnings from outcomes; e.g., customer reaction, uptake of features
+The empowered team is accountable for using its allocated resources to achieve business outcomes, to educate the enterprise on market responses, and to develop and share techniques to help accomplish the outcomes.
+Achieving team accountability for business outcomes must avoid:
+· Imposing undue constraints
+· Increasing team cognitive load · Developing a reporting "cargo cult" where meeting metrics replace business outcome
+metrics
+Instead, a robust, well defined, and transparent structure for product and operational information is necessary.
+The IT4IT Value Stream model [C24A] provides the necessary framework to deploy architecture governance and accountability in harmony with team enablement. The following discussions of each value stream explore the practical implications.
+"Evaluate": Supporting the Portfolio Manager
+
+Figure 25: The Evaluate Value Stream: A Guide for Portfolio-Level Decisions [Source: C24A]
+The IT4IT Evaluate value stream (Figure 25) [C24A] prescribes a holistic approach to reviewing and analyzing portfolios of Digital Products. The primary stakeholder is the Digital Product Portfolio Manager. Four routine scenarios are defined as:
+· Plan Product Portfolio Investments
+· Rationalize the Product Portfolio
+· Consider a New Digital Product (from a Portfolio perspective)
+· Perform Digital Product Governance
+The outcome is continuous updating of the portfolio's structure, considering internal and external drivers for change and mandates such as contractual and compliance constraints.
+
+42
+
+The Open Group Guide (2025)
+
+Enterprise Architects
+Such work should be familiar to Enterprise Architects and to TOGAF practitioners in particular. It maps to the TOGAF ADM Architecture Vision and Business Architecture phases in the context of "Architecture to Support Portfolio". Enterprise Architecture tools and methods should be used to guide the Portfolio Manager toward optimal decisions.
+The value stream is explicitly triggered by routine events in the organization's financial decisionmaking cycles but should also be a continuous background activity.
+Enterprise Architecture focus in support of this value stream should include:
+· Defining how the portfolio fits into the goals and objectives of the larger organization
+· Providing guidance on the business, governance, and compliance aspects of proposed product directions
+Technology Architecture at the Evaluate value stream level is unlikely to be highly detailed. But in many cases the Enterprise Architecture function of "knowing a little about a lot", applied to technology related architecture concerns, should add significant value.
+Product Managers
+Product Managers operate within high-level guidelines and portfolio roadmaps that are managed and updated in the Evaluate value stream. Processes designed as part of the Evaluate value stream decisions should emphasize active collaboration between Portfolio and Product Managers, who contribute practical input for Evaluate decisions.
+It is essential that strategy be informed by Product Managers' tactical and practical perspectives and that Product Managers are exposed to (and ideally participate in developing) the strategic intent of portfolio management decisions.
+IT Financial Management Leaders
+The Evaluate value stream is fundamentally about optimizing the business value of Product Portfolios. The ITFM professional is essential in guiding how value measurement is addressed in supporting processes.
+Transformation to a DPPM-based operating model is also a journey toward a new financial management paradigm, as described in Chapter 8. This should be a consideration for ITFM leaders working with the Evaluate value stream.
+The value approach in Evaluate value stream decisions is likely to mature and evolve. Reliable cost and value metrics that can be applied to specific products and portfolios should improve.
+The ITFM professional should remain engaged with specific iterations of the Evaluate value stream and ensure that underlying processes are kept up-to-date.
+Development and DevOps Leaders
+As with Product Managers, implementation leaders will achieve better outcomes when they understand the reasoning behind Portfolio roadmap decisions.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+43
+
+10.3
+
+This applies not only to software development but also to configuration of cloud or COTS products and the design of infrastructure service offerings.
+Evaluate process templates should include actors such as presumptive stakeholders whose input and expertise form part of the decision-making context. Conversely, implementation leaders should ensure that their teams are proactively kept aware of the strategic context for their work.
+"Explore": Support for the Product Manager
+
+Figure 26: Explore Value Stream Model [Source: C24A]
+The IT4IT Explore value stream (Figure 26) [C24A] prescribes the steps taken as product backlogs are prioritized and grouped into funded work packages for implementers.
+The primary stakeholder and leader is the Product Manager. Four routine scenarios are defined as:
+· Investigate a New Digital Product Idea
+· Optimize a Digital Product
+· Refine Digital Product Feasibility
+· Retire Digital Product
+The outcome is an accepted and planned Product Backlog with a detailed Scope Agreement,18Release Roadmap, resource allocation, and associated funding, packaged according to the organization's standards for team structures and methodologies.
+Enterprise Architects
+The role of the Enterprise Architecture in the Evaluate value stream will vary depending on the organization's approach to governance and methodology. In a TOGAF context, this will be based on the architecture governance model, which in turn is based on the business operating model.
+The Enterprise Architecture governance model should describe the organization's preferred approach and ensure that this is part of the design of the processes that support the Explore value stream.
+In general, the Enterprise Architecture role is still Architecture to Support Portfolio but may include aspects of Architecture to Support Project. Also relevant are the natural organizational scaling crisis points described by Verne Harnish in, Scaling Up: How a Few Companies Make It...and Why the Rest Don't [Harnish, 2014].
+
+18 In the IT4IT Standard, "Scope Agreement" means an approved package of funding and backlog items/requirements provided to implementors.
+
+44
+
+The Open Group Guide (2025)
+
+This perspective is translated into the four contexts mentioned in the Digital Practitioner Body of KnowledgeTM Standard of The Open Group, also known as the DPBoKTM Standard, (Figure 27) [C196]. The four contexts perspective is also incorporated into the TOGAF Standard [C220].
+
+Figure 27: The DPBoK Four Contexts
+Crisis points arise, according to Harnish, as leadership adapts to widening spans of control. His model describes this in terms of discrete companies, but the same span-of-control concerns provide a strong guide to the role of the Enterprise Architecture in different sizes of team. As Harnish wrote:
+If you figure roughly $100,000 revenue/employee for small firms and $250,000 revenue/employee for larger firms (yes, larger firms are more efficient on average); and you figure that one can lead seven to 10 others, you get some natural clusters:
+· One to three employees (the majority of home-based businesses)
+· Eight to 12 employees (a very efficient company with a leader and a bunch of helpers)
+· 40 to 70 employees (a senior team of five to seven people, leading teams of seven to 10 -- in a company where you still know everyone's name)
+· 350 to 500 employees (seven leaders, with seven middle managers each, running teams of seven to 10 -- a very efficient company)
+· 2,500 to 3,500 employees (more multiples of seven to 10)19
+Any company with an employee count between these natural clusters is likely to feel a bit stuck. Everything seems to take longer to complete. Problems you thought you had solved
+
+19 As mentioned in the DPBoK Standard, §5.1, Scaling Model, Verne Harnish, in the book Scaling Up [Harnish] describes how companies tend to cluster at certain levels of scale.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+45
+
+earlier start creeping up again. And you're feeling this "big, but not big enough" syndrome.
+For more on these natural cycles, read Larry E. Greiner's classic Harvard Business Review article: Evolution and Revolution as Organizations Grow [Greiner, 1998].
+Product Managers
+In practical terms, Product Managers, whose work is of strategic interest, should routinely be active participants in the Evaluate value stream activities that have defined the strategic context for the Explore value stream activities. At this level of maturity, it should be possible easily to define the right touch points and level of interaction needed for effective involvement of the Enterprise Architecture in the Product Manager's work.
+Explore value stream activities describe the primary role of the Product Manager: continuous iteration of defining roadmaps, arranging funding, setting specific outcomes for implementation, and continuous improvement.
+Explore value stream activities are more granular, less formal, and much more frequently iterated than those in the Evaluate value stream, and in a mature organization will be continuous day-today activities.
+When considering what to include in a Scope Agreement, the Product Manager must ensure the backlog items and associated requirements include everything needed so that a new or updated Product Release can be immediately instantiated upon release.
+This includes:
+· Description of valid consumer offers with pricing rules and defined service levels
+· Information about how the product is to be supported and managed
+· Consumer facing and technical requirements actionable by implementors
+The Product Manager is responsible for detailed management of underlying processes that support the Explore value stream, including required management reporting.
+Product roadmaps should be aligned with higher-level strategic and portfolio roadmaps.
+IT Financial Management Leaders
+ITFM involvement in the Explore value stream should provide Project Managers with useful access to financially meaningful metrics for development, operations, and customer support across the product lifecycle.
+This may include developing new financial models and metrics. A good reference for how to approach this may be to adapt any P&L and ROI models used for traditional products within the company. This should include consideration of the enabling effects of investing in Foundational and Manufacture and Delivery capabilities that provide value beyond the original drivers.
+Underlying processes for the Explore value stream should formalize the financial models, reporting cycles, and metrics needed to support more effective choices by the Product Manager.
+
+46
+
+The Open Group Guide (2025)
+
+10.4
+
+Development and DevOps Leaders
+For a DPPM-aligned operating model to succeed, implementation team structures and practices may need changes to execute correctly on handoffs coming from a DPPM-aligned Product Management process as described above.
+Such a transformation will be especially disruptive for traditional implementation teams whose practices still include development teams "throwing release packages over the wall to infrastructure".
+The journey should be easier for organizations that have already committed to DevOps practices and cross-functional teams. However, the change from project to product thinking may require active management reinforcement and support.
+Implementation leaders have an important role in collaborating with Product Managers and others to ensure that Product Managers communicate their requirements in ways that can be usefully consumed. Underlying processes for Explore must be supported by genuine implementation capabilities.
+"Integrate": Support for Designing and Delivering a Release
+
+Figure 28: Integrate Value Stream Model [Source: C24A]
+The IT4IT Integrate value stream (Figure 28) [C24A] describes the steps needed to create a successful Product Release based on a Product Manager's roadmaps, backlog items and scope agreements. The primary stakeholder is the Product Manager. Routine scenarios are defined as:
+· Develop a New or Initial Product Release
+· Configure an Off-the-Shelf or SaaS Product for Use
+· Deliver an Emergency Change or Hotfix
+· Update a Vendor Product
+The outcome is a new, updated, or deprecated Product Release.
+Enterprise Architects
+The role of the Enterprise Architecture in Integrate is clearly in the scope of TOGAF Phase G (Implementation Governance). What this means in practice will depend on the organization's architecture governance model, including any tailoring of the ADM.
+Further guidance from the TOGAF Standard is the Architecture to Support Project concept, filtered through the lens of advice pertaining to the four DPBoK contexts.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+47
+
+Following the logic of the empowered team, Enterprise Architecture leaders should adopt an outcome-based approach to governance reviews that can be embedded in Agile development practices in a way that maintains team momentum. This probably means adopting two principles:
+· Architecture reviews
+Should be part of a continuous, frequent assessment process embedded in the work cadence of the implementation team to the greatest extent possible.
+· Architecture governance
+Should follow the TOGAF Standard, that detailed attention need only be applied to implementation decisions that affect value outcomes described by the architecture or by Product Management requirements. Many implementation team decisions should not require architecture review.
+Architecture contract templates should be updated or created as needed and agreed with implementation teams and stakeholders. This is consistent with the TOGAF guidance that it is stakeholders, not architects, who own the architecture.
+More details on how to approach this work are mostly beyond the scope of this guide, except that the organization's ADM practices may need an overhaul as part of a DPPM transformation.
+Product Managers
+The Product Manager is the design authority for the product's business description and must engage with implementation teams to maintain this authority in a way that is helpful and supportive of success. This includes creating well-formed requirements/product backlog items so implementers can be successful.
+This work should be aligned with Enterprise Architecture governance. Underlying processes supporting Integrate should describe explicitly how Product Management interacts with architecture governance.
+IT Financial Management Leaders
+ITFM leaders are unlikely to have direct engagement with most Integrate activities.
+However, as DPPM transformations evolve, financial insights into Digital Product business specifications will become more important. Templates for understanding financial outcomes will impact how those business specifications become Digital Product designs.
+The IT4IT reference model describes financial calculations and monitoring in usage, Subscription, Offer, and chargeback calculations. Evolving ITFM standards must help define how granular costs should be allocated to individual portfolios, products, or Subscriptions.
+Integrate value stream activities will create or reuse automated calculations and data integrations whose design must align with the organization's financial management practices.
+A valuable reference for design insights for granular financial control of Digital Products and detailed usage-based cost allocation could be industries where granular financial controls and reporting are well understood, such as telephony, cloud services, and network provision.
+
+48
+
+The Open Group Guide (2025)
+
+10.5
+
+Development and DevOps Leaders
+Implementors deliver Product Releases that should be immediately deployable into supported production instances. Besides traditional release components such as software build packages, the Product Release must contain the full set of information needed to:
+· Automatically deploy an instance of the product, including infrastructure as code for setting up service monitors, usage monitors, chargeback contract templates, Service Level Agreement (SLA) contract templates, and user Subscriptions
+· Provide an effective support context, including information such as test results, knowledge articles, user guides/UX content, and service monitors
+Maturing the ability to create releases that support highly automated delivery and consumer specific management cannot be done overnight. Managers of designers and implementation teams should consider developing a skills and methods roadmap. Such roadmaps are part of mainstream Business Architecture practice.
+The extent to which implementors are free to choose software tools and define unique processes in the Integrate scope should be carefully managed. Architecture governance should require implementation leaders to existing infrastructure tools such as code libraries, toolchains, testing and release management tools, unless there is a compelling reason to do otherwise.
+"Deploy": Support for Provisioning and Deployment Teams
+
+Figure 29: Deploy Value Stream Model [Source: C24A]
+The IT4IT Deploy value stream (Figure 29) [C24A] prescribes the steps needed to deploy an Actual Product Instance to or remove an Actual Product Instance from, the deployed IT landscape.
+The primary stakeholder is the Product Manager. Three routine scenarios are defined: · Deploy a First Product Release for a New Digital Product Scenario · Deploy a New Product Release Version for a Digital Product Scenario · Disable or Remove Existing Product Release Instances of a Digital Product Scenario
+The outcome is defined as a Consumable Product Instance20.
+This is a change to the deployed IT landscape, which (as experienced IT managers will know) is the leading cause of operational instability. The Deploy value stream is focused on ensuring that change is well managed and does not disrupt or degrade service delivery.
+
+20 This is not entirely correct, as one scenario is about removing an instance. A more correct outcome would be described as an update or change to the set of consumable Product Instances.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+49
+
+Enterprise Architects
+The Foundational and Manufacture and Delivery portfolios will contain most of the tooling needed to support the Deploy value stream.
+Migration to a DPPM model may require significant new design of end-to-end automations, operational flows, and supporting tools. In many organizations, these tools represent a poorly integrated collection of point solutions. In that case, plenty of Architecture to Support Portfolio work may be needed to close the gaps and rationalize functional islands into integrated toolchains.
+Cloud platform providers have largely solved the problem of automated deployment at scale, and Enterprise Architectures may look there for examples and guidance. However, commodity Everything as a Service (XaaS) providers cannot replace in house understanding of business motivation and of complete deployment architectures. This applies to the more complex Digital Products, for which the first instantiation (Scenario 1) or deployment of a major release (Scenario 2) can be a high-risk proposition because full system testing is impractical or impossible.
+In that case, deployment into production is the first complete system test. Product Release design must include an effective rollback strategy to support the best possible impact analysis regarding the existing landscape.
+Product Managers
+The primary role of the Product Manager in supporting this value stream is to have enough practical knowledge of how their product is deployed to be comfortable providing a sign-off. This may be signing off on a general instantiation method for highly automated, high volume, low risk deployments. In that case, the Product Manager should be confident that the right operational monitors are in place and working as expected and that related reporting is meaningful and sufficient for good governance.
+A more complete understanding of the mechanics of actual deployment may be important for oneoff, complex, or high-risk deployments. An effective sign-off should include meaningful collaboration with Enterprise Architecture and Infrastructure management.
+IT Financial Management Leaders
+DPPM-aligned ITFM practitioners should use financial models that correctly capture and monitor the total cost impact of product deployment and operations.
+In a mature organization, the high-volume, low-risk context for routine product deployments should include specification of reliable usage data at the right granularity. This should be part of the original Digital Product design, embedded in the Product Release so that the right monitors and reporting are automatic.
+ITFM practitioners should be satisfied that costs incurred by deployment activities are correctly allocated to portfolios and products where possible and desired.
+Development and DevOps Leaders
+Developers must take responsibility for their releases being implementable and supportable. The main difference between the DPPM perspective and that of traditional IT organizations is that the product release must be designed and packaged to include all deployment and instantiation concerns. If built in the context of correctly specified requirements, the Product Release should
+
+50
+
+The Open Group Guide (2025)
+
+10.6
+
+include all the supporting information (such as Infrastructure as Code (IaC)) needed for effective technical deployment.
+Developers must ensure that testing is as complete as possible, that build packages are correctly configured, and that known defects, test results, and deployment risks are fully documented. The high-maturity organization will increase automation and standardization so that unsuccessful deployment is rare.
+"Release": Support for Offer and Catalog Management
+
+Figure 30: IT4IT Release Value Stream Model [Source: C24A]
+The IT4IT Release value stream (Figure 30) [C24A] is primarily concerned with maintaining an effective Service Offer Catalog based on well-formed Product Release data. The primary stakeholder is the Catalog Manager. Four routine scenarios are defined as:
+· Release a New Service Offer
+· Change an Existing Service Offer
+· Bundle Existing Service Offers
+· Terminate a Service Offer
+The outcome is an update to the Service Offer Catalog.
+Enterprise Architects
+The Enterprise Architecture focus in support of this value stream should include:
+· Ensuring that the design of the underlying processes, functions, and data enables effective, scalable, and manageable catalog management
+· Ensuring that Offer-related data structures and integrations for Digital Products, Product Releases, Service Offers, and Service Contract data objects are designed to ensure scalable interoperability
+· Defining a roadmap for effecting and maintaining a single global Offer function and a single global master catalog, to the extent possible. For organizations that prefer multiple catalogs, the Enterprise Architecture should ensure there is a good reason for fragmenting the catalog and that this is accepted by informed stakeholders.
+Product Managers
+The Product Manager must define allowable service offers in an automatable format consistent with the design of the Offer function and the Service Offer data object.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+51
+
+10.7
+
+The variety and complexity of product Offer templates on large e-commerce websites provide a good reference point for the type of complexity that may be required.
+These may include technical specifications, qualitative descriptions, prices or pricing algorithms, images, service level options, product variant options such as color or size, shipping options, restrictions on user role or type, location constraints, language variations, and so on.
+Mechanisms for documenting Offer design in the IT4IT Plan and Build capability groups should be enabling rather than frictional for the Product Manager, even for very complex offers.
+Product and Portfolio Managers must ensure that all downstream actors and automation, such as developers, catalog managers, and operations, support the complexity needed for successful Offer definitions.
+IT Financial Management Leaders
+ITFM practitioners should support catalog management, offer management, and pricing approaches with a suitable financial perspective.
+Changes to financial tracking and reporting models may be needed, but this may cause instability in data reliability or friction in the pace of change where new, reliable interfaces to financial systems are required. This will be of particular concern for ITFM teams that have supplemented rigid finance systems with complex systems of spreadsheets that may be poorly documented and dangerous to change.
+Development and DevOps Leaders
+For Build capabilities to be managed in alignment with the IT4IT model, designers, and developers must have the technical information and guidance required to create Product Release objects that will work as input data for automated catalog management.
+The organizational structure must support meaningful collaboration between Product Management, development, and operations.
+"Consume": Support for Digital Product Consumers
+
+Figure 31: IT4IT Consume Value Stream Model
+The IT4IT Consume value stream (Figure 31) [C24A] prescribes an approach for supporting consumers of Service Offers. It is focused on selecting, ordering, and setting up a Subscription and supporting active subscribers. The primary stakeholder is the customer and/or consumer (human or system actor).
+Four routine scenarios are defined as:
+· Order a New Desired Product Instance
+· Order an Actual Product Instance Modification
+
+52
+
+The Open Group Guide (2025)
+
+· Order an Actual Product Instance Termination
+· Order an Actual Product Instance Support
+The outcome is effective provision of, and support for, a running Actual Product Instance.
+Enterprise Architects
+The Enterprise Architecture focus in support of this value stream should include:
+· Design of the underlying processes, functions, and data needed to ensure that Offer consumption and consumer interaction management will remain effective, scalable, and manageable
+· Ensuring that Offer-related data structures and integrations for Service Offer, Subscription, Chargeback Contract, and Service Contract data objects are designed to ensure scalable interoperability
+· Defining a roadmap for migrating to the extent possible toward single systems of record for the Subscription and Chargeback data objects
+· Defining a roadmap for ensuring that interoperability, including data flows, is fully implemented with suitable automation among the participating functional components shown in Figure 32
+
+Figure 32: Consume Value Stream Participating Functional Components and Data Objects
+Product Managers
+The Product Manager must understand the Consume value stream at a business level, to ensure that business and technical Digital Product design includes a strong outside-in bias, making
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+53
+
+10.8
+
+consumption and support as frictionless as possible. Consumer experience should be monitored and measured.
+Product Managers must ensure the right service monitors are specified, to enable useful feedback on ongoing engagement with consumers and to be clear about how the design integrates or conflicts with standard customer engagement practices. The Product Manager should actively monitor the deployed landscape and suggest changes to service delivery if metrics are outside expectations for the service delivery experience. This role should be formally described in the processes that support Consume value stream activities.
+IT Financial Management Leaders
+ITFM leaders should be included as key stakeholders in the Enterprise Architecture activities described above, to ensure that ITFM perspectives and concerns are included in the design of underlying processes. ITFM leaders should participate in planning how Usage, Chargeback, Showback, and Cost Modeling functions and data are described and managed, and how these should be integrated with financial systems.
+Development and DevOps Leaders
+Product Releases must be crafted with knowledge of how Release information will be consumed and presented during Consume value stream activities.
+This applies in particular to presentation of Knowledge articles, performance metrics, service level information, and similar feedback and support information to human consumers.
+"Operate": Support for ITOM and ITSM Teams
+
+Figure 33: IT4IT Operate Value Stream Model [Source C24A]
+The IT4IT Operate value stream (Figure 33) [C24A] describes the ongoing activities required to identify and mitigate threats to the stability of the IT landscape. The primary stakeholder is the Consumer. Five routine scenarios are defined as:
+· Remediate an Identified Back-End Issue · Ensure Disaster Recovery Objectives · Remediate a Major Event or Incident · Remediate Consumer Front-End Issue · Perform Scheduled Maintenance The outcome is that all Actual Product Instances in the landscape operate as expected and can be consumed as specified in the relevant Service Contracts.
+
+54
+
+The Open Group Guide (2025)
+
+Enterprise Architects
+The Enterprise Architecture should ensure that the underlying Operate value stream processes are well-defined and well-governed. The Enterprise Architecture is unlikely to be a direct participant in the five scenarios.
+In the IT4IT context, some Enterprise Architecture considerations are important:
+· Ensuring that processes underlying the value stream take full advantage of integration among Service Monitoring, Event, Incident, and Problem as defined in the IT4IT model
+· Defining how data integration should improve traceability from Configuration data (i.e., CMDB data) to Digital Products and subscribers
+· Ensuring that IT related Disaster Recovery/Business Continuity processes and systems align with enterprise strategy
+Product Managers
+As with other downstream activities, the business and technical design of the product should include consideration of and support for Consume value stream activities and possible outcomes.
+Consumer-oriented design should address possible disconnects between formal SLAs and reasonable consumer expectations. These may diverge, for example, when essential Product Instance components are governed by supply chain-facing SLAs over which the Product Manager may have little or no control. This can arise when subordinate technology stacks are supplied by layers of third parties, internal and external.
+There is increasing industry recognition that customers may perceive service quality as poor even when all technical SLAs are met. To align operational and customer expectations more effectively, Product Managers may want to explore the concept of Experience Level Agreements (XLAs) as an additional service metric.
+Product design may consider possible non-technical remedies appropriate to consumer expectations in specific scenarios such as a major service outage. This could include automated proactive notifications and fallback service delivery scenarios designed to maintain customer satisfaction.
+IT Financial Management Leaders
+ITFM practitioners should examine where processes supporting Operate activities provide opportunities to measure cost and record this against specific products or Product Portfolios.
+Existing service contracts with outside vendors can heavily constrain the ability to evolve, scale, and seamlessly automate the operational environment. These concerns are within the scope of Service Integration and Management (SIAM), intended to improve the holistic management of multi-sourced services.
+ITFM leaders have a role in helping vendor management, procurement and operations teams move toward a SIAM model that provides a better opportunity for scalable support for Digital Products.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+55
+
+Development and DevOps Leaders
+DPPM transformation will include automated processes for Closed Loop Incident Processing (CLIP), in which issues arising from defects in deployed systems can easily be linked to, and automatically referred to, the Integrate teams responsible for remediation.
+Anticipating and supporting this kind of linkage with appropriate tools and processes should be part of the design of processes and automation supporting Integrations.
+At a fundamental level, DPPM requires developers to record, maintain, and retain Product Release information over the full product lifecycle, to support long-term traceability in the product ecosystem.
+
+56
+
+The Open Group Guide (2025)
+
+11
+11.1
+
+Designing the DPPM Business Architecture
+This section takes a more global view of the Business Architecture challenge, and especially the organizational structure challenge of the DPPM transformation.
+A DPPM transformation requires more than just a new look at ITFM models, development practices, and Enterprise Architecture governance. Without the right supporting Business Architecture, and particularly without the right organizational structure, DPPM cannot meet its full potential.
+For the Enterprise Architecture, organizational modeling is probably the most important area of DPPM transformation and governance.
+Rearchitecting the business is one of the highest-value Enterprise Architecture activities, particularly in designing team interactions/communications and accountability (which will in turn bring in technical concerns such as data sharing, communication systems, or reporting for accountability).
+To be effective in the context of empowered teams and related management structures, the Enterprise Architecture must operate at a level above governing product and service creation and delivery. They should focus on defining and supporting the enterprise's actual business and organizational architecture that produces the product.
+This is a critical architecture success factor as an organization grows21 in complexity, when the topic of the organization and structure needs to be formalized [C196]. The TOGAF Series Guide: Organization Mapping [G206] can provide a methodology for this, guided by the IT4IT Reference Architecture and the TOGAF Digital Business Reference Model [G21H].
+Some specifics of how this plays out in the IT4IT Value Streams are mentioned in Chapter 10.
+Conway's Law
+A key tenet of digital practice is Conway's Law22, which roughly states that an organization's products are shaped by the design of the enterprise that produced them. Digital architecture practices recognize that "to design a product is also to design an organization and vice versa" [C196]. Deliberately architecting product team responsibilities and interactions, sometimes known as the "Inverse Conway Maneuver" [C208], should be part of the digital Enterprise Architect's toolkit.
+Put another way, "Team structures must match the required software architecture or risk producing unintended designs" [Skelton & Pais, 2019]. The Open Agile ArchitectureTM Standard (also known as the O-AATM Standard) Axiom 12 calls this "Organization Mirroring Architecture" [C208]. This will be a joint responsibility of the Enterprise Architecture interacting with the management structure. Team leaders and members must be allocated, and outcomes agreed upon
+
+21 Ideally this growth in complexity reflects growth in an organization's success, but such complexity can also result from changing
+strategy, mergers and acquisition, or other sources. 22 Conway's Law; refer to: https://en.wikipedia.org/wiki/Conway's_law, Wikipedia.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+57
+
+when establishing that part of the portfolio. Portfolio structure and composition must be continuously adjusted based on business outcomes.
+Enterprise Architecture guidance must concern itself with the structure, accountability, and governance of the enterprise that produces the products. A vital Enterprise Architecture role is to help define organizational capabilities that enable product and supporting teams to optimize business outcomes and to provide a value-oriented model for business outcome accountability and resource allocation.
+Put succinctly: Architect the Enterprise, not the Products of the Enterprise.
+These changes naturally affect the starting points and outcomes of the Enterprise Architecture process. A DPPM-aligned operating model as described here can only work if the organization and flow of work are changed across the traditional IT and management functions.
+What decisions can improve overall enterprise effectiveness without unduly constraining team empowerment? How do we organize and allocate specialized resources and investments? How can we make architectural and business decisions intrinsic to our decision-making and workflows? How can we minimize the impact or automate the guardrails in implementation governance? This is sometimes phrased as "baking architecture into platforms and pipelines".
+As part of adopting new operating models, a Digital Enterprise will likely adopt new ways of working and organizing its assets [Betz, 2019]. Some examples of these changes are listed in Figure 34.
+
+11.2
+
+Figure 34: Organizational Shifts in the DPPM Transformation
+The Architecture of the Empowered Team
+Key factors for the Enterprise Architecture to consider in the design of new ways of organizing work include:
+· Interaction Cognitive Load Differences among teams in culture, operating, and communication style, and tools for gathering and sharing information can impose a cognitive load when specialized teams work together.
+The right organizational structure and communication practices can optimize team interactions. The Enterprise Architecture asked to design team interaction styles should minimize overhead and optimize value delivery. Such work should be suitable for the team size and context.
+
+58
+
+The Open Group Guide (2025)
+
+More about these topics can be found in: TOGAF Series Guide: Using the TOGAF Standard in the Digital Enterprise, Sections Context II: Team and Context III: Team of Teams [G217].
+· Real loads of self-maintained tools and infrastructure
+Enterprise Architectures can add value by recommending principles and standards that discourage the implementation of team-specific tools. These can create information silos that complicate communication and fragment the automation of practices. Such silos reduce transparency, accountability, and organizational flexibility.
+The right boundaries must be set to ensure that team innovations are focused on added value, not on creation of suboptimal tool chains that can drive up technical debt, reduce interoperability, and hobble flexibility.
+Governing the prevention of suboptimal silos cannot be the responsibility of individual teams. This is an IT management responsibility that should be supported by the right Enterprise Architecture governance approach.
+The Enterprise Architecture can help create a standard enterprise automated environment that supports innovation. This requires an outside-in approach designed to be recognized as high-value, highly usable automation by product and infrastructure teams.
+· Cross-functional versus specialized teams
+One of the harder challenges in digital portfolio managing is striking the correct resource and budget balance between product teams and more specialized teams like infrastructure, security, site reliability, and architecture teams.
+Product teams naturally desire to "do it all" and keep decisions and dependencies within the team to allow quick action and minimal coordination. However, some necessary activities require specialized knowledge and experience that a product team alone may not have.
+Specialized functions, sometimes called internal shared resources [C24A] will want to organize as teams to build and maintain their proficiency. This specialization requires such teams to coordinate activities, which imposes a cognitive load on both parties and presents the specialized team with multiple priorities.
+Balancing team autonomy with the need for specialized skills and resources is one of the most complex challenges the Enterprise Architect can face.
+The O-AA Standard describes inter-team dynamics using the terminology Stream-Aligned teams, Competency Teams, and Platform Teams [C208], as illustrated in Figure 35.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+59
+
+Figure 35: Stream-Aligned Teams and Competency Teams [C208]
+Continuous Refactoring versus Team Stability: the O-AA Standard recommends an approach of Continuous Architectural Refactoring [C208] based on the organization's constraints in meeting its objectives. However, organizations should not be refactored casually to avoid losing focus on value. How should the Enterprise Architect know when refactoring/rearchitecting of teams is needed?
+An important architectural input will be the Product Backlog and its traceability to the overall Portfolio Backlog [C24A]. Inspection of backlog items will show whether a team's time is being spent on deliverable product features rather than working on internal infrastructure and process improvements. If so, refactoring may be beneficial, keeping in mind that team interactions have a cost. Rearchitecting should consider how to maintain digital efficiency [C196].
+If shared teams are used, a principal success metric is consistently fast fulfillment time on responses to internal consumer requests [Betz, 2021], which can be determined by looking at the time in the queue for cross-team service requests; i.e., the time between process request and fulfillment [C24A].
+ITFM Considerations in Team Ontologies
+A large enterprise may ultimately have a large number of teams competing for budget. DPPM recommends maximizing cost allocation to specific products so that competition for budget resources is ­ to the extent practicable ­ a discussion about the value of the team's services to specific products or portfolios.
+Challenges of Scaling: Scaling is a foresight function for architecture ­ it is an essential "As Is -> To Be" change that should be part of continuous architecture. Organizational scaling should not normally be an unanticipated reaction to organic growth. Anticipating scaling through good design is part of good architecture.
+
+60
+
+The Open Group Guide (2025)
+
+The role of the architect in preparing an organization to meet the challenges of organizational scale has been mentioned elsewhere in this document; e.g., determining when to refactor teams.
+Scaling can occur for many reasons, not just growth. The architect should understand other possible scaling drivers such as innovation management and internal entrepreneurship models as described in the Amazon® "six pagers".23
+The Wardley Model
+Building the right team is fundamental to success. Different situations call for different types of people. Consider the Wardley model [Goldminz, 2016] when building a Digital Product team. The model defines three types of people: Pioneers, Settlers, and Town Planners, as described in Figure 36.
+
+Figure 36: The Wardley Model [Source: Goldminz, 2016]
+
+23 The "Six Page Narrative" refers to a leadership directive from Jeff Bezos to amazon executives on management standards; refer to: https://www.sixpagermemo.com/blog/what-is-an-amazon-six-pager.
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+61
+
+12
+12.1
+
+Getting Started: Toolchains and Scenarios
+In this section, we explore the process of getting started by considering the three scenarios below that represent three different situations and trying to imagine differences and similarities.
+Portfolio Evaluations and Tooling
+Digital Product Managers need to develop proficiency in how digital and DevOps toolchains function to evaluate the value and costs associated with their products.
+This understanding empowers them to make more informed decisions, advocate effectively for their products, and manage the lifecycle of digital offerings more effectively. In recognizing their products' financial implications and value propositions, product teams can successfully navigate the complexities of Product Management and the funding strategies of their Portfolio Managers.
+
+Figure 37: Digital and DevOps Toolchain Example [Source: John Spirko, ServiceNow]
+A toolchain example is shown in Figure 37. Understanding such toolchains offers insights into stakeholder perspectives, enabling the team to anticipate and address stakeholder concerns and priorities.
+The IT4IT Standard provides a stable Digital Factory toolchain architecture. This should guide the Manufacture and Delivery portfolio strategy.
+There are dozens or hundreds of possible tool choices and configurations that teams may wish to use. The portfolio strategy should describe the allowable scope of tooling choices by teams at all levels, especially teams of Infrastructure, Development, and DevOps practitioners. In a wellfunctioning, collaborative DPPM context, these operational stakeholders should be part of the Evaluate and Explore value stream work to ensure regular evaluation and streamlining of operational tooling.
+
+62
+
+The Open Group Guide (2025)
+
+12.2 12.3
+12.4
+
+Three Scenarios for Applying DPPM
+DPPM transformation may start with a single experiment or pilot. However, it is helpful to consider outcomes beyond the delivery of the first Digital Product(s). More specifically, consider the desired outcomes in terms of impact on the enterprise.
+How might the enterprise change if this new funding, working, and packaging method succeeds? Alternatively, consider what actions might be taken if this first endeavor does not deliver the expected value.
+We provide three scenarios on the path to a DPPM transformation, meant to help frame ideal outcomes and support contingency planning for unexpected results.
+Scenario 1: Bootstrapping a Digital Product or Portfolio
+Bootstrapping refers to the process of creating something new using available resources. This approach is often adopted in large organizations when executives recognize that the innovation required to meet market demand is either too challenging or impossible to achieve within the existing corporate structure.
+The Bootstrapping Process: Organizations may allocate a portion of their budget and personnel to form a new team. This team is granted the autonomy to develop Digital Products and portfolios outside of the standard corporate constraints. This autonomy is crucial for fostering innovation and rapid development.
+Key Roles in Bootstrapping: Successful bootstrapping initiatives tend to have a significant presence of "Pioneers" during the early stages. Pioneers are individuals who seek high-value opportunities despite the associated risks. They are comfortable with failure and are quick to pivot when initial attempts fail.
+As progress is made and the product(s) begin to gain traction, the role of Pioneers diminishes, making way for "Settlers" and eventually "Town Planners". Settlers focus on refining the product through continuous improvement. At the same time, Town Planners work on integrating new products and services into the mainstream market, shifting the focus from innovation to efficiency.
+Challenges of Bootstrapping: Despite its advantages, bootstrapping has challenges. One notable issue is the potential for too much autonomy to create isolated teams that lack a sense of belonging to the larger enterprise. This raises important questions about the future integration of bootstrapped products with the enterprise.
+Will these innovations remain autonomous, or will they be absorbed into the larger corporate structure? The answers to these questions are crucial for determining the long-term impact of bootstrapping on an organization.
+Scenario 2: Piloting Digital Products
+Digital product pilots offer a structured approach to innovation while adhering to the constraints of the enterprise. These pilots are crucial to address perceived discrepancies between funding
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+63
+
+12.5
+
+received and value delivered. Shifting the focus to Digital Products can address and mitigate significant challenges that hinder value delivery.
+Challenges Addressed by Digital Pilots: The adoption of Digital Product pilots can be driven by the need to overcome systemic issues, including outdated systems, low adoption rates, and inefficient integrations. The overarching goal is to enhance the delivery of Digital Products and services, thereby increasing the value provided to stakeholders.
+Role of Settlers in Digital Pilots: In the context of piloting Digital Products, a preference for Settlers emerges. Settlers are pivotal in building the initial Digital Products and establishing a framework for accountability throughout the product's lifecycle. This accountability spans managing technical debt, ensuring widespread adoption, and consistently improving user experience metrics. While some public sector Digital Products eventually transition to Town Planner oversight, many remain under the continuous improvement and management of Settlers.
+Pros and Cons of Digital Product Piloting: Piloting Digital Products introduces opportunities and challenges. Expanding the scope to include considerations beyond the product can lead to increased workload and complexity, particularly compared to traditional project management. On the other hand, Digital Product management focuses on retiring outdated technology, reducing ongoing costs, and enhancing user satisfaction, providing a more holistic view of a product's lifecycle than traditional project management offers.
+Comparing Digital Product to Project Management: A direct comparison between Digital Product management and traditional project management reveals fundamental differences. Digital Product Management encompasses a broader set of responsibilities, including the long-term sustainability and impact of the product, which are often outside the purview of project management. This distinction underscores the unique challenges and considerations involved in piloting Digital Products, especially within public sector enterprises.
+Scenario 3: Enterprise Shift to Digital Products
+Scenario 3 typically follows the successful completion of Scenario 2, where a pilot has demonstrated tangible value, leading to the strategic decision to migrate towards a DPPM operating model. It is essential to distinguish this scenario from the initial stages of innovation, specifically differentiating it from Scenario 1, "Bootstrapping", and Scenario 2, "Piloting".
+Distinguishing Between Scenarios for Clarity: The journey towards fully embracing Digital Products within an enterprise is a structured process that involves distinct phases. Scenario 3 marks a pivotal point where the organization commits to a digital-first approach, influenced by the insights and successes of prior piloting efforts. However, navigating this transition with a clear understanding of the differences between "Bootstrapping" and "Piloting" is crucial to avoid potential pitfalls.
+Caution Against Misapplication of Models: One significant risk during the Enterprise Shift to Digital Products is the misapplication of the bootstrapping model to this broader, more strategic initiative. While bootstrapping is valuable for initiating projects within constraints and fostering innovation, applying its principles indiscriminately to a wide-scale digital transformation can result in fragmented teams. These disconnected groups may struggle to leverage the full advantages of operating within an enterprise framework, diminishing the potential benefits of a cohesive Digital Product strategy.
+
+64
+
+The Open Group Guide (2025)
+
+Acronyms & Abbreviations
+
+ABB
+
+Architecture Building Block
+
+ADM
+
+Architecture Development Method
+
+APQC American Productivity and Quality Center
+
+CI/CD Continuous Integration/Continuous Deployment
+
+CLIP
+
+Closed Loop Incident Processing
+
+CMDB Configuration Management Database
+
+COTS
+
+Commercial Off The Shelf
+
+CRM
+
+Customer Relationship Management
+
+DevOps Development Operations
+
+DPPM Digital Product Portfolio Management
+
+GRC
+
+Governance, Risk, and Compliance
+
+HR
+
+Human Resources
+
+IaaS
+
+Infrastructure as a Service
+
+IoT
+
+Internet of Things
+
+ITFM
+
+IT Financial Management
+
+ITIL
+
+Information Technology Infrastructure Library
+
+ITOM Information Technology Operations Management
+
+ITSM
+
+Information Technology Service Management
+
+MDM
+
+Mobile Device Management
+
+OT
+
+Operational Technology
+
+P&L
+
+Profit-and-Loss
+
+P2P
+
+Project-to-Product
+
+PCF
+
+Process Classification Framework
+
+POS
+
+Point Of Sale
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+65
+
+ROI SaaS SBOM SIAM SLA XLA
+
+Return on Investment Software as a Service Software Bill of Materials Service Integration and Management Service Level Agreement Experience Level Agreement'
+
+66
+
+The Open Group Guide (2025)
+
+Index
+ADM..................................... 1, 31 APQC ....................................... 19 Consume Value Stream ............ 52 Conway's Law .......................... 57 Deploy Value Stream ............... 49 DevOps............................. 1, 7, 38 Digital Product ..................... 8, 30 Digital Product Manager .......... 27 Digital Products ........................ 22 DPPM ............... 1, 6, 9, 30, 38, 63 DPPM model ............................ 13 efficiency zone ......................... 36 Enterprise Architecture......... 6, 32 Enterprise Architecture Governance
+.............................................. 34 Evaluate Value Stream ............. 42
+
+Explore Value Stream .............. 44 Foundational Portfolio ............. 20 innovation zone ........................ 36 ITOM ......................................... 2 ITSM .......................................... 2 Manufacture and Delivery Portfolio
+............................................. 23 Operate Value Stream .............. 55 Product Mindset ................... 3, 12 project mindset ........................... 4 Provided Externally Portfolio .. 16 Provided Internally Portfolio.... 17 Reference Architecture ............ 32 Release Value Stream .............. 51 ROI............................................. 6 The Wardley Model ................. 61
+
+Digital Product Portfolio Management in the Digital Enterprise
+
+67
+
+

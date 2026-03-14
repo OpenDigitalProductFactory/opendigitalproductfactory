@@ -4,6 +4,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
+import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import * as crypto from "crypto";
 
@@ -459,6 +460,102 @@ async function seedThemeBrandingEpic(): Promise<void> {
   console.log(`Seeded theme epic ${epic.epicId} and linked BI-PROD-004/005/006/007/008`);
 }
 
+async function seedDarkThemeUsabilityEpic(): Promise<void> {
+  const portfolio = await prisma.portfolio.findUnique({ where: { slug: "manufacturing_and_delivery" } });
+  if (!portfolio) throw new Error("manufacturing_and_delivery portfolio not seeded");
+
+  const dpfPortal = await prisma.digitalProduct.findUnique({ where: { productId: "dpf-portal" } });
+  if (!dpfPortal) throw new Error("dpf-portal digital product not seeded");
+
+  const epic = await prisma.epic.upsert({
+    where: { epicId: "EP-UI-A11Y-001" },
+    update: {
+      title: "Dark-Theme Usability & Accessibility Policy",
+      description:
+        "Establish and enforce WCAG 2.1 AA contrast standards, minimum font sizes, and surface separation rules tailored to the platform's dark theme. Applies to all future development and admin configuration screens.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-UI-A11Y-001",
+      title: "Dark-Theme Usability & Accessibility Policy",
+      description:
+        "Establish and enforce WCAG 2.1 AA contrast standards, minimum font sizes, and surface separation rules tailored to the platform's dark theme. Applies to all future development and admin configuration screens.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: epic.id, portfolioId: portfolio.id } },
+    update: {},
+    create: { epicId: epic.id, portfolioId: portfolio.id },
+  });
+
+  const items = [
+    {
+      itemId: "BI-PROD-009",
+      title: "Define dark-theme contrast standards — WCAG AA minimums for dark backgrounds",
+      body: "Document colour contrast requirements: 4.5:1 for normal text, 3:1 for large text against #0f0f1a and #1a1a2e surfaces. Establish token palette: --dpf-muted (#8888a0, ~5:1), labels (#c0c0d8, ~7:1), secondary (#b0b0c8, ~6:1). No text may use colours below 4.5:1 on dark surfaces.",
+      status: "done",
+      priority: 1,
+    },
+    {
+      itemId: "BI-PROD-010",
+      title: "Establish minimum font-size policy — 10px floor for all UI text",
+      body: "Audit all inline styles and Tailwind classes. No text element may be smaller than 10px. Form labels: 12px minimum. Form inputs and buttons: 13px minimum. Document in CLAUDE.md and component guidelines.",
+      status: "done",
+      priority: 2,
+    },
+    {
+      itemId: "BI-PROD-011",
+      title: "Audit and remediate existing admin/platform screens for contrast compliance",
+      body: "Sweep all /platform, /admin, and /ea screens. Replace any remaining #555566 with #8888a0. Bump undersized text. Verify form inputs, buttons, and labels meet the new minimums.",
+      status: "done",
+      priority: 3,
+    },
+    {
+      itemId: "BI-PROD-012",
+      title: "Create dark-theme development guidelines for future feature work",
+      body: "Write developer-facing guidelines covering: surface hierarchy rules (bg < surface-1 < surface-2), border contrast, focus indicators, disabled-state contrast, and how to validate with contrast-checker tools. Include in onboarding docs.",
+      status: "open",
+      priority: 4,
+    },
+    {
+      itemId: "BI-PROD-013",
+      title: "Add UX Accessibility AI Agent (AGT-903) to agent registry",
+      body: "Register a cross-cutting UX accessibility agent that reviews UI work for WCAG compliance, contrast ratios, font sizing, and dark-theme usability. Agent should be invokable during code review to flag accessibility regressions.",
+      status: "open",
+      priority: 5,
+    },
+  ];
+
+  for (const item of items) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: {
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        body: item.body,
+        type: "product",
+        digitalProductId: dpfPortal.id,
+        epicId: epic.id,
+      },
+      create: {
+        itemId: item.itemId,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        body: item.body,
+        type: "product",
+        digitalProductId: dpfPortal.id,
+        epicId: epic.id,
+      },
+    });
+  }
+
+  console.log(`Seeded dark-theme usability epic ${epic.epicId} with ${items.length} backlog items`);
+}
+
 async function seedDefaultAdminUser(): Promise<void> {
   // Creates a default HR-000 user for initial access. Change password immediately.
   const adminRole = await prisma.platformRole.findUnique({ where: { roleId: "HR-000" } });
@@ -626,12 +723,14 @@ async function main(): Promise<void> {
   await seedPortfolios();
   await seedAgents();
   await seedTaxonomyNodes();
+  await seedEaReferenceModels();
   await seedDigitalProducts();
   await seedEaArchimate4();
   await seedEaViewpoints();
   await seedEaViews();
   await seedDpfSelfRegistration();
   await seedThemeBrandingEpic();
+  await seedDarkThemeUsabilityEpic();
   await seedDefaultAdminUser();
   await seedScheduledJobs();
   console.log("Seed complete.");
