@@ -83,21 +83,60 @@ export async function syncPortfolio(p: {
   );
 }
 
+export interface InfraCIExtendedProps {
+  baseUrl?: string;
+  gpu?: string;
+  vramGb?: number | null;
+  modelCount?: number;
+}
+
 /** Upsert an InfraCI node. */
-export async function syncInfraCI(ci: {
-  ciId: string;
-  name: string;
-  ciType: string;   // server | container | database | service | network
-  status: string;   // operational | degraded | offline
-  portfolioSlug?: string | null;
-}): Promise<void> {
+export async function syncInfraCI(
+  ci: {
+    ciId: string;
+    name: string;
+    ciType: string;   // server | container | database | service | network
+    status: string;   // operational | degraded | offline
+    portfolioSlug?: string | null;
+  },
+  extendedProps?: InfraCIExtendedProps,
+): Promise<void> {
+  const setClauses = [
+    "ci.name = $name",
+    "ci.ciType = $ciType",
+    "ci.status = $status",
+    "ci.syncedAt = datetime()",
+  ];
+  const params: Record<string, unknown> = {
+    ciId: ci.ciId,
+    name: ci.name,
+    ciType: ci.ciType,
+    status: ci.status,
+  };
+
+  if (extendedProps) {
+    if (extendedProps.baseUrl !== undefined) {
+      setClauses.push("ci.baseUrl = $baseUrl");
+      params.baseUrl = extendedProps.baseUrl;
+    }
+    if (extendedProps.gpu !== undefined) {
+      setClauses.push("ci.gpu = $gpu");
+      params.gpu = extendedProps.gpu;
+    }
+    if (extendedProps.vramGb !== undefined) {
+      setClauses.push("ci.vramGb = $vramGb");
+      params.vramGb = extendedProps.vramGb;
+    }
+    if (extendedProps.modelCount !== undefined) {
+      setClauses.push("ci.modelCount = $modelCount");
+      params.modelCount = extendedProps.modelCount;
+    }
+  }
+
   await runCypher(
     `MERGE (ci:InfraCI {ciId: $ciId})
-     SET ci.name        = $name,
-         ci.ciType      = $ciType,
-         ci.status      = $status,
-         ci.syncedAt    = datetime()`,
-    ci,
+     SET ${setClauses.join(", ")}`,
+    params,
   );
 
   if (ci.portfolioSlug) {
