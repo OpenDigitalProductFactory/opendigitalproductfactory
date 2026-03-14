@@ -1,6 +1,7 @@
 import { join } from "path";
 import { readFile, utils } from "xlsx";
 import { prisma } from "./client.js";
+import type { Prisma } from "../generated/client";
 import {
   normalizePriorityClass,
   slugifyReferenceModelName,
@@ -27,12 +28,27 @@ function buildElementSlug(kind: string, ...parts: string[]): string {
   return [kind, ...parts.map(slugifyPart)].filter(Boolean).join("__");
 }
 
+function requireSheet(
+  sheets: Record<string, unknown>,
+  name: string,
+): unknown {
+  const sheet = sheets[name];
+  if (!sheet) throw new Error(`Missing worksheet: ${name}`);
+  return sheet;
+}
+
 function loadIt4itWorkbook() {
   const workbook = readFile(IT4IT_WORKBOOK_PATH);
 
-  const functionalRows = utils.sheet_to_json(workbook.Sheets["IT4IT Functional Criteria"]) as Array<Record<string, unknown>>;
-  const valueStreamRows = utils.sheet_to_json(workbook.Sheets["Value Stream Activities"]) as Array<Record<string, unknown>>;
-  const participationRows = utils.sheet_to_json(workbook.Sheets["FC Participation Matrix"]) as Array<Record<string, unknown>>;
+  const functionalRows = utils.sheet_to_json(
+    requireSheet(workbook.Sheets, "IT4IT Functional Criteria") as Parameters<typeof utils.sheet_to_json>[0]
+  ) as Array<Record<string, unknown>>;
+  const valueStreamRows = utils.sheet_to_json(
+    requireSheet(workbook.Sheets, "Value Stream Activities") as Parameters<typeof utils.sheet_to_json>[0]
+  ) as Array<Record<string, unknown>>;
+  const participationRows = utils.sheet_to_json(
+    requireSheet(workbook.Sheets, "FC Participation Matrix") as Parameters<typeof utils.sheet_to_json>[0]
+  ) as Array<Record<string, unknown>>;
 
   return {
     functionalRows: functionalRows.map<FunctionalCriteriaRow>((row) => ({
@@ -87,7 +103,7 @@ async function upsertElement(args: {
       description: args.description ?? null,
       normativeClass: args.normativeClass ?? null,
       sourceReference: args.sourceReference ?? null,
-      properties: args.properties ?? {},
+      properties: (args.properties ?? {}) as Prisma.InputJsonValue,
     },
     create: {
       modelId: args.modelId,
@@ -99,7 +115,7 @@ async function upsertElement(args: {
       description: args.description ?? null,
       normativeClass: args.normativeClass ?? null,
       sourceReference: args.sourceReference ?? null,
-      properties: args.properties ?? {},
+      properties: (args.properties ?? {}) as Prisma.InputJsonValue,
     },
     select: { id: true },
   });
