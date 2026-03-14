@@ -9,6 +9,7 @@ import { serializeMessage } from "@/lib/agent-coworker-data";
 import { callWithFailover, NoProvidersAvailableError } from "@/lib/ai-provider-priority";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
+import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -21,7 +22,9 @@ async function requireAuthUser() {
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
 
-export async function getOrCreateThread(): Promise<{ threadId: string } | null> {
+export async function getOrCreateThreadSnapshot(input: {
+  routeContext: string;
+}): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
   const user = await requireAuthUser();
 
   // Verify user exists in DB (JWT may reference a stale user after re-seed)
@@ -31,14 +34,42 @@ export async function getOrCreateThread(): Promise<{ threadId: string } | null> 
   });
   if (!dbUser) return null;
 
+  const contextKey = buildCoworkerContextKey(input.routeContext);
+
   const thread = await prisma.agentThread.upsert({
-    where: { userId_contextKey: { userId: user.id, contextKey: "coworker" } },
+    where: { userId_contextKey: { userId: user.id, contextKey } },
     update: {},
-    create: { userId: user.id, contextKey: "coworker" },
+    create: { userId: user.id, contextKey },
     select: { id: true },
   });
 
-  return { threadId: thread.id };
+  const messages = await prisma.agentMessage.findMany({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      role: true,
+      content: true,
+      agentId: true,
+      routeContext: true,
+      createdAt: true,
+    },
+  });
+
+  return {
+    threadId: thread.id,
+    messages: messages.reverse().map(serializeMessage),
+  };
+}
+
+export async function getOrCreateThread(input?: {
+  routeContext?: string;
+}): Promise<{ threadId: string } | null> {
+  const snapshot = await getOrCreateThreadSnapshot({
+    routeContext: input?.routeContext ?? "/workspace",
+  });
+  return snapshot ? { threadId: snapshot.threadId } : null;
 }
 
 export async function sendMessage(input: {
@@ -263,4 +294,24 @@ export async function recordAgentTransition(input: {
   });
 
   return { message: serializeMessage(msg) };
+}
+
+export async function clearConversation(input: {
+  threadId: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await requireAuthUser();
+
+  const thread = await prisma.agentThread.findUnique({
+    where: { id: input.threadId },
+    select: { userId: true },
+  });
+  if (!thread || thread.userId !== user.id) {
+    return { error: "Unauthorized" };
+  }
+
+  await prisma.agentMessage.deleteMany({
+    where: { threadId: input.threadId },
+  });
+
+  return { ok: true };
 }

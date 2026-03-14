@@ -8,11 +8,21 @@ type Props = {
   agent: AgentInfo;
   userContext: UserContext;
   onSend: (content: string) => void;
+  onClear: () => void;
+  clearDisabled: boolean;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
 };
 
-export function AgentPanelHeader({ agent, userContext, onSend, onClose, onDragStart }: Props) {
+export function AgentPanelHeader({
+  agent,
+  userContext,
+  onSend,
+  onClear,
+  clearDisabled,
+  onClose,
+  onDragStart,
+}: Props) {
   return (
     <div
       onMouseDown={onDragStart}
@@ -45,23 +55,50 @@ export function AgentPanelHeader({ agent, userContext, onSend, onClose, onDragSt
         </span>
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        title="Close"
-        style={{
-          background: "none",
-          border: "none",
-          color: "var(--dpf-muted)",
-          cursor: "pointer",
-          fontSize: 16,
-          padding: "2px 6px",
-          borderRadius: 4,
-          lineHeight: 1,
-        }}
-      >
-        ✕
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          disabled={clearDisabled}
+          title="Erase current conversation"
+          style={{
+            background: "none",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            color: "var(--dpf-muted)",
+            cursor: clearDisabled ? "not-allowed" : "pointer",
+            fontSize: 11,
+            padding: "4px 8px",
+            borderRadius: 6,
+            lineHeight: 1,
+            opacity: clearDisabled ? 0.5 : 1,
+          }}
+        >
+          Erase
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          title="Close"
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--dpf-muted)",
+            cursor: "pointer",
+            fontSize: 16,
+            padding: "2px 6px",
+            borderRadius: 4,
+            lineHeight: 1,
+          }}
+        >
+          x
+        </button>
+      </div>
     </div>
   );
 }
