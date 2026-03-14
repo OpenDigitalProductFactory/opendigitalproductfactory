@@ -53,6 +53,20 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentName).toBeTruthy();
     expect(result.agentDescription).toBeTruthy();
   });
+
+  it("returns a non-empty systemPrompt", () => {
+    const result = resolveAgentForRoute("/portfolio", superuser);
+    expect(result.systemPrompt).toBeTruthy();
+    expect(result.systemPrompt).toContain("Portfolio Advisor");
+  });
+
+  it("every route agent has a non-empty systemPrompt", () => {
+    const routes = ["/portfolio", "/inventory", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    for (const route of routes) {
+      const result = resolveAgentForRoute(route, superuser);
+      expect(result.systemPrompt.length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("generateCannedResponse", () => {

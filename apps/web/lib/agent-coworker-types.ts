@@ -16,6 +16,7 @@ export type AgentInfo = {
   agentName: string;
   agentDescription: string;
   canAssist: boolean;
+  systemPrompt: string;
 };
 
 /** Entry in the route-to-agent map. */
@@ -24,6 +25,7 @@ export type RouteAgentEntry = {
   agentName: string;
   agentDescription: string;
   capability: CapabilityKey | null;
+  systemPrompt: string;
 };
 
 /** Max message content length (chars). */
