@@ -457,7 +457,7 @@ async function callProviderForProfiling(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(180_000), // 3min — local models need time to load on first call
   });
 
   if (!res.ok) {
