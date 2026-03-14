@@ -22,6 +22,7 @@ export {
   syncPortfolio,
   syncInfraCI,
   syncDependsOn,
+  type InfraCIExtendedProps,
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./neo4j-sync";

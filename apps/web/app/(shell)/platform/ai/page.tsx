@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs } from "@/lib/ai-provider-data";
 import { syncProviderRegistry } from "@/lib/actions/ai-providers";
+import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
@@ -26,6 +27,9 @@ export default async function PlatformAiPage() {
   if (syncJob && syncJob.schedule !== "disabled" && syncJob.nextRunAt && syncJob.nextRunAt < new Date()) {
     await syncProviderRegistry();
   }
+
+  // Passive health check for bundled Ollama (may change provider status)
+  await checkBundledProviders();
 
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
