@@ -78,7 +78,7 @@ export function FeedbackButton({ userId }: Props) {
           </div>
           <FeedbackForm
             routeContext={pathname}
-            userId={userId}
+            {...(userId != null && { userId })}
             source="manual"
             onClose={() => setShowForm(false)}
           />

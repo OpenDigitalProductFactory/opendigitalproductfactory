@@ -26,9 +26,9 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
       description,
       severity: type === "runtime_error" ? "high" : "medium",
       routeContext,
-      errorStack: errorStack ?? undefined,
+      ...(errorStack !== undefined && { errorStack }),
       source: source ?? "manual",
-      userId: userId ?? undefined,
+      ...(userId != null && { userId }),
     });
     if (result.ok && result.reportId) {
       setReportId(result.reportId);
