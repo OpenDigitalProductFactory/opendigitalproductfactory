@@ -23,12 +23,17 @@ describe("seed helpers", () => {
     expect(parseAgentType("AGT-900")).toBe("cross-cutting");
   });
 
-  it("exports seedEaReferenceModels", async () => {
+  it("does not export seedEaReferenceModels from the runtime db barrel", async () => {
     const mod = await import("./index.js");
+    expect("seedEaReferenceModels" in mod).toBe(false);
+  }, 15_000);
+
+  it("exports seedEaReferenceModels from the seed module", async () => {
+    const mod = await import("./seed-ea-reference-models.js");
     expect(typeof mod.seedEaReferenceModels).toBe("function");
   }, 15_000);
 
-  it("exports seedEaStructureRules", async () => {
+  it("exports seedEaStructureRules from the seed module", async () => {
     const mod = await import("./seed-ea-structure-rules.js");
     expect(typeof mod.seedEaStructureRules).toBe("function");
   }, 15_000);

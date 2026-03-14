@@ -25,7 +25,6 @@ export {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./neo4j-sync";
-export { seedEaReferenceModels } from "./seed-ea-reference-models";
 export {
   buildDiscoveredKey,
   buildInventoryEntityKey,
@@ -48,11 +47,6 @@ export {
   type StructuredChildRecord,
   type StructureConformanceWarning,
 } from "./ea-structure";
-export {
-  getDefaultEaStructureRules,
-  seedEaStructureRules,
-  type EaStructureRuleSeed,
-} from "./seed-ea-structure-rules";
 export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
