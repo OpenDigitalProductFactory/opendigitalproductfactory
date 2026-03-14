@@ -114,6 +114,16 @@ export function AgentCoworkerShell({ userContext }: Props) {
     localStorage.setItem(LS_KEY_OPEN, "false");
   }
 
+  // Listen for feedback button
+  useEffect(() => {
+    function handleFeedback() {
+      setIsOpen(true);
+      localStorage.setItem(LS_KEY_OPEN, "true");
+    }
+    document.addEventListener("open-agent-feedback", handleFeedback);
+    return () => document.removeEventListener("open-agent-feedback", handleFeedback);
+  }, []);
+
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     dragRef.current = {
       startX: e.clientX,
@@ -153,6 +163,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
 
       {isOpen && (
         <div
+          data-agent-panel="true"
           style={{
             position: "fixed",
             zIndex: 50,

@@ -23,6 +23,7 @@ model User {
   grantedDelegations  DelegationGrant[] @relation("DelegationGrantGrantor")
   passwordResetTokens  PasswordResetToken[] @relation("PasswordResetForUser")
   requestedPasswordResetTokens PasswordResetToken[] @relation("PasswordResetRequestedBy")
+  issueReports    PlatformIssueReport[]
 }
 
 model UserGroup {
@@ -649,6 +650,29 @@ model AgentMessage {
 
   @@index([threadId])
   @@index([createdAt])
+}
+
+// ─── Platform Issue Reporting ────────────────────────────────────────────────
+
+model PlatformIssueReport {
+  id               String   @id @default(cuid())
+  reportId         String   @unique
+  type             String   // "runtime_error" | "user_report" | "feedback"
+  severity         String   @default("medium")
+  status           String   @default("open")
+  title            String
+  description      String?  @db.Text
+  routeContext     String?
+  errorStack       String?  @db.Text
+  userAgent        String?
+  reportedById     String?
+  reportedBy       User?    @relation(fields: [reportedById], references: [id])
+  digitalProductId String?
+  portfolioId      String?
+  agentId          String?
+  source           String   @default("manual")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 // ─── Platform Configuration ──────────────────────────────────────────────────
