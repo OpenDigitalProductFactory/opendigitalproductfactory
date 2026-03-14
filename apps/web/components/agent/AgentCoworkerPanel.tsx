@@ -5,38 +5,51 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRoute, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { sendMessage } from "@/lib/actions/agent-coworker";
+import { clearConversation, sendMessage } from "@/lib/actions/agent-coworker";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 
 type Props = {
-  threadId: string;
+  threadId: string | null;
   initialMessages: AgentMessageRow[];
   userContext: UserContext;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
 };
 
-export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onClose, onDragStart }: Props) {
-  const pathname = usePathname();
-  // Filter out old "X has joined" transition messages — they clutter the conversation
-  const filtered = initialMessages.filter(
+function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
+  return messages.filter(
     (m) => !(m.role === "system" && m.content.endsWith("has joined the conversation")),
   );
-  const [messages, setMessages] = useState<AgentMessageRow[]>(filtered);
+}
+
+export function AgentCoworkerPanel({
+  threadId,
+  initialMessages,
+  userContext,
+  onClose,
+  onDragStart,
+}: Props) {
+  const pathname = usePathname();
+  const [messages, setMessages] = useState<AgentMessageRow[]>(() => filterMessages(initialMessages));
   const [isPending, startTransition] = useTransition();
+  const [isClearing, startClearing] = useTransition();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Resolve agent for current route
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
 
-  // Auto-scroll to bottom when new messages appear
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    setMessages(filterMessages(initialMessages));
+  }, [threadId, initialMessages]);
+
   function handleSend(content: string) {
+    if (!threadId) return;
+
     startTransition(async () => {
       const result = await sendMessage({
         threadId,
@@ -56,29 +69,50 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onC
     });
   }
 
+  function handleClear() {
+    if (!threadId) return;
+    if (typeof window !== "undefined" && !window.confirm("Erase the current page conversation?")) {
+      return;
+    }
+
+    startClearing(async () => {
+      const result = await clearConversation({ threadId });
+      if ("error" in result) {
+        console.warn("clearConversation error:", result.error);
+        return;
+      }
+      setMessages([]);
+    });
+  }
+
   return (
     <>
       <AgentPanelHeader
         agent={agent}
         userContext={userContext}
         onSend={handleSend}
+        onClear={handleClear}
+        clearDisabled={!threadId || messages.length === 0 || isPending || isClearing}
         onClose={onClose}
         onDragStart={onDragStart}
       />
 
-      {/* Messages area */}
-      <div style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: "12px",
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "12px",
+        }}
+      >
         {messages.length === 0 && (
-          <div style={{
-            textAlign: "center",
-            color: "var(--dpf-muted)",
-            fontSize: 12,
-            padding: "40px 20px",
-          }}>
+          <div
+            style={{
+              textAlign: "center",
+              color: "var(--dpf-muted)",
+              fontSize: 12,
+              padding: "40px 20px",
+            }}
+          >
             Start a conversation with your AI co-worker
           </div>
         )}
@@ -94,28 +128,32 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onC
             />
           );
         })}
-        {isPending && (
-          <div style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 2,
-            marginBottom: 8,
-          }}>
-            <div style={{
-              padding: "8px 16px",
-              borderRadius: "12px 12px 12px 2px",
-              fontSize: 13,
-              background: "rgba(22, 22, 37, 0.8)",
-              color: "var(--dpf-muted)",
-            }}>
-              <span className="animate-pulse">Thinking...</span>
+        {(isPending || isClearing) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 2,
+              marginBottom: 8,
+            }}
+          >
+            <div
+              style={{
+                padding: "8px 16px",
+                borderRadius: "12px 12px 12px 2px",
+                fontSize: 13,
+                background: "rgba(22, 22, 37, 0.8)",
+                color: "var(--dpf-muted)",
+              }}
+            >
+              <span className="animate-pulse">{isClearing ? "Erasing..." : "Thinking..."}</span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <AgentMessageInput onSend={handleSend} disabled={isPending} />
+      <AgentMessageInput onSend={handleSend} disabled={isPending || isClearing || !threadId} />
     </>
   );
 }
