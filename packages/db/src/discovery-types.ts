@@ -24,9 +24,25 @@ export type DiscoveredRelationshipInput = {
   attributes?: Record<string, unknown>;
 };
 
+export type DiscoveredSoftwareInput = {
+  sourceKind?: DiscoverySourceKind;
+  entityExternalRef?: string;
+  hostExternalRef?: string;
+  containerExternalRef?: string;
+  evidenceSource: string;
+  packageManager?: string;
+  rawVendor?: string;
+  rawProductName?: string;
+  rawPackageName?: string;
+  rawVersion?: string;
+  installLocation?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type CollectorOutput = {
   items: DiscoveredItemInput[];
   relationships: DiscoveredRelationshipInput[];
+  software?: DiscoveredSoftwareInput[];
   warnings?: string[];
 };
 

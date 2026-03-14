@@ -8,22 +8,10 @@ import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
-import {
-  buildPasswordResetExpiry,
-  createPasswordResetToken,
-  hashPasswordResetToken,
-  isPasswordResetExpired,
-  resolvePasswordResetDeliveryMode,
-} from "@/lib/password-reset";
 
 export type UserActionResult = {
   ok: boolean;
   message: string;
-};
-
-export type PasswordResetIssueResult = UserActionResult & {
-  deliveryChannel?: "email" | "manual";
-  recoveryLink?: string;
 };
 
 type SessionUserContext = {
@@ -73,46 +61,6 @@ function normalizeEmail(email: string): string {
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-async function isPasswordResetEmailEnabled(): Promise<boolean> {
-  const config = await prisma.platformConfig.findUnique({
-    where: { key: "password_reset_email" },
-    select: { value: true },
-  });
-
-  if (!config || typeof config.value !== "object" || config.value == null) {
-    return false;
-  }
-
-  const enabled = (config.value as { enabled?: unknown }).enabled;
-  return enabled === true;
-}
-
-function buildManualRecoveryLink(rawToken: string): string {
-  return `/reset-password?token=${encodeURIComponent(rawToken)}`;
-}
-
-async function issuePasswordResetToken(input: {
-  userId: string;
-  requestedByUserId?: string | null;
-  deliveryChannel: "email" | "manual";
-}): Promise<{ rawToken: string; expiresAt: Date }> {
-  const rawToken = createPasswordResetToken();
-  const tokenHash = await hashPasswordResetToken(rawToken);
-  const expiresAt = buildPasswordResetExpiry();
-
-  await prisma.passwordResetToken.create({
-    data: {
-      userId: input.userId,
-      tokenHash,
-      deliveryChannel: input.deliveryChannel,
-      requestedByUserId: input.requestedByUserId ?? null,
-      expiresAt,
-    },
-  });
-
-  return { rawToken, expiresAt };
 }
 
 async function resolveRoleDbId(roleId: string): Promise<string | null> {
@@ -247,138 +195,6 @@ export async function adminResetUserPassword(input: {
       return { ok: true, message: `Password reset for ${target.email}.` };
     },
   });
-}
-
-export async function requestPasswordReset(input: {
-  email: string;
-}): Promise<UserActionResult> {
-  const email = normalizeEmail(input.email);
-  const neutralMessage = "If an account exists for that email, password reset instructions will be sent.";
-
-  if (!validateEmail(email)) {
-    return { ok: true, message: neutralMessage };
-  }
-
-  const target = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, isActive: true },
-  });
-
-  if (!target?.isActive) {
-    return { ok: true, message: neutralMessage };
-  }
-
-  const emailEnabled = await isPasswordResetEmailEnabled();
-  const deliveryChannel = resolvePasswordResetDeliveryMode({ emailEnabled });
-  await issuePasswordResetToken({
-    userId: target.id,
-    requestedByUserId: null,
-    deliveryChannel,
-  });
-
-  return { ok: true, message: neutralMessage };
-}
-
-export async function adminIssuePasswordReset(input: {
-  userId: string;
-}): Promise<PasswordResetIssueResult> {
-  return withGovernedUserAction({
-    capability: "manage_users",
-    actionKey: "user.password_reset_issue",
-    riskBand: "high",
-    objectRef: input.userId,
-    run: async (actor) => {
-      const target = await prisma.user.findUnique({
-        where: { id: input.userId },
-        select: { id: true, email: true, isActive: true },
-      });
-      if (!target?.isActive) return { ok: false, message: "User not found." };
-
-      const emailEnabled = await isPasswordResetEmailEnabled();
-      const deliveryChannel = resolvePasswordResetDeliveryMode({ emailEnabled });
-      const issued = await issuePasswordResetToken({
-        userId: target.id,
-        requestedByUserId: actor.id,
-        deliveryChannel,
-      });
-
-      revalidatePath("/admin");
-      return {
-        ok: true,
-        message:
-          deliveryChannel === "email"
-            ? `Password reset email issued for ${target.email}.`
-            : `Manual recovery link issued for ${target.email}.`,
-        deliveryChannel,
-        recoveryLink:
-          deliveryChannel === "manual"
-            ? buildManualRecoveryLink(issued.rawToken)
-            : undefined,
-      };
-    },
-  }) as Promise<PasswordResetIssueResult>;
-}
-
-export async function completePasswordReset(input: {
-  token: string;
-  newPassword: string;
-  confirmPassword: string;
-}): Promise<UserActionResult> {
-  const rawToken = input.token.trim();
-  if (!rawToken) {
-    return { ok: false, message: "This password reset link is invalid or expired." };
-  }
-
-  if (input.newPassword !== input.confirmPassword) {
-    return { ok: false, message: "Passwords do not match." };
-  }
-
-  const policyErrors = passwordPolicyErrors(input.newPassword);
-  if (policyErrors.length > 0) {
-    return { ok: false, message: policyErrors[0] ?? "Password policy failed." };
-  }
-
-  const tokenHash = await hashPasswordResetToken(rawToken);
-  const resetToken = await prisma.passwordResetToken.findUnique({
-    where: { tokenHash },
-    select: {
-      id: true,
-      expiresAt: true,
-      consumedAt: true,
-      user: {
-        select: {
-          id: true,
-          email: true,
-          isActive: true,
-        },
-      },
-    },
-  });
-
-  if (
-    !resetToken ||
-    resetToken.consumedAt != null ||
-    isPasswordResetExpired(resetToken.expiresAt) ||
-    !resetToken.user.isActive
-  ) {
-    return { ok: false, message: "This password reset link is invalid or expired." };
-  }
-
-  const passwordHash = await hashPassword(input.newPassword);
-
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: resetToken.user.id },
-      data: { passwordHash },
-    });
-    await tx.passwordResetToken.update({
-      where: { id: resetToken.id },
-      data: { consumedAt: new Date() },
-    });
-  });
-
-  revalidatePath("/login");
-  return { ok: true, message: "Password updated. Sign in with your new password." };
 }
 
 export async function updateUserLifecycle(input: {

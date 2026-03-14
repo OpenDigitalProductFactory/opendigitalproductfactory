@@ -3,13 +3,16 @@ import {
   collectHostDiscovery,
   collectKubernetesDiscovery,
 } from "./discovery-collectors";
-import { normalizeDiscoveredFacts } from "./discovery-normalize";
+import {
+  normalizeDiscoveredFacts,
+  type NormalizeDiscoveryOptions,
+} from "./discovery-normalize";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
 
-type BootstrapExecutionOptions = {
+type BootstrapExecutionOptions = NormalizeDiscoveryOptions & {
   collectors?: DiscoveryCollector[];
   normalize?: typeof normalizeDiscoveredFacts;
   persist?: typeof persistBootstrapDiscoveryRun;
@@ -23,10 +26,11 @@ export function mergeCollectorOutputs(outputs: CollectorOutput[]): CollectorOutp
     (merged, output) => {
       merged.items.push(...output.items);
       merged.relationships.push(...output.relationships);
+      merged.software?.push(...(output.software ?? []));
       merged.warnings?.push(...(output.warnings ?? []));
       return merged;
     },
-    { items: [], relationships: [], warnings: [] },
+    { items: [], relationships: [], software: [], warnings: [] },
   );
 }
 
@@ -54,7 +58,23 @@ export async function executeBootstrapDiscovery(
   options: BootstrapExecutionOptions = {},
 ) {
   const collected = await runBootstrapCollectors(options.collectors);
-  const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected);
+  const taxonomyNodes = options.taxonomyNodes
+    ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
+      ? await ((db as unknown) as {
+          taxonomyNode: {
+            findMany(args: {
+              select: { nodeId: true; name: true };
+            }): Promise<Array<{ nodeId: string; name: string }>>;
+          };
+        }).taxonomyNode.findMany({
+          select: { nodeId: true, name: true },
+        })
+      : undefined);
+  const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected, {
+    ...(taxonomyNodes ? { taxonomyNodes } : {}),
+    ...(options.softwareIdentities ? { softwareIdentities: options.softwareIdentities } : {}),
+    ...(options.softwareRules ? { softwareRules: options.softwareRules } : {}),
+  });
 
   return (options.persist ?? persistBootstrapDiscoveryRun)(db, normalized, {
     runKey: options.runKey ?? `DISC-${Date.now()}`,
