@@ -41,7 +41,7 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-import { summarizeGovernedLifecycleAttempt } from "./users";
+import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
 
 describe("summarizeGovernedLifecycleAttempt", () => {
   it("denies when a non-superuser tries to modify a superuser account", () => {

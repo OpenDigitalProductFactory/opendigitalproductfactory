@@ -72,6 +72,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl }: P
       <div className="flex items-center gap-3">
         <button
           type="button"
+          onClick={() => document.dispatchEvent(new CustomEvent("toggle-agent-panel"))}
           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border border-[var(--dpf-accent)] text-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)] hover:text-white transition-colors"
         >
           <span>Agent</span>
