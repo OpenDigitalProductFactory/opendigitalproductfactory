@@ -5,8 +5,9 @@ type InventoryEntity = {
   entityType: string;
   status: string;
   attributionStatus: string;
-  attributionMethod: string | null;
-  attributionConfidence: number | null;
+  attributionMethod?: string | null;
+  confidence?: number | null;
+  attributionConfidence?: number | null;
   portfolio: { slug: string; name: string } | null;
   taxonomyNode: { nodeId: string; name: string } | null;
   digitalProduct: { productId: string; name: string } | null;
@@ -30,7 +31,10 @@ export function InventoryEntityPanel({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {entities.map((entity) => (
+        {entities.map((entity) => {
+          const confidence = entity.attributionConfidence ?? entity.confidence;
+
+          return (
           <article
             key={entity.id}
             className="rounded-lg border border-white/8 bg-black/20 p-3"
@@ -57,12 +61,13 @@ export function InventoryEntityPanel({
               {entity.digitalProduct && <span>Product: {entity.digitalProduct.name}</span>}
               <span>Status: {entity.status}</span>
               {entity.attributionMethod && <span>Method: {entity.attributionMethod}</span>}
-              {entity.attributionConfidence != null && (
-                <span>{Math.round(entity.attributionConfidence * 100)}% confidence</span>
+              {confidence != null && (
+                <span>{Math.round(confidence * 100)}% confidence</span>
               )}
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
 
       {entities.length === 0 && (
