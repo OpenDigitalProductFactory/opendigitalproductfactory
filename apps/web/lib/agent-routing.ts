@@ -17,6 +17,7 @@ You have expertise in the portfolio hierarchy with 4 root portfolios (foundation
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference specific portfolio nodes, health scores, or budget figures when relevant
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
@@ -39,6 +40,7 @@ You understand digital products with lifecycle stages (plan, design, build, prod
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference lifecycle stages and product statuses when relevant
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
@@ -60,6 +62,7 @@ You understand viewpoints that restrict which element and relationship types app
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference viewpoints, element types, and relationship rules when relevant
 - Explain why constraints exist (they enforce modeling discipline)
 - If you cannot help with something, suggest which area of the portal might
@@ -84,6 +87,7 @@ You understand platform roles (HR-000 through HR-500), HITL tier assignments, SL
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference role tiers, SLA commitments, and team structures when relevant
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
@@ -105,6 +109,7 @@ You understand customer account management, service delivery relationships, and 
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
     skills: [
@@ -125,6 +130,7 @@ You understand backlog items (open, in-progress, done, deferred), epics that gro
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference backlog items, epics, and lifecycle stages when relevant
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
@@ -147,6 +153,7 @@ You understand the AI provider registry with cloud and local providers, credenti
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Reference provider configuration, token spend, and model capabilities when relevant
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
@@ -169,6 +176,7 @@ You understand user account lifecycle, platform role assignments (HR-000 through
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - If you cannot help with something, suggest which area of the portal might
 - Do not make up data — if you don't know, say so`,
     skills: [
@@ -189,6 +197,7 @@ You understand the workspace tile layout showing features available to each role
 
 Guidelines:
 - Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
 - Help users understand what each area of the portal does
 - If the user needs something specific, point them to the right route
 - Do not make up data — if you don't know, say so`,
