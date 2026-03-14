@@ -1,8 +1,28 @@
 # EA Reference Value Stream Projection Design
 
 **Date:** 2026-03-14  
-**Status:** Proposed  
+**Status:** Implemented (MVP value-stream projection slice)  
 **Scope:** Add a repeatable, in-repository workflow that projects normalized reference-model value streams into visual EA views, with IT4IT as the first supported model.
+
+---
+
+## Implementation Notes
+
+- The MVP slice is implemented in the feature worktree with a deterministic projection service in `packages/db/src/reference-model-projection.ts`.
+- The projection is generic by contract (`referenceModelSlug` + `projectionType`) but currently supports one projection type: `value_stream_view`.
+- The current web UX adds an explicit `Load value stream view` / `Refresh value stream view` action on the reference-model detail route at `/ea/models/[slug]`.
+- Projection identity is persisted without a schema migration:
+  - `EaView.scopeType = "reference_model_projection"`
+  - `EaView.scopeRef = "<referenceModelSlug>:value_stream_view"`
+  - `EaElement.properties.projection = { referenceModelSlug, projectionType, referenceElementSlug }`
+- Verified live against the local development database using `postgresql://dpf:dpf_dev@localhost:5432/dpf`:
+  - created one IT4IT value-stream projection view
+  - materialized `7` top-level value streams
+  - materialized `28` nested value-stream stages
+- Deferred:
+  - uploaded reference-artifact ingestion from the EA UX
+  - embedded AI coworker initiation of the same projection workflow
+  - projection of criteria, capability groups, and other reference-model structures beyond value streams
 
 ---
 

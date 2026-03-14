@@ -7,6 +7,7 @@ import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
+import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
 
 export type UserActionResult = {
   ok: boolean;
@@ -19,23 +20,6 @@ type SessionUserContext = {
   platformRole: string | null;
   isSuperuser: boolean;
 };
-
-export function summarizeGovernedLifecycleAttempt(input: {
-  actorIsSuperuser: boolean;
-  targetIsSuperuser: boolean;
-}): { decision: "allow" | "deny"; message: string } {
-  if (input.targetIsSuperuser && !input.actorIsSuperuser) {
-    return {
-      decision: "deny",
-      message: "Only a superuser can change another superuser account.",
-    };
-  }
-
-  return {
-    decision: "allow",
-    message: "Lifecycle update permitted.",
-  };
-}
 
 async function hashPassword(password: string): Promise<string> {
   const data = new TextEncoder().encode(password);
