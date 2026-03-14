@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Handle, Position, useConnection, type NodeProps } from "@xyflow/react";
 import { layerFromNeoLabel, LAYER_COLOURS, type SerializedViewElement } from "@/lib/ea-types";
 import { StructuredValueStreamNode } from "./StructuredValueStreamNode";
+import { ValueStreamStageNode } from "./ValueStreamStageNode";
 
 // One source handle per side. ConnectionMode.Loose allows source→source connections,
 // so target handles are unnecessary. Floating edge routing uses node intersection, not handle IDs.
@@ -69,6 +70,10 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
         <StructuredValueStreamNode data={nodeData} selected={selected} />
       </div>
     );
+  }
+
+  if (nodeData.elementType.slug === "value_stream_stage") {
+    return <ValueStreamStageNode data={nodeData} selected={selected} />;
   }
 
   return (

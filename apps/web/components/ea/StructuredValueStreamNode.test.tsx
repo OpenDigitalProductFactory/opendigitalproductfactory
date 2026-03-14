@@ -35,7 +35,7 @@ function buildStage(
 }
 
 describe("StructuredValueStreamNode", () => {
-  it("renders a directional value stream band with a compact header row and ordered nested stage chevrons", () => {
+  it("renders only the value stream band shell and no embedded child stage markup", () => {
     const html = renderToStaticMarkup(
       <StructuredValueStreamNode
         selected={false}
@@ -69,16 +69,13 @@ describe("StructuredValueStreamNode", () => {
     );
 
     expect(html).toContain("Deliver Workforce Services");
-    expect(html).toContain("Request");
-    expect(html).toContain("Support");
-    expect(html.indexOf("Request")).toBeLessThan(html.indexOf("Support"));
-    expect(html).toContain("value-stream-stage");
     expect(html).toContain("data-value-stream-band");
     expect(html).toContain("data-value-stream-header");
     expect(html).toContain("data-value-stream-title-block");
     expect(html).toContain("data-value-stream-meta-block");
-    expect(html).not.toContain("Move stage left");
-    expect(html).not.toContain("Move stage right");
+    expect(html).not.toContain("value-stream-stage");
+    expect(html).not.toContain("Request");
+    expect(html).not.toContain("Support");
   });
 
   it("renders a warning state when the structure is non-conformant", () => {
@@ -115,7 +112,7 @@ describe("StructuredValueStreamNode", () => {
     expect(html).toContain("1 issue");
   });
 
-  it("marks editable stages as draggable reorder targets without inline controls", () => {
+  it("keeps the band free of inline drag controls", () => {
     const html = renderToStaticMarkup(
       <StructuredValueStreamNode
         selected={false}
@@ -150,9 +147,9 @@ describe("StructuredValueStreamNode", () => {
       />,
     );
 
-    expect(html).toContain('draggable="true"');
-    expect(html).toContain("data-stage-drop-target");
-    expect(html).toContain("data-stage-drag-preview");
+    expect(html).not.toContain('draggable="true"');
+    expect(html).not.toContain("data-stage-drop-target");
+    expect(html).not.toContain("data-stage-drag-preview");
     expect(html).not.toContain("Move stage right");
     expect(html).not.toContain("Move stage left");
   });

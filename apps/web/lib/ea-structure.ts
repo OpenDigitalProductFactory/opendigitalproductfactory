@@ -67,6 +67,20 @@ export function buildStructuredViewElements(
   return roots;
 }
 
+export function listStructuredVisibleViewElementIds(
+  structuredRoots: StructuredViewElement[],
+): string[] {
+  const visibleViewElementIds: string[] = [];
+
+  const visit = (node: StructuredViewElement) => {
+    visibleViewElementIds.push(node.viewElementId);
+    node.childViewElements.forEach(visit);
+  };
+
+  structuredRoots.forEach(visit);
+  return visibleViewElementIds;
+}
+
 export function filterStructuredEdges(
   edges: StructuredEdgeCandidate[],
   structuredElements: StructuredViewElement[],
