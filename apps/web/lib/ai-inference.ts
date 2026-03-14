@@ -185,7 +185,8 @@ export async function callProvider(
   } else {
     // OpenAI-compatible: system prompt prepended to messages array
     // Covers: openai, azure-openai, ollama, groq, together, fireworks, xai, mistral, cohere (v2), deepseek, openrouter, litellm, portkey, martian
-    chatUrl = `${baseUrl}/chat/completions`;
+    const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+    chatUrl = `${apiBase}/chat/completions`;
     const allMessages = [
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
