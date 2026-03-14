@@ -62,6 +62,13 @@ type DiscoverySyncTx = {
       select: { id: true };
     }): Promise<{ id: string }>;
   };
+  discoveredSoftwareEvidence: {
+    upsert(args: {
+      where: { evidenceKey: string };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }): Promise<unknown>;
+  };
   inventoryRelationship: {
     findMany(args: { select: { relationshipKey: true } }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
@@ -167,10 +174,17 @@ export async function persistBootstrapDiscoveryRun(
           name: entity.name,
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
+          attributionMethod: entity.attributionMethod ?? null,
+          attributionConfidence: entity.attributionConfidence ?? null,
+          attributionEvidence: entity.attributionEvidence ?? null,
+          candidateTaxonomy: entity.candidateTaxonomy ?? undefined,
           providerView: entity.providerView,
           confidence: entity.confidence ?? null,
           portfolio: entity.portfolioSlug
             ? { connect: { slug: entity.portfolioSlug } }
+            : undefined,
+          taxonomyNode: entity.taxonomyNodeId
+            ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
           firstSeenAt: now,
@@ -182,10 +196,17 @@ export async function persistBootstrapDiscoveryRun(
           name: entity.name,
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
+          attributionMethod: entity.attributionMethod ?? null,
+          attributionConfidence: entity.attributionConfidence ?? null,
+          attributionEvidence: entity.attributionEvidence ?? null,
+          candidateTaxonomy: entity.candidateTaxonomy ?? undefined,
           providerView: entity.providerView,
           confidence: entity.confidence ?? null,
           portfolio: entity.portfolioSlug
             ? { connect: { slug: entity.portfolioSlug } }
+            : undefined,
+          taxonomyNode: entity.taxonomyNodeId
+            ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
           lastSeenAt: now,
@@ -226,6 +247,53 @@ export async function persistBootstrapDiscoveryRun(
         select: { id: true },
       });
       discoveredItemIdsByKey.set(discoveredItem.discoveredKey, persistedDiscoveredItem.id);
+    }
+
+    for (const software of normalized.softwareEvidence) {
+      const inventoryEntityId = entityIdsByEntityKey.get(software.inventoryEntityKey);
+      if (!inventoryEntityId) {
+        continue;
+      }
+
+      await tx.discoveredSoftwareEvidence.upsert({
+        where: { evidenceKey: software.evidenceKey },
+        create: {
+          evidenceKey: software.evidenceKey,
+          inventoryEntity: { connect: { id: inventoryEntityId } },
+          evidenceSource: software.evidenceSource,
+          packageManager: software.packageManager ?? null,
+          rawVendor: software.rawVendor ?? null,
+          rawProductName: software.rawProductName ?? null,
+          rawPackageName: software.rawPackageName ?? null,
+          rawVersion: software.rawVersion ?? null,
+          installLocation: software.installLocation ?? null,
+          rawMetadata: software.rawMetadata ?? undefined,
+          normalizationStatus: software.normalizationStatus,
+          normalizationConfidence: software.normalizationConfidence,
+          softwareIdentity: software.softwareIdentityId
+            ? { connect: { id: software.softwareIdentityId } }
+            : undefined,
+          firstSeenAt: now,
+          lastSeenAt: now,
+        },
+        update: {
+          inventoryEntity: { connect: { id: inventoryEntityId } },
+          evidenceSource: software.evidenceSource,
+          packageManager: software.packageManager ?? null,
+          rawVendor: software.rawVendor ?? null,
+          rawProductName: software.rawProductName ?? null,
+          rawPackageName: software.rawPackageName ?? null,
+          rawVersion: software.rawVersion ?? null,
+          installLocation: software.installLocation ?? null,
+          rawMetadata: software.rawMetadata ?? undefined,
+          normalizationStatus: software.normalizationStatus,
+          normalizationConfidence: software.normalizationConfidence,
+          softwareIdentity: software.softwareIdentityId
+            ? { connect: { id: software.softwareIdentityId } }
+            : { disconnect: true },
+          lastSeenAt: now,
+        },
+      });
     }
 
     const currentEntityKeys = new Set(
@@ -330,6 +398,14 @@ export async function persistBootstrapDiscoveryRun(
             entityKey: entity.entityKey,
             entityType: entity.entityType,
             attributionStatus: entity.attributionStatus,
+            attributionMethod: entity.attributionMethod ?? null,
+            attributionConfidence: entity.attributionConfidence ?? null,
+            candidateTaxonomy: entity.candidateTaxonomy?.map((candidate) => ({
+              nodeId: candidate.nodeId,
+              score: candidate.score,
+            })) ?? null,
+            taxonomyNodeId: entity.taxonomyNodeId ?? null,
+            digitalProductId: null,
           };
 
           if (entity.attributionStatus === "needs_review") {
@@ -368,6 +444,16 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
+          taxonomyNode: issue.inventoryEntityKey
+            ? (() => {
+                const matchedEntity = normalized.inventoryEntities.find(
+                  (entity) => entity.entityKey === issue.inventoryEntityKey,
+                );
+                return matchedEntity?.taxonomyNodeId
+                  ? { connect: { nodeId: matchedEntity.taxonomyNodeId } }
+                  : undefined;
+              })()
+            : undefined,
           inventoryEntity: inventoryEntityId
             ? { connect: { id: inventoryEntityId } }
             : undefined,
@@ -377,6 +463,16 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
+          taxonomyNode: issue.inventoryEntityKey
+            ? (() => {
+                const matchedEntity = normalized.inventoryEntities.find(
+                  (entity) => entity.entityKey === issue.inventoryEntityKey,
+                );
+                return matchedEntity?.taxonomyNodeId
+                  ? { connect: { nodeId: matchedEntity.taxonomyNodeId } }
+                  : { disconnect: true };
+              })()
+            : undefined,
           inventoryEntity: inventoryEntityId
             ? { connect: { id: inventoryEntityId } }
             : undefined,

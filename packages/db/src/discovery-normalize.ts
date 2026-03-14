@@ -1,11 +1,22 @@
 import {
+  attributeInventoryEntity,
+  type RankedTaxonomyCandidate,
+  type TaxonomyNodeCandidate,
+} from "./discovery-attribution";
+import {
   buildDiscoveredKey,
   buildInventoryEntityKey,
 } from "./discovery-identity";
+import {
+  normalizeSoftwareEvidence,
+  type SoftwareIdentityCandidate,
+  type SoftwareNormalizationRuleInput,
+} from "./software-normalization";
 import type {
   CollectorOutput,
   DiscoveredItemInput,
   DiscoveredRelationshipInput,
+  DiscoveredSoftwareInput,
 } from "./discovery-types";
 
 export type NormalizedDiscoveredItem = {
@@ -24,9 +35,14 @@ export type NormalizedInventoryEntity = {
   entityType: string;
   name: string;
   discoveredKey: string;
-  portfolioSlug?: string;
+  portfolioSlug?: string | null;
+  taxonomyNodeId?: string | null;
   attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale";
-  providerView: "foundational";
+  attributionMethod?: "rule" | "heuristic";
+  attributionConfidence?: number;
+  attributionEvidence?: Record<string, unknown>;
+  candidateTaxonomy?: RankedTaxonomyCandidate[];
+  providerView: string;
   confidence?: number;
   properties: Record<string, unknown>;
 };
@@ -40,10 +56,49 @@ export type NormalizedInventoryRelationship = {
   properties: Record<string, unknown>;
 };
 
+export type NormalizedSoftwareEvidence = {
+  evidenceKey: string;
+  inventoryEntityKey: string;
+  evidenceSource: string;
+  packageManager?: string;
+  rawVendor?: string | null;
+  rawProductName?: string | null;
+  rawPackageName?: string | null;
+  rawVersion?: string | null;
+  installLocation?: string;
+  rawMetadata?: Record<string, unknown>;
+  normalizationStatus: "normalized" | "needs_review";
+  normalizationMethod: "rule" | "heuristic";
+  normalizationConfidence: number;
+  softwareIdentityId?: string | null;
+  normalizedVendor?: string | null;
+  normalizedProductName?: string | null;
+  normalizedEdition?: string | null;
+  canonicalVersion?: string | null;
+  candidateIdentities: Array<{ id: string; score: number; normalizedProductName: string }>;
+};
+
 export type NormalizedDiscoveryOutput = {
   discoveredItems: NormalizedDiscoveredItem[];
   inventoryEntities: NormalizedInventoryEntity[];
   inventoryRelationships: NormalizedInventoryRelationship[];
+  softwareEvidence: NormalizedSoftwareEvidence[];
+};
+
+export type NormalizeDiscoveryOptions = {
+  taxonomyNodes?: TaxonomyNodeCandidate[];
+  softwareIdentities?: SoftwareIdentityCandidate[];
+  softwareRules?: SoftwareNormalizationRuleInput[];
+};
+
+type DerivedAttribution = {
+  attributionStatus: "attributed" | "needs_review";
+  attributionMethod: "rule" | "heuristic";
+  confidence: number;
+  portfolioSlug: string | null;
+  taxonomyNodeId: string | null;
+  candidateTaxonomy: RankedTaxonomyCandidate[];
+  evidence: Record<string, unknown>;
 };
 
 function mapEntityType(itemType: string): string {
@@ -61,7 +116,27 @@ function isFoundationalInfrastructure(itemType: string): boolean {
     || itemType.includes("storage");
 }
 
-function normalizeItem(item: DiscoveredItemInput): {
+function buildFallbackAttribution(item: DiscoveredItemInput): DerivedAttribution {
+  const foundational = isFoundationalInfrastructure(item.itemType);
+
+  return {
+    attributionStatus: foundational ? "attributed" : "needs_review",
+    attributionMethod: foundational ? "rule" : "heuristic",
+    confidence: foundational ? 0.9 : 0.25,
+    portfolioSlug: foundational ? "foundational" : null,
+    taxonomyNodeId: null,
+    candidateTaxonomy: [],
+    evidence: {
+      descriptor: `${item.itemType} ${item.name}`,
+      matchedSignals: foundational ? [item.itemType] : [],
+    },
+  };
+}
+
+function normalizeItem(
+  item: DiscoveredItemInput,
+  options: NormalizeDiscoveryOptions,
+): {
   discoveredItem: NormalizedDiscoveredItem;
   inventoryEntity: NormalizedInventoryEntity;
 } {
@@ -77,8 +152,6 @@ function normalizeItem(item: DiscoveredItemInput): {
     entityType,
     naturalKey: item.naturalKey ?? externalRef,
   });
-  const foundational = isFoundationalInfrastructure(item.itemType);
-  const attributionStatus = foundational ? "attributed" : "needs_review";
   const discoveredItem: NormalizedDiscoveredItem = {
     discoveredKey,
     sourceKind,
@@ -96,19 +169,31 @@ function normalizeItem(item: DiscoveredItemInput): {
     discoveredItem.confidence = item.confidence;
   }
 
+  const attributed: DerivedAttribution = options.taxonomyNodes && options.taxonomyNodes.length > 0
+    ? attributeInventoryEntity({
+      entityKey,
+      entityType,
+      itemType: item.itemType,
+      name: item.name,
+      properties: item.attributes ?? {},
+    }, options.taxonomyNodes)
+    : buildFallbackAttribution(item);
+
   const inventoryEntity: NormalizedInventoryEntity = {
     entityKey,
     entityType,
     name: item.name,
     discoveredKey,
-    attributionStatus,
-    providerView: "foundational",
+    portfolioSlug: attributed.portfolioSlug,
+    taxonomyNodeId: attributed.taxonomyNodeId,
+    attributionStatus: attributed.attributionStatus,
+    attributionMethod: attributed.attributionMethod,
+    attributionConfidence: attributed.confidence,
+    attributionEvidence: attributed.evidence,
+    candidateTaxonomy: attributed.candidateTaxonomy,
+    providerView: attributed.portfolioSlug ?? "foundational",
     properties: item.attributes ?? {},
   };
-
-  if (foundational) {
-    inventoryEntity.portfolioSlug = "foundational";
-  }
 
   if (item.confidence != null) {
     inventoryEntity.confidence = item.confidence;
@@ -153,16 +238,94 @@ function normalizeRelationship(
   return normalizedRelationship;
 }
 
+function buildSoftwareEvidenceKey(
+  inventoryEntityKey: string,
+  software: DiscoveredSoftwareInput,
+): string {
+  const signature = software.rawPackageName
+    ?? software.rawProductName
+    ?? software.installLocation
+    ?? software.evidenceSource;
+  return `${inventoryEntityKey}:${software.evidenceSource}:${signature}`.toLowerCase();
+}
+
+function normalizeSoftware(
+  software: DiscoveredSoftwareInput,
+  inventoryEntityKeyByExternalRef: Map<string, string>,
+  options: NormalizeDiscoveryOptions,
+): NormalizedSoftwareEvidence | null {
+  const externalRef = software.entityExternalRef ?? software.hostExternalRef ?? software.containerExternalRef;
+  if (!externalRef) {
+    return null;
+  }
+
+  const inventoryEntityKey = inventoryEntityKeyByExternalRef.get(externalRef);
+  if (!inventoryEntityKey) {
+    return null;
+  }
+
+  const normalized = normalizeSoftwareEvidence(
+    {
+      evidenceKey: buildSoftwareEvidenceKey(inventoryEntityKey, software),
+      evidenceSource: software.evidenceSource,
+      ...(software.rawVendor ? { rawVendor: software.rawVendor } : {}),
+      ...(software.rawProductName ? { rawProductName: software.rawProductName } : {}),
+      ...(software.rawPackageName ? { rawPackageName: software.rawPackageName } : {}),
+      ...(software.rawVersion ? { rawVersion: software.rawVersion } : {}),
+    },
+    options.softwareIdentities ?? [],
+    options.softwareRules ?? [],
+  );
+
+  return {
+    evidenceKey: buildSoftwareEvidenceKey(inventoryEntityKey, software),
+    inventoryEntityKey,
+    evidenceSource: software.evidenceSource,
+    ...(software.packageManager ? { packageManager: software.packageManager } : {}),
+    ...(software.rawVendor ? { rawVendor: software.rawVendor } : {}),
+    ...(software.rawProductName ? { rawProductName: software.rawProductName } : {}),
+    ...(software.rawPackageName ? { rawPackageName: software.rawPackageName } : {}),
+    ...(software.rawVersion ? { rawVersion: software.rawVersion } : {}),
+    ...(software.installLocation ? { installLocation: software.installLocation } : {}),
+    ...(software.metadata ? { rawMetadata: software.metadata } : {}),
+    normalizationStatus: normalized.normalizationStatus,
+    normalizationMethod: normalized.method,
+    normalizationConfidence: normalized.confidence,
+    ...(normalized.identity?.id ? { softwareIdentityId: normalized.identity.id } : {}),
+    ...(normalized.identity?.normalizedVendor ? { normalizedVendor: normalized.identity.normalizedVendor } : {}),
+    ...(normalized.identity?.normalizedProductName
+      ? { normalizedProductName: normalized.identity.normalizedProductName }
+      : {}),
+    ...(normalized.identity?.normalizedEdition
+      ? { normalizedEdition: normalized.identity.normalizedEdition }
+      : {}),
+    ...(normalized.identity?.canonicalVersion
+      ? { canonicalVersion: normalized.identity.canonicalVersion }
+      : {}),
+    candidateIdentities: normalized.candidates.map((candidate) => ({
+      id: candidate.id,
+      score: candidate.score,
+      normalizedProductName: candidate.normalizedProductName,
+    })),
+  };
+}
+
 export function normalizeDiscoveredFacts(
   output: CollectorOutput,
+  options: NormalizeDiscoveryOptions = {},
 ): NormalizedDiscoveryOutput {
-  const normalizedItems = output.items.map(normalizeItem);
+  const normalizedItems = output.items.map((item) => normalizeItem(item, options));
   const discoveredKeyByExternalRef = new Map<string, string>();
+  const inventoryEntityKeyByExternalRef = new Map<string, string>();
 
   for (const entry of normalizedItems) {
     discoveredKeyByExternalRef.set(
       entry.discoveredItem.externalRef,
       entry.discoveredItem.discoveredKey,
+    );
+    inventoryEntityKeyByExternalRef.set(
+      entry.discoveredItem.externalRef,
+      entry.inventoryEntity.entityKey,
     );
   }
 
@@ -172,5 +335,8 @@ export function normalizeDiscoveredFacts(
     inventoryRelationships: output.relationships.map((relationship) =>
       normalizeRelationship(relationship, discoveredKeyByExternalRef),
     ),
+    softwareEvidence: (output.software ?? [])
+      .map((software) => normalizeSoftware(software, inventoryEntityKeyByExternalRef, options))
+      .filter((software): software is NormalizedSoftwareEvidence => software != null),
   };
 }

@@ -11,16 +11,16 @@ datasource db {
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  passwordHash String
-  isActive     Boolean       @default(true)
-  isSuperuser  Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  groups       UserGroup[]
-  agentThreads AgentThread[]
-  teamMemberships     TeamMembership[]
-  grantedDelegations  DelegationGrant[] @relation("DelegationGrantGrantor")
+  id                 String            @id @default(cuid())
+  email              String            @unique
+  passwordHash       String
+  isActive           Boolean           @default(true)
+  isSuperuser        Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  groups             UserGroup[]
+  agentThreads       AgentThread[]
+  teamMemberships    TeamMembership[]
+  grantedDelegations DelegationGrant[] @relation("DelegationGrantGrantor")
 }
 
 model UserGroup {
@@ -46,13 +46,13 @@ model CustomerContact {
 // ─── Roles ──────────────────────────────────────────────────────────────────
 
 model PlatformRole {
-  id            String      @id @default(cuid())
-  roleId        String      @unique // HR-000 … HR-500
-  name          String
-  description   String?
-  hitlTierMin   Int         @default(1)
-  slaDurationH  Int?
-  users         UserGroup[]
+  id           String      @id @default(cuid())
+  roleId       String      @unique // HR-000 … HR-500
+  name         String
+  description  String?
+  hitlTierMin  Int         @default(1)
+  slaDurationH Int?
+  users        UserGroup[]
 }
 
 // ─── Identity Governance ─────────────────────────────────────────────────────
@@ -75,12 +75,12 @@ model TeamMembership {
   id        String   @id @default(cuid())
   teamId    String
   userId    String
-  role      String   // member | manager | approver | operator
+  role      String // member | manager | approver | operator
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
@@ -89,36 +89,36 @@ model TeamMembership {
 // ─── Portfolios & Products ───────────────────────────────────────────────────
 
 model Portfolio {
-  id          String           @id @default(cuid())
-  slug        String           @unique
-  name        String
-  description String?
-  rootNodeId  String?
-  budgetKUsd  Int?             // annual budget in $k — null means unset/unknown
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  products        DigitalProduct[]
-  agents          Agent[]
-  epicPortfolios  EpicPortfolio[]
-  eaElements      EaElement[]
+  id                     String                  @id @default(cuid())
+  slug                   String                  @unique
+  name                   String
+  description            String?
+  rootNodeId             String?
+  budgetKUsd             Int? // annual budget in $k — null means unset/unknown
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  products               DigitalProduct[]
+  agents                 Agent[]
+  epicPortfolios         EpicPortfolio[]
+  eaElements             EaElement[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
 }
 
 model DigitalProduct {
-  id              String        @id @default(cuid())
-  productId       String        @unique
-  name            String
-  lifecycleStage  String        @default("plan")   // plan | design | build | production | retirement
-  lifecycleStatus String        @default("draft")  // draft | active | inactive
-  portfolioId     String?
-  portfolio       Portfolio?    @relation(fields: [portfolioId], references: [id])
-  taxonomyNodeId  String?
-  taxonomyNode    TaxonomyNode? @relation(fields: [taxonomyNodeId], references: [id])
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  backlogItems    BacklogItem[]
-  eaElements      EaElement[]
+  id                     String                  @id @default(cuid())
+  productId              String                  @unique
+  name                   String
+  lifecycleStage         String                  @default("plan") // plan | design | build | production | retirement
+  lifecycleStatus        String                  @default("draft") // draft | active | inactive
+  portfolioId            String?
+  portfolio              Portfolio?              @relation(fields: [portfolioId], references: [id])
+  taxonomyNodeId         String?
+  taxonomyNode           TaxonomyNode?           @relation(fields: [taxonomyNodeId], references: [id])
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  backlogItems           BacklogItem[]
+  eaElements             EaElement[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
 }
@@ -126,20 +126,20 @@ model DigitalProduct {
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
 
 model TaxonomyNode {
-  id          String           @id @default(cuid())
-  nodeId      String           @unique
-  name        String
-  portfolioId String?
-  parentId    String?
-  parent      TaxonomyNode?    @relation("TaxonomyTree", fields: [parentId], references: [id])
-  children    TaxonomyNode[]   @relation("TaxonomyTree")
-  products    DigitalProduct[]
-  backlogItems BacklogItem[]
-  eaElements  EaElement[]
+  id                     String                  @id @default(cuid())
+  nodeId                 String                  @unique
+  name                   String
+  portfolioId            String?
+  parentId               String?
+  parent                 TaxonomyNode?           @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children               TaxonomyNode[]          @relation("TaxonomyTree")
+  products               DigitalProduct[]
+  backlogItems           BacklogItem[]
+  eaElements             EaElement[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
-  status      String           @default("active")
-  governance  Json?
+  status                 String                  @default("active")
+  governance             Json?
 }
 
 // ─── Backlog ─────────────────────────────────────────────────────────────────
@@ -148,8 +148,8 @@ model BacklogItem {
   id               String          @id @default(cuid())
   itemId           String          @unique
   title            String
-  status           String          // open | in-progress | done | deferred
-  type             String          // product | portfolio
+  status           String // open | in-progress | done | deferred
+  type             String // product | portfolio
   body             String?
   priority         Int?
   digitalProductId String?
@@ -165,24 +165,24 @@ model BacklogItem {
 // ─── Epics ───────────────────────────────────────────────────────────────────
 
 model Epic {
-  id          String          @id @default(cuid())
-  epicId      String          @unique
+  id          String   @id @default(cuid())
+  epicId      String   @unique
   title       String
   description String?
-  status      String          @default("open")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  portfolios  EpicPortfolio[]
-  items       BacklogItem[]
+  portfolios EpicPortfolio[]
+  items      BacklogItem[]
 }
 
 model EpicPortfolio {
   epicId      String
   portfolioId String
 
-  epic        Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
-  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  epic      Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([epicId, portfolioId])
 }
@@ -313,30 +313,30 @@ model ScheduledJob {
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 model Agent {
-  id          String   @id @default(cuid())
-  agentId     String   @unique
-  name        String
-  tier        Int
-  type        String   // orchestrator | specialist | cross-cutting
-  description String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  portfolioId  String?
-  portfolio    Portfolio?  @relation(fields: [portfolioId], references: [id])
-  ownerships          AgentOwnership[]
-  governanceProfile   AgentGovernanceProfile?
-  delegationGrants    DelegationGrant[]
+  id                String                  @id @default(cuid())
+  agentId           String                  @unique
+  name              String
+  tier              Int
+  type              String // orchestrator | specialist | cross-cutting
+  description       String?
+  status            String                  @default("active")
+  createdAt         DateTime                @default(now())
+  portfolioId       String?
+  portfolio         Portfolio?              @relation(fields: [portfolioId], references: [id])
+  ownerships        AgentOwnership[]
+  governanceProfile AgentGovernanceProfile?
+  delegationGrants  DelegationGrant[]
 }
 
 model AgentOwnership {
   id             String   @id @default(cuid())
   agentId        String
   teamId         String
-  responsibility String   // owning_team | operating_team | approving_team
+  responsibility String // owning_team | operating_team | approving_team
   createdAt      DateTime @default(now())
 
-  agent          Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  team           Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, teamId, responsibility])
   @@index([teamId])
@@ -347,7 +347,7 @@ model AgentCapabilityClass {
   capabilityClassId  String   @unique
   name               String
   description        String?
-  riskBand           String   // low | medium | high | critical
+  riskBand           String // low | medium | high | critical
   defaultActionScope Json
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -356,15 +356,15 @@ model AgentCapabilityClass {
 }
 
 model DirectivePolicyClass {
-  id                String   @id @default(cuid())
-  policyClassId     String   @unique
-  name              String
-  description       String?
-  configCategory    String   // persona | workflow | tool_access | compliance | domain_rules
-  approvalMode      String   // self_service | manager_approval | admin_approval
-  allowedRiskBand   String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String   @id @default(cuid())
+  policyClassId   String   @unique
+  name            String
+  description     String?
+  configCategory  String // persona | workflow | tool_access | compliance | domain_rules
+  approvalMode    String // self_service | manager_approval | admin_approval
+  allowedRiskBand String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   governanceProfiles AgentGovernanceProfile[]
 }
@@ -374,43 +374,43 @@ model AgentGovernanceProfile {
   agentId                String   @unique
   capabilityClassId      String
   directivePolicyClassId String
-  autonomyLevel          String   // advisory | constrained_execute | supervised_execute | elevated_execute
-  hitlPolicy             String   // always | risk_based | never_without_grant
+  autonomyLevel          String // advisory | constrained_execute | supervised_execute | elevated_execute
+  hitlPolicy             String // always | risk_based | never_without_grant
   allowDelegation        Boolean  @default(true)
-  maxDelegationRiskBand  String?  // low | medium | high | critical
+  maxDelegationRiskBand  String? // low | medium | high | critical
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  agent                  Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  capabilityClass        AgentCapabilityClass @relation(fields: [capabilityClassId], references: [id])
-  directivePolicyClass   DirectivePolicyClass @relation(fields: [directivePolicyClassId], references: [id])
+  agent                Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityClass      AgentCapabilityClass @relation(fields: [capabilityClassId], references: [id])
+  directivePolicyClass DirectivePolicyClass @relation(fields: [directivePolicyClassId], references: [id])
 
   @@index([capabilityClassId])
   @@index([directivePolicyClassId])
 }
 
 model DelegationGrant {
-  id                 String   @id @default(cuid())
-  grantId            String   @unique
-  grantorUserId      String
-  granteeAgentId     String
-  targetUserId       String?
-  scopeJson          Json
-  reason             String?
-  riskBand           String
-  status             String   @default("active") // active | expired | revoked | consumed
-  validFrom          DateTime
-  expiresAt          DateTime
-  maxUses            Int?
-  useCount           Int      @default(0)
-  workflowKey        String?
-  objectRef          String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id             String   @id @default(cuid())
+  grantId        String   @unique
+  grantorUserId  String
+  granteeAgentId String
+  targetUserId   String?
+  scopeJson      Json
+  reason         String?
+  riskBand       String
+  status         String   @default("active") // active | expired | revoked | consumed
+  validFrom      DateTime
+  expiresAt      DateTime
+  maxUses        Int?
+  useCount       Int      @default(0)
+  workflowKey    String?
+  objectRef      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  grantorUser        User  @relation("DelegationGrantGrantor", fields: [grantorUserId], references: [id])
-  granteeAgent       Agent @relation(fields: [granteeAgentId], references: [id], onDelete: Cascade)
-  decisionLogs       AuthorizationDecisionLog[]
+  grantorUser  User                       @relation("DelegationGrantGrantor", fields: [grantorUserId], references: [id])
+  granteeAgent Agent                      @relation(fields: [granteeAgentId], references: [id], onDelete: Cascade)
+  decisionLogs AuthorizationDecisionLog[]
 
   @@index([grantorUserId])
   @@index([granteeAgentId])
@@ -420,18 +420,18 @@ model DelegationGrant {
 model AuthorizationDecisionLog {
   id                String   @id @default(cuid())
   decisionId        String   @unique
-  actorType         String   // user | customer_contact | agent
+  actorType         String // user | customer_contact | agent
   actorRef          String
   humanContextRef   String?
   agentContextRef   String?
   delegationGrantId String?
   actionKey         String
   objectRef         String?
-  decision          String   // allow | deny | require_approval
+  decision          String // allow | deny | require_approval
   rationale         Json
   createdAt         DateTime @default(now())
 
-  delegationGrant   DelegationGrant? @relation(fields: [delegationGrantId], references: [id], onDelete: SetNull)
+  delegationGrant DelegationGrant? @relation(fields: [delegationGrantId], references: [id], onDelete: SetNull)
 
   @@index([decision])
   @@index([createdAt])
@@ -461,39 +461,39 @@ model RuntimeAdvisory {
 // ─── Agent Threads ───────────────────────────────────────────────────────────
 
 model DiscoveryRun {
-  id                  String                  @id @default(cuid())
-  runKey              String                  @unique
+  id                  String                   @id @default(cuid())
+  runKey              String                   @unique
   sourceSlug          String
-  trigger             String                  @default("bootstrap")
-  status              String                  @default("running")
-  startedAt           DateTime                @default(now())
+  trigger             String                   @default("bootstrap")
+  status              String                   @default("running")
+  startedAt           DateTime                 @default(now())
   completedAt         DateTime?
-  itemCount           Int                     @default(0)
-  relationshipCount   Int                     @default(0)
+  itemCount           Int                      @default(0)
+  relationshipCount   Int                      @default(0)
   notes               Json?
   discoveredItems     DiscoveredItem[]
   discoveredRelations DiscoveredRelationship[]
-  confirmedEntities   InventoryEntity[]       @relation("InventoryEntityConfirmedRun")
-  confirmedRelations  InventoryRelationship[] @relation("InventoryRelationshipConfirmedRun")
+  confirmedEntities   InventoryEntity[]        @relation("InventoryEntityConfirmedRun")
+  confirmedRelations  InventoryRelationship[]  @relation("InventoryRelationshipConfirmedRun")
 }
 
 model DiscoveredItem {
-  id                 String                   @id @default(cuid())
-  discoveryRunId     String
-  discoveryRun       DiscoveryRun             @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
-  observedKey        String
-  itemType           String
-  name               String
-  sourcePath         String?
-  confidence         Float?
-  attributionStatus  String                   @default("unmapped")
-  rawData            Json
-  firstSeenAt        DateTime                 @default(now())
-  lastSeenAt         DateTime                 @default(now())
-  inventoryEntityId  String?
-  inventoryEntity    InventoryEntity?         @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
-  fromRelationships  DiscoveredRelationship[] @relation("DiscoveredRelationshipFromItem")
-  toRelationships    DiscoveredRelationship[] @relation("DiscoveredRelationshipToItem")
+  id                String                   @id @default(cuid())
+  discoveryRunId    String
+  discoveryRun      DiscoveryRun             @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
+  observedKey       String
+  itemType          String
+  name              String
+  sourcePath        String?
+  confidence        Float?
+  attributionStatus String                   @default("unmapped")
+  rawData           Json
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  inventoryEntityId String?
+  inventoryEntity   InventoryEntity?         @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  fromRelationships DiscoveredRelationship[] @relation("DiscoveredRelationshipFromItem")
+  toRelationships   DiscoveredRelationship[] @relation("DiscoveredRelationshipToItem")
 
   @@unique([discoveryRunId, observedKey])
   @@index([itemType])
@@ -520,35 +520,96 @@ model DiscoveredRelationship {
 }
 
 model InventoryEntity {
-  id                 String                  @id @default(cuid())
-  entityKey          String                  @unique
-  entityType         String
-  name               String
-  status             String                  @default("active")
-  attributionStatus  String                  @default("needs_review")
-  confidence         Float?
-  providerView       String                  @default("foundational")
-  properties         Json                    @default("{}")
-  firstSeenAt        DateTime                @default(now())
-  lastSeenAt         DateTime                @default(now())
-  lastConfirmedRunId String?
-  lastConfirmedRun   DiscoveryRun?           @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id], onDelete: SetNull)
-  portfolioId        String?
-  portfolio          Portfolio?              @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
-  taxonomyNodeId     String?
-  taxonomyNode       TaxonomyNode?           @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
-  digitalProductId   String?
-  digitalProduct     DigitalProduct?         @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
-  discoveredItems    DiscoveredItem[]
-  fromRelationships  InventoryRelationship[] @relation("InventoryRelationshipFromEntity")
-  toRelationships    InventoryRelationship[] @relation("InventoryRelationshipToEntity")
-  qualityIssues      PortfolioQualityIssue[]
+  id                    String                       @id @default(cuid())
+  entityKey             String                       @unique
+  entityType            String
+  name                  String
+  status                String                       @default("active")
+  attributionStatus     String                       @default("needs_review")
+  confidence            Float?
+  attributionMethod     String?
+  attributionConfidence Float?
+  attributionEvidence   Json?
+  candidateTaxonomy     Json?
+  providerView          String                       @default("foundational")
+  properties            Json                         @default("{}")
+  firstSeenAt           DateTime                     @default(now())
+  lastSeenAt            DateTime                     @default(now())
+  lastConfirmedRunId    String?
+  lastConfirmedRun      DiscoveryRun?                @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id], onDelete: SetNull)
+  portfolioId           String?
+  portfolio             Portfolio?                   @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  taxonomyNodeId        String?
+  taxonomyNode          TaxonomyNode?                @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  digitalProductId      String?
+  digitalProduct        DigitalProduct?              @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  discoveredItems       DiscoveredItem[]
+  softwareEvidence      DiscoveredSoftwareEvidence[]
+  fromRelationships     InventoryRelationship[]      @relation("InventoryRelationshipFromEntity")
+  toRelationships       InventoryRelationship[]      @relation("InventoryRelationshipToEntity")
+  qualityIssues         PortfolioQualityIssue[]
 
   @@index([entityType])
   @@index([attributionStatus])
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+}
+
+model DiscoveredSoftwareEvidence {
+  id                      String            @id @default(cuid())
+  inventoryEntityId       String
+  inventoryEntity         InventoryEntity   @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
+  evidenceKey             String            @unique
+  evidenceSource          String
+  packageManager          String?
+  rawVendor               String?
+  rawProductName          String?
+  rawPackageName          String?
+  rawVersion              String?
+  installLocation         String?
+  rawMetadata             Json?
+  normalizationStatus     String            @default("needs_review")
+  normalizationConfidence Float?
+  softwareIdentityId      String?
+  softwareIdentity        SoftwareIdentity? @relation(fields: [softwareIdentityId], references: [id], onDelete: SetNull)
+  firstSeenAt             DateTime          @default(now())
+  lastSeenAt              DateTime          @default(now())
+
+  @@index([inventoryEntityId])
+  @@index([softwareIdentityId])
+  @@index([normalizationStatus])
+}
+
+model SoftwareIdentity {
+  id                    String                       @id @default(cuid())
+  normalizedVendor      String?
+  normalizedProductName String
+  normalizedEdition     String?
+  canonicalVersion      String?
+  aliases               Json                         @default("[]")
+  metadata              Json?
+  evidence              DiscoveredSoftwareEvidence[]
+  normalizationRules    SoftwareNormalizationRule[]
+
+  @@unique([normalizedProductName, normalizedEdition, canonicalVersion])
+}
+
+model SoftwareNormalizationRule {
+  id                 String           @id @default(cuid())
+  ruleKey            String           @unique
+  matchType          String
+  rawSignature       String
+  versionTransform   Json?
+  source             String
+  status             String           @default("active")
+  softwareIdentityId String
+  softwareIdentity   SoftwareIdentity @relation(fields: [softwareIdentityId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([softwareIdentityId])
+  @@index([status])
 }
 
 model InventoryRelationship {
@@ -608,7 +669,7 @@ model AgentThread {
   id         String         @id @default(cuid())
   userId     String
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contextKey String
+  contextKey String         @default("coworker")
   messages   AgentMessage[]
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
@@ -617,36 +678,41 @@ model AgentThread {
 }
 
 model AgentMessage {
-  id        String      @id @default(cuid())
-  threadId  String
-  thread    AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  role      String      // user | assistant | system
-  content   String
-  tone      String?
-  createdAt DateTime    @default(now())
+  id           String      @id @default(cuid())
+  threadId     String
+  thread       AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role         String // user | assistant | system
+  content      String
+  tone         String?
+  agentId      String? // specialist agent that authored this response
+  routeContext String? // route pathname when message was sent
+  createdAt    DateTime    @default(now())
+
+  @@index([threadId])
+  @@index([createdAt])
 }
 
 // ─── EA Modeling ─────────────────────────────────────────────────────────────
 
 model EaNotation {
-  id           String               @id @default(cuid())
-  slug         String               @unique  // "archimate4" | "uml2" | "bpmn2"
-  name         String               // "ArchiMate 4"
-  version      String               // "4.0"
-  elementTypes EaElementType[]
-  relTypes     EaRelationshipType[]
-  dqRules      EaDqRule[]
+  id             String               @id @default(cuid())
+  slug           String               @unique // "archimate4" | "uml2" | "bpmn2"
+  name           String // "ArchiMate 4"
+  version        String // "4.0"
+  elementTypes   EaElementType[]
+  relTypes       EaRelationshipType[]
+  dqRules        EaDqRule[]
   structureRules EaStructureRule[]
-  views        EaView[]
+  views          EaView[]
 }
 
 model EaReferenceModel {
-  id              String                    @id @default(cuid())
-  slug            String                    @unique
+  id              String                     @id @default(cuid())
+  slug            String                     @unique
   name            String
   version         String
   authorityType   String
-  status          String                    @default("draft")
+  status          String                     @default("draft")
   description     String?
   primaryIndustry String?
   sourceSummary   String?
@@ -654,8 +720,8 @@ model EaReferenceModel {
   elements        EaReferenceModelElement[]
   assessments     EaReferenceAssessment[]
   proposals       EaReferenceProposal[]
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 }
 
 model EaReferenceModelElement {
@@ -681,16 +747,16 @@ model EaReferenceModelElement {
 }
 
 model EaReferenceModelArtifact {
-  id         String           @id @default(cuid())
-  modelId     String
-  model       EaReferenceModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  kind        String
-  path        String
-  checksum    String?
-  authority   String
-  importedAt  DateTime?
-  proposals   EaReferenceProposal[]
-  createdAt   DateTime         @default(now())
+  id         String                @id @default(cuid())
+  modelId    String
+  model      EaReferenceModel      @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  kind       String
+  path       String
+  checksum   String?
+  authority  String
+  importedAt DateTime?
+  proposals  EaReferenceProposal[]
+  createdAt  DateTime              @default(now())
 
   @@unique([modelId, path])
   @@index([modelId, authority])
@@ -711,21 +777,21 @@ model EaAssessmentScope {
 }
 
 model EaReferenceAssessment {
-  id              String                 @id @default(cuid())
+  id              String                  @id @default(cuid())
   scopeId         String
-  scope           EaAssessmentScope      @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  scope           EaAssessmentScope       @relation(fields: [scopeId], references: [id], onDelete: Cascade)
   modelId         String
-  model           EaReferenceModel       @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  model           EaReferenceModel        @relation(fields: [modelId], references: [id], onDelete: Cascade)
   modelElementId  String
   modelElement    EaReferenceModelElement @relation(fields: [modelElementId], references: [id], onDelete: Cascade)
   coverageStatus  String
-  mvpIncluded     Boolean                @default(true)
+  mvpIncluded     Boolean                 @default(true)
   evidenceSummary String?
   rationale       String?
   confidence      String?
   assessedById    String?
-  updatedAt       DateTime               @updatedAt
-  createdAt       DateTime               @default(now())
+  updatedAt       DateTime                @updatedAt
+  createdAt       DateTime                @default(now())
 
   @@unique([scopeId, modelElementId])
   @@index([modelId, coverageStatus])
@@ -754,10 +820,10 @@ model EaElementType {
   id                     String               @id @default(cuid())
   notationId             String
   notation               EaNotation           @relation(fields: [notationId], references: [id])
-  slug                   String               // "business_capability"
-  name                   String               // "Business Capability"
-  neoLabel               String               // "ArchiMate__BusinessCapability" — set in seed
-  domain                 String               // "business"|"application"|"technology"|"strategy"|"motivation"|"common"|"impl_migration"
+  slug                   String // "business_capability"
+  name                   String // "Business Capability"
+  neoLabel               String // "ArchiMate__BusinessCapability" — set in seed
+  domain                 String // "business"|"application"|"technology"|"strategy"|"motivation"|"common"|"impl_migration"
   description            String?
   validLifecycleStages   String[]
   validLifecycleStatuses String[]
@@ -767,6 +833,7 @@ model EaElementType {
   toRules                EaRelationshipRule[] @relation("ToType")
   parentStructureRules   EaStructureRule[]    @relation("EaStructureRuleParent")
   childStructureRules    EaStructureRule[]    @relation("EaStructureRuleChild")
+
   @@unique([notationId, slug])
 }
 
@@ -774,12 +841,13 @@ model EaRelationshipType {
   id            String               @id @default(cuid())
   notationId    String
   notation      EaNotation           @relation(fields: [notationId], references: [id])
-  slug          String               // "realizes"
-  name          String               // "Realizes"
-  neoType       String               // "REALIZES"
+  slug          String // "realizes"
+  name          String // "Realizes"
+  neoType       String // "REALIZES"
   description   String?
   rules         EaRelationshipRule[]
   relationships EaRelationship[]
+
   @@unique([notationId, slug])
 }
 
@@ -791,46 +859,47 @@ model EaRelationshipRule {
   toElementType      EaElementType      @relation("ToType", fields: [toElementTypeId], references: [id])
   relationshipTypeId String
   relationshipType   EaRelationshipType @relation(fields: [relationshipTypeId], references: [id])
+
   @@unique([fromElementTypeId, toElementTypeId, relationshipTypeId])
 }
 
 model EaDqRule {
-  id              String         @id @default(cuid())
-  notationId      String
-  notation        EaNotation     @relation(fields: [notationId], references: [id])
-  elementTypeId   String?
-  elementType     EaElementType? @relation(fields: [elementTypeId], references: [id])
-  name            String
-  description     String?
-  lifecycleStage  String
-  severity        String         @default("error")  // "error" | "warn"
-  rule            Json
+  id             String         @id @default(cuid())
+  notationId     String
+  notation       EaNotation     @relation(fields: [notationId], references: [id])
+  elementTypeId  String?
+  elementType    EaElementType? @relation(fields: [elementTypeId], references: [id])
+  name           String
+  description    String?
+  lifecycleStage String
+  severity       String         @default("error") // "error" | "warn"
+  rule           Json
 }
 
 model EaElement {
-  id               String             @id @default(cuid())
-  elementTypeId    String
-  elementType      EaElementType      @relation(fields: [elementTypeId], references: [id])
-  name             String
-  description      String?
-  properties       Json               @default("{}")
-  lifecycleStage   String             @default("plan")
-  lifecycleStatus  String             @default("draft")
-  createdById      String?
-  digitalProductId String?
-  digitalProduct   DigitalProduct?    @relation(fields: [digitalProductId], references: [id])
-  infraCiKey       String?
-  portfolioId      String?
-  portfolio        Portfolio?         @relation(fields: [portfolioId], references: [id])
-  taxonomyNodeId   String?
-  taxonomyNode     TaxonomyNode?      @relation(fields: [taxonomyNodeId], references: [id])
-  fromRelationships EaRelationship[]  @relation("FromElement")
-  toRelationships   EaRelationship[]  @relation("ToElement")
+  id                String               @id @default(cuid())
+  elementTypeId     String
+  elementType       EaElementType        @relation(fields: [elementTypeId], references: [id])
+  name              String
+  description       String?
+  properties        Json                 @default("{}")
+  lifecycleStage    String               @default("plan")
+  lifecycleStatus   String               @default("draft")
+  createdById       String?
+  digitalProductId  String?
+  digitalProduct    DigitalProduct?      @relation(fields: [digitalProductId], references: [id])
+  infraCiKey        String?
+  portfolioId       String?
+  portfolio         Portfolio?           @relation(fields: [portfolioId], references: [id])
+  taxonomyNodeId    String?
+  taxonomyNode      TaxonomyNode?        @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships EaRelationship[]     @relation("FromElement")
+  toRelationships   EaRelationship[]     @relation("ToElement")
   viewElements      EaViewElement[]
   conformanceIssues EaConformanceIssue[]
   syncedAt          DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
@@ -859,42 +928,42 @@ model EaRelationship {
 }
 
 model EaView {
-  id          String          @id @default(cuid())
-  notationId  String
-  notation    EaNotation      @relation(fields: [notationId], references: [id])
-  name        String
-  description String?
-  layoutType  String          // "graph"|"swimlane"|"matrix"|"layered"
-  scopeType   String          // "portfolio"|"domain"|"custom"
-  scopeRef    String?
-  createdById String?
-  viewElements EaViewElement[]
-  status       String          @default("draft")
-  submittedAt  DateTime?
-  submittedById String?
-  approvedAt   DateTime?
-  approvedById String?
-  canvasState  Json?
-  viewpointId  String?
-  viewpoint    ViewpointDefinition? @relation(fields: [viewpointId], references: [id])
+  id                String               @id @default(cuid())
+  notationId        String
+  notation          EaNotation           @relation(fields: [notationId], references: [id])
+  name              String
+  description       String?
+  layoutType        String // "graph"|"swimlane"|"matrix"|"layered"
+  scopeType         String // "portfolio"|"domain"|"custom"
+  scopeRef          String?
+  createdById       String?
+  viewElements      EaViewElement[]
+  status            String               @default("draft")
+  submittedAt       DateTime?
+  submittedById     String?
+  approvedAt        DateTime?
+  approvedById      String?
+  canvasState       Json?
+  viewpointId       String?
+  viewpoint         ViewpointDefinition? @relation(fields: [viewpointId], references: [id])
   conformanceIssues EaConformanceIssue[]
-  snapshots    EaSnapshot[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  snapshots         EaSnapshot[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 }
 
 model EaViewElement {
-  id                 String    @id @default(cuid())
-  viewId             String
-  view               EaView    @relation(fields: [viewId], references: [id], onDelete: Cascade)
-  elementId          String
-  element            EaElement @relation(fields: [elementId], references: [id])
+  id                  String          @id @default(cuid())
+  viewId              String
+  view                EaView          @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  elementId           String
+  element             EaElement       @relation(fields: [elementId], references: [id])
   parentViewElementId String?
   parentViewElement   EaViewElement?  @relation("EaViewElementParent", fields: [parentViewElementId], references: [id], onDelete: SetNull)
   childViewElements   EaViewElement[] @relation("EaViewElementParent")
   orderIndex          Int?
-  mode               String    @default("new")
-  proposedProperties Json?
+  mode                String          @default("new")
+  proposedProperties  Json?
 
   @@unique([viewId, elementId])
   @@index([elementId])
@@ -902,40 +971,40 @@ model EaViewElement {
 }
 
 model EaStructureRule {
-  id                     String        @id @default(cuid())
-  notationId             String
-  notation               EaNotation    @relation(fields: [notationId], references: [id])
-  parentElementTypeId    String
-  parentElementType      EaElementType @relation("EaStructureRuleParent", fields: [parentElementTypeId], references: [id])
-  childElementTypeId     String
-  childElementType       EaElementType @relation("EaStructureRuleChild", fields: [childElementTypeId], references: [id])
-  patternSlug            String
-  minChildren            Int?
-  maxChildren            Int?
-  orderedChildren        Boolean       @default(false)
+  id                      String        @id @default(cuid())
+  notationId              String
+  notation                EaNotation    @relation(fields: [notationId], references: [id])
+  parentElementTypeId     String
+  parentElementType       EaElementType @relation("EaStructureRuleParent", fields: [parentElementTypeId], references: [id])
+  childElementTypeId      String
+  childElementType        EaElementType @relation("EaStructureRuleChild", fields: [childElementTypeId], references: [id])
+  patternSlug             String
+  minChildren             Int?
+  maxChildren             Int?
+  orderedChildren         Boolean       @default(false)
   impliedRelationshipSlug String?
-  defaultSeverity        String        @default("warn")
-  rendererHint           String?
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
+  defaultSeverity         String        @default("warn")
+  rendererHint            String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   @@unique([notationId, parentElementTypeId, childElementTypeId, patternSlug])
   @@index([notationId, patternSlug])
 }
 
 model EaConformanceIssue {
-  id          String    @id @default(cuid())
-  viewId       String?
-  view         EaView?   @relation(fields: [viewId], references: [id], onDelete: Cascade)
-  elementId    String?
-  element      EaElement? @relation(fields: [elementId], references: [id], onDelete: Cascade)
-  issueType    String
-  severity     String    @default("warn")
-  message      String
-  status       String    @default("open")
-  detailsJson  Json?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String     @id @default(cuid())
+  viewId      String?
+  view        EaView?    @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  elementId   String?
+  element     EaElement? @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  issueType   String
+  severity    String     @default("warn")
+  message     String
+  status      String     @default("open")
+  detailsJson Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@index([viewId, status])
   @@index([elementId, status])

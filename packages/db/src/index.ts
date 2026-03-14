@@ -26,7 +26,6 @@ export {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./neo4j-sync";
-export { seedEaReferenceModels } from "./seed-ea-reference-models";
 export {
   buildDiscoveredKey,
   buildInventoryEntityKey,
@@ -35,10 +34,39 @@ export {
 } from "./discovery-identity";
 export {
   normalizeDiscoveredFacts,
+  type NormalizeDiscoveryOptions,
   type NormalizedDiscoveryOutput,
   type NormalizedInventoryEntity,
   type NormalizedInventoryRelationship,
+  type NormalizedSoftwareEvidence,
 } from "./discovery-normalize";
+export {
+  attributeInventoryEntity,
+  buildDiscoveryDescriptor,
+  evaluateInventoryQuality,
+  scoreTaxonomyCandidates,
+  type InventoryAttributionInput,
+  type InventoryAttributionResult,
+  type InventoryQualityEntityInput,
+  type InventoryQualityEvaluation,
+  type InventoryQualityIssue,
+  type InventoryQualityRelationshipInput,
+  type RankedTaxonomyCandidate,
+  type TaxonomyNodeCandidate,
+} from "./discovery-attribution";
+export {
+  buildNormalizationRuleCandidate,
+  matchSoftwareIdentityByRule,
+  normalizeSoftwareEvidence,
+  scoreSoftwareIdentityCandidates,
+  type RankedSoftwareIdentityCandidate,
+  type RuleCandidateInput,
+  type SoftwareEvidenceInput,
+  type SoftwareIdentityCandidate,
+  type SoftwareNormalizationResult,
+  type SoftwareNormalizationRuleCandidate,
+  type SoftwareNormalizationRuleInput,
+} from "./software-normalization";
 export {
   executeBootstrapDiscovery,
   runBootstrapCollectors,
@@ -49,11 +77,6 @@ export {
   type StructuredChildRecord,
   type StructureConformanceWarning,
 } from "./ea-structure";
-export {
-  getDefaultEaStructureRules,
-  seedEaStructureRules,
-  type EaStructureRuleSeed,
-} from "./seed-ea-structure-rules";
 export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,

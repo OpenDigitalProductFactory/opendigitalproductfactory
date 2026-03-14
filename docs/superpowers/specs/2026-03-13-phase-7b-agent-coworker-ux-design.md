@@ -52,18 +52,24 @@ The existing `AgentThread` already has `onDelete: Cascade` on the user relation 
 
 ### Route-to-Agent Mapping
 
-A static mapping defines which specialist agent handles each route prefix:
+A combined mapping defines which specialist agent handles each route prefix and which capability gates it. Routes with `capability: null` are accessible to all authenticated users.
 
 ```typescript
-const ROUTE_AGENT_MAP: Record<string, string> = {
-  "/portfolio":  "portfolio-advisor",
-  "/inventory":  "inventory-specialist",
-  "/ea":         "ea-architect",
-  "/employee":   "hr-specialist",
-  "/ops":        "ops-coordinator",
-  "/platform":   "platform-engineer",
-  "/admin":      "admin-assistant",   // forward-looking — activates when admin route is built
-  "/workspace":  "workspace-guide",
+type RouteAgentEntry = {
+  agentId: string;
+  capability: CapabilityKey | null;  // null = no gate, all authenticated users
+};
+
+const ROUTE_AGENT_MAP: Record<string, RouteAgentEntry> = {
+  "/portfolio":  { agentId: "portfolio-advisor",     capability: "view_portfolio" },
+  "/inventory":  { agentId: "inventory-specialist",  capability: "view_inventory" },
+  "/ea":         { agentId: "ea-architect",           capability: "view_ea_modeler" },
+  "/employee":   { agentId: "hr-specialist",          capability: "view_employee" },
+  "/customer":   { agentId: "customer-advisor",       capability: "view_customer" },
+  "/ops":        { agentId: "ops-coordinator",        capability: "view_operations" },
+  "/platform":   { agentId: "platform-engineer",      capability: "view_platform" },
+  "/admin":      { agentId: "admin-assistant",        capability: "view_admin" },      // forward-looking
+  "/workspace":  { agentId: "workspace-guide",        capability: null },               // all authenticated users
 };
 ```
 
@@ -111,7 +117,7 @@ This is persisted as a `role: "system"` message in the database and rendered cen
 
 ### `resolveAgentForRoute(pathname, userContext)`
 
-Pure function in `apps/web/lib/agent-routing.ts`. Imports and reuses the existing `UserContext` type from `permissions.ts` (which has `platformRole: string | null`):
+Pure function in `apps/web/lib/agent-routing.ts`. Reuses the existing `UserContext` type from `permissions.ts` (which has `platformRole: string | null`). **Prerequisite:** export the existing `UserContext` type in `permissions.ts` (add `export` keyword to the declaration at line 50).
 
 ```typescript
 import type { UserContext } from "@/lib/permissions";
@@ -129,10 +135,11 @@ function resolveAgentForRoute(pathname: string, userContext: UserContext): Agent
 ### Resolution Logic
 
 1. Match `pathname` against `ROUTE_AGENT_MAP` using longest prefix match
-2. If `userContext.platformRole` is `null`, return agent with `canAssist: false`
-3. Check if the user has the capability for that route's domain (reuse `can()` from permissions)
-4. If the user lacks permission: return the agent with `canAssist: false` — the agent will explain it cannot help with actions outside the user's authority
-5. If no route matches: fall back to `"workspace-guide"`
+2. If no route matches: fall back to `"workspace-guide"` (capability `null`)
+3. If the matched entry has `capability: null`: return agent with `canAssist: true` (ungated route)
+4. If `userContext.platformRole` is `null`: return agent with `canAssist: false`
+5. Check if the user has the entry's capability via `can()` from permissions
+6. If the user lacks permission: return the agent with `canAssist: false` — the agent will explain it cannot help with actions outside the user's authority
 
 ### Role-Aware Behavior
 
