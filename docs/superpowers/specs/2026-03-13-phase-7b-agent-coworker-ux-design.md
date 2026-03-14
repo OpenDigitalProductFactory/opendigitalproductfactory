@@ -14,39 +14,41 @@ A floating chat panel that provides context-aware AI agent assistance on every s
 
 Each user gets a single `AgentThread` with `contextKey: "coworker"`. The conversation persists across all routes and sessions, giving the user a continuous history with their AI co-worker.
 
-### Schema Additions
+### Schema Migration
 
+The `AgentThread` and `AgentMessage` models already exist in the schema. This phase adds fields to them via a Prisma migration:
+
+**`AgentThread`** — add default to `contextKey`:
 ```prisma
-model AgentThread {
-  id         String         @id @default(cuid())
-  userId     String
-  contextKey String         @default("coworker")
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  messages   AgentMessage[]
+contextKey String @default("coworker")   // existing field, adding default
+```
 
-  user User @relation(fields: [userId], references: [id])
-  @@unique([userId, contextKey])
-}
-
+**`AgentMessage`** — add two new columns and indexes:
+```prisma
 model AgentMessage {
   id           String      @id @default(cuid())
   threadId     String
-  role         String      // "user" | "assistant"
+  thread       AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role         String      // "user" | "assistant" | "system"
   content      String
-  agentId      String?     // which specialist agent authored this (null for user messages)
-  routeContext String?     // route pathname when message was sent
+  tone         String?     // existing field, retained
+  agentId      String?     // NEW: which specialist agent authored this (null for user messages)
+  routeContext String?     // NEW: route pathname when message was sent
   createdAt    DateTime    @default(now())
 
-  thread AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  @@index([threadId])      // NEW: needed for pagination queries
+  @@index([createdAt])     // NEW: needed for cursor-based ordering
 }
 ```
+
+The existing `AgentThread` already has `onDelete: Cascade` on the user relation — no change needed there.
 
 ### Key Decisions
 
 - **`agentId` on messages**: Tracks which specialist authored each response. Enables future multi-agent deliberation (Phase 7D) where messages from different specialists appear in the same thread.
 - **`routeContext`**: Records the route pathname when the message was sent. Useful for understanding conversation flow and for agents to reference what the user was looking at.
-- **No separate threads per route**: The user sees one continuous conversation. Agent identity changes are shown inline via avatar/label transitions.
+- **`role: "system"`**: The existing schema already supports `"system"` role. Agent transition messages ("EA Architect has joined the conversation") use `role: "system"`.
+- **No separate threads per route**: The user sees one continuous conversation. Agent identity changes are shown inline via system messages and avatar/label transitions.
 
 ### Route-to-Agent Mapping
 
@@ -60,7 +62,7 @@ const ROUTE_AGENT_MAP: Record<string, string> = {
   "/employee":   "hr-specialist",
   "/ops":        "ops-coordinator",
   "/platform":   "platform-engineer",
-  "/admin":      "admin-assistant",
+  "/admin":      "admin-assistant",   // forward-looking — activates when admin route is built
   "/workspace":  "workspace-guide",
 };
 ```
@@ -78,7 +80,7 @@ const ROUTE_AGENT_MAP: Record<string, string> = {
 - **Z-index**: 50 (above page content, below modals)
 - **Draggable**: Click-and-drag on the header bar to reposition
 - **Position persistence**: Saved to `localStorage` key `"agent-panel-position"` as `{x, y}`
-- **Toggle**: Button in the Header component (agent icon), toggles open/closed state stored in `localStorage` key `"agent-panel-open"`
+- **Toggle**: Existing "Agent" button in the Header component (pill with green dot, currently no onClick handler) is wired up to dispatch a `CustomEvent("toggle-agent-panel")`. The `AgentCoworkerPanel` listens for this event and syncs open/closed state with `localStorage` key `"agent-panel-open"`.
 
 ### Visual Design
 
@@ -93,6 +95,7 @@ const ROUTE_AGENT_MAP: Record<string, string> = {
 
 - **User messages**: Right-aligned, accent background (`var(--dpf-accent)` #7c8cf8), white text
 - **Agent messages**: Left-aligned, `var(--dpf-surface-2)` (#161625) background, light text
+- **System messages**: Centered, muted text (`var(--dpf-muted)` #8888a0), used for agent transition indicators
 - **Agent identity**: Small label above agent messages showing agent name when the specialist changes (e.g., "EA Architect" when navigating to /ea)
 - **Timestamps**: Relative time (e.g., "2m ago"), shown on hover
 
@@ -102,36 +105,34 @@ When the user navigates to a different route, the panel shows a subtle transitio
 
 > *EA Architect has joined the conversation*
 
-This appears as a system message (centered, muted text) in the message stream. The new agent has access to the full conversation history for continuity.
+This is persisted as a `role: "system"` message in the database and rendered centered with muted text. The new agent has access to the full conversation history for continuity.
 
 ## 3. Agent Routing & Role Awareness
 
 ### `resolveAgentForRoute(pathname, userContext)`
 
-Pure function in `apps/web/lib/agent-routing.ts`:
+Pure function in `apps/web/lib/agent-routing.ts`. Imports and reuses the existing `UserContext` type from `permissions.ts` (which has `platformRole: string | null`):
 
 ```typescript
-type UserContext = {
-  platformRole: string;
-  isSuperuser: boolean;
-};
+import type { UserContext } from "@/lib/permissions";
 
-type ResolvedAgent = {
+type AgentInfo = {
   agentId: string;
   agentName: string;
   agentDescription: string;
   canAssist: boolean;  // false if user lacks permission for this route's domain
 };
 
-function resolveAgentForRoute(pathname: string, userContext: UserContext): ResolvedAgent;
+function resolveAgentForRoute(pathname: string, userContext: UserContext): AgentInfo;
 ```
 
 ### Resolution Logic
 
 1. Match `pathname` against `ROUTE_AGENT_MAP` using longest prefix match
-2. Check if the user has the capability for that route's domain (reuse `can()` from permissions)
-3. If the user lacks permission: return the agent with `canAssist: false` — the agent will explain it cannot help with actions outside the user's authority
-4. If no route matches: fall back to `"workspace-guide"`
+2. If `userContext.platformRole` is `null`, return agent with `canAssist: false`
+3. Check if the user has the capability for that route's domain (reuse `can()` from permissions)
+4. If the user lacks permission: return the agent with `canAssist: false` — the agent will explain it cannot help with actions outside the user's authority
+5. If no route matches: fall back to `"workspace-guide"`
 
 ### Role-Aware Behavior
 
@@ -148,7 +149,7 @@ This is enforced in `generateCannedResponse` by selecting from role-appropriate 
 When the active agent changes (route navigation), the panel:
 
 1. Calls `resolveAgentForRoute` with the new pathname
-2. If the agent ID differs from the current one, inserts a system message ("X has joined the conversation")
+2. If the agent ID differs from the current one, persists a `role: "system"` message ("X has joined the conversation") via `sendMessage`
 3. Updates the header to show the new agent's name and description
 4. Does NOT clear the conversation — full history is preserved
 
@@ -163,41 +164,60 @@ When the active agent changes (route navigation), the panel:
 async function getOrCreateThread(): Promise<{ threadId: string }>;
 
 // Send a message and get a canned response
+// Returns { error: string } on validation failure or auth error
 async function sendMessage(input: {
   threadId: string;
-  content: string;
+  content: string;       // max 2000 chars, must be non-empty after trimming
   routeContext: string;
-}): Promise<{ userMessage: AgentMessageRow; agentMessage: AgentMessageRow }>;
+}): Promise<{ userMessage: AgentMessageRow; agentMessage: AgentMessageRow } | { error: string }>;
 
 // Load earlier messages (pagination)
 async function loadEarlierMessages(input: {
   threadId: string;
   before: string;  // cursor (message ID)
   limit?: number;  // default 20
-}): Promise<{ messages: AgentMessageRow[]; hasMore: boolean }>;
+}): Promise<{ messages: AgentMessageRow[]; hasMore: boolean } | { error: string }>;
 ```
+
+### Error Handling
+
+All server actions follow the existing codebase pattern (e.g., `actions/backlog.ts`):
+- Return `{ error: string }` union on failure
+- Auth: call `auth()`, verify user owns the thread — return `{ error: "Unauthorized" }` if not
+- Validation: reject empty content (after trim), reject content longer than 2000 characters
+- Thread ownership: verify `thread.userId === session.user.id`
 
 ### Data Fetcher (`apps/web/lib/agent-coworker-data.ts`)
 
 ```typescript
 // React cache — get recent messages for initial render
+// MUST only be called from the shell layout after session is verified.
+// The threadId is obtained via the authenticated getOrCreateThread() call,
+// which guarantees the user owns the thread.
 async function getRecentMessages(threadId: string, limit?: number): Promise<AgentMessageRow[]>;
+```
+
+### Serialization
+
+Server actions and data fetchers map Prisma `DateTime` to ISO strings when constructing `AgentMessageRow`:
+```typescript
+createdAt: message.createdAt.toISOString()
 ```
 
 ### Auth Guards
 
-All server actions call `auth()` and verify the user owns the thread. No new capability needed — any authenticated user can use the co-worker panel.
+All server actions call `auth()` and verify the user owns the thread. No new capability needed — any authenticated user can use the co-worker panel. The `getRecentMessages` data fetcher does not re-check auth; it relies on the caller (shell layout) having verified the session and obtained the `threadId` via `getOrCreateThread`.
 
 ### Types (`apps/web/lib/agent-coworker-types.ts`)
 
 ```typescript
 type AgentMessageRow = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   agentId: string | null;
   routeContext: string | null;
-  createdAt: string;  // ISO string for serialization
+  createdAt: string;  // ISO string — serialized from Prisma DateTime via .toISOString()
 };
 
 type AgentInfo = {
@@ -217,14 +237,14 @@ ShellLayout
   └── AgentCoworkerPanel (client component, rendered at layout level)
         ├── AgentPanelHeader (drag handle, agent name, minimize/close)
         ├── AgentMessageList (scrollable message area)
-        │     └── AgentMessageBubble (per message)
+        │     └── AgentMessageBubble (per message, handles user/assistant/system roles)
         └── AgentMessageInput (text input + send)
 ```
 
 ### `AgentCoworkerPanel` (`apps/web/components/agent/AgentCoworkerPanel.tsx`)
 
 Client component. Manages:
-- Open/closed state (localStorage + Header button)
+- Open/closed state (listens for `CustomEvent("toggle-agent-panel")`, syncs with `localStorage`)
 - Drag position (localStorage)
 - Current agent (derived from `usePathname()` + `resolveAgentForRoute`)
 - Message state (initial SSR data + optimistic updates)
@@ -237,13 +257,13 @@ Displays current agent name and description. Provides drag handle, minimize butt
 ### `AgentMessageBubble` (`apps/web/components/agent/AgentMessageBubble.tsx`)
 
 Renders a single message. Handles:
-- User vs. agent alignment and styling
+- User vs. agent vs. system alignment and styling
 - Agent identity label (shown when agent changes)
 - Relative timestamp on hover
 
 ### `AgentMessageInput` (`apps/web/components/agent/AgentMessageInput.tsx`)
 
-Text input with send button. Handles Enter-to-send, disabled state during processing.
+Text input with send button. Handles Enter-to-send, disabled state during processing, max 2000 char client-side validation.
 
 ### Integration with Shell Layout
 
@@ -253,31 +273,32 @@ Text input with send button. Handles Enter-to-send, disabled state during proces
 - `initialMessages` (from `getRecentMessages`)
 - `userContext` ({ platformRole, isSuperuser })
 
-The Header component gets a new "Agent" button that toggles the panel via a shared state mechanism (custom event or URL search param).
+The existing "Agent" button in the Header component (pill-shaped with green dot) is wired up with `onClick={() => document.dispatchEvent(new CustomEvent("toggle-agent-panel"))}`. No new button is created.
 
 ### Testing Strategy
 
 Unit tests for pure functions:
-- `resolveAgentForRoute` — route matching, permission gating, fallback behavior
+- `resolveAgentForRoute` — route matching, permission gating, fallback behavior, null platformRole handling
 - `generateCannedResponse` — correct response selection by agent, route, and role
 - Agent transition detection — when agent ID changes between messages
 
 Integration tests for server actions:
 - `getOrCreateThread` — creates on first call, returns existing on second
 - `sendMessage` — persists both user and agent messages, returns correct structure
+- `sendMessage` validation — rejects empty content, over-length content, unauthorized thread access
 - `loadEarlierMessages` — pagination cursor behavior, hasMore flag
 - Auth guards — rejects unauthenticated requests
 
 ## Scope Boundaries
 
 ### In Scope (Phase 7B)
-- Prisma schema migration (AgentThread, AgentMessage)
+- Prisma migration: add `agentId`, `routeContext` to `AgentMessage`; add `@default("coworker")` to `AgentThread.contextKey`; add indexes
 - Floating panel UI with drag, minimize, close
 - Route-based agent routing with permission awareness
 - Canned responses (no LLM)
-- Message persistence and pagination
-- Agent transition indicators
-- Header toggle button
+- Message persistence and pagination with error handling
+- Agent transition indicators (system messages)
+- Wire up existing Header "Agent" button via CustomEvent
 
 ### Out of Scope (Future Phases)
 - **Phase 7C**: Agent job configuration — assigning agents to UX interfaces, configuring per-screen behavior
