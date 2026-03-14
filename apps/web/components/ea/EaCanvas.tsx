@@ -8,6 +8,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "@/lib/ea-types";
+import { buildStructuredViewElements, filterStructuredEdges } from "@/lib/ea-structure";
 import { EaElementNode } from "./EaElementNode";
 import { EaRelationshipEdge } from "./EaRelationshipEdge";
 import { ElementPalette } from "./ElementPalette";
@@ -17,12 +18,18 @@ import {
   addElementToView,
   createEaRelationship,
   deleteEaRelationship,
+  moveStructuredViewElement,
   saveCanvasState,
   getDefaultRelTypeIdForView,
 } from "@/lib/actions/ea";
 
 const NODE_TYPES = { eaElement: EaElementNode };
 const EDGE_TYPES = { eaRelationship: EaRelationshipEdge };
+
+const DEFAULT_CANVAS_STATE: CanvasState = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  nodes: {},
+};
 
 type EdgeVariant = "straight" | "bezier" | "step";
 
@@ -47,13 +54,134 @@ type Props = {
   isReadOnly: boolean;
 };
 
-function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState | null): Node[] {
-  return elements.map((ve) => ({
-    id: ve.viewElementId,
-    type: "eaElement",
-    position: canvasState?.nodes[ve.viewElementId] ?? { x: 0, y: 0 },
-    data: ve,
-  }));
+function buildNodeLayout(
+  elements: SerializedViewElement[],
+  canvasState: CanvasState | null,
+): {
+  nodes: Record<string, { x: number; y: number }>;
+  shouldPersist: boolean;
+} {
+  const savedNodes = canvasState?.nodes ?? {};
+  const elementCount = elements.length;
+
+  if (elementCount <= 1) {
+    const single = elements[0];
+    if (!single) return { nodes: {}, shouldPersist: false };
+    return {
+      nodes: { [single.viewElementId]: savedNodes[single.viewElementId] ?? { x: 0, y: 0 } },
+      shouldPersist: false,
+    };
+  }
+
+  const allSavedPresent = elements.every((ve) => Boolean(savedNodes[ve.viewElementId]));
+  const allSavedAtOrigin = allSavedPresent
+    ? elements.every((ve) => {
+        const pos = savedNodes[ve.viewElementId];
+        return pos != null && pos.x === 0 && pos.y === 0;
+      })
+    : false;
+
+  const shouldLayoutAll = !allSavedPresent || allSavedAtOrigin;
+
+  if (shouldLayoutAll) {
+    const cols = Math.ceil(Math.sqrt(elementCount));
+    const xStep = 240;
+    const yStep = 150;
+    const nodes: Record<string, { x: number; y: number }> = {};
+
+    for (let i = 0; i < elementCount; i += 1) {
+      const ve = elements[i];
+      if (!ve) continue;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      nodes[ve.viewElementId] = { x: col * xStep, y: row * yStep };
+    }
+
+    return { nodes, shouldPersist: true };
+  }
+
+  // Keep existing saved coordinates, but backfill any missing node positions.
+  const used = new Set<string>();
+  const nodes = { ...savedNodes } as Record<string, { x: number; y: number }>;
+  for (const pos of Object.values(savedNodes)) {
+    used.add(`${pos.x},${pos.y}`);
+  }
+
+  const cols = Math.ceil(Math.sqrt(elementCount));
+  const xStep = 240;
+  const yStep = 150;
+  let fillIndex = 0;
+
+  for (const ve of elements) {
+    if (nodes[ve.viewElementId]) continue;
+    while (true) {
+      const candidate = { x: (fillIndex % cols) * xStep, y: Math.floor(fillIndex / cols) * yStep };
+      const key = `${candidate.x},${candidate.y}`;
+      fillIndex += 1;
+      if (used.has(key)) continue;
+      nodes[ve.viewElementId] = candidate;
+      used.add(key);
+      break;
+    }
+  }
+
+  return { nodes, shouldPersist: false };
+}
+
+function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState | null): {
+  nodes: Node[];
+  shouldPersist: boolean;
+} {
+  const layout = buildNodeLayout(elements, canvasState);
+
+  return {
+    shouldPersist: layout.shouldPersist,
+    nodes: elements.map((ve) => ({
+      id: ve.viewElementId,
+      type: "eaElement",
+      position: layout.nodes[ve.viewElementId] ?? { x: 0, y: 0 },
+      data: ve,
+    })),
+  };
+}
+
+function buildStructuredProjection(elements: SerializedViewElement[]): {
+  visibleElements: SerializedViewElement[];
+  structuredRoots: ReturnType<typeof buildStructuredViewElements>;
+} {
+  const structuredRoots = buildStructuredViewElements(
+    elements.map((element) => ({
+      viewElementId: element.viewElementId,
+      elementId: element.elementId,
+      elementTypeSlug: element.elementType.slug,
+      parentViewElementId: element.parentViewElementId,
+      orderIndex: element.orderIndex,
+      rendererHint: element.rendererHint,
+    })),
+  );
+  const elementsByViewElementId = new Map(elements.map((element) => [element.viewElementId, element]));
+
+  const hydrateStructuredElement = (
+    structuredElement: (typeof structuredRoots)[number],
+  ): SerializedViewElement => {
+    const baseElement = elementsByViewElementId.get(structuredElement.viewElementId);
+    if (!baseElement) {
+      throw new Error(`Structured element ${structuredElement.viewElementId} was not found in the view payload`);
+    }
+
+    return {
+      ...baseElement,
+      parentViewElementId: structuredElement.parentViewElementId,
+      orderIndex: structuredElement.orderIndex,
+      rendererHint: structuredElement.rendererHint,
+      childViewElements: structuredElement.childViewElements.map(hydrateStructuredElement),
+    };
+  };
+
+  return {
+    visibleElements: structuredRoots.map(hydrateStructuredElement),
+    structuredRoots,
+  };
 }
 
 function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edgeVariant: EdgeVariant): Edge[] {
@@ -98,8 +226,40 @@ export function EaCanvas({
     window.location.reload();
   }, [isReadOnly]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes(initialElements, initialCanvasState));
-  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(initialEdges, handleDeleteEdge, edgeVariant));
+  const projection = buildStructuredProjection(initialElements);
+  const visibleElements = projection.visibleElements.map((element) => ({
+    ...element,
+    isReadOnly,
+    onMoveStructuredChild: async (input: { childViewElementId: string; targetOrderIndex: number }) => {
+      if (isReadOnly) return;
+      await moveStructuredViewElement({
+        viewElementId: input.childViewElementId,
+        targetParentViewElementId: element.viewElementId,
+        targetOrderIndex: input.targetOrderIndex,
+      });
+      window.location.reload();
+    },
+    childViewElements: (element.childViewElements ?? []).map((child) => ({
+      ...child,
+      isReadOnly,
+    })),
+  }));
+  const visibleEdgeIds = new Set(
+    filterStructuredEdges(
+      initialEdges.map((edge) => ({
+        id: edge.id,
+        fromViewElementId: edge.fromViewElementId,
+        toViewElementId: edge.toViewElementId,
+        relationshipTypeSlug: edge.relationshipType.slug,
+      })),
+      projection.structuredRoots,
+    ).map((edge) => edge.id),
+  );
+  const visibleEdges = initialEdges.filter((edge) => visibleEdgeIds.has(edge.id));
+
+  const initialNodeLayout = buildNodes(visibleElements, initialCanvasState);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodeLayout.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
   const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
@@ -117,11 +277,17 @@ export function EaCanvas({
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCanvasStateRef = useRef<CanvasState>(
-    initialCanvasState ?? { viewport: { x: 0, y: 0, zoom: 1 }, nodes: {} }
+    initialCanvasState ?? DEFAULT_CANVAS_STATE
   );
   // Track live viewport (pan + zoom) so handleDrop can convert screen → flow coordinates.
   // Updated by onInit (after fitView) and onMove (during pan/zoom).
   const viewportRef = useRef(initialCanvasState?.viewport ?? { x: 0, y: 0, zoom: 1 });
+
+  useEffect(() => {
+    if (!initialNodeLayout.shouldPersist) return;
+    const nodesRecord = Object.fromEntries(nodes.map((node) => [node.id, node.position]));
+    scheduleAutoSave({ ...latestCanvasStateRef.current, nodes: nodesRecord });
+  }, [nodes, initialNodeLayout.shouldPersist]);
 
   function scheduleAutoSave(state: CanvasState) {
     latestCanvasStateRef.current = state;
@@ -270,6 +436,12 @@ export function EaCanvas({
             connectionMode={ConnectionMode.Loose}
             colorMode="dark"
             fitView
+            minZoom={0.05}
+            maxZoom={4}
+            panOnDrag
+            zoomOnScroll
+            zoomOnPinch
+            translateExtent={[[-Infinity, -Infinity], [Infinity, Infinity]]}
             onInit={(rf) => { viewportRef.current = rf.getViewport(); }}
             onMove={(_evt, vp) => { viewportRef.current = vp; }}
           >
