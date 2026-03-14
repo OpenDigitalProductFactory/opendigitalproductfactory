@@ -192,7 +192,12 @@ export async function callProvider(
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ];
     body = { model: modelId, messages: allMessages, max_tokens: 4096 };
-    extractText = (d) => (d.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "";
+    extractText = (d) => {
+      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string } }>)?.[0]?.message;
+      // Some models (qwen3) use chain-of-thought: content has the answer, reasoning has the thinking
+      // If content is empty but reasoning exists, the model may not have finished thinking within token limit
+      return msg?.content || msg?.reasoning || "";
+    };
   }
 
   const startMs = Date.now();
