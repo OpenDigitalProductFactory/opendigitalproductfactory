@@ -286,9 +286,9 @@ async function seedDpfSelfRegistration(): Promise<void> {
 
   // Product-type backlog items — linked to dpf-portal
   const productItems = [
-    { itemId: "BI-PROD-001", title: "Phase 5A — Backlog CRUD in /ops",                                    status: "in-progress", priority: 1 },
-    { itemId: "BI-PROD-002", title: "Phase 5B — DPF self-registration as managed digital product",        status: "in-progress", priority: 2 },
-    { itemId: "BI-PROD-003", title: "Phase 2B — Live Agent counts and Health metrics in portfolio panels", status: "open",        priority: 3 },
+    { itemId: "BI-PROD-001", title: "Phase 5A — Backlog CRUD in /ops",                                    status: "done",        priority: 1 },
+    { itemId: "BI-PROD-002", title: "Phase 5B — DPF self-registration as managed digital product",        status: "done",        priority: 2 },
+    { itemId: "BI-PROD-003", title: "Phase 2B — Live Agent counts and Health metrics in portfolio panels", status: "done",        priority: 3 },
     {
       itemId: "BI-PROD-004",
       title: "Add a resilient theme option library with branding presets from 10+ companies",
@@ -557,6 +557,146 @@ async function seedDarkThemeUsabilityEpic(): Promise<void> {
   console.log(`Seeded dark-theme usability epic ${epic.epicId} with ${items.length} backlog items`);
 }
 
+async function seedMvpEpics(): Promise<void> {
+  const mfgPortfolio = await prisma.portfolio.findUnique({ where: { slug: "manufacturing_and_delivery" } });
+  const foundPortfolio = await prisma.portfolio.findUnique({ where: { slug: "foundational" } });
+  if (!mfgPortfolio || !foundPortfolio) throw new Error("Required portfolios not seeded");
+
+  const dpfPortal = await prisma.digitalProduct.findUnique({ where: { productId: "dpf-portal" } });
+  if (!dpfPortal) throw new Error("dpf-portal digital product not seeded");
+
+  const taxNode = await prisma.taxonomyNode.findUnique({ where: { nodeId: "manufacturing_and_delivery" } });
+  if (!taxNode) throw new Error("manufacturing_and_delivery taxonomy node not seeded");
+
+  // ── EP-LLM-LIVE-001 ──────────────────────────────────────────────────────
+  const llmEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-LLM-LIVE-001" },
+    update: {
+      title: "Live LLM Conversations",
+      description: "Replace canned responses in the co-worker panel with real AI inference via configured providers. Generalizes the existing profiling call infrastructure into a chat-capable inference pipeline.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-LLM-LIVE-001",
+      title: "Live LLM Conversations",
+      description: "Replace canned responses in the co-worker panel with real AI inference via configured providers. Generalizes the existing profiling call infrastructure into a chat-capable inference pipeline.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: llmEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: llmEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const llmItems = [
+    { itemId: "BI-LLM-001", title: "Build callProvider generalized inference function", priority: 1, body: "Extract the private callProviderForProfiling from lib/actions/ai-providers.ts into a shared lib/ai-inference.ts module. Generalize into callProvider(providerId, modelId, messages[], systemPrompt) supporting multi-turn chat. Return { content, inputTokens, outputTokens, inferenceMs }." },
+    { itemId: "BI-LLM-002", title: "Define agent system prompts for all 9 route agents", priority: 2, body: "Extend RouteAgentEntry and AgentInfo types with systemPrompt field. Add prompts to ROUTE_AGENT_MAP for each of the 9 route agents describing role, capabilities, and context awareness." },
+    { itemId: "BI-LLM-003", title: "Add platform default provider and model selection", priority: 3, body: "Add platform-level default provider+model config for agent conversations. Selection UI in /platform/ai with dropdown of active providers and discovered models. rankProvidersByCost (lib/ai-profiling.ts) provides auto-selection fallback." },
+    { itemId: "BI-LLM-004", title: "Replace canned responses with live inference in sendMessage", priority: 4, body: "In sendMessage server action: check for active default provider, build messages array (system prompt + last 20 thread messages + user message), call callProvider, persist response. Fall back to generateCannedResponse when no provider active. Token counts logged via TokenUsage, not stored on AgentMessage." },
+    { itemId: "BI-LLM-005", title: "Wire token usage logging into inference calls", priority: 5, body: "Extract private logTokenUsage from lib/actions/ai-providers.ts to shared module. Call after every successful inference with agentId, providerId, contextKey=coworker, token counts, and computed cost." },
+  ];
+
+  for (const item of llmItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: llmEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: llmEpic.id },
+    });
+  }
+
+  // ── EP-DEPLOY-001 ─────────────────────────────────────────────────────────
+  const deployEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-DEPLOY-001" },
+    update: {
+      title: "Standalone Docker Deployment with Managed Ollama",
+      description: "Single docker compose up brings portal + Postgres + Ollama online. Platform UI manages Docker/Ollama directly with auto-detection of host GPU/RAM and zero-config model selection.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-DEPLOY-001",
+      title: "Standalone Docker Deployment with Managed Ollama",
+      description: "Single docker compose up brings portal + Postgres + Ollama online. Platform UI manages Docker/Ollama directly with auto-detection of host GPU/RAM and zero-config model selection.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: deployEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: deployEpic.id, portfolioId: foundPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: deployEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: deployEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const deployItems = [
+    { itemId: "BI-DEPLOY-001", title: "Create portal Dockerfile and Docker Compose stack", priority: 1, body: "Multi-stage Dockerfile for Next.js standalone. Compose: portal (port 3000), db (Postgres 16, volume), ollama (GPU passthrough). Auto-run Prisma migrations on startup." },
+    { itemId: "BI-DEPLOY-002", title: "Build Docker API client for container management", priority: 2, body: "Server-side module talking to Docker Engine API via /var/run/docker.sock. Scoped to Ollama container: status, start/stop/restart, pull image. Auth: manage_provider_connections." },
+    { itemId: "BI-DEPLOY-003", title: "Add Ollama management UI in platform", priority: 3, body: "New section in /platform/ai: Ollama container status, start/stop/restart buttons, model list, pull new model by name, delete model, real-time pull progress." },
+    { itemId: "BI-DEPLOY-004", title: "Implement host capability detection and auto-model selection", priority: 4, body: "Detect GPU (NVIDIA runtime), RAM. Selection: CPU <8GB -> phi3:mini, CPU 16GB+ -> llama3:8b, GPU 8GB -> llama3:8b, GPU 16GB+ -> llama3:70b-q4. Store as platform config." },
+    { itemId: "BI-DEPLOY-005", title: "Auto-pull default model and auto-configure provider on first startup", priority: 5, body: "Startup: check Ollama reachable -> check models pulled -> if none, pull auto-selected -> set Ollama provider active -> set as default for agent conversations. Zero manual config." },
+    { itemId: "BI-DEPLOY-006", title: "Add health check monitoring and status indicators", priority: 6, body: "Compose health checks on all services. Portal banner when Ollama unreachable. /api/health endpoint for external monitoring." },
+  ];
+
+  for (const item of deployItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: deployEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: deployEpic.id },
+    });
+  }
+
+  // ── EP-AGENT-EXEC-001 ────────────────────────────────────────────────────
+  const execEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-AGENT-EXEC-001" },
+    update: {
+      title: "Agent Task Execution with HITL Governance",
+      description: "Agents propose real actions (create backlog items, modify products, update EA). Humans approve before execution. Audit-logged via AuthorizationDecisionLog for regulated industry compliance.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-AGENT-EXEC-001",
+      title: "Agent Task Execution with HITL Governance",
+      description: "Agents propose real actions (create backlog items, modify products, update EA). Humans approve before execution. Audit-logged via AuthorizationDecisionLog for regulated industry compliance.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: execEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: execEpic.id, portfolioId: mfgPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: execEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: execEpic.id, portfolioId: foundPortfolio.id },
+  });
+
+  const execItems = [
+    { itemId: "BI-EXEC-001", title: "Design AgentActionProposal schema", priority: 1, body: "New Prisma migration. Model: proposalId (unique), threadId FK AgentThread, messageId FK AgentMessage, agentId, actionType enum, parameters Json, status (proposed|approved|rejected|executed|failed), proposedAt, decidedAt, decidedBy userId FK, executedAt, resultEntityId, resultError." },
+    { itemId: "BI-EXEC-002", title: "Build proposal creation from agent inference", priority: 2, body: "Parse LLM tool-use responses into AgentActionProposal records. Define tool schemas: create_backlog_item, update_lifecycle, create_ea_element, etc. System prompts include available tools based on user capabilities." },
+    { itemId: "BI-EXEC-003", title: "Create proposal card rendering in chat UX", priority: 3, body: "Structured content in AgentMessageBubble for messages with proposals. Card: action type label, key parameters, affected entity. Inline Approve/Reject/Edit buttons. Visual states for approved/rejected." },
+    { itemId: "BI-EXEC-004", title: "Implement proposal execution engine", priority: 4, body: "On approval: map actionType + parameters to existing server actions (createBacklogItem, etc.). Execute with approving user auth context. Record executedAt, resultEntityId or resultError. Post confirmation in thread." },
+    { itemId: "BI-EXEC-005", title: "Wire approval events into AuthorizationDecisionLog", priority: 5, body: "Every proposal approval/rejection writes to AuthorizationDecisionLog: actorRef (who), actionKey (what), objectRef (entity), decision, rationale. Satisfies regulated industry audit trail requirement." },
+    { itemId: "BI-EXEC-006", title: "Add agent action history view in platform", priority: 6, body: "Table of AgentActionProposal records in /platform or /admin. Filter by status, agent, action type, date range. Detail view with full parameters, approval chain, execution result. Export for compliance audits." },
+  ];
+
+  for (const item of execItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: execEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: execEpic.id },
+    });
+  }
+
+  console.log(`Seeded 3 MVP epics: ${llmEpic.epicId} (${llmItems.length} items), ${deployEpic.epicId} (${deployItems.length} items), ${execEpic.epicId} (${execItems.length} items)`);
+}
+
 async function seedDefaultAdminUser(): Promise<void> {
   // Creates a default HR-000 user for initial access. Change password immediately.
   const adminRole = await prisma.platformRole.findUnique({ where: { roleId: "HR-000" } });
@@ -733,6 +873,7 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedThemeBrandingEpic();
   await seedDarkThemeUsabilityEpic();
+  await seedMvpEpics();
   await seedDefaultAdminUser();
   await seedScheduledJobs();
   console.log("Seed complete.");
