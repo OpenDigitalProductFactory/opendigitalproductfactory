@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { AgentFAB } from "./AgentFAB";
@@ -13,6 +13,7 @@ type Props = {
 };
 
 const LS_KEY_OPEN = "agent-panel-open";
+const LS_KEY_POS = "agent-panel-position";
 
 const PANEL_W = 380;
 const PANEL_H = 480;
@@ -26,17 +27,34 @@ function loadOpen(): boolean {
   }
 }
 
+function loadPosition(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(LS_KEY_POS);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { x: number; y: number };
+      if (typeof parsed.x === "number" && typeof parsed.y === "number") return parsed;
+    }
+  } catch { /* ignore */ }
+  return {
+    x: typeof window !== "undefined" ? window.innerWidth - PANEL_W - EDGE_GAP : EDGE_GAP,
+    y: typeof window !== "undefined" ? window.innerHeight - PANEL_H - EDGE_GAP : EDGE_GAP,
+  };
+}
+
 export function AgentCoworkerShell({ threadId, initialMessages, userContext }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   const [hydrated, setHydrated] = useState(false);
+  const positionRef = useRef(position);
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
 
   useEffect(() => {
-    // Clean up orphaned drag position key
-    try { localStorage.removeItem("agent-panel-position"); } catch { /* ignore */ }
-
     if (loadOpen()) {
       setIsOpen(true);
     }
+    const pos = loadPosition();
+    positionRef.current = pos;
+    setPosition(pos);
     setHydrated(true);
   }, []);
 
@@ -50,21 +68,50 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
     localStorage.setItem(LS_KEY_OPEN, "false");
   }
 
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: positionRef.current.x,
+      startPosY: positionRef.current.y,
+    };
+
+    function onMouseMove(ev: MouseEvent) {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      const newPos = {
+        x: dragRef.current.startPosX + dx,
+        y: dragRef.current.startPosY + dy,
+      };
+      positionRef.current = newPos;
+      setPosition(newPos);
+      localStorage.setItem(LS_KEY_POS, JSON.stringify(newPos));
+    }
+
+    function onMouseUp() {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
+
   if (!hydrated) return null;
 
   return (
     <>
-      {/* FAB — visible when panel is closed */}
       {!isOpen && <AgentFAB onClick={handleOpen} />}
 
-      {/* Panel — fixed bottom-right, semi-transparent */}
       {isOpen && (
         <div
           style={{
             position: "fixed",
             zIndex: 50,
-            right: EDGE_GAP,
-            bottom: EDGE_GAP,
+            left: position.x,
+            top: position.y,
             width: PANEL_W,
             height: PANEL_H,
             borderRadius: 12,
@@ -83,6 +130,7 @@ export function AgentCoworkerShell({ threadId, initialMessages, userContext }: P
             initialMessages={initialMessages}
             userContext={userContext}
             onClose={handleClose}
+            onDragStart={handleDragStart}
           />
         </div>
       )}

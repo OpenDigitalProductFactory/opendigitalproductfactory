@@ -15,9 +15,10 @@ type Props = {
   initialMessages: AgentMessageRow[];
   userContext: UserContext;
   onClose: () => void;
+  onDragStart: (e: React.MouseEvent) => void;
 };
 
-export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onClose }: Props) {
+export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onClose, onDragStart }: Props) {
   const pathname = usePathname();
   // Filter out old "X has joined" transition messages — they clutter the conversation
   const filtered = initialMessages.filter(
@@ -62,6 +63,7 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onC
         userContext={userContext}
         onSend={handleSend}
         onClose={onClose}
+        onDragStart={onDragStart}
       />
 
       {/* Messages area */}
