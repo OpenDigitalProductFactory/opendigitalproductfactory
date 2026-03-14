@@ -53,11 +53,14 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
   const [lastAgentId, setLastAgentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
+  const positionRef = useRef(position);
 
   // Hydrate from localStorage after mount
   useEffect(() => {
     setIsOpen(loadOpen());
-    setPosition(loadPosition());
+    const pos = loadPosition();
+    positionRef.current = pos;
+    setPosition(pos);
   }, []);
 
   // Listen for toggle event from Header Agent button
@@ -102,7 +105,8 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
         routeContext: pathname,
       });
     }
-  }, [agent.agentId, agent.agentName, pathname, lastAgentId, threadId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- agentName is derived from agentId
+  }, [agent.agentId, pathname, lastAgentId, threadId]);
 
   // Auto-scroll to bottom when new messages appear
   useEffect(() => {
@@ -115,8 +119,8 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      startPosX: position.x,
-      startPosY: position.y,
+      startPosX: positionRef.current.x,
+      startPosY: positionRef.current.y,
     };
 
     function onMouseMove(ev: MouseEvent) {
@@ -127,6 +131,7 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
         x: dragRef.current.startPosX + dx,
         y: dragRef.current.startPosY + dy,
       };
+      positionRef.current = newPos;
       setPosition(newPos);
       localStorage.setItem(LS_KEY_POS, JSON.stringify(newPos));
     }
@@ -139,7 +144,7 @@ export function AgentCoworkerPanel({ threadId, initialMessages, userContext }: P
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, [position]);
+  }, []);
 
   // ─── Send message ───────────────────────────────────────────────────────
 

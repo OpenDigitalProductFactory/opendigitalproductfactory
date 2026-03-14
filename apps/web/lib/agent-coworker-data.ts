@@ -12,7 +12,9 @@ function serializeMessage(m: {
 }): AgentMessageRow {
   return {
     id: m.id,
-    role: m.role as AgentMessageRow["role"],
+    role: (["user", "assistant", "system"] as const).includes(m.role as AgentMessageRow["role"])
+      ? (m.role as AgentMessageRow["role"])
+      : "system",
     content: m.content,
     agentId: m.agentId,
     routeContext: m.routeContext,
