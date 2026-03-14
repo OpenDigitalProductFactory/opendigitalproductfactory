@@ -4,6 +4,12 @@ import { describe, it, expect } from "vitest";
 // buildBootstrapPriority and callWithFailover require DB mocking (tested via integration).
 
 describe("provider priority types", () => {
+  it("NoAllowedProvidersForSensitivityError carries the blocked sensitivity", async () => {
+    const err = new (await import("./ai-provider-priority")).NoAllowedProvidersForSensitivityError("restricted");
+    expect(err.sensitivity).toBe("restricted");
+    expect(err.name).toBe("NoAllowedProvidersForSensitivityError");
+  });
+
   it("ProviderPriorityEntry has required fields", async () => {
     // Type-level test: if this compiles, the type is correct
     const entry: import("./ai-provider-priority").ProviderPriorityEntry = {

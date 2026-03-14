@@ -6,10 +6,19 @@ import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import { resolveAgentForRoute, generateCannedResponse } from "@/lib/agent-routing";
 import { serializeMessage } from "@/lib/agent-coworker-data";
-import { callWithFailover, NoProvidersAvailableError } from "@/lib/ai-provider-priority";
+import {
+  callWithFailover,
+  NoAllowedProvidersForSensitivityError,
+  NoProvidersAvailableError,
+} from "@/lib/ai-provider-priority";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import {
+  buildFormAssistInstruction,
+  extractFormAssistResult,
+  type AgentFormAssistContext,
+} from "@/lib/agent-form-assist";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -76,8 +85,10 @@ export async function sendMessage(input: {
   threadId: string;
   content: string;
   routeContext: string;
+  elevatedFormFillEnabled?: boolean;
+  formAssistContext?: AgentFormAssistContext;
 }): Promise<
-  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow }
+  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
 > {
   const user = await requireAuthUser();
@@ -134,10 +145,24 @@ export async function sendMessage(input: {
   }));
 
   // Inject route context and user role into system prompt
-  const populatedPrompt = `${agent.systemPrompt}\n\nCurrent context:\n- Route: ${input.routeContext}\n- User role: ${user.platformRole ?? "none"}`;
+  const promptSections = [
+    agent.systemPrompt,
+    "",
+    "Current context:",
+    `- Route: ${input.routeContext}`,
+    `- User role: ${user.platformRole ?? "none"}`,
+    `- Page sensitivity: ${agent.sensitivity}`,
+  ];
+
+  if (input.elevatedFormFillEnabled && input.formAssistContext) {
+    promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
+  }
+
+  const populatedPrompt = promptSections.join("\n");
 
   let responseContent: string;
   let responseProviderId: string | null = null;
+  let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
 
   try {
@@ -170,7 +195,21 @@ export async function sendMessage(input: {
       systemMessage = serializeMessage(sysMsg);
     }
   } catch (e) {
-    if (e instanceof NoProvidersAvailableError) {
+    if (e instanceof NoAllowedProvidersForSensitivityError) {
+      responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
+
+      const sysMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "system",
+          content: `The current page is marked ${agent.sensitivity}. No allowed AI provider is configured for that sensitivity, so the coworker switched to a local fallback response.`,
+          agentId: agent.agentId,
+          routeContext: input.routeContext,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+      systemMessage = serializeMessage(sysMsg);
+    } else if (e instanceof NoProvidersAvailableError) {
       // Fall back to canned response
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
@@ -188,6 +227,12 @@ export async function sendMessage(input: {
     } else {
       throw e;
     }
+  }
+
+  if (input.elevatedFormFillEnabled && input.formAssistContext) {
+    const extracted = extractFormAssistResult(responseContent, input.formAssistContext);
+    responseContent = extracted.displayContent;
+    formAssistUpdate = extracted.fieldUpdates ?? undefined;
   }
 
   // Persist agent response
@@ -213,6 +258,7 @@ export async function sendMessage(input: {
   return {
     userMessage: serializeMessage(userMsg),
     agentMessage: serializeMessage(agentMsg),
+    ...(formAssistUpdate !== undefined && { formAssistUpdate }),
     ...(systemMessage !== undefined && { systemMessage }),
   };
 }
