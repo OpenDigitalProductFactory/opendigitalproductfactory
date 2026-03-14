@@ -86,7 +86,7 @@ export function AgentFAB({ onClick }: Props) {
       title="Open AI Co-worker"
       style={{
         position: "fixed",
-        left: 16,
+        right: 16,
         top: `${yPercent}%`,
         transform: "translateY(-50%)",
         padding: "8px 16px",
