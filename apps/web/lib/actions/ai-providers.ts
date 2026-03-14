@@ -6,8 +6,6 @@ import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
-  computeTokenCost,
-  computeComputeCost,
   computeNextRunAt,
   getTestUrl,
   parseModelsResponse,
@@ -19,7 +17,13 @@ import {
   parseProfilingResponse,
   type ProfileResult,
 } from "@/lib/ai-profiling";
-import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
+import { encryptSecret } from "@/lib/credential-crypto";
+import {
+  getDecryptedCredential,
+  getProviderExtraHeaders,
+  getProviderBearerToken,
+  logTokenUsage,
+} from "@/lib/ai-inference";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -138,23 +142,6 @@ export async function triggerProviderSync(): Promise<{ added: number; updated: n
   return syncProviderRegistry();
 }
 
-/** Decrypt the API key / client secret for a provider (server-only). */
-async function getDecryptedCredential(providerId: string) {
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (!cred) return null;
-  return {
-    ...cred,
-    secretRef:    cred.secretRef    ? decryptSecret(cred.secretRef)    : null,
-    clientSecret: cred.clientSecret ? decryptSecret(cred.clientSecret) : null,
-  };
-}
-
-/** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
-function getProviderExtraHeaders(providerId: string): Record<string, string> {
-  if (providerId === "anthropic") return { "anthropic-version": "2023-06-01" };
-  return {};
-}
-
 // ─── Configure provider ───────────────────────────────────────────────────────
 
 export async function configureProvider(input: {
@@ -223,54 +210,6 @@ export async function configureProvider(input: {
   });
 
   return {};
-}
-
-// ─── OAuth token exchange ─────────────────────────────────────────────────────
-
-async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
-  const credential = await getDecryptedCredential(providerId);
-  if (!credential) return { error: "No credential configured" };
-  if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
-    return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
-  }
-
-  // Return cached token if still valid (5-minute buffer)
-  if (credential.cachedToken && credential.tokenExpiresAt) {
-    const buffer = 5 * 60 * 1000;
-    if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
-      return { token: credential.cachedToken };
-    }
-  }
-
-  // Exchange for new token
-  const params = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: credential.clientId,
-    client_secret: credential.clientSecret,
-    ...(credential.scope ? { scope: credential.scope } : {}),
-  });
-
-  try {
-    const res = await fetch(credential.tokenEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return { error: `Token exchange failed: HTTP ${res.status}` };
-
-    const body = await res.json() as { access_token: string; expires_in: number };
-    const expiresAt = new Date(Date.now() + body.expires_in * 1000);
-
-    await prisma.credentialEntry.update({
-      where: { providerId },
-      data: { cachedToken: body.access_token, tokenExpiresAt: expiresAt, status: "ok" },
-    });
-
-    return { token: body.access_token };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Token exchange error" };
-  }
 }
 
 // ─── Test provider auth ───────────────────────────────────────────────────────
@@ -494,10 +433,6 @@ async function callProviderForProfiling(
     chatUrl = `${baseUrl}/messages`;
     body = { model, max_tokens: 4096, messages: [{ role: "user", content: prompt }] };
     extractText = (d) => (d.content as Array<{ text?: string }>)?.[0]?.text ?? "";
-  } else if (profilingProviderId === "cohere") {
-    chatUrl = `${baseUrl}/chat`;
-    body = { model, message: prompt, max_tokens: 4096 };
-    extractText = (d) => (d.text as string) ?? "";
   } else if (profilingProviderId === "gemini") {
     // Gemini uses generateContent endpoint with different structure
     chatUrl = `${baseUrl}/models/${model}:generateContent`;
@@ -695,47 +630,3 @@ export async function profileModels(
   return { profiled: totalProfiled, failed: totalFailed };
 }
 
-// ─── Token usage logging ──────────────────────────────────────────────────────
-
-async function logTokenUsage(input: {
-  agentId: string;
-  providerId: string;
-  contextKey: string;
-  inputTokens: number;
-  outputTokens: number;
-  inferenceMs?: number;
-}): Promise<void> {
-  // Internal helper — callers (profileModels) already guard with requireManageProviders()
-
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
-
-  let costUsd = 0;
-  if (provider) {
-    if (provider.costModel === "compute" && input.inferenceMs !== undefined) {
-      costUsd = computeComputeCost(
-        input.inferenceMs,
-        provider.computeWatts ?? 150,
-        provider.electricityRateKwh ?? 0.12,
-      );
-    } else if (provider.costModel === "token") {
-      costUsd = computeTokenCost(
-        input.inputTokens,
-        input.outputTokens,
-        provider.inputPricePerMToken ?? 0,
-        provider.outputPricePerMToken ?? 0,
-      );
-    }
-  }
-
-  await prisma.tokenUsage.create({
-    data: {
-      agentId:      input.agentId,
-      providerId:   input.providerId,
-      contextKey:   input.contextKey,
-      inputTokens:  input.inputTokens,
-      outputTokens: input.outputTokens,
-      ...(input.inferenceMs !== undefined && { inferenceMs: input.inferenceMs }),
-      costUsd,
-    },
-  });
-}
