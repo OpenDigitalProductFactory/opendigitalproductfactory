@@ -5,6 +5,7 @@ import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
+import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import * as crypto from "crypto";
 
@@ -619,7 +620,7 @@ async function seedEaViewpoints(): Promise<void> {
     {
       name: "Business Architecture",
       description: "Business capabilities, roles, actors, and value streams.",
-      elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream"],
+      elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream", "value_stream_stage"],
       relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "associated_with"],
     },
     {
@@ -726,6 +727,7 @@ async function main(): Promise<void> {
   await seedEaReferenceModels();
   await seedDigitalProducts();
   await seedEaArchimate4();
+  await seedEaStructureRules();
   await seedEaViewpoints();
   await seedEaViews();
   await seedDpfSelfRegistration();

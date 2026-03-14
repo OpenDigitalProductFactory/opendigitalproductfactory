@@ -35,6 +35,8 @@ export const getEaView = cache(async (id: string) => {
           id: true,
           elementId: true,
           mode: true,
+          parentViewElementId: true,
+          orderIndex: true,
           proposedProperties: true,
           element: {
             select: {
@@ -42,6 +44,7 @@ export const getEaView = cache(async (id: string) => {
               description: true,
               lifecycleStage: true,
               lifecycleStatus: true,
+              properties: true,
               elementType: {
                 select: { slug: true, name: true, neoLabel: true },
               },
@@ -55,11 +58,46 @@ export const getEaView = cache(async (id: string) => {
   if (!view) return null;
 
   const elementIds = view.viewElements.map((ve) => ve.elementId);
+  const elementTypeSlugs = Array.from(new Set(view.viewElements.map((ve) => ve.element.elementType.slug)));
   // Map elementId → viewElementId for edge source/target resolution.
   // React Flow node IDs are EaViewElement.id, not EaElement.id.
   const elementIdToViewElementId = new Map(
     view.viewElements.map((ve) => [ve.elementId, ve.id])
   );
+
+  const [structureRules, conformanceIssues] = await Promise.all([
+    elementTypeSlugs.length > 0
+      ? prisma.eaStructureRule.findMany({
+          where: {
+            notationId: view.notationId,
+            parentElementType: { slug: { in: elementTypeSlugs } },
+          },
+          select: {
+            rendererHint: true,
+            parentElementType: { select: { slug: true } },
+          },
+        })
+      : Promise.resolve([]),
+    elementIds.length > 0
+      ? prisma.eaConformanceIssue.findMany({
+          where: {
+            viewId: view.id,
+            status: "open",
+            elementId: { in: elementIds },
+          },
+          select: { elementId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const rendererHintByElementTypeSlug = new Map<string, string | null>(
+    structureRules.map((rule) => [rule.parentElementType.slug, rule.rendererHint]),
+  );
+  const issueCountByElementId = new Map<string, number>();
+  for (const issue of conformanceIssues) {
+    if (!issue.elementId) continue;
+    issueCountByElementId.set(issue.elementId, (issueCountByElementId.get(issue.elementId) ?? 0) + 1);
+  }
 
   // Load edges where both endpoints are on this view
   const relationships = elementIds.length > 1
@@ -81,6 +119,10 @@ export const getEaView = cache(async (id: string) => {
     viewElementId: ve.id,
     elementId: ve.elementId,
     mode: ve.mode as SerializedViewElement["mode"],
+    parentViewElementId: ve.parentViewElementId,
+    orderIndex: ve.orderIndex,
+    rendererHint: rendererHintByElementTypeSlug.get(ve.element.elementType.slug) ?? null,
+    structureIssueCount: issueCountByElementId.get(ve.elementId) ?? 0,
     proposedProperties: ve.proposedProperties as Record<string, unknown> | null,
     elementType: ve.element.elementType,
     element: {
@@ -88,6 +130,7 @@ export const getEaView = cache(async (id: string) => {
       description: ve.element.description,
       lifecycleStage: ve.element.lifecycleStage,
       lifecycleStatus: ve.element.lifecycleStatus,
+      properties: (ve.element.properties as Record<string, unknown> | null) ?? null,
     },
   }));
 
