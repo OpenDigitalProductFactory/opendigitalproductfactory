@@ -74,6 +74,22 @@ export function estimateMaxParameters(vramGb: number | null): string | null {
   return `~${maxB}B`;
 }
 
+/**
+ * Enrich the Ollama InfraCI node with hardware info.
+ * Failures are silently swallowed — Neo4j being down should not crash the page.
+ */
+async function enrichOllamaInfraCI(baseUrl: string, status: string): Promise<void> {
+  try {
+    const hwInfo = status === "offline" ? null : await getOllamaHardwareInfo(baseUrl);
+    await syncInfraCI(
+      { ciId: "CI-ollama-01", name: "Ollama", ciType: "ai-inference", status },
+      hwInfo ? { baseUrl, gpu: hwInfo.gpu, vramGb: hwInfo.vramGb, modelCount: hwInfo.modelCount } : undefined,
+    );
+  } catch {
+    // Neo4j unavailable — don't crash the page
+  }
+}
+
 // ─── Bundled provider health check ───────────────────────────────────────────
 
 /**
@@ -116,32 +132,17 @@ export async function checkBundledProviders(): Promise<void> {
       await profileModelsInternal("ollama");
     }
 
-    // Enrich InfraCI node with hardware info
-    const hwInfo = await getOllamaHardwareInfo(baseUrl);
-    if (hwInfo) {
-      await syncInfraCI(
-        { ciId: "CI-ollama-01", name: "Ollama", ciType: "ai-inference", status: "operational" },
-        { baseUrl, gpu: hwInfo.gpu, vramGb: hwInfo.vramGb, modelCount: hwInfo.modelCount },
-      );
-    }
+    await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
     // Already active — refresh hardware info only (no re-discovery)
-    const hwInfo = await getOllamaHardwareInfo(baseUrl);
-    if (hwInfo) {
-      await syncInfraCI(
-        { ciId: "CI-ollama-01", name: "Ollama", ciType: "ai-inference", status: "operational" },
-        { baseUrl, gpu: hwInfo.gpu, vramGb: hwInfo.vramGb, modelCount: hwInfo.modelCount },
-      );
-    }
+    await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {
     // Deactivate
     await prisma.modelProvider.update({
       where: { providerId: "ollama" },
       data: { status: "inactive" },
     });
-    await syncInfraCI(
-      { ciId: "CI-ollama-01", name: "Ollama", ciType: "ai-inference", status: "offline" },
-    );
+    await enrichOllamaInfraCI(baseUrl, "offline");
   }
   // If unreachable + unconfigured → leave as-is
 }
