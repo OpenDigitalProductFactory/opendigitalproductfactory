@@ -16,6 +16,7 @@ export type AgentInfo = {
   agentName: string;
   agentDescription: string;
   canAssist: boolean;
+  sensitivity: "public" | "internal" | "confidential" | "restricted";
   systemPrompt: string;
   skills: AgentSkill[];
 };
@@ -34,6 +35,7 @@ export type RouteAgentEntry = {
   agentName: string;
   agentDescription: string;
   capability: CapabilityKey | null;
+  sensitivity: "public" | "internal" | "confidential" | "restricted";
   systemPrompt: string;
   skills: AgentSkill[];
 };
