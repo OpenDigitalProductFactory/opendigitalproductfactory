@@ -15,7 +15,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding, { threadId }] = await Promise.all([
+  const [latestDiscoveryRun, activeBranding, threadResult] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
       select: { id: true },
@@ -30,7 +30,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     getOrCreateThread(),
   ]);
 
-  const initialMessages = await getRecentMessages(threadId);
+  const threadId = threadResult?.threadId ?? null;
+  const initialMessages = threadId ? await getRecentMessages(threadId) : [];
 
   if (!latestDiscoveryRun) {
     await executeBootstrapDiscovery(prisma as never, {
@@ -52,11 +53,13 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         )}
       />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
-      <AgentCoworkerPanel
-        threadId={threadId}
-        initialMessages={initialMessages}
-        userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
-      />
+      {threadId && (
+        <AgentCoworkerPanel
+          threadId={threadId}
+          initialMessages={initialMessages}
+          userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+        />
+      )}
     </div>
   );
 }
