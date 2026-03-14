@@ -7,6 +7,20 @@ Every user sees only the workspace capabilities their role permits. In-platform 
 
 ---
 
+## Quick Install (Windows)
+
+1. Download `install-dpf.ps1` from the [latest release](https://github.com/markdbodman/opendigitalproductfactory/releases)
+2. Right-click the file → **Run with PowerShell**
+3. Follow the guided steps (5-10 minutes)
+
+The installer will set up everything automatically: Docker, databases, AI engine, and the portal.
+
+**After installation:**
+- **Start:** Open PowerShell and run `dpf-start`
+- **Stop:** Open PowerShell and run `dpf-stop`
+
+---
+
 ## What It Does (Today)
 
 - Role-scoped workspace — log in as any of 6 IT4IT human roles and see only your tiles
@@ -26,7 +40,39 @@ Every user sees only the workspace capabilities their role permits. In-platform 
 
 ---
 
-## Prerequisites
+## For Developers
+
+Clone and run locally:
+
+```bash
+# Clone and install
+git clone https://github.com/markdbodman/opendigitalproductfactory.git
+cd opendigitalproductfactory
+pnpm install
+
+# Start databases
+docker compose up -d postgres neo4j
+
+# Setup database
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+
+# Start dev server
+pnpm dev
+```
+
+Open http://localhost:3000
+
+Log in with:
+- **Email:** `admin@dpf.local`
+- **Password:** `changeme123`
+
+> Change this password immediately for any non-local deployment.
+
+---
+
+## Prerequisites (for developers)
 
 | Tool | Version | Install |
 |---|---|---|
@@ -34,49 +80,6 @@ Every user sees only the workspace capabilities their role permits. In-platform 
 | [Node.js](https://nodejs.org/) | 20+ | Required |
 | [pnpm](https://pnpm.io/) | 9+ | `npm install -g pnpm` |
 | [Git](https://git-scm.com/) | Any | Required |
-
----
-
-## Quick Start
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/markdbodman/opendigitalproductfactory.git
-cd opendigitalproductfactory
-```
-
-### 2. Run the setup script
-
-**Windows (PowerShell — right-click, Run as Administrator not required):**
-```powershell
-.\scripts\setup.ps1
-```
-
-**Mac / Linux:**
-```bash
-chmod +x scripts/setup.sh && ./scripts/setup.sh
-```
-
-The script will:
-- Check your prerequisites
-- Install dependencies (`pnpm install`)
-- Create your local environment file from the template
-- Start PostgreSQL and Neo4j via Docker
-- Run database migrations and seed with default data
-- Print the URL and default credentials when ready
-
-### 3. Open the app
-
-```
-http://localhost:3000
-```
-
-Log in with:
-- **Email:** `admin@dpf.local`
-- **Password:** `changeme123`
-
-> Change this password immediately for any non-local deployment.
 
 ---
 
