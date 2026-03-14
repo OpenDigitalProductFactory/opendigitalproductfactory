@@ -19,7 +19,11 @@ type Props = {
 
 export function AgentCoworkerPanel({ threadId, initialMessages, userContext, onClose }: Props) {
   const pathname = usePathname();
-  const [messages, setMessages] = useState<AgentMessageRow[]>(initialMessages);
+  // Filter out old "X has joined" transition messages — they clutter the conversation
+  const filtered = initialMessages.filter(
+    (m) => !(m.role === "system" && m.content.endsWith("has joined the conversation")),
+  );
+  const [messages, setMessages] = useState<AgentMessageRow[]>(filtered);
   const [isPending, startTransition] = useTransition();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
