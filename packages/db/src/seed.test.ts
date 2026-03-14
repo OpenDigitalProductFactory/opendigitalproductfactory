@@ -24,7 +24,7 @@ describe("seed helpers", () => {
   });
 
   it("exports seedEaReferenceModels", async () => {
-    const mod = await import("./index.js");
+    const mod = await import("./seed-ea-reference-models.js");
     expect(typeof mod.seedEaReferenceModels).toBe("function");
   }, 15_000);
 
