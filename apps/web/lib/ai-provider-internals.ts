@@ -38,6 +38,36 @@ export function getProviderExtraHeaders(providerId: string): Record<string, stri
   return {};
 }
 
+type TokenUsage = {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
+  const usage = asRecord(data.usage);
+
+  if (!usage) {
+    return {
+      inputTokens: undefined,
+      outputTokens: undefined,
+    };
+  }
+
+  return {
+    inputTokens: asNumber(usage.input_tokens) ?? asNumber(usage.prompt_tokens),
+    outputTokens: asNumber(usage.output_tokens) ?? asNumber(usage.completion_tokens),
+  };
+}
+
 /** OAuth token exchange — obtain or refresh bearer token for a provider. */
 export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
   const credential = await getDecryptedCredential(providerId);
@@ -137,7 +167,7 @@ async function getProfilingModel(providerId: string): Promise<string> {
 async function callProviderForProfiling(
   profilingProviderId: string,
   prompt: string,
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+): Promise<{ text: string; inputTokens: number | undefined; outputTokens: number | undefined }> {
   const prov = await prisma.modelProvider.findUnique({ where: { providerId: profilingProviderId } });
   if (!prov) throw new Error("Provider not found");
 
@@ -204,11 +234,12 @@ async function callProviderForProfiling(
   const data = await res.json() as Record<string, unknown>;
 
   const text = extractText(data);
+  const usage = extractTokenUsage(data);
 
   return {
     text,
-    inputTokens: data.usage?.input_tokens ?? data.usage?.prompt_tokens,
-    outputTokens: data.usage?.output_tokens ?? data.usage?.completion_tokens,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
   };
 }
 
