@@ -35,7 +35,7 @@ function buildStage(
 }
 
 describe("StructuredValueStreamNode", () => {
-  it("renders a value stream with ordered nested stage chevrons", () => {
+  it("renders a directional value stream band with ordered nested stage chevrons", () => {
     const html = renderToStaticMarkup(
       <StructuredValueStreamNode
         selected={false}
@@ -73,6 +73,9 @@ describe("StructuredValueStreamNode", () => {
     expect(html).toContain("Support");
     expect(html.indexOf("Request")).toBeLessThan(html.indexOf("Support"));
     expect(html).toContain("value-stream-stage");
+    expect(html).toContain("data-value-stream-band");
+    expect(html).not.toContain("Move stage left");
+    expect(html).not.toContain("Move stage right");
   });
 
   it("renders a warning state when the structure is non-conformant", () => {
@@ -109,7 +112,7 @@ describe("StructuredValueStreamNode", () => {
     expect(html).toContain("1 issue");
   });
 
-  it("renders stage move controls when the view is editable", () => {
+  it("marks editable stages as draggable reorder targets without inline controls", () => {
     const html = renderToStaticMarkup(
       <StructuredValueStreamNode
         selected={false}
@@ -144,7 +147,9 @@ describe("StructuredValueStreamNode", () => {
       />,
     );
 
-    expect(html).toContain("Move stage right");
-    expect(html).toContain("Move stage left");
+    expect(html).toContain('draggable="true"');
+    expect(html).toContain("data-stage-drop-target");
+    expect(html).not.toContain("Move stage right");
+    expect(html).not.toContain("Move stage left");
   });
 });

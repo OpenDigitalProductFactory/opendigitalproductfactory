@@ -122,6 +122,10 @@ export const getEaView = cache(async (id: string) => {
     parentViewElementId: ve.parentViewElementId,
     orderIndex: ve.orderIndex,
     rendererHint: rendererHintByElementTypeSlug.get(ve.element.elementType.slug) ?? null,
+    layoutRole:
+      ((ve.element.properties as Record<string, unknown> | null)?.projection as
+        | { layoutRole?: SerializedViewElement["layoutRole"] }
+        | undefined)?.layoutRole ?? null,
     structureIssueCount: issueCountByElementId.get(ve.elementId) ?? 0,
     proposedProperties: ve.proposedProperties as Record<string, unknown> | null,
     elementType: ve.element.elementType,

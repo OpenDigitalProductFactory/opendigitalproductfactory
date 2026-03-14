@@ -29,10 +29,12 @@ function buildProjectionScopeRef(referenceModelSlug: string, projectionType: Ref
 function buildProjectionMetadata(input: {
   referenceModelSlug: string;
   projectionType: ReferenceProjectionType;
+  layoutRole: "stream_band" | "stream_stage";
   referenceElementSlug: string;
 }): Prisma.InputJsonValue {
   return {
     projection: {
+      layoutRole: input.layoutRole,
       referenceModelSlug: input.referenceModelSlug,
       projectionType: input.projectionType,
       referenceElementSlug: input.referenceElementSlug,
@@ -79,6 +81,7 @@ async function resolveProjectionElement(input: {
   });
 
   const properties = buildProjectionMetadata({
+    layoutRole: input.referenceElement.kind === "value_stream" ? "stream_band" : "stream_stage",
     referenceModelSlug: input.referenceModelSlug,
     projectionType: input.projectionType,
     referenceElementSlug: input.referenceElement.slug,

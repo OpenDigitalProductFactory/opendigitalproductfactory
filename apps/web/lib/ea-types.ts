@@ -7,6 +7,14 @@ export type CanvasState = {
   nodes: Record<string, { x: number; y: number }>; // key = EaViewElement.id
 };
 
+export type ProjectionLayoutRole =
+  | "stream_band"
+  | "stream_stage"
+  | "context_in"
+  | "context_out"
+  | "stage_support"
+  | "shared_support";
+
 // Serialised view element passed from server → EaCanvas
 export type SerializedViewElement = {
   viewElementId: string;     // EaViewElement.id — used as React Flow node id
@@ -15,6 +23,7 @@ export type SerializedViewElement = {
   parentViewElementId: string | null;
   orderIndex: number | null;
   rendererHint: string | null;
+  layoutRole?: ProjectionLayoutRole | null;
   structureIssueCount: number;
   proposedProperties: Record<string, unknown> | null;
   elementType: {
