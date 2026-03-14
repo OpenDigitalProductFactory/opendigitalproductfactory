@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildValueStreamGroupLayout,
   buildValueStreamLayout,
   estimateStageWidth,
 } from "./value-stream-layout";
@@ -36,5 +37,19 @@ describe("buildValueStreamLayout", () => {
       layout.bandInsetRight;
 
     expect(layout.bandWidth).toBeGreaterThan(rawStageSpan);
+  });
+
+  it("positions stage nodes inside the parent value stream band", () => {
+    const layout = buildValueStreamGroupLayout({
+      origin: { x: 0, y: 0 },
+      stageLabels: ["Plan", "Build"],
+    });
+
+    expect(layout.band.width).toBeGreaterThan(0);
+    expect(layout.stages[0]?.x).toBeGreaterThan(layout.band.x);
+    expect(layout.stages[1]?.x).toBeGreaterThan(layout.stages[0]?.x ?? 0);
+    expect(
+      (layout.stages[1]?.x ?? 0) + (layout.stages[1]?.width ?? 0),
+    ).toBeLessThan(layout.band.x + layout.band.width);
   });
 });

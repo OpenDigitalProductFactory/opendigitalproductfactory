@@ -6,6 +6,10 @@ const STAGE_GAP = 22;
 const BAND_INSET_LEFT = 56;
 const BAND_INSET_RIGHT = 72;
 const BAND_END_CLEARANCE = 36;
+const BAND_HEADER_HEIGHT = 54;
+const BAND_STAGE_TOP = 66;
+const STAGE_HEIGHT = 92;
+const BAND_BOTTOM_PADDING = 18;
 
 export function estimateStageWidth(label: string): number {
   return Math.max(
@@ -33,5 +37,40 @@ export function buildValueStreamLayout(labels: string[]) {
     bandInsetRight: BAND_INSET_RIGHT,
     bandEndClearance: BAND_END_CLEARANCE,
     bandWidth,
+    bandHeaderHeight: BAND_HEADER_HEIGHT,
+    bandStageTop: BAND_STAGE_TOP,
+    bandHeight: BAND_STAGE_TOP + STAGE_HEIGHT + BAND_BOTTOM_PADDING,
+    stageHeight: STAGE_HEIGHT,
+  };
+}
+
+export function buildValueStreamGroupLayout(input: {
+  stageLabels: string[];
+  origin: { x: number; y: number };
+}) {
+  const layout = buildValueStreamLayout(input.stageLabels);
+  let runningX = input.origin.x + layout.bandInsetLeft;
+
+  const stages = input.stageLabels.map((label, index) => {
+    const width = layout.stageWidths[index] ?? estimateStageWidth(label);
+    const stage = {
+      x: runningX,
+      y: input.origin.y + layout.bandStageTop,
+      width,
+      height: layout.stageHeight,
+    };
+    runningX += width + layout.stageGap;
+    return stage;
+  });
+
+  return {
+    band: {
+      x: input.origin.x,
+      y: input.origin.y,
+      width: layout.bandWidth + 24,
+      height: layout.bandHeight,
+    },
+    stages,
+    layout,
   };
 }
