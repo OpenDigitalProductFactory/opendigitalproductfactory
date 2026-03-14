@@ -141,7 +141,7 @@ export async function sendMessage(input: {
   let systemMessage: AgentMessageRow | undefined;
 
   try {
-    const result = await callWithFailover(chatHistory, populatedPrompt);
+    const result = await callWithFailover(chatHistory, populatedPrompt, agent.sensitivity);
     responseContent = result.content;
     responseProviderId = result.providerId;
 

@@ -1,6 +1,7 @@
 import { can } from "@/lib/permissions";
 import type { UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
+import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 
 /** Route prefix → agent + capability mapping. */
 const ROUTE_AGENT_MAP: Record<string, RouteAgentEntry> = {
@@ -9,6 +10,7 @@ const ROUTE_AGENT_MAP: Record<string, RouteAgentEntry> = {
     agentName: "Portfolio Advisor",
     agentDescription: "Helps navigate portfolio structure, products, and health metrics",
     capability: "view_portfolio",
+    sensitivity: "internal",
     systemPrompt: `You are Portfolio Advisor, an AI assistant in the Digital Product Factory portal.
 
 Role: You help navigate the portfolio structure, review product health metrics, and understand budget allocations.
@@ -33,6 +35,7 @@ Guidelines:
     agentName: "Inventory Specialist",
     agentDescription: "Assists with digital product inventory and infrastructure CIs",
     capability: "view_inventory",
+    sensitivity: "internal",
     systemPrompt: `You are Inventory Specialist, an AI assistant in the Digital Product Factory portal.
 
 Role: You help explore the digital product inventory, review lifecycle stages, and understand infrastructure dependencies.
@@ -56,6 +59,7 @@ Guidelines:
     agentName: "EA Architect",
     agentDescription: "Guides enterprise architecture modeling, views, and relationships",
     capability: "view_ea_modeler",
+    sensitivity: "internal",
     systemPrompt: `You are EA Architect, an AI assistant in the Digital Product Factory portal.
 
 Role: You guide enterprise architecture modeling using ArchiMate 4 notation.
@@ -82,6 +86,7 @@ Guidelines:
     agentName: "HR Specialist",
     agentDescription: "Assists with role management, people, and organizational structure",
     capability: "view_employee",
+    sensitivity: "confidential",
     systemPrompt: `You are HR Specialist, an AI assistant in the Digital Product Factory portal.
 
 Role: You help understand the role structure, review team assignments, and navigate the organizational hierarchy.
@@ -105,6 +110,7 @@ Guidelines:
     agentName: "Customer Advisor",
     agentDescription: "Helps manage customer accounts and service relationships",
     capability: "view_customer",
+    sensitivity: "confidential",
     systemPrompt: `You are Customer Advisor, an AI assistant in the Digital Product Factory portal.
 
 Role: You help manage customer accounts, review service relationships, and track engagement.
@@ -127,6 +133,7 @@ Guidelines:
     agentName: "Ops Coordinator",
     agentDescription: "Assists with backlog management, epics, and operational workflows",
     capability: "view_operations",
+    sensitivity: "internal",
     systemPrompt: `You are Ops Coordinator, an AI assistant in the Digital Product Factory portal.
 
 Role: You help manage the backlog system with portfolio-type and product-type items, epic grouping, and lifecycle tracking.
@@ -151,6 +158,7 @@ Guidelines:
     agentName: "Platform Engineer",
     agentDescription: "Helps configure AI providers, credentials, and platform services",
     capability: "view_platform",
+    sensitivity: "confidential",
     systemPrompt: `You are Platform Engineer, an AI assistant in the Digital Product Factory portal.
 
 Role: You help configure AI providers, manage credentials, monitor token spend, and manage platform services.
@@ -175,6 +183,7 @@ Guidelines:
     agentName: "Admin Assistant",
     agentDescription: "Assists with platform administration and user management",
     capability: "view_admin",
+    sensitivity: "restricted",
     systemPrompt: `You are Admin Assistant, an AI assistant in the Digital Product Factory portal.
 
 Role: You help with platform administration — user management, role assignments, and system configuration.
@@ -197,6 +206,7 @@ Guidelines:
     agentName: "Workspace Guide",
     agentDescription: "Helps navigate the portal and find the right tools for your task",
     capability: null,
+    sensitivity: "internal",
     systemPrompt: `You are Workspace Guide, an AI assistant in the Digital Product Factory portal.
 
 Role: You help users navigate the portal and find the right tools for their tasks.
@@ -253,6 +263,7 @@ export function resolveAgentForRoute(
       agentName: bestMatch.agentName,
       agentDescription: bestMatch.agentDescription,
       canAssist: true,
+      sensitivity: bestMatch.sensitivity,
       systemPrompt: bestMatch.systemPrompt,
       skills: bestMatch.skills,
     };
@@ -266,6 +277,7 @@ export function resolveAgentForRoute(
     agentName: bestMatch.agentName,
     agentDescription: bestMatch.agentDescription,
     canAssist,
+    sensitivity: bestMatch.sensitivity ?? getRouteSensitivity(pathname),
     systemPrompt: bestMatch.systemPrompt,
     skills: bestMatch.skills,
   };

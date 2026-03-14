@@ -4,6 +4,11 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { callProvider, logTokenUsage, InferenceError } from "@/lib/ai-inference";
 import type { ChatMessage, InferenceResult } from "@/lib/ai-inference";
+import {
+  filterProviderPriorityBySensitivity,
+  type ProviderPolicyInfo,
+  type RouteSensitivity,
+} from "@/lib/agent-sensitivity";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +109,19 @@ export async function getProviderPriority(): Promise<ProviderPriorityEntry[]> {
   return buildBootstrapPriority();
 }
 
+async function getActiveProviderPolicyInfo(): Promise<ProviderPolicyInfo[]> {
+  const providers = await prisma.modelProvider.findMany({
+    where: { status: "active" },
+    select: { providerId: true, costModel: true, category: true },
+  });
+
+  return providers.map((provider) => ({
+    providerId: provider.providerId,
+    costModel: provider.costModel,
+    category: provider.category,
+  }));
+}
+
 // ─── Failover Engine ─────────────────────────────────────────────────────────
 
 const MAX_CASCADE_DEPTH = 5;
@@ -111,18 +129,21 @@ const MAX_CASCADE_DEPTH = 5;
 export async function callWithFailover(
   messages: ChatMessage[],
   systemPrompt: string,
+  sensitivity: RouteSensitivity = "internal",
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority();
-  if (priority.length === 0) {
+  const providerPolicy = await getActiveProviderPolicyInfo();
+  const filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
+  if (filteredPriority.length === 0) {
     throw new NoProvidersAvailableError([]);
   }
 
-  const baselineTier = priority[0]!.capabilityTier;
+  const baselineTier = filteredPriority[0]!.capabilityTier;
   const attempts: Array<{ providerId: string; error: string }> = [];
-  const limit = Math.min(priority.length, MAX_CASCADE_DEPTH);
+  const limit = Math.min(filteredPriority.length, MAX_CASCADE_DEPTH);
 
   for (let i = 0; i < limit; i++) {
-    const entry = priority[i]!;
+    const entry = filteredPriority[i]!;
     try {
       const result = await callProvider(entry.providerId, entry.modelId, messages, systemPrompt);
 
@@ -131,7 +152,7 @@ export async function callWithFailover(
       // Look up provider name for the message
       let downgradeMessage: string | null = null;
       if (downgraded) {
-        const failedName = priority[0]!.providerId;
+        const failedName = filteredPriority[0]!.providerId;
         const usedProvider = await prisma.modelProvider.findUnique({
           where: { providerId: entry.providerId },
           select: { name: true },
