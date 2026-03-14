@@ -55,6 +55,8 @@ if [ ! -f apps/web/.env.local ]; then
   # Generate a secure AUTH_SECRET
   SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
   sed -i "s|<generate with: openssl rand -base64 32>|$SECRET|" apps/web/.env.local
+  # Enable Docker internal URL for Ollama
+  echo "OLLAMA_INTERNAL_URL=http://ollama:11434" >> apps/web/.env.local
   ok "Created apps/web/.env.local with generated AUTH_SECRET"
 else
   ok "apps/web/.env.local already exists — skipping"
@@ -67,7 +69,7 @@ fi
 
 # ── Databases ─────────────────────────────────────────────────────────────────
 
-step "Starting databases (PostgreSQL + Neo4j)"
+step "Starting services (PostgreSQL + Neo4j + Ollama)"
 docker compose up -d
 
 echo "  Waiting for PostgreSQL to be ready..."
@@ -80,6 +82,17 @@ until docker compose exec -T postgres pg_isready -U dpf -q 2>/dev/null; do
   sleep 2
 done
 ok "PostgreSQL is ready"
+
+echo "  Waiting for Ollama... (first run may take a few minutes to download default model)"
+RETRIES=90
+until docker compose exec -T ollama curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
+  RETRIES=$((RETRIES - 1))
+  if [ $RETRIES -eq 0 ]; then
+    fail "Ollama did not start in time. Check: docker compose logs ollama"
+  fi
+  sleep 2
+done
+ok "Ollama is ready"
 
 # ── Database Setup ────────────────────────────────────────────────────────────
 
