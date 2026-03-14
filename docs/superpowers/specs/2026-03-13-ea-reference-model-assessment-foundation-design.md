@@ -1,8 +1,22 @@
 # EA Reference Model Assessment Foundation Design
 
 **Date:** 2026-03-13  
-**Status:** Draft  
+**Status:** Implemented (foundation slice)  
 **Scope:** Establish a generic Enterprise Architecture reference-model assessment framework in `/ea`, with portfolio-first scoring and IT4IT as the first seeded model.
+
+---
+
+## Implementation Notes
+
+- The foundation slice is implemented with Prisma models, IT4IT seeding/import, EA read models, EA assessment/proposal actions, and the initial `/ea` summary/detail surfaces.
+- In code, version 1 binds assessment scopes to the current `Portfolio.slug` values that already exist in the repository data model: `foundational`, `manufacturing_and_delivery`, `for_employees`, and `products_and_services_sold`.
+- The newer business-language labels `provided_internally` and `provided_externally` remain the intended architectural direction, but this slice does not rename the existing portfolio slugs.
+- Full repository verification is still blocked by pre-existing baseline issues outside this feature:
+  - `packages/db/src/ea-validation.test.ts`
+  - `apps/web/lib/permissions.test.ts`
+  - `apps/web/app/(shell)/workspace/page.test.tsx`
+  - `apps/web` typecheck failures from unrelated missing modules and admin/provider typing issues
+  - the seed entrypoint still depends on an external bootstrap data root (`ROLES/`, `AGENTS/`, `MODEL/`) that is not present in this repository
 
 ---
 
