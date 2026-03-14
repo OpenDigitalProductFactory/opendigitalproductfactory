@@ -47,7 +47,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_ea_model:             { roles: ["HR-000", "HR-300"] },
 };
 
-type UserContext = {
+export type UserContext = {
   platformRole: string | null;
   isSuperuser: boolean;
 };
