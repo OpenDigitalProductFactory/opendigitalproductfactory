@@ -29,6 +29,12 @@ export type SerializedViewElement = {
     lifecycleStatus: string;
     properties: Record<string, unknown> | null;
   };
+  childViewElements?: SerializedViewElement[];
+  isReadOnly?: boolean;
+  onMoveStructuredChild?: (input: {
+    childViewElementId: string;
+    targetOrderIndex: number;
+  }) => void | Promise<void>;
 };
 
 // Serialised relationship edge passed from server → EaCanvas
