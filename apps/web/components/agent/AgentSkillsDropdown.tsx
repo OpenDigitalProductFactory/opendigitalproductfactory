@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AgentSkill } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { can } from "@/lib/permissions";
@@ -13,6 +13,7 @@ type Props = {
 
 export function AgentSkillsDropdown({ skills, userContext, onSend }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredSkills = skills.filter(
     (s) => s.capability === null || can(userContext, s.capability),
@@ -20,13 +21,34 @@ export function AgentSkillsDropdown({ skills, userContext, onSend }: Props) {
 
   if (filteredSkills.length === 0) return null;
 
+  // Delayed close gives the mouse time to travel from trigger to dropdown
+  function startClose() {
+    closeTimer.current = setTimeout(() => setIsOpen(false), 150);
+  }
+
+  function cancelClose() {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }
+
+  function handleEnter() {
+    cancelClose();
+    setIsOpen(true);
+  }
+
+  function handleLeave() {
+    startClose();
+  }
+
   return (
     <div
       style={{ position: "relative", display: "inline-block" }}
-      onMouseEnter={() => setIsOpen(true)}
-      onMouseLeave={() => setIsOpen(false)}
-      onFocus={() => setIsOpen(true)}
-      onBlur={() => setIsOpen(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onFocus={handleEnter}
+      onBlur={handleLeave}
     >
       <button
         type="button"
@@ -48,6 +70,8 @@ export function AgentSkillsDropdown({ skills, userContext, onSend }: Props) {
 
       {isOpen && (
         <div
+          onMouseEnter={cancelClose}
+          onMouseLeave={handleLeave}
           style={{
             position: "absolute",
             top: "100%",
@@ -56,12 +80,14 @@ export function AgentSkillsDropdown({ skills, userContext, onSend }: Props) {
             maxWidth: 280,
             background: "rgba(26, 26, 46, 0.95)",
             backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
             border: "1px solid rgba(42, 42, 64, 0.6)",
             borderRadius: 8,
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             zIndex: 60,
             padding: "4px 0",
-            marginTop: 4,
+            paddingTop: 8,
+            marginTop: 0,
           }}
         >
           {filteredSkills.map((skill) => (
