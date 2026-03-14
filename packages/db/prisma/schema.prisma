@@ -21,6 +21,8 @@ model User {
   agentThreads AgentThread[]
   teamMemberships     TeamMembership[]
   grantedDelegations  DelegationGrant[] @relation("DelegationGrantGrantor")
+  passwordResetTokens  PasswordResetToken[] @relation("PasswordResetForUser")
+  requestedPasswordResetTokens PasswordResetToken[] @relation("PasswordResetRequestedBy")
 }
 
 model UserGroup {
@@ -41,6 +43,23 @@ model CustomerContact {
   account      CustomerAccount @relation(fields: [accountId], references: [id])
   isActive     Boolean         @default(true)
   createdAt    DateTime        @default(now())
+}
+
+model PasswordResetToken {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation("PasswordResetForUser", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String   @unique
+  deliveryChannel   String
+  requestedByUserId String?
+  requestedByUser   User?    @relation("PasswordResetRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([consumedAt])
 }
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
