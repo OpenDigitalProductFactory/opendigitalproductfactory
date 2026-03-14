@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-02-28",
+  "roles": [
+    {
+      "role_id": "HR-000",
+      "role_name": "CDIO / Executive Sponsor",
+      "authority_domain": "Strategic direction, budget authority, constitutional governance",
+      "hitl_tier_min": 0,
+      "escalation_sla_hours": -1,
+      "supervises_agents": ["AGT-ORCH-000"],
+      "owns_portfolios": [],
+      "status": "active"
+    },
+    {
+      "role_id": "HR-100",
+      "role_name": "Portfolio Manager",
+      "authority_domain": "Portfolio investment prioritization, product retirement, taxonomy quality",
+      "hitl_tier_min": 1,
+      "escalation_sla_hours": 120,
+      "supervises_agents": ["AGT-ORCH-100", "AGT-ORCH-500"],
+      "owns_portfolios": ["for-employees", "foundational", "manufacturing-and-delivery", "products-and-services-sold"],
+      "status": "active"
+    },
+    {
+      "role_id": "HR-200",
+      "role_name": "Digital Product Manager",
+      "authority_domain": "Product lifecycle decisions, release acceptance, stakeholder relationships",
+      "hitl_tier_min": 1,
+      "escalation_sla_hours": 48,
+      "supervises_agents": ["AGT-ORCH-200", "AGT-ORCH-300", "AGT-ORCH-600"],
+      "owns_portfolios": [],
+      "status": "active"
+    },
+    {
+      "role_id": "HR-300",
+      "role_name": "Enterprise Architect",
+      "authority_domain": "Architectural guardrail definition, Conway Law alignment, schema governance",
+      "hitl_tier_min": 0,
+      "escalation_sla_hours": 24,
+      "supervises_agents": ["AGT-ORCH-800"],
+      "owns_portfolios": [],
+      "status": "active"
+    },
+    {
+      "role_id": "HR-400",
+      "role_name": "ITFM Director",
+      "authority_domain": "Pricing strategy, chargeback model, financial accountability, P&L",
+      "hitl_tier_min": 1,
+      "escalation_sla_hours": 72,
+      "supervises_agents": [],
+      "owns_portfolios": [],
+      "status": "active"
+    },
+    {
+      "role_id": "HR-500",
+      "role_name": "Operations Manager",
+      "authority_domain": "Major incident authority, deployment approval, SLA accountability",
+      "hitl_tier_min": 0,
+      "escalation_sla_hours": 4,
+      "supervises_agents": ["AGT-ORCH-400", "AGT-ORCH-700"],
+      "owns_portfolios": [],
+      "status": "active"
+    }
+  ]
+}
