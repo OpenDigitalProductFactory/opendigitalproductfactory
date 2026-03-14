@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { getOrCreateThread } from "@/lib/actions/agent-coworker";
 import { getRecentMessages } from "@/lib/agent-coworker-data";
-import { AgentCoworkerPanel } from "@/components/agent/AgentCoworkerPanel";
+import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -54,7 +54,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
       {threadId && (
-        <AgentCoworkerPanel
+        <AgentCoworkerShell
           threadId={threadId}
           initialMessages={initialMessages}
           userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
