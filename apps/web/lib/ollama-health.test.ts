@@ -92,6 +92,7 @@ describe("checkBundledProviders", () => {
     expect(mockDiscover).not.toHaveBeenCalled();
     expect(mockSyncInfraCI).toHaveBeenCalledWith(
       expect.objectContaining({ status: "offline" }),
+      undefined,
     );
   });
 
