@@ -49,6 +49,10 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+vi.mock("@dpf/db/reference-model-projection", () => ({
+  projectReferenceModel: vi.fn(),
+}));
+
 // Mock validation
 vi.mock("@dpf/db/ea-validation", () => ({
   validateEaLifecycle:    vi.fn(),
@@ -67,6 +71,7 @@ vi.mock("@dpf/db/neo4j-sync", () => ({
 import { auth } from "@/lib/auth";
 import { can }  from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { projectReferenceModel as projectReferenceModelService } from "@dpf/db/reference-model-projection";
 import { validateEaLifecycle, validateEaRelationship, checkEaDqRules } from "@dpf/db/ea-validation";
 import {
   createEaElement,
@@ -80,6 +85,7 @@ import {
   saveCanvasState,
   updateReferenceAssessment,
   reviewReferenceProposal,
+  projectReferenceModelValueStreams,
 } from "./ea";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -87,6 +93,7 @@ const mockCan  = can  as ReturnType<typeof vi.fn>;
 const mockValidateLifecycle    = validateEaLifecycle    as ReturnType<typeof vi.fn>;
 const mockValidateRelationship = validateEaRelationship as ReturnType<typeof vi.fn>;
 const mockCheckDqRules         = checkEaDqRules         as ReturnType<typeof vi.fn>;
+const mockProjectReferenceModelService = projectReferenceModelService as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
 
 const authorizedSession = { user: { platformRole: "HR-300", isSuperuser: false } };
@@ -557,5 +564,33 @@ describe("moveStructuredViewElement", () => {
         ]),
       })
     );
+  });
+});
+
+describe("projectReferenceModelValueStreams", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: false, id: "u1" } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("loads the value stream projection and returns the target view id", async () => {
+    mockProjectReferenceModelService.mockResolvedValue({
+      viewId: "view-1",
+      createdView: true,
+      createdElements: 3,
+      updatedElements: 0,
+      createdViewElements: 3,
+      updatedViewElements: 0,
+    });
+
+    const result = await projectReferenceModelValueStreams({
+      referenceModelSlug: "it4it_v3_0_1",
+    });
+
+    expect(result).toEqual({ viewId: "view-1" });
+    expect(mockProjectReferenceModelService).toHaveBeenCalledWith({
+      referenceModelSlug: "it4it_v3_0_1",
+      projectionType: "value_stream_view",
+    });
   });
 });
