@@ -448,21 +448,31 @@ const OOTB_PRESETS: BrandingPresetRow[] = [
 ];
 
 export default async function AdminPage() {
-  const users = await prisma.user.findMany({
-    orderBy: { email: "asc" },
-    select: {
-      id: true,
-      email: true,
-      isActive: true,
-      isSuperuser: true,
-      createdAt: true,
-      groups: {
-        select: {
-          platformRole: { select: { roleId: true, name: true } },
+  const [users, roles] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { email: "asc" },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        isSuperuser: true,
+        createdAt: true,
+        groups: {
+          select: {
+            platformRole: { select: { roleId: true, name: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.platformRole.findMany({
+      orderBy: { roleId: "asc" },
+      select: {
+        id: true,
+        roleId: true,
+        name: true,
+      },
+    }),
+  ]);
 
   const brandingConfigs: BrandingConfigRow[] = await prisma.brandingConfig.findMany({
     where: { scope: { startsWith: THEME_PRESET_SCOPE_PREFIX } },
@@ -500,14 +510,6 @@ export default async function AdminPage() {
     logoUrl: resolveBrandingLogoUrl(activeBranding?.logoUrl ?? null, activeBranding?.companyName ?? "Custom"),
     tokens: activeBranding ? parseStoredTokens(activeBranding.tokens) : THEME_TOKEN_BASE,
   };
-
-  const roles = await prisma.platformRole.findMany({
-    orderBy: { roleId: "asc" },
-    select: {
-      roleId: true,
-      name: true,
-    },
-  });
 
   return (
     <div>

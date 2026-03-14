@@ -1,22 +1,67 @@
 // apps/web/app/(shell)/platform/page.tsx
 import { prisma } from "@dpf/db";
 import Link from "next/link";
+import { GovernanceOverviewPanel } from "@/components/platform/GovernanceOverviewPanel";
 
 const STATE_COLOURS: Record<string, string> = {
   active: "#4ade80",
 };
 
 export default async function PlatformPage() {
-  const capabilities = await prisma.platformCapability.findMany({
-    orderBy: { capabilityId: "asc" },
-    select: {
-      id: true,
-      capabilityId: true,
-      name: true,
-      description: true,
-      state: true,
-    },
-  });
+  const now = new Date();
+  const [capabilities, teams, governedAgents, activeGrants, recentGrants] = await Promise.all([
+    prisma.platformCapability.findMany({
+      orderBy: { capabilityId: "asc" },
+      select: {
+        id: true,
+        capabilityId: true,
+        name: true,
+        description: true,
+        state: true,
+      },
+    }),
+    prisma.team.count(),
+    prisma.agentGovernanceProfile.count(),
+    prisma.delegationGrant.count({
+      where: {
+        status: "active",
+        expiresAt: { gt: now },
+      },
+    }),
+    prisma.delegationGrant.findMany({
+      where: {
+        status: "active",
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        grantId: true,
+        status: true,
+        expiresAt: true,
+        workflowKey: true,
+        objectRef: true,
+        grantorUser: { select: { email: true } },
+        granteeAgent: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  const governanceSummary = {
+    teams,
+    governedAgents,
+    activeGrants,
+    pendingApprovals: 0,
+  };
+
+  const grantRows = recentGrants.map((grant) => ({
+    grantId: grant.grantId,
+    agentName: grant.granteeAgent.name,
+    grantorLabel: grant.grantorUser.email,
+    status: grant.status,
+    expiresAt: grant.expiresAt.toLocaleString(),
+    scopeSummary: [grant.workflowKey, grant.objectRef].filter(Boolean).join(" • ") || null,
+  }));
 
   return (
     <div>
@@ -26,6 +71,8 @@ export default async function PlatformPage() {
           {capabilities.length} capabilit{capabilities.length !== 1 ? "ies" : "y"}
         </p>
       </div>
+
+      <GovernanceOverviewPanel summary={governanceSummary} recentGrants={grantRows} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {capabilities.map((c) => {
