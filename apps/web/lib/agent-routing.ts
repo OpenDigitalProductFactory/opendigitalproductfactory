@@ -25,6 +25,7 @@ Guidelines:
       { label: "Show health summary", description: "Summarize health metrics for this portfolio", capability: "view_portfolio", prompt: "Summarize the health metrics for this portfolio" },
       { label: "Explain budget", description: "Explain budget allocation across the portfolio", capability: "view_portfolio", prompt: "Explain how the budget is allocated across this portfolio" },
       { label: "Find a product", description: "Search for a digital product in the portfolio", capability: "view_portfolio", prompt: "Help me find a specific digital product in the portfolio" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/inventory": {
@@ -47,6 +48,7 @@ Guidelines:
     skills: [
       { label: "Filter by status", description: "Filter inventory by lifecycle status", capability: "view_inventory", prompt: "Help me filter the inventory by lifecycle status" },
       { label: "Explain lifecycle", description: "Explain the lifecycle stages and statuses", capability: "view_inventory", prompt: "Explain the lifecycle stages and what each status means" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/ea": {
@@ -72,6 +74,7 @@ Guidelines:
       { label: "Add an element", description: "Add an element to the current view", capability: "manage_ea_model", prompt: "Guide me through adding a new element to this view" },
       { label: "Map a relationship", description: "Connect two elements with a relationship", capability: "manage_ea_model", prompt: "Help me create a relationship between two elements" },
       { label: "Explain viewpoint", description: "What this viewpoint allows and restricts", capability: "view_ea_modeler", prompt: "Explain what this viewpoint allows and restricts" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/employee": {
@@ -94,6 +97,7 @@ Guidelines:
     skills: [
       { label: "Explain role tiers", description: "Understand HITL tiers and SLA commitments", capability: "view_employee", prompt: "Explain the role tiers and their SLA commitments" },
       { label: "Show team structure", description: "View team memberships and assignments", capability: "view_employee", prompt: "Show me the team structure and assignments" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/customer": {
@@ -115,6 +119,7 @@ Guidelines:
     skills: [
       { label: "Account overview", description: "Summarize a customer account", capability: "view_customer", prompt: "Give me an overview of this customer account" },
       { label: "Service relationships", description: "Show service delivery relationships", capability: "view_customer", prompt: "Show the service relationships for this customer" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/ops": {
@@ -138,6 +143,7 @@ Guidelines:
       { label: "Create backlog item", description: "Add a new item to the backlog", capability: "manage_backlog", prompt: "Help me create a new backlog item" },
       { label: "Epic progress", description: "Summarize progress across epics", capability: "view_operations", prompt: "Give me a summary of the current epic progress" },
       { label: "Prioritize items", description: "Help order backlog items by priority", capability: "manage_backlog", prompt: "Help me prioritize the open backlog items" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/platform": {
@@ -161,6 +167,7 @@ Guidelines:
       { label: "Configure provider", description: "Set up an AI provider connection", capability: "manage_provider_connections", prompt: "Help me configure an AI provider" },
       { label: "Token spend", description: "Review token usage and costs", capability: "view_platform", prompt: "Show me a summary of token usage and costs" },
       { label: "Run optimization", description: "Optimize provider priority rankings", capability: "manage_provider_connections", prompt: "Run the provider priority optimization now" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/admin": {
@@ -182,6 +189,7 @@ Guidelines:
     skills: [
       { label: "Manage users", description: "User account lifecycle and roles", capability: "manage_users", prompt: "Help me manage user accounts" },
       { label: "System config", description: "Platform configuration and settings", capability: "view_admin", prompt: "Show me the current system configuration" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
   "/workspace": {
@@ -205,6 +213,7 @@ Guidelines:
       { label: "What can I do?", description: "Features available to your role", capability: null, prompt: "What features and actions are available to me?" },
       { label: "Navigate to...", description: "Find the right portal section", capability: null, prompt: "Help me find the right section of the portal for what I need" },
       { label: "Explain my role", description: "What your role gives you access to", capability: null, prompt: "Explain what my current role gives me access to" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
 };

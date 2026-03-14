@@ -6,6 +6,8 @@ import { resolveBrandingLogoUrl } from "@/lib/branding";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
+import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -50,6 +52,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       <AgentCoworkerShell
         userContext={{ platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
       />
+      <FeedbackButton userId={user.id} />
+      <QueueFlusher />
     </div>
   );
 }
