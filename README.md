@@ -1,8 +1,37 @@
 # Open Digital Product Factory
 
-An open, AI-powered digital product management platform built on IT4IT v3 governance principles. Every user sees only the workspace capabilities their role permits. In-platform AI agents help teams manage their digital product portfolio collaboratively — with a goal of the platform maintaining and extending itself.
+**The platform that builds itself.**
 
-> **Vision — Hive Mind:** Each installation is a node. Extend locally. Contribute extensions back to the shared repo. The community grows the platform from within.
+An open-source, AI-native digital product management platform that gives any organization — from a 5-person startup to a regulated enterprise — the same capabilities that only the largest tech companies have today. Built-in AI agents don't just answer questions: they manage your portfolio, model your architecture, execute your backlog, and eventually write the features you need — all with human approval at every step.
+
+No vendor lock-in. No consultants. No million-dollar license. One click to install. Your AI workforce starts working immediately.
+
+---
+
+## Why This Exists
+
+Enterprise software has a fundamental problem: the tools that manage digital products are harder to use than the products themselves. Portfolio management, enterprise architecture, backlog tracking, lifecycle governance — these are locked behind expensive platforms that require specialized teams to operate.
+
+**What if the platform could operate itself?**
+
+The Open Digital Product Factory is built on a radical premise: **AI agents should be first-class participants in the work**, not bolt-on assistants. Every screen has a context-aware AI co-worker. Every action an agent proposes goes through human-in-the-loop governance. Every decision is audit-logged. The platform knows what hardware it's running on, what models are available, and how to optimize its own AI workforce.
+
+And because it's open source and self-contained (runs entirely on your machine with local AI), there are **no data privacy concerns, no cloud dependency, and no subscription fees**.
+
+### The Vision: A Self-Evolving Platform
+
+Today, the platform manages your digital products. Tomorrow, it writes new features for itself — in a governed sandbox, reviewed by humans, deployed when approved. A small business owner describes what they need in plain language. The AI builds it. A human reviews and approves. The platform grows from within.
+
+> **Hive Mind:** Each installation is a node. Extend locally. Contribute extensions back. The community grows the platform from within — humans and AI agents working together.
+
+---
+
+## Who This Is For
+
+- **Small business owners** who need enterprise-grade digital product management without enterprise-grade budgets or teams
+- **Regulated industries** (healthcare, finance, insurance) that need audit trails, human approval chains, and compliance evidence — built in, not bolted on
+- **IT leaders** who want to model their architecture, manage their portfolio, and track their backlog in one governed platform
+- **Developers and architects** who want to extend and contribute to an open platform that treats AI as a core capability, not a chatbot sidebar
 
 ---
 
@@ -17,111 +46,129 @@ No technical experience needed. The installer handles everything automatically.
 The installer will:
 - Set up Docker Desktop and WSL2 (if not already installed)
 - Download and build the platform
-- Detect your hardware and select an appropriate AI model
-- Start everything and open your browser
+- Detect your hardware and select an appropriate local AI model
+- Start everything and open your browser — ready to use
 
 **After installation:**
-- **Start the platform:** Open PowerShell and run `dpf-start`
-- **Stop the platform:** Open PowerShell and run `dpf-stop`
+- **Start the platform:** `dpf-start`
+- **Stop the platform:** `dpf-stop`
 - **Uninstall everything:** Right-click [`uninstall-dpf.ps1`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.ps1) → Run with PowerShell
 
 ---
 
 ## What's Inside
 
-### Platform Features
+### Core Platform
 
 | Area | What It Does |
 |------|-------------|
 | **Portfolio Management** | 4-portfolio hierarchy with 481-node DPPM taxonomy, health metrics, budget tracking, agent assignments |
-| **EA Modeler** | Enterprise architecture canvas with ArchiMate 4 notation, viewpoints, relationship rules, structured value streams |
-| **Inventory** | Digital product lifecycle management (plan → design → build → production → retirement) |
-| **Backlog & Ops** | Epic grouping, portfolio and product backlog items, priority management |
-| **AI Workforce** | Provider registry (17 cloud + local), model discovery, profiling, token spend tracking, priority-based failover |
-| **AI Co-worker** | Route-aware chat assistant with context-specific skills, real LLM inference via Ollama or cloud providers |
-| **Employee & Roles** | 6 IT4IT human roles (HR-000 through HR-500) with HITL tier assignments and SLA tracking |
+| **EA Modeler** | Enterprise architecture canvas with ArchiMate 4 notation — models that are implementable, not whiteboards. Viewpoints enforce discipline. Governance keeps humans accountable. |
+| **Inventory** | Digital product lifecycle management (plan → design → build → production → retirement) with portfolio attribution |
+| **Backlog & Ops** | Epic grouping, portfolio and product backlog items, priority management — the platform manages its own backlog too |
+| **Employee & Roles** | 6 IT4IT human roles (HR-000 through HR-500) with HITL tier assignments, SLA tracking, and delegation grants |
 | **Platform Admin** | Branding, user management, credential encryption, governance controls |
 
-### AI Capabilities
+### AI Workforce
 
-- **Live LLM conversations** — real AI responses from Ollama (local) or cloud providers (Anthropic, OpenAI, Azure, Gemini, etc.)
-- **Automatic failover** — if one provider fails, the next in priority takes over
-- **Context-aware agents** — 9 specialist agents that know about their domain (portfolio, EA, operations, etc.)
-- **Skills dropdown** — each agent offers context-relevant actions filtered by your role
-- **Token usage tracking** — cost monitoring by provider and by agent
-- **Weekly optimization** — scheduled job ranks providers by capability and cost
+This isn't a chatbot bolted onto a dashboard. AI is a core architectural layer.
 
-### Security & Governance
+| Capability | Description |
+|-----------|-------------|
+| **AI Co-worker Panel** | Floating, semi-transparent assistant on every screen. Context-aware — knows which page you're on and what you can do. |
+| **9 Specialist Agents** | Portfolio Advisor, EA Architect, Ops Coordinator, Platform Engineer, and more — each with domain expertise and role-specific skills |
+| **Skills Dropdown** | Each agent offers context-relevant actions filtered by your role. Higher authority = more capabilities. |
+| **17 Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Ollama, Groq, Together, and 10 more — cloud or local, your choice |
+| **Automatic Failover** | Priority-ranked providers. If one fails, the next takes over. Local AI is always the safety net. |
+| **Weekly Optimization** | Scheduled job ranks providers by capability tier and cost. The platform optimizes its own AI spending. |
+| **Token Spend Tracking** | Per-provider, per-agent cost monitoring. Know exactly what your AI workforce costs. |
+| **Local-First AI** | Runs Ollama out of the box. No API keys needed. No data leaves your machine. |
 
-- Role-based access control with 18 capabilities across 6 roles
-- AES-256-GCM credential encryption at rest
-- Human-in-the-loop (HITL) governance designed for regulated industries (healthcare, finance, insurance)
-- Audit trail via AuthorizationDecisionLog
+### Governance & Compliance
+
+Built for regulated industries from day one — not retrofitted.
+
+- **Human-in-the-Loop (HITL)** — AI agents propose actions; humans approve before execution. Non-negotiable.
+- **Audit Trail** — every governance decision records WHO approved, WHEN, and WHAT. Queryable. Exportable. Evidence for regulators.
+- **Role-Based Access** — 18 capabilities across 6 roles. Each user sees only what their role permits.
+- **Credential Encryption** — AES-256-GCM for all provider secrets at rest.
+- **EA Governance** — architecture models go through draft → submitted → approved workflows. Models drive decisions; governance ensures accountability.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│                  Browser                     │
-│  ┌─────────┐ ┌──────────┐ ┌──────────────┐ │
-│  │Workspace│ │ Routes   │ │ AI Coworker  │ │
-│  │ Tiles   │ │(8 areas) │ │   Panel      │ │
-│  └─────────┘ └──────────┘ └──────────────┘ │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│           Next.js 14 App Router              │
-│  Server Components + Server Actions          │
-│  Auth.js v5 (JWT sessions)                   │
-│  Typed permission registry (can(user, cap))  │
-└───┬──────────┬──────────────┬───────────────┘
-    │          │              │
-┌───┴───┐ ┌───┴────┐ ┌──────┴──────┐
-│Prisma │ │ Neo4j  │ │   Ollama    │
-│  +    │ │  5     │ │  (local AI) │
-│Postgres│ │(graph) │ │  or Cloud   │
-│  16   │ │        │ │  Providers  │
-└───────┘ └────────┘ └─────────────┘
+┌──────────────────────────────────────────────────┐
+│                    Browser                        │
+│  ┌──────────┐ ┌───────────┐ ┌──────────────────┐│
+│  │Workspace │ │ 8 Route   │ │ AI Coworker      ││
+│  │  Tiles   │ │  Areas    │ │ Panel + Skills   ││
+│  └──────────┘ └───────────┘ └──────────────────┘│
+└────────────────────┬─────────────────────────────┘
+                     │
+┌────────────────────┴─────────────────────────────┐
+│             Next.js 14 App Router                 │
+│   Server Components · Server Actions · Auth.js    │
+│   Typed Permission Registry · AI Inference Engine │
+└────┬───────────┬───────────────┬─────────────────┘
+     │           │               │
+┌────┴────┐ ┌───┴─────┐ ┌──────┴───────┐
+│ Prisma  │ │  Neo4j  │ │   Ollama     │
+│    +    │ │    5    │ │ (local AI)   │
+│Postgres │ │ (graph) │ │  or Cloud    │
+│   16    │ │         │ │  Providers   │
+└─────────┘ └─────────┘ └──────────────┘
 ```
 
-| Component | Purpose |
-|-----------|---------|
-| **Next.js 14** | App Router — React Server Components, Server Actions |
-| **Prisma 5 + PostgreSQL 16** | Structured data (42 models) |
-| **Neo4j 5** | Graph traversal for EA modeling |
-| **Ollama** | Local AI inference (no cloud dependency needed) |
-| **Auth.js v5** | JWT sessions, role-based access |
-| **Vitest** | Fast TypeScript-native tests |
-| **pnpm workspaces** | Monorepo: `apps/web` + `packages/db` |
+The entire stack runs on your machine in Docker. No cloud required. No data leaves your network.
 
 ---
 
 ## Docker Deployment
 
-The platform runs as a 4-service Docker Compose stack:
+4-service Docker Compose stack:
 
 | Service | Purpose |
 |---------|---------|
 | `portal` | Next.js standalone app (port 3000) |
-| `postgres` | PostgreSQL 16 (internal only) |
+| `postgres` | PostgreSQL 16 (internal only — no external access) |
 | `neo4j` | Neo4j 5 Community (internal only) |
 | `ollama` | Local AI inference (internal only) |
 
 ```bash
-# Start everything
-docker compose up -d
-
-# Check health
-docker compose ps
-
-# View logs
-docker compose logs portal -f
-
-# Stop
-docker compose down
+docker compose up -d       # Start everything
+docker compose ps          # Check health
+docker compose logs -f     # View logs
+docker compose down        # Stop
 ```
+
+---
+
+## Roadmap
+
+### What's Working Now
+
+| Epic | Description |
+|------|-------------|
+| Portal Foundation | Shell, 8 route areas, workspace tiles, portfolio tree with health/budget metrics |
+| Backlog & Epics | Backlog CRUD, epic grouping, ops panel, DPF self-registration |
+| EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
+| AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
+| AI Co-worker | Live LLM conversations, automatic failover, context-aware skills dropdown |
+| Docker Deployment | Zero-prerequisites Windows installer, hardware detection, Ollama auto-setup |
+
+### What's Coming
+
+| Epic | Description |
+|------|-------------|
+| **Agent Task Execution** | Agents propose real actions (create backlog items, modify products, update EA models). Humans approve. Every action audit-logged. |
+| **Platform Self-Development** | Agents write new features in a sandboxed environment. Humans review diffs and approve. The platform extends itself. |
+| **AI-Guided Setup Wizard** | On first install, the AI Co-worker walks you through company setup conversationally — no forms, just a conversation. |
+| **Ollama Management UI** | Pull models, manage containers, detect hardware — all from the platform, no terminal needed. |
+| **Web-Hosted SaaS** | Cloud deployment option for organizations that prefer managed hosting. |
+| **Theme & Branding** | Configurable visual presets. AI-assisted branding from a URL or description. |
+| **Mac & Linux Installers** | Extend the one-click install experience to all platforms. |
 
 ---
 
@@ -129,11 +176,11 @@ docker compose down
 
 ### Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Latest | Runs the databases |
-| [Node.js](https://nodejs.org/) | 20+ | Runtime |
-| [pnpm](https://pnpm.io/) | 9+ | `npm install -g pnpm` |
+| Tool | Version |
+|------|---------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Latest |
+| [Node.js](https://nodejs.org/) | 20+ |
+| [pnpm](https://pnpm.io/) | 9+ |
 
 ### Setup
 
@@ -142,46 +189,23 @@ git clone https://github.com/markdbodman/opendigitalproductfactory.git
 cd opendigitalproductfactory
 pnpm install
 
-# Start databases
-docker compose up -d postgres neo4j
-
-# Setup database
-pnpm db:generate
-pnpm db:migrate
-pnpm db:seed
-
-# Start dev server
-pnpm dev
+docker compose up -d postgres neo4j    # Start databases
+pnpm db:generate && pnpm db:migrate && pnpm db:seed
+pnpm dev                                # http://localhost:3000
 ```
 
-Open http://localhost:3000 — log in with `admin@dpf.local` / `changeme123`
-
-### Common Commands
-
-```bash
-pnpm dev           # Dev server
-pnpm test          # Run all tests
-pnpm typecheck     # TypeScript check (must pass before PRs)
-pnpm build         # Production build
-pnpm db:migrate    # Run Prisma migrations
-pnpm db:seed       # Seed database (idempotent)
-pnpm db:studio     # Prisma Studio — visual database browser
-```
+Login: `admin@dpf.local` / `changeme123`
 
 ### Project Structure
 
 ```
 opendigitalproductfactory/
 ├── apps/web/                    # Next.js 14 App Router
-│   ├── app/(shell)/             # Authenticated routes (8 areas)
+│   ├── app/(shell)/             # 8 authenticated route areas
 │   ├── components/agent/        # AI Coworker panel + skills
-│   ├── components/shell/        # Header, NavBar
 │   ├── lib/                     # Auth, permissions, inference, routing
 │   └── lib/actions/             # Server actions
-├── packages/db/                 # Prisma schema + seed data
-│   ├── prisma/schema.prisma     # 42 models
-│   ├── data/                    # Seed JSON files
-│   └── src/                     # Seed scripts, helpers
+├── packages/db/                 # Prisma schema (42 models) + seed data
 ├── scripts/                     # Convenience + hardware detection
 ├── install-dpf.ps1              # Windows installer
 ├── uninstall-dpf.ps1            # Windows uninstaller
@@ -189,64 +213,44 @@ opendigitalproductfactory/
 └── docker-compose.yml           # Full stack (4 services)
 ```
 
-### TypeScript Conventions
+### Extension Points
 
-- Strict mode: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
-- `moduleResolution: "bundler"` — no `.js` extensions on local imports
-- `@/` path alias maps to `apps/web/`
-- Server actions: `"use server"`, return `{ error: string }` union
-- Tests: Vitest with `environment: "node"` (no jsdom)
+| What | Where |
+|------|-------|
+| New workspace tile | `lib/permissions.ts` → `ALL_TILES` |
+| New role | `PERMISSIONS` in `lib/permissions.ts` |
+| New route | Page under `app/(shell)/` + register capability |
+| New data model | `packages/db/prisma/schema.prisma` + migration |
+| New AI agent | `ROUTE_AGENT_MAP` in `lib/agent-routing.ts` |
+| New agent skill | Agent's `skills` array in the route map |
 
 ---
 
 ## Contributing
 
-Everyone is welcome. The goal is a platform that anyone can extend and give back to the community.
+Everyone is welcome. This is a platform built by its community — humans and AI working together.
 
 ### The Hive Mind Model
 
-1. Run your own installation
-2. Add capabilities, roles, or domain routes for your context
-3. If it's useful to others, open a pull request and share it back
+1. Install and run your own instance
+2. Add capabilities for your context
+3. Share back what's useful to others
 
-### Extension Points
-
-| What | Where |
-|------|-------|
-| New workspace tile | Add capability to `lib/permissions.ts` → add tile to `ALL_TILES` |
-| New role | Extend `PERMISSIONS` in `lib/permissions.ts` |
-| New route | Add page under `app/(shell)/` and register the capability |
-| New data model | Add to `packages/db/prisma/schema.prisma` + migration |
-| New AI agent | Add entry to `ROUTE_AGENT_MAP` in `lib/agent-routing.ts` |
-| New agent skill | Add to the agent's `skills` array in the route map |
+The platform is designed so that every extension — a new role, a new route, a new agent skill — follows the same pattern. No special access needed. Fork, build, contribute.
 
 ### Code Standards
 
+- TypeScript strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`)
 - `pnpm typecheck && pnpm test` must pass before any PR
 - All new features need Vitest tests
 - Follow existing patterns (server actions, React cache, auth gates)
 
 ---
 
-## Roadmap
-
-| Epic | Status | Description |
-|------|--------|-------------|
-| Portal Foundation | Done | Shell, routes, workspace, portfolio, inventory |
-| Backlog & Epics | Done | Backlog CRUD, epic grouping, ops panel |
-| EA Modeling | In Progress | ArchiMate canvas, viewpoints, structured notation |
-| AI Provider Registry | Done | 17 providers, cost tracking, model profiling |
-| AI Co-worker | Done | Live LLM chat, failover, skills dropdown |
-| Governance Foundation | In Progress | Identity, delegation, agent governance |
-| Infrastructure Discovery | In Progress | Bootstrap discovery, inventory quality |
-| Docker Deployment | Done | One-click installer, Ollama management |
-| Agent Task Execution | Open | HITL-governed actions proposed by agents |
-| Platform Self-Development | Open | Agents write and deploy new features |
-| Theme & Branding | Open | Configurable presets, AI-assisted branding |
-| Web-Hosted SaaS | Open | Cloud deployment option |
-
----
-
 ## License
 
 [MIT](LICENSE)
+
+---
+
+*Built with the belief that every organization deserves enterprise-grade tools — and that AI should work for you, not the other way around.*
