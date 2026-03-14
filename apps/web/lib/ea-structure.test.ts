@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStructuredViewElements,
   filterStructuredEdges,
+  listStructuredVisibleViewElementIds,
   type StructuredEdgeCandidate,
   type StructuredViewElementCandidate,
 } from "./ea-structure";
@@ -78,6 +79,34 @@ describe("app ea structure helpers", () => {
 
     expect(filterStructuredEdges(edges, buildStructuredViewElements(elements)).map((edge) => edge.id)).toEqual([
       "edge-2",
+    ]);
+  });
+
+  it("keeps structured stage nodes visible while preserving parent-child grouping", () => {
+    const elements: StructuredViewElementCandidate[] = [
+      {
+        viewElementId: "stream-1",
+        elementId: "el-stream-1",
+        elementTypeSlug: "value_stream",
+        parentViewElementId: null,
+        orderIndex: null,
+        rendererHint: "nested_chevron_sequence",
+      },
+      {
+        viewElementId: "stage-1",
+        elementId: "el-stage-1",
+        elementTypeSlug: "value_stream_stage",
+        parentViewElementId: "stream-1",
+        orderIndex: 0,
+        rendererHint: null,
+      },
+    ];
+
+    const structured = buildStructuredViewElements(elements);
+
+    expect(listStructuredVisibleViewElementIds(structured)).toEqual([
+      "stream-1",
+      "stage-1",
     ]);
   });
 });
