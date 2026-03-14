@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
-    "neo4j-driver": "^5.27.0"
+    "neo4j-driver": "^5.27.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "prisma": "5.22.0",

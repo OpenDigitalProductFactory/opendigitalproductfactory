@@ -1,6 +1,13 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-types";
+import type {
+  CoverageStatus,
+  ReferenceModelDetail,
+  ReferenceModelPortfolioRollup,
+  ReferenceModelPortfolioRollupRow,
+  ReferenceModelSummary,
+} from "./reference-model-types";
 
 export const getEaView = cache(async (id: string) => {
   const view = await prisma.eaView.findUnique({
@@ -128,3 +135,149 @@ export const getRelationshipTypeId = cache(async (notationId: string, slug: stri
   });
   return rt?.id ?? null;
 });
+
+export const getReferenceModelsSummary = cache(async (): Promise<ReferenceModelSummary[]> => {
+  const models = await prisma.eaReferenceModel.findMany({
+    orderBy: [{ name: "asc" }, { version: "asc" }],
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      version: true,
+      status: true,
+      _count: {
+        select: {
+          elements: true,
+          assessments: true,
+          proposals: true,
+        },
+      },
+    },
+  });
+
+  return models.map((model) => ({
+    id: model.id,
+    slug: model.slug,
+    name: model.name,
+    version: model.version,
+    status: model.status,
+    criteriaCount: model._count.elements,
+    assessmentCount: model._count.assessments,
+    proposalCount: model._count.proposals,
+  }));
+});
+
+const COVERAGE_STATUSES: CoverageStatus[] = [
+  "implemented",
+  "partial",
+  "planned",
+  "not_started",
+  "out_of_mvp",
+];
+
+function emptyCoverageCounts(): Record<CoverageStatus, number> {
+  return {
+    implemented: 0,
+    partial: 0,
+    planned: 0,
+    not_started: 0,
+    out_of_mvp: 0,
+  };
+}
+
+export const getReferenceModelPortfolioRollup = cache(
+  async (slug: string): Promise<ReferenceModelPortfolioRollup> => {
+    const model = await prisma.eaReferenceModel.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, name: true, version: true },
+    });
+    if (!model) throw new Error("Reference model not found");
+
+    const assessments = await prisma.eaReferenceAssessment.findMany({
+      where: {
+        modelId: model.id,
+        modelElement: { kind: "criterion" },
+        scope: { scopeType: "portfolio" },
+      },
+      orderBy: [{ scope: { scopeRef: "asc" } }],
+      select: {
+        coverageStatus: true,
+        mvpIncluded: true,
+        scope: {
+          select: { scopeRef: true, name: true },
+        },
+        modelElement: {
+          select: { kind: true },
+        },
+      },
+    });
+
+    const rowsByScope = new Map<string, ReferenceModelPortfolioRollupRow>();
+
+    for (const assessment of assessments) {
+      const key = assessment.scope.scopeRef;
+      let row = rowsByScope.get(key);
+      if (!row) {
+        row = {
+          scopeRef: assessment.scope.scopeRef,
+          scopeName: assessment.scope.name,
+          counts: emptyCoverageCounts(),
+          mvpIncludedCount: 0,
+          outOfMvpCount: 0,
+        };
+        rowsByScope.set(key, row);
+      }
+
+      const status = COVERAGE_STATUSES.includes(assessment.coverageStatus as CoverageStatus)
+        ? (assessment.coverageStatus as CoverageStatus)
+        : "not_started";
+      row.counts[status] += 1;
+      if (assessment.mvpIncluded) row.mvpIncludedCount += 1;
+      else row.outOfMvpCount += 1;
+    }
+
+    return {
+      model,
+      rows: Array.from(rowsByScope.values()),
+    };
+  }
+);
+
+export const getReferenceModelDetail = cache(
+  async (slug: string): Promise<ReferenceModelDetail> => {
+    const model = await prisma.eaReferenceModel.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        version: true,
+        status: true,
+        authorityType: true,
+        description: true,
+        artifacts: {
+          orderBy: [{ authority: "asc" }, { path: "asc" }],
+          select: {
+            id: true,
+            path: true,
+            kind: true,
+            authority: true,
+          },
+        },
+        proposals: {
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            proposalType: true,
+            status: true,
+            proposedByType: true,
+            reviewNotes: true,
+          },
+        },
+      },
+    });
+
+    if (!model) throw new Error("Reference model not found");
+    return model;
+  }
+);

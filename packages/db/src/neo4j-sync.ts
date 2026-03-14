@@ -180,6 +180,46 @@ export async function syncDependsOn(dep: {
  *  Note: infraCiKey is stored as a scalar property on the node — there is
  *  no EA_REPRESENTS bridge edge to InfraCI (the key is denormalised for
  *  direct lookup in queries without requiring an extra hop). */
+export async function syncInventoryEntityAsInfraCI(entity: {
+  entityKey: string;
+  name: string;
+  entityType: string;
+  status: string;
+  portfolioSlug?: string | null;
+}): Promise<void> {
+  const ciType =
+    entity.entityType === "host" ? "server"
+    : entity.entityType === "container" ? "container"
+    : entity.entityType === "runtime" ? "service"
+    : entity.entityType;
+  const operationalStatus =
+    entity.status === "stale" ? "degraded"
+    : entity.status === "inactive" ? "offline"
+    : "operational";
+
+  await syncInfraCI({
+    ciId: entity.entityKey,
+    name: entity.name,
+    ciType,
+    status: operationalStatus,
+    portfolioSlug: entity.portfolioSlug ?? null,
+  });
+}
+
+export async function syncInventoryRelationship(rel: {
+  fromEntityKey: string;
+  toEntityKey: string;
+  relationshipType: string;
+}): Promise<void> {
+  await syncDependsOn({
+    fromLabel: "InfraCI",
+    fromId: rel.fromEntityKey,
+    toLabel: "InfraCI",
+    toId: rel.toEntityKey,
+    role: rel.relationshipType,
+  });
+}
+
 export async function syncEaElement(element: {
   id: string;
   neoLabel: string;         // from EaElementType.neoLabel
