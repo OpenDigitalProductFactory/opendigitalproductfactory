@@ -57,7 +57,7 @@ export function AgentMessageBubble({ message, showAgentLabel, agentName }: Props
           borderRadius: isUser ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
           fontSize: 13,
           lineHeight: 1.4,
-          background: isUser ? "var(--dpf-accent)" : "var(--dpf-surface-2)",
+          background: isUser ? "var(--dpf-accent)" : "rgba(22, 22, 37, 0.8)",
           color: isUser ? "#ffffff" : "#e0e0ff",
           wordBreak: "break-word",
         }}
