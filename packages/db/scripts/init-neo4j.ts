@@ -77,6 +77,7 @@ async function main() {
     { ciId: "CI-neo4j-01",      name: "DPF Neo4j",          ciType: "database",  status: "operational", portfolioSlug: "foundational" },
     { ciId: "CI-docker-host-01",name: "Docker Host",         ciType: "server",    status: "operational", portfolioSlug: "foundational" },
     { ciId: "CI-nextjs-01",     name: "DPF Web (Next.js)",  ciType: "service",   status: "operational", portfolioSlug: "foundational" },
+    { ciId: "CI-ollama-01",     name: "Ollama",             ciType: "ai-inference", status: "offline",      portfolioSlug: "foundational" },
   ];
   for (const ci of infraNodes) {
     await syncInfraCI(ci);
@@ -90,7 +91,8 @@ async function main() {
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-nextjs-01",  toLabel: "InfraCI", toId: "CI-neo4j-01",       role: "graph-db" });
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-postgres-01",toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime"  });
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-neo4j-01",   toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime"  });
-  console.log("  4 edges done");
+  await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-ollama-01", toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime" });
+  console.log("  5 edges done");
 
   console.log("\n✓ Neo4j initialised. Open http://localhost:7474 to browse the graph.");
 }

@@ -64,6 +64,8 @@ if (-not (Test-Path "apps\web\.env.local")) {
     } else {
         Write-Warn "Created apps\web\.env.local — please set AUTH_SECRET manually"
     }
+    # Enable Docker internal URL for Ollama
+    Add-Content -Path "apps\web\.env.local" -Value "OLLAMA_INTERNAL_URL=http://ollama:11434"
 } else {
     Write-Ok "apps\web\.env.local already exists — skipping"
 }
@@ -75,7 +77,7 @@ if (-not (Test-Path "packages\db\.env")) {
 
 # -- Databases -------------------------------------------------------------------
 
-Write-Step "Starting databases (PostgreSQL + Neo4j)"
+Write-Step "Starting services (PostgreSQL + Neo4j + Ollama)"
 docker compose up -d
 
 Write-Host "  Waiting for PostgreSQL to be ready..."
@@ -88,6 +90,20 @@ do {
     Start-Sleep -Seconds 2
 } while ($true)
 Write-Ok "PostgreSQL is ready"
+
+Write-Host "  Waiting for Ollama... (first run may take a few minutes to download default model)" -ForegroundColor Yellow
+$retries = 90
+do {
+    $null = docker compose exec -T ollama curl -sf http://localhost:11434/api/tags 2>$null
+    if ($LASTEXITCODE -eq 0) { break }
+    $retries--
+    if ($retries -eq 0) {
+        Write-Host "  [FAIL] Ollama did not start in time. Check: docker compose logs ollama" -ForegroundColor Red
+        exit 1
+    }
+    Start-Sleep -Seconds 2
+} while ($true)
+Write-Host "  [OK] Ollama is ready" -ForegroundColor Green
 
 # -- Database Setup --------------------------------------------------------------
 

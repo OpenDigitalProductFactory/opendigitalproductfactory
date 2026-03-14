@@ -1,7 +1,60 @@
+const LOW_CONFIDENCE_THRESHOLD = 0.55;
+const STOP_WORDS = new Set([
+  "and",
+  "app",
+  "application",
+  "engine",
+  "for",
+  "internal",
+  "management",
+  "platform",
+  "portal",
+  "service",
+  "services",
+  "system",
+  "the",
+]);
+
+export type TaxonomyNodeCandidate = {
+  nodeId: string;
+  name: string;
+  portfolioSlug?: string | null;
+};
+
+export type RankedTaxonomyCandidate = TaxonomyNodeCandidate & {
+  score: number;
+  evidence: string[];
+};
+
+export type InventoryAttributionInput = {
+  entityKey: string;
+  entityType: string;
+  itemType?: string;
+  name: string;
+  properties?: Record<string, unknown>;
+};
+
+export type InventoryAttributionResult = {
+  taxonomyNodeId: string | null;
+  portfolioSlug: string | null;
+  attributionMethod: "rule" | "heuristic";
+  attributionStatus: "attributed" | "needs_review";
+  confidence: number;
+  candidateTaxonomy: RankedTaxonomyCandidate[];
+  evidence: {
+    descriptor: string;
+    ruleId?: string;
+    matchedSignals: string[];
+  };
+};
+
 export type InventoryQualityEntityInput = {
   entityKey: string;
   entityType: string;
   attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale";
+  attributionMethod?: "rule" | "heuristic" | "manual" | "ai_proposed" | null;
+  attributionConfidence?: number | null;
+  candidateTaxonomy?: Array<{ nodeId: string; score: number }> | null;
   taxonomyNodeId?: string | null;
   digitalProductId?: string | null;
   qualityStatus?: "warning" | "error";
@@ -27,6 +80,175 @@ export type InventoryQualityEvaluation = {
   issues: InventoryQualityIssue[];
 };
 
+function normalizeToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function tokenize(value: string): string[] {
+  return normalizeToken(value)
+    .split(/\s+/)
+    .map((token) => token.replace(/s$/, ""))
+    .filter((token) => token.length > 1 && !STOP_WORDS.has(token));
+}
+
+function toSentence(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => toSentence(entry)).join(" ");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value).map((entry) => toSentence(entry)).join(" ");
+  }
+
+  return "";
+}
+
+function resolvePortfolioSlug(node: TaxonomyNodeCandidate): string | null {
+  if (node.portfolioSlug) {
+    return node.portfolioSlug;
+  }
+
+  const [root] = node.nodeId.split("/");
+  return root || null;
+}
+
+function findRuleMatch(
+  input: InventoryAttributionInput,
+  taxonomyNodes: TaxonomyNodeCandidate[],
+): InventoryAttributionResult | null {
+  const itemType = (input.itemType ?? input.entityType).toLowerCase();
+  const matchByNodeId = (matcher: (nodeId: string) => boolean) =>
+    taxonomyNodes.find((node) => matcher(node.nodeId.toLowerCase()));
+
+  let node: TaxonomyNodeCandidate | undefined;
+  let ruleId: string | undefined;
+
+  if (input.entityType === "host" || itemType === "host") {
+    node = matchByNodeId((nodeId) => nodeId.endsWith("/servers"));
+    ruleId = node ? "foundational_host_servers" : undefined;
+  } else if (itemType.includes("docker") || itemType.includes("container")) {
+    node = matchByNodeId((nodeId) => nodeId.includes("container_platform"));
+    ruleId = node ? "container_platform_runtime" : undefined;
+  } else if (itemType.includes("database")) {
+    node = matchByNodeId((nodeId) => nodeId.endsWith("/database"));
+    ruleId = node ? "foundational_database" : undefined;
+  } else if (itemType.includes("network")) {
+    node = matchByNodeId((nodeId) => nodeId.includes("network_management"));
+    ruleId = node ? "foundational_network" : undefined;
+  } else if (itemType.includes("storage")) {
+    node = matchByNodeId((nodeId) => nodeId.endsWith("/online_storage"));
+    ruleId = node ? "foundational_storage" : undefined;
+  }
+
+  if (!node || !ruleId) {
+    return null;
+  }
+
+  return {
+    taxonomyNodeId: node.nodeId,
+    portfolioSlug: resolvePortfolioSlug(node),
+    attributionMethod: "rule",
+    attributionStatus: "attributed",
+    confidence: 0.98,
+    candidateTaxonomy: [
+      {
+        ...node,
+        score: 0.98,
+        evidence: [ruleId],
+      },
+    ],
+    evidence: {
+      descriptor: buildDiscoveryDescriptor(input),
+      ruleId,
+      matchedSignals: [input.entityType, itemType],
+    },
+  };
+}
+
+export function buildDiscoveryDescriptor(input: InventoryAttributionInput): string {
+  const propertiesText = toSentence(input.properties ?? {});
+  return [input.entityType, input.itemType, input.name, propertiesText]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+}
+
+export function scoreTaxonomyCandidates(
+  descriptor: string,
+  taxonomyNodes: TaxonomyNodeCandidate[],
+): RankedTaxonomyCandidate[] {
+  const descriptorText = normalizeToken(descriptor);
+  const descriptorTokens = tokenize(descriptor);
+  const descriptorTokenSet = new Set(descriptorTokens);
+
+  return taxonomyNodes
+    .map((node) => {
+      const labelText = `${node.name} ${node.nodeId.split("/").join(" ")}`;
+      const nodeTokens = tokenize(labelText);
+      const overlap = nodeTokens.filter((token) => descriptorTokenSet.has(token));
+      const nodeCoverage = nodeTokens.length > 0 ? overlap.length / nodeTokens.length : 0;
+      const descriptorCoverage = descriptorTokens.length > 0 ? overlap.length / descriptorTokens.length : 0;
+      const phraseBonus = descriptorText.includes(normalizeToken(node.name)) ? 0.2 : 0;
+      const score = Math.min(0.95, Number((nodeCoverage * 0.7 + descriptorCoverage * 0.3 + phraseBonus).toFixed(3)));
+
+      return {
+        ...node,
+        score,
+        evidence: overlap.length > 0 ? overlap : ["fallback_candidate"],
+      };
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5);
+}
+
+export function attributeInventoryEntity(
+  input: InventoryAttributionInput,
+  taxonomyNodes: TaxonomyNodeCandidate[],
+): InventoryAttributionResult {
+  const ruleMatch = findRuleMatch(input, taxonomyNodes);
+  if (ruleMatch) {
+    return ruleMatch;
+  }
+
+  const descriptor = buildDiscoveryDescriptor(input);
+  const ranked = scoreTaxonomyCandidates(descriptor, taxonomyNodes);
+  const best = ranked[0] ?? null;
+
+  if (!best || best.score < LOW_CONFIDENCE_THRESHOLD) {
+    return {
+      taxonomyNodeId: null,
+      portfolioSlug: null,
+      attributionMethod: "heuristic",
+      attributionStatus: "needs_review",
+      confidence: best?.score ?? 0,
+      candidateTaxonomy: ranked,
+      evidence: {
+        descriptor,
+        matchedSignals: best?.evidence ?? [],
+      },
+    };
+  }
+
+  return {
+    taxonomyNodeId: best.nodeId,
+    portfolioSlug: resolvePortfolioSlug(best),
+    attributionMethod: "heuristic",
+    attributionStatus: "attributed",
+    confidence: best.score,
+    candidateTaxonomy: ranked,
+    evidence: {
+      descriptor,
+      matchedSignals: best.evidence,
+    },
+  };
+}
+
 export function evaluateInventoryQuality(
   entities: InventoryQualityEntityInput[],
   relationships: InventoryQualityRelationshipInput[] = [],
@@ -41,6 +263,21 @@ export function evaluateInventoryQuality(
         severity: entity.qualityStatus === "error" ? "error" : "warn",
         status: "open",
         summary: `${entity.entityType} ${entity.entityKey} requires taxonomy or product attribution review`,
+        inventoryEntityKey: entity.entityKey,
+      });
+    }
+
+    if (
+      (entity.attributionStatus === "needs_review" || entity.attributionStatus === "unmapped")
+      && (entity.attributionConfidence ?? 0) < LOW_CONFIDENCE_THRESHOLD
+      && (entity.candidateTaxonomy?.length ?? 0) > 0
+    ) {
+      issues.push({
+        issueKey: `inventory_entity:${entity.entityKey}:taxonomy_low_confidence`,
+        issueType: "taxonomy_attribution_low_confidence",
+        severity: "warn",
+        status: "open",
+        summary: `${entity.entityType} ${entity.entityKey} has low-confidence taxonomy attribution candidates`,
         inventoryEntityKey: entity.entityKey,
       });
     }
@@ -72,3 +309,4 @@ export function evaluateInventoryQuality(
 
   return { issues };
 }
+
