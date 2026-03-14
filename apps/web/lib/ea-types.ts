@@ -12,6 +12,10 @@ export type SerializedViewElement = {
   viewElementId: string;     // EaViewElement.id — used as React Flow node id
   elementId: string;
   mode: EaViewMode;
+  parentViewElementId: string | null;
+  orderIndex: number | null;
+  rendererHint: string | null;
+  structureIssueCount: number;
   proposedProperties: Record<string, unknown> | null;
   elementType: {
     slug: string;
@@ -23,6 +27,7 @@ export type SerializedViewElement = {
     description: string | null;
     lifecycleStage: string;
     lifecycleStatus: string;
+    properties: Record<string, unknown> | null;
   };
 };
 
