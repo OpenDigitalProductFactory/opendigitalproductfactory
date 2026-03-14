@@ -52,3 +52,7 @@ export {
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
 } from "./discovery-sync";
+export {
+  projectReferenceModel,
+  type ReferenceProjectionType,
+} from "./reference-model-projection";
