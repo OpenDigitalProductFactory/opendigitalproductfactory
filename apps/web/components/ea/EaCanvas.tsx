@@ -22,6 +22,7 @@ import {
   saveCanvasState,
   getDefaultRelTypeIdForView,
 } from "@/lib/actions/ea";
+import { buildValueStreamGroupLayout, estimateStageWidth } from "./value-stream-layout";
 
 const NODE_TYPES = { eaElement: EaElementNode };
 const EDGE_TYPES = { eaRelationship: EaRelationshipEdge };
@@ -132,16 +133,68 @@ function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState 
   nodes: Node[];
   shouldPersist: boolean;
 } {
-  const layout = buildNodeLayout(elements, canvasState);
+  const structuredChildIds = new Set<string>();
+  for (const element of elements) {
+    for (const child of element.childViewElements ?? []) {
+      structuredChildIds.add(child.viewElementId);
+    }
+  }
+
+  const topLevelElements = elements.filter((element) => !structuredChildIds.has(element.viewElementId));
+  const topLevelLayout = buildNodeLayout(topLevelElements, canvasState);
+  const nodes: Node[] = [];
+
+  for (const element of topLevelElements) {
+    const position = topLevelLayout.nodes[element.viewElementId] ?? { x: 0, y: 0 };
+
+    if (element.rendererHint === "nested_chevron_sequence") {
+      const childStages = [...(element.childViewElements ?? [])].sort((left, right) => {
+        const leftOrder = left.orderIndex ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = right.orderIndex ?? Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return left.viewElementId.localeCompare(right.viewElementId);
+      });
+      const groupLayout = buildValueStreamGroupLayout({
+        origin: position,
+        stageLabels: childStages.map((child) => child.element.name),
+      });
+
+      nodes.push({
+        id: element.viewElementId,
+        type: "eaElement",
+        position,
+        data: element,
+      });
+
+      childStages.forEach((child, index) => {
+        const stageFrame = groupLayout.stages[index];
+        if (!stageFrame) return;
+
+        nodes.push({
+          id: child.viewElementId,
+          type: "eaElement",
+          position: {
+            x: stageFrame.x - groupLayout.band.x,
+            y: stageFrame.y - groupLayout.band.y,
+          },
+          parentId: element.viewElementId,
+          data: child,
+        });
+      });
+      continue;
+    }
+
+    nodes.push({
+      id: element.viewElementId,
+      type: "eaElement",
+      position,
+      data: element,
+    });
+  }
 
   return {
-    shouldPersist: layout.shouldPersist,
-    nodes: elements.map((ve) => ({
-      id: ve.viewElementId,
-      type: "eaElement",
-      position: layout.nodes[ve.viewElementId] ?? { x: 0, y: 0 },
-      data: ve,
-    })),
+    shouldPersist: topLevelLayout.shouldPersist,
+    nodes,
   };
 }
 
@@ -178,8 +231,16 @@ function buildStructuredProjection(elements: SerializedViewElement[]): {
     };
   };
 
+  const hydratedRoots = structuredRoots.map(hydrateStructuredElement);
+  const visibleElements: SerializedViewElement[] = [];
+  const visit = (element: SerializedViewElement) => {
+    visibleElements.push(element);
+    (element.childViewElements ?? []).forEach(visit);
+  };
+  hydratedRoots.forEach(visit);
+
   return {
-    visibleElements: structuredRoots.map(hydrateStructuredElement),
+    visibleElements,
     structuredRoots,
   };
 }
@@ -297,6 +358,23 @@ export function EaCanvas({
     }, 1500);
   }
 
+  function getAbsoluteNodePosition(node: Node, nodesById: Map<string, Node>): { x: number; y: number } {
+    if (!node.parentId) {
+      return node.position;
+    }
+
+    const parent = nodesById.get(node.parentId);
+    if (!parent) {
+      return node.position;
+    }
+
+    const parentPosition = getAbsoluteNodePosition(parent, nodesById);
+    return {
+      x: parentPosition.x + node.position.x,
+      y: parentPosition.y + node.position.y,
+    };
+  }
+
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
     onNodesChange(changes);
     setNodes((nds) => {
@@ -306,6 +384,94 @@ export function EaCanvas({
       return nds;
     });
   }, [onNodesChange]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleNodeDragStop = useCallback(async (_event: unknown, node: Node) => {
+    if (isReadOnly) return;
+
+    const movedElement = node.data as SerializedViewElement;
+    if (movedElement.elementType.slug !== "value_stream_stage") return;
+
+    const nodesById = new Map(nodes.map((entry) => [entry.id, entry]));
+    const movedNode = nodesById.get(node.id) ?? node;
+    const movedAbsolutePosition = getAbsoluteNodePosition(movedNode, nodesById);
+    const movedWidth = estimateStageWidth(movedElement.element.name);
+    const movedCenterX = movedAbsolutePosition.x + movedWidth / 2;
+    const movedCenterY = movedAbsolutePosition.y + 46;
+
+    const streamCandidates = nodes.filter((entry) => {
+      const entryData = entry.data as SerializedViewElement;
+      return entryData.rendererHint === "nested_chevron_sequence";
+    });
+
+    let targetParentNode: Node | null = null;
+    for (const candidate of streamCandidates) {
+      const candidateData = candidate.data as SerializedViewElement;
+      const candidateLayout = buildValueStreamGroupLayout({
+        origin: getAbsoluteNodePosition(candidate, nodesById),
+        stageLabels: (candidateData.childViewElements ?? []).map((child) => child.element.name),
+      });
+      const withinHorizontal =
+        movedCenterX >= candidateLayout.band.x &&
+        movedCenterX <= candidateLayout.band.x + candidateLayout.band.width;
+      const withinVertical =
+        movedCenterY >= candidateLayout.band.y &&
+        movedCenterY <= candidateLayout.band.y + candidateLayout.band.height;
+
+      if (withinHorizontal && withinVertical) {
+        targetParentNode = candidate;
+        break;
+      }
+    }
+
+    const targetParentViewElementId = targetParentNode?.id ?? null;
+
+    if (targetParentViewElementId == null) {
+      if (movedElement.parentViewElementId == null) return;
+      await moveStructuredViewElement({
+        viewElementId: movedElement.viewElementId,
+        targetParentViewElementId: null,
+        targetOrderIndex: null,
+      });
+      window.location.reload();
+      return;
+    }
+
+    const siblingNodes = nodes
+      .filter((entry) => {
+        const entryData = entry.data as SerializedViewElement;
+        return (
+          entry.id !== movedElement.viewElementId &&
+          entryData.elementType.slug === "value_stream_stage" &&
+          entryData.parentViewElementId === targetParentViewElementId
+        );
+      })
+      .sort((left, right) => {
+        const leftPosition = getAbsoluteNodePosition(left, nodesById).x;
+        const rightPosition = getAbsoluteNodePosition(right, nodesById).x;
+        return leftPosition - rightPosition;
+      });
+
+    const targetOrderIndex = siblingNodes.filter((entry) => {
+      const entryData = entry.data as SerializedViewElement;
+      const entryPosition = getAbsoluteNodePosition(entry, nodesById);
+      return entryPosition.x + estimateStageWidth(entryData.element.name) / 2 < movedCenterX;
+    }).length;
+
+    const normalizedCurrentOrder = movedElement.orderIndex ?? siblingNodes.length;
+    if (
+      movedElement.parentViewElementId === targetParentViewElementId &&
+      normalizedCurrentOrder === targetOrderIndex
+    ) {
+      return;
+    }
+
+    await moveStructuredViewElement({
+      viewElementId: movedElement.viewElementId,
+      targetParentViewElementId,
+      targetOrderIndex,
+    });
+    window.location.reload();
+  }, [isReadOnly, nodes]);
 
   const handleConnect = useCallback(async (connection: Connection) => {
     if (isReadOnly || !connection.source || !connection.target) return;
@@ -429,6 +595,7 @@ export function EaCanvas({
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
+            onNodeDragStop={handleNodeDragStop}
             onConnect={handleConnect}
             onNodeClick={handleNodeClick}
             nodeTypes={NODE_TYPES}
