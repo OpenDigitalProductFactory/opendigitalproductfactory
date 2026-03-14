@@ -625,10 +625,20 @@ model AgentMessage {
   tone         String?
   agentId      String?     // specialist agent that authored this response
   routeContext String?     // route pathname when message was sent
+  providerId   String?     // provider that handled this inference
   createdAt    DateTime    @default(now())
 
   @@index([threadId])
   @@index([createdAt])
+}
+
+// ─── Platform Configuration ──────────────────────────────────────────────────
+
+model PlatformConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
 }
 
 // ─── EA Modeling ─────────────────────────────────────────────────────────────
