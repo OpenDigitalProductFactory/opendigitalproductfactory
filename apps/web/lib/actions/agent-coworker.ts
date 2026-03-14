@@ -18,8 +18,15 @@ async function requireAuthUser() {
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
 
-export async function getOrCreateThread(): Promise<{ threadId: string }> {
+export async function getOrCreateThread(): Promise<{ threadId: string } | null> {
   const user = await requireAuthUser();
+
+  // Verify user exists in DB (JWT may reference a stale user after re-seed)
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true },
+  });
+  if (!dbUser) return null;
 
   const thread = await prisma.agentThread.upsert({
     where: { userId_contextKey: { userId: user.id, contextKey: "coworker" } },
