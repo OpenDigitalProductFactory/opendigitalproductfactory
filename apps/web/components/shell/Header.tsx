@@ -70,14 +70,6 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl }: P
         <NavBar items={visibleItems} />
       </div>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => document.dispatchEvent(new CustomEvent("toggle-agent-panel"))}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border border-[var(--dpf-accent)] text-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)] hover:text-white transition-colors"
-        >
-          <span>Agent</span>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
-        </button>
         {platformRole !== null && (
           <span className="text-xs text-[var(--dpf-muted)]">{platformRole}</span>
         )}
