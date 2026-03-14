@@ -8,6 +8,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     eaReferenceModel: { findMany: vi.fn(), findUnique: vi.fn() },
     eaReferenceAssessment: { findMany: vi.fn() },
+    eaView: { findFirst: vi.fn() },
   },
 }));
 
@@ -21,6 +22,7 @@ import {
 const mockPrisma = prisma as unknown as {
   eaReferenceModel: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   eaReferenceAssessment: { findMany: ReturnType<typeof vi.fn> };
+  eaView: { findFirst: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => {
@@ -124,12 +126,20 @@ describe("getReferenceModelDetail", () => {
         { id: "p1", proposalType: "guidance", status: "proposed", proposedByType: "agent", reviewNotes: null },
       ],
     });
+    mockPrisma.eaView.findFirst.mockResolvedValue({
+      id: "view-1",
+      name: "IT4IT value streams",
+    });
 
     const result = await getReferenceModelDetail("it4it_v3_0_1");
 
     expect(result).toEqual(
       expect.objectContaining({
         slug: "it4it_v3_0_1",
+        valueStreamProjection: expect.objectContaining({
+          viewId: "view-1",
+          isProjected: true,
+        }),
         artifacts: expect.arrayContaining([
           expect.objectContaining({ kind: "pdf", authority: "authoritative" }),
         ]),

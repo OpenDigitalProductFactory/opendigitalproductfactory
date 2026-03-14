@@ -321,6 +321,25 @@ export const getReferenceModelDetail = cache(
     });
 
     if (!model) throw new Error("Reference model not found");
-    return model;
+
+    const valueStreamProjection = await prisma.eaView.findFirst({
+      where: {
+        scopeType: "reference_model_projection",
+        scopeRef: `${slug}:value_stream_view`,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    return {
+      ...model,
+      valueStreamProjection: {
+        viewId: valueStreamProjection?.id ?? null,
+        viewName: valueStreamProjection?.name ?? null,
+        isProjected: valueStreamProjection != null,
+      },
+    };
   }
 );
