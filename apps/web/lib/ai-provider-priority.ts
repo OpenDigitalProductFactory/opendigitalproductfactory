@@ -19,6 +19,14 @@ export type ProviderPriorityEntry = {
   capabilityTier: string;
 };
 
+export type TaskKey = "conversation" | "code_generation" | "analysis";
+
+export type TaskAwarePriority = {
+  conversation: ProviderPriorityEntry[];
+  code_generation: ProviderPriorityEntry[];
+  analysis?: ProviderPriorityEntry[];
+};
+
 export type FailoverResult = InferenceResult & {
   providerId: string;
   modelId: string;
@@ -98,16 +106,30 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
   return entries;
 }
 
+// ─── Task-Aware Resolution ──────────────────────────────────────────────────
+
+export function resolveTaskPriority(
+  stored: ProviderPriorityEntry[] | TaskAwarePriority,
+  task: string,
+): ProviderPriorityEntry[] {
+  if (Array.isArray(stored)) return stored;
+  const key = task as keyof TaskAwarePriority;
+  const entries = stored[key];
+  if (Array.isArray(entries) && entries.length > 0) return entries;
+  return stored.conversation ?? [];
+}
+
 // ─── Get Priority ────────────────────────────────────────────────────────────
 
-export async function getProviderPriority(): Promise<ProviderPriorityEntry[]> {
+export async function getProviderPriority(task: string = "conversation"): Promise<ProviderPriorityEntry[]> {
   const config = await prisma.platformConfig.findUnique({
     where: { key: "provider_priority" },
   });
 
   if (config) {
-    const entries = config.value as ProviderPriorityEntry[];
-    if (Array.isArray(entries) && entries.length > 0) {
+    const stored = config.value as ProviderPriorityEntry[] | TaskAwarePriority;
+    const entries = resolveTaskPriority(stored, task);
+    if (entries.length > 0) {
       return entries.sort((a, b) => a.rank - b.rank);
     }
   }
