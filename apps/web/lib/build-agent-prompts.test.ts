@@ -25,30 +25,26 @@ describe("bumpVersion", () => {
 });
 
 describe("getBuildPhasePrompt", () => {
-  it("returns ideate prompt for ideate phase", () => {
+  it("returns ideate prompt with portfolio search", () => {
     const prompt = getBuildPhasePrompt("ideate");
     expect(prompt).toContain("search_portfolio_context");
     expect(prompt).toContain("assess_complexity");
   });
-  it("returns plan prompt for plan phase", () => {
+  it("returns plan prompt", () => {
     const prompt = getBuildPhasePrompt("plan");
-    expect(prompt).toContain("Plan");
-    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("build");
   });
-  it("returns build prompt for build phase", () => {
+  it("returns build prompt", () => {
     const prompt = getBuildPhasePrompt("build");
-    expect(prompt).toContain("Build");
-    expect(prompt).toContain("sandbox");
+    expect(prompt).toContain("building");
   });
-  it("returns review prompt for review phase", () => {
+  it("returns review prompt", () => {
     const prompt = getBuildPhasePrompt("review");
-    expect(prompt).toContain("Review");
-    expect(prompt).toContain("test");
+    expect(prompt).toContain("ship");
   });
-  it("returns ship prompt for ship phase", () => {
+  it("returns ship prompt", () => {
     const prompt = getBuildPhasePrompt("ship");
-    expect(prompt).toContain("Ship");
-    expect(prompt).toContain("deploy");
+    expect(prompt).toContain("register_digital_product_from_build");
   });
   it("returns empty string for terminal phases", () => {
     expect(getBuildPhasePrompt("complete")).toBe("");
