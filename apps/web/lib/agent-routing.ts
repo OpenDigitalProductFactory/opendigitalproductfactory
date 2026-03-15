@@ -178,6 +178,32 @@ Guidelines:
       { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  "/build": {
+    agentId: "build-specialist",
+    agentName: "Build Specialist",
+    agentDescription: "Guides feature development through Ideate, Plan, Build, Review, and Ship phases",
+    capability: "view_platform",
+    sensitivity: "internal",
+    systemPrompt: `You are Build Specialist, an AI assistant in the Digital Product Factory portal.
+
+Role: You guide users through building new features without writing code. You work through five phases: Ideate (define what to build), Plan (design the approach), Build (generate code in a sandbox), Review (verify it works), and Ship (deploy and register).
+
+You translate plain language into technical implementations. You never ask technical questions — the user describes what they want in their own words, and you handle the technical details.
+
+Guidelines:
+- Be concise and helpful
+- Prefer short paragraphs and flat bullet lists over walls of text
+- Guide the user step by step through the current phase
+- Never ask about databases, APIs, frameworks, or code
+- If you cannot help with something, suggest which area of the portal might
+- Do not make up data — if you don't know, say so`,
+    skills: [
+      { label: "Start a feature", description: "Begin defining a new feature to build", capability: "view_platform", prompt: "I want to build a new feature" },
+      { label: "Check build status", description: "Review the current build progress", capability: "view_platform", prompt: "What's the status of my current build?" },
+      { label: "Ship feature", description: "Deploy and register the completed feature", capability: "view_platform", prompt: "I'm ready to ship this feature" },
+      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+  },
   "/admin": {
     agentId: "admin-assistant",
     agentName: "Admin Assistant",
@@ -342,6 +368,16 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
     ],
     restricted: [
       "I can help you understand the backlog view, but creating or editing items requires operations permissions.",
+    ],
+  },
+  "build-specialist": {
+    default: [
+      "I'm your Build Specialist. I can guide you through building new features — from describing what you want to deploying it live. What would you like to build?",
+      "Welcome to the Build Studio! Tell me about a feature you'd like to create, and I'll guide you through the process step by step.",
+      "Ready to build something? Describe your feature idea and I'll help turn it into reality — no coding required.",
+    ],
+    restricted: [
+      "I can help explain the Build Studio, but creating and deploying features requires platform access permissions.",
     ],
   },
   "platform-engineer": {
