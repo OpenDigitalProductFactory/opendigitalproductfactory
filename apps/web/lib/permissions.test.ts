@@ -53,14 +53,14 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).not.toContain("admin");
   });
 
-  it("HR-300 gets Agents, Portfolio, Inventory", () => {
+  it("HR-300 gets EA Modeler, Portfolio, Inventory", () => {
     const tiles = getWorkspaceTiles(hr300).map((t) => t.key);
-    expect(tiles).toContain("agents");
+    expect(tiles).toContain("ea_modeler");
     expect(tiles).toContain("portfolio");
     expect(tiles).toContain("inventory");
   });
 
-  it("superuser gets all 8 tiles regardless of role", () => {
-    expect(getWorkspaceTiles(superuser).length).toBe(8);
+  it("superuser gets all 10 tiles regardless of role", () => {
+    expect(getWorkspaceTiles(superuser).length).toBe(10);
   });
 });

@@ -20,6 +20,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey 
   { label: "Inventory",    href: "/inventory",  capability: "view_inventory" },
   { label: "EA Modeler",   href: "/ea",           capability: "view_ea_modeler" },
   { label: "AI Workforce", href: "/platform/ai",  capability: "view_platform" },
+  { label: "Build",        href: "/build",        capability: "view_platform" },
 ];
 
 export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl }: Props) {
