@@ -8,6 +8,8 @@ import { Header } from "@/components/shell/Header";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
+import { StatusBanner } from "@/components/shell/StatusBanner";
+import { ModelWarmup } from "@/components/shell/ModelWarmup";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -39,6 +41,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+      <StatusBanner />
       <Header
         platformRole={user.platformRole}
         isSuperuser={user.isSuperuser}
@@ -54,6 +57,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       />
       <FeedbackButton userId={user.id} />
       <QueueFlusher />
+      <ModelWarmup />
     </div>
   );
 }
