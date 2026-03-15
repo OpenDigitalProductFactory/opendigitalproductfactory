@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
+import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 
 type Props = {
   pw: ProviderWithCredential;
@@ -184,11 +185,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         })}
       </div>
 
-      {/* Status */}
+      {/* Status + toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-        <span style={{ background: `${statusColour}20`, color: statusColour, fontSize: 12, padding: "3px 8px", borderRadius: 3 }}>
-          {provider.status}
-        </span>
+        <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
         <span style={{ color: "#b0b0c8", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
       </div>
 
