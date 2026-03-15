@@ -15,7 +15,7 @@ BEGIN
   SELECT id INTO mfg_portfolio_id FROM "Portfolio" WHERE slug = 'manufacturing_and_delivery';
   SELECT id INTO found_portfolio_id FROM "Portfolio" WHERE slug = 'foundational';
   SELECT id INTO dpf_portal_id FROM "DigitalProduct" WHERE "productId" = 'dpf-portal';
-  SELECT "nodeId" INTO mfg_tax_node_id FROM "TaxonomyNode" WHERE "nodeId" = 'manufacturing_and_delivery';
+  SELECT id INTO mfg_tax_node_id FROM "TaxonomyNode" WHERE "nodeId" = 'manufacturing_and_delivery';
 
   IF mfg_portfolio_id IS NULL THEN RAISE EXCEPTION 'manufacturing_and_delivery portfolio not found'; END IF;
   IF found_portfolio_id IS NULL THEN RAISE EXCEPTION 'foundational portfolio not found'; END IF;
