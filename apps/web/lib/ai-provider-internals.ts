@@ -230,7 +230,27 @@ async function callProviderForProfiling(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} from ${profilingProviderId}: ${errBody.slice(0, 200)}`);
+    // Auto-disable on quota exhaustion (429) — same as callWithFailover
+    if (res.status === 429) {
+      await prisma.modelProvider.update({
+        where: { providerId: profilingProviderId },
+        data: { status: "inactive" },
+      }).catch(() => {});
+      const nextRunAt = new Date(Date.now() + 60 * 60 * 1000);
+      await prisma.scheduledJob.upsert({
+        where: { jobId: `provider-reenable-${profilingProviderId}` },
+        create: {
+          jobId: `provider-reenable-${profilingProviderId}`,
+          name: `Re-enable ${profilingProviderId} after quota reset`,
+          schedule: "once",
+          nextRunAt,
+          lastStatus: "scheduled",
+          lastError: errBody.slice(0, 500),
+        },
+        update: { nextRunAt, lastStatus: "scheduled", lastError: errBody.slice(0, 500) },
+      }).catch(() => {});
+    }
+    throw new Error(`${profilingProviderId}: HTTP ${res.status} from ${profilingProviderId}: ${errBody.slice(0, 200)}`);
   }
   const data = await res.json() as Record<string, unknown>;
 
@@ -453,9 +473,13 @@ export async function profileModelsInternal(
       }
     }
 
-    // If all providers failed for this batch, return the last error
+    // If all providers failed for this batch, return a user-friendly error
     if (profiles.length === 0 && lastError) {
-      return { profiled: totalProfiled, failed: batch.length, error: lastError };
+      const isQuota = lastError.includes("429");
+      const friendlyError = isQuota
+        ? "Provider hit its usage quota and has been disabled. It will be re-enabled in about 1 hour. Configure another provider to continue profiling."
+        : lastError;
+      return { profiled: totalProfiled, failed: batch.length, error: friendlyError };
     }
 
     // Save successful profiles
