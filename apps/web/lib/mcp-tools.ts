@@ -2,6 +2,12 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
+import {
+  analyzePublicWebsiteBranding,
+  fetchPublicWebsiteEvidence,
+  searchPublicWeb,
+} from "@/lib/public-web-tools";
+import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -10,6 +16,8 @@ export type ToolDefinition = {
   description: string;
   inputSchema: Record<string, unknown>;
   requiredCapability: CapabilityKey | null;
+  requiresExternalAccess?: boolean;
+  executionMode?: "proposal" | "immediate";
 };
 
 export type ToolResult = {
@@ -17,6 +25,7 @@ export type ToolResult = {
   entityId?: string;
   message: string;
   error?: string;
+  data?: Record<string, unknown>;
 };
 
 // ─── Tool Registry ───────────────────────────────────────────────────────────
@@ -98,13 +107,60 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
   },
+  {
+    name: "search_public_web",
+    description: "Search the public web for relevant pages or facts",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null,
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+  },
+  {
+    name: "fetch_public_website",
+    description: "Fetch a public website and summarize visible branding and metadata",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Public http or https URL" },
+      },
+      required: ["url"],
+    },
+    requiredCapability: null,
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+  },
+  {
+    name: "analyze_public_website_branding",
+    description: "Analyze a public website and propose branding values such as company name, logo, and accent color",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Public http or https URL" },
+      },
+      required: ["url"],
+    },
+    requiredCapability: "manage_branding",
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
 
-export function getAvailableTools(userContext: UserContext): ToolDefinition[] {
+export function getAvailableTools(
+  userContext: UserContext,
+  options?: { externalAccessEnabled?: boolean },
+): ToolDefinition[] {
   return PLATFORM_TOOLS.filter(
-    (t) => t.requiredCapability === null || can(userContext, t.requiredCapability),
+    (tool) =>
+      (!tool.requiresExternalAccess || options?.externalAccessEnabled === true)
+      && (tool.requiredCapability === null || can(userContext, tool.requiredCapability)),
   );
 }
 
@@ -114,6 +170,7 @@ export async function executeTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
+  context?: { routeContext?: string },
 ): Promise<ToolResult> {
   switch (toolName) {
     case "create_backlog_item": {
@@ -179,6 +236,80 @@ export async function executeTool(
         },
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
+    }
+
+    case "search_public_web": {
+      const query = String(params["query"] ?? "").trim();
+      const results = await searchPublicWeb(query);
+      if (context?.routeContext) {
+        await recordExternalEvidence({
+          actorUserId: userId,
+          routeContext: context.routeContext,
+          operationType: "public_web_search",
+          target: query,
+          provider: "brave_search",
+          resultSummary: `Found ${results.length} public search result(s)`,
+          details: results as import("@dpf/db").Prisma.InputJsonValue,
+        });
+      }
+      return {
+        success: true,
+        message: results.length > 0
+          ? `Found ${results.length} public search result(s). Top result: ${results[0]!.title} (${results[0]!.url})`
+          : "No public search results were found.",
+        data: { results },
+      };
+    }
+
+    case "fetch_public_website": {
+      const url = String(params["url"] ?? "").trim();
+      const evidence = await fetchPublicWebsiteEvidence(url);
+      if (context?.routeContext) {
+        await recordExternalEvidence({
+          actorUserId: userId,
+          routeContext: context.routeContext,
+          operationType: "public_web_fetch",
+          target: evidence.finalUrl,
+          provider: "public_fetch",
+          resultSummary: `Fetched public website evidence for ${evidence.finalUrl}`,
+          details: evidence as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        });
+      }
+      return {
+        success: true,
+        message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
+        data: evidence,
+      };
+    }
+
+    case "analyze_public_website_branding": {
+      const url = String(params["url"] ?? "").trim();
+      const evidence = await fetchPublicWebsiteEvidence(url);
+      const branding = analyzePublicWebsiteBranding(evidence);
+      if (context?.routeContext) {
+        await recordExternalEvidence({
+          actorUserId: userId,
+          routeContext: context.routeContext,
+          operationType: "branding_analysis",
+          target: evidence.finalUrl,
+          provider: "public_fetch",
+          resultSummary: `Derived branding proposal for ${evidence.finalUrl}`,
+          details: {
+            evidence,
+            branding,
+          } as import("@dpf/db").Prisma.InputJsonValue,
+        });
+      }
+      return {
+        success: true,
+        message: `Derived branding suggestions for ${branding.companyName ?? evidence.finalUrl}.`,
+        data: {
+          companyName: branding.companyName,
+          logoUrl: branding.logoUrl,
+          paletteAccent: branding.paletteAccent,
+          notes: branding.notes,
+        },
+      };
     }
 
     default:

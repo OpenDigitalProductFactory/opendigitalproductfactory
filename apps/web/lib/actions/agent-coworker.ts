@@ -19,7 +19,7 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
-import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -86,6 +86,7 @@ export async function sendMessage(input: {
   threadId: string;
   content: string;
   routeContext: string;
+  externalAccessEnabled?: boolean;
   elevatedFormFillEnabled?: boolean;
   formAssistContext?: AgentFormAssistContext;
 }): Promise<
@@ -165,6 +166,8 @@ export async function sendMessage(input: {
   const availableTools = getAvailableTools({
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
+  }, {
+    externalAccessEnabled: input.externalAccessEnabled === true,
   });
   const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
 
@@ -181,9 +184,38 @@ export async function sendMessage(input: {
       toolsForProvider ? { tools: toolsForProvider } : undefined,
     );
 
-    // Handle tool calls — create proposals
+    // Handle tool calls — execute read-only tools immediately, propose side-effecting tools.
     if (result.toolCalls && result.toolCalls.length > 0) {
       const tc = result.toolCalls[0]!; // v1: one proposal per message
+      const toolDefinition = availableTools.find((tool) => tool.name === tc.name);
+
+      if (toolDefinition?.executionMode === "immediate") {
+        const toolResult = await executeTool(
+          tc.name,
+          tc.arguments,
+          user.id,
+          { routeContext: input.routeContext },
+        );
+
+        const agentMsg = await prisma.agentMessage.create({
+          data: {
+            threadId: input.threadId,
+            role: "assistant",
+            content: toolResult.message,
+            agentId: agent.agentId,
+            routeContext: input.routeContext,
+            providerId: result.providerId,
+          },
+          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+        });
+
+        return {
+          userMessage: serializeMessage(userMsg),
+          agentMessage: serializeMessage(agentMsg),
+          ...(toolResult.data !== undefined ? { formAssistUpdate: toolResult.data } : {}),
+        };
+      }
+
       const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
 
       // Create the agent message first
