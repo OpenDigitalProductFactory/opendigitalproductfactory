@@ -17,9 +17,9 @@ model AgentActionProposal {
   proposalId     String       @unique  // "AP-XXXXX" human-readable
   threadId       String
   thread         AgentThread  @relation(fields: [threadId], references: [id])
-  messageId      String
+  messageId      String       @unique  // v1: one proposal per message
   message        AgentMessage @relation(fields: [messageId], references: [id])
-  agentId        String
+  agentId        String       // soft ref to agent ID (not FK — agent may be route-derived, not in Agent table)
   actionType     String       // create_backlog_item | update_backlog_item | create_digital_product | update_lifecycle | report_quality_issue
   parameters     Json         // structured args the agent proposed
   status         String       @default("proposed") // proposed | approved | rejected | executed | failed
@@ -30,13 +30,21 @@ model AgentActionProposal {
   executedAt     DateTime?
   resultEntityId String?      // ID of the created/updated entity
   resultError    String?      @db.Text
+
+  @@index([threadId])
+  @@index([status])
 }
 ```
 
 **Reverse relations required:**
 - `AgentThread` gains `proposals AgentActionProposal[]`
-- `AgentMessage` gains `proposals AgentActionProposal[]`
+- `AgentMessage` gains `proposal AgentActionProposal?` (singular — v1 is one proposal per message, enforced by `@unique` on messageId)
 - `User` gains `approvedProposals AgentActionProposal[]`
+
+**Design decisions:**
+- `messageId @unique` enforces v1's one-proposal-per-message constraint at the DB level. Future multi-proposal support would remove this constraint.
+- `agentId` is a soft reference (not FK) because route-derived agents (e.g., "portfolio-advisor") are not rows in the `Agent` table — they're entries in `ROUTE_AGENT_MAP`.
+- Indexes on `threadId` and `status` for common query patterns.
 
 **Human-readable IDs:** `AP-XXXXX` format (same pattern as PIR-XXXXX for quality reports).
 
@@ -46,13 +54,17 @@ model AgentActionProposal {
 
 ### Endpoint
 
-`apps/web/app/api/mcp/route.ts` — HTTP transport following the MCP specification.
+`apps/web/app/api/mcp/route.ts` — simplified REST endpoint inspired by MCP conventions. NOT full MCP JSON-RPC 2.0 compliance in v1 (that requires Streamable HTTP transport with SSE, which is overkill for the initial integration).
 
-Supports two operations:
-- `tools/list` — returns available tools filtered by the authenticated user's capabilities
-- `tools/call` — executes a tool (for external MCP clients only — the co-worker panel uses the proposal/approve flow instead)
+**v1 is REST-style:**
+- `POST /api/mcp/tools` — returns available tools filtered by the authenticated user's capabilities
+- `POST /api/mcp/call` — executes a tool (for external MCP clients only — the co-worker panel uses the proposal/approve flow instead)
 
-**Auth:** Session-based for browser requests (existing Auth.js). For external MCP clients (Claude Code, Cursor), a Bearer token header. Token validation reuses the existing auth infrastructure.
+**Future:** Full MCP JSON-RPC 2.0 compliance (JSON-RPC envelope with `method: "tools/list"`, `method: "tools/call"`) as a follow-up when connecting external MCP clients like Claude Code becomes a priority.
+
+**Auth for browser requests:** Existing Auth.js session (JWT cookie).
+
+**Auth for external MCP clients (Claude Code, Cursor):** New `ApiToken` model — a simple table of `token` (hashed), `userId`, `name`, `expiresAt`. The endpoint checks the `Authorization: Bearer <token>` header and resolves to a user context. Token management via `/admin` or `/platform`. This is a new schema addition for this epic.
 
 **External clients skip the proposal flow** — they're already human-operated. When Claude Code calls `create_backlog_item`, it executes immediately (the human is the one typing in Claude Code). The proposal/approve flow is only for the AI co-worker panel where the agent acts autonomously.
 
@@ -90,7 +102,7 @@ Each tool definition includes:
 When tools are provided, the request body includes them in the provider's native format:
 - **OpenAI-compatible (including Ollama):** `tools` array with `type: "function"` and `function: { name, description, parameters }`
 - **Anthropic:** `tools` array with `name`, `description`, `input_schema`
-- **Gemini:** `tools` array with `functionDeclarations`
+- **Gemini:** `tools: [{ functionDeclarations: [...] }]` (array of tool objects wrapping function declarations)
 
 The response parser checks for `tool_calls` in the LLM response:
 - **OpenAI-compatible:** `choices[0].message.tool_calls[]`
@@ -111,13 +123,28 @@ type InferenceResult = {
 };
 ```
 
+### callWithFailover Extension
+
+`callWithFailover` in `ai-provider-priority.ts` gains an optional `tools` parameter that is threaded through to each `callProvider` retry attempt. The `FailoverResult` type (which extends `InferenceResult`) also carries `toolCalls`.
+
+**Updated signature:**
+```typescript
+export async function callWithFailover(
+  messages: ChatMessage[],
+  systemPrompt: string,
+  options?: { tools?: ToolDefinition[] },
+): Promise<FailoverResult>
+```
+
+The existing `sensitivity` parameter (if present) is folded into the options object. This is a non-breaking change — existing callers that pass no third argument continue to work.
+
 ### sendMessage Changes
 
 In `apps/web/lib/actions/agent-coworker.ts`, `sendMessage` is updated:
 
 1. Get available tools via `getAvailableTools(userContext)`
 2. Convert MCP tool definitions to the provider's native tool format
-3. Include in `callWithFailover(messages, systemPrompt, tools)`
+3. Include in `callWithFailover(messages, systemPrompt, { tools })`
 4. If response has `toolCalls`:
    - For each tool call: create an `AgentActionProposal` (status: `proposed`)
    - Create an assistant message that describes what the agent wants to do
@@ -126,7 +153,7 @@ In `apps/web/lib/actions/agent-coworker.ts`, `sendMessage` is updated:
 
 ### Model Filtering
 
-Add `supportsToolUse` field to `ModelProfile` schema (Boolean, default true). The provider priority system filters out models that don't support tool-use when selecting for agent conversations. The profiling step sets this based on model capabilities.
+Add `supportsToolUse` field to `ModelProfile` schema (Boolean, **default false** — safe default). The provider priority system filters out models with `supportsToolUse: false` when selecting for agent conversations that need tool-use. The profiling step must run to set this to `true` for capable models. Models that haven't been profiled won't be used for tool-use conversations until profiling confirms their capability.
 
 ---
 
@@ -176,20 +203,23 @@ The `serializeMessage` function in `agent-coworker-data.ts` joins proposals onto
 
 ### `approveProposal(proposalId)`
 
-1. Auth check — user must have the tool's `requiredCapability`
+1. Auth check — user must have the tool's `requiredCapability`. For tools with `requiredCapability: null` (e.g., `report_quality_issue`), any authenticated user can approve.
 2. Verify proposal status is `proposed` (can't approve twice)
-3. Update status to `approved`, set `decidedAt`, `decidedById`
-4. Execute the tool handler with the proposal's parameters
-5. On success: update status to `executed`, set `executedAt`, `resultEntityId`
-6. On failure: update status to `failed`, set `resultError`
-7. Write to `AuthorizationDecisionLog`: decision `allow`, actionKey = tool name, objectRef = resultEntityId, actorRef = userId
-8. Return updated proposal
+3. In a single Prisma transaction: update status to `approved`, set `decidedAt`/`decidedById`, then execute the tool handler
+4. On success: update status to `executed`, set `executedAt`, `resultEntityId`
+5. On failure: update status to `failed`, set `resultError`. Also insert a system message in the agent thread notifying the user: "Action failed: [error]"
+6. Write to `AuthorizationDecisionLog`: `decisionId` = `DEC-${crypto.randomUUID()}`, decision `allow`, actionKey = tool name, objectRef = proposalId, actorRef = userId
+7. Return updated proposal
+
+**Atomicity note:** Steps 3-4 use a Prisma `$transaction` to ensure the proposal never gets stuck in `approved` state without execution. If the handler throws, the transaction rolls back to `proposed` and the error is recorded via step 5 outside the transaction.
+
+**Same-user constraint (v1):** In v1, only the thread owner can see and approve proposals (the `AgentThread` has `@@unique([userId, contextKey])`). This means the proposer and approver are implicitly the same user. Cross-user approval (e.g., a manager approving an agent's proposal for a subordinate) is a future enhancement.
 
 ### `rejectProposal(proposalId, reason?)`
 
-1. Auth check
+1. Auth check — same rules as approval
 2. Update status to `rejected`, set `decidedAt`, `decidedById`
-3. Write to `AuthorizationDecisionLog`: decision `deny`, rationale = reason
+3. Write to `AuthorizationDecisionLog`: `decisionId` = `DEC-${crypto.randomUUID()}`, decision `deny`, rationale = reason
 4. Return updated proposal
 
 ---
@@ -225,7 +255,7 @@ This satisfies the regulated industry requirement: every agent action has a trac
 ### Modified Files
 | File | Change |
 |------|--------|
-| `packages/db/prisma/schema.prisma` | AgentActionProposal model + reverse relations on AgentThread, AgentMessage, User + supportsToolUse on ModelProfile |
+| `packages/db/prisma/schema.prisma` | AgentActionProposal model + ApiToken model + reverse relations on AgentThread, AgentMessage, User + supportsToolUse on ModelProfile |
 | `apps/web/lib/ai-inference.ts` | callProvider gains optional `tools` param, response parser handles `tool_calls` |
 | `apps/web/lib/agent-coworker-types.ts` | AgentMessageRow gains optional `proposal` field |
 | `apps/web/lib/agent-coworker-data.ts` | serializeMessage joins proposals onto messages |
