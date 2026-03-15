@@ -2,14 +2,17 @@
 "use client";
 
 import { type FeatureBrief, type BuildPhase } from "@/lib/feature-build-types";
+import type { AttachmentInfo } from "@/lib/agent-coworker-types";
+import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
 
 type Props = {
   brief: FeatureBrief | null;
   phase: BuildPhase;
   diffSummary: string | null;
+  attachments?: AttachmentInfo[];
 };
 
-export function FeatureBriefPanel({ brief, phase, diffSummary }: Props) {
+export function FeatureBriefPanel({ brief, phase, diffSummary, attachments }: Props) {
   if (phase === "review" || phase === "ship" || phase === "complete") {
     return (
       <div className="p-4">
@@ -53,6 +56,18 @@ export function FeatureBriefPanel({ brief, phase, diffSummary }: Props) {
               <li key={i} className="text-[13px] text-[#ccc] leading-relaxed">{c}</li>
             ))}
           </ul>
+        </div>
+      )}
+      {attachments && attachments.length > 0 && (
+        <div>
+          <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">
+            Attachments
+          </span>
+          <div className="mt-1">
+            {attachments.map((att) => (
+              <AgentAttachmentCard key={att.id} attachment={att} />
+            ))}
+          </div>
         </div>
       )}
     </div>

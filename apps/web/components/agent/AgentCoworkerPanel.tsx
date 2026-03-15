@@ -72,6 +72,7 @@ export function AgentCoworkerPanel({
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
@@ -136,6 +137,9 @@ export function AgentCoworkerPanel({
       setMessages((prev) => [...prev, optimisticMessage]);
     }
 
+    const attachmentForThisMessage = pendingAttachment;
+    if (attachmentForThisMessage) setPendingAttachment(null);
+
     startTransition(async () => {
       const result = await sendMessage({
         threadId,
@@ -145,6 +149,7 @@ export function AgentCoworkerPanel({
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
+        ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
       });
       if ("error" in result) {
         console.warn("sendMessage error:", result.error);
@@ -356,7 +361,14 @@ export function AgentCoworkerPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      <AgentMessageInput onSend={handleSend} disabled={isPending || isClearing || !threadId} />
+      <AgentMessageInput
+        onSend={handleSend}
+        disabled={isPending || isClearing || !threadId}
+        threadId={threadId}
+        pendingFile={pendingAttachment}
+        onFileUploaded={setPendingAttachment}
+        onFileClear={() => setPendingAttachment(null)}
+      />
     </>
   );
 }

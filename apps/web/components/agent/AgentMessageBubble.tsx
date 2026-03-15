@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
+import { AgentAttachmentCard } from "./AgentAttachmentCard";
 
 type Props = {
   message: AgentMessageRow;
@@ -305,6 +306,13 @@ export function AgentMessageBubble({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
+          </div>
+        )}
+        {message.attachments && message.attachments.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            {message.attachments.map((att) => (
+              <AgentAttachmentCard key={att.id} attachment={att} />
+            ))}
           </div>
         )}
       </div>

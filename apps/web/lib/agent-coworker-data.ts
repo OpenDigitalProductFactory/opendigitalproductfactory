@@ -1,6 +1,14 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import type { AgentMessageRow } from "@/lib/agent-coworker-types";
+import type { AgentMessageRow, AttachmentInfo } from "@/lib/agent-coworker-types";
+
+type AttachmentRow = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  parsedContent: unknown;
+};
 
 function serializeMessage(
   m: {
@@ -10,6 +18,7 @@ function serializeMessage(
     agentId: string | null;
     routeContext: string | null;
     createdAt: Date;
+    attachments?: AttachmentRow[];
   },
   proposal?: {
     proposalId: string;
@@ -30,6 +39,15 @@ function serializeMessage(
     routeContext: m.routeContext,
     createdAt: m.createdAt.toISOString(),
   };
+  if (m.attachments && m.attachments.length > 0) {
+    row.attachments = m.attachments.map((a): AttachmentInfo => ({
+      id: a.id,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      sizeBytes: a.sizeBytes,
+      parsedSummary: (a.parsedContent as { summary?: string } | null)?.summary ?? null,
+    }));
+  }
   if (proposal) {
     row.proposal = {
       proposalId: proposal.proposalId,
@@ -61,6 +79,9 @@ export const getRecentMessages = cache(
         agentId: true,
         routeContext: true,
         createdAt: true,
+        attachments: {
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
+        },
       },
     });
     return messages.reverse().map((m) => serializeMessage(m));
