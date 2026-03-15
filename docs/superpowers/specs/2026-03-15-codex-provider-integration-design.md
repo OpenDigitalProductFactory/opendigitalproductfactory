@@ -122,6 +122,8 @@ For providers without an explicit `billingLabel`, the UI generates one from pric
 
 The `billingLabel` field from the DB/registry overrides the auto-generated label when set.
 
+**Note:** `costModel: "subscription"` has no auto-generation path — any provider using subscription billing MUST have an explicit `billingLabel` set in the registry entry. The `getBillingLabel()` function returns `null` for unrecognised `costModel` values, and the UI falls back to showing no label (which is acceptable since subscription providers without an explicit label would be a data error).
+
 #### Provider card changes
 
 Each provider card on `/platform/ai` gains the billing label, displayed in small muted text below the family list. Format: `fontSize: 10, color: #8888a0`.
@@ -161,6 +163,7 @@ The provider detail page (`/platform/ai/providers/[providerId]`) shows the `cost
 - `packages/db/src/seed.ts` — add `seedMcpServers()` for Codex MCP server record
 - `apps/web/lib/ai-provider-types.ts` — extend `RegistryProviderEntry`, `ProviderRow` with new fields; add `getBillingLabel()` pure function
 - `apps/web/lib/actions/ai-providers.ts` — update `syncProviderRegistry()` to persist `billingLabel`, `costPerformanceNotes`
+- `apps/web/lib/ai-provider-data.ts` — no code change needed; `getProviders()` uses `findMany()` without a `select` clause, so new scalar columns are returned automatically by Prisma
 - `apps/web/app/(shell)/platform/ai/page.tsx` — add "Agent Providers" section, billing labels on cards
 - `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx` — cost-performance notes info box
 
