@@ -149,6 +149,56 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
   },
+  // ─── Build Studio Tools ───────────────────────────────────────────────────
+  {
+    name: "update_feature_brief",
+    description: "Update the Feature Brief for an active build with structured fields",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The build ID (e.g., FB-XXXXX)" },
+        title: { type: "string", description: "Feature title" },
+        description: { type: "string", description: "Plain-language feature description" },
+        portfolioContext: { type: "string", description: "Portfolio slug that owns this feature" },
+        targetRoles: { type: "array", items: { type: "string" }, description: "Role IDs that will use this feature" },
+        inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
+        dataNeeds: { type: "string", description: "What data the feature stores" },
+        acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
+      },
+      required: ["buildId", "title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "register_digital_product_from_build",
+    description: "Register or update a DigitalProduct from a shipped feature build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The build ID being shipped" },
+        name: { type: "string", description: "Product name" },
+        portfolioSlug: { type: "string", description: "Portfolio slug to assign to" },
+        versionBump: { type: "string", enum: ["major", "minor", "patch"], description: "How to bump the version" },
+      },
+      required: ["buildId", "name", "portfolioSlug"],
+    },
+    requiredCapability: "manage_capabilities",
+  },
+  {
+    name: "create_build_epic",
+    description: "Create an Epic and initial backlog items for a shipped feature build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The build ID" },
+        title: { type: "string", description: "Epic title (e.g., Feature Name v1.0.0)" },
+        portfolioSlug: { type: "string", description: "Portfolio slug to link the epic to" },
+        digitalProductId: { type: "string", description: "Product internal ID for backlog items" },
+      },
+      required: ["buildId", "title"],
+    },
+    requiredCapability: "manage_capabilities",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -310,6 +360,51 @@ export async function executeTool(
           notes: branding.notes,
         },
       };
+    }
+
+    case "update_feature_brief": {
+      const { updateFeatureBrief } = await import("@/lib/actions/build");
+      const brief = {
+        title: String(params["title"] ?? ""),
+        description: String(params["description"] ?? ""),
+        portfolioContext: String(params["portfolioContext"] ?? ""),
+        targetRoles: Array.isArray(params["targetRoles"]) ? params["targetRoles"].map(String) : [],
+        inputs: Array.isArray(params["inputs"]) ? params["inputs"].map(String) : [],
+        dataNeeds: String(params["dataNeeds"] ?? ""),
+        acceptanceCriteria: Array.isArray(params["acceptanceCriteria"]) ? params["acceptanceCriteria"].map(String) : [],
+      };
+      await updateFeatureBrief(String(params["buildId"]), brief);
+      return { success: true, entityId: String(params["buildId"]), message: `Updated Feature Brief for ${String(params["buildId"])}` };
+    }
+
+    case "register_digital_product_from_build": {
+      const { shipBuild } = await import("@/lib/actions/build");
+      const result = await shipBuild({
+        buildId: String(params["buildId"]),
+        name: String(params["name"]),
+        portfolioSlug: String(params["portfolioSlug"]),
+        versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
+      });
+      return {
+        success: true,
+        entityId: result.productId,
+        message: result.message,
+        data: {
+          productInternalId: result.productInternalId,
+          portfolioInternalId: result.portfolioInternalId,
+        },
+      };
+    }
+
+    case "create_build_epic": {
+      const { createBuildEpic } = await import("@/lib/actions/build");
+      const result = await createBuildEpic({
+        buildId: String(params["buildId"]),
+        title: String(params["title"]),
+        portfolioSlug: typeof params["portfolioSlug"] === "string" ? params["portfolioSlug"] : undefined,
+        digitalProductId: typeof params["digitalProductId"] === "string" ? params["digitalProductId"] : undefined,
+      });
+      return { success: true, entityId: result.epicId, message: result.message };
     }
 
     default:
