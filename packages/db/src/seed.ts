@@ -866,6 +866,36 @@ async function seedScheduledJobs(): Promise<void> {
   console.log("Seeded scheduled jobs");
 }
 
+async function seedMcpServers(): Promise<void> {
+  const existing = await prisma.mcpServer.findUnique({
+    where: { serverId: "codex-agent" },
+  });
+
+  if (!existing) {
+    await prisma.mcpServer.create({
+      data: {
+        serverId: "codex-agent",
+        name: "OpenAI Codex Agent",
+        config: {
+          command: "npx",
+          args: ["-y", "codex", "mcp-server"],
+          transport: "stdio",
+          tools: ["codex", "codex-reply"],
+          linkedProviderId: "codex",
+          defaults: {
+            "approval-policy": "on-request",
+            sandbox: "workspace-write",
+          },
+        },
+        status: "unconfigured",
+      },
+    });
+    console.log("Seeded MCP server: codex-agent");
+  } else {
+    console.log("MCP server codex-agent already exists — skipping (preserving admin config)");
+  }
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -887,6 +917,7 @@ async function main(): Promise<void> {
   await seedMvpEpics();
   await seedDefaultAdminUser();
   await seedScheduledJobs();
+  await seedMcpServers();
   console.log("Seed complete.");
 }
 
