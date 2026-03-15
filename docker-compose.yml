@@ -79,6 +79,15 @@ services:
       retries: 10
       start_period: 30s
 
+  # ─── Sandbox (build image only, containers created on-demand) ────────────
+  sandbox-image:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: dpf-sandbox
+    profiles: ["build-images"]  # only built when explicitly requested
+    command: ["echo", "Image built successfully"]
+
 volumes:
   pgdata:
   neo4jdata:

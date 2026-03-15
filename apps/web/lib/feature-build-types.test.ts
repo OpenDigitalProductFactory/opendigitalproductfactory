@@ -1,0 +1,137 @@
+import { describe, it, expect } from "vitest";
+import {
+  validateFeatureBrief,
+  PHASE_ORDER,
+  canTransitionPhase,
+  PHASE_LABELS,
+  CODING_CAPABILITY_COLOURS,
+  generateBuildId,
+  generatePackId,
+} from "./feature-build-types";
+
+describe("validateFeatureBrief", () => {
+  it("accepts a valid brief", () => {
+    const result = validateFeatureBrief({
+      title: "Customer Feedback Form",
+      description: "A form for collecting customer feedback",
+      portfolioContext: "products_and_services_sold",
+      targetRoles: ["HR-200"],
+      inputs: [],
+      dataNeeds: "Stores feedback text and rating",
+      acceptanceCriteria: ["Form submits successfully"],
+    });
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects empty title", () => {
+    const result = validateFeatureBrief({
+      title: "",
+      description: "desc",
+      portfolioContext: "foundational",
+      targetRoles: [],
+      inputs: [],
+      dataNeeds: "",
+      acceptanceCriteria: [],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("title is required");
+  });
+
+  it("rejects missing description", () => {
+    const result = validateFeatureBrief({
+      title: "Test",
+      description: "",
+      portfolioContext: "foundational",
+      targetRoles: [],
+      inputs: [],
+      dataNeeds: "",
+      acceptanceCriteria: [],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("description is required");
+  });
+});
+
+describe("PHASE_ORDER", () => {
+  it("has 7 phases in correct order", () => {
+    expect(PHASE_ORDER).toEqual([
+      "ideate", "plan", "build", "review", "ship", "complete", "failed",
+    ]);
+  });
+});
+
+describe("canTransitionPhase", () => {
+  it("allows ideate → plan", () => {
+    expect(canTransitionPhase("ideate", "plan")).toBe(true);
+  });
+
+  it("allows plan → build", () => {
+    expect(canTransitionPhase("plan", "build")).toBe(true);
+  });
+
+  it("allows build → review", () => {
+    expect(canTransitionPhase("build", "review")).toBe(true);
+  });
+
+  it("allows review → ship", () => {
+    expect(canTransitionPhase("review", "ship")).toBe(true);
+  });
+
+  it("allows ship → complete", () => {
+    expect(canTransitionPhase("ship", "complete")).toBe(true);
+  });
+
+  it("allows any phase → failed", () => {
+    expect(canTransitionPhase("ideate", "failed")).toBe(true);
+    expect(canTransitionPhase("build", "failed")).toBe(true);
+  });
+
+  it("blocks skipping phases", () => {
+    expect(canTransitionPhase("ideate", "build")).toBe(false);
+    expect(canTransitionPhase("plan", "review")).toBe(false);
+  });
+
+  it("blocks backward transitions", () => {
+    expect(canTransitionPhase("build", "ideate")).toBe(false);
+    expect(canTransitionPhase("review", "plan")).toBe(false);
+  });
+
+  it("blocks transitions from terminal states", () => {
+    expect(canTransitionPhase("complete", "ideate")).toBe(false);
+    expect(canTransitionPhase("failed", "ideate")).toBe(false);
+  });
+});
+
+describe("PHASE_LABELS", () => {
+  it("has a label for every phase", () => {
+    for (const phase of PHASE_ORDER) {
+      expect(PHASE_LABELS[phase]).toBeTruthy();
+    }
+  });
+});
+
+describe("CODING_CAPABILITY_COLOURS", () => {
+  it("maps all three tiers", () => {
+    expect(CODING_CAPABILITY_COLOURS["excellent"]).toBeTruthy();
+    expect(CODING_CAPABILITY_COLOURS["adequate"]).toBeTruthy();
+    expect(CODING_CAPABILITY_COLOURS["insufficient"]).toBeTruthy();
+  });
+});
+
+describe("generateBuildId", () => {
+  it("starts with FB-", () => {
+    expect(generateBuildId()).toMatch(/^FB-[A-Z0-9]{8}$/);
+  });
+
+  it("generates unique IDs", () => {
+    const a = generateBuildId();
+    const b = generateBuildId();
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("generatePackId", () => {
+  it("starts with FP-", () => {
+    expect(generatePackId()).toMatch(/^FP-[A-Z0-9]{8}$/);
+  });
+});

@@ -27,6 +27,7 @@ model User {
   externalEvidenceRecords ExternalEvidenceRecord[]
   approvedProposals AgentActionProposal[] @relation("ProposalDecisions")
   apiTokens       ApiToken[]
+  featureBuilds   FeatureBuild[]
 }
 
 model UserGroup {
@@ -303,6 +304,7 @@ model ModelProfile {
   contextWindow    String?
   speedRating      String?
   supportsToolUse  Boolean  @default(false)
+  codingCapability String?  // "excellent" | "adequate" | "insufficient"
   generatedBy      String
   generatedAt      DateTime @default(now())
 
@@ -731,6 +733,47 @@ model ExternalEvidenceRecord {
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
   @@index([operationType, createdAt])
+}
+
+// ─── Feature Build ──────────────────────────────────────────────────────────
+
+model FeatureBuild {
+  id              String   @id @default(cuid())
+  buildId         String   @unique  // "FB-XXXXX"
+  title           String
+  description     String?  @db.Text
+  portfolioId     String?
+  brief           Json?    // FeatureBrief structure
+  plan            Json?    // Internal implementation plan
+  phase           String   @default("ideate") // ideate | plan | build | review | ship | complete | failed
+  sandboxId       String?  // Docker container ID
+  sandboxPort     Int?     // Dev server port
+  diffSummary     String?  @db.Text  // Human-readable change summary
+  diffPatch       String?  @db.Text  // Git patch content
+  codingProvider  String?  // Which provider/model did the code generation
+  threadId        String?  // Links to the conversation thread
+  createdById     String
+  createdBy       User     @relation(fields: [createdById], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([phase])
+  @@index([createdById])
+}
+
+model FeaturePack {
+  id               String   @id @default(cuid())
+  packId           String   @unique  // "FP-XXXXX"
+  title            String
+  description      String?  @db.Text
+  portfolioContext String?
+  version          String   @default("1.0.0")
+  manifest         Json     // files, migrations, seeds, dependencies
+  screenshot       String?  // URL or base64 preview image
+  buildId          String?  // Links to the FeatureBuild that created it
+  status           String   @default("local")  // local | contributed | published
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 // ─── Platform Configuration ──────────────────────────────────────────────────
