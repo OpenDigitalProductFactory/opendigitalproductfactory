@@ -47,6 +47,7 @@ export type FeaturePackRow = {
   status: string;
   buildId: string | null;
   createdAt: Date;
+  updatedAt: Date;
 };
 
 export type CodingCapability = "excellent" | "adequate" | "insufficient";
