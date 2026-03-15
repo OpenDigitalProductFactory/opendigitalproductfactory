@@ -127,6 +127,7 @@ export async function getFeatureBuildForContext(
       title: true,
       phase: true,
       brief: true,
+      plan: true,
       portfolioId: true,
       createdById: true,
     },
@@ -139,6 +140,7 @@ export async function getFeatureBuildForContext(
     phase: r.phase as BuildPhase,
     title: r.title,
     brief: r.brief as FeatureBrief | null,
+    plan: r.plan as Record<string, unknown> | null,
     portfolioId: r.portfolioId,
   };
 }
