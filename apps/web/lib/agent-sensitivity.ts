@@ -15,6 +15,7 @@ const ROUTE_SENSITIVITY: Array<{ prefix: string; sensitivity: RouteSensitivity }
   { prefix: "/platform", sensitivity: "confidential" },
   { prefix: "/ea", sensitivity: "internal" },
   { prefix: "/ops", sensitivity: "internal" },
+  { prefix: "/build", sensitivity: "internal" },
   { prefix: "/inventory", sensitivity: "internal" },
   { prefix: "/portfolio", sensitivity: "internal" },
   { prefix: "/workspace", sensitivity: "internal" },
