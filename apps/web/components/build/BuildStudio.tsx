@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { SandboxPreview } from "./SandboxPreview";
-import { createFeatureBuild } from "@/lib/actions/build";
+import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 
@@ -113,7 +113,26 @@ export function BuildStudio({ builds, portfolios }: Props) {
                       : "transparent",
                   }}
                 >
-                  <div className="text-[13px] font-semibold text-white mb-0.5">{build.title}</div>
+                  <div className="flex items-start justify-between">
+                    <div className="text-[13px] font-semibold text-white mb-0.5">{build.title}</div>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      title="Delete build"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete "${build.title}"?`)) return;
+                        deleteFeatureBuild(build.buildId).then(() => {
+                          if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
+                          router.refresh();
+                        });
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.click(); }}
+                      className="text-[var(--dpf-muted)] hover:text-[#f87171] text-xs ml-2 shrink-0 cursor-pointer"
+                    >
+                      &times;
+                    </span>
+                  </div>
                   <div className="text-[11px] text-[var(--dpf-muted)]">
                     {build.buildId} &middot; {build.phase}
                     {build.product && (

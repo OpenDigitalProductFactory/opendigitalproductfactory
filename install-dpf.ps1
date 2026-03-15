@@ -1,25 +1,29 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
+param(
+    [string]$InstallDir = "C:\DPF"
+)
 $ErrorActionPreference = "Stop"
 
-$DPF_DIR = "C:\DPF"
+$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
 $PROGRESS_FILE = "$DPF_DIR\.install-progress"
+$AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Write-Step($step, $total, $msg) {
     Write-Host "`nStep $step of $total`: $msg" -ForegroundColor Cyan
 }
 
 function Write-OK($msg) {
-    Write-Host "  ✓ $msg" -ForegroundColor Green
+    Write-Host "  âœ“ $msg" -ForegroundColor Green
 }
 
 function Write-Action($msg) {
-    Write-Host "  → $msg" -ForegroundColor Yellow
+    Write-Host "  â†’ $msg" -ForegroundColor Yellow
 }
 
 function Write-Warn($msg) {
-    Write-Host "  ⚠ $msg" -ForegroundColor Red
+    Write-Host "  âš  $msg" -ForegroundColor Red
 }
 
 function Get-Progress {
@@ -55,22 +59,45 @@ function Generate-RandomAlphanumeric($length = 16) {
     return -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
-# ─── Banner ───────────────────────────────────────────────────────────────────
+function Ensure-DPFStartupTask {
+    param([string]$taskName, [string]$startScriptPath)
+
+    if (-not (Test-Path $startScriptPath)) {
+        Write-Warn "Startup script not found at $startScriptPath. Skipping auto-start setup."
+        return $false
+    }
+
+    try {
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NoLogo -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$startScriptPath`" -NoBrowser"
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType InteractiveToken
+        $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Start DPF containers on user logon." -Force | Out-Null
+        Write-OK "Auto-start task configured: $taskName"
+        return $true
+    } catch {
+        Write-Warn "Could not configure auto-start task '$taskName': $($_.Exception.Message)"
+        return $false
+    }
+}
+
+# â”€â”€â”€ Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Magenta
-Write-Host "║  Digital Product Factory — Installation              ║" -ForegroundColor Magenta
-Write-Host "║  This will set up everything you need automatically  ║" -ForegroundColor Magenta
-Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Magenta
+Write-Host "â•‘  Digital Product Factory â€” Installation              â•‘" -ForegroundColor Magenta
+Write-Host "â•‘  This will set up everything you need automatically  â•‘" -ForegroundColor Magenta
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Magenta
 
 # Create install dir
 if (-not (Test-Path $DPF_DIR)) {
     New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
 }
 
-# ─── Step 1: Check Windows ────────────────────────────────────────────────────
+# â”€â”€â”€ Step 1: Check Windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 1 8 "Checking Windows version..."
+Write-Step 1 9 "Checking Windows version..."
 if (-not (Is-StepDone "windows_check")) {
     $os = Get-CimInstance Win32_OperatingSystem
     $build = [int]$os.BuildNumber
@@ -86,9 +113,9 @@ if (-not (Is-StepDone "windows_check")) {
     Write-OK "Already checked"
 }
 
-# ─── Step 2: WSL2 ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ Step 2: WSL2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 2 8 "Setting up WSL2..."
+Write-Step 2 9 "Setting up WSL2..."
 if (-not (Is-StepDone "wsl2")) {
     $vmpFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
     $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
@@ -96,7 +123,7 @@ if (-not (Is-StepDone "wsl2")) {
     $needsReboot = $false
 
     if ($vmpFeature.State -ne "Enabled") {
-        Write-Action "Enabling Virtual Machine Platform (safe — needed for Docker)..."
+        Write-Action "Enabling Virtual Machine Platform (safe â€” needed for Docker)..."
         Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -WarningAction SilentlyContinue | Out-Null
         $needsReboot = $true
     }
@@ -139,9 +166,9 @@ if ((Is-StepDone "wsl2_partial") -and -not (Is-StepDone "wsl2")) {
     Save-Progress "wsl2"
 }
 
-# ─── Step 3: Docker Desktop ───────────────────────────────────────────────────
+# â”€â”€â”€ Step 3: Docker Desktop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 3 8 "Installing Docker Desktop..."
+Write-Step 3 9 "Installing Docker Desktop..."
 if (-not (Is-StepDone "docker")) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
@@ -151,19 +178,19 @@ if (-not (Is-StepDone "docker")) {
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
 
         Write-Host ""
-        Write-Host "  ╔═══════════════════════════════════════════════════╗" -ForegroundColor Yellow
-        Write-Host "  ║  ACTION NEEDED:                                   ║" -ForegroundColor Yellow
-        Write-Host "  ║                                                   ║" -ForegroundColor Yellow
-        Write-Host "  ║  The Docker Desktop installer will open.          ║" -ForegroundColor Yellow
-        Write-Host "  ║  1. Click 'Accept' on the license agreement       ║" -ForegroundColor Yellow
-        Write-Host "  ║  2. Leave all checkboxes at their defaults        ║" -ForegroundColor Yellow
-        Write-Host "  ║  3. Click 'Install' and wait for it to finish     ║" -ForegroundColor Yellow
-        Write-Host "  ║  4. Click 'Close' when done                       ║" -ForegroundColor Yellow
-        Write-Host "  ║                                                   ║" -ForegroundColor Yellow
-        Write-Host "  ║  Docker Desktop is free for businesses with       ║" -ForegroundColor Yellow
-        Write-Host "  ║  fewer than 250 employees and under `$10M revenue. ║" -ForegroundColor Yellow
-        Write-Host "  ║  See https://docker.com/pricing for details.      ║" -ForegroundColor Yellow
-        Write-Host "  ╚═══════════════════════════════════════════════════╝" -ForegroundColor Yellow
+        Write-Host "  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Yellow
+        Write-Host "  â•‘  ACTION NEEDED:                                   â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘                                                   â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  The Docker Desktop installer will open.          â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  1. Click 'Accept' on the license agreement       â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  2. Leave all checkboxes at their defaults        â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  3. Click 'Install' and wait for it to finish     â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  4. Click 'Close' when done                       â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘                                                   â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  Docker Desktop is free for businesses with       â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  fewer than 250 employees and under `$10M revenue. â•‘" -ForegroundColor Yellow
+        Write-Host "  â•‘  See https://docker.com/pricing for details.      â•‘" -ForegroundColor Yellow
+        Write-Host "  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Yellow
         Write-Host ""
 
         Start-Process -FilePath $installerPath -Wait
@@ -198,9 +225,9 @@ if (-not (Is-StepDone "docker")) {
     Write-OK "Already installed"
 }
 
-# ─── Step 4: Download DPF ─────────────────────────────────────────────────────
+# â”€â”€â”€ Step 4: Download DPF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 4 8 "Downloading Digital Product Factory..."
+Write-Step 4 9 "Downloading Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
     Write-Action "Downloading latest release..."
     $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
@@ -232,7 +259,7 @@ if (-not (Is-StepDone "download")) {
     Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
     Copy-Item "$DPF_DIR\scripts\dpf-stop.ps1" "$DPF_DIR\dpf-stop.ps1" -ErrorAction SilentlyContinue
 
-    # Add C:\DPF to user PATH if not already there
+    # Add install directory to user PATH if not already there
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($userPath -notlike "*$DPF_DIR*") {
         [Environment]::SetEnvironmentVariable("Path", "$userPath;$DPF_DIR", "User")
@@ -245,9 +272,9 @@ if (-not (Is-StepDone "download")) {
     Write-OK "Already downloaded"
 }
 
-# ─── Step 5: Hardware Detection ────────────────────────────────────────────────
+# â”€â”€â”€ Step 5: Hardware Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 5 8 "Detecting your hardware..."
+Write-Step 5 9 "Detecting your hardware..."
 if (-not (Is-StepDone "hardware")) {
     $cpu = Get-CimInstance Win32_Processor
     $mem = Get-CimInstance Win32_ComputerSystem
@@ -266,7 +293,7 @@ if (-not (Is-StepDone "hardware")) {
     # Select the LARGEST model the hardware can support
     if ($gpuVRAM_GB -ge 16) {
         $selectedModel = "qwen3:32b"
-        $modelReason = "maximum quality — your GPU has plenty of memory"
+        $modelReason = "maximum quality â€” your GPU has plenty of memory"
     } elseif ($gpuVRAM_GB -ge 8) {
         $selectedModel = "qwen3:14b"
         $modelReason = "high quality, good fit for your GPU"
@@ -331,7 +358,7 @@ services:
     if (-not $selectedModel) { $selectedModel = "qwen3:1.7b" }
 }
 
-# ─── Generate .env ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ Generate .env â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if (-not (Test-Path "$DPF_DIR\.env")) {
     $pgPass = Generate-RandomPassword 16
@@ -342,7 +369,7 @@ if (-not (Test-Path "$DPF_DIR\.env")) {
     $hostProfileJson = if (Test-Path "$DPF_DIR\.host-profile.json") { Get-Content "$DPF_DIR\.host-profile.json" -Raw } else { "{}" }
 
     @"
-# Generated by DPF installer — do not edit manually
+# Generated by DPF installer â€” do not edit manually
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=$pgPass
 DATABASE_URL=postgresql://dpf:$pgPass@postgres:5432/dpf
@@ -356,9 +383,9 @@ SELECTED_MODEL=$selectedModel
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
-# ─── Step 6: Start Platform ───────────────────────────────────────────────────
+# â”€â”€â”€ Step 6: Start Platform â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 6 8 "Starting the platform..."
+Write-Step 6 9 "Starting the platform..."
 if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
     Write-Action "Building the portal (first time takes 3-5 minutes)..."
@@ -399,9 +426,9 @@ if (-not (Is-StepDone "started")) {
     Write-OK "Already running"
 }
 
-# ─── Step 7: Pull AI Model ────────────────────────────────────────────────────
+# â”€â”€â”€ Step 7: Pull AI Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 7 8 "Setting up your AI Coworker..."
+Write-Step 7 9 "Setting up your AI Coworker..."
 if (-not (Is-StepDone "model")) {
     Write-Action "Downloading AI model ($selectedModel)... this takes a minute"
     docker compose exec ollama ollama pull $selectedModel
@@ -415,9 +442,18 @@ if (-not (Is-StepDone "model")) {
     Write-OK "Already set up"
 }
 
-# ─── Step 8: Open Browser ─────────────────────────────────────────────────────
+# â”€â”€â”€ Step 8: Open Browser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 8 8 "Opening your portal!"
+Write-Step 8 9 "Configuring auto-start on logon..."
+if (-not (Is-StepDone "autostart")) {
+    if (Ensure-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\\dpf-start.ps1") {
+        Save-Progress "autostart"
+    }
+} else {
+    Write-OK "Already configured"
+}
+
+Write-Step 9 9 "Opening your portal!"
 
 # Read admin password from .env
 $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PASSWORD=" }) -replace "^ADMIN_PASSWORD=", ""
@@ -425,22 +461,22 @@ $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PAS
 Start-Process "http://localhost:3000"
 
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  Your Digital Product Factory is ready!              ║" -ForegroundColor Green
-Write-Host "  ║                                                      ║" -ForegroundColor Green
-Write-Host "  ║  URL:      http://localhost:3000                     ║" -ForegroundColor Green
-Write-Host "  ║  Email:    admin@dpf.local                           ║" -ForegroundColor Green
-Write-Host "  ║  Password: $($adminPass.PadRight(40))║" -ForegroundColor Green
-Write-Host "  ║                                                      ║" -ForegroundColor Green
-Write-Host "  ║  Save this password — it won't be shown again!      ║" -ForegroundColor Green
-Write-Host "  ║                                                      ║" -ForegroundColor Green
-Write-Host "  ║  To stop:  Open PowerShell, run: dpf-stop            ║" -ForegroundColor Green
-Write-Host "  ║  To start: Open PowerShell, run: dpf-start           ║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "  â•‘  Your Digital Product Factory is ready!              â•‘" -ForegroundColor Green
+Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
+Write-Host "  â•‘  URL:      http://localhost:3000                     â•‘" -ForegroundColor Green
+Write-Host "  â•‘  Email:    admin@dpf.local                           â•‘" -ForegroundColor Green
+Write-Host "  â•‘  Password: $($adminPass.PadRight(40))â•‘" -ForegroundColor Green
+Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
+Write-Host "  â•‘  Save this password â€” it won't be shown again!      â•‘" -ForegroundColor Green
+Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
+Write-Host "  â•‘  To stop:  Open PowerShell, run: dpf-stop            â•‘" -ForegroundColor Green
+Write-Host "  â•‘  To start: Open PowerShell, run: dpf-start           â•‘" -ForegroundColor Green
+Write-Host "  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 
 # Save credentials file
 @"
-Digital Product Factory — Admin Credentials
+Digital Product Factory â€” Admin Credentials
 ============================================
 URL:      http://localhost:3000
 Email:    admin@dpf.local
@@ -449,3 +485,4 @@ Password: $adminPass
 Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 Change this password after first login!
 "@ | Set-Content "$DPF_DIR\.admin-credentials"
+

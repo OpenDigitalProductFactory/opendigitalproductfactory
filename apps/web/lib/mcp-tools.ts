@@ -150,54 +150,52 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
   },
   // ─── Build Studio Tools ───────────────────────────────────────────────────
+  // update_feature_brief and create_build_epic execute immediately (no approval dialog).
+  // Only register_digital_product_from_build needs HITL approval (creates a real product).
   {
     name: "update_feature_brief",
-    description: "Update the Feature Brief for an active build with structured fields",
+    description: "Save the Feature Brief for the current build. Build ID is auto-resolved.",
     inputSchema: {
       type: "object",
       properties: {
-        buildId: { type: "string", description: "The build ID (e.g., FB-XXXXX)" },
         title: { type: "string", description: "Feature title" },
         description: { type: "string", description: "Plain-language feature description" },
         portfolioContext: { type: "string", description: "Portfolio slug that owns this feature" },
-        targetRoles: { type: "array", items: { type: "string" }, description: "Role IDs that will use this feature" },
+        targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature" },
         inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
         dataNeeds: { type: "string", description: "What data the feature stores" },
         acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
       },
-      required: ["buildId", "title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
+      required: ["title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
     },
     requiredCapability: "view_platform",
+    executionMode: "immediate",
   },
   {
     name: "register_digital_product_from_build",
-    description: "Register or update a DigitalProduct from a shipped feature build",
+    description: "Register or update a DigitalProduct from the current build. Build ID is auto-resolved. Requires approval.",
     inputSchema: {
       type: "object",
       properties: {
-        buildId: { type: "string", description: "The build ID being shipped" },
         name: { type: "string", description: "Product name" },
         portfolioSlug: { type: "string", description: "Portfolio slug to assign to" },
-        versionBump: { type: "string", enum: ["major", "minor", "patch"], description: "How to bump the version" },
       },
-      required: ["buildId", "name", "portfolioSlug"],
+      required: ["name", "portfolioSlug"],
     },
     requiredCapability: "manage_capabilities",
   },
   {
     name: "create_build_epic",
-    description: "Create an Epic and initial backlog items for a shipped feature build",
+    description: "Create an Epic and backlog items for a shipped build. All IDs are auto-resolved.",
     inputSchema: {
       type: "object",
       properties: {
-        buildId: { type: "string", description: "The build ID" },
-        title: { type: "string", description: "Epic title (e.g., Feature Name v1.0.0)" },
-        portfolioSlug: { type: "string", description: "Portfolio slug to link the epic to" },
-        digitalProductId: { type: "string", description: "Product internal ID for backlog items" },
+        title: { type: "string", description: "Epic title" },
       },
-      required: ["buildId", "title"],
+      required: ["title"],
     },
     requiredCapability: "manage_capabilities",
+    executionMode: "immediate",
   },
   // ─── Intake Tools ─────────────────────────────────────────────────────────
   {
@@ -480,7 +478,7 @@ export async function executeTool(
     }
 
     case "create_build_epic": {
-      // Auto-resolve buildId if the LLM passed a placeholder
+      // Auto-resolve buildId and digitalProductId from the build record
       let epicBuildId = String(params["buildId"] ?? "");
       if (!epicBuildId || epicBuildId.startsWith("CURRENT") || !epicBuildId.startsWith("FB-")) {
         const latestBuild = await prisma.featureBuild.findFirst({
@@ -491,13 +489,27 @@ export async function executeTool(
         if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
         epicBuildId = latestBuild.buildId;
       }
+      // Auto-resolve digitalProductId and portfolioSlug from the build's linked product
+      const epicBuild = await prisma.featureBuild.findUnique({
+        where: { buildId: epicBuildId },
+        select: {
+          digitalProductId: true,
+          portfolioId: true,
+          digitalProduct: { select: { portfolio: { select: { slug: true } } } },
+        },
+      });
+      const resolvedProductId = epicBuild?.digitalProductId ?? undefined;
+      const resolvedPortfolioSlug = typeof params["portfolioSlug"] === "string"
+        ? params["portfolioSlug"]
+        : epicBuild?.digitalProduct?.portfolio?.slug ?? undefined;
+
       const { createBuildEpic } = await import("@/lib/actions/build");
       const epicInput: { buildId: string; title: string; portfolioSlug?: string; digitalProductId?: string } = {
         buildId: epicBuildId,
         title: String(params["title"]),
       };
-      if (typeof params["portfolioSlug"] === "string") epicInput.portfolioSlug = params["portfolioSlug"];
-      if (typeof params["digitalProductId"] === "string") epicInput.digitalProductId = params["digitalProductId"];
+      if (resolvedPortfolioSlug) epicInput.portfolioSlug = resolvedPortfolioSlug;
+      if (resolvedProductId) epicInput.digitalProductId = resolvedProductId;
       const result = await createBuildEpic(epicInput);
       return { success: true, entityId: result.epicId, message: result.message };
     }
