@@ -6,6 +6,7 @@ import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRoute, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { clearConversation, sendMessage } from "@/lib/actions/agent-coworker";
+import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
@@ -106,6 +107,39 @@ export function AgentCoworkerPanel({
     });
   }
 
+  async function handleApprove(proposalId: string) {
+    const result = await approveProposal(proposalId);
+    if (result.success) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.proposal?.proposalId === proposalId
+            ? {
+                ...m,
+                proposal: {
+                  ...m.proposal,
+                  status: "executed",
+                  ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
+                },
+              }
+            : m,
+        ),
+      );
+    }
+  }
+
+  async function handleReject(proposalId: string) {
+    const result = await rejectProposal(proposalId);
+    if (result.success) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.proposal?.proposalId === proposalId
+            ? { ...m, proposal: { ...m.proposal, status: "rejected" } }
+            : m,
+        ),
+      );
+    }
+  }
+
   function handleClear() {
     if (!threadId) return;
     if (typeof window !== "undefined" && !window.confirm("Erase the current page conversation?")) {
@@ -164,6 +198,8 @@ export function AgentCoworkerPanel({
               message={msg}
               showAgentLabel={showAgentLabel}
               agentName={showAgentLabel && msg.agentId ? (AGENT_NAME_MAP[msg.agentId] ?? msg.agentId) : null}
+              onApprove={handleApprove}
+              onReject={handleReject}
             />
           );
         })}
