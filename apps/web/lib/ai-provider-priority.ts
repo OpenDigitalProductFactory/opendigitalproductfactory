@@ -215,6 +215,40 @@ async function filterByModelRequirements(
   });
 }
 
+// ─── Auto-Disable on Quota ────────────────────────────────────────────────────
+
+const REENABLE_DELAY_MS = 60 * 60 * 1000; // 1 hour
+
+async function autoDisableProvider(providerId: string, reason: string): Promise<void> {
+  await prisma.modelProvider.update({
+    where: { providerId },
+    data: { status: "inactive" },
+  });
+
+  // Schedule re-enablement
+  const jobId = `provider-reenable-${providerId}`;
+  const nextRunAt = new Date(Date.now() + REENABLE_DELAY_MS);
+
+  await prisma.scheduledJob.upsert({
+    where: { jobId },
+    create: {
+      jobId,
+      name: `Re-enable ${providerId} after quota reset`,
+      schedule: "once",
+      nextRunAt,
+      lastStatus: "scheduled",
+      lastError: reason.slice(0, 500),
+    },
+    update: {
+      nextRunAt,
+      lastStatus: "scheduled",
+      lastError: reason.slice(0, 500),
+    },
+  });
+
+  console.warn(`[autoDisableProvider] ${providerId} disabled due to quota. Re-enable scheduled at ${nextRunAt.toISOString()}`);
+}
+
 // ─── Failover Engine ─────────────────────────────────────────────────────────
 
 const MAX_CASCADE_DEPTH = 5;
@@ -281,6 +315,13 @@ export async function callWithFailover(
       const errMsg = e instanceof Error ? e.message : String(e);
       attempts.push({ providerId: entry.providerId, error: errMsg });
       console.warn(`[callWithFailover] ${entry.providerId} failed: ${errMsg}`);
+
+      // Auto-disable provider on quota/rate-limit and schedule re-enablement
+      if (e instanceof InferenceError && e.code === "rate_limit") {
+        await autoDisableProvider(entry.providerId, errMsg).catch((err) =>
+          console.error("[callWithFailover] auto-disable failed:", err),
+        );
+      }
     }
   }
 

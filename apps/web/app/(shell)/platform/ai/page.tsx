@@ -29,6 +29,14 @@ export default async function PlatformAiPage() {
     await syncProviderRegistry();
   }
 
+  // Re-enable providers whose quota reset timer has elapsed
+  const reenableJobs = jobs.filter((j) => j.jobId.startsWith("provider-reenable-") && j.nextRunAt && j.nextRunAt < new Date());
+  for (const job of reenableJobs) {
+    const providerId = job.jobId.replace("provider-reenable-", "");
+    await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } }).catch(() => {});
+    await prisma.scheduledJob.update({ where: { jobId: job.jobId }, data: { lastStatus: "completed", lastRunAt: new Date(), schedule: "disabled" } }).catch(() => {});
+  }
+
   // Passive health check for bundled Ollama (may change provider status)
   await checkBundledProviders();
 
