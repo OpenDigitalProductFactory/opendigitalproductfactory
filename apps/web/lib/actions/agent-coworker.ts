@@ -67,6 +67,9 @@ export async function getOrCreateThreadSnapshot(input: {
       agentId: true,
       routeContext: true,
       createdAt: true,
+      attachments: {
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
+      },
     },
   });
 
@@ -93,6 +96,7 @@ export async function sendMessage(input: {
   elevatedFormFillEnabled?: boolean;
   formAssistContext?: AgentFormAssistContext;
   buildId?: string;
+  attachmentId?: string;
 }): Promise<
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
@@ -168,6 +172,22 @@ export async function sendMessage(input: {
     },
   });
 
+  // Link attachment to the user message if provided
+  let attachmentContext: string | null = null;
+  if (input.attachmentId) {
+    await prisma.agentAttachment.update({
+      where: { id: input.attachmentId },
+      data: { messageId: userMsg.id },
+    });
+    const att = await prisma.agentAttachment.findUnique({
+      where: { id: input.attachmentId },
+      select: { parsedContent: true, fileName: true },
+    });
+    if (att) {
+      attachmentContext = `\nUploaded file: ${att.fileName}\nContent: ${JSON.stringify(att.parsedContent).slice(0, 2000)}`;
+    }
+  }
+
   // Resolve agent
   const agent = resolveAgentForRoute(input.routeContext, {
     platformRole: user.platformRole,
@@ -216,6 +236,10 @@ export async function sendMessage(input: {
     if (buildCtx) {
       promptSections.push(getBuildContextSection(buildCtx));
     }
+  }
+
+  if (attachmentContext) {
+    promptSections.push(attachmentContext);
   }
 
   const populatedPrompt = promptSections.join("\n");
