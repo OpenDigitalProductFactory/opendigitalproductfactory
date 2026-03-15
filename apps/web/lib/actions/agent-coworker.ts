@@ -69,7 +69,7 @@ export async function getOrCreateThreadSnapshot(input: {
 
   return {
     threadId: thread.id,
-    messages: messages.reverse().map(serializeMessage),
+    messages: messages.reverse().map((m) => serializeMessage(m)),
   };
 }
 
@@ -174,7 +174,12 @@ export async function sendMessage(input: {
   let systemMessage: AgentMessageRow | undefined;
 
   try {
-    const result = await callWithFailover(chatHistory, populatedPrompt, agent.sensitivity, { tools: toolsForProvider });
+    const result = await callWithFailover(
+      chatHistory,
+      populatedPrompt,
+      agent.sensitivity,
+      toolsForProvider ? { tools: toolsForProvider } : undefined,
+    );
 
     // Handle tool calls — create proposals
     if (result.toolCalls && result.toolCalls.length > 0) {
@@ -202,7 +207,7 @@ export async function sendMessage(input: {
           messageId: agentMsg.id,
           agentId: agent.agentId,
           actionType: tc.name,
-          parameters: tc.arguments,
+          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue,
         },
       });
 
@@ -345,7 +350,7 @@ export async function loadEarlierMessages(input: {
   const slice = hasMore ? messages.slice(0, limit) : messages;
 
   return {
-    messages: slice.reverse().map(serializeMessage),
+    messages: slice.reverse().map((m) => serializeMessage(m)),
     hasMore,
   };
 }
