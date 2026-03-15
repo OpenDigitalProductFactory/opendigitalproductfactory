@@ -128,11 +128,24 @@ export function normalizeBraveSearchResults(raw: BraveSearchApiResult): Normaliz
     }));
 }
 
-export async function searchPublicWeb(query: string): Promise<NormalizedSearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) {
-    throw new Error("BRAVE_SEARCH_API_KEY is not configured");
+async function getBraveSearchApiKey(): Promise<string> {
+  // Try platform config first (admin-configurable in production)
+  const { prisma } = await import("@dpf/db");
+  const config = await prisma.platformConfig.findUnique({
+    where: { key: "brave_search_api_key" },
+    select: { value: true },
+  });
+  if (config && typeof config.value === "string" && config.value.length > 0) {
+    return config.value;
   }
+  // Fall back to env var for local dev
+  const envKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (envKey) return envKey;
+  throw new Error("Brave Search API key is not configured. Set it in Platform > Admin or BRAVE_SEARCH_API_KEY env var.");
+}
+
+export async function searchPublicWeb(query: string): Promise<NormalizedSearchResult[]> {
+  const apiKey = await getBraveSearchApiKey();
 
   const response = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`, {
     headers: {
