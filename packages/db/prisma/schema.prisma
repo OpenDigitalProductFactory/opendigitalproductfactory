@@ -133,6 +133,7 @@ model DigitalProduct {
   id              String        @id @default(cuid())
   productId       String        @unique
   name            String
+  description     String?       @db.Text
   lifecycleStage  String        @default("plan")   // plan | design | build | production | retirement
   lifecycleStatus String        @default("draft")  // draft | active | inactive
   version         String        @default("1.0.0")
@@ -155,6 +156,7 @@ model TaxonomyNode {
   id          String           @id @default(cuid())
   nodeId      String           @unique
   name        String
+  description String?          @db.Text
   portfolioId String?
   parentId    String?
   parent      TaxonomyNode?    @relation("TaxonomyTree", fields: [parentId], references: [id])
