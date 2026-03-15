@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { MAX_MESSAGE_LENGTH } from "@/lib/agent-coworker-types";
 
 type Props = {
@@ -10,7 +10,18 @@ type Props = {
 
 export function AgentMessageInput({ onSend, disabled }: Props) {
   const [value, setValue] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, []);
+
+  useEffect(() => {
+    autoResize();
+  }, [value, autoResize]);
 
   function handleSubmit() {
     const trimmed = value.trim();
@@ -18,7 +29,7 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
     if (trimmed.length > MAX_MESSAGE_LENGTH) return;
     onSend(trimmed);
     setValue("");
-    inputRef.current?.focus();
+    textareaRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -36,15 +47,16 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
       gap: 6,
       padding: "10px 12px",
       borderTop: "1px solid rgba(42, 42, 64, 0.6)",
+      alignItems: "flex-end",
     }}>
-      <input
-        ref={inputRef}
-        type="text"
+      <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder={disabled ? "Sending..." : "Ask your co-worker..."}
+        rows={1}
         style={{
           flex: 1,
           background: "rgba(15, 15, 26, 0.8)",
@@ -54,6 +66,11 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
           fontSize: 12,
           color: "#e0e0ff",
           outline: "none",
+          resize: "none",
+          overflow: "auto",
+          lineHeight: "1.4",
+          minHeight: 32,
+          maxHeight: 160,
         }}
       />
       <button
@@ -69,6 +86,8 @@ export function AgentMessageInput({ onSend, disabled }: Props) {
           color: "#ffffff",
           cursor: disabled || !value.trim() || overLimit ? "not-allowed" : "pointer",
           opacity: disabled || !value.trim() || overLimit ? 0.5 : 1,
+          flexShrink: 0,
+          height: 32,
         }}
       >
         Send

@@ -13,9 +13,9 @@ export default async function BuildPage() {
     getPortfoliosForSelect(),
   ]);
 
-  // Negative margin counteracts the shell's p-6 so Build Studio goes full-bleed
+  // Break out of the shell's max-w-7xl + p-6 container for full-bleed layout
   return (
-    <div className="-m-6 h-[calc(100vh-48px)]">
+    <div className="fixed inset-0 top-[48px]">
       <BuildStudio builds={builds} portfolios={portfolios} />
     </div>
   );

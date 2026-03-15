@@ -33,6 +33,7 @@ export type FeatureBuildRow = {
   codingProvider: string | null;
   threadId: string | null;
   digitalProductId: string | null;
+  product: { productId: string; version: string; backlogCount: number } | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;

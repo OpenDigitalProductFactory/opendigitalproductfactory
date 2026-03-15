@@ -189,8 +189,11 @@ export function AgentCoworkerPanel({
   }
 
   async function handleApprove(proposalId: string) {
-    const result = await approveProposal(proposalId);
-    if (result.success) {
+    try {
+      const result = await approveProposal(proposalId);
+      const msg = messages.find((m) => m.proposal?.proposalId === proposalId);
+      const actionType = msg?.proposal?.actionType ?? "action";
+
       setMessages((prev) =>
         prev.map((m) =>
           m.proposal?.proposalId === proposalId
@@ -198,10 +201,28 @@ export function AgentCoworkerPanel({
                 ...m,
                 proposal: {
                   ...m.proposal,
-                  status: "executed",
+                  status: result.success ? "executed" : "failed",
                   ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
+                  ...(result.error !== undefined ? { resultError: result.error } : {}),
                 },
               }
+            : m,
+        ),
+      );
+
+      // Auto-send a follow-up so the agent reacts to the result
+      if (result.success) {
+        const followUp = result.resultEntityId
+          ? `I approved ${actionType.replace(/_/g, " ")}. Result: ${result.resultEntityId}. What's next?`
+          : `I approved ${actionType.replace(/_/g, " ")}. What's next?`;
+        submitMessage(followUp);
+      }
+    } catch (e) {
+      console.error("[handleApprove]", e);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.proposal?.proposalId === proposalId
+            ? { ...m, proposal: { ...m.proposal, status: "failed", resultError: "Execution failed" } }
             : m,
         ),
       );

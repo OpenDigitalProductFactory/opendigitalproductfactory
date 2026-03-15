@@ -52,6 +52,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
         codingProvider: null,
         threadId: null,
         digitalProductId: null,
+        product: null,
         createdById: "",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -115,6 +116,9 @@ export function BuildStudio({ builds, portfolios }: Props) {
                   <div className="text-[13px] font-semibold text-white mb-0.5">{build.title}</div>
                   <div className="text-[11px] text-[var(--dpf-muted)]">
                     {build.buildId} &middot; {build.phase}
+                    {build.product && (
+                      <span> &middot; v{build.product.version} &middot; {build.product.backlogCount} item{build.product.backlogCount !== 1 ? "s" : ""}</span>
+                    )}
                   </div>
                 </button>
               ))

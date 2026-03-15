@@ -163,9 +163,19 @@ export async function sendMessage(input: {
     promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
   }
 
-  // Inject Build Studio context when buildId is provided
-  if (input.buildId) {
-    const buildCtx = await getFeatureBuildForContext(input.buildId, user.id!);
+  // Inject Build Studio context — use explicit buildId or auto-resolve on /build route
+  let resolvedBuildId = input.buildId;
+  if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
+    // Auto-resolve: find the user's most recent non-terminal build
+    const latestBuild = await prisma.featureBuild.findFirst({
+      where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
+      orderBy: { updatedAt: "desc" },
+      select: { buildId: true },
+    });
+    resolvedBuildId = latestBuild?.buildId ?? undefined;
+  }
+  if (resolvedBuildId) {
+    const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
     if (buildCtx) {
       promptSections.push(getBuildContextSection(buildCtx));
     }
@@ -448,6 +458,10 @@ export async function clearConversation(input: {
     return { error: "Unauthorized" };
   }
 
+  // Delete proposals first (FK on messageId), then messages
+  await prisma.agentActionProposal.deleteMany({
+    where: { threadId: input.threadId },
+  });
   await prisma.agentMessage.deleteMany({
     where: { threadId: input.threadId },
   });

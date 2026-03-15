@@ -363,6 +363,17 @@ export async function executeTool(
     }
 
     case "update_feature_brief": {
+      // Auto-resolve buildId if the LLM passed a placeholder or invalid value
+      let buildId = String(params["buildId"] ?? "");
+      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true },
+        });
+        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        buildId = latestBuild.buildId;
+      }
       const { updateFeatureBrief } = await import("@/lib/actions/build");
       const brief = {
         title: String(params["title"] ?? ""),
@@ -373,14 +384,25 @@ export async function executeTool(
         dataNeeds: String(params["dataNeeds"] ?? ""),
         acceptanceCriteria: Array.isArray(params["acceptanceCriteria"]) ? params["acceptanceCriteria"].map(String) : [],
       };
-      await updateFeatureBrief(String(params["buildId"]), brief);
-      return { success: true, entityId: String(params["buildId"]), message: `Updated Feature Brief for ${String(params["buildId"])}` };
+      await updateFeatureBrief(buildId, brief);
+      return { success: true, entityId: buildId, message: `Updated Feature Brief for ${buildId}` };
     }
 
     case "register_digital_product_from_build": {
+      // Auto-resolve buildId if the LLM passed a placeholder
+      let buildId = String(params["buildId"] ?? "");
+      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true },
+        });
+        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        buildId = latestBuild.buildId;
+      }
       const { shipBuild } = await import("@/lib/actions/build");
       const result = await shipBuild({
-        buildId: String(params["buildId"]),
+        buildId,
         name: String(params["name"]),
         portfolioSlug: String(params["portfolioSlug"]),
         versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
@@ -397,9 +419,20 @@ export async function executeTool(
     }
 
     case "create_build_epic": {
+      // Auto-resolve buildId if the LLM passed a placeholder
+      let epicBuildId = String(params["buildId"] ?? "");
+      if (!epicBuildId || epicBuildId.startsWith("CURRENT") || !epicBuildId.startsWith("FB-")) {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true },
+        });
+        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        epicBuildId = latestBuild.buildId;
+      }
       const { createBuildEpic } = await import("@/lib/actions/build");
       const epicInput: { buildId: string; title: string; portfolioSlug?: string; digitalProductId?: string } = {
-        buildId: String(params["buildId"]),
+        buildId: epicBuildId,
         title: String(params["title"]),
       };
       if (typeof params["portfolioSlug"] === "string") epicInput.portfolioSlug = params["portfolioSlug"];
