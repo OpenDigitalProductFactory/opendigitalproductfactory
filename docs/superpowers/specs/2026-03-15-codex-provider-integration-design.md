@@ -38,7 +38,7 @@ The existing `category` field gains a third valid value: `"agent"` alongside `"d
   "category": "agent",
   "baseUrl": null,
   "authMethod": "api_key",
-  "supportedAuthMethods": ["api_key", "subscription"],
+  "supportedAuthMethods": ["api_key"],
   "authHeader": "Authorization",
   "costModel": "token",
   "families": ["codex-mini"],
@@ -55,11 +55,13 @@ Key distinctions from the existing `openai` entry:
 - Separate `providerId` — own credential, own spend tracking, own billing
 - `category: "agent"` — not a raw model API
 - Different pricing ($1.50/$6.00 vs $2.50/$10.00)
-- `supportedAuthMethods` includes `"subscription"` — user can configure which billing mode they use
+- `authMethod: "api_key"` — subscription billing mode is deferred (no platform-side credential flow exists for it yet; subscription users use Codex via IDE, not platform API calls)
 
 #### Registry type update: `RegistryProviderEntry`
 
-Add optional `billingLabel` and `costPerformanceNotes` fields to the type in `ai-provider-types.ts`. The sync logic in `syncProviderRegistry()` persists these to the new DB columns.
+Widen the `category` union from `"direct" | "router"` to `"direct" | "router" | "agent"` in `ai-provider-types.ts`.
+
+Add optional `billingLabel` and `costPerformanceNotes` fields to `RegistryProviderEntry` and `ProviderRow`. The sync logic in `syncProviderRegistry()` persists these to the new DB columns.
 
 ### 2. MCP Server Integration
 
@@ -84,12 +86,16 @@ Add optional `billingLabel` and `costPerformanceNotes` fields to the type in `ai
 }
 ```
 
-- `linkedProviderId: "codex"` ties MCP tool invocations back to the Codex provider for spend attribution
+- `linkedProviderId: "codex"` — reserved for future spend attribution (see note below)
 - `transport: "stdio"` — JSON-RPC over stdio (standard Codex MCP protocol)
 - Two tools exposed: `codex` (start session) and `codex-reply` (continue thread)
 - Configurable `approval-policy` (untrusted | on-request | never) and `sandbox` (read-only | workspace-write | danger-full-access)
 
-#### Orchestration pattern
+**Note on `linkedProviderId`:** This field is stored in the untyped `config: Json` blob. In this phase it is seeded but not consumed by any runtime code path — spend attribution from MCP invocations to the Codex provider is deferred to the agent orchestration epic. A typed `McpServerConfig` interface and the consumption point will be specified in that epic.
+
+#### Orchestration pattern (contextual — not in implementation scope)
+
+The following describes the intended runtime pattern, implemented in a future agent orchestration epic:
 
 A lower-cost orchestrator model (e.g. Ollama running locally) dispatches coding tasks to Codex via the MCP tools:
 
@@ -98,7 +104,7 @@ A lower-cost orchestrator model (e.g. Ollama running locally) dispatches coding 
 3. Invokes `codex` MCP tool with the task description
 4. Codex runs in its sandbox, uses tools, writes code
 5. Orchestrator receives the result via `codex-reply`
-6. Platform logs token usage against the `codex` provider
+6. Platform logs token usage against the `codex` provider via `linkedProviderId`
 
 This enables a cost-efficient tier architecture: cheap local model for routing/decisions, expensive cloud specialist for code execution.
 
@@ -113,7 +119,6 @@ For providers without an explicit `billingLabel`, the UI generates one from pric
 | `token` (with prices) | "Pay-per-use · $X.XX/$X.XX per M tokens" |
 | `token` (no prices, e.g. routers) | "Pay-per-use · rates vary by model" |
 | `compute` | "Local compute · electricity cost only" |
-| `subscription` | "Subscription (usage-limited)" |
 
 The `billingLabel` field from the DB/registry overrides the auto-generated label when set.
 
@@ -125,6 +130,9 @@ Each provider card on `/platform/ai` gains the billing label, displayed in small
 
 The AI Providers page currently groups providers into "Direct Providers" and "Routers & Gateways". A third section is added: **"Agent Providers"** for `category: "agent"`. This visually separates agentic providers (Codex, and future entries like Claude Code or Devin) from raw model APIs.
 
+**Rendering order:** Direct Providers, Agent Providers, Routers & Gateways.
+**Empty state:** The Agent Providers section is hidden when no `category: "agent"` providers exist (same conditional pattern as the existing sections).
+
 #### Cost-performance notes on detail page
 
 The provider detail page (`/platform/ai/providers/[providerId]`) shows the `costPerformanceNotes` in an info box above the configuration form when the field is non-null. Styled as a subtle info panel (`background: #161625`, `border-left: 3px solid #7c8cf8`).
@@ -133,12 +141,17 @@ The provider detail page (`/platform/ai/providers/[providerId]`) shows the `cost
 
 `packages/db/src/seed.ts` gains a `seedMcpServers()` function that upserts the Codex MCP server record. Called after `seedScheduledJobs()`.
 
+**Upsert policy:** On re-seed, `seedMcpServers()` creates the record if missing but does NOT overwrite `config` or `status` if the record already exists. This preserves admin-modified sandbox/approval-policy settings. Same rationale as `syncProviderRegistry()` which preserves `status`, `enabledFamilies`, and `endpoint`.
+
 ### 5. What Is NOT In Scope
 
 - **Codex TypeScript SDK** (`@openai/codex-sdk`) — can be layered on later if direct programmatic access proves more useful than MCP
 - **Budget guardrails / spending limits** — deferred to the financial management module (parallel workstream)
 - **Cost-vs-labor comparison** — deferred to financial management + HR system integration
-- **Subscription usage tracking** — subscription plans have usage limits but no per-token cost; tracking "credits consumed" requires Codex API support that doesn't yet exist for third-party apps. For now, subscription mode shows "Subscription — usage not metered by platform" in the spend dashboard.
+- **Subscription auth method** — `"subscription"` as a `supportedAuthMethod` is deferred. No platform-side credential flow exists for subscription billing. Subscription users access Codex via IDE/CLI (personal use), not platform API calls. When a subscription auth flow becomes feasible, it will be specified in a follow-up epic.
+- **Subscription usage tracking** — subscription plans have usage limits but no per-token cost; tracking "credits consumed" requires Codex API support that doesn't yet exist for third-party apps.
+- **MCP spend attribution** — the `linkedProviderId` field in the MCP server config is seeded but not consumed. Runtime spend attribution from MCP tool invocations to the Codex provider is deferred to the agent orchestration epic.
+- **Agent orchestration runtime** — the orchestration pattern described in Section 2 (Ollama dispatching to Codex via MCP) is contextual background. The actual dispatch logic, thread management, and multi-agent coordination are a separate epic.
 
 ## Files to Create or Modify
 
