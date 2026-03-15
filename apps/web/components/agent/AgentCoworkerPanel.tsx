@@ -15,6 +15,10 @@ import {
   saveElevatedAssistPreference,
 } from "./agent-form-assist-prefs";
 import {
+  loadExternalAccessSessionState,
+  saveExternalAccessSessionState,
+} from "./agent-external-access-session";
+import {
   buildAgentFormAssistContext,
   getActiveFormAssist,
 } from "@/lib/agent-form-assist";
@@ -61,6 +65,7 @@ export function AgentCoworkerPanel({
   const [isPending, startTransition] = useTransition();
   const [isClearing, startClearing] = useTransition();
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
+  const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -78,12 +83,21 @@ export function AgentCoworkerPanel({
 
   useEffect(() => {
     setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
+    setExternalAccessEnabled(loadExternalAccessSessionState(preferenceUserKey, pathname));
   }, [pathname, preferenceUserKey]);
 
   function handleToggleElevatedAssist() {
     setElevatedAssistEnabled((prev) => {
       const next = !prev;
       saveElevatedAssistPreference(preferenceUserKey, pathname, next);
+      return next;
+    });
+  }
+
+  function handleToggleExternalAccess() {
+    setExternalAccessEnabled((prev) => {
+      const next = !prev;
+      saveExternalAccessSessionState(preferenceUserKey, pathname, next);
       return next;
     });
   }
@@ -105,6 +119,7 @@ export function AgentCoworkerPanel({
         threadId,
         content,
         routeContext: pathname,
+        externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
       });
@@ -231,6 +246,8 @@ export function AgentCoworkerPanel({
         clearConfirmOpen={clearConfirmOpen}
         elevatedAssistEnabled={elevatedAssistEnabled}
         onToggleElevatedAssist={handleToggleElevatedAssist}
+        externalAccessEnabled={externalAccessEnabled}
+        onToggleExternalAccess={handleToggleExternalAccess}
         onClose={onClose}
         onDragStart={onDragStart}
       />

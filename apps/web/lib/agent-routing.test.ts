@@ -54,6 +54,12 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentDescription).toBeTruthy();
   });
 
+  it("mentions public website branding analysis in the admin assistant prompt", () => {
+    const result = resolveAgentForRoute("/admin", superuser);
+    expect(result.systemPrompt).toContain("public website");
+    expect(result.systemPrompt).toContain("branding");
+  });
+
   it("returns a non-empty systemPrompt", () => {
     const result = resolveAgentForRoute("/portfolio", superuser);
     expect(result.systemPrompt).toBeTruthy();
