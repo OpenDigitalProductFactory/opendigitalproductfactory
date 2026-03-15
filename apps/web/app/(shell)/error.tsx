@@ -9,9 +9,15 @@ export default function ShellError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const [description, setDescription] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
+
+  // Pre-populate with session context
+  const route = typeof window !== "undefined" ? window.location.pathname : "";
+  const cleanError = error.message?.replace(/\n.*/s, "").slice(0, 150) ?? "Unknown error";
+  const [description, setDescription] = useState(
+    `Page: ${route}\nError: ${cleanError}\n\nI was: `,
+  );
 
   // Auto-report on mount (fire-and-forget)
   useEffect(() => {
