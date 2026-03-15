@@ -98,6 +98,109 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
   },
+
+  // ─── Build Studio Tools ─────────────────────────────────────────────────────
+  {
+    name: "start_feature_brief",
+    description: "Create a new FeatureBuild record and start the Ideate phase",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Feature title" },
+        description: { type: "string", description: "Plain language description" },
+        portfolioContext: { type: "string", description: "Portfolio slug for context" },
+      },
+      required: ["title"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "launch_sandbox",
+    description: "Spin up a sandbox container, install dependencies, and start the dev server",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "generate_code",
+    description: "Send the implementation plan to the coding agent in the sandbox",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "iterate_sandbox",
+    description: "Send refinement instructions to the coding agent in the sandbox",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+        instruction: { type: "string", description: "What to change (e.g., 'make the button bigger')" },
+      },
+      required: ["buildId", "instruction"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "preview_sandbox",
+    description: "Get the sandbox preview proxy URL for the current build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "run_sandbox_tests",
+    description: "Run pnpm test and tsc --noEmit inside the sandbox, return results",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "view_platform",
+  },
+  {
+    name: "deploy_feature",
+    description: "Extract the git diff from the sandbox and apply to the running platform",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "manage_capabilities",
+  },
+  {
+    name: "contribute_to_hive",
+    description: "Package the feature as a Feature Pack for contribution to the Hive Mind",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FeatureBuild ID" },
+        title: { type: "string", description: "Pack title" },
+        description: { type: "string", description: "Pack description" },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "view_platform",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -179,6 +282,56 @@ export async function executeTool(
         },
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
+    }
+
+    case "start_feature_brief": {
+      const buildId = `FB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await prisma.featureBuild.create({
+        data: {
+          buildId,
+          title: String(params["title"] ?? "Untitled Feature"),
+          ...(typeof params["description"] === "string" ? { description: params["description"] } : {}),
+          ...(typeof params["portfolioContext"] === "string" ? { portfolioId: params["portfolioContext"] } : {}),
+          createdById: userId,
+        },
+      });
+      return { success: true, entityId: buildId, message: `Created feature build ${buildId}` };
+    }
+
+    case "launch_sandbox":
+      return { success: false, error: "Not implemented", message: "Sandbox launch requires Docker — use the Build Studio UI" };
+
+    case "generate_code":
+      return { success: false, error: "Not implemented", message: "Code generation requires an active sandbox — use the Build Studio UI" };
+
+    case "iterate_sandbox":
+      return { success: false, error: "Not implemented", message: "Iteration requires an active sandbox — use the Build Studio UI" };
+
+    case "preview_sandbox": {
+      const previewBuild = await prisma.featureBuild.findUnique({ where: { buildId: String(params["buildId"]) } });
+      if (!previewBuild?.sandboxPort) return { success: false, error: "No sandbox", message: "Sandbox not running" };
+      return { success: true, message: `/api/sandbox/preview?buildId=${String(params["buildId"])}` };
+    }
+
+    case "run_sandbox_tests":
+      return { success: false, error: "Not implemented", message: "Test execution requires an active sandbox — use the Build Studio UI" };
+
+    case "deploy_feature":
+      return { success: false, error: "Not implemented", message: "Deployment requires review approval — use the Build Studio UI" };
+
+    case "contribute_to_hive": {
+      const packId = `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await prisma.featurePack.create({
+        data: {
+          packId,
+          title: String(params["title"] ?? "Untitled Pack"),
+          ...(typeof params["description"] === "string" ? { description: params["description"] } : {}),
+          buildId: String(params["buildId"]),
+          manifest: {},
+          status: "local",
+        },
+      });
+      return { success: true, entityId: packId, message: `Created feature pack ${packId}` };
     }
 
     default:

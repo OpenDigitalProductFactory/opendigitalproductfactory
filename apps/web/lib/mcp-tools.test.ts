@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { PLATFORM_TOOLS, getAvailableTools, toolsToOpenAIFormat } from "./mcp-tools";
 
 describe("PLATFORM_TOOLS", () => {
-  it("has 5 tools", () => {
-    expect(PLATFORM_TOOLS).toHaveLength(5);
+  it("has 13 tools", () => {
+    expect(PLATFORM_TOOLS).toHaveLength(13);
   });
 
   it("every tool has name, description, inputSchema, requiredCapability", () => {
@@ -19,7 +19,7 @@ describe("PLATFORM_TOOLS", () => {
 describe("getAvailableTools", () => {
   it("superuser sees all tools", () => {
     const tools = getAvailableTools({ platformRole: "HR-000", isSuperuser: true });
-    expect(tools).toHaveLength(5);
+    expect(tools).toHaveLength(13);
   });
 
   it("null role sees only null-capability tools", () => {
@@ -34,6 +34,36 @@ describe("getAvailableTools", () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain("create_backlog_item");
     expect(names).toContain("report_quality_issue");
+  });
+});
+
+describe("Build studio tools", () => {
+  const buildToolNames = [
+    "start_feature_brief",
+    "launch_sandbox",
+    "generate_code",
+    "iterate_sandbox",
+    "preview_sandbox",
+    "run_sandbox_tests",
+    "deploy_feature",
+    "contribute_to_hive",
+  ];
+
+  it("all build tools are registered", () => {
+    const names = PLATFORM_TOOLS.map((t) => t.name);
+    for (const name of buildToolNames) {
+      expect(names).toContain(name);
+    }
+  });
+
+  it("deploy_feature requires manage_capabilities", () => {
+    const tool = PLATFORM_TOOLS.find((t) => t.name === "deploy_feature");
+    expect(tool?.requiredCapability).toBe("manage_capabilities");
+  });
+
+  it("start_feature_brief requires view_platform", () => {
+    const tool = PLATFORM_TOOLS.find((t) => t.name === "start_feature_brief");
+    expect(tool?.requiredCapability).toBe("view_platform");
   });
 });
 
