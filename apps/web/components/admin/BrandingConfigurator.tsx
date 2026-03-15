@@ -1,7 +1,9 @@
 ﻿"use client";
 
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { saveActiveThemePreset, saveThemePreset } from "@/lib/actions/branding";
+import { registerActiveFormAssist } from "@/lib/agent-form-assist";
+import { applyBrandingFormAssistUpdates } from "./branding-form-assist";
 
 type ThemeTokenInput = {
   version: string;
@@ -296,6 +298,41 @@ export function BrandingConfigurator({
     }
     setUploadedLogoName("");
   };
+
+  useEffect(() => {
+    return registerActiveFormAssist({
+      routeContext: "/admin",
+      formId: "branding-configurator",
+      formName: "Branding configurator",
+      fields: [
+        { key: "companyName", label: "Company name", type: "text" },
+        { key: "logoUrl", label: "Logo URL", type: "text" },
+        { key: "paletteAccent", label: "Accent color", type: "text" },
+        { key: "paletteBg", label: "Page background", type: "text", shareCurrentValue: false },
+        { key: "typographyFontFamily", label: "Body font", type: "text", shareCurrentValue: false },
+      ],
+      getValues: () => ({
+        companyName,
+        logoUrl,
+        paletteAccent: tokens.palette_accent,
+        paletteBg: tokens.palette_bg,
+        typographyFontFamily: tokens.typography_fontFamily,
+      }),
+      applyFieldUpdates: (updates) => {
+        const next = applyBrandingFormAssistUpdates(
+          {
+            companyName,
+            logoUrl,
+            tokens,
+          },
+          updates,
+        );
+        setCompanyName(next.companyName);
+        setLogoSourceFromUrl(next.logoUrl);
+        setTokens(next.tokens as ThemeTokenInput);
+      },
+    });
+  }, [companyName, logoUrl, tokens]);
 
   const renderTokenField = (field: FieldDef): JSX.Element => {
     const value = tokens[field.key];
