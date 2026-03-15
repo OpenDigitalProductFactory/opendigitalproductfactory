@@ -173,19 +173,31 @@ export async function sendMessage(input: {
   });
 
   // Link attachment to the user message if provided
-  let attachmentContext: string | null = null;
+  // Link new attachment to this message if provided
   if (input.attachmentId) {
     await prisma.agentAttachment.update({
       where: { id: input.attachmentId },
       data: { messageId: userMsg.id },
     });
-    const att = await prisma.agentAttachment.findUnique({
-      where: { id: input.attachmentId },
-      select: { parsedContent: true, fileName: true },
+  }
+
+  // Always inject all thread attachments so the agent remembers uploaded files
+  const threadAttachments = await prisma.agentAttachment.findMany({
+    where: { threadId: input.threadId },
+    orderBy: { createdAt: "asc" },
+    select: { fileName: true, parsedContent: true },
+  });
+  let attachmentContext: string | null = null;
+  if (threadAttachments.length > 0) {
+    const summaries = threadAttachments.map((att) => {
+      const parsed = att.parsedContent as Record<string, unknown> | null;
+      if (!parsed) return `- ${att.fileName} (not parsed)`;
+      const summary = parsed.summary ?? "";
+      const columns = Array.isArray(parsed.columns) ? `\n  Columns: ${(parsed.columns as string[]).join(", ")}` : "";
+      const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 1500)}` : "";
+      return `- ${att.fileName}: ${summary}${columns}${text}`;
     });
-    if (att) {
-      attachmentContext = `\nUploaded file: ${att.fileName}\nContent: ${JSON.stringify(att.parsedContent).slice(0, 2000)}`;
-    }
+    attachmentContext = `\n--- Uploaded Files ---\n${summaries.join("\n")}`;
   }
 
   // Resolve agent
