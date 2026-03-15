@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "#4ade80",
-  unconfigured: "#fbbf24",
-  inactive: "#8888a0",
+  unconfigured: "#8888a0",
+  inactive: "#fbbf24",
 };
 
 type Props = {

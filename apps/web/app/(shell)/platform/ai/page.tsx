@@ -13,8 +13,8 @@ import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle
 
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
-  unconfigured:  "#fbbf24",
-  inactive:      "#8888a0",
+  unconfigured:  "#8888a0",
+  inactive:      "#fbbf24",
 };
 
 export default async function PlatformAiPage() {
