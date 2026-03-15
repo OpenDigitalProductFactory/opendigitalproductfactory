@@ -12,8 +12,11 @@ type Props = {
   agent: AgentInfo;
   userContext: UserContext;
   onSend: (content: string) => void;
-  onClear: () => void;
+  onOpenClearConfirm: () => void;
+  onCancelClearConfirm: () => void;
+  onConfirmClear: () => void;
   clearDisabled: boolean;
+  clearConfirmOpen: boolean;
   elevatedAssistEnabled: boolean;
   onToggleElevatedAssist: () => void;
   onClose: () => void;
@@ -24,8 +27,11 @@ export function AgentPanelHeader({
   agent,
   userContext,
   onSend,
-  onClear,
+  onOpenClearConfirm,
+  onCancelClearConfirm,
+  onConfirmClear,
   clearDisabled,
+  clearConfirmOpen,
   elevatedAssistEnabled,
   onToggleElevatedAssist,
   onClose,
@@ -72,60 +78,47 @@ export function AgentPanelHeader({
           >
             {formatSensitivityLabel(agent.sensitivity)}
           </span>
-          {elevatedAssistEnabled && (
-            <span
-              style={{
-                fontSize: 9,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: "#241700",
-                background: "#facc15",
-                borderRadius: 999,
-                padding: "2px 6px",
-                fontWeight: 700,
-              }}
-            >
-              Hands On
-            </span>
-          )}
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleElevatedAssist();
+            }}
+            title={
+              elevatedAssistEnabled
+                ? "Hands On: this page's coworker can update approved form fields"
+                : "Hands Off: this page's coworker can suggest changes without updating form fields"
+            }
+            style={{
+              fontSize: 9,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: elevatedAssistEnabled ? "#241700" : "rgba(224, 224, 255, 0.78)",
+              background: elevatedAssistEnabled ? "#facc15" : "transparent",
+              border: `1px solid ${elevatedAssistEnabled ? "#facc15" : "rgba(255, 255, 255, 0.12)"}`,
+              borderRadius: 999,
+              padding: "2px 6px",
+              fontWeight: elevatedAssistEnabled ? 700 : 500,
+              cursor: "pointer",
+              lineHeight: 1.2,
+            }}
+          >
+            {elevatedAssistEnabled ? "Hands On" : "Hands Off"}
+          </button>
         </div>
         <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 12 }}>
           {agent.agentDescription}
         </span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative" }}>
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleElevatedAssist();
-          }}
-          title={
-            elevatedAssistEnabled
-              ? "Hands On: this page's coworker can update approved form fields"
-              : "Hands Off: this page's coworker can suggest changes without updating form fields"
-          }
-          style={{
-            background: elevatedAssistEnabled ? "rgba(250, 204, 21, 0.18)" : "none",
-            border: `1px solid ${elevatedAssistEnabled ? "rgba(250, 204, 21, 0.65)" : "rgba(255, 255, 255, 0.12)"}`,
-            color: elevatedAssistEnabled ? "#facc15" : "var(--dpf-muted)",
-            cursor: "pointer",
-            fontSize: 11,
-            padding: "4px 8px",
-            borderRadius: 6,
-            lineHeight: 1,
-          }}
-        >
-          {elevatedAssistEnabled ? "Hands On" : "Hands Off"}
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClear();
+            onOpenClearConfirm();
           }}
           disabled={clearDisabled}
           title="Erase current conversation"
@@ -143,6 +136,71 @@ export function AgentPanelHeader({
         >
           Erase
         </button>
+        {clearConfirmOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 30,
+              width: 220,
+              padding: 10,
+              background: "rgba(26, 26, 46, 0.96)",
+              border: "1px solid rgba(42, 42, 64, 0.8)",
+              borderRadius: 10,
+              boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              zIndex: 2,
+            }}
+          >
+            <span style={{ fontSize: 12, color: "#e0e0ff", lineHeight: 1.4 }}>
+              Erase this page conversation?
+            </span>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelClearConfirm();
+                }}
+                style={{
+                  background: "none",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  borderRadius: 6,
+                  color: "var(--dpf-muted)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  lineHeight: 1,
+                  padding: "5px 8px",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfirmClear();
+                }}
+                style={{
+                  background: "rgba(239, 68, 68, 0.16)",
+                  border: "1px solid rgba(239, 68, 68, 0.5)",
+                  borderRadius: 6,
+                  color: "#fca5a5",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  lineHeight: 1,
+                  padding: "5px 8px",
+                }}
+              >
+                Erase now
+              </button>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}

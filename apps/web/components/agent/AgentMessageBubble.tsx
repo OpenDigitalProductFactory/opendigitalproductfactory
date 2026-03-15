@@ -10,6 +10,8 @@ type Props = {
   agentName: string | null;
   onApprove?: (proposalId: string) => void;
   onReject?: (proposalId: string) => void;
+  deliveryState?: "sending" | "sent" | "failed";
+  onRetry?: () => void;
 };
 
 const MARKDOWN_COMPONENTS: Components = {
@@ -76,7 +78,15 @@ function formatRelativeTime(isoString: string): string {
   return `${days}d ago`;
 }
 
-export function AgentMessageBubble({ message, showAgentLabel, agentName, onApprove, onReject }: Props) {
+export function AgentMessageBubble({
+  message,
+  showAgentLabel,
+  agentName,
+  onApprove,
+  onReject,
+  deliveryState,
+  onRetry,
+}: Props) {
   if (message.role === "system") {
     return (
       <div
@@ -249,6 +259,7 @@ export function AgentMessageBubble({ message, showAgentLabel, agentName, onAppro
           background: isUser ? "var(--dpf-accent)" : "rgba(22, 22, 37, 0.8)",
           color: isUser ? "#ffffff" : "#e0e0ff",
           wordBreak: "break-word",
+          opacity: isUser && deliveryState === "sending" ? 0.74 : 1,
         }}
       >
         {isUser ? (
@@ -259,6 +270,38 @@ export function AgentMessageBubble({ message, showAgentLabel, agentName, onAppro
           </div>
         )}
       </div>
+      {isUser && deliveryState && deliveryState !== "sent" && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            color: "var(--dpf-muted)",
+            marginRight: 4,
+          }}
+        >
+          <span>{deliveryState === "sending" ? "Sending..." : "Not sent"}</span>
+          {deliveryState === "failed" && onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                background: "none",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                borderRadius: 999,
+                color: "#e0e0ff",
+                cursor: "pointer",
+                fontSize: 11,
+                lineHeight: 1,
+                padding: "3px 8px",
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
