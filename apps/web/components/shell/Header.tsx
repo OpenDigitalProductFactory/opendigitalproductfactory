@@ -4,6 +4,7 @@
 import { signOutAction } from "@/lib/actions";
 import { can, type CapabilityKey } from "@/lib/permissions";
 import { NavBar } from "./NavBar";
+import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { useEffect, useState } from "react";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
   isSuperuser: boolean;
   brandName: string;
   brandLogoUrl: string | null;
+  userId?: string | null;
 };
 
 const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey | null }> = [
@@ -23,7 +25,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey 
   { label: "Build",        href: "/build",        capability: "view_platform" },
 ];
 
-export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl }: Props) {
+export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, userId }: Props) {
   const visibleItems = NAV_ITEMS.filter(
     (item) => item.capability === null || can({ platformRole, isSuperuser }, item.capability)
   );
@@ -72,6 +74,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl }: P
         <NavBar items={visibleItems} />
       </div>
       <div className="flex items-center gap-3">
+        <HeaderFeedbackButton userId={userId} />
         {platformRole !== null && (
           <span className="text-xs text-[var(--dpf-muted)]">{platformRole}</span>
         )}

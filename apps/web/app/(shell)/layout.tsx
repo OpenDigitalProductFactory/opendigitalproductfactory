@@ -6,7 +6,6 @@ import { resolveBrandingLogoUrl } from "@/lib/branding";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
-import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
@@ -50,12 +49,13 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           activeBranding?.logoUrl ?? null,
           activeBranding?.companyName ?? "Open Digital Product Factory",
         )}
+        userId={user.id}
       />
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
       <AgentCoworkerShell
         userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
       />
-      <FeedbackButton userId={user.id} />
+      {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
       <QueueFlusher />
       <ModelWarmup />
     </div>

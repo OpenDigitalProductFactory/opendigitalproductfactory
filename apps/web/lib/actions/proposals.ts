@@ -30,41 +30,38 @@ export async function approveProposal(
     return { success: false, error: "Insufficient permissions" };
   }
 
-  // Execute in transaction
+  // Execute sequentially (not in a wrapping transaction) because tool handlers
+  // like shipBuild/createBuildEpic use their own $transaction internally.
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.agentActionProposal.update({
-        where: { proposalId },
-        data: { status: "approved", decidedAt: new Date(), decidedById: user.id },
-      });
-
-      const toolResult = await executeTool(
-        proposal.actionType,
-        proposal.parameters as Record<string, unknown>,
-        user.id,
-      );
-
-      if (toolResult.success) {
-        await tx.agentActionProposal.update({
-          where: { proposalId },
-          data: {
-            status: "executed",
-            executedAt: new Date(),
-            ...(toolResult.entityId !== undefined ? { resultEntityId: toolResult.entityId } : {}),
-          },
-        });
-      } else {
-        await tx.agentActionProposal.update({
-          where: { proposalId },
-          data: {
-            status: "failed",
-            ...(toolResult.error !== undefined ? { resultError: toolResult.error } : {}),
-          },
-        });
-      }
-
-      return toolResult;
+    await prisma.agentActionProposal.update({
+      where: { proposalId },
+      data: { status: "approved", decidedAt: new Date(), decidedById: user.id },
     });
+
+    const result = await executeTool(
+      proposal.actionType,
+      proposal.parameters as Record<string, unknown>,
+      user.id,
+    );
+
+    if (result.success) {
+      await prisma.agentActionProposal.update({
+        where: { proposalId },
+        data: {
+          status: "executed",
+          executedAt: new Date(),
+          ...(result.entityId !== undefined ? { resultEntityId: result.entityId } : {}),
+        },
+      });
+    } else {
+      await prisma.agentActionProposal.update({
+        where: { proposalId },
+        data: {
+          status: "failed",
+          ...(result.error !== undefined ? { resultError: result.error } : {}),
+        },
+      });
+    }
 
     // Audit log
     await prisma.authorizationDecisionLog.create({

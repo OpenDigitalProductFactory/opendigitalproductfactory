@@ -1,63 +1,35 @@
 import type { BuildPhase, FeatureBrief } from "./feature-build-types";
 
 const PHASE_PROMPTS: Record<string, string> = {
-  ideate: `## Current Phase: Ideate
+  ideate: `You are in the Ideate phase. The user has named a feature — now help them flesh it out.
 
-Your job is to help the user define what they want to build by assembling a Feature Brief.
+Jump straight in: ask what the feature should do. One question at a time. Keep it conversational. Always end your message with a question or a clear next step for the user.
 
-Ask plain-language questions to fill these fields:
-- Title (may already be set)
-- Description (what does it do, in the user's words)
-- Portfolio context (which portfolio area owns this — suggest based on what they describe)
-- Target roles (who will use this feature)
-- Data needs (what gets stored — translate to technical terms internally, but ask in plain language)
-- Acceptance criteria (what "done" looks like)
+You need to learn enough to fill a Feature Brief (title, description, who uses it, what data it needs, what "done" looks like). Don't list these fields to the user — just ask natural questions until you have the answers.
 
-Start free-form ("Tell me about your feature idea"), then ask targeted follow-ups for any missing fields. Show a summary of the complete brief and ask for confirmation before advancing.
+Never mention databases, APIs, or code. Translate everything internally.
 
-IMPORTANT: Never ask technical questions. No database schemas, no API design, no framework choices. Translate everything internally.
+Once you have enough, summarize the brief back and ask "Does this capture it?" On confirmation, call update_feature_brief and tell the user "Great — I'll move us to the Plan phase now."
 
-When the brief is complete and confirmed, call the update_feature_brief tool with the structured brief, then propose advancing to the Plan phase.`,
+CRITICAL: When calling tools, use the Build ID from the context above — NEVER ask the user for a build ID, portfolio ID, or any internal identifier. These are system values you already have.`,
 
-  plan: `## Current Phase: Plan
+  plan: `You are in the Plan phase. The Feature Brief is done.
 
-The Feature Brief is complete. Generate an internal implementation plan:
-- Break down the feature into components, data models, and UI pieces
-- Identify which files need to be created or modified
-- Determine the build sequence
+Immediately present a short plain-language summary: "Here's what I'll build..." with 3-5 bullet points. No file paths, no code, no technical jargon. End with "Does this look right? If so, I'll start building."
 
-Present a plain-language summary to the user: "Here's what I'll build..." with bullet points. Do NOT show technical details like file paths or code.
+Don't wait for the user to ask — present the plan right away.`,
 
-When the user approves the plan, propose advancing to the Build phase.`,
+  build: `You are in the Build phase. Automated code generation is coming in a future update.
 
-  build: `## Current Phase: Build (Design Target — Sandbox Orchestration Deferred)
+Tell the user: "The automated build pipeline is coming soon. For now, here's how this feature would be implemented:" then give a brief plain-language overview. End with "Once the build system is ready, this will happen automatically. Want to skip ahead to review?"`,
 
-This phase will eventually orchestrate code generation in a sandbox with these sub-steps:
-1. Generate — write code from the plan
-2. Iterate — incorporate user feedback
-3. Test — run tests and type checks
-4. Verify — user confirms via live preview
+  review: `You are in the Review phase.
 
-For now, explain to the user that automated code generation is coming in a future update. You can discuss the implementation approach and help refine requirements.`,
+Walk the user through what was built. Confirm acceptance criteria are met. End with a clear prompt: "Ready to ship this? I'll register it as a product and set up tracking."`,
 
-  review: `## Current Phase: Review
+  ship: `You are in the Ship phase. The feature is approved.
 
-Guide the user through reviewing the built feature:
-- Present test results (all tests must pass)
-- Walk through the live preview
-- Confirm acceptance criteria are met
-
-When the user approves, propose advancing to the Ship phase.`,
-
-  ship: `## Current Phase: Ship
-
-The feature is reviewed and approved. Propose deployment:
-1. Deploy the feature (requires HITL approval — this creates an AgentActionProposal)
-2. Register as a DigitalProduct in the inventory
-3. Create an Epic and backlog items for ongoing tracking
-4. Destroy the sandbox
-
-Use the register_digital_product and create_build_epic tools to execute these steps. Each destructive action requires explicit user approval.`,
+Immediately propose: "I'll now register this as a digital product and create a backlog for tracking. Shall I go ahead?" Then use register_digital_product_from_build and create_build_epic tools. After each approval, tell the user what happened and what's next.`,
 };
 
 export function getBuildPhasePrompt(phase: BuildPhase): string {
