@@ -69,12 +69,16 @@ export function PlatformKeysPanel({ keyStatuses }: Props) {
               <p className="text-xs text-[var(--dpf-muted)] mb-3">{cfg.description}</p>
               <div className="flex gap-2">
                 <input
-                  type="password"
+                  type="text"
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
                   value={values[cfg.key] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [cfg.key]: e.target.value }))}
                   placeholder={isConfigured ? "Enter new key to replace" : cfg.placeholder}
                   disabled={isPending}
                   className="flex-1 px-3 py-2 text-xs font-mono bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-white outline-none focus:border-[var(--dpf-accent)]"
+                  style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
                 />
                 <button
                   onClick={() => handleSave(cfg.key)}
