@@ -9,6 +9,7 @@ type KeyConfig = {
   description: string;
   placeholder: string;
   configured: boolean;
+  isSecret: boolean;
 };
 
 const PLATFORM_KEYS: Omit<KeyConfig, "configured">[] = [
@@ -17,6 +18,14 @@ const PLATFORM_KEYS: Omit<KeyConfig, "configured">[] = [
     label: "Brave Search API Key",
     description: "Enables the AI Coworker to search the web when External Access is on. Get a free key at brave.com/search/api.",
     placeholder: "BSA-xxxxxxxxxxxxxxxx",
+    isSecret: true,
+  },
+  {
+    key: "upload_storage_path",
+    label: "File Upload Storage Path",
+    description: "Directory for uploaded files. Use an absolute path in production (e.g., D:/dpf-uploads).",
+    placeholder: "./data/uploads",
+    isSecret: false,
   },
 ];
 
@@ -75,10 +84,10 @@ export function PlatformKeysPanel({ keyStatuses }: Props) {
                   data-lpignore="true"
                   value={values[cfg.key] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [cfg.key]: e.target.value }))}
-                  placeholder={isConfigured ? "Enter new key to replace" : cfg.placeholder}
+                  placeholder={isConfigured ? (cfg.isSecret ? "Enter new key to replace" : "Enter new value to replace") : cfg.placeholder}
                   disabled={isPending}
                   className="flex-1 px-3 py-2 text-xs font-mono bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-white outline-none focus:border-[var(--dpf-accent)]"
-                  style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
+                  style={cfg.isSecret ? { WebkitTextSecurity: "disc" } as React.CSSProperties : undefined}
                 />
                 <button
                   onClick={() => handleSave(cfg.key)}
