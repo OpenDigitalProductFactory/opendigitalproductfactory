@@ -85,7 +85,7 @@ export function AgentPanelHeader({
                 fontWeight: 700,
               }}
             >
-              Form fill enabled
+              Hands On
             </span>
           )}
         </div>
@@ -102,7 +102,11 @@ export function AgentPanelHeader({
             e.stopPropagation();
             onToggleElevatedAssist();
           }}
-          title="Allow this page's coworker to fill approved form fields"
+          title={
+            elevatedAssistEnabled
+              ? "Hands On: this page's coworker can update approved form fields"
+              : "Hands Off: this page's coworker can suggest changes without updating form fields"
+          }
           style={{
             background: elevatedAssistEnabled ? "rgba(250, 204, 21, 0.18)" : "none",
             border: `1px solid ${elevatedAssistEnabled ? "rgba(250, 204, 21, 0.65)" : "rgba(255, 255, 255, 0.12)"}`,
@@ -114,7 +118,7 @@ export function AgentPanelHeader({
             lineHeight: 1,
           }}
         >
-          Fill
+          {elevatedAssistEnabled ? "Hands On" : "Hands Off"}
         </button>
         <button
           type="button"
