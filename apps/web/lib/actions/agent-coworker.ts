@@ -22,6 +22,7 @@ import {
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
+import { deleteAttachmentsForThread } from "@/lib/file-upload";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -547,7 +548,8 @@ export async function clearConversation(input: {
     return { error: "Unauthorized" };
   }
 
-  // Delete proposals first (FK on messageId), then messages
+  // Delete attachments (files on disk + DB rows), then proposals (FK on messageId), then messages
+  await deleteAttachmentsForThread(input.threadId);
   await prisma.agentActionProposal.deleteMany({
     where: { threadId: input.threadId },
   });
