@@ -36,6 +36,8 @@ type Props = {
   userContext: UserContext;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
+  pendingAutoMessage?: string | null;
+  onAutoMessageConsumed?: () => void;
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
@@ -59,6 +61,8 @@ export function AgentCoworkerPanel({
   userContext,
   onClose,
   onDragStart,
+  pendingAutoMessage,
+  onAutoMessageConsumed,
 }: Props) {
   const pathname = usePathname();
   const [messages, setMessages] = useState<AgentRenderableMessage[]>(() => filterMessages(initialMessages));
@@ -95,6 +99,14 @@ export function AgentCoworkerPanel({
     window.addEventListener("build-studio-active-build", handleBuildChange);
     return () => window.removeEventListener("build-studio-active-build", handleBuildChange);
   }, []);
+
+  // Auto-send a message when triggered by build creation or other events
+  useEffect(() => {
+    if (pendingAutoMessage && threadId) {
+      submitMessage(pendingAutoMessage);
+      onAutoMessageConsumed?.();
+    }
+  }, [pendingAutoMessage, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleToggleElevatedAssist() {
     setElevatedAssistEnabled((prev) => {

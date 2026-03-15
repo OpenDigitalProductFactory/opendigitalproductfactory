@@ -41,6 +41,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
+  const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
@@ -118,9 +119,13 @@ export function AgentCoworkerShell({ userContext }: Props) {
 
   // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
-    function handleOpenPanel() {
+    function handleOpenPanel(e: Event) {
       setIsOpen(true);
       savePanelOpen(userKey, true);
+      const detail = (e as CustomEvent<{ autoMessage?: string } | undefined>).detail;
+      if (detail?.autoMessage) {
+        setPendingAutoMessage(detail.autoMessage);
+      }
     }
     document.addEventListener("open-agent-feedback", handleOpenPanel);
     document.addEventListener("open-agent-panel", handleOpenPanel);
@@ -229,6 +234,8 @@ export function AgentCoworkerShell({ userContext }: Props) {
             userContext={userContext}
             onClose={handleClose}
             onDragStart={handleDragStart}
+            pendingAutoMessage={pendingAutoMessage}
+            onAutoMessageConsumed={() => setPendingAutoMessage(null)}
           />
           <div
             onMouseDown={handleResizeStart}
