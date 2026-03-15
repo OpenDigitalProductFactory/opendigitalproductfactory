@@ -112,6 +112,19 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     });
   }
 
+  // Guided setup: determine which step the user is on
+  const step = provider.status === "active" ? 4
+    : testResult?.ok ? 3
+    : (secretRef || credential?.secretHint || selectedAuthMethod === "none") ? 2
+    : 1;
+
+  const STEPS = [
+    { n: 1, label: "Credentials" },
+    { n: 2, label: "Connect" },
+    { n: 3, label: "Models" },
+    { n: 4, label: "Active" },
+  ];
+
   const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#8888a0" : "#fbbf24";
 
   const inputStyle: React.CSSProperties = {
@@ -133,6 +146,34 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   return (
     <div style={{ maxWidth: 560 }}>
+      {/* Setup progress */}
+      <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 24 }}>
+        {STEPS.map((s, i) => {
+          const done = step > s.n;
+          const current = step === s.n;
+          const colour = done ? "#4ade80" : current ? "#7c8cf8" : "#2a2a40";
+          return (
+            <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60 }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: "50%",
+                  background: done ? "#4ade8030" : current ? "#7c8cf830" : "#1a1a2e",
+                  border: `2px solid ${colour}`,
+                  display: "grid", placeItems: "center",
+                  fontSize: 11, fontWeight: 600, color: colour,
+                }}>
+                  {done ? "\u2713" : s.n}
+                </div>
+                <span style={{ fontSize: 10, color: current ? "#e0e0ff" : "#8888a0", marginTop: 4 }}>{s.label}</span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div style={{ width: 32, height: 2, background: done ? "#4ade8060" : "#2a2a40", marginBottom: 16 }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* Status */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
         <span style={{ background: `${statusColour}20`, color: statusColour, fontSize: 12, padding: "3px 8px", borderRadius: 3 }}>
