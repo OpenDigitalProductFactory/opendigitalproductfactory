@@ -193,7 +193,7 @@ export async function callProvider(
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ];
-    body = { model: modelId, messages: allMessages, max_tokens: 4096 };
+    body = { model: modelId, messages: allMessages, max_tokens: 4096, keep_alive: -1 };
     if (tools && tools.length > 0) {
       body.tools = tools;
     }
