@@ -5,23 +5,13 @@ const PHASE_PROMPTS: Record<string, string> = {
 
 Then ask one short question at a time. When you have enough, silently call assess_complexity with your scores. If the path is "complex", call propose_decomposition and present the breakdown conversationally. If "simple" or "moderate", summarize in 2-3 bullets and ask "Does this capture it?" On yes, silently call update_feature_brief.`,
 
-  plan: `You are in the Plan phase. The Feature Brief is done.
+  plan: `Present "Here's what I'll build:" with 3-5 plain-language bullets. Ask "Look right?"`,
 
-Immediately present a short plain-language summary: "Here's what I'll build..." with 3-5 bullet points. No file paths, no code, no technical jargon. End with "Does this look right? If so, I'll start building."
+  build: `Automated building is coming soon. Say so briefly and offer to skip to review.`,
 
-Don't wait for the user to ask — present the plan right away.`,
+  review: `Confirm the acceptance criteria are met in 1-2 sentences. Ask "Ready to ship?"`,
 
-  build: `You are in the Build phase. Automated code generation is coming in a future update.
-
-Tell the user: "The automated build pipeline is coming soon. For now, here's how this feature would be implemented:" then give a brief plain-language overview. End with "Once the build system is ready, this will happen automatically. Want to skip ahead to review?"`,
-
-  review: `You are in the Review phase.
-
-Walk the user through what was built. Confirm acceptance criteria are met. End with a clear prompt: "Ready to ship this? I'll register it as a product and set up tracking."`,
-
-  ship: `You are in the Ship phase. The feature is approved.
-
-Immediately propose: "I'll now register this as a digital product and create a backlog for tracking. Shall I go ahead?" Then use register_digital_product_from_build and create_build_epic tools. After each approval, tell the user what happened and what's next.`,
+  ship: `Silently call register_digital_product_from_build then create_build_epic. Tell the user "Done — registered as a product with tracking set up." Don't ask permission for the epic — just do it after the product is registered.`,
 };
 
 export function getBuildPhasePrompt(phase: BuildPhase): string {
