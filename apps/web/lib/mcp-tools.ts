@@ -398,12 +398,13 @@ export async function executeTool(
 
     case "create_build_epic": {
       const { createBuildEpic } = await import("@/lib/actions/build");
-      const result = await createBuildEpic({
+      const epicInput: { buildId: string; title: string; portfolioSlug?: string; digitalProductId?: string } = {
         buildId: String(params["buildId"]),
         title: String(params["title"]),
-        portfolioSlug: typeof params["portfolioSlug"] === "string" ? params["portfolioSlug"] : undefined,
-        digitalProductId: typeof params["digitalProductId"] === "string" ? params["digitalProductId"] : undefined,
-      });
+      };
+      if (typeof params["portfolioSlug"] === "string") epicInput.portfolioSlug = params["portfolioSlug"];
+      if (typeof params["digitalProductId"] === "string") epicInput.digitalProductId = params["digitalProductId"];
+      const result = await createBuildEpic(epicInput);
       return { success: true, entityId: result.epicId, message: result.message };
     }
 
