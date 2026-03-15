@@ -6,6 +6,7 @@ import {
   SCHEDULE_INTERVALS_MS,
   getTestUrl,
   parseModelsResponse,
+  getBillingLabel,
 } from "./ai-provider-types";
 
 describe("computeTokenCost", () => {
@@ -123,5 +124,70 @@ describe("parseModelsResponse", () => {
 
   it("returns empty array for missing data key", () => {
     expect(parseModelsResponse("openai", { models: [] })).toEqual([]);
+  });
+});
+
+describe("getBillingLabel", () => {
+  it("returns explicit billingLabel when set", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: "Custom label",
+      inputPricePerMToken: 3.0,
+      outputPricePerMToken: 15.0,
+    })).toBe("Custom label");
+  });
+
+  it("auto-generates label for token provider with prices", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: null,
+      inputPricePerMToken: 3.0,
+      outputPricePerMToken: 15.0,
+    })).toBe("Pay-per-use · $3.00/$15.00 per M tokens");
+  });
+
+  it("auto-generates label for token provider without prices", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: null,
+      inputPricePerMToken: null,
+      outputPricePerMToken: null,
+    })).toBe("Pay-per-use · rates vary by model");
+  });
+
+  it("auto-generates label for compute provider", () => {
+    expect(getBillingLabel({
+      costModel: "compute",
+      billingLabel: null,
+      inputPricePerMToken: null,
+      outputPricePerMToken: null,
+    })).toBe("Local compute · electricity cost only");
+  });
+
+  it("returns null for unknown costModel without explicit label", () => {
+    expect(getBillingLabel({
+      costModel: "subscription",
+      billingLabel: null,
+      inputPricePerMToken: null,
+      outputPricePerMToken: null,
+    })).toBeNull();
+  });
+
+  it("treats empty string billingLabel as absent", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: "",
+      inputPricePerMToken: 3.0,
+      outputPricePerMToken: 15.0,
+    })).toBe("Pay-per-use · $3.00/$15.00 per M tokens");
+  });
+
+  it("formats prices with two decimal places", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: null,
+      inputPricePerMToken: 1.5,
+      outputPricePerMToken: 6.0,
+    })).toBe("Pay-per-use · $1.50/$6.00 per M tokens");
   });
 });
