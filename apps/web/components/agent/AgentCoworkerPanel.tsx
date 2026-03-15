@@ -119,6 +119,7 @@ export function AgentCoworkerPanel({
         threadId,
         content,
         routeContext: pathname,
+        externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
       });
