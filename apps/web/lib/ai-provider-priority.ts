@@ -130,11 +130,22 @@ export async function getProviderPriority(task: string = "conversation"): Promis
     const stored = config.value as ProviderPriorityEntry[] | TaskAwarePriority;
     const entries = resolveTaskPriority(stored, task);
     if (entries.length > 0) {
-      return entries.sort((a, b) => a.rank - b.rank);
+      // Filter out providers that are no longer active (disabled, quota-hit, etc.)
+      const activeProviders = await prisma.modelProvider.findMany({
+        where: { status: "active" },
+        select: { providerId: true },
+      });
+      const activeIds = new Set(activeProviders.map((p) => p.providerId));
+      const activeEntries = entries.filter((e) => activeIds.has(e.providerId));
+
+      if (activeEntries.length > 0) {
+        return activeEntries.sort((a, b) => a.rank - b.rank);
+      }
+      // All stored providers are inactive — fall through to bootstrap
     }
   }
 
-  // No config yet — bootstrap from active providers
+  // No config or all stored providers inactive — bootstrap from active providers
   return buildBootstrapPriority();
 }
 
