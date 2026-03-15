@@ -113,6 +113,42 @@ export async function sendMessage(input: {
 
   const trimmedContent = input.content.trim();
 
+  // Handle "re-enable" command — last-resort provider recovery
+  if (trimmedContent.toLowerCase() === "re-enable") {
+    const reEnabled = await prisma.modelProvider.findFirst({
+      where: { status: "inactive" },
+      orderBy: { updatedAt: "desc" },
+      select: { providerId: true, name: true },
+    });
+    if (reEnabled) {
+      await prisma.modelProvider.update({
+        where: { providerId: reEnabled.providerId },
+        data: { status: "active" },
+      });
+      // Cancel the re-enable scheduled job if it exists
+      await prisma.scheduledJob.deleteMany({
+        where: { jobId: `provider-reenable-${reEnabled.providerId}` },
+      }).catch(() => {});
+
+      const sysMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "system",
+          content: `${reEnabled.name} has been re-enabled. It may have reduced quota — try sending your message again.`,
+          routeContext: input.routeContext,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+      return {
+        userMessage: serializeMessage(await prisma.agentMessage.create({
+          data: { threadId: input.threadId, role: "user", content: trimmedContent, routeContext: input.routeContext },
+          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+        })),
+        agentMessage: serializeMessage(sysMsg),
+      };
+    }
+  }
+
   // Persist user message
   const userMsg = await prisma.agentMessage.create({
     data: {
@@ -316,14 +352,28 @@ export async function sendMessage(input: {
       });
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
-      // Fall back to canned response
+      // Check if there are inactive providers that could be re-enabled as a last resort
+      const inactiveProviders = await prisma.modelProvider.findMany({
+        where: { status: "inactive" },
+        select: { providerId: true, name: true },
+        take: 3,
+      });
+
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
+
+      let sysContent: string;
+      if (inactiveProviders.length > 0) {
+        const names = inactiveProviders.map((p) => p.name).join(", ");
+        sysContent = `All AI providers are unavailable. Disabled providers that could be re-enabled: ${names}. Visit Platform > AI Providers to re-enable one, or type "re-enable" to activate the best available provider as a last resort.`;
+      } else {
+        sysContent = "No AI providers are configured or available. Visit Platform > AI Providers to set one up.";
+      }
 
       const sysMsg = await prisma.agentMessage.create({
         data: {
           threadId: input.threadId,
           role: "system",
-          content: "AI providers are currently unavailable. Showing a pre-configured response.",
+          content: sysContent,
           agentId: agent.agentId,
           routeContext: input.routeContext,
         },
