@@ -217,7 +217,7 @@ async function callProviderForProfiling(
     // OpenAI-compatible (OpenAI, Azure, Mistral, Groq, Together, Fireworks, xAI, OpenRouter, LiteLLM, etc.)
     const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
     chatUrl = `${apiBase}/chat/completions`;
-    body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096 };
+    body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096, keep_alive: -1 };
     extractText = (d) => (d.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "";
   }
 
