@@ -101,8 +101,8 @@ export async function checkBundledProviders(): Promise<void> {
     // Timeout or connection error
   }
 
-  if (reachable && provider.status !== "active") {
-    // Activate and discover
+  if (reachable && provider.status === "unconfigured") {
+    // First-time auto-activation — only for unconfigured providers, not intentionally disabled ones
     await prisma.modelProvider.update({
       where: { providerId: "ollama" },
       data: { status: "active" },
