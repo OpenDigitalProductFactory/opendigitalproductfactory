@@ -27,8 +27,8 @@ describe("bumpVersion", () => {
 describe("getBuildPhasePrompt", () => {
   it("returns ideate prompt for ideate phase", () => {
     const prompt = getBuildPhasePrompt("ideate");
-    expect(prompt).toContain("Ideate");
-    expect(prompt).toContain("Feature Brief");
+    expect(prompt).toContain("search_portfolio_context");
+    expect(prompt).toContain("assess_complexity");
   });
   it("returns plan prompt for plan phase", () => {
     const prompt = getBuildPhasePrompt("plan");

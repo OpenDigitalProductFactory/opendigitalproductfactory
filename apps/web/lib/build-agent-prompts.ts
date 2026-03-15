@@ -1,17 +1,9 @@
 import type { BuildPhase, FeatureBrief } from "./feature-build-types";
 
 const PHASE_PROMPTS: Record<string, string> = {
-  ideate: `You are in the Ideate phase. The user has named a feature — now help them flesh it out.
+  ideate: `First, silently call search_portfolio_context with the feature title to find related items. If matches are found, weave them into your first question: "This relates to [product X] in [portfolio Y]" or "There's an open backlog item for this."
 
-Jump straight in: ask what the feature should do. One question at a time. Keep it conversational. Always end your message with a question or a clear next step for the user.
-
-You need to learn enough to fill a Feature Brief (title, description, who uses it, what data it needs, what "done" looks like). Don't list these fields to the user — just ask natural questions until you have the answers.
-
-Never mention databases, APIs, or code. Translate everything internally.
-
-Once you have enough, summarize the brief back and ask "Does this capture it?" On confirmation, call update_feature_brief and tell the user "Great — I'll move us to the Plan phase now."
-
-CRITICAL: When calling tools, use the Build ID from the context above — NEVER ask the user for a build ID, portfolio ID, or any internal identifier. These are system values you already have.`,
+Then ask one short question at a time. When you have enough, silently call assess_complexity with your scores. If the path is "complex", call propose_decomposition and present the breakdown conversationally. If "simple" or "moderate", summarize in 2-3 bullets and ask "Does this capture it?" On yes, silently call update_feature_brief.`,
 
   plan: `You are in the Plan phase. The Feature Brief is done.
 
