@@ -55,7 +55,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 60px)" }}>
+    <div className="flex flex-col h-full">
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Build List */}
         <div className="w-[360px] border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)]">
@@ -81,9 +81,13 @@ export function BuildStudio({ builds, portfolios }: Props) {
 
           <div className="flex-1 overflow-auto p-2">
             {builds.length === 0 ? (
-              <p className="text-[13px] text-[var(--dpf-muted)] p-4 text-center">
-                No feature builds yet. Describe what you want to build above.
-              </p>
+              <div className="p-6 text-center">
+                <div className="text-3xl mb-3 opacity-20">&#128161;</div>
+                <p className="text-[13px] text-[var(--dpf-muted)] mb-2">No builds yet</p>
+                <p className="text-xs text-[var(--dpf-muted)] opacity-70">
+                  Type a feature name above and press <strong className="text-white">New</strong> to start.
+                </p>
+              </div>
             ) : (
               builds.map((build) => (
                 <button
@@ -140,12 +144,21 @@ export function BuildStudio({ builds, portfolios }: Props) {
             </>
           ) : (
             <div className="flex-1 grid place-items-center">
-              <div className="text-center">
+              <div className="text-center max-w-md px-8">
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
-                <h2 className="text-lg font-bold text-white mb-2">Product Development Studio</h2>
-                <p className="text-sm text-[var(--dpf-muted)] max-w-[400px] leading-relaxed">
-                  Describe what you want to build in plain language. The AI will design it, build it in a sandbox, and deploy it when you approve.
+                <h2 className="text-lg font-bold text-white mb-3">Product Development Studio</h2>
+                <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
+                  Build features without writing code. Describe what you want, and the AI will design, build, and deploy it.
                 </p>
+                <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4">
+                  <p className="text-xs font-semibold text-white mb-3 uppercase tracking-wider">How it works</p>
+                  <div className="flex flex-col gap-2.5">
+                    <Step n={1} text="Type a feature name in the sidebar and click New" />
+                    <Step n={2} text="Describe what you want in conversation with the AI" />
+                    <Step n={3} text="Review the live preview as the AI builds it" />
+                    <Step n={4} text="Approve and deploy when you're happy" />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -153,6 +166,17 @@ export function BuildStudio({ builds, portfolios }: Props) {
       </div>
 
       {activeBuild && <PhaseIndicator currentPhase={activeBuild.phase} />}
+    </div>
+  );
+}
+
+function Step({ n, text }: { n: number; text: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="w-5 h-5 rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-white grid place-items-center shrink-0 mt-0.5">
+        {n}
+      </span>
+      <span className="text-[13px] text-[#ccc] leading-snug">{text}</span>
     </div>
   );
 }

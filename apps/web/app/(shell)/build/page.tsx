@@ -13,5 +13,10 @@ export default async function BuildPage() {
     getPortfoliosForSelect(),
   ]);
 
-  return <BuildStudio builds={builds} portfolios={portfolios} />;
+  // Negative margin counteracts the shell's p-6 so Build Studio goes full-bleed
+  return (
+    <div className="-m-6 h-[calc(100vh-64px)]">
+      <BuildStudio builds={builds} portfolios={portfolios} />
+    </div>
+  );
 }
