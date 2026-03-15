@@ -255,6 +255,28 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   }
 }
 
+// ─── Enable / Disable provider ───────────────────────────────────────────────
+
+export async function toggleProviderStatus(
+  providerId: string,
+): Promise<{ status: string }> {
+  await requireManageProviders();
+
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { status: true },
+  });
+  if (!provider) throw new Error("Provider not found");
+
+  const newStatus = provider.status === "active" ? "inactive" : "active";
+  await prisma.modelProvider.update({
+    where: { providerId },
+    data: { status: newStatus },
+  });
+
+  return { status: newStatus };
+}
+
 // ─── Model discovery ─────────────────────────────────────────────────────────
 
 export async function discoverModels(
