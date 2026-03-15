@@ -27,7 +27,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const targetPath = request.nextUrl.searchParams.get("path") ?? "/";
+  // Sanitize path: ensure it starts with / and contains no protocol-relative patterns
+  let targetPath = request.nextUrl.searchParams.get("path") ?? "/";
+  if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
+  targetPath = targetPath.replace(/\/\//g, "/");
   const targetUrl = `http://localhost:${build.sandboxPort}${targetPath}`;
 
   try {
