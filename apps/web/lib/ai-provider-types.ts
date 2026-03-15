@@ -61,6 +61,8 @@ export type ProviderRow = {
   electricityRateKwh: number | null;
   docsUrl: string | null;
   consoleUrl: string | null;
+  billingLabel: string | null;
+  costPerformanceNotes: string | null;
 };
 
 /** Client-safe credential info — secrets are never sent to the browser. */
@@ -136,7 +138,7 @@ export type RegistryProviderEntry = {
   providerId: string;
   name: string;
   families: string[];
-  category: "direct" | "router";
+  category: "direct" | "router" | "agent";
   baseUrl: string | null;
   authMethod: "api_key" | "oauth2_client_credentials" | "none";
   supportedAuthMethods: string[];
@@ -148,6 +150,8 @@ export type RegistryProviderEntry = {
   electricityRateKwh?: number;
   docsUrl?: string | null;
   consoleUrl?: string | null;
+  billingLabel?: string | null;
+  costPerformanceNotes?: string | null;
 };
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
@@ -183,6 +187,33 @@ export function parseModelsResponse(
   return (obj.data ?? [])
     .filter((m) => typeof m.id === "string")
     .map((m) => ({ modelId: m.id as string, rawMetadata: m as Record<string, unknown> }));
+}
+
+// ─── Billing label ───────────────────────────────────────────────────────────
+
+type BillingLabelInput = {
+  costModel: string;
+  billingLabel: string | null;
+  inputPricePerMToken: number | null;
+  outputPricePerMToken: number | null;
+};
+
+/** Human-readable billing label. Returns explicit label if set, auto-generates from pricing otherwise. */
+export function getBillingLabel(provider: BillingLabelInput): string | null {
+  if (provider.billingLabel) return provider.billingLabel;
+
+  if (provider.costModel === "token") {
+    if (provider.inputPricePerMToken != null && provider.outputPricePerMToken != null) {
+      return `Pay-per-use · $${provider.inputPricePerMToken.toFixed(2)}/$${provider.outputPricePerMToken.toFixed(2)} per M tokens`;
+    }
+    return "Pay-per-use · rates vary by model";
+  }
+
+  if (provider.costModel === "compute") {
+    return "Local compute · electricity cost only";
+  }
+
+  return null;
 }
 
 // ─── URL helpers ──────────────────────────────────────────────────────────────
