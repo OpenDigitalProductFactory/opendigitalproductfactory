@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 
 describe("AgentPanelHeader", () => {
-  it("renders an erase control for the current conversation", () => {
+  it("renders Hands Off when elevated assist is disabled", () => {
     const html = renderToStaticMarkup(
       <AgentPanelHeader
         agent={{
@@ -26,10 +26,10 @@ describe("AgentPanelHeader", () => {
       />,
     );
 
-    expect(html).toContain("Erase");
+    expect(html).toContain("Hands Off");
   });
 
-  it("renders a yellow elevated assist indicator when form fill is enabled", () => {
+  it("renders a yellow Hands On indicator when elevated assist is enabled", () => {
     const html = renderToStaticMarkup(
       <AgentPanelHeader
         agent={{
@@ -52,7 +52,7 @@ describe("AgentPanelHeader", () => {
       />,
     );
 
-    expect(html).toContain("Form fill enabled");
+    expect(html).toContain("Hands On");
     expect(html).toContain("Restricted");
   });
 });
