@@ -182,14 +182,14 @@ export function BuildStudio({ builds, portfolios }: Props) {
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
                 <h2 className="text-lg font-bold text-white mb-3">Product Development Studio</h2>
                 <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
-                  Build features without writing code. Describe what you want, and the AI will design, build, and deploy it.
+                  Build features without writing code. Describe what you want, and your AI Coworker will design, build, and deploy it.
                 </p>
                 <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4">
                   <p className="text-xs font-semibold text-white mb-3 uppercase tracking-wider">How it works</p>
                   <div className="flex flex-col gap-2.5">
                     <Step n={1} text="Type a feature name in the sidebar and click New" />
-                    <Step n={2} text="Describe what you want in conversation with the AI" />
-                    <Step n={3} text="Review the live preview as the AI builds it" />
+                    <Step n={2} text="Your AI Coworker will open and guide you through the process" />
+                    <Step n={3} text="Review the live preview as it builds" />
                     <Step n={4} text="Approve and deploy when you're happy" />
                   </div>
                 </div>
