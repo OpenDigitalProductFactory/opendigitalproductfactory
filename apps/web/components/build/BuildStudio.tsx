@@ -33,13 +33,14 @@ export function BuildStudio({ builds, portfolios }: Props) {
 
   async function handleCreate() {
     if (!newTitle.trim()) return;
+    const title = newTitle.trim();
     setCreating(true);
     try {
-      const { buildId } = await createFeatureBuild({ title: newTitle.trim() });
+      const { buildId } = await createFeatureBuild({ title });
       setActiveBuild({
         id: "",
         buildId,
-        title: newTitle.trim(),
+        title,
         description: null,
         portfolioId: null,
         brief: null,
@@ -59,8 +60,10 @@ export function BuildStudio({ builds, portfolios }: Props) {
       });
       setNewTitle("");
       router.refresh();
-      // Open the co-worker panel so the agent can start guiding
-      document.dispatchEvent(new CustomEvent("open-agent-panel"));
+      // Open the co-worker panel and auto-prompt about the new feature
+      document.dispatchEvent(new CustomEvent("open-agent-panel", {
+        detail: { autoMessage: `I just created a new feature called "${title}". Help me define it.` },
+      }));
     } finally {
       setCreating(false);
     }
