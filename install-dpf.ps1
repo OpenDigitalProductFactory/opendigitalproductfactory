@@ -263,13 +263,19 @@ if (-not (Is-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select model based on hardware
-    if ($gpuVRAM_GB -ge 4) {
+    # Select the LARGEST model the hardware can support
+    if ($gpuVRAM_GB -ge 16) {
+        $selectedModel = "qwen3:32b"
+        $modelReason = "maximum quality — your GPU has plenty of memory"
+    } elseif ($gpuVRAM_GB -ge 8) {
+        $selectedModel = "qwen3:14b"
+        $modelReason = "high quality, good fit for your GPU"
+    } elseif ($gpuVRAM_GB -ge 4) {
         $selectedModel = "qwen3:8b"
-        $modelReason = "high quality, GPU-accelerated"
+        $modelReason = "good quality, GPU-accelerated"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "qwen3:4b"
-        $modelReason = "good quality, fits your RAM"
+        $selectedModel = "qwen3:8b"
+        $modelReason = "good quality, fits your RAM (CPU mode)"
     } elseif ($totalRAM_GB -ge 8) {
         $selectedModel = "qwen3:1.7b"
         $modelReason = "fast, works well on your hardware"
@@ -278,6 +284,7 @@ if (-not (Is-StepDone "hardware")) {
         $modelReason = "lightweight, optimized for your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
+    Write-Action "Note: The AI model takes about a minute to load on first use after startup."
 
     # Check disk space
     if ($diskFree_GB -lt 5) {
