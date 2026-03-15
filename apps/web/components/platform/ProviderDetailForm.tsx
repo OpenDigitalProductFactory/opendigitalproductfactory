@@ -156,7 +156,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   };
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div>
+      <div style={{ maxWidth: 560 }}>
       {/* Setup progress */}
       <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 24 }}>
         {STEPS.map((s, i) => {
@@ -420,6 +421,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           {models.length} model{models.length !== 1 ? "s" : ""} discovered
         </p>
       )}
+
+      </div>{/* end max-width form wrapper */}
 
       {models.length > 0 && (
         <div style={{ marginTop: 24 }}>
