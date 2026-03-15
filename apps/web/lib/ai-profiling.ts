@@ -24,6 +24,8 @@ For each model below, produce a JSON array of profiles. Each profile has:
 - avoidFor: array of 2-3 anti-patterns in plain English
 - contextWindow: human-friendly string like "Large (200K tokens)" or "Standard (8K tokens)" or null if unknown
 - speedRating: "Fast", "Moderate", or "Slow" (or null if unknown)
+- codingCapability: one of "excellent", "adequate", "insufficient" — can it write correct, working code?
+- instructionFollowing: one of "excellent", "adequate", "insufficient" — does it follow system prompts precisely, stay concise, avoid dumping internal reasoning?
 - modelId: the exact model ID string
 
 Use language a non-technical manager would understand. No jargon. No marketing language.
@@ -44,6 +46,8 @@ export type ProfileResult = {
   avoidFor: string[];
   contextWindow: string | null;
   speedRating: string | null;
+  codingCapability: string | null;
+  instructionFollowing: string | null;
 };
 
 export function parseProfilingResponse(text: string): ProfileResult[] {

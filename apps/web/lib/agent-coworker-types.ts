@@ -27,6 +27,7 @@ export type AgentInfo = {
   sensitivity: "public" | "internal" | "confidential" | "restricted";
   systemPrompt: string;
   skills: AgentSkill[];
+  modelRequirements?: AgentModelRequirements;
 };
 
 /** A context-relevant action the agent can help with. */
@@ -35,6 +36,13 @@ export type AgentSkill = {
   description: string;
   capability: CapabilityKey | null;
   prompt: string;
+};
+
+/** Model capability requirements for an agent. */
+export type AgentModelRequirements = {
+  minCapabilityTier?: string;
+  instructionFollowing?: "excellent" | "adequate";
+  codingCapability?: "excellent" | "adequate";
 };
 
 /** Entry in the route-to-agent map. */
@@ -46,6 +54,7 @@ export type RouteAgentEntry = {
   sensitivity: "public" | "internal" | "confidential" | "restricted";
   systemPrompt: string;
   skills: AgentSkill[];
+  modelRequirements?: AgentModelRequirements;
 };
 
 /** Max message content length (chars). */

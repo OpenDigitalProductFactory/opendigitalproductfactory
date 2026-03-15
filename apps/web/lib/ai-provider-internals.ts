@@ -473,6 +473,8 @@ export async function profileModelsInternal(
           avoidFor: profile.avoidFor,
           contextWindow: profile.contextWindow ?? null,
           speedRating: profile.speedRating ?? null,
+          codingCapability: profile.codingCapability ?? null,
+          instructionFollowing: profile.instructionFollowing ?? null,
           generatedBy: usedProviderId ?? "unknown",
         },
         update: {
@@ -484,6 +486,8 @@ export async function profileModelsInternal(
           avoidFor: profile.avoidFor,
           contextWindow: profile.contextWindow ?? null,
           speedRating: profile.speedRating ?? null,
+          codingCapability: profile.codingCapability ?? null,
+          instructionFollowing: profile.instructionFollowing ?? null,
           generatedBy: usedProviderId ?? "unknown",
           generatedAt: new Date(),
         },
