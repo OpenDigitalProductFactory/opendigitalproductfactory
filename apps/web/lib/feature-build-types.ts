@@ -151,3 +151,62 @@ export function bumpVersion(current: string, bump: VersionBump): string {
       return `${major}.${minor + 1}.0`;
   }
 }
+
+// ─── Portfolio Search Types ──────────────────────────────────────────────────
+
+export type SearchMatch = {
+  id: string;
+  name: string;
+  slug?: string;
+  description: string | null;
+  relevanceScore: number;
+  context?: string;
+};
+
+export type PortfolioSearchResult = {
+  taxonomyMatches: SearchMatch[];
+  productMatches: SearchMatch[];
+  buildMatches: SearchMatch[];
+  backlogMatches: SearchMatch[];
+};
+
+// ─── Complexity Assessment Types ─────────────────────────────────────────────
+
+export type ComplexityDimension =
+  | "taxonomySpan"
+  | "dataEntities"
+  | "integrations"
+  | "novelty"
+  | "regulatory"
+  | "costEstimate"
+  | "techDebt";
+
+export type ComplexityScores = Record<ComplexityDimension, 1 | 2 | 3>;
+
+export type ComplexityPath = "simple" | "moderate" | "complex";
+
+export type ComplexityResult = {
+  total: number;
+  path: ComplexityPath;
+  scores: ComplexityScores;
+};
+
+// ─── Decomposition Types ─────────────────────────────────────────────────────
+
+export type BuildOrBuyRecommendation = "build" | "buy" | "integrate";
+
+export type FeatureSetEntry = {
+  title: string;
+  description: string;
+  type: "feature_build" | "digital_product";
+  estimatedBuilds: number;
+  recommendation: BuildOrBuyRecommendation;
+  rationale: string;
+  techDebtNote: string | null;
+};
+
+export type DecompositionPlan = {
+  epicTitle: string;
+  epicDescription: string;
+  featureSets: FeatureSetEntry[];
+};
