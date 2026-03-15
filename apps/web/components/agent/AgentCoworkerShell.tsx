@@ -116,14 +116,18 @@ export function AgentCoworkerShell({ userContext }: Props) {
     savePanelOpen(userKey, false);
   }
 
-  // Listen for feedback button
+  // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
-    function handleFeedback() {
+    function handleOpenPanel() {
       setIsOpen(true);
       savePanelOpen(userKey, true);
     }
-    document.addEventListener("open-agent-feedback", handleFeedback);
-    return () => document.removeEventListener("open-agent-feedback", handleFeedback);
+    document.addEventListener("open-agent-feedback", handleOpenPanel);
+    document.addEventListener("open-agent-panel", handleOpenPanel);
+    return () => {
+      document.removeEventListener("open-agent-feedback", handleOpenPanel);
+      document.removeEventListener("open-agent-panel", handleOpenPanel);
+    };
   }, [userKey]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {

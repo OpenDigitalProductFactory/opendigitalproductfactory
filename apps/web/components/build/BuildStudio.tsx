@@ -59,6 +59,8 @@ export function BuildStudio({ builds, portfolios }: Props) {
       });
       setNewTitle("");
       router.refresh();
+      // Open the co-worker panel so the agent can start guiding
+      window.dispatchEvent(new CustomEvent("open-agent-panel"));
     } finally {
       setCreating(false);
     }
