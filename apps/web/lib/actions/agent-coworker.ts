@@ -23,6 +23,7 @@ import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-t
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
+import { observeConversation } from "@/lib/process-observer-hook";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -144,6 +145,12 @@ export async function sendMessage(input: {
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
+
+      // Fire-and-forget: process observer
+      observeConversation(input.threadId, input.routeContext).catch((err) =>
+        console.error("[process-observer]", err),
+      );
+
       return {
         userMessage: serializeMessage(await prisma.agentMessage.create({
           data: { threadId: input.threadId, role: "user", content: trimmedContent, routeContext: input.routeContext },
@@ -320,6 +327,12 @@ export async function sendMessage(input: {
               },
               select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
             });
+
+            // Fire-and-forget: process observer
+            observeConversation(input.threadId, input.routeContext).catch((err) =>
+              console.error("[process-observer]", err),
+            );
+
             return {
               userMessage: serializeMessage(userMsg),
               agentMessage: serializeMessage(agentMsg),
@@ -341,6 +354,11 @@ export async function sendMessage(input: {
           },
           select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
         });
+
+        // Fire-and-forget: process observer
+        observeConversation(input.threadId, input.routeContext).catch((err) =>
+          console.error("[process-observer]", err),
+        );
 
         return {
           userMessage: serializeMessage(userMsg),
@@ -375,6 +393,11 @@ export async function sendMessage(input: {
           parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue,
         },
       });
+
+      // Fire-and-forget: process observer
+      observeConversation(input.threadId, input.routeContext).catch((err) =>
+        console.error("[process-observer]", err),
+      );
 
       return {
         userMessage: serializeMessage(userMsg),
@@ -483,6 +506,11 @@ export async function sendMessage(input: {
       createdAt: true,
     },
   });
+
+  // Fire-and-forget: process observer
+  observeConversation(input.threadId, input.routeContext).catch((err) =>
+    console.error("[process-observer]", err),
+  );
 
   return {
     userMessage: serializeMessage(userMsg),
