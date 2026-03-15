@@ -12,7 +12,9 @@
     "inputPricePerMToken": 3.00,
     "outputPricePerMToken": 15.00,
     "docsUrl": "https://docs.anthropic.com",
-    "consoleUrl": "https://console.anthropic.com/settings/billing"
+    "consoleUrl": "https://console.anthropic.com/settings/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "openai",
@@ -27,7 +29,9 @@
     "inputPricePerMToken": 2.50,
     "outputPricePerMToken": 10.00,
     "docsUrl": "https://platform.openai.com/docs",
-    "consoleUrl": "https://platform.openai.com/settings/organization/billing"
+    "consoleUrl": "https://platform.openai.com/settings/organization/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "azure-openai",
@@ -42,7 +46,9 @@
     "inputPricePerMToken": 5.00,
     "outputPricePerMToken": 15.00,
     "docsUrl": "https://learn.microsoft.com/en-us/azure/ai-services/openai/",
-    "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI"
+    "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "gemini",
@@ -57,7 +63,9 @@
     "inputPricePerMToken": 1.25,
     "outputPricePerMToken": 5.00,
     "docsUrl": "https://ai.google.dev/docs",
-    "consoleUrl": "https://aistudio.google.com/apikey"
+    "consoleUrl": "https://aistudio.google.com/apikey",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "bedrock",
@@ -72,7 +80,9 @@
     "inputPricePerMToken": 3.00,
     "outputPricePerMToken": 15.00,
     "docsUrl": "https://docs.aws.amazon.com/bedrock/",
-    "consoleUrl": "https://console.aws.amazon.com/bedrock/"
+    "consoleUrl": "https://console.aws.amazon.com/bedrock/",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "ollama",
@@ -87,7 +97,9 @@
     "computeWatts": 150,
     "electricityRateKwh": 0.12,
     "docsUrl": "https://github.com/ollama/ollama/blob/main/docs/api.md",
-    "consoleUrl": null
+    "consoleUrl": null,
+    "billingLabel": "Local compute \u00b7 electricity cost only",
+    "costPerformanceNotes": null
   },
   {
     "providerId": "xai",
@@ -100,7 +112,9 @@
     "costModel": "token",
     "families": ["grok-2", "grok-3"],
     "docsUrl": "https://docs.x.ai",
-    "consoleUrl": "https://console.x.ai"
+    "consoleUrl": "https://console.x.ai",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "mistral",
@@ -113,7 +127,9 @@
     "costModel": "token",
     "families": ["mistral-large", "mistral-small", "codestral"],
     "docsUrl": "https://docs.mistral.ai",
-    "consoleUrl": "https://console.mistral.ai/billing"
+    "consoleUrl": "https://console.mistral.ai/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "cohere",
@@ -126,7 +142,9 @@
     "costModel": "token",
     "families": ["command-r-plus", "command-r", "embed"],
     "docsUrl": "https://docs.cohere.com",
-    "consoleUrl": "https://dashboard.cohere.com/billing"
+    "consoleUrl": "https://dashboard.cohere.com/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "deepseek",
@@ -139,7 +157,9 @@
     "costModel": "token",
     "families": ["deepseek-chat", "deepseek-coder"],
     "docsUrl": "https://platform.deepseek.com/api-docs",
-    "consoleUrl": "https://platform.deepseek.com/top_up"
+    "consoleUrl": "https://platform.deepseek.com/top_up",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "groq",
@@ -152,7 +172,9 @@
     "costModel": "token",
     "families": ["llama3", "mixtral", "gemma"],
     "docsUrl": "https://console.groq.com/docs",
-    "consoleUrl": "https://console.groq.com/settings/billing"
+    "consoleUrl": "https://console.groq.com/settings/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "together",
@@ -165,7 +187,9 @@
     "costModel": "token",
     "families": ["llama3", "mistral", "qwen"],
     "docsUrl": "https://docs.together.ai",
-    "consoleUrl": "https://api.together.ai/settings/billing"
+    "consoleUrl": "https://api.together.ai/settings/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
   },
   {
     "providerId": "fireworks",
@@ -178,7 +202,26 @@
     "costModel": "token",
     "families": ["llama3", "mixtral", "qwen"],
     "docsUrl": "https://docs.fireworks.ai",
-    "consoleUrl": "https://fireworks.ai/account/billing"
+    "consoleUrl": "https://fireworks.ai/account/billing",
+    "billingLabel": null,
+    "costPerformanceNotes": null
+  },
+  {
+    "providerId": "codex",
+    "name": "OpenAI Codex",
+    "category": "agent",
+    "baseUrl": null,
+    "authMethod": "api_key",
+    "supportedAuthMethods": ["api_key"],
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "families": ["codex-mini"],
+    "inputPricePerMToken": 1.50,
+    "outputPricePerMToken": 6.00,
+    "docsUrl": "https://developers.openai.com/codex/",
+    "consoleUrl": "https://platform.openai.com/settings/organization/billing",
+    "billingLabel": "Pay-per-use (API key) or Subscription (ChatGPT plan)",
+    "costPerformanceNotes": "Agentic coding specialist. ~3x cheaper than GPT-4o for code tasks. Runs in sandboxed environment with tool use and persistent threads."
   },
   {
     "providerId": "openrouter",
@@ -191,7 +234,9 @@
     "costModel": "token",
     "families": ["multi-provider"],
     "docsUrl": "https://openrouter.ai/docs",
-    "consoleUrl": "https://openrouter.ai/credits"
+    "consoleUrl": "https://openrouter.ai/credits",
+    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "costPerformanceNotes": null
   },
   {
     "providerId": "litellm",
@@ -204,7 +249,9 @@
     "costModel": "token",
     "families": ["multi-provider"],
     "docsUrl": "https://docs.litellm.ai",
-    "consoleUrl": null
+    "consoleUrl": null,
+    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "costPerformanceNotes": null
   },
   {
     "providerId": "portkey",
@@ -217,7 +264,9 @@
     "costModel": "token",
     "families": ["multi-provider"],
     "docsUrl": "https://docs.portkey.ai",
-    "consoleUrl": "https://app.portkey.ai/organisation/billing"
+    "consoleUrl": "https://app.portkey.ai/organisation/billing",
+    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "costPerformanceNotes": null
   },
   {
     "providerId": "martian",
@@ -230,6 +279,8 @@
     "costModel": "token",
     "families": ["multi-provider"],
     "docsUrl": "https://docs.withmartian.com",
-    "consoleUrl": "https://app.withmartian.com/billing"
+    "consoleUrl": "https://app.withmartian.com/billing",
+    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "costPerformanceNotes": null
   }
 ]
