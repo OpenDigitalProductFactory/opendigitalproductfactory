@@ -57,6 +57,8 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
         families:             p.families as string[],
         enabledFamilies:      p.enabledFamilies as string[],
         supportedAuthMethods: p.supportedAuthMethods as string[],
+        billingLabel:         p.billingLabel,
+        costPerformanceNotes: p.costPerformanceNotes,
       } satisfies ProviderRow,
       credential: raw ? maskCredential(raw) : null,
     };
@@ -73,6 +75,8 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       families:             provider.families as string[],
       enabledFamilies:      provider.enabledFamilies as string[],
       supportedAuthMethods: provider.supportedAuthMethods as string[],
+      billingLabel:         provider.billingLabel,
+      costPerformanceNotes: provider.costPerformanceNotes,
     } satisfies ProviderRow,
     credential: credential ? maskCredential(credential) : null,
   };
