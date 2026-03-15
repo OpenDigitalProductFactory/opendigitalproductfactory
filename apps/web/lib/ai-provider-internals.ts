@@ -215,7 +215,8 @@ async function callProviderForProfiling(
     };
   } else {
     // OpenAI-compatible (OpenAI, Azure, Mistral, Groq, Together, Fireworks, xAI, OpenRouter, LiteLLM, etc.)
-    chatUrl = `${baseUrl}/chat/completions`;
+    const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+    chatUrl = `${apiBase}/chat/completions`;
     body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096 };
     extractText = (d) => (d.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "";
   }
@@ -224,7 +225,7 @@ async function callProviderForProfiling(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(600_000), // 10min — profiling generates detailed JSON, local models are slow
   });
 
   if (!res.ok) {
