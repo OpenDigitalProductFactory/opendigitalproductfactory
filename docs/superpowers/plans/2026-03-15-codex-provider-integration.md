@@ -189,6 +189,15 @@ describe("getBillingLabel", () => {
     })).toBeNull();
   });
 
+  it("treats empty string billingLabel as absent", () => {
+    expect(getBillingLabel({
+      costModel: "token",
+      billingLabel: "",
+      inputPricePerMToken: 3.0,
+      outputPricePerMToken: 15.0,
+    })).toBe("Pay-per-use · $3.00/$15.00 per M tokens");
+  });
+
   it("formats prices with two decimal places", () => {
     expect(getBillingLabel({
       costModel: "token",
@@ -275,7 +284,7 @@ Run:
 cd apps/web && npx vitest run lib/ai-providers.test.ts
 ```
 
-Expected: All tests PASS (existing 11 + 6 new = 17 total)
+Expected: All tests PASS (existing 11 + 7 new = 18 total)
 
 - [ ] **Step 8: Commit**
 
@@ -295,14 +304,14 @@ git commit -m "feat: add getBillingLabel() and widen category union for agent pr
 
 In `getProviders()`, the `provider` object is built with explicit spreads for JSON fields. The `satisfies ProviderRow` assertion requires all fields in `ProviderRow` to be present. After Task 3 widened `ProviderRow`, the new `billingLabel` and `costPerformanceNotes` fields must be explicitly mapped.
 
-Update the provider mapping in `getProviders()` to include (after the `supportedAuthMethods` line):
+The `...p` spread already carries the new columns from Prisma, but explicit mapping is clearer and consistent with how the other JSON-cast fields are handled. Add after the `supportedAuthMethods` line in `getProviders()`:
 
 ```typescript
-        billingLabel:         p.billingLabel ?? null,
-        costPerformanceNotes: p.costPerformanceNotes ?? null,
+        billingLabel:         p.billingLabel,
+        costPerformanceNotes: p.costPerformanceNotes,
 ```
 
-Do the same in `getProviderById()`.
+Do the same in `getProviderById()`. No `?? null` coercion needed — these are nullable Prisma columns that already return `string | null`.
 
 - [ ] **Step 2: Verify TypeScript compiles**
 
@@ -621,7 +630,7 @@ Run:
 pnpm test
 ```
 
-Expected: All tests pass, including the 6 new `getBillingLabel` tests.
+Expected: All tests pass, including the 7 new `getBillingLabel` tests.
 
 - [ ] **Step 2: Run TypeScript check**
 
