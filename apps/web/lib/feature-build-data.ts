@@ -2,6 +2,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow, FeatureBrief, BuildPhase } from "./feature-build-types";
+import type { BuildContext } from "./build-agent-prompts";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   const rows = await prisma.featureBuild.findMany({
@@ -102,3 +103,31 @@ export const getCodingProviders = cache(async (): Promise<CodingProviderOption[]
     codingCapability: p.codingCapability ?? "unknown",
   }));
 });
+
+/** Fetch minimal build context for prompt injection. NOT cached — must be fresh per message. */
+export async function getFeatureBuildForContext(
+  buildId: string,
+  userId: string,
+): Promise<BuildContext | null> {
+  const r = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      buildId: true,
+      title: true,
+      phase: true,
+      brief: true,
+      portfolioId: true,
+      createdById: true,
+    },
+  });
+
+  if (!r || r.createdById !== userId) return null;
+
+  return {
+    buildId: r.buildId,
+    phase: r.phase as BuildPhase,
+    title: r.title,
+    brief: r.brief as FeatureBrief | null,
+    portfolioId: r.portfolioId,
+  };
+}

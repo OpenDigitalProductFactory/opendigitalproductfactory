@@ -20,6 +20,8 @@ import {
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { getBuildContextSection } from "@/lib/build-agent-prompts";
+import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@ export async function sendMessage(input: {
   externalAccessEnabled?: boolean;
   elevatedFormFillEnabled?: boolean;
   formAssistContext?: AgentFormAssistContext;
+  buildId?: string;
 }): Promise<
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
@@ -158,6 +161,14 @@ export async function sendMessage(input: {
 
   if (input.elevatedFormFillEnabled && input.formAssistContext) {
     promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
+  }
+
+  // Inject Build Studio context when buildId is provided
+  if (input.buildId) {
+    const buildCtx = await getFeatureBuildForContext(input.buildId, user.id!);
+    if (buildCtx) {
+      promptSections.push(getBuildContextSection(buildCtx));
+    }
   }
 
   const populatedPrompt = promptSections.join("\n");
