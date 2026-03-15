@@ -33,7 +33,7 @@ Your data stays on your hardware.  The AI agents are there to help you grow and 
 - **Small business owners** who need enterprise-grade digital product management without enterprise-grade budgets or teams
 - **Regulated industries** (healthcare, finance, insurance) that need audit trails, human approval chains, and compliance evidence — built in, not bolted on
 - **IT leaders** who want to model their architecture, manage their portfolio, and track their backlog in one governed platform
-- **Concerned citizens** who want to use AI without the AI plaforms owning you and yuour business outright.
+- **Concerned citizens** who want to use AI without the AI plaforms owning you and your business outright.
 - **Developers and architects** who want to extend and contribute to an open platform that treats AI as a core capability, not a chatbot sidebar
 
 ---
