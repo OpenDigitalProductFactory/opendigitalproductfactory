@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { BrandingConfigurator } from "@/components/admin/BrandingConfigurator";
 import { AdminUserAccessPanel } from "@/components/admin/AdminUserAccessPanel";
+import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { deleteThemePreset } from "@/lib/actions/branding";
 import { resolveBrandingLogoUrl } from "@/lib/branding";
 
@@ -447,6 +448,20 @@ const OOTB_PRESETS: BrandingPresetRow[] = [
   ),
 ];
 
+async function getPlatformKeyStatuses(): Promise<Record<string, boolean>> {
+  const keys = ["brave_search_api_key"];
+  const configs = await prisma.platformConfig.findMany({
+    where: { key: { in: keys } },
+    select: { key: true, value: true },
+  });
+  const statuses: Record<string, boolean> = {};
+  for (const k of keys) {
+    const config = configs.find((c) => c.key === k);
+    statuses[k] = !!config && typeof config.value === "string" && config.value.length > 0;
+  }
+  return statuses;
+}
+
 export default async function AdminPage() {
   const [users, roles] = await Promise.all([
     prisma.user.findMany({
@@ -580,6 +595,10 @@ export default async function AdminPage() {
             email: user.email,
           }))}
         />
+      </div>
+
+      <div className="mt-8">
+        <PlatformKeysPanel keyStatuses={await getPlatformKeyStatuses()} />
       </div>
 
       <div className="mt-8">
