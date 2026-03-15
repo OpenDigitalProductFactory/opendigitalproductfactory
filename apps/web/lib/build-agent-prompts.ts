@@ -1,19 +1,27 @@
 import type { BuildPhase, FeatureBrief } from "./feature-build-types";
 
+const NOTES_INSTRUCTION = `
+
+IMPORTANT: After every significant exchange (user shares requirements, describes a process, provides data, or makes a decision), silently call save_build_notes to persist what you've learned. This builds a running spec that survives across conversations. Include:
+- What the user described (processes, data, systems)
+- Decisions made (build vs buy, integrations, priorities)
+- Requirements discovered (fields, workflows, roles, constraints)
+- Open questions still to resolve
+Do NOT announce that you're saving notes. Just do it silently after each meaningful exchange.`;
+
 const PHASE_PROMPTS: Record<string, string> = {
   ideate: `First, silently call search_portfolio_context with the feature title to find related items. Weave findings into your response naturally.
 
 When the user describes a manual process or an external system:
 - Proactively investigate: can this be automated? Is there an API? Does the platform already have something that handles part of this?
-- Suggest automation opportunities: "This manual step could be automated by..." or "The Open Group has an API for certifications — we could pull data directly instead of manual entry."
-- If external access is enabled, use search_public_web to look up APIs or integration options for the systems the user mentions.
-- Present your findings as suggestions, not questions: "I found that X has a REST API we could integrate with. That would eliminate the manual data entry step."
+- Suggest automation opportunities based on findings.
+- If external access is enabled, use search_public_web to look up APIs or integration options.
 
-Ask one short question at a time between investigations. When you have enough, silently call assess_complexity. If "complex", call propose_decomposition. If "simple" or "moderate", summarize in 2-3 bullets and ask "Does this capture it?" On yes, silently call update_feature_brief.`,
+Ask one short question at a time between investigations. When you have enough, silently call assess_complexity. If "complex", call propose_decomposition. If "simple" or "moderate", summarize in 2-3 bullets and ask "Does this capture it?" On yes, silently call update_feature_brief.${NOTES_INSTRUCTION}`,
 
-  plan: `Present "Here's what I'll build:" with 3-5 plain-language bullets. Ask "Look right?"`,
+  plan: `Present "Here's what I'll build:" with 3-5 plain-language bullets based on everything captured in the build notes. Ask "Look right?"${NOTES_INSTRUCTION}`,
 
-  build: `Automated building is coming soon. Say so briefly and offer to skip to review.`,
+  build: `Automated building is coming soon. Say so briefly and offer to skip to review.${NOTES_INSTRUCTION}`,
 
   review: `Confirm the acceptance criteria are met in 1-2 sentences. Ask "Ready to ship?"`,
 
@@ -30,6 +38,7 @@ export type BuildContext = {
   title: string;
   brief: FeatureBrief | null;
   portfolioId: string | null;
+  plan: Record<string, unknown> | null;
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -53,6 +62,12 @@ export function getBuildContextSection(ctx: BuildContext): string {
     lines.push(`  Portfolio: ${ctx.brief.portfolioContext}`);
     lines.push(`  Target roles: ${ctx.brief.targetRoles.join(", ")}`);
     lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
+  }
+
+  if (ctx.plan && Object.keys(ctx.plan).length > 0) {
+    lines.push("");
+    lines.push("--- Running Spec (accumulated from conversation) ---");
+    lines.push(JSON.stringify(ctx.plan, null, 2).slice(0, 4000));
   }
 
   lines.push("");

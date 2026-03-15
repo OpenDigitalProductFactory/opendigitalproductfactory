@@ -258,6 +258,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
   },
+  // ─── Build Notes Tool ───────────────────────────────────────────────────
+  {
+    name: "save_build_notes",
+    description: "Persist key points from the conversation to the running spec. Call silently after each significant exchange.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        processes: { type: "array", items: { type: "string" }, description: "Manual or automated processes described" },
+        requirements: { type: "array", items: { type: "string" }, description: "Requirements discovered (fields, workflows, roles)" },
+        decisions: { type: "array", items: { type: "string" }, description: "Decisions made (build vs buy, priorities)" },
+        integrations: { type: "array", items: { type: "string" }, description: "External systems or APIs mentioned" },
+        dataModel: { type: "array", items: { type: "string" }, description: "Data fields, entities, or structures identified" },
+        openQuestions: { type: "array", items: { type: "string" }, description: "Questions still to resolve" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -569,6 +588,43 @@ export async function executeTool(
         data: { itemId: item.itemId, title: item.title, type: item.type, status: item.status, body: item.body, priority: item.priority, ...(refactorEpic ? { epicId: refactorEpic.id } : {}) },
       });
       return { success: true, entityId: item.itemId, message: `Tech debt logged: ${item.itemId}` };
+    }
+
+    case "save_build_notes": {
+      // Auto-resolve the active build and merge notes into its plan field
+      const latestBuild = await prisma.featureBuild.findFirst({
+        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true, plan: true },
+      });
+      if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+
+      const existing = (latestBuild.plan as Record<string, unknown> | null) ?? {};
+      const mergeArray = (key: string) => {
+        const prev = Array.isArray(existing[key]) ? existing[key] as string[] : [];
+        const incoming = Array.isArray(params[key]) ? (params[key] as string[]).map(String) : [];
+        // Deduplicate
+        return [...new Set([...prev, ...incoming])];
+      };
+
+      const merged = {
+        ...existing,
+        processes: mergeArray("processes"),
+        requirements: mergeArray("requirements"),
+        decisions: mergeArray("decisions"),
+        integrations: mergeArray("integrations"),
+        dataModel: mergeArray("dataModel"),
+        openQuestions: mergeArray("openQuestions"),
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await prisma.featureBuild.update({
+        where: { buildId: latestBuild.buildId },
+        data: { plan: merged as import("@dpf/db").Prisma.InputJsonValue },
+      });
+
+      const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
+      return { success: true, message: `Spec updated — ${totalItems} items captured.` };
     }
 
     default:
