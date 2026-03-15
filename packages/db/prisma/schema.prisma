@@ -640,10 +640,11 @@ model AgentThread {
   userId     String
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   contextKey String @default("coworker")
-  messages   AgentMessage[]
-  proposals  AgentActionProposal[]
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  messages    AgentMessage[]
+  proposals   AgentActionProposal[]
+  attachments AgentAttachment[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@unique([userId, contextKey])
 }
@@ -660,6 +661,7 @@ model AgentMessage {
   providerId   String?     // provider that handled this inference
   createdAt    DateTime    @default(now())
   proposal     AgentActionProposal?
+  attachments  AgentAttachment[]
 
   @@index([threadId])
   @@index([createdAt])
@@ -688,6 +690,24 @@ model AgentActionProposal {
 
   @@index([threadId])
   @@index([status])
+}
+
+model AgentAttachment {
+  id             String        @id @default(cuid())
+  threadId       String
+  thread         AgentThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        AgentMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String
+  parsedContent  Json?
+  parsedAt       DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([threadId])
+  @@index([messageId])
 }
 
 model ApiToken {
