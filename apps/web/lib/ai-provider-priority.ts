@@ -219,7 +219,7 @@ async function filterByModelRequirements(
 
 const REENABLE_DELAY_MS = 60 * 60 * 1000; // 1 hour
 
-async function autoDisableProvider(providerId: string, reason: string): Promise<void> {
+async function autoDisableProvider(providerId: string, reason: string): Promise<Date> {
   await prisma.modelProvider.update({
     where: { providerId },
     data: { status: "inactive" },
@@ -247,6 +247,16 @@ async function autoDisableProvider(providerId: string, reason: string): Promise<
   });
 
   console.warn(`[autoDisableProvider] ${providerId} disabled due to quota. Re-enable scheduled at ${nextRunAt.toISOString()}`);
+  return nextRunAt;
+}
+
+function formatReenableTime(date: Date): string {
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 60) return `in ${diffMin} minute${diffMin !== 1 ? "s" : ""}`;
+  const diffHr = Math.round(diffMin / 60);
+  return `in about ${diffHr} hour${diffHr !== 1 ? "s" : ""}`;
 }
 
 // ─── Failover Engine ─────────────────────────────────────────────────────────
@@ -285,23 +295,24 @@ export async function callWithFailover(
   const baselineTier = filteredPriority[0]!.capabilityTier;
   const attempts: Array<{ providerId: string; error: string }> = [];
   const limit = Math.min(filteredPriority.length, MAX_CASCADE_DEPTH);
+  let quotaDisableMessage: string | null = null;
 
   for (let i = 0; i < limit; i++) {
     const entry = filteredPriority[i]!;
     try {
       const result = await callProvider(entry.providerId, entry.modelId, messages, systemPrompt, options?.tools);
 
-      const downgraded = entry.capabilityTier !== baselineTier && entry.capabilityTier !== "unknown" && baselineTier !== "unknown";
+      const downgraded = i > 0;
 
-      // Look up provider name for the message
-      let downgradeMessage: string | null = null;
-      if (downgraded) {
+      // Build downgrade message — quota-specific or generic
+      let downgradeMessage: string | null = quotaDisableMessage;
+      if (!downgradeMessage && downgraded) {
         const failedName = filteredPriority[0]!.providerId;
         const usedProvider = await prisma.modelProvider.findUnique({
           where: { providerId: entry.providerId },
           select: { name: true },
         });
-        downgradeMessage = `${failedName} is unavailable. Using ${usedProvider?.name ?? entry.providerId} (lower capability) — results may be less accurate.`;
+        downgradeMessage = `${failedName} is unavailable. Using ${usedProvider?.name ?? entry.providerId} instead.`;
       }
 
       return {
@@ -318,9 +329,17 @@ export async function callWithFailover(
 
       // Auto-disable provider on quota/rate-limit and schedule re-enablement
       if (e instanceof InferenceError && e.code === "rate_limit") {
-        await autoDisableProvider(entry.providerId, errMsg).catch((err) =>
-          console.error("[callWithFailover] auto-disable failed:", err),
-        );
+        const reenableAt = await autoDisableProvider(entry.providerId, errMsg).catch((err) => {
+          console.error("[callWithFailover] auto-disable failed:", err);
+          return null;
+        });
+        const providerName = await prisma.modelProvider.findUnique({
+          where: { providerId: entry.providerId },
+          select: { name: true },
+        });
+        const name = providerName?.name ?? entry.providerId;
+        const timeStr = reenableAt ? formatReenableTime(reenableAt) : "in about 1 hour";
+        quotaDisableMessage = `${name} hit its usage quota and has been temporarily disabled. It will be re-enabled ${timeStr}. Using a different provider for now.`;
       }
     }
   }
