@@ -1,5 +1,13 @@
 import type { CapabilityKey } from "@/lib/permissions";
 
+export type AttachmentInfo = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  parsedSummary: string | null;
+};
+
 /** Serialized message for client/server boundary. */
 export type AgentMessageRow = {
   id: string;
@@ -8,6 +16,7 @@ export type AgentMessageRow = {
   agentId: string | null;
   routeContext: string | null;
   createdAt: string; // ISO string via .toISOString()
+  attachments?: AttachmentInfo[];
   proposal?: {
     proposalId: string;
     actionType: string;
