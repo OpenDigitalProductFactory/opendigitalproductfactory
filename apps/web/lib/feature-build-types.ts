@@ -32,6 +32,7 @@ export type FeatureBuildRow = {
   diffPatch: string | null;
   codingProvider: string | null;
   threadId: string | null;
+  digitalProductId: string | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -123,4 +124,29 @@ export function generateBuildId(): string {
 
 export function generatePackId(): string {
   return `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+// ─── Version Bumping ──────────────────────────────────────────────────────
+
+export type VersionBump = "major" | "minor" | "patch";
+
+export function bumpVersion(current: string, bump: VersionBump): string {
+  const parts = current.split(".");
+  if (parts.length !== 3) return "1.0.0";
+
+  const major = parseInt(parts[0]!, 10);
+  const minor = parseInt(parts[1]!, 10);
+  const patch = parseInt(parts[2]!, 10);
+
+  if (isNaN(major) || isNaN(minor) || isNaN(patch)) return "1.0.0";
+
+  switch (bump) {
+    case "major":
+      return `${major + 1}.0.0`;
+    case "patch":
+      return `${major}.${minor}.${patch + 1}`;
+    case "minor":
+    default:
+      return `${major}.${minor + 1}.0`;
+  }
 }

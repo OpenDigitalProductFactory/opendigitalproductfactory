@@ -43,6 +43,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
         diffPatch: null,
         codingProvider: null,
         threadId: null,
+        digitalProductId: null,
         createdById: "",
         createdAt: new Date(),
         updatedAt: new Date(),
