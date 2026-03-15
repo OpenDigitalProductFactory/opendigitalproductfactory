@@ -257,6 +257,42 @@ export async function sendMessage(input: {
           { routeContext: input.routeContext },
         );
 
+        // If the tool returned data (search results, scores), feed it back to the LLM
+        // so the agent can craft a natural response instead of echoing "Found 12 items"
+        if (toolResult.data && toolResult.success) {
+          const toolContext: ChatMessage[] = [
+            ...chatHistory,
+            { role: "assistant" as const, content: `[Tool ${tc.name} returned: ${JSON.stringify(toolResult.data).slice(0, 2000)}]` },
+            { role: "user" as const, content: "Use the tool results above to continue the conversation naturally. Do not mention the tool by name." },
+          ];
+          try {
+            const followUp = await callWithFailover(
+              toolContext,
+              populatedPrompt,
+              agent.sensitivity,
+              { ...(agent.modelRequirements ? { modelRequirements: agent.modelRequirements } : {}) },
+            );
+            const agentMsg = await prisma.agentMessage.create({
+              data: {
+                threadId: input.threadId,
+                role: "assistant",
+                content: followUp.content,
+                agentId: agent.agentId,
+                routeContext: input.routeContext,
+                providerId: followUp.providerId,
+              },
+              select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+            });
+            return {
+              userMessage: serializeMessage(userMsg),
+              agentMessage: serializeMessage(agentMsg),
+              ...(toolResult.data !== undefined ? { formAssistUpdate: toolResult.data } : {}),
+            };
+          } catch {
+            // If follow-up LLM call fails, fall through to showing the raw tool message
+          }
+        }
+
         const agentMsg = await prisma.agentMessage.create({
           data: {
             threadId: input.threadId,
