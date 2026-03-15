@@ -137,6 +137,7 @@ model DigitalProduct {
   lifecycleStage  String        @default("plan")   // plan | design | build | production | retirement
   lifecycleStatus String        @default("draft")  // draft | active | inactive
   version         String        @default("1.0.0")
+  observationConfig Json?
   portfolioId     String?
   portfolio       Portfolio?    @relation(fields: [portfolioId], references: [id])
   taxonomyNodeId  String?
@@ -188,6 +189,9 @@ model BacklogItem {
   updatedAt        DateTime        @updatedAt
   epicId           String?
   epic             Epic?           @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  source          String?
+  occurrenceCount Int       @default(1)
+  lastSeenAt      DateTime?
 }
 
 // ─── Epics ───────────────────────────────────────────────────────────────────
@@ -281,8 +285,6 @@ model ModelProvider {
   supportedAuthMethods Json     @default("[\"api_key\"]")
   docsUrl              String?
   consoleUrl           String?
-  billingLabel         String?
-  costPerformanceNotes String?
   updatedAt            DateTime @updatedAt
 }
 
