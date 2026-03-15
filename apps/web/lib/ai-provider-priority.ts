@@ -137,6 +137,7 @@ export async function callWithFailover(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity = "internal",
+  options?: { tools?: Array<Record<string, unknown>> },
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority();
   const providerPolicy = await getActiveProviderPolicyInfo();
@@ -152,7 +153,7 @@ export async function callWithFailover(
   for (let i = 0; i < limit; i++) {
     const entry = filteredPriority[i]!;
     try {
-      const result = await callProvider(entry.providerId, entry.modelId, messages, systemPrompt);
+      const result = await callProvider(entry.providerId, entry.modelId, messages, systemPrompt, options?.tools);
 
       const downgraded = entry.capabilityTier !== baselineTier && entry.capabilityTier !== "unknown" && baselineTier !== "unknown";
 
