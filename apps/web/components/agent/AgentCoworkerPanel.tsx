@@ -18,6 +18,13 @@ import {
   buildAgentFormAssistContext,
   getActiveFormAssist,
 } from "@/lib/agent-form-assist";
+import {
+  createOptimisticUserMessage,
+  failOptimisticMessage,
+  reconcileOptimisticMessage,
+  retryOptimisticMessage,
+  type AgentRenderableMessage,
+} from "./agent-message-state";
 
 type Props = {
   threadId: string | null;
@@ -33,6 +40,15 @@ function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
   );
 }
 
+function isClearDisabled(
+  messages: AgentRenderableMessage[],
+  isPending: boolean,
+  isClearing: boolean,
+  threadId?: string | null,
+) {
+  return !threadId || messages.length === 0 || isPending || isClearing;
+}
+
 export function AgentCoworkerPanel({
   threadId,
   initialMessages,
@@ -41,10 +57,11 @@ export function AgentCoworkerPanel({
   onDragStart,
 }: Props) {
   const pathname = usePathname();
-  const [messages, setMessages] = useState<AgentMessageRow[]>(() => filterMessages(initialMessages));
+  const [messages, setMessages] = useState<AgentRenderableMessage[]>(() => filterMessages(initialMessages));
   const [isPending, startTransition] = useTransition();
   const [isClearing, startClearing] = useTransition();
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
@@ -56,6 +73,7 @@ export function AgentCoworkerPanel({
 
   useEffect(() => {
     setMessages(filterMessages(initialMessages));
+    setClearConfirmOpen(false);
   }, [threadId, initialMessages]);
 
   useEffect(() => {
@@ -70,10 +88,17 @@ export function AgentCoworkerPanel({
     });
   }
 
-  function handleSend(content: string) {
+  function submitMessage(
+    content: string,
+    optimisticMessage = createOptimisticUserMessage(content, pathname),
+    appendOptimistic = true,
+  ) {
     if (!threadId) return;
     const activeFormAssist = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
     const formAssistContext = activeFormAssist ? buildAgentFormAssistContext(activeFormAssist) : undefined;
+    if (appendOptimistic) {
+      setMessages((prev) => [...prev, optimisticMessage]);
+    }
 
     startTransition(async () => {
       const result = await sendMessage({
@@ -85,9 +110,14 @@ export function AgentCoworkerPanel({
       });
       if ("error" in result) {
         console.warn("sendMessage error:", result.error);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
+          ),
+        );
         return;
       }
-      const newMessages = [result.userMessage];
+      const newMessages: AgentRenderableMessage[] = [];
       if ("systemMessage" in result && result.systemMessage) {
         newMessages.push(result.systemMessage);
       }
@@ -103,8 +133,33 @@ export function AgentCoworkerPanel({
           createdAt: new Date().toISOString(),
         });
       }
-      setMessages((prev) => [...prev, ...newMessages]);
+      setMessages((prev) => {
+        const reconciled = prev.flatMap((message) =>
+          message.id === optimisticMessage.id
+            ? [reconcileOptimisticMessage(message, result.userMessage)]
+            : [message],
+        );
+        return [...reconciled, ...newMessages];
+      });
     });
+  }
+
+  function handleSend(content: string) {
+    submitMessage(content);
+  }
+
+  function handleRetry(messageId: string) {
+    const failedMessage = messages.find(
+      (message) => message.id === messageId && message.role === "user" && message.deliveryState === "failed",
+    );
+    if (!failedMessage) return;
+    const retryContent = failedMessage.retryContent ?? failedMessage.content;
+
+    const retriedMessage = retryOptimisticMessage(failedMessage);
+    setMessages((prev) =>
+      prev.map((message) => (message.id === messageId ? retriedMessage : message)),
+    );
+    submitMessage(retryContent, retriedMessage, false);
   }
 
   async function handleApprove(proposalId: string) {
@@ -140,11 +195,18 @@ export function AgentCoworkerPanel({
     }
   }
 
-  function handleClear() {
+  function handleOpenClearConfirm() {
+    if (isClearDisabled(messages, isPending, isClearing, threadId)) return;
+    setClearConfirmOpen(true);
+  }
+
+  function handleCancelClearConfirm() {
+    setClearConfirmOpen(false);
+  }
+
+  function handleConfirmClear() {
     if (!threadId) return;
-    if (typeof window !== "undefined" && !window.confirm("Erase the current page conversation?")) {
-      return;
-    }
+    setClearConfirmOpen(false);
 
     startClearing(async () => {
       const result = await clearConversation({ threadId });
@@ -162,8 +224,11 @@ export function AgentCoworkerPanel({
         agent={agent}
         userContext={userContext}
         onSend={handleSend}
-        onClear={handleClear}
-        clearDisabled={!threadId || messages.length === 0 || isPending || isClearing}
+        onOpenClearConfirm={handleOpenClearConfirm}
+        onCancelClearConfirm={handleCancelClearConfirm}
+        onConfirmClear={handleConfirmClear}
+        clearDisabled={isClearDisabled(messages, isPending, isClearing, threadId)}
+        clearConfirmOpen={clearConfirmOpen}
         elevatedAssistEnabled={elevatedAssistEnabled}
         onToggleElevatedAssist={handleToggleElevatedAssist}
         onClose={onClose}
@@ -200,6 +265,8 @@ export function AgentCoworkerPanel({
               agentName={showAgentLabel && msg.agentId ? (AGENT_NAME_MAP[msg.agentId] ?? msg.agentId) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
+              {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}
             />
           );
         })}
