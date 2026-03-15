@@ -2,17 +2,16 @@
 import { signIn } from "@/lib/auth";
 
 type Props = {
-  searchParams?: {
-    reset?: string;
-  };
+  searchParams: Promise<{ reset?: string }>;
 };
 
-export default function LoginPage({ searchParams }: Props) {
+export default async function LoginPage({ searchParams }: Props) {
+  const { reset } = await searchParams;
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
       <div className="w-full max-w-sm p-8 bg-[var(--dpf-surface-1)] rounded-xl border border-[var(--dpf-border)]">
         <h1 className="text-xl font-bold text-white mb-6">Digital Product Factory</h1>
-        {searchParams?.reset === "success" ? (
+        {reset === "success" ? (
           <p className="mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
             Password updated. Sign in with your new password.
           </p>
