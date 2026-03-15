@@ -68,6 +68,21 @@ export default async function ProviderDetailPage({ params }: Props) {
         />
       )}
 
+      {pw.provider.costPerformanceNotes && (
+        <div style={{
+          background: "#161625",
+          borderLeft: "3px solid #7c8cf8",
+          borderRadius: 6,
+          padding: "12px 16px",
+          marginBottom: 16,
+          fontSize: 12,
+          color: "#b0b0c8",
+          lineHeight: 1.5,
+        }}>
+          {pw.provider.costPerformanceNotes}
+        </div>
+      )}
+
       <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
         <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
       </div>
