@@ -21,6 +21,8 @@ const baseProps = {
   clearConfirmOpen: false,
   elevatedAssistEnabled: false,
   onToggleElevatedAssist: () => {},
+  externalAccessEnabled: false,
+  onToggleExternalAccess: () => {},
   onClose: () => {},
   onDragStart: () => {},
 };
@@ -32,6 +34,7 @@ describe("AgentPanelHeader", () => {
     );
 
     expect(html).toContain("Hands Off");
+    expect(html).toContain("External Off");
   });
 
   it("renders a yellow Hands On indicator when elevated assist is enabled", () => {
@@ -45,6 +48,17 @@ describe("AgentPanelHeader", () => {
 
     expect(html).toContain("Hands On");
     expect(html).toContain("Restricted");
+  });
+
+  it("renders External On when external access is enabled", () => {
+    const html = renderToStaticMarkup(
+      <AgentPanelHeader
+        {...baseProps}
+        externalAccessEnabled
+      />,
+    );
+
+    expect(html).toContain("External On");
   });
 
   it("renders an inline erase confirmation popover when open", () => {
