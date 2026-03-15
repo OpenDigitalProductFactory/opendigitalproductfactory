@@ -9,6 +9,7 @@ import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
+import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
@@ -80,9 +81,7 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
-                        {provider.status}
-                      </span>
+                      <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
                     </div>
                     <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
@@ -129,9 +128,7 @@ export default async function PlatformAiPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
-                      <span style={{ background: `${colour}20`, color: colour, fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>
-                        {provider.status}
-                      </span>
+                      <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
                     </div>
                     <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
                       {provider.families.slice(0, 3).join(" · ")}
