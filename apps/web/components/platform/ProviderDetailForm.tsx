@@ -192,23 +192,27 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         <span style={{ color: "#b0b0c8", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
       </div>
 
-      {/* Enabled families */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ color: "#c0c0d8", fontSize: 12, marginBottom: 6 }}>Enabled model families</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {provider.families.map((f) => (
-            <label key={f} style={{ display: "flex", alignItems: "center", gap: 4, cursor: canWrite ? "pointer" : "default" }}>
-              <input
-                type="checkbox"
-                checked={enabledFamilies.includes(f)}
-                disabled={!canWrite || isPending}
-                onChange={() => toggleFamily(f)}
-              />
-              <span style={{ fontSize: 12, color: "#e0e0ff" }}>{f}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+      {/* Model families — hidden during initial setup, shown as advanced after profiling */}
+      {hasProfiles && (
+        <details style={{ marginBottom: 16 }}>
+          <summary style={{ color: "#8888a0", fontSize: 12, cursor: "pointer", marginBottom: 6 }}>
+            Advanced: model families ({enabledFamilies.length}/{provider.families.length} enabled)
+          </summary>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+            {provider.families.map((f) => (
+              <label key={f} style={{ display: "flex", alignItems: "center", gap: 4, cursor: canWrite ? "pointer" : "default" }}>
+                <input
+                  type="checkbox"
+                  checked={enabledFamilies.includes(f)}
+                  disabled={!canWrite || isPending}
+                  onChange={() => toggleFamily(f)}
+                />
+                <span style={{ fontSize: 12, color: "#e0e0ff" }}>{f}</span>
+              </label>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* Custom endpoint (Azure OpenAI etc.) */}
       {needsEndpoint && (
