@@ -85,6 +85,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.electricityRateKwh !== undefined   && { electricityRateKwh:   entry.electricityRateKwh }),
           docsUrl:              entry.docsUrl ?? null,
           consoleUrl:           entry.consoleUrl ?? null,
+          billingLabel:         entry.billingLabel ?? null,
+          costPerformanceNotes: entry.costPerformanceNotes ?? null,
         },
       });
       updated++;
@@ -108,6 +110,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           electricityRateKwh:   entry.electricityRateKwh ?? null,
           docsUrl:              entry.docsUrl ?? null,
           consoleUrl:           entry.consoleUrl ?? null,
+          billingLabel:         entry.billingLabel ?? null,
+          costPerformanceNotes: entry.costPerformanceNotes ?? null,
         },
       });
       added++;
