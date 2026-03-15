@@ -144,8 +144,23 @@ async function getBraveSearchApiKey(): Promise<string> {
   throw new Error("Brave Search API key is not configured. Set it in Platform > Admin or BRAVE_SEARCH_API_KEY env var.");
 }
 
+export class ExternalAccessNotConfiguredError extends Error {
+  constructor(service: string, setupInstructions: string) {
+    super(`${service} is not configured. ${setupInstructions}`);
+    this.name = "ExternalAccessNotConfiguredError";
+  }
+}
+
 export async function searchPublicWeb(query: string): Promise<NormalizedSearchResult[]> {
-  const apiKey = await getBraveSearchApiKey();
+  let apiKey: string;
+  try {
+    apiKey = await getBraveSearchApiKey();
+  } catch {
+    throw new ExternalAccessNotConfiguredError(
+      "Web Search (Brave)",
+      "An admin needs to configure the Brave Search API key in Platform > AI Providers > Scheduled Jobs table, or ask your administrator to set it up.",
+    );
+  }
 
   const response = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`, {
     headers: {

@@ -349,7 +349,13 @@ export async function executeTool(
 
     case "search_public_web": {
       const query = String(params["query"] ?? "").trim();
-      const results = await searchPublicWeb(query);
+      let results: Awaited<ReturnType<typeof searchPublicWeb>>;
+      try {
+        results = await searchPublicWeb(query);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Web search failed";
+        return { success: false, error: msg, message: msg };
+      }
       if (context?.routeContext) {
         await recordExternalEvidence({
           actorUserId: userId,

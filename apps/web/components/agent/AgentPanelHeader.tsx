@@ -136,7 +136,7 @@ export function AgentPanelHeader({
               lineHeight: 1.2,
             }}
           >
-            {externalAccessEnabled ? "External On" : "External Off"}
+            {externalAccessEnabled ? "External Access On" : "External Access Off"}
           </button>
         </div>
         <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 12 }}>
