@@ -230,6 +230,19 @@ async function callProviderForProfiling(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
+    // Auto-retire deprecated/removed models (404 with "no longer available" or "not found")
+    if (res.status === 404) {
+      const modelRef = await prisma.discoveredModel.findFirst({
+        where: { providerId: profilingProviderId, modelId: model },
+      });
+      if (modelRef) {
+        await prisma.discoveredModel.delete({ where: { id: modelRef.id } }).catch(() => {});
+        await prisma.modelProfile.deleteMany({
+          where: { providerId: profilingProviderId, modelId: model },
+        }).catch(() => {});
+        console.warn(`[profiling] Retired deprecated model ${model} from ${profilingProviderId}`);
+      }
+    }
     // Auto-disable on quota exhaustion (429) — same as callWithFailover
     if (res.status === 429) {
       await prisma.modelProvider.update({

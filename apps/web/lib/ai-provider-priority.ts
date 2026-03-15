@@ -259,6 +259,18 @@ function formatReenableTime(date: Date): string {
   return `in about ${diffHr} hour${diffHr !== 1 ? "s" : ""}`;
 }
 
+// ─── Auto-Retire Deprecated Models ───────────────────────────────────────────
+
+async function retireDeprecatedModel(providerId: string, modelId: string): Promise<void> {
+  await prisma.discoveredModel.deleteMany({
+    where: { providerId, modelId },
+  });
+  await prisma.modelProfile.deleteMany({
+    where: { providerId, modelId },
+  });
+  console.warn(`[retireDeprecatedModel] Removed ${modelId} from ${providerId} — no longer available`);
+}
+
 // ─── Failover Engine ─────────────────────────────────────────────────────────
 
 const MAX_CASCADE_DEPTH = 5;
@@ -340,6 +352,16 @@ export async function callWithFailover(
         const name = providerName?.name ?? entry.providerId;
         const timeStr = reenableAt ? formatReenableTime(reenableAt) : "in about 1 hour";
         quotaDisableMessage = `${name} hit its usage quota and has been temporarily disabled. It will be re-enabled ${timeStr}. Using a different provider for now.`;
+      }
+
+      // Auto-retire deprecated/removed models (404) — delete from discovered + profile, try next
+      if (e instanceof InferenceError && e.code === "model_not_found") {
+        await retireDeprecatedModel(entry.providerId, entry.modelId).catch((err) =>
+          console.error("[callWithFailover] retire model failed:", err),
+        );
+        if (!quotaDisableMessage) {
+          quotaDisableMessage = `Model ${entry.modelId} is no longer available from ${entry.providerId} and has been removed. Switching to another model.`;
+        }
       }
     }
   }
