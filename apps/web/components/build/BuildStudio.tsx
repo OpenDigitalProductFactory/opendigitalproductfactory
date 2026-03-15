@@ -1,7 +1,7 @@
 // apps/web/components/build/BuildStudio.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
@@ -22,6 +22,14 @@ export function BuildStudio({ builds, portfolios }: Props) {
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+
+  useEffect(() => {
+    const detail = activeBuild?.buildId ?? null;
+    window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail: null }));
+    };
+  }, [activeBuild?.buildId]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;

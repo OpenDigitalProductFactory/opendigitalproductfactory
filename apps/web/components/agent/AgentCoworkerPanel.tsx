@@ -67,6 +67,7 @@ export function AgentCoworkerPanel({
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
@@ -85,6 +86,15 @@ export function AgentCoworkerPanel({
     setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
     setExternalAccessEnabled(loadExternalAccessSessionState(preferenceUserKey, pathname));
   }, [pathname, preferenceUserKey]);
+
+  useEffect(() => {
+    function handleBuildChange(e: Event) {
+      const buildId = (e as CustomEvent<string | null>).detail;
+      setActiveBuildId(buildId);
+    }
+    window.addEventListener("build-studio-active-build", handleBuildChange);
+    return () => window.removeEventListener("build-studio-active-build", handleBuildChange);
+  }, []);
 
   function handleToggleElevatedAssist() {
     setElevatedAssistEnabled((prev) => {
@@ -122,6 +132,7 @@ export function AgentCoworkerPanel({
         externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
+        ...(activeBuildId ? { buildId: activeBuildId } : {}),
       });
       if ("error" in result) {
         console.warn("sendMessage error:", result.error);
