@@ -135,6 +135,7 @@ model DigitalProduct {
   name            String
   lifecycleStage  String        @default("plan")   // plan | design | build | production | retirement
   lifecycleStatus String        @default("draft")  // draft | active | inactive
+  version         String        @default("1.0.0")
   portfolioId     String?
   portfolio       Portfolio?    @relation(fields: [portfolioId], references: [id])
   taxonomyNodeId  String?
@@ -145,6 +146,7 @@ model DigitalProduct {
   eaElements      EaElement[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
+  featureBuilds          FeatureBuild[]
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
@@ -751,14 +753,17 @@ model FeatureBuild {
   diffSummary     String?  @db.Text  // Human-readable change summary
   diffPatch       String?  @db.Text  // Git patch content
   codingProvider  String?  // Which provider/model did the code generation
-  threadId        String?  // Links to the conversation thread
-  createdById     String
-  createdBy       User     @relation(fields: [createdById], references: [id])
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  threadId         String?  // Links to the conversation thread
+  digitalProductId String?
+  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id])
+  createdById      String
+  createdBy        User     @relation(fields: [createdById], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([phase])
   @@index([createdById])
+  @@index([digitalProductId])
 }
 
 model FeaturePack {
