@@ -1,0 +1,6 @@
+FROM node:20-alpine
+RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN apk add --no-cache git
+WORKDIR /workspace
+# No database access, no secrets, no Docker socket
+# Resource limits applied at container creation
