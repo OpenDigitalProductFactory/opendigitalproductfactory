@@ -56,9 +56,14 @@ export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
 }
 
 export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
-  const pdfParse = (await import("pdf-parse")).default;
-  const data = await pdfParse(buffer);
-  return { type: "document", summary: `${data.numpages} page${data.numpages !== 1 ? "s" : ""}, ${data.text.length} characters`, fullText: truncate(data.text, MAX_TEXT_LEN) };
+  const { PDFParse } = await import("pdf-parse");
+  const pdf = new PDFParse({ data: new Uint8Array(buffer) });
+  const textResult = await pdf.getText();
+  const info = await pdf.getInfo();
+  const numPages = info.pages?.length ?? textResult.pages?.length ?? 0;
+  const fullText = textResult.text ?? "";
+  await pdf.destroy();
+  return { type: "document", summary: `${numPages} page${numPages !== 1 ? "s" : ""}, ${fullText.length} characters`, fullText: truncate(fullText, MAX_TEXT_LEN) };
 }
 
 export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
@@ -71,7 +76,9 @@ export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
   while ((match = headingRe.exec(htmlResult.value)) !== null && sections.length < MAX_SECTIONS) {
     sections.push({ heading: match[1]!.replace(/<[^>]*>/g, ""), text: "" });
   }
-  return { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, sections: sections.length > 0 ? sections : undefined, fullText: truncate(result.value, MAX_TEXT_LEN) };
+  const base: ParsedFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, fullText: truncate(result.value, MAX_TEXT_LEN) };
+  if (sections.length > 0) base.sections = sections;
+  return base;
 }
 
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string): Promise<ParsedFileContent | null> {
