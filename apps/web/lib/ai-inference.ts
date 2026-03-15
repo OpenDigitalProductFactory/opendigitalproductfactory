@@ -18,6 +18,7 @@ export type InferenceResult = {
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
+  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -142,6 +143,7 @@ export async function callProvider(
   modelId: string,
   messages: ChatMessage[],
   systemPrompt: string,
+  tools?: Array<Record<string, unknown>>,
 ): Promise<InferenceResult> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
@@ -192,8 +194,11 @@ export async function callProvider(
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ];
     body = { model: modelId, messages: allMessages, max_tokens: 4096 };
+    if (tools && tools.length > 0) {
+      body.tools = tools;
+    }
     extractText = (d) => {
-      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string } }>)?.[0]?.message;
+      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string; tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
       // Some models (qwen3) use chain-of-thought: content has the answer, reasoning has the thinking
       // If content is empty but reasoning exists, the model may not have finished thinking within token limit
       return msg?.content || msg?.reasoning || "";
@@ -236,11 +241,24 @@ export async function callProvider(
     return 0;
   };
 
+  // Extract tool calls if present (OpenAI-compatible only)
+  let toolCalls: InferenceResult["toolCalls"];
+  const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
+  if (rawMsg?.tool_calls && rawMsg.tool_calls.length > 0) {
+    toolCalls = rawMsg.tool_calls
+      .filter((tc) => tc.function?.name)
+      .map((tc) => ({
+        name: tc.function!.name!,
+        arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
+      }));
+  }
+
   return {
     content: extractText(data),
     inputTokens: readUsageNumber("input_tokens", "prompt_tokens"),
     outputTokens: readUsageNumber("output_tokens", "completion_tokens"),
     inferenceMs,
+    ...(toolCalls !== undefined && { toolCalls }),
   };
 }
 
