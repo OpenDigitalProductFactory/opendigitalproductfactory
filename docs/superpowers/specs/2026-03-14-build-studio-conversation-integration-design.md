@@ -15,13 +15,16 @@ When the user is on `/build`, the floating co-worker panel connects to a **Build
 
 Add a `/build` entry to `ROUTE_AGENT_MAP` in `agent-routing.ts`:
 - Agent ID: `build-specialist`
-- Sensitivity: `internal`
-- System prompt: dynamically built based on the active build's phase and brief
+- Sensitivity: `internal` (add to `ROUTE_SENSITIVITY` in `agent-sensitivity.ts`)
+- System prompt: static base prompt describing the Build Specialist role
+- Canned responses: add `CANNED_RESPONSES["build-specialist"]` entry for when no AI provider is configured
 
 ### Phase-Aware System Prompt
 
-The agent's behavior changes based on the active build's `phase` field. The system prompt is rebuilt on each message send, injecting:
-- Current phase and what the agent should do in that phase
+The base system prompt in `ROUTE_AGENT_MAP` is static (matching the existing `string` type on `RouteAgentEntry`). Phase-specific context is injected as additional prompt sections in `sendMessage()`, following the same pattern as `formAssistContext` injection. This avoids changing the `RouteAgentEntry` type.
+
+The injected context includes:
+- Current phase and what the agent should do in that phase (from `build-agent-prompts.ts`)
 - The Feature Brief (if populated)
 - The build's portfolio context
 - Available build MCP tools for the current phase
@@ -36,10 +39,13 @@ The agent's behavior changes based on the active build's `phase` field. The syst
 
 ### Context Injection
 
-When `sendMessage()` detects the route is `/build`, it:
-1. Looks up the user's active `FeatureBuild` (most recent non-terminal build)
-2. Injects build context into the system prompt: `buildId`, `phase`, `brief`, `title`
-3. Filters available MCP tools to those relevant to the current phase
+The client passes the active `buildId` explicitly when sending messages from `/build`. The `BuildStudio` component already tracks `activeBuild` in state, so it passes `buildId` as an additional field in the `sendMessage()` input. This avoids ambiguity when a user has multiple non-terminal builds.
+
+When `sendMessage()` receives a `buildId`:
+1. Fetches the `FeatureBuild` record by `buildId` (verifies `createdById` matches the authenticated user)
+2. Loads the phase-specific prompt section from `build-agent-prompts.ts` and appends it to the base system prompt
+3. Injects build context: `buildId`, `phase`, `brief`, `title`, `portfolioId`
+4. Filters available MCP tools to those relevant to the current phase
 
 ---
 
@@ -64,7 +70,9 @@ The agent never asks technical questions (no "what database schema do you need?"
 
 ---
 
-## 3. Build Phase Sub-Steps
+## 3. Build Phase Sub-Steps (Design Target — Sandbox Orchestration Deferred)
+
+> **Note:** The sub-steps below describe the target design for when sandbox orchestration is fully wired. For this epic, only the **prompt templates** for the Build phase agent behavior are implemented. The actual Generate/Test/Verify automation requires end-to-end sandbox-to-LLM orchestration (future phase).
 
 The Build phase expands into an internal workflow that mirrors the IT4IT Requirement-to-Deploy value stream:
 
@@ -134,7 +142,9 @@ When someone looks at a product in the inventory, they see the current version. 
 ### DigitalProduct — add version
 
 ```prisma
-  version         String   @default("0.0.0")  // semver — bumped on each shipped build
+  version         String   @default("1.0.0")  // semver — bumped on each shipped build
+  // Migration backfill: UPDATE "DigitalProduct" SET version = '1.0.0' WHERE version = '1.0.0';
+  // (default handles existing rows; no backfill needed since default applies)
 ```
 
 ### FeatureBuild — add digitalProductId
@@ -172,7 +182,8 @@ Add index:
 | `apps/web/lib/agent-routing.ts` | Add `/build` entry to `ROUTE_AGENT_MAP` with phase-aware prompt builder |
 | `apps/web/lib/actions/build.ts` | Add `shipBuild()` action — deploy + register product + create epic/backlog + destroy sandbox |
 | `apps/web/lib/actions/agent-coworker.ts` | Extend `sendMessage()` to inject active build context when on `/build` route |
-| `apps/web/lib/mcp-tools.ts` | Add `register_digital_product`, `create_build_epic` tools; update `deploy_feature` handler |
+| `apps/web/lib/mcp-tools.ts` | Add `update_feature_brief`, `register_digital_product`, `create_build_epic` tools; update `deploy_feature` handler |
+| `apps/web/lib/agent-sensitivity.ts` | Add `/build` → `"internal"` entry to `ROUTE_SENSITIVITY` |
 | `apps/web/components/build/BuildStudio.tsx` | Wire co-worker panel awareness — pass active buildId, listen for phase changes via refresh |
 | `apps/web/components/agent/AgentCoworkerPanel.tsx` | Show build phase context when on `/build` route |
 
