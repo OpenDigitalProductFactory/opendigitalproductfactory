@@ -47,12 +47,19 @@ export async function approveProposal(
       if (toolResult.success) {
         await tx.agentActionProposal.update({
           where: { proposalId },
-          data: { status: "executed", executedAt: new Date(), resultEntityId: toolResult.entityId },
+          data: {
+            status: "executed",
+            executedAt: new Date(),
+            ...(toolResult.entityId !== undefined ? { resultEntityId: toolResult.entityId } : {}),
+          },
         });
       } else {
         await tx.agentActionProposal.update({
           where: { proposalId },
-          data: { status: "failed", resultError: toolResult.error },
+          data: {
+            status: "failed",
+            ...(toolResult.error !== undefined ? { resultError: toolResult.error } : {}),
+          },
         });
       }
 
@@ -72,7 +79,10 @@ export async function approveProposal(
       },
     });
 
-    return { success: result.success, resultEntityId: result.entityId, error: result.error };
+    const returnVal: { success: boolean; resultEntityId?: string; error?: string } = { success: result.success };
+    if (result.entityId !== undefined) returnVal.resultEntityId = result.entityId;
+    if (result.error !== undefined) returnVal.error = result.error;
+    return returnVal;
   } catch (e) {
     // Transaction failed — proposal stays as "proposed"
     await prisma.agentActionProposal.update({

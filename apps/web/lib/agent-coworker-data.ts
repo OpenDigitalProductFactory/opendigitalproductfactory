@@ -63,7 +63,7 @@ export const getRecentMessages = cache(
         createdAt: true,
       },
     });
-    return messages.reverse().map(serializeMessage);
+    return messages.reverse().map((m) => serializeMessage(m));
   },
 );
 
