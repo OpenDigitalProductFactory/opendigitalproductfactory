@@ -73,10 +73,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       if (result.ok) {
         const discovery = await discoverModels(provider.providerId);
         setDiscoveryResult(discovery);
-        if (discovery.newCount > 0 && hasActiveProvider) {
-          if (discovery.newCount > 50) {
+        // Always profile after discovery — needed for model qualification routing.
+        // The provider itself is now active (testProviderAuth sets status to active),
+        // so it can self-profile even as the first/only provider.
+        if (discovery.discovered > 0) {
+          const unprofiled = discovery.discovered - profiles.length;
+          if (unprofiled > 50) {
             const ok = window.confirm(
-              `Profile ${discovery.newCount} new models? This may take a moment and incur AI costs.`
+              `Profile ${unprofiled} models? This may take a moment and incur AI costs.`
             );
             if (!ok) {
               router.refresh();
@@ -95,25 +99,30 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     startTransition(async () => {
       const discovery = await discoverModels(provider.providerId);
       setDiscoveryResult(discovery);
-      if (discovery.newCount > 0 && hasActiveProvider) {
-        if (discovery.newCount > 50) {
+      if (discovery.discovered > 0) {
+        const unprofiled = discovery.discovered - profiles.length;
+        if (unprofiled > 50) {
           const ok = window.confirm(
-            `Profile ${discovery.newCount} new models? This may take a moment and incur AI costs.`
+            `Profile ${unprofiled} models? This may take a moment and incur AI costs.`
           );
           if (!ok) {
             router.refresh();
             return;
           }
         }
-        const profResult = await profileModels(provider.providerId);
-        setProfilingResult(profResult);
+        if (unprofiled > 0) {
+          const profResult = await profileModels(provider.providerId);
+          setProfilingResult(profResult);
+        }
       }
       router.refresh();
     });
   }
 
   // Guided setup: determine which step the user is on
-  const step = provider.status === "active" ? 4
+  const hasProfiles = profiles.length > 0;
+  const step = provider.status === "active" && hasProfiles ? 5
+    : provider.status === "active" ? 4
     : testResult?.ok ? 3
     : (secretRef || credential?.secretHint || selectedAuthMethod === "none") ? 2
     : 1;
@@ -121,8 +130,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const STEPS = [
     { n: 1, label: "Credentials" },
     { n: 2, label: "Connect" },
-    { n: 3, label: "Models" },
-    { n: 4, label: "Active" },
+    { n: 3, label: "Discover" },
+    { n: 4, label: "Profile" },
+    { n: 5, label: "Ready" },
   ];
 
   const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#8888a0" : "#fbbf24";
