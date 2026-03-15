@@ -151,21 +151,101 @@ async function getActiveProviderPolicyInfo(): Promise<ProviderPolicyInfo[]> {
   }));
 }
 
+// ─── Model Requirement Filtering ─────────────────────────────────────────────
+
+const CAPABILITY_RANK: Record<string, number> = {
+  excellent: 3,
+  adequate: 2,
+  insufficient: 1,
+};
+
+const TIER_RANK: Record<string, number> = {
+  "deep-thinker": 4,
+  "fast-worker": 3,
+  specialist: 2,
+  budget: 1,
+  embedding: 0,
+  unknown: 0,
+};
+
+async function filterByModelRequirements(
+  entries: ProviderPriorityEntry[],
+  req: ModelRequirements,
+): Promise<ProviderPriorityEntry[]> {
+  if (!req.minCapabilityTier && !req.instructionFollowing && !req.codingCapability) return entries;
+
+  const profiles = await prisma.modelProfile.findMany({
+    where: {
+      OR: entries.map((e) => ({ providerId: e.providerId, modelId: e.modelId })),
+    },
+    select: {
+      providerId: true,
+      modelId: true,
+      capabilityTier: true,
+      instructionFollowing: true,
+      codingCapability: true,
+    },
+  });
+
+  const profileMap = new Map(profiles.map((p) => [`${p.providerId}:${p.modelId}`, p]));
+
+  return entries.filter((entry) => {
+    const profile = profileMap.get(`${entry.providerId}:${entry.modelId}`);
+    if (!profile) return false; // No profile = can't verify requirements
+
+    if (req.minCapabilityTier) {
+      const required = TIER_RANK[req.minCapabilityTier] ?? 0;
+      const actual = TIER_RANK[profile.capabilityTier] ?? 0;
+      if (actual < required) return false;
+    }
+
+    if (req.instructionFollowing) {
+      const required = CAPABILITY_RANK[req.instructionFollowing] ?? 0;
+      const actual = CAPABILITY_RANK[profile.instructionFollowing ?? "insufficient"] ?? 0;
+      if (actual < required) return false;
+    }
+
+    if (req.codingCapability) {
+      const required = CAPABILITY_RANK[req.codingCapability] ?? 0;
+      const actual = CAPABILITY_RANK[profile.codingCapability ?? "insufficient"] ?? 0;
+      if (actual < required) return false;
+    }
+
+    return true;
+  });
+}
+
 // ─── Failover Engine ─────────────────────────────────────────────────────────
 
 const MAX_CASCADE_DEPTH = 5;
+
+export type ModelRequirements = {
+  minCapabilityTier?: string;
+  instructionFollowing?: "excellent" | "adequate";
+  codingCapability?: "excellent" | "adequate";
+};
 
 export async function callWithFailover(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity = "internal",
-  options?: { tools?: Array<Record<string, unknown>> },
+  options?: { tools?: Array<Record<string, unknown>>; task?: TaskKey; modelRequirements?: ModelRequirements },
 ): Promise<FailoverResult> {
-  const priority = await getProviderPriority();
+  const priority = await getProviderPriority(options?.task ?? "conversation");
   const providerPolicy = await getActiveProviderPolicyInfo();
-  const filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
+  let filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
   if (filteredPriority.length === 0) {
     throw new NoAllowedProvidersForSensitivityError(sensitivity);
+  }
+
+  // Filter by model requirements if specified (e.g., Build Specialist needs excellent instruction-following)
+  if (options?.modelRequirements) {
+    const req = options.modelRequirements;
+    const qualified = await filterByModelRequirements(filteredPriority, req);
+    if (qualified.length > 0) {
+      filteredPriority = qualified;
+    }
+    // If no models meet requirements, fall back to unfiltered list (graceful degradation)
   }
 
   const baselineTier = filteredPriority[0]!.capabilityTier;

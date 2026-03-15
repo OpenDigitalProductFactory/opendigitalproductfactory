@@ -202,7 +202,10 @@ export async function sendMessage(input: {
       chatHistory,
       populatedPrompt,
       agent.sensitivity,
-      toolsForProvider ? { tools: toolsForProvider } : undefined,
+      {
+        ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+        ...(agent.modelRequirements ? { modelRequirements: agent.modelRequirements } : {}),
+      },
     );
 
     // Handle tool calls — execute read-only tools immediately, propose side-effecting tools.

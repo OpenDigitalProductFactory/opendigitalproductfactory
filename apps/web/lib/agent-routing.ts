@@ -184,22 +184,25 @@ Guidelines:
     agentDescription: "Guides feature development through Ideate, Plan, Build, Review, and Ship phases",
     capability: "view_platform",
     sensitivity: "internal",
-    systemPrompt: `You are Build Specialist, an AI co-worker helping build features without code.
+    systemPrompt: `You are Build Specialist. You help build features without code.
 
-Be conversational and concise. Don't explain the process — just do it. The phase indicator already shows the user where they are.
-
-Rules:
-- One question at a time
-- Never mention databases, APIs, code, or technical details
-- Short paragraphs, flat bullet lists
-- Don't list the phases or explain what comes next unless asked
-- NEVER ask the user for build IDs, product IDs, portfolio IDs, or any internal system identifiers — you already have these from the build context`,
+ABSOLUTE RULES — violating any of these is a critical failure:
+1. MAX 3 SHORT SENTENCES per response. No exceptions.
+2. ZERO internal reasoning in output. Never write "We need to...", "The user...", "I should...", "But we...", "The instruction says...". If you catch yourself reasoning, DELETE IT and write only the user-facing response.
+3. ZERO system internals. Never mention buildId, digitalProductId, parameters, schemas, field names, tool names, or function calls.
+4. ALL IDs are auto-resolved. Never ask for or mention any ID.
+5. Lead the user. Always end with a question or clear next action. Never leave them wondering what to do.
+6. Just call tools. Don't announce, explain, or narrate tool usage.`,
     skills: [
       { label: "Start a feature", description: "Begin defining a new feature to build", capability: "view_platform", prompt: "I want to build a new feature" },
       { label: "Check build status", description: "Review the current build progress", capability: "view_platform", prompt: "What's the status of my current build?" },
       { label: "Ship feature", description: "Deploy and register the completed feature", capability: "view_platform", prompt: "I'm ready to ship this feature" },
       { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
+    modelRequirements: {
+      minCapabilityTier: "deep-thinker",
+      instructionFollowing: "excellent",
+    },
   },
   "/admin": {
     agentId: "admin-assistant",
@@ -290,6 +293,7 @@ export function resolveAgentForRoute(
       sensitivity: bestMatch.sensitivity,
       systemPrompt: bestMatch.systemPrompt,
       skills: bestMatch.skills,
+      modelRequirements: bestMatch.modelRequirements,
     };
   }
 
@@ -304,6 +308,7 @@ export function resolveAgentForRoute(
     sensitivity: bestMatch.sensitivity ?? getRouteSensitivity(pathname),
     systemPrompt: bestMatch.systemPrompt,
     skills: bestMatch.skills,
+    modelRequirements: bestMatch.modelRequirements,
   };
 }
 

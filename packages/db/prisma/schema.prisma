@@ -306,8 +306,9 @@ model ModelProfile {
   contextWindow    String?
   speedRating      String?
   supportsToolUse  Boolean  @default(false)
-  codingCapability String?  // "excellent" | "adequate" | "insufficient"
-  generatedBy      String
+  codingCapability      String?  // "excellent" | "adequate" | "insufficient"
+  instructionFollowing  String?  // "excellent" | "adequate" | "insufficient"
+  generatedBy           String
   generatedAt      DateTime @default(now())
 
   @@unique([providerId, modelId])
