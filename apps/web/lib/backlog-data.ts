@@ -10,6 +10,8 @@ import type {
   EpicWithRelations,
 } from "./backlog";
 
+export type { PortfolioForSelect };
+
 export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[]> => {
   return prisma.backlogItem.findMany({
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
