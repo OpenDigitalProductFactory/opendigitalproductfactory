@@ -335,10 +335,15 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleRefreshModels}
             disabled={isPending}
-            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: "pointer" }}
+            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
           >
-            Refresh Models
+            {isPending ? "Discovering models..." : "Refresh Models"}
           </button>
+          {isPending && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: "var(--dpf-muted)" }} className="animate-pulse">
+              This may take a minute for local models...
+            </span>
+          )}
           {discoveryResult && (
             <span style={{ marginLeft: 8, fontSize: 12, color: discoveryResult.error ? "#f87171" : "#4ade80" }}>
               {discoveryResult.error
