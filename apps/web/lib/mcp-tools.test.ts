@@ -45,4 +45,22 @@ describe("mcp tools", () => {
     expect(tool).toBeDefined();
     expect(tool!.requiredCapability).toBe("manage_capabilities");
   });
+
+  it("includes intake tools for platform users", () => {
+    const tools = getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("search_portfolio_context");
+    expect(toolNames).toContain("assess_complexity");
+    expect(toolNames).toContain("propose_decomposition");
+    expect(toolNames).toContain("register_tech_debt");
+  });
+
+  it("intake tools execute immediately", () => {
+    const tools = getAvailableTools(adminUser, { externalAccessEnabled: false });
+    for (const name of ["search_portfolio_context", "assess_complexity", "propose_decomposition", "register_tech_debt"]) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool).toBeDefined();
+      expect(tool!.executionMode).toBe("immediate");
+    }
+  });
 });

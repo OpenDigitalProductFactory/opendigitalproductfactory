@@ -199,6 +199,67 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_capabilities",
   },
+  // ─── Intake Tools ─────────────────────────────────────────────────────────
+  {
+    name: "search_portfolio_context",
+    description: "Search taxonomy, products, builds, and backlog for items related to a feature description.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Plain-language feature description" } },
+      required: ["query"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
+  {
+    name: "assess_complexity",
+    description: "Score a feature on 7 dimensions, get path recommendation (simple/moderate/complex).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taxonomySpan: { type: "number", enum: [1, 2, 3] },
+        dataEntities: { type: "number", enum: [1, 2, 3] },
+        integrations: { type: "number", enum: [1, 2, 3] },
+        novelty: { type: "number", enum: [1, 2, 3] },
+        regulatory: { type: "number", enum: [1, 2, 3] },
+        costEstimate: { type: "number", enum: [1, 2, 3] },
+        techDebt: { type: "number", enum: [1, 2, 3] },
+      },
+      required: ["taxonomySpan", "dataEntities", "integrations", "novelty", "regulatory", "costEstimate", "techDebt"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
+  {
+    name: "propose_decomposition",
+    description: "Generate an epic + feature set breakdown for a complex idea.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        epicTitle: { type: "string" },
+        epicDescription: { type: "string" },
+        featureSets: { type: "array", items: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, type: { type: "string", enum: ["feature_build", "digital_product"] }, estimatedBuilds: { type: "number" }, recommendation: { type: "string", enum: ["build", "buy", "integrate"] }, rationale: { type: "string" }, techDebtNote: { type: "string" } }, required: ["title", "description", "type", "estimatedBuilds", "recommendation", "rationale"] } },
+      },
+      required: ["epicTitle", "epicDescription", "featureSets"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
+  {
+    name: "register_tech_debt",
+    description: "Log a technical shortcut as a refactoring backlog item.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        description: { type: "string" },
+        severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+      },
+      required: ["title", "description"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -439,6 +500,57 @@ export async function executeTool(
       if (typeof params["digitalProductId"] === "string") epicInput.digitalProductId = params["digitalProductId"];
       const result = await createBuildEpic(epicInput);
       return { success: true, entityId: result.epicId, message: result.message };
+    }
+
+    case "search_portfolio_context": {
+      const { searchPortfolioContext } = await import("@/lib/portfolio-search");
+      let portfolioId: string | null = null;
+      const latestBuild = await prisma.featureBuild.findFirst({
+        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { portfolioId: true },
+      });
+      portfolioId = latestBuild?.portfolioId ?? null;
+      const results = await searchPortfolioContext(String(params["query"] ?? ""), portfolioId);
+      const totalMatches = results.taxonomyMatches.length + results.productMatches.length + results.buildMatches.length + results.backlogMatches.length;
+      return { success: true, message: `Found ${totalMatches} related item${totalMatches !== 1 ? "s" : ""}.`, data: results as unknown as Record<string, unknown> };
+    }
+
+    case "assess_complexity": {
+      const { assessComplexity } = await import("@/lib/complexity-assessment");
+      const scores = {
+        taxonomySpan: Number(params["taxonomySpan"] ?? 1) as 1 | 2 | 3,
+        dataEntities: Number(params["dataEntities"] ?? 1) as 1 | 2 | 3,
+        integrations: Number(params["integrations"] ?? 1) as 1 | 2 | 3,
+        novelty: Number(params["novelty"] ?? 1) as 1 | 2 | 3,
+        regulatory: Number(params["regulatory"] ?? 1) as 1 | 2 | 3,
+        costEstimate: Number(params["costEstimate"] ?? 1) as 1 | 2 | 3,
+        techDebt: Number(params["techDebt"] ?? 1) as 1 | 2 | 3,
+      };
+      const result = assessComplexity(scores);
+      return { success: true, message: `Complexity: ${result.total}/21 — ${result.path} path.`, data: result as unknown as Record<string, unknown> };
+    }
+
+    case "propose_decomposition": {
+      const { validateDecompositionPlan } = await import("@/lib/decomposition");
+      const plan = {
+        epicTitle: String(params["epicTitle"] ?? ""),
+        epicDescription: String(params["epicDescription"] ?? ""),
+        featureSets: Array.isArray(params["featureSets"]) ? params["featureSets"] as import("@/lib/feature-build-types").FeatureSetEntry[] : [],
+      };
+      const validation = validateDecompositionPlan(plan);
+      if (!validation.valid) return { success: false, error: validation.errors.join(", "), message: `Invalid: ${validation.errors.join(", ")}` };
+      return { success: true, message: `${plan.epicTitle} — ${plan.featureSets.length} feature set${plan.featureSets.length !== 1 ? "s" : ""}.`, data: plan as unknown as Record<string, unknown> };
+    }
+
+    case "register_tech_debt": {
+      const { createTechDebtItem } = await import("@/lib/decomposition");
+      const item = createTechDebtItem({ title: String(params["title"] ?? ""), description: String(params["description"] ?? ""), severity: String(params["severity"] ?? "medium") });
+      const refactorEpic = await prisma.epic.findUnique({ where: { epicId: "EP-REFACTOR-001" } });
+      await prisma.backlogItem.create({
+        data: { itemId: item.itemId, title: item.title, type: item.type, status: item.status, body: item.body, priority: item.priority, ...(refactorEpic ? { epicId: refactorEpic.id } : {}) },
+      });
+      return { success: true, entityId: item.itemId, message: `Tech debt logged: ${item.itemId}` };
     }
 
     default:
