@@ -15,7 +15,7 @@ export default async function BuildPage() {
 
   // Negative margin counteracts the shell's p-6 so Build Studio goes full-bleed
   return (
-    <div className="-m-6 h-[calc(100vh-64px)]">
+    <div className="-m-6 h-[calc(100vh-48px)]">
       <BuildStudio builds={builds} portfolios={portfolios} />
     </div>
   );
