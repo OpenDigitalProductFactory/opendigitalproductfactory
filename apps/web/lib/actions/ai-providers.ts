@@ -315,3 +315,36 @@ export async function profileModels(
   await requireManageProviders();
   return profileModelsInternal(providerId, modelIds);
 }
+
+// ─── Platform API Keys (admin-configurable) ──────────────────────────────────
+
+export async function savePlatformApiKey(
+  key: string,
+  value: string,
+): Promise<{ ok: true }> {
+  await requireManageProviders();
+
+  const allowedKeys = ["brave_search_api_key"];
+  if (!allowedKeys.includes(key)) throw new Error(`Unknown platform key: ${key}`);
+
+  await prisma.platformConfig.upsert({
+    where: { key },
+    create: { key, value },
+    update: { value },
+  });
+
+  return { ok: true };
+}
+
+export async function getPlatformApiKeyStatus(
+  key: string,
+): Promise<{ configured: boolean }> {
+  await requireManageProviders();
+
+  const config = await prisma.platformConfig.findUnique({
+    where: { key },
+    select: { value: true },
+  });
+
+  return { configured: !!config && typeof config.value === "string" && config.value.length > 0 };
+}
