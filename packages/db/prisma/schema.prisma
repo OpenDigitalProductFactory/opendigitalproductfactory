@@ -24,6 +24,8 @@ model User {
   passwordResetTokens  PasswordResetToken[] @relation("PasswordResetForUser")
   requestedPasswordResetTokens PasswordResetToken[] @relation("PasswordResetRequestedBy")
   issueReports    PlatformIssueReport[]
+  approvedProposals AgentActionProposal[] @relation("ProposalDecisions")
+  apiTokens       ApiToken[]
 }
 
 model UserGroup {
@@ -288,19 +290,20 @@ model DiscoveredModel {
 }
 
 model ModelProfile {
-  id             String   @id @default(cuid())
-  providerId     String
-  modelId        String
-  friendlyName   String
-  summary        String
-  capabilityTier String
-  costTier       String
-  bestFor        Json
-  avoidFor       Json
-  contextWindow  String?
-  speedRating    String?
-  generatedBy    String
-  generatedAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  providerId       String
+  modelId          String
+  friendlyName     String
+  summary          String
+  capabilityTier   String
+  costTier         String
+  bestFor          Json
+  avoidFor         Json
+  contextWindow    String?
+  speedRating      String?
+  supportsToolUse  Boolean  @default(false)
+  generatedBy      String
+  generatedAt      DateTime @default(now())
 
   @@unique([providerId, modelId])
 }
@@ -630,6 +633,7 @@ model AgentThread {
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   contextKey String @default("coworker")
   messages   AgentMessage[]
+  proposals  AgentActionProposal[]
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
@@ -647,9 +651,45 @@ model AgentMessage {
   routeContext String?     // route pathname when message was sent
   providerId   String?     // provider that handled this inference
   createdAt    DateTime    @default(now())
+  proposal     AgentActionProposal?
 
   @@index([threadId])
   @@index([createdAt])
+}
+
+// ─── Agent Action Proposals ──────────────────────────────────────────────────
+
+model AgentActionProposal {
+  id             String       @id @default(cuid())
+  proposalId     String       @unique
+  threadId       String
+  thread         AgentThread  @relation(fields: [threadId], references: [id])
+  messageId      String       @unique
+  message        AgentMessage @relation(fields: [messageId], references: [id])
+  agentId        String
+  actionType     String
+  parameters     Json
+  status         String       @default("proposed")
+  proposedAt     DateTime     @default(now())
+  decidedAt      DateTime?
+  decidedById    String?
+  decidedBy      User?        @relation("ProposalDecisions", fields: [decidedById], references: [id])
+  executedAt     DateTime?
+  resultEntityId String?
+  resultError    String?      @db.Text
+
+  @@index([threadId])
+  @@index([status])
+}
+
+model ApiToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  name      String
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
 }
 
 // ─── Platform Issue Reporting ────────────────────────────────────────────────

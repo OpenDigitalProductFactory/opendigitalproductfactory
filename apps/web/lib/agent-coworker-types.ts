@@ -8,6 +8,14 @@ export type AgentMessageRow = {
   agentId: string | null;
   routeContext: string | null;
   createdAt: string; // ISO string via .toISOString()
+  proposal?: {
+    proposalId: string;
+    actionType: string;
+    parameters: Record<string, unknown>;
+    status: string;
+    resultEntityId?: string;
+    resultError?: string;
+  };
 };
 
 /** Resolved agent info returned by resolveAgentForRoute. */

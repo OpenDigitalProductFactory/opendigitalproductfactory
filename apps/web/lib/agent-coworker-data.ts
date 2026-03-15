@@ -2,15 +2,25 @@ import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 
-function serializeMessage(m: {
-  id: string;
-  role: string;
-  content: string;
-  agentId: string | null;
-  routeContext: string | null;
-  createdAt: Date;
-}): AgentMessageRow {
-  return {
+function serializeMessage(
+  m: {
+    id: string;
+    role: string;
+    content: string;
+    agentId: string | null;
+    routeContext: string | null;
+    createdAt: Date;
+  },
+  proposal?: {
+    proposalId: string;
+    actionType: string;
+    parameters: unknown;
+    status: string;
+    resultEntityId: string | null;
+    resultError: string | null;
+  } | null,
+): AgentMessageRow {
+  const row: AgentMessageRow = {
     id: m.id,
     role: (["user", "assistant", "system"] as const).includes(m.role as AgentMessageRow["role"])
       ? (m.role as AgentMessageRow["role"])
@@ -20,6 +30,17 @@ function serializeMessage(m: {
     routeContext: m.routeContext,
     createdAt: m.createdAt.toISOString(),
   };
+  if (proposal) {
+    row.proposal = {
+      proposalId: proposal.proposalId,
+      actionType: proposal.actionType,
+      parameters: proposal.parameters as Record<string, unknown>,
+      status: proposal.status,
+      ...(proposal.resultEntityId ? { resultEntityId: proposal.resultEntityId } : {}),
+      ...(proposal.resultError ? { resultError: proposal.resultError } : {}),
+    };
+  }
+  return row;
 }
 
 /**
@@ -42,7 +63,7 @@ export const getRecentMessages = cache(
         createdAt: true,
       },
     });
-    return messages.reverse().map(serializeMessage);
+    return messages.reverse().map((m) => serializeMessage(m));
   },
 );
 

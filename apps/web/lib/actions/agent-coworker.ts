@@ -19,6 +19,7 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
+import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ export async function getOrCreateThreadSnapshot(input: {
 
   return {
     threadId: thread.id,
-    messages: messages.reverse().map(serializeMessage),
+    messages: messages.reverse().map((m) => serializeMessage(m)),
   };
 }
 
@@ -160,13 +161,62 @@ export async function sendMessage(input: {
 
   const populatedPrompt = promptSections.join("\n");
 
+  // Get available tools for this user
+  const availableTools = getAvailableTools({
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  });
+  const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
+
   let responseContent: string;
   let responseProviderId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
 
   try {
-    const result = await callWithFailover(chatHistory, populatedPrompt, agent.sensitivity);
+    const result = await callWithFailover(
+      chatHistory,
+      populatedPrompt,
+      agent.sensitivity,
+      toolsForProvider ? { tools: toolsForProvider } : undefined,
+    );
+
+    // Handle tool calls — create proposals
+    if (result.toolCalls && result.toolCalls.length > 0) {
+      const tc = result.toolCalls[0]!; // v1: one proposal per message
+      const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+      // Create the agent message first
+      const agentMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "assistant",
+          content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+          agentId: agent.agentId,
+          routeContext: input.routeContext,
+          providerId: result.providerId,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+
+      // Create the proposal linked to the message
+      const proposal = await prisma.agentActionProposal.create({
+        data: {
+          proposalId,
+          threadId: input.threadId,
+          messageId: agentMsg.id,
+          agentId: agent.agentId,
+          actionType: tc.name,
+          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+
+      return {
+        userMessage: serializeMessage(userMsg),
+        agentMessage: serializeMessage(agentMsg, proposal),
+      };
+    }
+
     responseContent = result.content;
     responseProviderId = result.providerId;
 
@@ -300,7 +350,7 @@ export async function loadEarlierMessages(input: {
   const slice = hasMore ? messages.slice(0, limit) : messages;
 
   return {
-    messages: slice.reverse().map(serializeMessage),
+    messages: slice.reverse().map((m) => serializeMessage(m)),
     hasMore,
   };
 }
