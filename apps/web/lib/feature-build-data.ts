@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow, FeatureBrief, BuildPhase } from "./feature-build-types";
 import type { BuildContext } from "./build-agent-prompts";
+import type { AttachmentInfo } from "./agent-coworker-types";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   const rows = await prisma.featureBuild.findMany({
@@ -141,3 +142,18 @@ export async function getFeatureBuildForContext(
     portfolioId: r.portfolioId,
   };
 }
+
+export const getThreadAttachments = cache(async (threadId: string): Promise<AttachmentInfo[]> => {
+  const rows = await prisma.agentAttachment.findMany({
+    where: { threadId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    fileName: r.fileName,
+    mimeType: r.mimeType,
+    sizeBytes: r.sizeBytes,
+    parsedSummary: (r.parsedContent as { summary?: string } | null)?.summary ?? null,
+  }));
+});

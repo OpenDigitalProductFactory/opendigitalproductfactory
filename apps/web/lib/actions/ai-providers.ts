@@ -324,7 +324,7 @@ export async function savePlatformApiKey(
 ): Promise<{ ok: true }> {
   await requireManageProviders();
 
-  const allowedKeys = ["brave_search_api_key"];
+  const allowedKeys = ["brave_search_api_key", "upload_storage_path"];
   if (!allowedKeys.includes(key)) throw new Error(`Unknown platform key: ${key}`);
 
   await prisma.platformConfig.upsert({
