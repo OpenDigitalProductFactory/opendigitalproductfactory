@@ -14,6 +14,49 @@ type Props = {
   onRetry?: () => void;
 };
 
+// Human-friendly labels for proposal parameters
+const PARAM_LABELS: Record<string, string> = {
+  title: "Title",
+  description: "Description",
+  name: "Name",
+  portfolioContext: "Portfolio",
+  portfolioSlug: "Portfolio",
+  targetRoles: "For",
+  dataNeeds: "Data",
+  acceptanceCriteria: "Done when",
+  inputs: "Inputs",
+  versionBump: "Version bump",
+};
+
+// Keys to hide from proposal display (internal system values)
+const HIDDEN_PARAMS = new Set(["buildId", "digitalProductId", "featureBrief"]);
+
+function formatProposalParams(
+  actionType: string,
+  params: Record<string, unknown>,
+): React.ReactNode {
+  const entries = Object.entries(params).filter(([k]) => !HIDDEN_PARAMS.has(k));
+  if (entries.length === 0) return null;
+
+  return entries.map(([k, v]) => {
+    const label = PARAM_LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+    let display: string;
+    if (Array.isArray(v)) {
+      display = v.join(", ");
+    } else {
+      display = String(v ?? "");
+    }
+    // Truncate very long values
+    if (display.length > 120) display = display.slice(0, 117) + "...";
+    return (
+      <div key={k} style={{ marginBottom: 2 }}>
+        <span style={{ color: "#a0a0b8", fontWeight: 500 }}>{label}:</span>{" "}
+        <span style={{ color: "#d0d0e8" }}>{display}</span>
+      </div>
+    );
+  });
+}
+
 const MARKDOWN_COMPONENTS: Components = {
   p: ({ children }) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
   ul: ({ children }) => <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ul>,
@@ -170,13 +213,8 @@ export function AgentMessageBubble({
             <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 6 }}>
               {actionLabel}
             </div>
-            <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8 }}>
-              {Object.entries(p.parameters).map(([k, v]) => (
-                <div key={k}>
-                  <span style={{ color: "#8888a0" }}>{k}:</span>{" "}
-                  {String(v)}
-                </div>
-              ))}
+            <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+              {formatProposalParams(p.actionType, p.parameters)}
             </div>
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>

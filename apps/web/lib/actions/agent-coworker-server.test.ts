@@ -17,6 +17,9 @@ vi.mock("@dpf/db", () => ({
     user: {
       findUnique: vi.fn(),
     },
+    agentActionProposal: {
+      deleteMany: vi.fn(),
+    },
     agentThread: {
       upsert: vi.fn(),
       findUnique: vi.fn(),
@@ -101,11 +104,15 @@ describe("agent coworker thread scoping", () => {
       id: "thread-inventory",
       userId: "user-1",
     });
+    mockPrisma.agentActionProposal.deleteMany.mockResolvedValue({ count: 1 });
     mockPrisma.agentMessage.deleteMany.mockResolvedValue({ count: 3 });
 
     const result = await clearConversation({ threadId: "thread-inventory" });
 
     expect(result).toEqual({ ok: true });
+    expect(mockPrisma.agentActionProposal.deleteMany).toHaveBeenCalledWith({
+      where: { threadId: "thread-inventory" },
+    });
     expect(mockPrisma.agentMessage.deleteMany).toHaveBeenCalledWith({
       where: { threadId: "thread-inventory" },
     });
