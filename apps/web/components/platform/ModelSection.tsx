@@ -35,6 +35,7 @@ export function ModelSection({
     failed: number;
     error?: string;
   } | null>(null);
+  const [profilingStatus, setProfilingStatus] = useState<string | null>(null);
   // Track modelIds that were discovered but not profiled after a profiling run
   const [failedModelIds, setFailedModelIds] = useState<Set<string>>(new Set());
 
@@ -109,15 +110,12 @@ export function ModelSection({
 
     startTransition(async () => {
       setProfilingResult(null);
+      setProfilingStatus(`Profiling ${unprofiledIds.length} model${unprofiledIds.length !== 1 ? "s" : ""}... This may take a minute.`);
       const result = await profileModels(providerId, unprofiledIds);
       setProfilingResult(result);
+      setProfilingStatus(null);
 
-      // After the run, mark any models that are still unprofiled as failed
-      // (we compare against what we attempted to profile)
       if (result.failed > 0) {
-        // We don't know which specific ones failed from the aggregate result,
-        // so mark all attempted IDs as potentially failed; successful ones
-        // will be cleared on next render when profileMap is updated.
         setFailedModelIds(new Set(unprofiledIds));
       }
 
@@ -201,6 +199,13 @@ export function ModelSection({
           </button>
         )}
       </div>
+
+      {/* Profiling progress */}
+      {profilingStatus && (
+        <div style={{ marginBottom: 10, fontSize: 11, color: "#7c8cf8" }} className="animate-pulse">
+          {profilingStatus}
+        </div>
+      )}
 
       {/* Profiling result message */}
       {profilingResult && (
