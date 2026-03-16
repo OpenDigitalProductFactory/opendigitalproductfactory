@@ -3,7 +3,7 @@ import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 
 async function getPlatformKeyStatuses(): Promise<Record<string, boolean>> {
-  const keys = ["brave_search_api_key"];
+  const keys = ["brave_search_api_key", "upload_storage_path"];
   const configs = await prisma.platformConfig.findMany({
     where: { key: { in: keys } },
     select: { key: true, value: true },
