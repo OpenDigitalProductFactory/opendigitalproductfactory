@@ -30,6 +30,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [saveMessage, setSaveMessage]               = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult]       = useState<{ discovered: number; newCount: number; error?: string } | null>(null);
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
+  const [pipelineStatus, setPipelineStatus]         = useState<string | null>(null);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
   const [clientSecret, setClientSecret]             = useState("");  // write-only
@@ -69,30 +70,52 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   function handleTest() {
     startTransition(async () => {
+      // Step 1: Test connection
+      setPipelineStatus("Testing connection...");
+      setTestResult(null);
+      setDiscoveryResult(null);
+      setProfilingResult(null);
       const result = await testProviderAuth(provider.providerId);
       setTestResult(result);
-      if (result.ok) {
-        const discovery = await discoverModels(provider.providerId);
-        setDiscoveryResult(discovery);
-        // Auto-profile only for Ollama (instant metadata-based profiling).
-        // Cloud providers have too many models — user profiles individually.
-        if (provider.providerId === "ollama" && discovery.discovered > 0) {
-          const unprofiled = discovery.discovered - profiles.length;
-          if (unprofiled > 0) {
-            const profResult = await profileModels(provider.providerId);
-            setProfilingResult(profResult);
-          }
+
+      if (!result.ok) {
+        setPipelineStatus(null);
+        return;
+      }
+
+      // Step 2: Discover models
+      setPipelineStatus("Discovering available models...");
+      const discovery = await discoverModels(provider.providerId);
+      setDiscoveryResult(discovery);
+
+      if (discovery.discovered === 0) {
+        setPipelineStatus(null);
+        router.refresh();
+        return;
+      }
+
+      // Step 3: Auto-profile only for Ollama (instant metadata-based).
+      // Cloud providers have too many models — user profiles from the model list.
+      if (provider.providerId === "ollama") {
+        const unprofiled = discovery.discovered - profiles.length;
+        if (unprofiled > 0) {
+          setPipelineStatus(`Profiling ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
+          const profResult = await profileModels(provider.providerId);
+          setProfilingResult(profResult);
         }
       }
+
+      setPipelineStatus(null);
       router.refresh();
     });
   }
 
   function handleRefreshModels() {
     startTransition(async () => {
+      setPipelineStatus("Refreshing models...");
       const discovery = await discoverModels(provider.providerId);
       setDiscoveryResult(discovery);
-      // Don't auto-profile — user can profile individually from the model list.
+      setPipelineStatus(null);
       router.refresh();
     });
   }
@@ -358,6 +381,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           {testResult && (
             <span style={{ fontSize: 12, color: testResult.ok ? "#4ade80" : "#f87171" }}>
               {testResult.ok ? "✓" : "✗"} {testResult.message}
+            </span>
+          )}
+          {pipelineStatus && (
+            <span style={{ fontSize: 12, color: "#7c8cf8" }} className="animate-pulse">
+              {pipelineStatus}
             </span>
           )}
         </div>
