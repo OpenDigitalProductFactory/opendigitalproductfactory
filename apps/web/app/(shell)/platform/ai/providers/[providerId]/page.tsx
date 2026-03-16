@@ -43,7 +43,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <Link href="/platform/ai" style={{ color: "#b0b0c8", fontSize: 12 }}>← AI Providers</Link>
+        <Link href="/platform/ai/providers" style={{ color: "#b0b0c8", fontSize: 12 }}>← AI Providers</Link>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
           <span style={{ fontSize: 12, color: "#b0b0c8", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
