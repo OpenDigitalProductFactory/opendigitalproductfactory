@@ -28,6 +28,8 @@ model User {
   issueReports    PlatformIssueReport[]
   externalEvidenceRecords ExternalEvidenceRecord[]
   approvedProposals AgentActionProposal[] @relation("ProposalDecisions")
+  improvementSubmissions ImprovementProposal[] @relation("ImprovementSubmissions")
+  improvementReviews     ImprovementProposal[] @relation("ImprovementReviews")
   apiTokens       ApiToken[]
   featureBuilds   FeatureBuild[]
 }
@@ -366,6 +368,49 @@ model EpicPortfolio {
   portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([epicId, portfolioId])
+}
+
+// ─── Improvement Proposals ──────────────────────────────────────────────────
+
+model ImprovementProposal {
+  id                  String    @id @default(cuid())
+  proposalId          String    @unique                // "IP-XXXXX"
+  title               String
+  description         String    @db.Text
+  category            String                           // ux_friction | missing_feature | performance | accessibility | security | process
+  severity            String    @default("medium")     // low | medium | high | critical
+
+  // Attribution
+  submittedById       String
+  submittedBy         User      @relation("ImprovementSubmissions", fields: [submittedById], references: [id])
+  agentId             String                           // which agent proposed it
+  routeContext        String                           // which page they were on
+  threadId            String?                          // conversation thread
+
+  // Evidence
+  conversationExcerpt String?   @db.Text
+  observedFriction    String?   @db.Text
+
+  // Governance pipeline
+  status              String    @default("proposed")   // proposed | reviewed | prioritized | in_progress | implemented | verified | rejected
+  reviewedById        String?
+  reviewedBy          User?     @relation("ImprovementReviews", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  prioritizedAt       DateTime?
+  backlogItemId       String?                          // links to BacklogItem once prioritized
+  buildId             String?                          // links to FeatureBuild once implemented
+  rejectionReason     String?
+  verifiedAt          DateTime?
+
+  // Hive Mind bridge
+  contributionStatus  String    @default("local")      // local | proposed_for_sharing | contributed
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status])
+  @@index([submittedById])
+  @@index([routeContext])
 }
 
 // ─── Branding ────────────────────────────────────────────────────────────────

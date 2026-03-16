@@ -322,6 +322,34 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_capabilities",
   },
+  // ─── Feedback Loop ──────────────────────────────────────────────────────────
+  {
+    name: "propose_improvement",
+    description:
+      "Propose a platform improvement based on friction or a missing capability observed in this conversation. " +
+      "Auto-attributes to the current user. No special permission needed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short title for the improvement (max 100 chars)" },
+        description: { type: "string", description: "What should be improved and why" },
+        category: {
+          type: "string",
+          enum: ["ux_friction", "missing_feature", "performance", "accessibility", "security", "process"],
+          description: "Improvement category",
+        },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high", "critical"],
+          description: "Impact severity (default: medium)",
+        },
+        observedFriction: { type: "string", description: "What you observed that prompted this suggestion" },
+      },
+      required: ["title", "description", "category"],
+    },
+    requiredCapability: null,
+    executionMode: "proposal",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -343,7 +371,7 @@ export async function executeTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string },
+  context?: { routeContext?: string; agentId?: string; threadId?: string },
 ): Promise<ToolResult> {
   switch (toolName) {
     case "create_backlog_item": {
@@ -711,6 +739,48 @@ export async function executeTool(
         entityId: path,
         message: `Applied change to ${path}`,
         data: { path, diff, description },
+      };
+    }
+
+    case "propose_improvement": {
+      const proposalId = `IP-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
+
+      // Capture conversation excerpt (last 5 messages) for evidence
+      let conversationExcerpt: string | null = null;
+      if (context?.threadId) {
+        const recentMessages = await prisma.agentMessage.findMany({
+          where: { threadId: context.threadId },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: { role: true, content: true },
+        });
+        if (recentMessages.length > 0) {
+          conversationExcerpt = recentMessages
+            .reverse()
+            .map((m) => `[${m.role}] ${m.content?.slice(0, 200)}`)
+            .join("\n");
+        }
+      }
+
+      const proposal = await prisma.improvementProposal.create({
+        data: {
+          proposalId,
+          title: String(params["title"] ?? "Untitled improvement"),
+          description: String(params["description"] ?? ""),
+          category: String(params["category"] ?? "missing_feature"),
+          severity: String(params["severity"] ?? "medium"),
+          observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
+          conversationExcerpt,
+          submittedById: userId,
+          agentId: context?.agentId ?? "unknown",
+          routeContext: context?.routeContext ?? "unknown",
+          threadId: context?.threadId ?? null,
+        },
+      });
+      return {
+        success: true,
+        entityId: proposal.proposalId,
+        message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
       };
     }
 
