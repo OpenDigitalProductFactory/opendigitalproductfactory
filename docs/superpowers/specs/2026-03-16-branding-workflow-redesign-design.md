@@ -48,7 +48,7 @@ Follow the established tab-nav pattern used by EA Modeler (`/ea` + `/ea/models`)
 ```
 
 **Implementation:**
-- Update `AdminTabNav` with three tabs: Users, Branding, Settings
+- Update `AdminTabNav` with three tabs: Access, Branding, Settings (keeping existing "Access" label which covers user listing + role assignment)
 - Create `app/(shell)/admin/branding/page.tsx`
 - Create `app/(shell)/admin/settings/page.tsx`
 - Move `PlatformKeysPanel` to the Settings tab
@@ -63,12 +63,13 @@ The branding page (`/admin/branding`) supports three complementary interaction m
 Shown when no `BrandingConfig` with scope `"organization"` exists in the database.
 
 **Step 1 — Choose source:**
-- **Import from URL** — paste company website URL. System calls existing `analyze_public_website_branding` tool to scrape logo, colors, and fonts. Requires external access toggle.
-- **Upload brand document** — PDF or image with brand guidelines. System extracts brand assets (logo, colors, fonts).
+- **Import from URL** — paste company website URL. System calls existing `analyze_public_website_branding` tool to scrape logo, colors, and fonts. Requires external access toggle. If external access is disabled, this option is grayed out with tooltip: "Enable external access in Settings to use this feature."
+- **Upload brand document** — PDF or image with brand guidelines. System extracts brand assets (logo, colors, fonts). See Section 6 for detailed tool specification.
 - **Pick a preset** — grid of generic OOTB presets (see Section 5).
 
 **Step 2 — Preview & confirm:**
 - Live preview panel showing header, sidebar, card, and button samples with the extracted/selected brand applied via scoped CSS variable overrides
+- Tokens not directly extracted (surfaces, states, etc.) are algorithmically derived from the accent color — same approach used for OOTB presets. The `analyze_public_website_branding` tool currently returns only `companyName`, `logoUrl`, `paletteAccent`, and `notes`; the remaining token set is generated from the accent color to produce a cohesive theme.
 - Editable summary: company name, logo, accent color
 - Actions: "Looks good" (save) / "Let me adjust" (go to step 3)
 
@@ -91,7 +92,7 @@ Shown when a `BrandingConfig` with scope `"organization"` already exists.
 - Live preview panel
 
 **Additional controls:**
-- "Re-run setup wizard" link to go back to Layer A
+- "Re-run setup wizard" link — shows Layer A pre-populated with current BrandingConfig values. On completion, updates the existing record. User can cancel to return to Layer B.
 - Save button applies changes immediately
 
 #### Layer C: AI Coworker (power user, always available)
@@ -134,7 +135,7 @@ ALWAYS:
 - Page navigations within the shell pick up the injected styles automatically
 - Live preview in wizard/form uses a scoped wrapper with inline CSS variable overrides (client component)
 
-**Token-to-CSS mapping:**
+**Token-to-CSS mapping (8 variables currently defined and consumed by components):**
 ```
 palette.bg         → --dpf-bg
 palette.surface1   → --dpf-surface-1
@@ -146,7 +147,7 @@ typography.fontFamily        → --dpf-font-body
 typography.headingFontFamily → --dpf-font-heading
 ```
 
-Additional tokens (surfaces, states, spacing, radius, shadows) map to their respective `--dpf-*` variables. Any token not stored falls back to the `globals.css` default.
+**Scope note:** Only these 8 CSS variables are currently defined in `globals.css` and referenced by components. The remaining tokens (surfaces, states, spacing, radius, shadows) are stored in the database but have no corresponding CSS variable usage in components today. The initial implementation injects only these 8 variables. As components are built or updated to reference additional `--dpf-*` variables, the injection mapping and `globals.css` baseline should be extended to match. The form assist adapter (Section 6) exposes all tokens to the AI coworker regardless, so the system is forward-compatible.
 
 ### 4. Logo Fix
 
@@ -161,7 +162,9 @@ Additional tokens (surfaces, states, spacing, radius, shadows) map to their resp
 - File upload path: save uploaded logo to `upload_storage_path`, reference as local path
 - Add logging when Header component falls back to initials (logo src 404)
 
-**No schema changes needed** — `BrandingConfig.logoUrl` already supports HTTPS URLs, app-local paths, and data URLs via `normalizeLogoUrl()` and `resolveBrandingLogoUrl()`.
+**Logo URL utilities need consolidation:** `normalizeLogoUrl()` currently lives as a local function inside `BrandingConfigurator.tsx` (client-side only). `resolveBrandingLogoUrl()` in `lib/branding.ts` is a near-no-op (trims whitespace). Extract `normalizeLogoUrl` to `lib/branding.ts` as a shared utility so the wizard, quick-edit, and server-side code can all use it. Enhance `resolveBrandingLogoUrl()` to handle edge cases (relative URLs, missing protocols).
+
+**No schema changes needed** — `BrandingConfig.logoUrl` already supports HTTPS URLs, app-local paths, and data URLs.
 
 ### 5. Generic OOTB Presets
 
@@ -212,12 +215,35 @@ Total: ~33 fields exposed to the AI, hidden from the manual UI.
 
 #### Document upload path
 
-Add a new tool or extend `analyze_public_website_branding` to accept PDF/image brand guidelines documents. Extract:
-- Logo image (if present)
-- Brand colors (from color swatches or dominant colors)
-- Font names (from text samples or explicit mentions)
+New tool: `analyze_brand_document`
 
-This can use the AI model's vision capabilities for image analysis or PDF text extraction for structured brand guidelines.
+**Input schema:**
+```
+{
+  fileName: string       // original filename
+  fileContent: string    // base64-encoded file content
+  fileType: "pdf" | "png" | "jpg" | "svg"
+}
+```
+
+**Output schema:**
+```
+{
+  companyName: string | null
+  logoDataUrl: string | null    // base64 data URL if logo extracted
+  colors: string[]              // hex colors found (max 6)
+  fonts: string[]               // font names found
+  notes: string                 // AI's summary of what was extracted
+}
+```
+
+**Execution:** Immediate mode, requires `manage_branding` capability. Does NOT require external access (file is local).
+
+**Implementation:** Send the document to the AI model with vision capabilities. For PDFs, extract text first; if structured brand guidelines are detected, parse colors and fonts from text. For images, use vision to identify logo regions, dominant colors, and any text mentioning fonts.
+
+**Fallback:** If extraction fails or produces no usable results, return empty fields with a `notes` message explaining what went wrong. The wizard Step 2 falls back to a manual entry form with the message: "We couldn't extract brand assets automatically. You can enter them manually or try a different file."
+
+**File handling:** Document upload on the branding page does NOT use the existing thread-scoped `file-upload.ts` system. Instead, the file is read client-side as base64 and passed directly to the tool. No server-side file storage needed — the tool processes the file and returns extracted assets. If a logo is extracted, it's stored as a data URL in `BrandingConfig.logoUrl`.
 
 ### 7. Agent Instruction Updates
 
@@ -248,14 +274,22 @@ Updated:  "I'm your HR Director. I can help you understand role structures,
            You can also explore more actions in the skills menu above."
 ```
 
-**Example for System Admin:**
-```
-Current:  "I can help with platform administration — user management, role
-           assignments, and system configuration."
-Updated:  "I'm the System Admin. I can help with user management, branding
-           configuration, and platform settings. You can also explore more
-           actions in the skills menu above."
-```
+**All 10 agents updated to this format:**
+
+| Agent | Route | Proposed Welcome Message |
+|-------|-------|--------------------------|
+| Portfolio Analyst | `/portfolio` | "I'm your Portfolio Analyst. I can help you explore portfolio health, review budget allocations, and understand product groupings. You can also explore more actions in the skills menu above." |
+| Product Manager | `/inventory` | "I'm the Product Manager. I can help you review product lifecycles, check stage-gate readiness, and explore the digital product inventory. You can also explore more actions in the skills menu above." |
+| Enterprise Architect | `/ea` | "I'm your Enterprise Architect. I can help you create architecture views, map relationships between components, and navigate ArchiMate models. You can also explore more actions in the skills menu above." |
+| HR Director | `/employee` | "I'm the HR Director. I can help you understand role structures, review team assignments, and navigate the organizational hierarchy. You can also explore more actions in the skills menu above." |
+| Customer Success Mgr | `/customer` | "I'm the Customer Success Manager. I can help you review customer journeys, identify friction points, and track adoption metrics. You can also explore more actions in the skills menu above." |
+| Scrum Master | `/ops` | "I'm the Scrum Master. I can help you manage the backlog, track epic progress, and prioritize work items. You can also explore more actions in the skills menu above." |
+| AI Ops Engineer | `/platform` | "I'm the AI Ops Engineer. I can help you configure AI providers, review token spend, and optimize the AI workforce. You can also explore more actions in the skills menu above." |
+| Software Engineer | `/build` | "I'm your Software Engineer. I can help you build features, review code, and guide you through the build process. You can also explore more actions in the skills menu above." |
+| System Admin | `/admin` | "I'm the System Admin. I can help with user management, branding configuration, and platform settings. You can also explore more actions in the skills menu above." |
+| COO | `/workspace` | "I'm the COO. I can help you get oriented across the platform — from portfolio health to backlog priorities to workforce status. You can also explore more actions in the skills menu above." |
+
+The existing multi-response rotation pattern (`CANNED_RESPONSES` with `default` and `restricted` arrays) is replaced with a single canonical greeting per agent. The `restricted` variant remains as a separate, simpler message for users without full permissions.
 
 ---
 
@@ -270,18 +304,20 @@ No schema changes required. Existing models support the full design:
 ## Files Affected
 
 **New files:**
-- `app/(shell)/admin/branding/page.tsx` — branding sub-route
-- `app/(shell)/admin/settings/page.tsx` — settings sub-route
-- `components/admin/BrandingWizard.tsx` — setup wizard component
-- `components/admin/BrandingQuickEdit.tsx` — simple edit form
-- `components/admin/BrandingPreview.tsx` — live preview panel
+- `app/(shell)/admin/branding/page.tsx` — branding sub-route (server component, fetches BrandingConfig)
+- `app/(shell)/admin/settings/page.tsx` — settings sub-route (server component, fetches PlatformConfig)
+- `components/admin/BrandingWizard.tsx` — setup wizard component ("use client" — manages wizard state, form inputs, preview)
+- `components/admin/BrandingQuickEdit.tsx` — simple edit form ("use client" — form inputs, color picker, live preview)
+- `components/admin/BrandingPreview.tsx` — live preview panel ("use client" — applies scoped CSS variable overrides from props)
 
 **Modified files:**
 - `components/admin/AdminTabNav.tsx` — add Branding and Settings tabs
 - `app/(shell)/admin/page.tsx` — remove branding and platform keys, keep users only
 - `app/(shell)/layout.tsx` — add runtime CSS variable injection from BrandingConfig tokens
 - `components/admin/branding-form-assist.ts` — expand to all token fields
-- `lib/agent-routing.ts` — update System Admin agent (skills, system prompt, welcome messages); update all agent welcome messages
+- `lib/agent-routing.ts` — update System Admin agent (skills, system prompt, welcome messages); update all 10 agent welcome messages
+- `lib/branding.ts` — extract `normalizeLogoUrl` here as shared utility, enhance `resolveBrandingLogoUrl`
+- `lib/mcp-tools.ts` — add `analyze_brand_document` tool definition
 - `app/globals.css` — ensure CSS variable names align with injection mapping
 - `AGENTS.md` — add design principles section
 - `components/admin/BrandingConfigurator.tsx` — deprecate/remove (replaced by wizard + quick edit)
@@ -289,6 +325,7 @@ No schema changes required. Existing models support the full design:
 **Removed:**
 - 13 company-branded presets from `app/(shell)/admin/page.tsx`
 - Raw token editor fields from branding UI
+- Unused preset logo SVGs from `public/logos/` (company-branded ones only; verify none are referenced elsewhere before deleting)
 
 ## Testing Strategy
 
