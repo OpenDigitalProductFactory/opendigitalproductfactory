@@ -218,7 +218,10 @@ async function callProviderForProfiling(
     const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
     chatUrl = `${apiBase}/chat/completions`;
     body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096, keep_alive: -1 };
-    extractText = (d) => (d.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "";
+    extractText = (d) => {
+      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string } }>)?.[0]?.message;
+      return msg?.content || msg?.reasoning || "";
+    };
   }
 
   const res = await fetch(chatUrl, {
