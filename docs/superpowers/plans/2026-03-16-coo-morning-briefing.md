@@ -1,5 +1,23 @@
 # COO Morning Briefing — 2026-03-16
 
+## CRITICAL DISCOVERY: Build Studio is 95% Complete
+
+An overnight audit reveals the Build Studio (`/build`) is nearly production-ready:
+- Three-panel layout (conversation + preview + phase bar) — COMPLETE
+- All 5 phases (Ideate → Plan → Build → Review → Ship) — COMPLETE
+- 8 MCP tools (update_feature_brief, register_product, create_epic, etc.) — COMPLETE
+- Sandbox lifecycle management (Docker create/start/exec/destroy) — COMPLETE
+- Coding agent orchestration (readiness check, prompt builder, test runner) — COMPLETE
+- Preview proxy, Dockerfile.sandbox, server actions, data layer — ALL COMPLETE
+
+**The only missing piece:** The actual LLM execution loop in the Build phase — calling the coding model and writing files into the sandbox. Everything else is wired up.
+
+**Revised recommendation:** Instead of building codebase access tools from scratch (the first-slice plan), we should **connect the existing Build Studio to a capable coding provider** (Codex/Anthropic). The infrastructure is already there — it just needs the execution bridge.
+
+The codebase access tools (read_project_file, search_project_files, propose_file_change) are still valuable for the COO's day-to-day oversight, but the Build Studio is the faster path to self-development capability.
+
+---
+
 ## Platform Health Summary
 
 **Completed epics (2):**
@@ -56,12 +74,20 @@
 
 ## Open Backlog — Prioritized Recommendations
 
-### Priority 1: Self-Development Capability (NEW — not yet in backlog)
-**Why now:** Mark's core vision. The platform should iterate on itself. The Build Studio has significant partial implementation. The COO agent needs codebase access to be effective.
+### Priority 1A: Activate the Build Studio (FASTEST PATH)
+**Why now:** The Build Studio is 95% built. Only the LLM execution bridge is missing. Connecting a capable provider (Codex/Anthropic) to the existing `coding-agent.ts` infrastructure gets self-development working faster than building new tools.
 
-**First slice:** COO/Build Specialist can read project files, propose changes as diffs, and apply approved changes. No sandbox container yet — just the read + propose + apply loop.
+**What's needed:** Implement the `generateCode()` function in `coding-agent.ts` that calls the LLM with the build prompt, parses file outputs, and writes them into the sandbox via `execInSandbox`. Then wire it into the Build phase of the agent conversation.
 
-**Dependency:** Needs a capable cloud provider (Gemini or Anthropic) assigned to COO and Build Specialist. Mark needs to enter/re-enter Gemini API key after the encryption key fix.
+**Dependency:** Codex provider must be active and assigned to Build Specialist.
+
+### Priority 1B: COO Codebase Access (COMPLEMENTARY)
+**Why also:** The COO needs to read and modify files for oversight tasks that don't go through the Build Studio (quick fixes, config changes, prompt updates). The codebase access tools (read_project_file, search_project_files, propose_file_change) serve this purpose.
+
+**Spec:** `docs/superpowers/specs/2026-03-16-self-dev-codebase-access-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-16-self-dev-codebase-access.md`
+
+**Dependency:** Needs a capable cloud provider assigned to COO. Mark needs to enter/re-enter Gemini API key after the encryption key fix.
 
 ### Priority 2: BI-DEPLOY-003 — Ollama Management UI
 **Why now:** Mark experienced the pain of CLI-only model management during the session. Pull/delete models from the UI would make the platform self-service for AI model management.
