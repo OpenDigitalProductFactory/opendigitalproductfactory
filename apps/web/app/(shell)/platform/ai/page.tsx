@@ -66,6 +66,11 @@ export default async function PlatformAiPage() {
           {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({directProviders.length} direct, {agentProviders.length} agent, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
+        <div style={{ marginTop: 8 }}>
+          <Link href="/platform/ai/history" style={{ color: "#7c8cf8", fontSize: 12 }}>
+            Agent Action History &rarr;
+          </Link>
+        </div>
       </div>
 
       {/* Section 1: Provider Registry */}
