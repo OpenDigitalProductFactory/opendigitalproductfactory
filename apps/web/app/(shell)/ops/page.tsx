@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/ops/page.tsx
 import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, getEpics, getPortfoliosForSelect } from "@/lib/backlog-data";
 import { OpsClient } from "@/components/ops/OpsClient";
+import { OpsTabNav } from "@/components/ops/OpsTabNav";
 
 export default async function OpsPage() {
   const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
@@ -19,6 +20,8 @@ export default async function OpsPage() {
           {epics.length} epic{epics.length !== 1 ? "s" : ""} · {items.length} item{items.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      <OpsTabNav />
 
       <OpsClient
         items={items}

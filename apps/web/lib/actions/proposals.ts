@@ -42,6 +42,7 @@ export async function approveProposal(
       proposal.actionType,
       proposal.parameters as Record<string, unknown>,
       user.id,
+      { agentId: proposal.agentId, threadId: proposal.threadId },
     );
 
     if (result.success) {
