@@ -908,7 +908,7 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "platform-engineer", name: "Platform Engineer", tier: 2, type: "coworker", description: "Manages AI providers, platform configuration, and infrastructure" },
     { agentId: "build-specialist", name: "Build Specialist", tier: 2, type: "coworker", description: "Guides feature development through Ideate, Plan, Build, Review, and Ship" },
     { agentId: "admin-assistant", name: "Admin Assistant", tier: 2, type: "coworker", description: "Assists with platform administration and user management" },
-    { agentId: "workspace-guide", name: "Workspace Guide", tier: 1, type: "coworker", description: "Helps navigate the platform and understand available capabilities" },
+    { agentId: "coo", name: "COO", tier: 1, type: "coworker", description: "Chief Operating Officer — oversees all platform operations, workforce, and priorities" },
   ];
 
   for (const cw of coworkers) {
