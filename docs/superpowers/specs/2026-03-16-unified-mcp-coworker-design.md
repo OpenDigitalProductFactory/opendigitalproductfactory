@@ -14,6 +14,15 @@ The current agent architecture assigns named personas (COO, Portfolio Analyst, S
 4. **No cost optimization** — every inference uses the same provider tier regardless of task complexity. Simple summarization tasks consume the same expensive model as deep reasoning.
 5. **Separate integration paths** — internal LLM providers and external services (web search, URL fetch) are registered and routed through completely different systems.
 
+## Terminology
+
+- **Employee** — the human user interacting with the platform (business concept). Maps to `userId` / `UserContext` in code.
+- **Coworker** — the AI assistant identity (one, unified, no personas).
+- **Endpoint** — any AI resource (LLM or service) registered in the workforce MCP registry.
+- **Domain** — the functional area of a page route (portfolio, ops, build, etc.).
+
+---
+
 ## Design Summary
 
 Replace the multi-persona agent system with a **single AI coworker identity** that adapts to context, governed by the employee's HR role, with a **unified MCP routing layer** that treats all AI resources — local models, cloud models, and external services — as MCP endpoints in one registry.
@@ -21,7 +30,7 @@ Replace the multi-persona agent system with a **single AI coworker identity** th
 ### Key Principles
 
 - **One coworker, many contexts** — same AI identity everywhere, domain knowledge injected per route
-- **HR role is the sole authority gate** — what the coworker can do is always bounded by what the employee is authorized to do
+- **HR role is the primary authority gate** — what the coworker can do is bounded by what the employee is authorized to do. A small set of universal tools (e.g., `report_quality_issue`) remain ungated by design — available to all roles as baseline platform participation
 - **Advise / Act toggle** — binary autonomy dial controlled by the employee
 - **Sensitivity follows the data** — each page has a classification that determines which endpoints can serve it
 - **Cost-optimal routing** — primary inference gets the best model, sub-tasks get the cheapest eligible model
@@ -75,7 +84,7 @@ EndpointManifest {
   // Clearance
   sensitivityClearance: ("public" | "internal" | "confidential" | "restricted")[]
 
-  // Capability
+  // Capability (maps from existing tiers: budget→basic, fast-worker→routine, specialist→analytical, deep-thinker→deep-thinker)
   capabilityTier: "basic" | "routine" | "analytical" | "deep-thinker"
   taskTags: string[]           // ["summarization", "reasoning", "code-gen", "web-search", "data-extraction"]
 
@@ -165,7 +174,7 @@ Every tool execution in Act mode logs to `authorizationDecisionLog`:
 
 ### Session Scoping
 
-Advise/Act is per-session (sessionStorage). Defaults to Advise. Resets on new session.
+Advise/Act is scoped per route context (sessionStorage key includes route prefix). This prevents a toggle set on `/portfolio` (Internal) from also enabling Act on `/admin` (Restricted). Defaults to Advise on each route. Resets on new session.
 
 ---
 
@@ -177,8 +186,8 @@ Advise/Act is per-session (sessionStorage). Defaults to Advise. Resets on new se
 |-------|---------|--------|
 | **Public** | No sensitive data. Any provider. | Marketing pages, public docs |
 | **Internal** | Business data, not personally sensitive. | `/portfolio`, `/inventory`, `/ops`, `/build`, `/ea` |
-| **Confidential** | Personal data, financials, HR records. | `/employee`, `/customer`, `/workspace` |
-| **Restricted** | Platform config, secrets, access control. | `/admin`, `/platform` |
+| **Confidential** | Personal data, financials, HR records. | `/employee`, `/customer`, `/workspace`, `/platform` |
+| **Restricted** | Platform config, secrets, access control. | `/admin` |
 
 ### Routing Integration
 
@@ -196,6 +205,10 @@ Default behavior: sub-tasks inherit the originating page's sensitivity level. A 
 > "I need to run a web search but this page is Confidential and no search endpoint is cleared at that level. You can approve a sensitivity downgrade to Internal for this specific task if the query contains no sensitive data."
 
 The human approves or denies. The downgrade decision is logged in the audit trail with the employee's ID. The downgrade applies to that single sub-task only, not the session.
+
+### Sensitivity of Read-Only External Tools
+
+External services like `brave-search` and `public-fetch` access public data, not page-classified data. However, the *query* sent to them may leak context from a classified page (e.g., searching for an employee name from `/employee`). Default inheritance protects against this. The human override exists for cases where the employee knows the query is clean.
 
 ---
 
@@ -235,6 +248,21 @@ The `ModelProvider` table evolves into the MCP endpoint registry.
 | `costModel` (token/compute) | Replaced by `costBand` |
 | `supportedAuthMethods` | Simplified to single `authMethod` |
 | `category` (direct/local/agent/router) | Replaced by `endpointType` |
+
+### Capability Tier Mapping
+
+The existing codebase uses a different tier vocabulary (`TIER_RANK` in `ai-provider-priority.ts`: `deep-thinker`, `fast-worker`, `specialist`, `budget`, `embedding`, `unknown`). The new spec consolidates to four tiers. Migration mapping:
+
+| Existing Tier | New Tier | Rationale |
+|--------------|----------|-----------|
+| `budget` | `basic` | Cheapest, simplest tasks |
+| `fast-worker` | `routine` | Quick turnaround, moderate complexity |
+| `specialist` | `analytical` | Domain expertise, multi-step reasoning |
+| `deep-thinker` | `deep-thinker` | Unchanged — highest tier |
+| `embedding` | N/A | Embedding models are not conversational endpoints; tracked separately as a task tag |
+| `unknown` | `basic` | Default to lowest tier until profiled |
+
+The `ModelProfile` table stores existing tier values. A data migration will update all `ModelProfile.capabilityTier` values using this mapping. The `TIER_RANK` constant in `ai-provider-priority.ts` is replaced by the router's tier ordering.
 
 ### Migration Examples
 
@@ -297,6 +325,16 @@ One template, seven composable blocks:
 
 **6 & 7.** Route data and attachments — unchanged from today's injection.
 
+**Identity block note:** The static identity should mention what the platform does (a digital product management platform) so the LLM has grounding. This mirrors the existing `PLATFORM_PREAMBLE` context.
+
+### Canned Responses
+
+The existing `CANNED_RESPONSES` in `agent-routing.ts` (per-agent fallbacks when no provider is available) are replaced with a single generic fallback:
+
+> "I'm unable to assist right now — no AI endpoint is available for this page's sensitivity level. An administrator can check the Workforce configuration."
+
+This is used when the router finds zero eligible endpoints.
+
 ### What This Eliminates
 
 - 11 bespoke system prompts with personality, heuristics, interpretive models
@@ -334,6 +372,134 @@ One template, seven composable blocks:
 
 ---
 
+## Governance Model Disposition
+
+The existing codebase has a governance layer: `AgentGovernanceProfile` (with `autonomyLevel`, `hitlPolicy`, `allowDelegation`, `maxDelegationRiskBand`), `DelegationGrant`, `AgentCapabilityClass`, and `DirectivePolicyClass`. The current autonomy scale has four levels: `advisory`, `constrained_execute`, `supervised_execute`, `elevated_execute`.
+
+**This design intentionally simplifies to Advise/Act (two levels).** Rationale:
+
+- The four-level autonomy scale was designed for a multi-agent system where different agents had different trust levels. With a single coworker identity, the relevant trust dimension is the *employee's* choice (Advise vs Act), not the agent's governance profile.
+- Risk-band gating (low/medium/high/critical) was meaningful when agents had varying authority. Under the new model, the employee's HR role is the authority ceiling. The coworker never exceeds it regardless of mode.
+- The governance infrastructure is partially implemented but not enforced in the current tool chain. Simplifying now avoids building on uncommitted foundations.
+
+**What happens to governance tables:**
+
+| Table | Disposition |
+|-------|------------|
+| `AgentGovernanceProfile` | Deprecated. Rows preserved for audit history but no longer consulted at runtime. |
+| `DelegationGrant` | Deprecated. Human sensitivity overrides (Section 4) replace risk-band delegation. |
+| `AgentCapabilityClass` | Deprecated. Replaced by HR role capabilities. |
+| `DirectivePolicyClass` | Deprecated. |
+| `AuthorizationDecisionLog` | **Retained and extended** (see Audit Schema below). |
+| `governance-resolver.ts` | Refactored: `resolveGovernedAction` replaced with sensitivity override resolution logic. |
+
+If future requirements demand more granular autonomy (e.g., per-domain Act permissions), the Advise/Act toggle can be extended to per-route scoping — which is already how session storage keys will work.
+
+---
+
+## Agent Table Migration
+
+The existing `Agent` model stores per-agent records with `preferredProviderId`, linked to `AgentOwnership`, `AgentGovernanceProfile`, and `DelegationGrant` via foreign keys (with `onDelete: Cascade`).
+
+**Migration plan:**
+
+1. **Create a single `coworker` agent row** — replaces all 11 persona rows. This preserves FK integrity for new audit records and provides a stable reference for the unified coworker.
+2. **Retain old agent rows as archived** — add an `archived: true` flag rather than deleting. This preserves:
+   - Historical `AgentMessage` records that reference old agent IDs
+   - Historical `AgentActionProposal` records
+   - Historical `AuthorizationDecisionLog` entries
+3. **`preferredProviderId` on the Agent table becomes unused** — the router handles provider selection dynamically. The field stays nullable for backward compatibility but is ignored at runtime.
+4. **Cascading governance records** — `AgentGovernanceProfile` and `AgentOwnership` for archived agents are left in place (no cascading delete). They become historical artifacts.
+
+The `AGENT_NAME_MAP` in `agent-routing.ts` (used for rendering historical messages) is extended to map old agent IDs to display names, so past conversations still render correctly.
+
+---
+
+## Audit Schema Extension
+
+The existing `AuthorizationDecisionLog` is retained and extended. New fields are added alongside existing ones (no breaking changes):
+
+| Existing Field | Kept? | Notes |
+|---------------|-------|-------|
+| `actorType` | Yes | Always `"user"` under new model |
+| `actorRef` | Yes | Employee's user ID |
+| `humanContextRef` | Yes | Unchanged |
+| `agentContextRef` | Yes | Always `"coworker"` under new model |
+| `delegationGrantId` | Yes | Nullable, unused in new model but preserved for historical records |
+| `actionKey` | Yes | Tool name |
+| `objectRef` | Yes | Entity affected |
+| `decision` | Yes | `"allow"` (Act mode executed) or `"deny"` (mode/role blocked) |
+| `rationale` | Yes | Extended with structured JSON |
+
+| New Field | Type | Purpose |
+|-----------|------|---------|
+| `endpointUsed` | `string?` | Which MCP endpoint handled the action |
+| `mode` | `string?` | `"advise"` or `"act"` |
+| `routeContext` | `string?` | Which page route |
+| `sensitivityLevel` | `string?` | Page sensitivity at time of action |
+| `sensitivityOverride` | `boolean?` | Whether a human downgrade was applied |
+
+All new fields are nullable so existing log entries remain valid without migration.
+
+---
+
+## Sub-Task Delegation Interface
+
+Sub-task delegation is Phase 3 work, but the interface contract is defined here to prevent Phase 1-2 decisions from foreclosing options.
+
+**Interface:** The primary LLM emits a structured tool call to a `delegate_subtask` meta-tool:
+
+```
+delegate_subtask({
+  task: string,              // Natural language description of the sub-task
+  requiredTags: string[],    // e.g., ["summarization"], ["web-search"]
+  maxCapabilityTier: string, // Highest tier needed (router uses cheapest at or above)
+  maxTokenBudget?: number,   // Optional token limit for the sub-task
+  timeoutMs?: number         // Optional timeout (default: 30s)
+})
+```
+
+**Flow:**
+1. Primary LLM calls `delegate_subtask` as a tool call
+2. Router selects cheapest eligible endpoint matching tags + tier + sensitivity
+3. Sub-task executes against selected endpoint
+4. Result returned to primary LLM as tool call response
+5. Primary LLM incorporates result into its response to the employee
+
+**Constraints:**
+- Sub-tasks inherit page sensitivity (with human override as defined in Section 4)
+- Sub-task results are not shown directly to the employee — the primary LLM synthesizes them
+- Delegation chain is logged: audit trail records both the primary action and the sub-task endpoint
+- If no eligible endpoint exists for the sub-task, it fails gracefully and the primary LLM handles the task itself (or reports inability)
+- Requires tool-calling capability on the primary endpoint; endpoints without tool-calling cannot delegate
+
+**Token budget management:** The router tracks cumulative token usage across primary + sub-tasks per conversation turn. If a configurable per-turn budget is exceeded, further sub-task delegation is blocked for that turn. Budget is a workforce-level config, not per-endpoint.
+
+---
+
+## Routing Tiebreaker
+
+When multiple endpoints match the same costBand and capabilityTier, the router uses these tiebreakers in order:
+
+1. **Lowest latency** — based on rolling average response time (tracked per endpoint)
+2. **Highest availability** — endpoint with fewer recent failures
+3. **Deterministic fallback** — alphabetical by endpointId (for reproducible behavior in tests)
+
+---
+
+## Rollback Strategy
+
+Each phase is designed to be independently revertable:
+
+- **Phase 1 (Schema):** New fields are additive — old code ignores them. Rollback = deploy previous code version; new fields are unused but harmless.
+- **Phase 2 (Coworker Identity):** The route context map can coexist with old persona map behind a feature flag (`USE_UNIFIED_COWORKER`). Rollback = flip flag to false, old persona system activates.
+- **Phase 3 (Sub-task Delegation):** Delegation is opt-in per the `delegate_subtask` tool. If disabled, primary handles everything directly (current behavior). Rollback = remove tool from registry.
+- **Phase 4 (Workforce Admin):** UI-only changes. Rollback = deploy previous UI.
+
+The feature flag `USE_UNIFIED_COWORKER` should be added in Phase 1 and remain available through Phase 3 completion.
+
+---
+
 ## Future Epic: Corporate Knowledge Memory
 
 All employee-coworker interactions generate institutional knowledge — decisions, rationale, patterns, solutions. Today this is trapped in individual chat threads.
@@ -350,13 +516,15 @@ All employee-coworker interactions generate institutional knowledge — decision
 
 | File | Change |
 |------|--------|
-| `apps/web/lib/agent-routing.ts` | Replace persona map with route context definitions |
-| `apps/web/lib/mcp-tools.ts` | Add `sideEffect` flag, migrate external tools to endpoint references |
-| `apps/web/lib/actions/agent-coworker.ts` | New prompt assembler, Advise/Act gating, router integration |
-| `apps/web/lib/ai-provider-priority.ts` | Replace with `AgentRouter` using MCP endpoint matching |
-| `apps/web/components/agent/AgentPanelHeader.tsx` | Advise/Act toggle, sensitivity badge |
-| `apps/web/components/agent/AgentCoworkerPanel.tsx` | Session state for Advise/Act |
-| `packages/db/prisma/schema.prisma` | Evolve ModelProvider to endpoint manifest schema |
+| `apps/web/lib/agent-routing.ts` | Replace persona map with route context definitions; retain `AGENT_NAME_MAP` for historical rendering; remove canned responses |
+| `apps/web/lib/mcp-tools.ts` | Add `sideEffect` flag, migrate external tools to endpoint references, add `delegate_subtask` meta-tool |
+| `apps/web/lib/actions/agent-coworker.ts` | New prompt assembler, Advise/Act gating, router integration, feature flag |
+| `apps/web/lib/ai-provider-priority.ts` | Replace with `AgentRouter` using MCP endpoint matching, tiebreaker logic, delegation routing |
+| `apps/web/components/agent/AgentPanelHeader.tsx` | Advise/Act toggle (per-route scoped), sensitivity badge |
+| `apps/web/components/agent/AgentCoworkerPanel.tsx` | Session state for Advise/Act (per-route keys) |
+| `packages/db/prisma/schema.prisma` | Evolve ModelProvider to endpoint manifest schema; extend AuthorizationDecisionLog; add `archived` flag to Agent; migrate ModelProfile tiers |
 | `apps/web/app/(protected)/platform/workforce/` | Updated admin UI for endpoint management |
-| `apps/web/lib/agent-sensitivity.ts` | Refactor to per-route sensitivity declarations |
-| `apps/web/lib/governance-resolver.ts` | Wire sensitivity override flow |
+| `apps/web/lib/agent-sensitivity.ts` | Refactor to per-route sensitivity declarations (canonical source) |
+| `apps/web/lib/governance-resolver.ts` | Replace risk-band resolution with sensitivity override logic |
+| `apps/web/lib/governance-data.ts` | Extend audit logging with new fields |
+| `packages/db/data/agent_registry.json` | Archive persona agent records, add single `coworker` entry |
