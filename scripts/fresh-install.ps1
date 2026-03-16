@@ -123,7 +123,10 @@ $dbEnvPath      = Join-Path $InstallRoot "packages\db\.env"
 if (Test-Path $envExamplePath) {
     if (-not (Test-Path $webEnvPath)) {
         Copy-Item $envExamplePath $webEnvPath
-        Write-Ok "Created apps/web/.env.local from .env.example"
+        # Generate a real CREDENTIAL_ENCRYPTION_KEY (replace placeholder)
+        $encKey = -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Maximum 256) })
+        (Get-Content $webEnvPath) -replace '<generate with: openssl rand -hex 32>', $encKey | Set-Content $webEnvPath
+        Write-Ok "Created apps/web/.env.local with generated encryption key"
     } else {
         Write-Ok "apps/web/.env.local already exists — skipping"
     }
