@@ -303,18 +303,23 @@ if (-not (Is-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select the LARGEST model the hardware can support
-    if ($gpuVRAM_GB -ge 16) {
-        $selectedModel = "qwen3:32b"
-        $modelReason = "maximum quality â€” your GPU has plenty of memory"
-    } elseif ($gpuVRAM_GB -ge 8) {
-        $selectedModel = "qwen3:14b"
-        $modelReason = "high quality, good fit for your GPU"
+    # Select a model that fits comfortably in VRAM with room for context/KV cache.
+    # Rule: model file size should be ~70% of VRAM or less to avoid CPU spill.
+    # qwen3:32b = 20GB (needs 28+ GB VRAM), qwen3:14b = 9GB, qwen3:8b = 5GB
+    if ($gpuVRAM_GB -ge 28) {
+        $selectedModel = “qwen3:32b”
+        $modelReason = “maximum quality — fits fully in your GPU memory”
+    } elseif ($gpuVRAM_GB -ge 12) {
+        $selectedModel = “qwen3:14b”
+        $modelReason = “high quality, fits fully in your GPU memory”
+    } elseif ($gpuVRAM_GB -ge 6) {
+        $selectedModel = “qwen3:8b”
+        $modelReason = “good quality, GPU-accelerated”
     } elseif ($gpuVRAM_GB -ge 4) {
-        $selectedModel = "qwen3:8b"
-        $modelReason = "good quality, GPU-accelerated"
+        $selectedModel = “qwen3:4b”
+        $modelReason = “balanced quality, GPU-accelerated”
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "qwen3:8b"
+        $selectedModel = “qwen3:8b”
         $modelReason = "good quality, fits your RAM (CPU mode)"
     } elseif ($totalRAM_GB -ge 8) {
         $selectedModel = "qwen3:1.7b"
