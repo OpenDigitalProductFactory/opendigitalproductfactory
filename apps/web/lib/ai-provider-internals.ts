@@ -389,6 +389,77 @@ export async function discoverModelsInternal(
   return { discovered: models.length, newCount };
 }
 
+// ─── Model Specialization Detection ─────────────────────────────────────────
+
+type ModelSpecialization = "general" | "code" | "vision" | "embedding" | "math" | "instruct";
+
+const SPECIALIZATION_PATTERNS: Array<{ pattern: RegExp; type: ModelSpecialization }> = [
+  { pattern: /embed|nomic-embed|bge-|e5-|gte-|mxbai-embed/i, type: "embedding" },
+  { pattern: /llava|bakllava|moondream|minicpm-v/i, type: "vision" },
+  { pattern: /codellama|codegemma|codestral|deepseek-coder|starcoder|codeqwen|qwen2\.5-coder/i, type: "code" },
+  { pattern: /mathstral|deepseek-math|wizard-math/i, type: "math" },
+  { pattern: /instruct/i, type: "instruct" },
+];
+
+function detectSpecialization(modelId: string): ModelSpecialization {
+  const lower = modelId.toLowerCase();
+  for (const { pattern, type } of SPECIALIZATION_PATTERNS) {
+    if (pattern.test(lower)) return type;
+  }
+  return "general";
+}
+
+const SPECIALIZATION_PROFILES: Record<ModelSpecialization, {
+  bestFor: string[];
+  avoidFor: string[];
+  summaryPrefix: string;
+  codingCapability: (paramB: number) => string;
+  supportsToolUse: boolean;
+}> = {
+  general: {
+    bestFor: ["reasoning", "conversation", "analysis"],
+    avoidFor: [],
+    summaryPrefix: "General-purpose",
+    codingCapability: (b) => b >= 10 ? "strong" : "basic",
+    supportsToolUse: true,
+  },
+  code: {
+    bestFor: ["code generation", "code review", "debugging", "refactoring"],
+    avoidFor: ["creative writing", "general conversation"],
+    summaryPrefix: "Code-specialized",
+    codingCapability: () => "strong",
+    supportsToolUse: true,
+  },
+  vision: {
+    bestFor: ["image understanding", "visual Q&A", "screenshot analysis"],
+    avoidFor: ["code generation", "complex reasoning"],
+    summaryPrefix: "Vision-capable",
+    codingCapability: () => "basic",
+    supportsToolUse: false,
+  },
+  embedding: {
+    bestFor: ["text embeddings", "semantic search", "RAG"],
+    avoidFor: ["conversation", "generation", "reasoning"],
+    summaryPrefix: "Embedding",
+    codingCapability: () => "none",
+    supportsToolUse: false,
+  },
+  math: {
+    bestFor: ["mathematical reasoning", "formal proofs", "quantitative analysis"],
+    avoidFor: ["creative writing", "general conversation"],
+    summaryPrefix: "Math-specialized",
+    codingCapability: (b) => b >= 10 ? "strong" : "moderate",
+    supportsToolUse: true,
+  },
+  instruct: {
+    bestFor: ["instruction following", "structured output", "task completion"],
+    avoidFor: [],
+    summaryPrefix: "Instruction-tuned",
+    codingCapability: (b) => b >= 10 ? "strong" : "moderate",
+    supportsToolUse: true,
+  },
+};
+
 /** Generate a profile for a local Ollama model from its metadata without calling an LLM. */
 function profileLocalModel(modelId: string, rawMetadata: Record<string, unknown>): ProfileResult {
   const sizeBytes = (rawMetadata.size as number) ?? 0;
@@ -396,21 +467,34 @@ function profileLocalModel(modelId: string, rawMetadata: Record<string, unknown>
   const paramMatch = modelId.match(/(\d+\.?\d*)b/i);
   const paramB = paramMatch?.[1] ? parseFloat(paramMatch[1]) : (sizeGb > 15 ? 32 : sizeGb > 5 ? 14 : sizeGb > 2 ? 8 : 1.7);
 
-  const capabilityTier = paramB >= 30 ? "deep-thinker" : paramB >= 10 ? "strong" : paramB >= 5 ? "moderate" : "fast-cheap";
-  const speedRating = paramB >= 30 ? "slow" : paramB >= 10 ? "moderate" : "fast";
+  const spec = detectSpecialization(modelId);
+  const profile = SPECIALIZATION_PROFILES[spec];
+
+  // Embedding models are always "fast-cheap" — they don't generate text
+  const capabilityTier = spec === "embedding" ? "fast-cheap"
+    : paramB >= 30 ? "deep-thinker" : paramB >= 10 ? "strong" : paramB >= 5 ? "moderate" : "fast-cheap";
+  const speedRating = spec === "embedding" ? "fast"
+    : paramB >= 30 ? "slow" : paramB >= 10 ? "moderate" : "fast";
+
+  const sizeLabel = spec === "embedding" ? `${Math.round(sizeGb * 1000)}M dimensional` : `${paramB}B parameter`;
+  const qualityLabel = paramB >= 30
+    ? "High quality reasoning and generation."
+    : paramB >= 10
+      ? "Good balance of quality and speed."
+      : "Fast responses, suitable for targeted tasks.";
 
   return {
     modelId,
     friendlyName: modelId.replace(/:/, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    summary: `Local ${paramB}B parameter model running via Ollama. ${paramB >= 30 ? "High quality reasoning and generation." : paramB >= 10 ? "Good balance of quality and speed." : "Fast responses, suitable for simple tasks."}`,
+    summary: `${profile.summaryPrefix} ${sizeLabel} model via Ollama. ${spec === "embedding" ? "Generates vector embeddings for semantic search." : qualityLabel}`,
     capabilityTier,
     costTier: "$",
-    bestFor: paramB >= 10 ? ["reasoning", "code generation", "analysis"] : ["quick answers", "simple tasks"],
-    avoidFor: paramB < 10 ? ["complex reasoning", "long-form generation"] : [],
-    contextWindow: "32768",
+    bestFor: profile.bestFor,
+    avoidFor: [...profile.avoidFor, ...(paramB < 10 && spec !== "embedding" ? ["complex reasoning", "long-form generation"] : [])],
+    contextWindow: spec === "embedding" ? null : "32768",
     speedRating,
-    codingCapability: paramB >= 10 ? "strong" : "basic",
-    instructionFollowing: paramB >= 10 ? "strong" : "moderate",
+    codingCapability: profile.codingCapability(paramB),
+    instructionFollowing: spec === "embedding" ? null : paramB >= 10 ? "strong" : "moderate",
   };
 }
 
@@ -435,10 +519,12 @@ export async function profileModelsInternal(
     let profiled = 0;
     for (const m of models) {
       const profile = profileLocalModel(m.modelId, m.rawMetadata as Record<string, unknown>);
+      const spec = detectSpecialization(m.modelId);
+      const toolUse = SPECIALIZATION_PROFILES[spec].supportsToolUse;
       await prisma.modelProfile.upsert({
         where: { providerId_modelId: { providerId, modelId: profile.modelId } },
-        create: { providerId, ...profile, generatedBy: "local-metadata" },
-        update: { ...profile, generatedBy: "local-metadata", generatedAt: new Date() },
+        create: { providerId, ...profile, supportsToolUse: toolUse, generatedBy: "local-metadata" },
+        update: { ...profile, supportsToolUse: toolUse, generatedBy: "local-metadata", generatedAt: new Date() },
       });
       profiled++;
     }
