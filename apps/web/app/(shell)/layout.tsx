@@ -2,7 +2,7 @@
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
-import { resolveBrandingLogoUrl } from "@/lib/branding";
+import { resolveBrandingLogoUrl, buildBrandingStyleTag } from "@/lib/branding";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
@@ -26,6 +26,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       select: {
         companyName: true,
         logoUrl: true,
+        tokens: true,
       },
     }),
   ]);
@@ -38,26 +39,31 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     });
   }
 
+  const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
+
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
-      <StatusBanner />
-      <Header
-        platformRole={user.platformRole}
-        isSuperuser={user.isSuperuser}
-        brandName={activeBranding?.companyName ?? "Open Digital Product Factory"}
-        brandLogoUrl={resolveBrandingLogoUrl(
-          activeBranding?.logoUrl ?? null,
-          activeBranding?.companyName ?? "Open Digital Product Factory",
-        )}
-        userId={user.id}
-      />
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
-      <AgentCoworkerShell
-        userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
-      />
-      {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
-      <QueueFlusher />
-      <ModelWarmup />
-    </div>
+    <>
+      {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
+      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+        <StatusBanner />
+        <Header
+          platformRole={user.platformRole}
+          isSuperuser={user.isSuperuser}
+          brandName={activeBranding?.companyName ?? "Open Digital Product Factory"}
+          brandLogoUrl={resolveBrandingLogoUrl(
+            activeBranding?.logoUrl ?? null,
+            activeBranding?.companyName ?? "Open Digital Product Factory",
+          )}
+          userId={user.id}
+        />
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
+        <AgentCoworkerShell
+          userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+        />
+        {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
+        <QueueFlusher />
+        <ModelWarmup />
+      </div>
+    </>
   );
 }
