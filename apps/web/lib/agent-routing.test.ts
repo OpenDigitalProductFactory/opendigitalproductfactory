@@ -18,9 +18,9 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
-  it("returns workspace-guide for unknown routes", () => {
+  it("returns coo for unknown routes (workspace fallback)", () => {
     const result = resolveAgentForRoute("/unknown/path", superuser);
-    expect(result.agentId).toBe("workspace-guide");
+    expect(result.agentId).toBe("coo");
     expect(result.canAssist).toBe(true);
   });
 
@@ -31,9 +31,9 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(false);
   });
 
-  it("returns canAssist=true for ungated routes (capability null)", () => {
-    const result = resolveAgentForRoute("/workspace", noRole);
-    expect(result.agentId).toBe("workspace-guide");
+  it("returns coo for /workspace route", () => {
+    const result = resolveAgentForRoute("/workspace", superuser);
+    expect(result.agentId).toBe("coo");
     expect(result.canAssist).toBe(true);
   });
 
@@ -63,7 +63,7 @@ describe("resolveAgentForRoute", () => {
   it("returns a non-empty systemPrompt", () => {
     const result = resolveAgentForRoute("/portfolio", superuser);
     expect(result.systemPrompt).toBeTruthy();
-    expect(result.systemPrompt).toContain("Portfolio Advisor");
+    expect(result.systemPrompt).toContain("Portfolio Analyst");
   });
 
   it("every route agent has a non-empty systemPrompt", () => {
