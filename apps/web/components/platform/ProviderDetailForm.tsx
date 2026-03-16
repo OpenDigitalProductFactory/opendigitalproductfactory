@@ -88,8 +88,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               return;
             }
           }
-          const profResult = await profileModels(provider.providerId);
-          setProfilingResult(profResult);
+          if (unprofiled > 0) {
+            const profResult = await profileModels(provider.providerId);
+            setProfilingResult(profResult);
+          }
         }
       }
       router.refresh();
