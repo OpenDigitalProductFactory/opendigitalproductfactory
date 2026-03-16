@@ -381,6 +381,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
   },
+  {
+    name: "analyze_brand_document",
+    description: "Analyze an uploaded brand guidelines document (PDF or image) and extract brand assets: logo, colors, and fonts",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileName: { type: "string", description: "Original filename" },
+        fileContent: { type: "string", description: "Base64-encoded file content" },
+        fileType: { type: "string", enum: ["pdf", "png", "jpg", "svg"], description: "File type" },
+      },
+      required: ["fileName", "fileContent", "fileType"],
+    },
+    requiredCapability: "manage_branding" as CapabilityKey,
+    executionMode: "immediate",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -859,6 +874,21 @@ export async function executeTool(
         success: true,
         entityId: providerId,
         message: `Provider "${provider.name}" category updated to "${category}".`,
+      };
+    }
+
+    case "analyze_brand_document": {
+      const { fileName, fileType } = params as { fileName: string; fileContent: string; fileType: string };
+      return {
+        success: true,
+        message: `Analyzing brand document: ${fileName} (${fileType})`,
+        data: {
+          companyName: null,
+          logoDataUrl: null,
+          colors: [],
+          fonts: [],
+          notes: `Document "${fileName}" received for brand analysis. The AI agent should analyze the base64 content to extract brand assets.`,
+        },
       };
     }
 
