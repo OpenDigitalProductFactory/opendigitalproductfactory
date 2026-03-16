@@ -74,20 +74,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       if (result.ok) {
         const discovery = await discoverModels(provider.providerId);
         setDiscoveryResult(discovery);
-        // Always profile after discovery — needed for model qualification routing.
-        // The provider itself is now active (testProviderAuth sets status to active),
-        // so it can self-profile even as the first/only provider.
-        if (discovery.discovered > 0) {
+        // Auto-profile only for Ollama (instant metadata-based profiling).
+        // Cloud providers have too many models — user profiles individually.
+        if (provider.providerId === "ollama" && discovery.discovered > 0) {
           const unprofiled = discovery.discovered - profiles.length;
-          if (unprofiled > 50) {
-            const ok = window.confirm(
-              `Profile ${unprofiled} models? This may take a moment and incur AI costs.`
-            );
-            if (!ok) {
-              router.refresh();
-              return;
-            }
-          }
           if (unprofiled > 0) {
             const profResult = await profileModels(provider.providerId);
             setProfilingResult(profResult);
@@ -102,22 +92,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     startTransition(async () => {
       const discovery = await discoverModels(provider.providerId);
       setDiscoveryResult(discovery);
-      if (discovery.discovered > 0) {
-        const unprofiled = discovery.discovered - profiles.length;
-        if (unprofiled > 50) {
-          const ok = window.confirm(
-            `Profile ${unprofiled} models? This may take a moment and incur AI costs.`
-          );
-          if (!ok) {
-            router.refresh();
-            return;
-          }
-        }
-        if (unprofiled > 0) {
-          const profResult = await profileModels(provider.providerId);
-          setProfilingResult(profResult);
-        }
-      }
+      // Don't auto-profile — user can profile individually from the model list.
       router.refresh();
     });
   }
