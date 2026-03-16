@@ -94,15 +94,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         return;
       }
 
-      // Step 3: Auto-profile only for Ollama (instant metadata-based).
-      // Cloud providers have too many models — user profiles from the model list.
-      if (provider.providerId === "ollama") {
-        const unprofiled = discovery.discovered - profiles.length;
-        if (unprofiled > 0) {
-          setPipelineStatus(`Profiling ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
-          const profResult = await profileModels(provider.providerId);
-          setProfilingResult(profResult);
-        }
+      // Step 3: Auto-profile if model count is manageable (≤ 30).
+      // Large catalogs (100+ models) are left for the user to profile selectively.
+      const unprofiled = discovery.discovered - profiles.length;
+      if (unprofiled > 0 && discovery.discovered <= 30) {
+        setPipelineStatus(`Profiling ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
+        const profResult = await profileModels(provider.providerId);
+        setProfilingResult(profResult);
       }
 
       setPipelineStatus(null);
