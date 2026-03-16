@@ -1,4 +1,4 @@
-# ────────────────────────────────────────────────────────────────────────────
+﻿# ────────────────────────────────────────────────────────────────────────────
 # fresh-install.ps1 — Fresh install of Open Digital Product Factory (Windows)
 #
 # Usage:
@@ -81,110 +81,158 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
 }
 Write-Ok "pnpm found: $(pnpm -v)"
 
-if (-not $SkipDocker) {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Fail "Docker is not installed. Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
-    }
-    Write-Ok "Docker found: $(docker --version)"
-}
+# ── Install dependencies ──────────────────────────────────────────────────
 
-# ── Clone or update repo ────────────────────────────────────────────────────
-
-Write-Step "Setting up repository"
-
-if (Test-Path "$InstallRoot\.git") {
-    Write-Ok "Repository already exists at $InstallRoot — pulling latest"
-    Push-Location $InstallRoot
-    git pull origin main
-    Pop-Location
-} elseif (Test-Path $InstallRoot) {
-    Write-Warn "$InstallRoot exists but is not a git repo. Skipping clone."
-} else {
-    Write-Host "  Cloning to $InstallRoot..."
-    git clone $RepoUrl $InstallRoot
-    Write-Ok "Repository cloned"
-}
-
+Write-Step "Installing project dependencies"
 Push-Location $InstallRoot
-
-# ── Dependencies ─────────────────────────────────────────────────────────────
-
-Write-Step "Installing dependencies"
 pnpm install
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "pnpm install failed. Check the output above for errors."
+}
+Pop-Location
 Write-Ok "Dependencies installed"
 
-# ── Environment ──────────────────────────────────────────────────────────────
+# ── Create root .env for Docker Compose ────────────────────────────────────
 
-Write-Step "Setting up environment files"
+Write-Step "Creating .env file for Docker Compose"
 
-if (-not (Test-Path "apps\web\.env.local")) {
-    if (Test-Path ".env.example") {
-        Copy-Item ".env.example" "apps\web\.env.local"
-        $secret = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
-        (Get-Content "apps\web\.env.local") -replace '<generate with: openssl rand -base64 32>', $secret |
-            Set-Content "apps\web\.env.local"
-        Add-Content "apps\web\.env.local" "OLLAMA_INTERNAL_URL=http://ollama:11434"
-        Write-Ok "Created apps\web\.env.local"
-    } else {
-        Write-Warn ".env.example not found — create apps\web\.env.local manually"
-    }
+$envFile = Join-Path $InstallRoot ".env"
+if (-not (Test-Path $envFile)) {
+    @"
+# Docker Compose defaults — created by fresh-install.ps1
+POSTGRES_USER=dpf
+POSTGRES_PASSWORD=dpf_dev
+DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
+NEO4J_AUTH=neo4j/dpf_dev_password
+AUTH_SECRET=dev_secret_change_me
+ADMIN_PASSWORD=changeme123
+"@ | Set-Content -Path $envFile -Encoding UTF8
+    Write-Ok "Created .env with default Docker credentials"
 } else {
-    Write-Ok "apps\web\.env.local already exists"
+    Write-Ok ".env already exists — skipping"
 }
 
-if (-not (Test-Path "packages\db\.env")) {
-    if (Test-Path ".env.example") {
-        Copy-Item ".env.example" "packages\db\.env"
-        Write-Ok "Created packages\db\.env"
+# ── Create app-level .env files ────────────────────────────────────────────
+
+Write-Step "Creating app-level .env files (Next.js + Prisma)"
+
+$envExamplePath = Join-Path $InstallRoot ".env.example"
+$webEnvPath     = Join-Path $InstallRoot "apps\web\.env.local"
+$dbEnvPath      = Join-Path $InstallRoot "packages\db\.env"
+
+if (Test-Path $envExamplePath) {
+    if (-not (Test-Path $webEnvPath)) {
+        Copy-Item $envExamplePath $webEnvPath
+        Write-Ok "Created apps/web/.env.local from .env.example"
     } else {
-        # Create minimal .env for Prisma
-        'DATABASE_URL="postgresql://dpf:dpf_dev@localhost:5432/dpf"' | Set-Content "packages\db\.env"
-        Write-Ok "Created packages\db\.env with default DATABASE_URL"
+        Write-Ok "apps/web/.env.local already exists — skipping"
+    }
+
+    if (-not (Test-Path $dbEnvPath)) {
+        Copy-Item $envExamplePath $dbEnvPath
+        Write-Ok "Created packages/db/.env from .env.example"
+    } else {
+        Write-Ok "packages/db/.env already exists — skipping"
     }
 } else {
-    Write-Ok "packages\db\.env already exists"
+    Write-Warn ".env.example not found — skipping app-level .env creation"
 }
-
-# ── Docker services ──────────────────────────────────────────────────────────
 
 if (-not $SkipDocker) {
     Write-Step "Starting Docker services (PostgreSQL, Neo4j, Ollama)"
 
     # Configure Docker volume location on the chosen drive
     $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
-    if (-not (Test-Path $dockerDataDir)) {
-        New-Item -ItemType Directory -Path $dockerDataDir -Force | Out-Null
+    foreach ($dir in @(
+        $dockerDataDir,
+        (Join-Path $dockerDataDir "pgdata"),
+        (Join-Path $dockerDataDir "neo4jdata"),
+        (Join-Path $dockerDataDir "ollama_models")
+    )) {
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
     }
 
-    # Create override to store volumes on the selected drive
+    # Docker Compose on Windows is safer with quoted forward-slash host paths.
+    $dockerDataDirForCompose = $dockerDataDir.Replace('\', '/')
+
+    # Create override: volumes on the selected drive + ports exposed for local dev
     $overrideContent = @"
-# Auto-generated by fresh-install.ps1 — stores Docker volumes on ${InstallDrive}: drive
+# Auto-generated by fresh-install.ps1 (developer mode)
+# Stores Docker volumes on ${InstallDrive}: drive and exposes ports to the host
+# so you can run Next.js locally (pnpm dev) and connect from your IDE.
 services:
   postgres:
+    ports:
+      - "5432:5432"
     volumes:
-      - ${dockerDataDir}\pgdata:/var/lib/postgresql/data
+      - "${dockerDataDirForCompose}/pgdata:/var/lib/postgresql/data"
   neo4j:
+    ports:
+      - "7687:7687"
+      - "7474:7474"
     volumes:
-      - ${dockerDataDir}\neo4jdata:/data
+      - "${dockerDataDirForCompose}/neo4jdata:/data"
   ollama:
+    ports:
+      - "11434:11434"
     volumes:
-      - ${dockerDataDir}\ollama_models:/root/.ollama
+      - "${dockerDataDirForCompose}/ollama_models:/root/.ollama"
 "@
 
     $overridePath = Join-Path $InstallRoot "docker-compose.override.yml"
-    $overrideContent | Set-Content $overridePath -Encoding UTF8
+    $overrideContent | Set-Content -Path $overridePath -Encoding UTF8
     Write-Ok "Created docker-compose.override.yml (volumes on ${InstallDrive}:)"
 
     docker compose up -d
-    Write-Host "  Waiting for PostgreSQL..."
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "docker compose up failed. Check: docker compose logs"
+    }
+
+    Write-Host "  Waiting for PostgreSQL container to start..."
     $retries = 30
+    $postgresId = $null
     while ($retries -gt 0) {
-        $ready = docker compose exec -T postgres pg_isready -U dpf 2>$null
-        if ($LASTEXITCODE -eq 0) { break }
+        $postgresId = (docker compose ps -q postgres 2>$null | Select-Object -First 1)
+        if ($postgresId) {
+            $running = (docker inspect -f "{{.State.Running}}" $postgresId 2>$null)
+            if ($LASTEXITCODE -eq 0 -and "$running".Trim().ToLower() -eq "true") { break }
+        }
         Start-Sleep -Seconds 2
         $retries--
     }
-    if ($retries -eq 0) { Write-Fail "PostgreSQL did not start. Check: docker compose logs postgres" }
+
+    if (-not $postgresId) {
+        Write-Host ""
+        docker compose ps -a postgres
+        Write-Fail "PostgreSQL container was not created. Check: docker compose logs postgres"
+    }
+
+    $running = (docker inspect -f "{{.State.Running}}" $postgresId 2>$null)
+    if ("$running".Trim().ToLower() -ne "true") {
+        Write-Host ""
+        docker compose ps -a postgres
+        docker compose logs --tail 80 postgres
+        Write-Fail "PostgreSQL container exited before it became ready. See logs above."
+    }
+
+    Write-Host "  Waiting for PostgreSQL readiness..."
+    $retries = 30
+    while ($retries -gt 0) {
+        try {
+            docker compose exec -T postgres pg_isready -U dpf 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { break }
+        } catch {}
+        Start-Sleep -Seconds 2
+        $retries--
+    }
+    if ($retries -eq 0) {
+        Write-Host ""
+        docker compose ps -a postgres
+        docker compose logs --tail 80 postgres
+        Write-Fail "PostgreSQL did not become ready. See logs above."
+    }
     Write-Ok "PostgreSQL is ready"
 
     Write-Host "  Waiting for Ollama (first run downloads model — may take several minutes)..."
