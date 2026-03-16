@@ -1,13 +1,23 @@
 import { prisma } from "@dpf/db";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { BrandingPageClient } from "@/components/admin/BrandingPageClient";
 
 export default async function AdminBrandingPage() {
   const activeBranding = await prisma.brandingConfig.findUnique({
     where: { scope: "organization" },
-    select: { id: true },
+    select: { companyName: true, logoUrl: true, tokens: true },
   });
 
-  const hasExistingBrand = !!activeBranding;
+  let currentAccent = "#7c8cf8";
+  let currentFont = "Inter, system-ui, sans-serif";
+
+  if (activeBranding?.tokens && typeof activeBranding.tokens === "object") {
+    const tokens = activeBranding.tokens as Record<string, unknown>;
+    const palette = typeof tokens.palette === "object" && tokens.palette !== null ? tokens.palette as Record<string, unknown> : {};
+    const typography = typeof tokens.typography === "object" && tokens.typography !== null ? tokens.typography as Record<string, unknown> : {};
+    if (typeof palette.accent === "string") currentAccent = palette.accent;
+    if (typeof typography.fontFamily === "string") currentFont = typography.fontFamily;
+  }
 
   return (
     <div>
@@ -16,13 +26,13 @@ export default async function AdminBrandingPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Brand Configuration</p>
       </div>
       <AdminTabNav />
-      <div className="p-6 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
-        <p className="text-sm text-[var(--dpf-muted)]">
-          {hasExistingBrand
-            ? "Brand is configured. Quick edit and AI coworker coming soon."
-            : "No brand configured yet. Setup wizard coming soon."}
-        </p>
-      </div>
+      <BrandingPageClient
+        hasExistingBrand={!!activeBranding}
+        currentName={activeBranding?.companyName ?? ""}
+        currentLogoUrl={activeBranding?.logoUrl ?? ""}
+        currentAccent={currentAccent}
+        currentFont={currentFont}
+      />
     </div>
   );
 }
