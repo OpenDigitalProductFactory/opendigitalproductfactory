@@ -303,30 +303,28 @@ if (-not (Is-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select a model that fits comfortably in VRAM with room for context/KV cache.
+    # Select a chat-optimized model that fits comfortably in VRAM.
     # Rule: model file size should be ~70% of VRAM or less to avoid CPU spill.
-    # qwen3:32b = 20GB (needs 28+ GB VRAM), qwen3:14b = 9GB, qwen3:8b = 5GB
-    if ($gpuVRAM_GB -ge 28) {
-        $selectedModel = “qwen3:32b”
-        $modelReason = “maximum quality — fits fully in your GPU memory”
-    } elseif ($gpuVRAM_GB -ge 12) {
-        $selectedModel = “qwen3:14b”
-        $modelReason = “high quality, fits fully in your GPU memory”
+    # Use llama3.1 for chat (no thinking-mode issues, fast responses).
+    # llama3.1:70b = 40GB, llama3.1:8b = 4.7GB, llama3.2:3b = 2GB, llama3.2:1b = 1.3GB
+    if ($gpuVRAM_GB -ge 12) {
+        $selectedModel = “llama3.1:8b”
+        $modelReason = “fast, high-quality chat — fits fully in your GPU memory”
     } elseif ($gpuVRAM_GB -ge 6) {
-        $selectedModel = “qwen3:8b”
-        $modelReason = “good quality, GPU-accelerated”
-    } elseif ($gpuVRAM_GB -ge 4) {
-        $selectedModel = “qwen3:4b”
+        $selectedModel = “llama3.1:8b”
+        $modelReason = “good quality chat, GPU-accelerated”
+    } elseif ($gpuVRAM_GB -ge 3) {
+        $selectedModel = “llama3.2:3b”
         $modelReason = “balanced quality, GPU-accelerated”
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = “qwen3:8b”
-        $modelReason = "good quality, fits your RAM (CPU mode)"
+        $selectedModel = “llama3.1:8b”
+        $modelReason = “good quality chat, fits your RAM (CPU mode)”
     } elseif ($totalRAM_GB -ge 8) {
-        $selectedModel = "qwen3:1.7b"
-        $modelReason = "fast, works well on your hardware"
+        $selectedModel = “llama3.2:3b”
+        $modelReason = “fast, works well on your hardware”
     } else {
-        $selectedModel = "qwen3:0.6b"
-        $modelReason = "lightweight, optimized for your hardware"
+        $selectedModel = “llama3.2:1b”
+        $modelReason = “lightweight, optimized for your hardware”
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Note: The AI model takes about a minute to load on first use after startup."
