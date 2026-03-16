@@ -351,25 +351,66 @@ export function AgentCoworkerPanel({
           );
         })}
         {(isPending || isClearing) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 2,
-              marginBottom: 8,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+            {/* Pulsing agent avatar */}
             <div
               style={{
-                padding: "8px 16px",
-                borderRadius: "12px 12px 12px 2px",
-                fontSize: 13,
-                background: "rgba(22, 22, 37, 0.8)",
-                color: "var(--dpf-muted)",
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, rgba(124,140,248,0.3), rgba(124,140,248,0.1))",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                color: "#7c8cf8",
+                flexShrink: 0,
+                animation: "dpf-pulse 2s ease-in-out infinite",
               }}
             >
-              <span className="animate-pulse">{isClearing ? "Erasing..." : "Thinking..."}</span>
+              {agent.agentName.charAt(0)}
             </div>
+            <div
+              style={{
+                padding: "8px 14px",
+                borderRadius: "12px 12px 12px 2px",
+                fontSize: 12,
+                background: "rgba(22, 22, 37, 0.8)",
+                color: "var(--dpf-muted)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 11 }}>
+                {isClearing ? "Clearing conversation" : `${agent.agentName} is thinking`}
+              </span>
+              {/* Animated bouncing dots */}
+              <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: "50%",
+                      background: "#7c8cf8",
+                      animation: `dpf-bounce 1.4s ease-in-out ${i * 0.16}s infinite`,
+                    }}
+                  />
+                ))}
+              </span>
+            </div>
+            <style>{`
+              @keyframes dpf-bounce {
+                0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+                40% { transform: translateY(-5px); opacity: 1; }
+              }
+              @keyframes dpf-pulse {
+                0%, 100% { opacity: 0.6; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.05); }
+              }
+            `}</style>
           </div>
         )}
         <div ref={messagesEndRef} />
