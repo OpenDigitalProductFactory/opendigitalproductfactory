@@ -12,6 +12,14 @@
 - Do not edit `seed.ts` to represent day-to-day runtime changes.
 - Runtime workflow changes should be made through app actions, migrations, or direct DB operations as appropriate.
 
+## Backlog & Planning
+
+- The backlog lives in the PostgreSQL database (`Epic`, `BacklogItem` tables). Always query the live DB for current state.
+- Before starting new work, review open epics and their backlog items to understand priorities and dependencies.
+- Design specs and implementation plans live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. Check for existing designs before starting work on an epic — some have specs ready to implement.
+- When completing backlog items, update their status in the DB to keep the backlog trustworthy.
+- When suggesting what to work on next, consider: items with existing designs first, then dependencies between items, then impact.
+
 ## Branching & Workflow
 
 ### Core Rule
