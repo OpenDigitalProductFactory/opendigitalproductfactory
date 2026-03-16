@@ -210,7 +210,7 @@
     "providerId": "codex",
     "name": "OpenAI Codex",
     "category": "agent",
-    "baseUrl": null,
+    "baseUrl": "https://api.openai.com/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": ["api_key"],
     "authHeader": "Authorization",
