@@ -437,19 +437,29 @@ export async function sendMessage(input: {
       inferenceMs: result.inferenceMs,
     }).catch((err) => console.error("[logTokenUsage]", err));
 
-    // Downgrade notification
+    // Downgrade notification — only show once per thread (suppress repeats)
     if (result.downgraded && result.downgradeMessage) {
-      const sysMsg = await prisma.agentMessage.create({
-        data: {
+      const recentDowngrade = await prisma.agentMessage.findFirst({
+        where: {
           threadId: input.threadId,
           role: "system",
-          content: result.downgradeMessage,
-          agentId: agent.agentId,
-          routeContext: input.routeContext,
+          content: { startsWith: "Switched to" },
+          createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }, // within 30 min
         },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
-      systemMessage = serializeMessage(sysMsg);
+      if (!recentDowngrade) {
+        const sysMsg = await prisma.agentMessage.create({
+          data: {
+            threadId: input.threadId,
+            role: "system",
+            content: result.downgradeMessage,
+            agentId: agent.agentId,
+            routeContext: input.routeContext,
+          },
+          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+        });
+        systemMessage = serializeMessage(sysMsg);
+      }
     }
   } catch (e) {
     if (e instanceof NoAllowedProvidersForSensitivityError) {
