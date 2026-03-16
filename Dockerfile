@@ -14,12 +14,16 @@ RUN pnpm install --frozen-lockfile
 # ─── Stage 3: build ───────────────────────────────────────────────────────────
 FROM deps AS build
 COPY . .
+# Ensure dependencies are intact after copying source files (which may include symlinks)
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 RUN pnpm --filter web build
 
 # ─── Stage 4: init (migrations, seed, hardware detection) ─────────────────────
 FROM deps AS init
 COPY . .
+# Ensure dependencies are intact before running database migrations/seeding
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

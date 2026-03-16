@@ -74,7 +74,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
         <NavBar items={visibleItems} />
       </div>
       <div className="flex items-center gap-3">
-        <HeaderFeedbackButton userId={userId} />
+        <HeaderFeedbackButton userId={userId ?? null} />
         {platformRole !== null && (
           <span className="text-xs text-[var(--dpf-muted)]">{platformRole}</span>
         )}
