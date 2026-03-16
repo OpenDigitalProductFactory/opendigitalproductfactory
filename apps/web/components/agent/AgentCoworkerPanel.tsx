@@ -330,16 +330,6 @@ export function AgentCoworkerPanel({
           padding: "12px",
         }}
       >
-        {/* Agent intro — always shown at top of conversation */}
-        <div style={{
-          padding: "12px",
-          marginBottom: 8,
-          borderBottom: "1px solid var(--dpf-border)",
-        }}>
-          <div style={{ fontSize: 12, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
-            {agent.agentDescription}
-          </div>
-        </div>
         {messages.map((msg, i) => {
           const prevAgentId = i > 0 ? messages[i - 1]?.agentId : null;
           const showAgentLabel = msg.role === "assistant" && msg.agentId !== prevAgentId;
