@@ -7,6 +7,7 @@ import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
+import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import * as crypto from "crypto";
 
 const DATA_DIR = join(__dirname, "..", "data");
@@ -900,6 +901,7 @@ async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
+  await seedWorkforceReferenceData(prisma);
   await seedPortfolios();
   await seedAgents();
   await seedTaxonomyNodes();
