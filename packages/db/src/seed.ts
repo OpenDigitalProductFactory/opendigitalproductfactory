@@ -899,16 +899,16 @@ async function seedMcpServers(): Promise<void> {
 
 async function seedCoworkerAgents(): Promise<void> {
   const coworkers = [
-    { agentId: "portfolio-advisor", name: "Portfolio Advisor", tier: 1, type: "coworker", description: "Advises on portfolio health, budget, and agent assignments" },
-    { agentId: "inventory-specialist", name: "Inventory Specialist", tier: 2, type: "coworker", description: "Manages digital product lifecycle and inventory" },
-    { agentId: "ea-architect", name: "EA Architect", tier: 2, type: "coworker", description: "Assists with enterprise architecture modeling and governance" },
-    { agentId: "hr-specialist", name: "HR Specialist", tier: 2, type: "coworker", description: "Manages employee roles, HITL assignments, and workforce governance" },
-    { agentId: "customer-advisor", name: "Customer Advisor", tier: 2, type: "coworker", description: "Assists with customer account and service management" },
-    { agentId: "ops-coordinator", name: "Ops Coordinator", tier: 2, type: "coworker", description: "Manages backlog items, epics, and operational priorities" },
-    { agentId: "platform-engineer", name: "Platform Engineer", tier: 2, type: "coworker", description: "Manages AI providers, platform configuration, and infrastructure" },
-    { agentId: "build-specialist", name: "Build Specialist", tier: 2, type: "coworker", description: "Guides feature development through Ideate, Plan, Build, Review, and Ship" },
-    { agentId: "admin-assistant", name: "Admin Assistant", tier: 2, type: "coworker", description: "Assists with platform administration and user management" },
-    { agentId: "coo", name: "COO", tier: 1, type: "coworker", description: "Chief Operating Officer — oversees all platform operations, workforce, and priorities" },
+    { agentId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis" },
+    { agentId: "inventory-specialist", name: "Product Manager", tier: 2, type: "coworker", description: "Product lifecycle, maturity, and market fit analysis" },
+    { agentId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance" },
+    { agentId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance" },
+    { agentId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis" },
+    { agentId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal" },
+    { agentId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization" },
+    { agentId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation" },
+    { agentId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration" },
+    { agentId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities" },
   ];
 
   for (const cw of coworkers) {
