@@ -279,6 +279,20 @@ export async function sendMessage(input: {
   });
   const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
 
+  // When external access is enabled, tell the agent about its web tools
+  if (input.externalAccessEnabled) {
+    const externalTools = availableTools.filter((t) => t.requiresExternalAccess);
+    if (externalTools.length > 0) {
+      const toolList = externalTools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
+      promptSections.push(
+        "",
+        "EXTERNAL ACCESS ENABLED — you have the following additional tools this session:",
+        toolList,
+        "Use these tools when the user asks about external websites, URLs, web searches, or public information.",
+      );
+    }
+  }
+
   let responseContent: string;
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
