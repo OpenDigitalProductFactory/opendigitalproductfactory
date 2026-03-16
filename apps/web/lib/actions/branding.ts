@@ -3,6 +3,11 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { deriveThemeTokens } from "@/lib/branding-presets";
+import {
+  fetchPublicWebsiteEvidence,
+  analyzePublicWebsiteBranding,
+  type BrandingAnalysisResult,
+} from "@/lib/public-web-tools";
 
 function readString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
@@ -145,6 +150,36 @@ export async function deleteThemePreset(formData: FormData): Promise<void> {
   }).catch(() => undefined);
 
   revalidateBrandingSurfaces();
+}
+
+export type BrandImportResult = {
+  ok: true;
+  companyName: string | null;
+  logoUrl: string | null;
+  accentColor: string | null;
+} | {
+  ok: false;
+  error: string;
+};
+
+/**
+ * Fetch a public URL and extract brand assets (logo, colors, company name).
+ * Called directly from the branding wizard — NOT gated by agent external access toggle.
+ */
+export async function importBrandFromUrl(url: string): Promise<BrandImportResult> {
+  try {
+    const evidence = await fetchPublicWebsiteEvidence(url);
+    const analysis: BrandingAnalysisResult = analyzePublicWebsiteBranding(evidence);
+    return {
+      ok: true,
+      companyName: analysis.companyName,
+      logoUrl: analysis.logoUrl,
+      accentColor: analysis.paletteAccent,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to analyze URL";
+    return { ok: false, error: message };
+  }
 }
 
 export async function saveSimpleBrand(formData: FormData): Promise<void> {
