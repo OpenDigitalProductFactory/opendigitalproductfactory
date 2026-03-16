@@ -57,6 +57,18 @@ export default async function WorkspacePage() {
     prisma.featureBuild.count(),
   ]);
 
+  // Check for agents with inactive preferred providers
+  const inactiveProviderIds = (await prisma.modelProvider.findMany({
+    where: { status: "inactive" },
+    select: { providerId: true },
+  })).map((p) => p.providerId);
+
+  const agentsWithBrokenProviders = inactiveProviderIds.length > 0
+    ? await prisma.agent.count({
+        where: { preferredProviderId: { in: inactiveProviderIds } },
+      })
+    : 0;
+
   const tileStatus: Record<string, TileStatus> = {
     ea_modeler: {
       metrics: [
@@ -68,6 +80,9 @@ export default async function WorkspacePage() {
         { label: "Active agents", value: agentCount, color: "#38bdf8" },
         { label: "Providers", value: `${activeProviderCount}/${providerCount}`, color: activeProviderCount > 0 ? "#4ade80" : "#fb923c" },
       ],
+      ...(agentsWithBrokenProviders > 0
+        ? { badge: `${agentsWithBrokenProviders} agent${agentsWithBrokenProviders !== 1 ? "s" : ""} need attention`, badgeColor: "#fbbf24" }
+        : {}),
     },
     build: {
       metrics: [
@@ -130,6 +145,14 @@ export default async function WorkspacePage() {
       label: "Improvements",
       description: `${actionableImprovementCount} improvement proposal${actionableImprovementCount !== 1 ? "s" : ""} need review`,
       href: "/ops/improvements",
+    });
+  }
+  if (agentsWithBrokenProviders > 0) {
+    attentionItems.push({
+      id: "broken-providers",
+      label: "AI Workforce",
+      description: `${agentsWithBrokenProviders} agent${agentsWithBrokenProviders !== 1 ? "s have" : " has"} an inactive provider — may not work as expected`,
+      href: "/platform/ai",
     });
   }
   if (activeProviderCount === 0 && providerCount > 0) {
