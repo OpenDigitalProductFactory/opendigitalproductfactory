@@ -283,7 +283,20 @@ if (-not (Is-StepDone "hardware")) {
 
     $totalRAM_GB = [math]::Round($mem.TotalPhysicalMemory / 1GB, 1)
     $gpuName = if ($gpu) { $gpu.Name } else { $null }
-    $gpuVRAM_GB = if ($gpu -and $gpu.AdapterRAM) { [math]::Round($gpu.AdapterRAM / 1GB, 1) } else { 0 }
+
+    # WMI AdapterRAM is a DWORD — caps at 4GB. Use nvidia-smi for accurate VRAM.
+    $gpuVRAM_GB = 0
+    if ($gpuName) {
+        try {
+            $nvSmiOutput = & "nvidia-smi" "--query-gpu=memory.total" "--format=csv,noheader,nounits" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $nvSmiOutput) {
+                $gpuVRAM_GB = [math]::Round([int]$nvSmiOutput.Trim() / 1024, 1)
+            }
+        } catch {}
+        if ($gpuVRAM_GB -eq 0 -and $gpu.AdapterRAM) {
+            $gpuVRAM_GB = [math]::Round($gpu.AdapterRAM / 1GB, 1)
+        }
+    }
     $diskFree_GB = [math]::Round($disk.FreeSpace / 1GB, 1)
 
     $hwSummary = "$totalRAM_GB GB RAM, $($cpu.NumberOfCores)-core CPU"
@@ -426,20 +439,33 @@ if (-not (Is-StepDone "started")) {
     Write-OK "Already running"
 }
 
-# â”€â”€â”€ Step 7: Pull AI Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â”€â”€â”€ Step 7: Wait for AI Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Write-Step 7 9 "Setting up your AI Coworker..."
-if (-not (Is-StepDone "model")) {
-    Write-Action "Downloading AI model ($selectedModel)... this takes a minute"
-    docker compose exec ollama ollama pull $selectedModel
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn "Model download failed. You can try later from the platform's AI Workforce page."
-    } else {
-        Write-OK "AI Coworker is ready"
+Write-Step 7 9 “Setting up your AI Coworker...”
+if (-not (Is-StepDone “model”)) {
+    # The entrypoint script detects hardware and pulls the model automatically.
+    # SELECTED_MODEL from .env is passed as OLLAMA_DEFAULT_MODEL to the container.
+    Write-Action “AI engine is downloading $selectedModel in the background...”
+    Write-Action “This may take several minutes depending on your internet speed.”
+    $attempts = 0
+    $maxAttempts = 120  # 10 minutes
+    while ($attempts -lt $maxAttempts) {
+        try {
+            $modelList = docker compose exec -T ollama ollama list 2>$null
+            if ($modelList -match $selectedModel.Replace(“:”, “\:”)) { break }
+        } catch {}
+        Start-Sleep -Seconds 5
+        $attempts++
     }
-    Save-Progress "model"
+    if ($attempts -ge $maxAttempts) {
+        Write-Warn “Model still downloading. It will be ready when the download completes.”
+        Write-Warn “Check progress: docker compose logs ollama”
+    } else {
+        Write-OK “AI Coworker is ready ($selectedModel)”
+    }
+    Save-Progress “model”
 } else {
-    Write-OK "Already set up"
+    Write-OK “Already set up”
 }
 
 # â”€â”€â”€ Step 8: Open Browser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

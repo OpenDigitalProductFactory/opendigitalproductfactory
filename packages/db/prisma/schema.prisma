@@ -434,6 +434,8 @@ model ModelProvider {
   supportedAuthMethods Json     @default("[\"api_key\"]")
   docsUrl              String?
   consoleUrl           String?
+  billingLabel         String?
+  costPerformanceNotes String?
   updatedAt            DateTime @updatedAt
 }
 

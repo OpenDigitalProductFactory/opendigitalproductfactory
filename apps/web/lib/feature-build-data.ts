@@ -71,6 +71,13 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       createdById: true,
       createdAt: true,
       updatedAt: true,
+      digitalProduct: {
+        select: {
+          productId: true,
+          version: true,
+          _count: { select: { backlogItems: true } },
+        },
+      },
     },
   });
 
@@ -81,6 +88,9 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     brief: r.brief as FeatureBrief | null,
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
+    product: r.digitalProduct
+      ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
+      : null,
   };
 });
 
