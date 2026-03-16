@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/admin/agents",
+  usePathname: () => "/admin/branding",
 }));
 
 vi.mock("next/link", () => ({
@@ -14,12 +14,14 @@ vi.mock("next/link", () => ({
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 
 describe("AdminTabNav", () => {
-  it("renders Access and Agents tabs", () => {
+  it("renders Access, Branding, and Settings tabs", () => {
     const html = renderToStaticMarkup(<AdminTabNav />);
 
     expect(html).toContain('href="/admin"');
-    expect(html).toContain('href="/admin/agents"');
+    expect(html).toContain('href="/admin/branding"');
+    expect(html).toContain('href="/admin/settings"');
     expect(html).toContain(">Access<");
-    expect(html).toContain(">Agents<");
+    expect(html).toContain(">Branding<");
+    expect(html).toContain(">Settings<");
   });
 });
