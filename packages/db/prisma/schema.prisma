@@ -561,6 +561,10 @@ model InventoryEntity {
   name               String
   status             String                  @default("active")
   attributionStatus  String                  @default("needs_review")
+  attributionMethod  String?
+  attributionConfidence Float?
+  attributionEvidence Json?
+  candidateTaxonomy  Json?
   confidence         Float?
   providerView       String                  @default("foundational")
   properties         Json                    @default("{}")
