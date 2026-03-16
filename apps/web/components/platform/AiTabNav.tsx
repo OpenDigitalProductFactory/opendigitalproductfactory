@@ -4,15 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { label: "Workforce", href: "/platform/ai/agents" },
-  { label: "Providers", href: "/platform/ai" },
+  { label: "Workforce", href: "/platform/ai" },
+  { label: "Providers", href: "/platform/ai/providers" },
   { label: "Action History", href: "/platform/ai/history" },
 ];
 
 export function AiTabNav() {
   const pathname = usePathname();
   const active = (href: string) =>
-    href === "/platform/ai" ? pathname === "/platform/ai" : pathname.startsWith(href);
+    href === "/platform/ai"
+      ? pathname === "/platform/ai"
+      : pathname.startsWith(href);
 
   return (
     <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
