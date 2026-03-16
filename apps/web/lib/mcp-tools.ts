@@ -350,6 +350,37 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "proposal",
   },
+  // ─── Provider Management ────────────────────────────────────────────────────
+  {
+    name: "add_provider",
+    description: "Add a new AI provider to the platform. Creates an unconfigured entry that can then be set up.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        providerId: { type: "string", description: "Short identifier (e.g. 'mantis', 'ollama')" },
+        name: { type: "string", description: "Display name (e.g. 'Mantis (local)')" },
+        category: { type: "string", enum: ["direct", "agent", "router", "local"], description: "Provider category" },
+        costModel: { type: "string", enum: ["token", "compute"], description: "Pricing model" },
+        baseUrl: { type: "string", description: "API base URL (optional)" },
+        authMethod: { type: "string", enum: ["none", "api_key", "oauth2_client_credentials"], description: "Auth method (default: api_key)" },
+      },
+      required: ["providerId", "name", "category"],
+    },
+    requiredCapability: "manage_provider_connections",
+  },
+  {
+    name: "update_provider_category",
+    description: "Change the category of an existing AI provider (e.g. from 'direct' to 'local').",
+    inputSchema: {
+      type: "object",
+      properties: {
+        providerId: { type: "string", description: "Provider to update" },
+        category: { type: "string", enum: ["direct", "agent", "router", "local"], description: "New category" },
+      },
+      required: ["providerId", "category"],
+    },
+    requiredCapability: "manage_provider_connections",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -781,6 +812,53 @@ export async function executeTool(
         success: true,
         entityId: proposal.proposalId,
         message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
+      };
+    }
+
+    case "add_provider": {
+      const providerId = String(params["providerId"] ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      if (!providerId) return { success: false, error: "Invalid provider ID", message: "Provider ID is required" };
+
+      const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
+      if (existing) return { success: false, error: "Already exists", message: `Provider "${providerId}" already exists` };
+
+      const provider = await prisma.modelProvider.create({
+        data: {
+          providerId,
+          name: String(params["name"] ?? providerId),
+          category: String(params["category"] ?? "direct"),
+          costModel: String(params["costModel"] ?? "token"),
+          families: [],
+          enabledFamilies: [],
+          status: "unconfigured",
+          authMethod: String(params["authMethod"] ?? "api_key"),
+          supportedAuthMethods: [String(params["authMethod"] ?? "api_key")],
+          ...(typeof params["baseUrl"] === "string" ? { baseUrl: params["baseUrl"] } : {}),
+        },
+      });
+      return {
+        success: true,
+        entityId: provider.providerId,
+        message: `Provider "${provider.name}" added. Visit AI Providers to configure it.`,
+      };
+    }
+
+    case "update_provider_category": {
+      const providerId = String(params["providerId"] ?? "");
+      const category = String(params["category"] ?? "");
+      if (!providerId || !category) return { success: false, error: "Missing fields", message: "Provider ID and category are required" };
+
+      const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+      if (!provider) return { success: false, error: "Not found", message: `Provider "${providerId}" not found` };
+
+      await prisma.modelProvider.update({
+        where: { providerId },
+        data: { category },
+      });
+      return {
+        success: true,
+        entityId: providerId,
+        message: `Provider "${provider.name}" category updated to "${category}".`,
       };
     }
 
