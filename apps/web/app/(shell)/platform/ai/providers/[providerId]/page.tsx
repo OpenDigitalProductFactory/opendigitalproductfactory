@@ -7,6 +7,7 @@ import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } 
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
 import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
+import { OllamaManagement } from "@/components/platform/OllamaManagement";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -66,6 +67,10 @@ export default async function ProviderDetailPage({ params }: Props) {
           vramGb={hardwareInfo.vramGb}
           modelCount={hardwareInfo.modelCount}
         />
+      )}
+
+      {providerId === "ollama" && (
+        <OllamaManagement canWrite={canWrite} />
       )}
 
       {pw.provider.costPerformanceNotes && (
