@@ -277,6 +277,51 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
   },
+  // ─── Codebase Access Tools ──────────────────────────────────────────────────
+  {
+    name: "read_project_file",
+    description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path from project root" },
+        startLine: { type: "number", description: "Start line (1-based, optional)" },
+        endLine: { type: "number", description: "End line (optional)" },
+      },
+      required: ["path"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
+  {
+    name: "search_project_files",
+    description: "Search the project codebase for a text pattern. Returns matching file paths, line numbers, and context.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Text or regex pattern to search for" },
+        glob: { type: "string", description: "File glob filter, e.g. '*.ts' or '*.tsx'" },
+        maxResults: { type: "number", description: "Maximum results (default 20)" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+  },
+  {
+    name: "propose_file_change",
+    description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path to modify or create" },
+        description: { type: "string", description: "Human-readable description of the change" },
+        newContent: { type: "string", description: "The complete new file contents" },
+      },
+      required: ["path", "description", "newContent"],
+    },
+    requiredCapability: "manage_capabilities",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -625,6 +670,48 @@ export async function executeTool(
 
       const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
       return { success: true, message: `Spec updated — ${totalItems} items captured.` };
+    }
+
+    case "read_project_file": {
+      const { readProjectFile } = await import("@/lib/codebase-tools");
+      const opts: { startLine?: number; endLine?: number } = {};
+      if (typeof params.startLine === "number") opts.startLine = params.startLine;
+      if (typeof params.endLine === "number") opts.endLine = params.endLine;
+      const result = readProjectFile(String(params.path ?? ""), opts);
+      if ("error" in result) return { success: false, error: result.error, message: result.error };
+      return { success: true, message: result.content, data: { content: result.content } };
+    }
+
+    case "search_project_files": {
+      const { searchProjectFiles } = await import("@/lib/codebase-tools");
+      const opts: { glob?: string; maxResults?: number } = {};
+      if (typeof params.glob === "string") opts.glob = params.glob;
+      if (typeof params.maxResults === "number") opts.maxResults = params.maxResults;
+      const result = searchProjectFiles(String(params.query ?? ""), opts);
+      if ("error" in result) return { success: false, error: result.error, message: result.error };
+      const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
+      return { success: true, message: summary || "No matches found", data: { results: result.results } };
+    }
+
+    case "propose_file_change": {
+      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("@/lib/codebase-tools");
+      const path = String(params.path ?? "");
+      const newContent = String(params.newContent ?? "");
+      const description = String(params.description ?? "");
+
+      const current = readProjectFile(path);
+      const currentContent = "content" in current ? current.content : "";
+      const diff = generateSimpleDiff(currentContent, newContent, path);
+
+      const writeResult = writeProjectFile(path, newContent);
+      if ("error" in writeResult) return { success: false, error: writeResult.error, message: writeResult.error };
+
+      return {
+        success: true,
+        entityId: path,
+        message: `Applied change to ${path}`,
+        data: { path, diff, description },
+      };
     }
 
     default:

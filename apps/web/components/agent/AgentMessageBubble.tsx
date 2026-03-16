@@ -167,6 +167,71 @@ export function AgentMessageBubble({
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
+    // Special rendering for file change proposals
+    if (p.actionType === "propose_file_change") {
+      const filePath = p.parameters.path as string;
+      const description = p.parameters.description as string;
+      const diff = (p.parameters as Record<string, unknown>).diff as string | undefined;
+      const isApproved = isExecuted;
+
+      return (
+        <div style={{ marginBottom: 12 }}>
+          {message.content && (
+            <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", fontSize: 13, lineHeight: 1.4, background: "rgba(22, 22, 37, 0.8)", color: "#e0e0ff", marginBottom: 6 }}>
+              {message.content}
+            </div>
+          )}
+          <div style={{
+            background: "rgba(26, 26, 46, 0.9)",
+            border: `1px solid ${borderColor}`,
+            borderRadius: 10, padding: "10px 14px", fontSize: 12,
+          }}>
+            <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 4 }}>
+              Propose File Change
+            </div>
+            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#7c8cf8", marginBottom: 4 }}>
+              {filePath}
+            </div>
+            <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8 }}>
+              {description}
+            </div>
+            {diff && (
+              <pre style={{
+                background: "#0d0d18", borderRadius: 6, padding: 8, fontSize: 10,
+                fontFamily: "monospace", lineHeight: 1.5, overflow: "auto", maxHeight: 300,
+                border: "1px solid #2a2a40", margin: "0 0 8px",
+              }}>
+                {diff.split("\n").map((line, i) => {
+                  const colour = line.startsWith("+") && !line.startsWith("+++") ? "#4ade80"
+                    : line.startsWith("-") && !line.startsWith("---") ? "#ef4444"
+                    : line.startsWith("@@") ? "#7c8cf8"
+                    : "#8888a0";
+                  return (
+                    <div key={i} style={{ color: colour }}>
+                      {line}
+                    </div>
+                  );
+                })}
+              </pre>
+            )}
+            {isPending && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={() => onApprove?.(p.proposalId)} style={{ flex: 1, background: "rgba(74,222,128,0.2)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "#4ade80", cursor: "pointer" }}>
+                  Approve &amp; Apply
+                </button>
+                <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
+                  Reject
+                </button>
+              </div>
+            )}
+            {isApproved && <div style={{ color: "#4ade80", fontSize: 11, marginTop: 6 }}>Applied to {filePath}</div>}
+            {isRejected && <div style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>Rejected</div>}
+            {isFailed && <div style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>Failed: {p.resultError}</div>}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         style={{
