@@ -1,5 +1,5 @@
+import Link from "next/link";
 import { prisma } from "@dpf/db";
-import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
 
 const TIER_LABELS: Record<number, string> = {
@@ -8,7 +8,7 @@ const TIER_LABELS: Record<number, string> = {
   3: "Tier 3 - Cross-cutting",
 };
 
-export default async function AdminAgentsPage() {
+export default async function AiAgentsPage() {
   const now = new Date();
   const agents = await prisma.agent.findMany({
     orderBy: [{ tier: "asc" }, { name: "asc" }],
@@ -45,14 +45,17 @@ export default async function AdminAgentsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Admin</h1>
-        <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          {agents.length} agent{agents.length !== 1 ? "s" : ""}
+      <div style={{ marginBottom: 20 }}>
+        <Link href="/platform/ai" style={{ color: "#b0b0c8", fontSize: 12 }}>
+          &larr; AI Providers
+        </Link>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>
+          AI Workforce
+        </h1>
+        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
+          {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
         </p>
       </div>
-
-      <AdminTabNav />
 
       {tiers.map((tier) => {
         const tierAgents = byTier.get(tier) ?? [];
