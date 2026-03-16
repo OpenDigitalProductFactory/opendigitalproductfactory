@@ -23,6 +23,7 @@ type Props = {
   onToggleExternalAccess: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
+  providerInfo?: { providerId: string; modelId: string } | null;
 };
 
 export function AgentPanelHeader({
@@ -40,6 +41,7 @@ export function AgentPanelHeader({
   onToggleExternalAccess,
   onClose,
   onDragStart,
+  providerInfo,
 }: Props) {
   return (
     <div
@@ -67,6 +69,11 @@ export function AgentPanelHeader({
             userContext={userContext}
             onSend={onSend}
           />
+          {providerInfo && (
+            <span style={{ fontSize: 9, color: "#8888a0", fontFamily: "monospace" }}>
+              {providerInfo.providerId}:{providerInfo.modelId}
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginLeft: 12 }}>
           <span

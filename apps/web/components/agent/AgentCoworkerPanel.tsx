@@ -73,6 +73,7 @@ export function AgentCoworkerPanel({
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
+  const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
@@ -159,6 +160,10 @@ export function AgentCoworkerPanel({
           ),
         );
         return;
+      }
+      if ("providerInfo" in result) {
+        const info = (result as { providerInfo?: { providerId: string; modelId: string } }).providerInfo;
+        if (info) setLastProviderInfo(info);
       }
       const newMessages: AgentRenderableMessage[] = [];
       if ("systemMessage" in result && result.systemMessage) {
@@ -299,6 +304,7 @@ export function AgentCoworkerPanel({
         onToggleExternalAccess={handleToggleExternalAccess}
         onClose={onClose}
         onDragStart={onDragStart}
+        providerInfo={lastProviderInfo}
       />
 
       <div

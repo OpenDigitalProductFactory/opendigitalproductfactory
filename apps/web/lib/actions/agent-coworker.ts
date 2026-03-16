@@ -274,6 +274,7 @@ export async function sendMessage(input: {
 
   let responseContent: string;
   let responseProviderId: string | null = null;
+  let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
 
@@ -407,6 +408,7 @@ export async function sendMessage(input: {
 
     responseContent = result.content;
     responseProviderId = result.providerId;
+    responseModelId = result.modelId;
 
     // Log token usage (fire-and-forget with error logging)
     logTokenUsage({
@@ -517,6 +519,7 @@ export async function sendMessage(input: {
     agentMessage: serializeMessage(agentMsg),
     ...(formAssistUpdate !== undefined && { formAssistUpdate }),
     ...(systemMessage !== undefined && { systemMessage }),
+    ...(responseProviderId && responseModelId && { providerInfo: { providerId: responseProviderId, modelId: responseModelId } }),
   };
 }
 
