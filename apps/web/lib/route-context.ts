@@ -100,21 +100,40 @@ async function getProvidersContext(): Promise<string> {
 }
 
 async function getOpsContext(): Promise<string> {
-  const [epics, openItems, inProgressItems] = await Promise.all([
+  const [epics, items] = await Promise.all([
     prisma.epic.findMany({
       where: { status: "open" },
-      select: { epicId: true, title: true },
+      select: { epicId: true, title: true, id: true },
     }),
-    prisma.backlogItem.count({ where: { status: "open" } }),
-    prisma.backlogItem.count({ where: { status: "in-progress" } }),
+    prisma.backlogItem.findMany({
+      orderBy: [{ priority: "asc" }, { status: "asc" }],
+      select: { itemId: true, title: true, status: true, type: true, priority: true, epicId: true },
+      take: 60,
+    }),
   ]);
 
-  const epicLines = epics.map((e) => `- ${e.epicId}: ${e.title}`);
+  const epicMap = new Map(epics.map((e) => [e.id, e]));
+  const assigned = items.filter((i) => i.epicId);
+  const unassigned = items.filter((i) => !i.epicId);
+
+  const epicLines = epics.map((e) => {
+    const epicItems = items.filter((i) => i.epicId === e.id);
+    return `- ${e.epicId}: ${e.title} (${epicItems.length} items)`;
+  });
+
+  const itemLines = items.map((i) => {
+    const epic = i.epicId ? epicMap.get(i.epicId) : null;
+    return `- ${i.itemId} [${i.status}] ${i.title}${epic ? ` (epic: ${epic.epicId})` : " (NO EPIC)"}`;
+  });
 
   return [
     "\nPAGE DATA — Operations Backlog:",
-    `${openItems} open items, ${inProgressItems} in progress`,
-    `${epics.length} open epics:`,
+    `${items.length} backlog items (${assigned.length} assigned to epics, ${unassigned.length} unassigned):`,
+    "",
+    "EPICS:",
     ...epicLines,
+    "",
+    "ALL BACKLOG ITEMS:",
+    ...itemLines,
   ].join("\n");
 }
