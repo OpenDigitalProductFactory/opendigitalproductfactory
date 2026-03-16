@@ -280,9 +280,14 @@ HEURISTICS:
 
 INTERPRETIVE MODEL: You optimize for security posture and operational control. The platform is secure when access is minimal, auditable, and revocable. When the user provides a public website URL for branding setup and external access is enabled, use the branding analysis tool.
 
-ON THIS PAGE: The user sees user management, role assignments, and platform configuration.`,
+ON THIS PAGE: The user sees user management, role assignments, and platform configuration.
+
+BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (palette colors, surface colors, typography, spacing, radius, shadows) are stored in BrandingConfig and applied as CSS variables at runtime. When the user wants to adjust branding via conversation, you can update any of the ~33 theme token fields through form assist. Field names use camelCase (e.g., paletteAccent, surfacesSidebar, statesSuccess, typographyFontFamily, radiusMd). When asked to make subjective changes like "warmer tones" or "darker sidebar", translate to specific hex values.`,
     skills: [
       { label: "Manage users", description: "User accounts and roles", capability: "manage_users", prompt: "Help me manage user accounts" },
+      { label: "Set up branding", description: "Configure platform brand", capability: "manage_branding", prompt: "Help me set up the platform branding" },
+      { label: "Import brand from URL", description: "Scrape brand from website", capability: "manage_branding", prompt: "I want to import our brand from a website URL" },
+      { label: "Adjust theme colors", description: "Change brand colors and style", capability: "manage_branding", prompt: "I'd like to adjust the platform theme colors" },
       { label: "Access review", description: "Who has access to what?", capability: "view_admin", prompt: "Show me who has access to what capabilities" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
@@ -312,6 +317,7 @@ YOUR TOOLS (use these, don't invent actions):
 - read_project_file, search_project_files: browse the codebase
 - propose_file_change: suggest code changes (requires human approval)
 - report_quality_issue: file a bug or feedback
+- When External Access is enabled: search_public_web, fetch_public_website (search the web and fetch URLs)
 - You do NOT have direct database query access. Work with what the tools provide.
 - You do NOT generate JSON actions, SQL queries, or API calls. Use the tool system.
 
@@ -408,9 +414,7 @@ type CannedResponseSet = Record<string, string[]>;
 const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   "portfolio-advisor": {
     default: [
-      "I can help you explore the portfolio structure, review product health metrics, and understand budget allocations across your portfolios.",
-      "Looking at the portfolio view — would you like me to explain the health scores or help you navigate to a specific product group?",
-      "I'm your Portfolio Advisor. I can guide you through portfolio nodes, agent assignments, and product ownership.",
+      "I'm your Portfolio Analyst. I can help you explore portfolio health, review budget allocations, and understand product groupings. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can see you're viewing the portfolio area. I can help explain what you see here, but some actions may require additional permissions.",
@@ -418,8 +422,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "inventory-specialist": {
     default: [
-      "I can help you explore the digital product inventory, review lifecycle stages, and understand infrastructure dependencies.",
-      "Looking at the inventory — would you like me to help filter products by status or explain the lifecycle stages?",
+      "I'm the Product Manager. I can help you review product lifecycles, check stage-gate readiness, and explore the digital product inventory. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you understand the inventory view, but modifying products may require elevated permissions.",
@@ -427,9 +430,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "ea-architect": {
     default: [
-      "I can help you with your architecture model — creating views, adding elements, and establishing relationships between components.",
-      "Welcome to the EA Modeler. I can guide you through viewpoint selection, element placement, and relationship mapping.",
-      "Need help with the canvas? I can explain how to drag elements from the palette, connect them, and organize your architecture view.",
+      "I'm your Enterprise Architect. I can help you create architecture views, map relationships between components, and navigate ArchiMate models. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can explain the architecture model you're viewing, but editing requires EA management permissions.",
@@ -437,8 +438,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "hr-specialist": {
     default: [
-      "I can help you understand the role structure, review team assignments, and navigate the employee directory.",
-      "Looking at the employee view — I can explain role tiers, SLA commitments, and help you understand the organizational hierarchy.",
+      "I'm the HR Director. I can help you understand role structures, review team assignments, and navigate the organizational hierarchy. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you explore employee information visible to your role.",
@@ -446,7 +446,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "customer-advisor": {
     default: [
-      "I can help you manage customer accounts, review service relationships, and track engagement metrics.",
+      "I'm the Customer Success Manager. I can help you review customer journeys, identify friction points, and track adoption metrics. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can provide general information about customer management, but account actions require customer view permissions.",
@@ -454,45 +454,48 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "ops-coordinator": {
     default: [
-      "I can help you manage the backlog — creating items, organizing epics, and tracking progress across portfolio and product work.",
-      "Looking at operations — would you like help prioritizing backlog items or understanding the epic structure?",
+      "I'm the Scrum Master. I can help you manage the backlog, track epic progress, and prioritize work items. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you understand the backlog view, but creating or editing items requires operations permissions.",
     ],
   },
-  "build-specialist": {
-    default: [
-      "I'm your Build Specialist. I can guide you through building new features — from describing what you want to deploying it live. What would you like to build?",
-      "Welcome to the Build Studio! Tell me about a feature you'd like to create, and I'll guide you through the process step by step.",
-      "Ready to build something? Describe your feature idea and I'll help turn it into reality — no coding required.",
-    ],
-    restricted: [
-      "I can help explain the Build Studio, but creating and deploying features requires platform access permissions.",
-    ],
-  },
   "platform-engineer": {
     default: [
-      "I can help you configure AI providers, manage credentials, monitor token spend, and set up scheduled sync jobs.",
-      "Looking at the platform services — would you like help connecting a new provider or reviewing the token usage dashboard?",
+      "I'm the AI Ops Engineer. I can help you configure AI providers, review token spend, and optimize the AI workforce. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can explain the platform configuration, but changes require platform management permissions.",
     ],
   },
+  "build-specialist": {
+    default: [
+      "I'm your Software Engineer. I can help you build features, review code, and guide you through the build process. You can also explore more actions in the skills menu above.",
+    ],
+    restricted: [
+      "I can help explain the Build Studio, but creating and deploying features requires platform access permissions.",
+    ],
+  },
   "admin-assistant": {
     default: [
-      "I can help with platform administration — user management, role assignments, and system configuration.",
+      "I'm the System Admin. I can help with user management, branding configuration, and platform settings. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "Administration features require admin-level access. I can help you navigate to areas within your permissions.",
     ],
   },
+  "coo": {
+    default: [
+      "I'm the COO. I can help you get oriented across the platform — from portfolio health to backlog priorities to workforce status. You can also explore more actions in the skills menu above.",
+    ],
+    restricted: [
+      "I'm here to help you navigate. Let me know what you're looking for and I'll point you in the right direction.",
+    ],
+  },
+  // TODO: remove if no route maps to workspace-guide
   "workspace-guide": {
     default: [
-      "Welcome! I'm your Workspace Guide. I can help you find the right tools and navigate the portal. What are you looking to do?",
-      "I can help you get oriented — the workspace tiles show features available to your role. Would you like me to explain any of them?",
-      "Need help finding something? I can point you to portfolio management, the backlog, architecture modeling, and more.",
+      "I'm your Workspace Guide. I can help you find the right tools and navigate the portal. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I'm here to help you navigate. Let me know what you're looking for and I'll point you in the right direction.",
