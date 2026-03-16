@@ -74,9 +74,14 @@ export function AgentCoworkerPanel({
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
   const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
+  const [cooMode, setCooMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const agent: AgentInfo = resolveAgentForRoute(pathname, userContext);
+  const routeAgent: AgentInfo = resolveAgentForRoute(pathname, userContext);
+  const cooAgent: AgentInfo = resolveAgentForRoute("/workspace", userContext);
+  const agent = cooMode ? cooAgent : routeAgent;
+  const isCoo = agent.agentId === "coo";
+  const canUseCoo = userContext.isSuperuser || userContext.platformRole === "HR-000";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
   useEffect(() => {
@@ -305,6 +310,9 @@ export function AgentCoworkerPanel({
         onClose={onClose}
         onDragStart={onDragStart}
         providerInfo={lastProviderInfo}
+        cooMode={cooMode}
+        canUseCoo={canUseCoo}
+        onToggleCoo={() => setCooMode((prev) => !prev)}
       />
 
       <div
