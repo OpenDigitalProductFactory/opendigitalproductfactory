@@ -52,6 +52,7 @@ export type AgentModelRequirements = {
   minCapabilityTier?: string;
   instructionFollowing?: "excellent" | "adequate";
   codingCapability?: "excellent" | "adequate";
+  preferredProviderId?: string;
 };
 
 /** Entry in the route-to-agent map. */
