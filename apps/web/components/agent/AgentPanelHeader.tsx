@@ -24,6 +24,9 @@ type Props = {
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   providerInfo?: { providerId: string; modelId: string } | null;
+  cooMode?: boolean;
+  canUseCoo?: boolean;
+  onToggleCoo?: () => void;
 };
 
 export function AgentPanelHeader({
@@ -42,6 +45,9 @@ export function AgentPanelHeader({
   onClose,
   onDragStart,
   providerInfo,
+  cooMode,
+  canUseCoo,
+  onToggleCoo,
 }: Props) {
   return (
     <div
@@ -145,6 +151,32 @@ export function AgentPanelHeader({
           >
             {externalAccessEnabled ? "External Access On" : "External Access Off"}
           </button>
+          {canUseCoo && onToggleCoo && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCoo();
+              }}
+              title={cooMode ? "Switch back to this page's specialist agent" : "Switch to COO — cross-cutting oversight agent"}
+              style={{
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: cooMode ? "#fff" : "rgba(224, 224, 255, 0.78)",
+                background: cooMode ? "rgba(124, 140, 248, 0.3)" : "transparent",
+                border: `1px solid ${cooMode ? "#7c8cf8" : "rgba(255, 255, 255, 0.12)"}`,
+                borderRadius: 999,
+                padding: "2px 6px",
+                fontWeight: cooMode ? 700 : 500,
+                cursor: "pointer",
+                lineHeight: 1.2,
+              }}
+            >
+              COO
+            </button>
+          )}
         </div>
         <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 12 }}>
           {agent.agentDescription}
