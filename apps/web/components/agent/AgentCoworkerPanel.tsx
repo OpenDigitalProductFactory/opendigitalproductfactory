@@ -330,76 +330,16 @@ export function AgentCoworkerPanel({
           padding: "12px",
         }}
       >
-        {messages.length === 0 && (
-          <div style={{ padding: "20px 12px" }}>
-            {/* Agent intro */}
-            <div style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 8,
-              marginBottom: 16,
-            }}>
-              <div style={{
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, rgba(124,140,248,0.3), rgba(124,140,248,0.1))",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-                color: "#7c8cf8",
-                flexShrink: 0,
-              }}>
-                {agent.agentName.charAt(0)}
-              </div>
-              <div style={{
-                padding: "8px 12px",
-                borderRadius: "12px 12px 12px 2px",
-                background: "rgba(22, 22, 37, 0.8)",
-                fontSize: 12,
-                color: "var(--dpf-muted)",
-                lineHeight: 1.5,
-              }}>
-                <div style={{ fontWeight: 500, color: "#e0e0ff", marginBottom: 4 }}>
-                  {agent.agentName}
-                </div>
-                {agent.agentDescription}
-              </div>
-            </div>
-            {/* Quick-start skills */}
-            {agent.skills.length > 0 && (
-              <div>
-                <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Try asking
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {agent.skills.slice(0, 3).map((skill) => (
-                    <button
-                      key={skill.label}
-                      type="button"
-                      onClick={() => handleSend(skill.prompt)}
-                      disabled={isPending || !threadId}
-                      style={{
-                        textAlign: "left",
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        border: "1px solid var(--dpf-border)",
-                        background: "transparent",
-                        color: "#b0b0c8",
-                        fontSize: 11,
-                        cursor: "pointer",
-                        transition: "border-color 0.15s",
-                      }}
-                    >
-                      {skill.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+        {/* Agent intro — always shown at top of conversation */}
+        <div style={{
+          padding: "12px",
+          marginBottom: 8,
+          borderBottom: "1px solid var(--dpf-border)",
+        }}>
+          <div style={{ fontSize: 12, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
+            {agent.agentDescription}
           </div>
-        )}
+        </div>
         {messages.map((msg, i) => {
           const prevAgentId = i > 0 ? messages[i - 1]?.agentId : null;
           const showAgentLabel = msg.role === "assistant" && msg.agentId !== prevAgentId;
