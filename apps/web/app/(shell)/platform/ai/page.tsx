@@ -86,7 +86,7 @@ export default async function PlatformAiPage() {
             <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
               Direct Providers
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
               {directProviders.map(({ provider }) => {
                 const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
@@ -139,7 +139,7 @@ export default async function PlatformAiPage() {
             <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
               Agent Providers
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
               {agentProviders.map(({ provider }) => {
                 const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 const label = getBillingLabel(provider);
@@ -190,7 +190,7 @@ export default async function PlatformAiPage() {
             <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
               Routers &amp; Gateways
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
               {routerProviders.map(({ provider }) => {
                 const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
                 return (
