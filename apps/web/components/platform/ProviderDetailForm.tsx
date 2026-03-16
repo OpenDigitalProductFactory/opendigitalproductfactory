@@ -161,8 +161,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {/* Setup progress */}
       <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 24 }}>
         {STEPS.map((s, i) => {
-          const done = step > s.n;
-          const current = step === s.n;
+          const isLastStep = s.n === STEPS.length;
+          const done = step > s.n || (isLastStep && step === s.n);
+          const current = step === s.n && !isLastStep;
           const colour = done ? "#4ade80" : current ? "#7c8cf8" : "#2a2a40";
           return (
             <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
