@@ -478,10 +478,9 @@ export async function sendMessage(input: {
 
       let sysContent: string;
       if (inactiveProviders.length > 0) {
-        const names = inactiveProviders.map((p) => p.name).join(", ");
-        sysContent = `All AI providers are unavailable. Disabled providers that could be re-enabled: ${names}. Visit Platform > AI Providers to re-enable one, or type "re-enable" to activate the best available provider as a last resort.`;
+        sysContent = `AI co-workers are temporarily offline. An administrator can re-enable them from Platform > AI Providers.`;
       } else {
-        sysContent = "No AI providers are configured or available. Visit Platform > AI Providers to set one up.";
+        sysContent = "AI co-workers haven't been set up yet. An administrator can configure them from Platform > AI Providers.";
       }
 
       const sysMsg = await prisma.agentMessage.create({
