@@ -897,6 +897,30 @@ async function seedMcpServers(): Promise<void> {
   }
 }
 
+async function seedCoworkerAgents(): Promise<void> {
+  const coworkers = [
+    { agentId: "portfolio-advisor", name: "Portfolio Advisor", tier: 1, type: "coworker", description: "Advises on portfolio health, budget, and agent assignments" },
+    { agentId: "inventory-specialist", name: "Inventory Specialist", tier: 2, type: "coworker", description: "Manages digital product lifecycle and inventory" },
+    { agentId: "ea-architect", name: "EA Architect", tier: 2, type: "coworker", description: "Assists with enterprise architecture modeling and governance" },
+    { agentId: "hr-specialist", name: "HR Specialist", tier: 2, type: "coworker", description: "Manages employee roles, HITL assignments, and workforce governance" },
+    { agentId: "customer-advisor", name: "Customer Advisor", tier: 2, type: "coworker", description: "Assists with customer account and service management" },
+    { agentId: "ops-coordinator", name: "Ops Coordinator", tier: 2, type: "coworker", description: "Manages backlog items, epics, and operational priorities" },
+    { agentId: "platform-engineer", name: "Platform Engineer", tier: 2, type: "coworker", description: "Manages AI providers, platform configuration, and infrastructure" },
+    { agentId: "build-specialist", name: "Build Specialist", tier: 2, type: "coworker", description: "Guides feature development through Ideate, Plan, Build, Review, and Ship" },
+    { agentId: "admin-assistant", name: "Admin Assistant", tier: 2, type: "coworker", description: "Assists with platform administration and user management" },
+    { agentId: "workspace-guide", name: "Workspace Guide", tier: 1, type: "coworker", description: "Helps navigate the platform and understand available capabilities" },
+  ];
+
+  for (const cw of coworkers) {
+    await prisma.agent.upsert({
+      where: { agentId: cw.agentId },
+      create: cw,
+      update: { name: cw.name, description: cw.description },
+    });
+  }
+  console.log(`Seeded ${coworkers.length} coworker agents`);
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -904,6 +928,7 @@ async function main(): Promise<void> {
   await seedWorkforceReferenceData(prisma);
   await seedPortfolios();
   await seedAgents();
+  await seedCoworkerAgents();
   await seedTaxonomyNodes();
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
