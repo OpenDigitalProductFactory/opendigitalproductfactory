@@ -61,7 +61,10 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
                   src={logoSource}
                   alt={`${companyName} logo`}
                   className="block h-full w-auto max-w-[220px] object-contain"
-                  onError={() => setLogoFailed(true)}
+                  onError={() => {
+                    console.warn(`[Header] Logo failed to load: ${logoSource}`);
+                    setLogoFailed(true);
+                  }}
                 />
             </div>
           ) : (
