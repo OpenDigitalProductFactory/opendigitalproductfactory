@@ -19,6 +19,8 @@ model User {
   createdAt    DateTime      @default(now())
   groups       UserGroup[]
   agentThreads AgentThread[]
+  employeeProfile      EmployeeProfile?
+  authoredEmploymentEvents EmploymentEvent[]
   teamMemberships     TeamMembership[]
   grantedDelegations  DelegationGrant[] @relation("DelegationGrantGrantor")
   passwordResetTokens  PasswordResetToken[] @relation("PasswordResetForUser")
@@ -108,6 +110,153 @@ model TeamMembership {
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+// Workforce Core
+
+model EmployeeProfile {
+  id                  String   @id @default(cuid())
+  employeeId          String   @unique
+  userId              String?  @unique
+  firstName           String
+  middleName          String?
+  lastName            String
+  displayName         String
+  workEmail           String?
+  personalEmail       String?
+  phoneNumber         String?
+  status              String   @default("onboarding") // onboarding | active | leave | suspended | offboarding | inactive
+  employmentTypeId    String?
+  departmentId        String?
+  positionId          String?
+  managerEmployeeId   String?
+  dottedLineManagerId String?
+  workLocationId      String?
+  timezone            String?
+  startDate           DateTime?
+  confirmationDate    DateTime?
+  endDate             DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employmentType      EmploymentType?   @relation(fields: [employmentTypeId], references: [id], onDelete: SetNull)
+  department          Department?       @relation("DepartmentEmployees", fields: [departmentId], references: [id], onDelete: SetNull)
+  position            Position?         @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  manager             EmployeeProfile?  @relation("EmployeeManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
+  directReports       EmployeeProfile[] @relation("EmployeeManager")
+  dottedLineManager   EmployeeProfile?  @relation("EmployeeDottedManager", fields: [dottedLineManagerId], references: [id], onDelete: SetNull)
+  dottedLineReports   EmployeeProfile[] @relation("EmployeeDottedManager")
+  workLocation        WorkLocation?     @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  employmentEvents    EmploymentEvent[]
+  terminationRecord   TerminationRecord?
+  headedDepartments   Department[]      @relation("DepartmentHead")
+
+  @@index([status])
+  @@index([departmentId])
+  @@index([managerEmployeeId])
+  @@index([employmentTypeId])
+  @@index([positionId])
+  @@index([workLocationId])
+}
+
+model Department {
+  id                 String          @id @default(cuid())
+  departmentId       String          @unique
+  name               String
+  slug               String          @unique
+  parentDepartmentId String?
+  headEmployeeId     String?
+  status             String          @default("active")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  parentDepartment   Department?     @relation("DepartmentTree", fields: [parentDepartmentId], references: [id], onDelete: SetNull)
+  childDepartments   Department[]    @relation("DepartmentTree")
+  headEmployee       EmployeeProfile? @relation("DepartmentHead", fields: [headEmployeeId], references: [id], onDelete: SetNull)
+  employees          EmployeeProfile[] @relation("DepartmentEmployees")
+
+  @@index([parentDepartmentId])
+  @@index([headEmployeeId])
+  @@index([status])
+}
+
+model Position {
+  id          String   @id @default(cuid())
+  positionId  String   @unique
+  title       String
+  jobFamily   String?
+  jobLevel    String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees   EmployeeProfile[]
+
+  @@index([status])
+}
+
+model EmploymentType {
+  id               String   @id @default(cuid())
+  employmentTypeId String   @unique
+  name             String
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employees        EmployeeProfile[]
+
+  @@index([status])
+}
+
+model WorkLocation {
+  id           String   @id @default(cuid())
+  locationId    String   @unique
+  name          String
+  locationType  String   // office | remote | hybrid | customer_site
+  timezone      String?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employees     EmployeeProfile[]
+
+  @@index([status])
+}
+
+model EmploymentEvent {
+  id                String          @id @default(cuid())
+  eventId           String          @unique
+  employeeProfileId String
+  eventType         String          // hired | onboarding_started | activated | manager_changed | department_changed | position_changed | leave_started | leave_ended | offboarding_started | terminated | reactivated
+  effectiveAt       DateTime
+  reason            String?
+  actorUserId       String?
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  actorUser         User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([employeeProfileId])
+  @@index([effectiveAt])
+  @@index([eventType])
+}
+
+model TerminationRecord {
+  id                String          @id @default(cuid())
+  terminationId     String          @unique
+  employeeProfileId String          @unique
+  terminationDate   DateTime
+  terminationReason String?
+  notes             String?
+  exitInterviewDone Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([terminationDate])
 }
 
 // ─── Portfolios & Products ───────────────────────────────────────────────────
