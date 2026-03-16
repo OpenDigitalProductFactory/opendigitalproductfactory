@@ -2,7 +2,6 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -284,9 +283,7 @@ export async function discoverModels(
   providerId: string,
 ): Promise<{ discovered: number; newCount: number; error?: string }> {
   await requireManageProviders();
-  const result = await discoverModelsInternal(providerId);
-  revalidatePath(`/platform/ai/providers/${providerId}`);
-  return result;
+  return discoverModelsInternal(providerId);
 }
 
 // ─── Scheduled jobs ───────────────────────────────────────────────────────────
@@ -316,9 +313,7 @@ export async function profileModels(
   modelIds?: string[],
 ): Promise<{ profiled: number; failed: number; error?: string }> {
   await requireManageProviders();
-  const result = await profileModelsInternal(providerId, modelIds);
-  revalidatePath(`/platform/ai/providers/${providerId}`);
-  return result;
+  return profileModelsInternal(providerId, modelIds);
 }
 
 // ─── Platform API Keys (admin-configurable) ──────────────────────────────────
