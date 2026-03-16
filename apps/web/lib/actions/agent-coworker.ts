@@ -515,6 +515,15 @@ export async function sendMessage(input: {
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
   }
 
+  // Sanitize: strip tool narration that some LLMs emit as text instead of tool calls.
+  // Patterns: "Action: tool_name(...)", "Let me read/search/call...", "Step 1: ...", "Self-correction: ..."
+  responseContent = responseContent
+    .replace(/^Action:\s*\w+\(.*?\)\s*$/gm, "")
+    .replace(/^(?:Self-correction|Here's my plan|My plan is|Let me (?:read|search|call|look|check|find|query|analyze) )[^\n]*$/gm, "")
+    .replace(/^Step \d+:\s*[^\n]*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
   // Persist agent response
   const agentMsg = await prisma.agentMessage.create({
     data: {

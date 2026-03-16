@@ -53,6 +53,14 @@ export default async function PlatformAiPage() {
   const tiers = [1, 2, 3] as const;
   const byTier = new Map(tiers.map((tier) => [tier, agents.filter((agent) => agent.tier === tier)]));
 
+  // Build provider status lookup for agent health indicators
+  const providerStatusMap = new Map(providers.map((p) => [p.providerId, p.status]));
+  const agentsWithBrokenProviders = agents.filter((a) => {
+    if (!a.preferredProviderId) return false;
+    const status = providerStatusMap.get(a.preferredProviderId);
+    return status === "inactive" || status === undefined;
+  });
+
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
@@ -65,6 +73,29 @@ export default async function PlatformAiPage() {
       </div>
 
       <AiTabNav />
+
+      {agentsWithBrokenProviders.length > 0 && (
+        <div style={{
+          background: "rgba(251,191,36,0.08)",
+          border: "1px solid rgba(251,191,36,0.3)",
+          borderRadius: 8,
+          padding: "10px 14px",
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>&#9888;</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#fbbf24" }}>
+              {agentsWithBrokenProviders.length} agent{agentsWithBrokenProviders.length !== 1 ? "s have" : " has"} an inactive provider
+            </div>
+            <div style={{ fontSize: 11, color: "#b0b0c8", marginTop: 2 }}>
+              {agentsWithBrokenProviders.map((a) => a.name).join(", ")} — these agents will fall back to auto-routing which may use a less suitable model.
+            </div>
+          </div>
+        </div>
+      )}
 
       {tiers.map((tier) => {
         const tierAgents = byTier.get(tier) ?? [];
@@ -93,11 +124,26 @@ export default async function PlatformAiPage() {
                       activeGrantCount: agent.delegationGrants.length,
                     }}
                   />
-                  <AgentProviderSelect
-                    agentId={agent.agentId}
-                    currentProviderId={agent.preferredProviderId}
-                    providers={providers}
-                  />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <AgentProviderSelect
+                      agentId={agent.agentId}
+                      currentProviderId={agent.preferredProviderId}
+                      providers={providers}
+                    />
+                    {agent.preferredProviderId && providerStatusMap.get(agent.preferredProviderId) === "inactive" && (
+                      <span style={{
+                        fontSize: 10,
+                        color: "#fbbf24",
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: "rgba(251,191,36,0.1)",
+                        border: "1px solid rgba(251,191,36,0.3)",
+                        whiteSpace: "nowrap",
+                      }}>
+                        provider inactive
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
