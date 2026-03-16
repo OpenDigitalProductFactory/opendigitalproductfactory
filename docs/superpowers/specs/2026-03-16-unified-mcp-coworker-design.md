@@ -50,7 +50,7 @@ Replace the multi-persona agent system with a **single AI coworker identity** th
 ### Three Inputs Shape Behavior
 
 1. **Route context** — what page the employee is on, what domain tools are relevant, what data is visible. Injected as factual context, not personality.
-2. **HR role** — the employee's designation (HR-000 through HR-500) determines what the coworker is allowed to do. The existing `can()` capability system is the sole authority gate.
+2. **HR role** — the employee's designation (HR-000 through HR-500) determines what the coworker is allowed to do. The existing `can()` capability system is the primary authority gate (a small set of universal tools like `report_quality_issue` remain available to all roles).
 3. **Advise / Act toggle** — binary, per-session, controlled by the employee.
 
 ### What Stays
@@ -78,7 +78,7 @@ Every AI resource — LLM provider or external service — is registered as an M
 ```
 EndpointManifest {
   endpointId: string           // "mantis", "ollama-llama3", "brave-search"
-  endpointType: "llm" | "service"
+  endpointType: "llm" | "service"  // Sufficient for current needs. Future types (embedding, vector DB, code sandbox) register as "service" with distinguishing taskTags.
   displayName: string
 
   // Clearance
@@ -144,6 +144,7 @@ Each tool in the registry gains a `sideEffect: boolean` flag:
 
 - `sideEffect: false` — allowed in both Advise and Act modes. Examples: `read_project_file`, `search_project_files`, `search_portfolio_context`, `search_public_web`, `fetch_public_website`.
 - `sideEffect: true` — blocked in Advise mode, allowed in Act mode (subject to HR authority). Examples: `create_backlog_item`, `update_backlog_item`, `propose_file_change`, `update_lifecycle`, `add_provider`.
+- **Proposal-mode tools** (e.g., `propose_improvement`) that create records but are ungated (`requiredCapability: null`) are classified as `sideEffect: true` — they still create data. In Advise mode the coworker describes what it would propose; in Act mode it creates the proposal record.
 
 ### Elevation Request
 
@@ -186,7 +187,7 @@ Advise/Act is scoped per route context (sessionStorage key includes route prefix
 |-------|---------|--------|
 | **Public** | No sensitive data. Any provider. | Marketing pages, public docs |
 | **Internal** | Business data, not personally sensitive. | `/portfolio`, `/inventory`, `/ops`, `/build`, `/ea` |
-| **Confidential** | Personal data, financials, HR records. | `/employee`, `/customer`, `/workspace`, `/platform` |
+| **Confidential** | Personal data, financials, HR records. | `/employee`, `/customer`, `/platform`, `/workspace` (promoted from `internal` — update `agent-sensitivity.ts` to match) |
 | **Restricted** | Platform config, secrets, access control. | `/admin` |
 
 ### Routing Integration
@@ -325,7 +326,7 @@ One template, seven composable blocks:
 
 **6 & 7.** Route data and attachments — unchanged from today's injection.
 
-**Identity block note:** The static identity should mention what the platform does (a digital product management platform) so the LLM has grounding. This mirrors the existing `PLATFORM_PREAMBLE` context.
+**Identity block note:** The static identity should mention what the platform does (a digital product management platform) so the LLM has grounding. The existing `PLATFORM_PREAMBLE` in `agent-routing.ts` contains ~200 words of critical behavioral rules (e.g., "NEVER claim you did something you didn't do", "NEVER write multi-paragraph plans", "NEVER ask for confirmation before using a tool"). These rules migrate into the Identity block as part of the static prompt — they are platform-wide behavioral constraints, not persona-specific, so they belong in Block 1. The Identity block will be longer than 50 words once these rules are included (~200 words total).
 
 ### Canned Responses
 
@@ -387,7 +388,7 @@ The existing codebase has a governance layer: `AgentGovernanceProfile` (with `au
 | Table | Disposition |
 |-------|------------|
 | `AgentGovernanceProfile` | Deprecated. Rows preserved for audit history but no longer consulted at runtime. |
-| `DelegationGrant` | Deprecated. Human sensitivity overrides (Section 4) replace risk-band delegation. |
+| `DelegationGrant` | Deprecated. Human sensitivity overrides (Section 4) replace risk-band delegation. Rows must be retained as long as any `AuthorizationDecisionLog` entries reference them (FK is `onDelete: SetNull`, so cleanup would silently null historical audit records). |
 | `AgentCapabilityClass` | Deprecated. Replaced by HR role capabilities. |
 | `DirectivePolicyClass` | Deprecated. |
 | `AuthorizationDecisionLog` | **Retained and extended** (see Audit Schema below). |
@@ -404,7 +405,7 @@ The existing `Agent` model stores per-agent records with `preferredProviderId`, 
 **Migration plan:**
 
 1. **Create a single `coworker` agent row** — replaces all 11 persona rows. This preserves FK integrity for new audit records and provides a stable reference for the unified coworker.
-2. **Retain old agent rows as archived** — add an `archived: true` flag rather than deleting. This preserves:
+2. **Retain old agent rows as archived** — add an `archived: Boolean @default(false)` field to the `Agent` model in `schema.prisma` (requires Prisma migration). Set `archived: true` on all 11 persona rows. This preserves:
    - Historical `AgentMessage` records that reference old agent IDs
    - Historical `AgentActionProposal` records
    - Historical `AuthorizationDecisionLog` entries
@@ -527,4 +528,5 @@ All employee-coworker interactions generate institutional knowledge — decision
 | `apps/web/lib/agent-sensitivity.ts` | Refactor to per-route sensitivity declarations (canonical source) |
 | `apps/web/lib/governance-resolver.ts` | Replace risk-band resolution with sensitivity override logic |
 | `apps/web/lib/governance-data.ts` | Extend audit logging with new fields |
+| `apps/web/lib/governance-types.ts` | Deprecate `RiskBand`, `DefaultActionScope`, `DelegationGrantScope` types; retain for historical compatibility |
 | `packages/db/data/agent_registry.json` | Archive persona agent records, add single `coworker` entry |
