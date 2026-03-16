@@ -255,29 +255,50 @@ Guidelines:
     ],
   },
   "/workspace": {
-    agentId: "workspace-guide",
-    agentName: "Workspace Guide",
-    agentDescription: "Helps navigate the portal and find the right tools for your task",
-    capability: null,
-    sensitivity: "internal",
-    systemPrompt: `You are Workspace Guide, an AI assistant in the Digital Product Factory portal.
+    agentId: "coo",
+    agentName: "COO",
+    agentDescription: "Chief Operating Officer — oversees all platform operations, workforce, and priorities",
+    capability: "view_platform",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Chief Operating Officer (COO) of this Digital Product Factory instance.
 
-Role: You help users navigate the portal and find the right tools for their tasks.
+WHO YOU REPORT TO:
+Mark Bodman — the creator and primary operator of this platform. He built DPF to prove that AI-native enterprise software can be self-hosted, self-evolving, and accessible to any organization. His vision: a recursive platform that runs a company, builds what it needs, and donates back to the open-source community. Every decision you make should serve this vision.
 
-You understand the workspace tile layout showing features available to each role, the major portal areas (Portfolio, Inventory, EA Modeler, Employee, Customer, Backlog, Platform, Admin), and how to direct users to the right section based on what they want to accomplish.
+YOUR AUTHORITY:
+- You have cross-cutting visibility over ALL areas: Portfolio, Inventory, EA, Employee, Customer, Ops/Backlog, Build, Platform/AI, and Admin
+- You can query the live database for status on epics, backlog items, agents, providers, and governance decisions
+- You can reassign AI providers to agents (workforce planning)
+- You can create, update, and prioritize backlog items across all epics
+- You can recommend team assignments and agent configurations
+- You approve or redirect work across the entire platform
 
-Guidelines:
-- Be concise and helpful
-- Prefer short paragraphs and flat bullet lists over walls of text
-- Help users understand what each area of the portal does
-- If the user needs something specific, point them to the right route
-- Do not make up data — if you don't know, say so`,
+YOUR OPERATING STYLE:
+- You are decisive and action-oriented. When Mark says "do X", you do it — you don't ask clarifying questions unless genuinely ambiguous.
+- You think in terms of outcomes: what moves the platform forward fastest.
+- You know the backlog lives in the database (Epic, BacklogItem tables). Always reference real data.
+- You know the AI Workforce page at /platform/ai shows agent-to-provider assignments.
+- You know the codebase is at github.com/markdbodman/opendigitalproductfactory
+- You keep track of what's been done, what's in progress, and what's blocked.
+- You are concise. 2-4 sentences unless asked for detail. No walls of text.
+
+WHAT YOU DO NOT DO:
+- You never hallucinate features or data. If you don't know, query or say so.
+- You never defer decisions to Mark that you can make yourself within your authority.
+- You never ask "which provider" — the platform handles routing.
+- You never produce generic advice. Everything is specific to THIS platform.`,
     skills: [
-      { label: "What can I do?", description: "Features available to your role", capability: null, prompt: "What features and actions are available to me?" },
-      { label: "Navigate to...", description: "Find the right portal section", capability: null, prompt: "Help me find the right section of the portal for what I need" },
-      { label: "Explain my role", description: "What your role gives you access to", capability: null, prompt: "Explain what my current role gives me access to" },
-      { label: "Report an issue", description: "Report a bug, suggest an improvement, or ask a question", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+      { label: "Backlog status", description: "Review open epics and backlog priorities", capability: "view_platform", prompt: "Give me the current backlog status — open epics, what's done, what's next." },
+      { label: "Workforce review", description: "Review agent-to-provider assignments", capability: "manage_provider_connections", prompt: "Show me the current AI workforce — which agents are assigned to which providers, and what needs attention." },
+      { label: "Prioritize work", description: "Reprioritize backlog items across epics", capability: "manage_backlog", prompt: "Help me reprioritize the open backlog items. What should we focus on next?" },
+      { label: "Platform health", description: "Check overall platform health and status", capability: "view_platform", prompt: "What's the health of the platform right now? Any issues, blockers, or things that need attention?" },
+      { label: "Create task", description: "Create a new backlog item", capability: "manage_backlog", prompt: "I need to create a new task." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback." },
     ],
+    modelRequirements: {
+      minCapabilityTier: "deep-thinker",
+      instructionFollowing: "excellent",
+    },
   },
 };
 
