@@ -84,6 +84,14 @@ export function AgentCoworkerPanel({
   const canUseCoo = userContext.isSuperuser || userContext.platformRole === "HR-000";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
+  // Elapsed time counter for thinking indicator
+  const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  useEffect(() => {
+    if (!isPending) { setThinkingSeconds(0); return; }
+    const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [isPending]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -441,7 +449,13 @@ export function AgentCoworkerPanel({
               }}
             >
               <span style={{ fontSize: 11 }}>
-                {isClearing ? "Clearing conversation" : `${agent.agentName} is thinking`}
+                {isClearing
+                  ? "Clearing conversation"
+                  : thinkingSeconds < 5
+                    ? `${agent.agentName} is thinking`
+                    : thinkingSeconds < 15
+                      ? `${agent.agentName} is working on it`
+                      : `${agent.agentName} is still working (${thinkingSeconds}s)`}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>

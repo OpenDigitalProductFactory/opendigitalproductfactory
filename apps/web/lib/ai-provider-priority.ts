@@ -360,7 +360,7 @@ export async function callWithFailover(
           where: { providerId: entry.providerId },
           select: { name: true },
         });
-        downgradeMessage = `${failedName} is unavailable. Using ${usedProvider?.name ?? entry.providerId} instead.`;
+        downgradeMessage = `Switched to an alternative AI provider for this response.`;
       }
 
       return {
@@ -387,7 +387,7 @@ export async function callWithFailover(
         });
         const name = providerName?.name ?? entry.providerId;
         const timeStr = reenableAt ? formatReenableTime(reenableAt) : "in about 1 hour";
-        quotaDisableMessage = `${name} hit its usage quota and has been temporarily disabled. It will be re-enabled ${timeStr}. Using a different provider for now.`;
+        quotaDisableMessage = `The preferred AI provider hit its usage quota and has been temporarily paused. It will resume ${timeStr}. Using an alternative for now.`;
       }
 
       // Auto-retire deprecated/removed models (404) — delete from discovered + profile, try next
@@ -396,7 +396,7 @@ export async function callWithFailover(
           console.error("[callWithFailover] retire model failed:", err),
         );
         if (!quotaDisableMessage) {
-          quotaDisableMessage = `Model ${entry.modelId} is no longer available from ${entry.providerId} and has been removed. Switching to another model.`;
+          quotaDisableMessage = `The previously used AI model is no longer available and has been removed. Switching to an alternative.`;
         }
       }
     }
