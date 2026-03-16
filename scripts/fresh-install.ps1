@@ -250,54 +250,57 @@ services:
 }
 
 # ── Database setup ───────────────────────────────────────────────────────────
+# All commands run from the project root using pnpm workspace filters, which
+# ensures the correct binaries (prisma, tsx) are resolved from node_modules.
 
 Write-Step "Running database migrations"
-Push-Location "packages\db"
-npx prisma migrate deploy
+pnpm --filter @dpf/db exec prisma generate
+if ($LASTEXITCODE -ne 0) { Write-Fail "Prisma generate failed" }
+
+pnpm --filter @dpf/db exec prisma migrate deploy
+if ($LASTEXITCODE -ne 0) { Write-Fail "Database migrations failed" }
 Write-Ok "Migrations complete"
 
 Write-Step "Seeding database"
-npx prisma db seed
+pnpm --filter @dpf/db seed
+if ($LASTEXITCODE -ne 0) { Write-Fail "Database seed failed" }
 Write-Ok "Base seed complete"
 
 Write-Step "Restoring full database state (epics, backlog, providers)"
 
 $sqlScripts = @(
-    "..\..\scripts\db-export-epics-backlog.sql",
-    "..\..\scripts\db-export-runtime-state.sql",
-    "..\..\scripts\seed-vision-epics.sql",
-    "..\..\scripts\seed-hr-epic.sql",
-    "..\..\scripts\seed-crm-epic.sql",
-    "..\..\scripts\seed-sbom-epic.sql",
-    "..\..\scripts\seed-calendaring-epic.sql",
-    "..\..\scripts\update-finance-epic.sql",
-    "..\..\scripts\update-selfdev-epic-runtime-registration.sql",
-    "..\..\scripts\update-calendar-epic.sql",
-    "..\..\scripts\cleanup-orphaned-hr-items.sql",
-    "..\..\scripts\dedup-hr-epic.sql",
-    "..\..\scripts\mark-neo4j-stories-done.sql",
-    "..\..\scripts\mark-neo4j-stories-6-7-done.sql"
+    "scripts\db-export-epics-backlog.sql",
+    "scripts\db-export-runtime-state.sql",
+    "scripts\seed-vision-epics.sql",
+    "scripts\seed-hr-epic.sql",
+    "scripts\seed-crm-epic.sql",
+    "scripts\seed-sbom-epic.sql",
+    "scripts\seed-calendaring-epic.sql",
+    "scripts\update-finance-epic.sql",
+    "scripts\update-selfdev-epic-runtime-registration.sql",
+    "scripts\update-calendar-epic.sql",
+    "scripts\cleanup-orphaned-hr-items.sql",
+    "scripts\dedup-hr-epic.sql",
+    "scripts\mark-neo4j-stories-done.sql",
+    "scripts\mark-neo4j-stories-6-7-done.sql"
 )
 
 foreach ($sql in $sqlScripts) {
-    $fullPath = Join-Path (Get-Location) $sql
+    $fullPath = Join-Path $InstallRoot $sql
     if (Test-Path $fullPath) {
         $name = Split-Path $sql -Leaf
         Write-Host "  Applying $name..."
         try {
-            npx prisma db execute --file $sql --schema prisma/schema.prisma 2>$null
+            pnpm --filter @dpf/db exec prisma db execute --file "../../$sql" --schema prisma/schema.prisma 2>$null
         } catch {
             Write-Warn "$name had errors (may be expected if already applied)"
         }
     }
 }
 
-Pop-Location
 Write-Ok "Database fully restored"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
-
-Pop-Location
 
 Write-Host ""
 Write-Host "  ✓ Fresh install complete!" -ForegroundColor Green
@@ -305,7 +308,7 @@ Write-Host ""
 Write-Host "  Project location: $InstallRoot" -ForegroundColor Cyan
 Write-Host "  Docker volumes:   ${InstallDrive}:\docker-data\dpf" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Start the app:    cd $InstallRoot && pnpm dev"
+Write-Host "  Start the app:    cd $InstallRoot && pnpm --filter web dev"
 Write-Host "  Open:             http://localhost:3000"
 Write-Host ""
 Write-Host "  Default login:"

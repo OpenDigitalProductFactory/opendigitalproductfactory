@@ -148,9 +148,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres ne
 **Run migrations and seed:**
 
 ```bash
-pnpm --filter @dpf/db exec prisma generate
-pnpm --filter @dpf/db exec prisma migrate deploy
-pnpm --filter @dpf/db seed
+pnpm --filter @dpf/db exec prisma generate       # Generate Prisma client
+pnpm --filter @dpf/db exec prisma migrate deploy  # Apply all migrations
+pnpm --filter @dpf/db seed                        # Seed roles, agents, taxonomy, admin user
 ```
 
 **Start the dev server:**
