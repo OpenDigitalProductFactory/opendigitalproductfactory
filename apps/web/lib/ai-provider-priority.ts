@@ -100,7 +100,18 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
         rank: i + 1,
         capabilityTier: "unknown",
       });
+      continue;
     }
+
+    // Active provider with no discovered/profiled models in DB — still include
+    // it as a fallback. Ollama and similar local providers can self-select a
+    // model even if discovery hasn't run yet.
+    entries.push({
+      providerId: p.providerId,
+      modelId: "",
+      rank: i + 1,
+      capabilityTier: "unknown",
+    });
   }
 
   return entries;
@@ -300,6 +311,9 @@ export async function callWithFailover(
   options?: { tools?: Array<Record<string, unknown>>; task?: TaskKey; modelRequirements?: ModelRequirements },
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority(options?.task ?? "conversation");
+  if (priority.length === 0) {
+    throw new NoProvidersAvailableError([]);
+  }
   const providerPolicy = await getActiveProviderPolicyInfo();
   let filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
   if (filteredPriority.length === 0) {
