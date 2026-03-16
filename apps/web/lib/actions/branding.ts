@@ -2,6 +2,7 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+import { deriveThemeTokens } from "@/lib/branding-presets";
 
 function readString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
@@ -142,6 +143,23 @@ export async function deleteThemePreset(formData: FormData): Promise<void> {
   await prisma.brandingConfig.delete({
     where: { id },
   }).catch(() => undefined);
+
+  revalidateBrandingSurfaces();
+}
+
+export async function saveSimpleBrand(formData: FormData): Promise<void> {
+  const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
+  const logoUrl = readString(formData.get("logoUrl")) || null;
+  const accent = readString(formData.get("accent")) || "#7c8cf8";
+  const fontFamily = readString(formData.get("fontFamily")) || "Inter, system-ui, sans-serif";
+
+  const tokens = deriveThemeTokens(accent, { fontFamily });
+
+  await prisma.brandingConfig.upsert({
+    where: { scope: "organization" },
+    update: { companyName, logoUrl, tokens: tokens as unknown as Prisma.InputJsonValue },
+    create: { scope: "organization", companyName, logoUrl, tokens: tokens as unknown as Prisma.InputJsonValue },
+  });
 
   revalidateBrandingSurfaces();
 }
