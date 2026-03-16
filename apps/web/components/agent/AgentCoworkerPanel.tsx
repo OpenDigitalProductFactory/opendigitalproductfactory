@@ -150,11 +150,11 @@ export function AgentCoworkerPanel({
       const result = await sendMessage({
         threadId,
         content,
-        routeContext: pathname,
+        routeContext: cooMode ? "/workspace" : pathname,
         externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
-        ...(activeBuildId ? { buildId: activeBuildId } : {}),
+        ...(!cooMode && activeBuildId ? { buildId: activeBuildId } : {}),
         ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
       });
       if ("error" in result) {
