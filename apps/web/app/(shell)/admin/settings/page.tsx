@@ -2,18 +2,19 @@ import { prisma } from "@dpf/db";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 
-async function getPlatformKeyStatuses(): Promise<Record<string, boolean>> {
+async function getPlatformKeyData(): Promise<Record<string, { configured: boolean; currentValue: string | null }>> {
   const keys = ["brave_search_api_key", "upload_storage_path"];
   const configs = await prisma.platformConfig.findMany({
     where: { key: { in: keys } },
     select: { key: true, value: true },
   });
-  const statuses: Record<string, boolean> = {};
+  const data: Record<string, { configured: boolean; currentValue: string | null }> = {};
   for (const k of keys) {
     const config = configs.find((c) => c.key === k);
-    statuses[k] = !!config && typeof config.value === "string" && config.value.length > 0;
+    const val = config && typeof config.value === "string" && config.value.length > 0 ? config.value : null;
+    data[k] = { configured: !!val, currentValue: val };
   }
-  return statuses;
+  return data;
 }
 
 export default async function AdminSettingsPage() {
@@ -24,7 +25,7 @@ export default async function AdminSettingsPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Platform Settings</p>
       </div>
       <AdminTabNav />
-      <PlatformKeysPanel keyStatuses={await getPlatformKeyStatuses()} />
+      <PlatformKeysPanel keyData={await getPlatformKeyData()} />
     </div>
   );
 }

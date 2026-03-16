@@ -8,11 +8,10 @@ type KeyConfig = {
   label: string;
   description: string;
   placeholder: string;
-  configured: boolean;
   isSecret: boolean;
 };
 
-const PLATFORM_KEYS: Omit<KeyConfig, "configured">[] = [
+const PLATFORM_KEYS: KeyConfig[] = [
   {
     key: "brave_search_api_key",
     label: "Brave Search API Key",
@@ -29,35 +28,44 @@ const PLATFORM_KEYS: Omit<KeyConfig, "configured">[] = [
   },
 ];
 
+type KeyData = { configured: boolean; currentValue: string | null };
+
 type Props = {
-  keyStatuses: Record<string, boolean>;
+  keyData: Record<string, KeyData>;
 };
 
-export function PlatformKeysPanel({ keyStatuses }: Props) {
+function maskSecret(value: string): string {
+  if (value.length <= 6) return "\u2022".repeat(value.length);
+  return value.slice(0, 4) + "\u2022".repeat(Math.min(value.length - 4, 12));
+}
+
+export function PlatformKeysPanel({ keyData }: Props) {
   const [isPending, startTransition] = useTransition();
   const [values, setValues] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [savedValues, setSavedValues] = useState<Record<string, string>>({});
 
   function handleSave(key: string) {
     const value = values[key];
     if (!value?.trim()) return;
     startTransition(async () => {
       await savePlatformApiKey(key, value.trim());
-      setSaved((prev) => ({ ...prev, [key]: true }));
+      setSavedValues((prev) => ({ ...prev, [key]: value.trim() }));
       setValues((prev) => ({ ...prev, [key]: "" }));
     });
   }
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white mb-1">Platform API Keys</h2>
+      <h2 className="text-lg font-semibold text-white mb-1">Platform Settings</h2>
       <p className="text-sm text-[var(--dpf-muted)] mb-4">
-        External service keys used by the platform. These are stored encrypted and never displayed after saving.
+        External service keys and paths used by the platform.
       </p>
 
       <div className="space-y-3">
         {PLATFORM_KEYS.map((cfg) => {
-          const isConfigured = keyStatuses[cfg.key] || saved[cfg.key];
+          const data = keyData[cfg.key];
+          const displayValue = savedValues[cfg.key] ?? data?.currentValue ?? null;
+          const isConfigured = !!displayValue;
           const statusColor = isConfigured ? "#4ade80" : "#fbbf24";
 
           return (
@@ -75,7 +83,17 @@ export function PlatformKeysPanel({ keyStatuses }: Props) {
                   {isConfigured ? "Configured" : "Not configured"}
                 </span>
               </div>
-              <p className="text-xs text-[var(--dpf-muted)] mb-3">{cfg.description}</p>
+              <p className="text-xs text-[var(--dpf-muted)] mb-2">{cfg.description}</p>
+
+              {isConfigured && (
+                <div className="mb-3 px-3 py-1.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+                  <span className="text-[10px] text-[var(--dpf-muted)] mr-2">Current:</span>
+                  <span className="text-xs font-mono text-white">
+                    {cfg.isSecret ? maskSecret(displayValue!) : displayValue}
+                  </span>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="text"
