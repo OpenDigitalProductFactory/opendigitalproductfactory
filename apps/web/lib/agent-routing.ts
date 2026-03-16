@@ -202,7 +202,6 @@ ABSOLUTE RULES — violating any of these is a critical failure:
     modelRequirements: {
       minCapabilityTier: "deep-thinker",
       instructionFollowing: "excellent",
-      preferredProviderId: "codex",
     },
   },
   "/admin": {

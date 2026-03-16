@@ -316,6 +316,22 @@ export async function profileModels(
   return profileModelsInternal(providerId, modelIds);
 }
 
+// ─── Agent Provider Assignment ──────────────────────────────────────────────
+
+export async function updateAgentPreferredProvider(
+  agentId: string,
+  preferredProviderId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireManageProviders();
+  const agent = await prisma.agent.findUnique({ where: { agentId } });
+  if (!agent) return { ok: false, error: "Agent not found" };
+  await prisma.agent.update({
+    where: { agentId },
+    data: { preferredProviderId },
+  });
+  return { ok: true };
+}
+
 // ─── Platform API Keys (admin-configurable) ──────────────────────────────────
 
 export async function savePlatformApiKey(

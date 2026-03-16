@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
+import { AgentProviderSelect } from "@/components/platform/AgentProviderSelect";
 import { AiTabNav } from "@/components/platform/AiTabNav";
 
 const TIER_LABELS: Record<number, string> = {
@@ -10,35 +11,43 @@ const TIER_LABELS: Record<number, string> = {
 
 export default async function AiAgentsPage() {
   const now = new Date();
-  const agents = await prisma.agent.findMany({
-    orderBy: [{ tier: "asc" }, { name: "asc" }],
-    select: {
-      id: true,
-      agentId: true,
-      name: true,
-      tier: true,
-      description: true,
-      portfolio: { select: { slug: true, name: true } },
-      ownerships: {
-        where: { responsibility: "owning_team" },
-        select: { team: { select: { name: true } } },
-        take: 1,
-      },
-      governanceProfile: {
-        select: {
-          autonomyLevel: true,
-          capabilityClass: { select: { name: true } },
+  const [agents, providers] = await Promise.all([
+    prisma.agent.findMany({
+      orderBy: [{ tier: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        agentId: true,
+        name: true,
+        tier: true,
+        description: true,
+        preferredProviderId: true,
+        portfolio: { select: { slug: true, name: true } },
+        ownerships: {
+          where: { responsibility: "owning_team" },
+          select: { team: { select: { name: true } } },
+          take: 1,
+        },
+        governanceProfile: {
+          select: {
+            autonomyLevel: true,
+            capabilityClass: { select: { name: true } },
+          },
+        },
+        delegationGrants: {
+          where: {
+            status: "active",
+            expiresAt: { gt: now },
+          },
+          select: { id: true },
         },
       },
-      delegationGrants: {
-        where: {
-          status: "active",
-          expiresAt: { gt: now },
-        },
-        select: { id: true },
-      },
-    },
-  });
+    }),
+    prisma.modelProvider.findMany({
+      where: { status: { in: ["active", "inactive"] } },
+      orderBy: { name: "asc" },
+      select: { providerId: true, name: true, status: true },
+    }),
+  ]);
 
   const tiers = [1, 2, 3] as const;
   const byTier = new Map(tiers.map((tier) => [tier, agents.filter((agent) => agent.tier === tier)]));
@@ -67,22 +76,28 @@ export default async function AiAgentsPage() {
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {tierAgents.map((agent) => (
-                <AgentGovernanceCard
-                  key={agent.id}
-                  agent={{
-                    id: agent.id,
-                    agentId: agent.agentId,
-                    name: agent.name,
-                    description: agent.description,
-                    tier: agent.tier,
-                    portfolioName: agent.portfolio?.name ?? null,
-                    portfolioSlug: agent.portfolio?.slug ?? null,
-                    capabilityClassName: agent.governanceProfile?.capabilityClass.name ?? null,
-                    autonomyLevel: agent.governanceProfile?.autonomyLevel ?? null,
-                    owningTeamName: agent.ownerships[0]?.team.name ?? null,
-                    activeGrantCount: agent.delegationGrants.length,
-                  }}
-                />
+                <div key={agent.id}>
+                  <AgentGovernanceCard
+                    agent={{
+                      id: agent.id,
+                      agentId: agent.agentId,
+                      name: agent.name,
+                      description: agent.description,
+                      tier: agent.tier,
+                      portfolioName: agent.portfolio?.name ?? null,
+                      portfolioSlug: agent.portfolio?.slug ?? null,
+                      capabilityClassName: agent.governanceProfile?.capabilityClass.name ?? null,
+                      autonomyLevel: agent.governanceProfile?.autonomyLevel ?? null,
+                      owningTeamName: agent.ownerships[0]?.team.name ?? null,
+                      activeGrantCount: agent.delegationGrants.length,
+                    }}
+                  />
+                  <AgentProviderSelect
+                    agentId={agent.agentId}
+                    currentProviderId={agent.preferredProviderId}
+                    providers={providers}
+                  />
+                </div>
               ))}
             </div>
           </section>
