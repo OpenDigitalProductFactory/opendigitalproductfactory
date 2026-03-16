@@ -53,6 +53,7 @@ export default async function ProvidersPage() {
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
   ]);
 
+  const localProviders = providers.filter((pw) => pw.provider.category === "local");
   const directProviders = providers.filter((pw) => pw.provider.category === "direct");
   const routerProviders = providers.filter((pw) => pw.provider.category === "router");
   const agentProviders = providers.filter((pw) => pw.provider.category === "agent");
@@ -64,7 +65,7 @@ export default async function ProvidersPage() {
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>AI Providers</h1>
         <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
-          {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({directProviders.length} direct, {agentProviders.length} agent, {routerProviders.length} routers)
+          {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({localProviders.length} local, {directProviders.length} direct, {agentProviders.length} agent, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
       </div>
@@ -77,6 +78,55 @@ export default async function ProvidersPage() {
           <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Providers</div>
           {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
         </div>
+
+        {/* Local Providers */}
+        {localProviders.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ color: "#4ade80", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              Local Providers
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+              {localProviders.map(({ provider }) => {
+                const colour = STATUS_COLOURS[provider.status] ?? "#8888a0";
+                return (
+                  <div
+                    key={provider.providerId}
+                    style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderLeft: `3px solid ${colour}`, borderRadius: 6, padding: 10 }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <span style={{ color: "#e0e0ff", fontWeight: 600, fontSize: 12 }}>{provider.name}</span>
+                      <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
+                    </div>
+                    <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>
+                      {provider.families.length > 0
+                        ? provider.families.slice(0, 3).join(" · ") + (provider.families.length > 3 ? " +more" : "")
+                        : "No models configured"}
+                    </div>
+                    {(() => {
+                      const label = getBillingLabel(provider);
+                      return label ? (
+                        <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 6 }}>{label}</div>
+                      ) : null;
+                    })()}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/platform/ai/providers/${provider.providerId}`}
+                        style={{ color: "#7c8cf8", fontSize: 10 }}
+                      >
+                        Configure →
+                      </Link>
+                      {provider.docsUrl && (
+                        <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#8888a0", fontSize: 10 }}>
+                          Docs
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Direct Providers */}
         {directProviders.length > 0 && (

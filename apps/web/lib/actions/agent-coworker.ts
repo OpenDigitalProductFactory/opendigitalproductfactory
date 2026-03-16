@@ -516,11 +516,22 @@ export async function sendMessage(input: {
   }
 
   // Sanitize: strip tool narration that some LLMs emit as text instead of tool calls.
-  // Patterns: "Action: tool_name(...)", "Let me read/search/call...", "Step 1: ...", "Self-correction: ..."
   responseContent = responseContent
-    .replace(/^Action:\s*\w+\(.*?\)\s*$/gm, "")
-    .replace(/^(?:Self-correction|Here's my plan|My plan is|Let me (?:read|search|call|look|check|find|query|analyze) )[^\n]*$/gm, "")
-    .replace(/^Step \d+:\s*[^\n]*$/gm, "")
+    // "Action: tool_name(...)" or "Action: Create/Update/Remove..."
+    .replace(/^Action:?\s*[^\n]*$/gm, "")
+    // "Step N: ..." planning
+    .replace(/^Step \d+:?\s*[^\n]*$/gm, "")
+    // "Self-correction:", "Here's my plan:", "My plan is:", "I will now..."
+    .replace(/^(?:Self-correction|Here's my plan|My plan is|I (?:will|am going to|need to|have to) (?:now |immediately |proceed |also |then )?(?:create|update|add|remove|delete|modify|change|set|initiate|execute|implement))[^\n]*$/gim, "")
+    // "Let me read/search/call/look/check..."
+    .replace(/^Let me (?:read|search|call|look|check|find|query|analyze|investigate|examine|review)[^\n]*$/gim, "")
+    // "What you need to do next" / "What's next?" sections with content
+    .replace(/^What(?:'s| you need to do) next[^\n]*$/gim, "")
+    // "In summary:" / "To reiterate:" / "To summarize:" sections
+    .replace(/^(?:In summary|To reiterate|To summarize)[^\n]*$/gim, "")
+    // Numbered list items that are just planning ("1. Create...", "2. Update...")
+    .replace(/^\d+\.\s*(?:Create|Update|Remove|Add|Delete|Modify|Change|Set|Initiate)\s+(?:a |the |new )?(?:backlog|provider|entry|item|category|record)[^\n]*$/gim, "")
+    // Clean up excessive whitespace
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
