@@ -34,14 +34,19 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama
-    # GPU passthrough — the installer generates a docker-compose.override.yml
+      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
+    environment:
+      OLLAMA_DEFAULT_MODEL: ${SELECTED_MODEL:-}
+    # GPU passthrough — install-dpf.ps1 generates a docker-compose.override.yml
     # with deploy.resources.reservations.devices when NVIDIA GPU is detected.
     # Without the override, Ollama runs on CPU only.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 120s
 
   portal-init:
     build:

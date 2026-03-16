@@ -293,7 +293,7 @@ export function resolveAgentForRoute(
       sensitivity: bestMatch.sensitivity,
       systemPrompt: bestMatch.systemPrompt,
       skills: bestMatch.skills,
-      modelRequirements: bestMatch.modelRequirements,
+      ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
     };
   }
 
@@ -308,7 +308,7 @@ export function resolveAgentForRoute(
     sensitivity: bestMatch.sensitivity ?? getRouteSensitivity(pathname),
     systemPrompt: bestMatch.systemPrompt,
     skills: bestMatch.skills,
-    modelRequirements: bestMatch.modelRequirements,
+    ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
   };
 }
 

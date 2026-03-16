@@ -17,7 +17,7 @@ describe("LoginPage", () => {
   it("shows a forgot password link on the login page", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    const html = renderToStaticMarkup(<LoginPage />);
+    const html = renderToStaticMarkup(<LoginPage searchParams={Promise.resolve({})} />);
 
     expect(html).toContain("Forgot password?");
     expect(html).toContain("/forgot-password");

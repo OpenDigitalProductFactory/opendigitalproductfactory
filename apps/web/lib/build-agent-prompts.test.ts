@@ -63,6 +63,7 @@ describe("getBuildContextSection", () => {
       phase: "ideate",
       title: "My Feature",
       brief: null,
+      plan: null,
       portfolioId: null,
     });
     expect(section).toContain("FB-12345678");
@@ -84,6 +85,7 @@ describe("getBuildContextSection", () => {
       phase: "plan",
       title: "Feedback Form",
       brief,
+      plan: null,
       portfolioId: "products_and_services_sold",
     });
     expect(section).toContain("Feedback Form");
@@ -96,6 +98,7 @@ describe("getBuildContextSection", () => {
       phase: "ideate",
       title: "Test",
       brief: null,
+      plan: null,
       portfolioId: null,
     });
     expect(section).not.toContain("Feature Brief:");
