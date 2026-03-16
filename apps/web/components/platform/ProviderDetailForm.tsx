@@ -121,7 +121,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   }
 
   // Guided setup: determine which step the user is on
-  const hasProfiles = profiles.length > 0;
+  const hasProfiles = profiles.length > 0 || (profilingResult != null && profilingResult.profiled > 0);
   const step = provider.status === "active" && hasProfiles ? 5
     : provider.status === "active" ? 4
     : testResult?.ok ? 3
