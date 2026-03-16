@@ -389,6 +389,31 @@ export async function discoverModelsInternal(
   return { discovered: models.length, newCount };
 }
 
+/** Generate a profile for a local Ollama model from its metadata without calling an LLM. */
+function profileLocalModel(modelId: string, rawMetadata: Record<string, unknown>): ProfileResult {
+  const sizeBytes = (rawMetadata.size as number) ?? 0;
+  const sizeGb = sizeBytes / 1_073_741_824;
+  const paramMatch = modelId.match(/(\d+\.?\d*)b/i);
+  const paramB = paramMatch?.[1] ? parseFloat(paramMatch[1]) : (sizeGb > 15 ? 32 : sizeGb > 5 ? 14 : sizeGb > 2 ? 8 : 1.7);
+
+  const capabilityTier = paramB >= 30 ? "deep-thinker" : paramB >= 10 ? "strong" : paramB >= 5 ? "moderate" : "fast-cheap";
+  const speedRating = paramB >= 30 ? "slow" : paramB >= 10 ? "moderate" : "fast";
+
+  return {
+    modelId,
+    friendlyName: modelId.replace(/:/, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    summary: `Local ${paramB}B parameter model running via Ollama. ${paramB >= 30 ? "High quality reasoning and generation." : paramB >= 10 ? "Good balance of quality and speed." : "Fast responses, suitable for simple tasks."}`,
+    capabilityTier,
+    costTier: "$",
+    bestFor: paramB >= 10 ? ["reasoning", "code generation", "analysis"] : ["quick answers", "simple tasks"],
+    avoidFor: paramB < 10 ? ["complex reasoning", "long-form generation"] : [],
+    contextWindow: "32768",
+    speedRating,
+    codingCapability: paramB >= 10 ? "strong" : "basic",
+    instructionFollowing: paramB >= 10 ? "strong" : "moderate",
+  };
+}
+
 export async function profileModelsInternal(
   providerId: string,
   modelIds?: string[],
@@ -402,6 +427,23 @@ export async function profileModelsInternal(
     : { providerId };
   const models = await prisma.discoveredModel.findMany({ where: whereClause });
   if (models.length === 0) return { profiled: 0, failed: 0, error: "No models to profile" };
+
+  // Local providers (Ollama): profile from metadata without calling an LLM.
+  // Self-profiling a large local model is too slow and unreliable (thinking mode,
+  // token limits, OOM on split GPU/CPU loads).
+  if (providerId === "ollama") {
+    let profiled = 0;
+    for (const m of models) {
+      const profile = profileLocalModel(m.modelId, m.rawMetadata as Record<string, unknown>);
+      await prisma.modelProfile.upsert({
+        where: { providerId_modelId: { providerId, modelId: profile.modelId } },
+        create: { providerId, ...profile, generatedBy: "local-metadata" },
+        update: { ...profile, generatedBy: "local-metadata", generatedAt: new Date() },
+      });
+      profiled++;
+    }
+    return { profiled, failed: 0 };
+  }
 
   // Find cheapest active provider to do the profiling
   const allProviders = await prisma.modelProvider.findMany({
