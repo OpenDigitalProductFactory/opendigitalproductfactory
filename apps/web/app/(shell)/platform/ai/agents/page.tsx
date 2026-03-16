@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
+import { AiTabNav } from "@/components/platform/AiTabNav";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Tier 1 - Orchestrators",
@@ -46,16 +46,15 @@ export default async function AiAgentsPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <Link href="/platform/ai" style={{ color: "#b0b0c8", fontSize: 12 }}>
-          &larr; AI Providers
-        </Link>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>
           AI Workforce
         </h1>
         <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
           {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
         </p>
       </div>
+
+      <AiTabNav />
 
       {tiers.map((tier) => {
         const tierAgents = byTier.get(tier) ?? [];
