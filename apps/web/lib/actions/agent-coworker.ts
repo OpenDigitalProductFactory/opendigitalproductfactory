@@ -23,6 +23,7 @@ import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-t
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
+import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
@@ -259,6 +260,12 @@ export async function sendMessage(input: {
 
   if (attachmentContext) {
     promptSections.push(attachmentContext);
+  }
+
+  // Inject route-specific page data context
+  const routeData = await getRouteDataContext(input.routeContext, user.id!);
+  if (routeData) {
+    promptSections.push(routeData);
   }
 
   const populatedPrompt = promptSections.join("\n");
