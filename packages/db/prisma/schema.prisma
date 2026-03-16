@@ -499,16 +499,17 @@ model ScheduledJob {
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 model Agent {
-  id          String   @id @default(cuid())
-  agentId     String   @unique
-  name        String
-  tier        Int
-  type        String   // orchestrator | specialist | cross-cutting
-  description String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  portfolioId  String?
-  portfolio    Portfolio?  @relation(fields: [portfolioId], references: [id])
+  id                  String   @id @default(cuid())
+  agentId             String   @unique
+  name                String
+  tier                Int
+  type                String   // orchestrator | specialist | cross-cutting
+  description         String?
+  status              String   @default("active")
+  createdAt           DateTime @default(now())
+  portfolioId         String?
+  preferredProviderId String?  // provider to try first for this agent's conversations
+  portfolio           Portfolio?  @relation(fields: [portfolioId], references: [id])
   ownerships          AgentOwnership[]
   governanceProfile   AgentGovernanceProfile?
   delegationGrants    DelegationGrant[]

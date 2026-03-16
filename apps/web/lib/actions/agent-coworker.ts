@@ -278,6 +278,16 @@ export async function sendMessage(input: {
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
 
+  // Check DB for agent-level provider preference (overrides hardcoded config)
+  const dbAgent = await prisma.agent.findUnique({
+    where: { agentId: agent.agentId },
+    select: { preferredProviderId: true },
+  });
+  const modelReqs = {
+    ...agent.modelRequirements,
+    ...(dbAgent?.preferredProviderId ? { preferredProviderId: dbAgent.preferredProviderId } : {}),
+  };
+
   try {
     const result = await callWithFailover(
       chatHistory,
@@ -285,7 +295,7 @@ export async function sendMessage(input: {
       agent.sensitivity,
       {
         ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-        ...(agent.modelRequirements ? { modelRequirements: agent.modelRequirements } : {}),
+        ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       },
     );
 
