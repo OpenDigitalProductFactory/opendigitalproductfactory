@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/platform/ai/history/page.tsx
-import Link from "next/link";
 import { getProposals, getProposalStats } from "@/lib/proposal-data";
 import { ProposalHistoryClient } from "@/components/platform/ProposalHistoryClient";
+import { AiTabNav } from "@/components/platform/AiTabNav";
 
 const STAT_CARDS: Array<{ key: "total" | "executed" | "proposed" | "rejected" | "failed"; label: string; accent: string }> = [
   { key: "total", label: "Total", accent: "#7c8cf8" },
@@ -20,16 +20,15 @@ export default async function AgentHistoryPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <Link href="/platform/ai" style={{ color: "#b0b0c8", fontSize: 12 }}>
-          &larr; AI Providers
-        </Link>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>
-          Agent Action History
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>
+          Action History
         </h1>
         <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
           {stats.total} proposal{stats.total !== 1 ? "s" : ""} recorded
         </p>
       </div>
+
+      <AiTabNav />
 
       {/* Summary cards */}
       {stats.total > 0 && (

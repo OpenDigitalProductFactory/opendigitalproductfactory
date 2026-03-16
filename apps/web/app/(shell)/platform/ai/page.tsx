@@ -11,6 +11,7 @@ import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 import { getBillingLabel } from "@/lib/ai-provider-types";
+import { AiTabNav } from "@/components/platform/AiTabNav";
 
 const STATUS_COLOURS: Record<string, string> = {
   active:        "#4ade80",
@@ -66,15 +67,9 @@ export default async function PlatformAiPage() {
           {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({directProviders.length} direct, {agentProviders.length} agent, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
-        <div style={{ marginTop: 8, display: "flex", gap: 16 }}>
-          <Link href="/platform/ai/agents" style={{ color: "#7c8cf8", fontSize: 12 }}>
-            AI Workforce &rarr;
-          </Link>
-          <Link href="/platform/ai/history" style={{ color: "#7c8cf8", fontSize: 12 }}>
-            Action History &rarr;
-          </Link>
-        </div>
       </div>
+
+      <AiTabNav />
 
       {/* Section 1: Provider Registry */}
       <div style={{ marginBottom: 32 }}>
