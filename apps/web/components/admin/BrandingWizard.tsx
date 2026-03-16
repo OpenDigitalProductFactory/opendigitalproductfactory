@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveSimpleBrand } from "@/lib/actions/branding";
+import { saveSimpleBrand, importBrandFromUrl } from "@/lib/actions/branding";
 import { OOTB_PRESETS } from "@/lib/branding-presets";
 import { BrandingPreview } from "./BrandingPreview";
 
@@ -38,6 +38,25 @@ export function BrandingWizard({
   const [accent, setAccent] = useState(existingAccent ?? "#7c8cf8");
   const [font, setFont] = useState(existingFont ?? "Inter, system-ui, sans-serif");
   const [saving, setSaving] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  const handleAnalyzeUrl = async () => {
+    if (!urlInput.trim()) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    const result = await importBrandFromUrl(urlInput.trim());
+    setAnalyzing(false);
+    if (!result.ok) {
+      setAnalyzeError(result.error);
+      return;
+    }
+    if (result.companyName) setName(result.companyName);
+    if (result.logoUrl) setLogoUrl(result.logoUrl);
+    if (result.accentColor) setAccent(result.accentColor);
+    setStep("preview");
+  };
 
   const applyPreset = (preset: (typeof OOTB_PRESETS)[number]) => {
     setAccent(preset.tokens.palette.accent);
@@ -85,23 +104,30 @@ export function BrandingWizard({
         <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-3">
           <p className="text-xs font-semibold text-white uppercase tracking-widest">Import from URL</p>
           <p className="text-[11px] text-[var(--dpf-muted)]">
-            Requires external access to be enabled in Settings.
+            Paste your company website and we&apos;ll extract your logo, colors, and name.
           </p>
           <div className="flex gap-2">
             <input
               type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.currentTarget.value)}
               placeholder="https://yourcompany.com"
-              disabled
-              className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] opacity-60 cursor-not-allowed"
+              disabled={analyzing}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAnalyzeUrl(); } }}
+              className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] disabled:opacity-60"
             />
             <button
               type="button"
-              disabled
-              className="px-3 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] opacity-60 cursor-not-allowed"
+              onClick={handleAnalyzeUrl}
+              disabled={analyzing || !urlInput.trim()}
+              className="px-3 py-2 rounded bg-[var(--dpf-accent)] text-xs text-white font-semibold disabled:opacity-50"
             >
-              Analyze
+              {analyzing ? "Analyzing…" : "Analyze"}
             </button>
           </div>
+          {analyzeError && (
+            <p className="text-[11px] text-red-400">{analyzeError}</p>
+          )}
         </div>
 
         {/* Upload brand document */}
@@ -114,7 +140,7 @@ export function BrandingWizard({
             className="w-full bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-white opacity-60 cursor-not-allowed file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-surface-1)] file:text-[var(--dpf-muted)] file:px-2 file:py-1 file:text-xs"
           />
           <p className="text-[11px] text-[var(--dpf-muted)]">
-            Accepts PDF, PNG, JPG, JPEG, SVG. Brand extraction coming soon.
+            Accepts PDF, PNG, JPG, JPEG, SVG.
           </p>
         </div>
 
