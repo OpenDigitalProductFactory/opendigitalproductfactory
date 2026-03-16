@@ -290,6 +290,7 @@ export type ModelRequirements = {
   minCapabilityTier?: string;
   instructionFollowing?: "excellent" | "adequate";
   codingCapability?: "excellent" | "adequate";
+  preferredProviderId?: string;
 };
 
 export async function callWithFailover(
@@ -303,6 +304,16 @@ export async function callWithFailover(
   let filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
   if (filteredPriority.length === 0) {
     throw new NoAllowedProvidersForSensitivityError(sensitivity);
+  }
+
+  // Prefer a specific provider if the agent requests one (e.g., Build Specialist -> Codex)
+  if (options?.modelRequirements?.preferredProviderId) {
+    const preferred = filteredPriority.filter((e) => e.providerId === options.modelRequirements!.preferredProviderId);
+    if (preferred.length > 0) {
+      // Put preferred first, keep others as fallback
+      const rest = filteredPriority.filter((e) => e.providerId !== options.modelRequirements!.preferredProviderId);
+      filteredPriority = [...preferred, ...rest];
+    }
   }
 
   // Filter by model requirements if specified (e.g., Build Specialist needs excellent instruction-following)
