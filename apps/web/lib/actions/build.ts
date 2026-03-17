@@ -12,7 +12,12 @@ import {
   type FeatureBrief,
   type BuildPhase,
   type VersionBump,
+  type BuildDesignDoc,
+  type BuildPlanDoc,
+  type ReviewResult,
 } from "@/lib/feature-build-types";
+import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
+import { callWithFailover } from "@/lib/ai-provider-priority";
 import * as crypto from "crypto";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -496,4 +501,60 @@ export async function saveBuildEvidence(
     where: { buildId },
     data: { [field]: value as Prisma.InputJsonValue },
   });
+}
+
+// ─── Build Disciplines — Reviewer Actions ────────────────────────────────────
+
+async function callReviewerLLM(prompt: string): Promise<string> {
+  const result = await callWithFailover(
+    [{ role: "user", content: prompt }],
+    "You are a build discipline reviewer. Respond only with the requested JSON format.",
+    "internal",
+    { task: "analysis" },
+  );
+  return result.content;
+}
+
+export async function reviewDesignDoc(buildId: string): Promise<ReviewResult> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (!build.designDoc) throw new Error("No design document to review");
+
+  const doc = build.designDoc as unknown as BuildDesignDoc;
+  const prompt = buildDesignReviewPrompt(doc, `Build: ${build.title}. ${build.description ?? ""}`);
+
+  const raw = await callReviewerLLM(prompt);
+  const result = parseReviewResponse(raw);
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: { designReview: result as unknown as Prisma.InputJsonValue },
+  });
+
+  return result;
+}
+
+export async function reviewBuildPlan(buildId: string): Promise<ReviewResult> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (!build.buildPlan) throw new Error("No implementation plan to review");
+
+  const plan = build.buildPlan as unknown as BuildPlanDoc;
+  const prompt = buildPlanReviewPrompt(plan);
+
+  const raw = await callReviewerLLM(prompt);
+  const result = parseReviewResponse(raw);
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: { planReview: result as unknown as Prisma.InputJsonValue },
+  });
+
+  return result;
 }
