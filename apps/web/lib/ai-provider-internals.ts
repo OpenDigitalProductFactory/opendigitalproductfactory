@@ -38,6 +38,14 @@ export function getProviderExtraHeaders(providerId: string): Record<string, stri
   return {};
 }
 
+/** Detect if an Anthropic key is a subscription OAuth token (from `claude setup-token`) */
+export function isAnthropicOAuthToken(apiKey: string): boolean {
+  return apiKey.includes("sk-ant-oat");
+}
+
+/** Beta headers required for Anthropic subscription token auth */
+export const ANTHROPIC_OAUTH_BETA_HEADERS = "claude-code-20250219,oauth-2025-04-20";
+
 type TokenUsage = {
   inputTokens: number | undefined;
   outputTokens: number | undefined;

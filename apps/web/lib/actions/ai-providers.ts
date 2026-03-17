@@ -17,6 +17,8 @@ import {
   getDecryptedCredential,
   getProviderExtraHeaders,
   getProviderBearerToken,
+  isAnthropicOAuthToken,
+  ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -235,6 +237,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${credential.secretRef}`
         : credential.secretRef;
+    }
+    // Anthropic subscription tokens need OAuth beta headers
+    if (providerId === "anthropic" && isAnthropicOAuthToken(credential.secretRef)) {
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
