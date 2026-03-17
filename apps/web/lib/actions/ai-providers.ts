@@ -250,7 +250,33 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   // authMethod === "none" → no headers needed
 
   try {
-    const res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
+    let res: Response;
+
+    // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
+    if (providerId === "anthropic" && headers["anthropic-beta"]?.includes("oauth")) {
+      const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
+      const messagesUrl = `${baseUrl}/messages`;
+      headers["Content-Type"] = "application/json";
+      res = await fetch(messagesUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      // A 200 or even a 400 "max_tokens too low" means auth worked
+      if (res.ok || res.status === 400) {
+        await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
+        return { ok: true, message: `Connected via subscription token — auth verified` };
+      }
+      const body = await res.text().catch(() => "");
+      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
+    }
+
+    res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
       await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
       return { ok: true, message: `Connected — HTTP ${res.status}` };
