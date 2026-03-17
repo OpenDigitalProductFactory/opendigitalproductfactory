@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory } from "@/lib/ai-provider-data";
-import { syncProviderRegistry } from "@/lib/actions/ai-providers";
+import { syncProviderRegistry, detectMcpServers } from "@/lib/actions/ai-providers";
+import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
@@ -40,11 +41,12 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
+    detectMcpServers(),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -60,6 +62,8 @@ export default async function ProvidersPage() {
       </div>
 
       <AiTabNav />
+
+      <DetectedServicesBanner detected={detected} />
 
       {/* Section 1: External Services Registry */}
       <div style={{ marginBottom: 32 }}>
