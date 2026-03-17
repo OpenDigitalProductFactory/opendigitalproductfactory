@@ -17,6 +17,9 @@ import {
 import {
   loadExternalAccessSessionState,
   saveExternalAccessSessionState,
+  loadCoworkerMode,
+  saveCoworkerMode,
+  type CoworkerMode,
 } from "./agent-external-access-session";
 import {
   buildAgentFormAssistContext,
@@ -70,6 +73,7 @@ export function AgentCoworkerPanel({
   const [isClearing, startClearing] = useTransition();
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
+  const [coworkerMode, setCoworkerMode] = useState<CoworkerMode>("advise");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
@@ -104,6 +108,7 @@ export function AgentCoworkerPanel({
   useEffect(() => {
     setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
     setExternalAccessEnabled(loadExternalAccessSessionState(preferenceUserKey, pathname));
+    setCoworkerMode(loadCoworkerMode(preferenceUserKey, pathname));
   }, [pathname, preferenceUserKey]);
 
   useEffect(() => {
@@ -139,6 +144,14 @@ export function AgentCoworkerPanel({
     });
   }
 
+  function handleToggleCoworkerMode() {
+    setCoworkerMode((prev) => {
+      const next: CoworkerMode = prev === "advise" ? "act" : "advise";
+      saveCoworkerMode(preferenceUserKey, pathname, next);
+      return next;
+    });
+  }
+
   function submitMessage(
     content: string,
     optimisticMessage = createOptimisticUserMessage(content, pathname),
@@ -159,7 +172,8 @@ export function AgentCoworkerPanel({
         threadId,
         content,
         routeContext: cooMode ? "/workspace" : pathname,
-        externalAccessEnabled,
+        coworkerMode: coworkerMode,
+        externalAccessEnabled: coworkerMode === "act" ? true : externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(!cooMode && activeBuildId ? { buildId: activeBuildId } : {}),
@@ -321,6 +335,9 @@ export function AgentCoworkerPanel({
         cooMode={cooMode}
         canUseCoo={canUseCoo}
         onToggleCoo={() => setCooMode((prev) => !prev)}
+        coworkerMode={coworkerMode}
+        onToggleCoworkerMode={handleToggleCoworkerMode}
+        sensitivityLevel={agent.sensitivity}
       />
 
       <div

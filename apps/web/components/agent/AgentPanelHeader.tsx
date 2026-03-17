@@ -27,6 +27,10 @@ type Props = {
   cooMode?: boolean;
   canUseCoo?: boolean;
   onToggleCoo?: () => void;
+  coworkerMode?: "advise" | "act";
+  onToggleCoworkerMode?: () => void;
+  sensitivityLevel?: string;
+  useUnified?: boolean;
 };
 
 export function AgentPanelHeader({
@@ -48,6 +52,10 @@ export function AgentPanelHeader({
   cooMode,
   canUseCoo,
   onToggleCoo,
+  coworkerMode,
+  onToggleCoworkerMode,
+  sensitivityLevel,
+  useUnified,
 }: Props) {
   return (
     <div
@@ -123,34 +131,65 @@ export function AgentPanelHeader({
           >
             {elevatedAssistEnabled ? "Hands On" : "Hands Off"}
           </button>
-          <button
-            type="button"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleExternalAccess();
-            }}
-            title={
-              externalAccessEnabled
-                ? "External On: this page's coworker can use approved public web search and fetch tools during this session"
-                : "External Off: this page's coworker cannot access approved public web search and fetch tools during this session"
-            }
-            style={{
-              fontSize: 9,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              color: externalAccessEnabled ? "#a7f3d0" : "rgba(224, 224, 255, 0.78)",
-              background: externalAccessEnabled ? "rgba(16, 185, 129, 0.16)" : "transparent",
-              border: `1px solid ${externalAccessEnabled ? "rgba(16, 185, 129, 0.55)" : "rgba(255, 255, 255, 0.12)"}`,
-              borderRadius: 999,
-              padding: "2px 6px",
-              fontWeight: externalAccessEnabled ? 700 : 500,
-              cursor: "pointer",
-              lineHeight: 1.2,
-            }}
-          >
-            {externalAccessEnabled ? "External Access On" : "External Access Off"}
-          </button>
+          {useUnified && onToggleCoworkerMode ? (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCoworkerMode();
+              }}
+              title={
+                coworkerMode === "act"
+                  ? "Act: AI executes within your authority"
+                  : "Advise: AI recommends but doesn't act"
+              }
+              style={{
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: coworkerMode === "act" ? "#a7f3d0" : "rgba(224, 224, 255, 0.78)",
+                background: coworkerMode === "act" ? "rgba(16, 185, 129, 0.16)" : "transparent",
+                border: `1px solid ${coworkerMode === "act" ? "rgba(16, 185, 129, 0.55)" : "rgba(255, 255, 255, 0.12)"}`,
+                borderRadius: 999,
+                padding: "2px 6px",
+                fontWeight: coworkerMode === "act" ? 700 : 500,
+                cursor: "pointer",
+                lineHeight: 1.2,
+              }}
+            >
+              {coworkerMode === "act" ? "Act" : "Advise"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExternalAccess();
+              }}
+              title={
+                externalAccessEnabled
+                  ? "External On: this page's coworker can use approved public web search and fetch tools during this session"
+                  : "External Off: this page's coworker cannot access approved public web search and fetch tools during this session"
+              }
+              style={{
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: externalAccessEnabled ? "#a7f3d0" : "rgba(224, 224, 255, 0.78)",
+                background: externalAccessEnabled ? "rgba(16, 185, 129, 0.16)" : "transparent",
+                border: `1px solid ${externalAccessEnabled ? "rgba(16, 185, 129, 0.55)" : "rgba(255, 255, 255, 0.12)"}`,
+                borderRadius: 999,
+                padding: "2px 6px",
+                fontWeight: externalAccessEnabled ? 700 : 500,
+                cursor: "pointer",
+                lineHeight: 1.2,
+              }}
+            >
+              {externalAccessEnabled ? "External Access On" : "External Access Off"}
+            </button>
+          )}
           {canUseCoo && onToggleCoo && (
             <button
               type="button"
@@ -176,6 +215,23 @@ export function AgentPanelHeader({
             >
               COO
             </button>
+          )}
+          {sensitivityLevel && (
+            <span
+              title={`Page sensitivity: ${sensitivityLevel}`}
+              style={{
+                fontSize: 8,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "rgba(224, 224, 255, 0.55)",
+                border: "1px dashed rgba(255, 255, 255, 0.1)",
+                borderRadius: 999,
+                padding: "1px 5px",
+                lineHeight: 1.3,
+              }}
+            >
+              {sensitivityLevel}
+            </span>
           )}
         </div>
         <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 12 }}>
