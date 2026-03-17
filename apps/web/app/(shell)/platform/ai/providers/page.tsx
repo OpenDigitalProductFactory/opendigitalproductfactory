@@ -63,7 +63,7 @@ export default async function ProvidersPage() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>AI Providers</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>External Services</h1>
         <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
           {providers.length} provider{providers.length !== 1 ? "s" : ""} registered ({localProviders.length} local, {directProviders.length} direct, {agentProviders.length} agent, {routerProviders.length} routers)
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
