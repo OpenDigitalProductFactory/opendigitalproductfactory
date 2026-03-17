@@ -9,6 +9,7 @@ import {
   type EpicWithRelations,
   type BacklogItemWithRelations,
 } from "@/lib/backlog";
+import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { BacklogItemRow } from "./BacklogItemRow";
 
 // Must stay in sync with OpsClient SortField / SortState
@@ -90,6 +91,12 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
         <p className="flex-1 min-w-0 text-xs text-white truncate">
           {epic.title}
           <span className="ml-1.5 text-[9px] text-[var(--dpf-muted)] tabular-nums">({totalCount})</span>
+          <span className="ml-2 text-[9px] text-[var(--dpf-muted)]">
+            {new Date(epic.createdAt).toLocaleDateString()}
+            {epic.agentId ? ` · ${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId}` : ""}
+            {epic.submittedBy ? ` · ${epic.submittedBy.email}` : ""}
+            {epic.completedAt ? ` · done ${new Date(epic.completedAt).toLocaleDateString()}` : ""}
+          </span>
         </p>
 
         {/* col: portfolio — w-36 hidden sm */}
