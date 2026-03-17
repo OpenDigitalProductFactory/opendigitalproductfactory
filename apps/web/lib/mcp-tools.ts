@@ -372,6 +372,33 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── Manifest Tools ────────────────────────────────────────────────────────
+  {
+    name: "generate_codebase_manifest",
+    description: "Generate or refresh the codebase manifest (SBOM). Reads package.json, schema.prisma, directory structure, and the base manifest template to produce a current snapshot. Dev-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        version: { type: "string", description: "Version label (default: 'dev')" },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "read_codebase_manifest",
+    description: "Read the codebase manifest (SBOM) for a specific version. Returns the structured JSON with modules, capabilities, dependencies, and statistics. Works in both dev and production.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        version: { type: "string", description: "Version to read (default: latest or deployed)" },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   {
     name: "propose_file_change",
     description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
@@ -1005,6 +1032,70 @@ export async function executeTool(
         message: summary || "No versions found.",
         data: { versions: rows },
       };
+    }
+
+    case "generate_codebase_manifest": {
+      const { isDevInstance } = await import("@/lib/codebase-tools");
+      if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
+
+      const { generateManifest } = await import("@/lib/manifest-generator");
+      const { getCurrentCommitHash } = await import("@/lib/git-utils");
+
+      const gitRef = await getCurrentCommitHash() ?? "unknown";
+      const version = typeof params.version === "string" ? params.version : "dev";
+
+      const manifest = await generateManifest({ version, gitRef, writeFile: true });
+
+      // Store in DB (best-effort) — delete+create to avoid nullable composite key issues
+      try {
+        await prisma.codebaseManifest.deleteMany({
+          where: { version, digitalProductId: null },
+        });
+        await prisma.codebaseManifest.create({
+          data: { version, gitRef, manifest: manifest as unknown as import("@dpf/db").Prisma.InputJsonValue },
+        });
+      } catch (err) {
+        console.warn("[generate_codebase_manifest] DB store failed:", err);
+      }
+
+      return {
+        success: true,
+        message: `Manifest generated for version "${version}" with ${manifest.statistics.totalFiles} files, ${manifest.statistics.dataModelCount} models, ${manifest.statistics.externalDependencyCount} dependencies.`,
+        data: { manifest },
+      };
+    }
+
+    case "read_codebase_manifest": {
+      const version = typeof params.version === "string" ? params.version : undefined;
+
+      // Try DB first
+      const dbManifest = await prisma.codebaseManifest.findFirst({
+        where: version ? { version } : {},
+        orderBy: { generatedAt: "desc" },
+        select: { version: true, gitRef: true, manifest: true, generatedAt: true },
+      });
+
+      if (dbManifest) {
+        return {
+          success: true,
+          message: `Manifest for version "${dbManifest.version}" (generated ${dbManifest.generatedAt.toISOString().slice(0, 10)})`,
+          data: { manifest: dbManifest.manifest, version: dbManifest.version, gitRef: dbManifest.gitRef },
+        };
+      }
+
+      // Fall back to reading the file (dev instances only)
+      const { isDevInstance, readProjectFile } = await import("@/lib/codebase-tools");
+      if (isDevInstance()) {
+        const result = readProjectFile("codebase-manifest.json");
+        if ("content" in result) {
+          try {
+            const manifest = JSON.parse(result.content);
+            return { success: true, message: "Manifest loaded from file.", data: { manifest } };
+          } catch { /* fall through */ }
+        }
+      }
+
+      return { success: false, error: "No manifest found. Use generate_codebase_manifest to create one.", message: "No manifest available." };
     }
 
     case "propose_file_change": {
