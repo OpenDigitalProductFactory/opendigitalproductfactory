@@ -4,7 +4,8 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { approveTimesheet, rejectTimesheet } from "@/lib/actions/timesheet";
 import type { TimesheetPeriodRow } from "@/lib/timesheet-data";
-import { DAY_NAMES } from "@/lib/timesheet-data";
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type Props = {
   pendingTimesheets: TimesheetPeriodRow[];

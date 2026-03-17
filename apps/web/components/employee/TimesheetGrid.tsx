@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveTimesheetEntries, submitTimesheet } from "@/lib/actions/timesheet";
 import type { TimesheetPeriodRow } from "@/lib/timesheet-data";
-import { DAY_NAMES } from "@/lib/timesheet-data";
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
