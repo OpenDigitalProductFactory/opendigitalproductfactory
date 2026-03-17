@@ -94,8 +94,8 @@ CREATE INDEX "Region_countryId_idx" ON "Region"("countryId");
 -- CreateIndex
 CREATE INDEX "Region_status_idx" ON "Region"("status");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Region_countryId_name_key" ON "Region"("countryId", "name");
+-- CreateIndex (non-unique; uniqueness handled by case-insensitive functional index below)
+CREATE INDEX "Region_countryId_name_idx" ON "Region"("countryId", "name");
 
 -- CreateIndex
 CREATE INDEX "City_regionId_idx" ON "City"("regionId");
@@ -103,8 +103,8 @@ CREATE INDEX "City_regionId_idx" ON "City"("regionId");
 -- CreateIndex
 CREATE INDEX "City_status_idx" ON "City"("status");
 
--- CreateIndex
-CREATE UNIQUE INDEX "City_regionId_name_key" ON "City"("regionId", "name");
+-- CreateIndex (non-unique; uniqueness handled by case-insensitive functional index below)
+CREATE INDEX "City_regionId_name_idx" ON "City"("regionId", "name");
 
 -- CreateIndex
 CREATE INDEX "Address_cityId_idx" ON "Address"("cityId");
@@ -142,6 +142,18 @@ ALTER TABLE "EmployeeAddress" ADD CONSTRAINT "EmployeeAddress_employeeProfileId_
 -- AddForeignKey
 ALTER TABLE "EmployeeAddress" ADD CONSTRAINT "EmployeeAddress_addressId_fkey" FOREIGN KEY ("addressId") REFERENCES "Address"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- Unique index on Country.numericCode (ISO 3166-1 numeric)
+CREATE UNIQUE INDEX "Country_numericCode_key" ON "Country"("numericCode");
+
 -- Case-insensitive functional unique indexes
 CREATE UNIQUE INDEX "Region_countryId_name_ci" ON "Region" (LOWER("name"), "countryId");
 CREATE UNIQUE INDEX "City_regionId_name_ci" ON "City" (LOWER("name"), "regionId");
+
+-- Partial unique index: at most one primary address per employee
+CREATE UNIQUE INDEX "EmployeeAddress_employeeProfileId_primary_key"
+    ON "EmployeeAddress" ("employeeProfileId")
+    WHERE "isPrimary" = true;
+
+-- CHECK constraint: restrict Address.label to known values
+ALTER TABLE "Address" ADD CONSTRAINT "Address_label_check"
+    CHECK ("label" IN ('home', 'work', 'billing', 'shipping', 'headquarters', 'site'));
