@@ -13,8 +13,8 @@ const NAV_ITEMS = [
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) redirect("/customer-login");
-  if (session.user.type !== "customer") redirect("/customer-login");
+  if (!session?.user) redirect("/");
+  if (session.user.type !== "customer") redirect("/");
 
   const user = session.user;
 
