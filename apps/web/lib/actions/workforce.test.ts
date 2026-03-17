@@ -51,9 +51,11 @@ import { resolveGovernedAction } from "@/lib/governance-resolver";
 import {
   createEmployeeProfile,
   recordEmploymentLifecycleEvent,
+} from "./workforce";
+import {
   validateEmployeeProfileInput,
   validateLifecycleTransition,
-} from "./workforce";
+} from "@/lib/workforce-types";
 
 const authMock = auth as unknown as { mockResolvedValue: (value: unknown) => void };
 
