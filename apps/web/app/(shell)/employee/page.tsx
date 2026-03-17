@@ -2,10 +2,12 @@
 import { prisma } from "@dpf/db";
 import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryPanel";
 import { EmployeeProfilePanel } from "@/components/employee/EmployeeProfilePanel";
+import { EmployeeTabNav } from "@/components/employee/EmployeeTabNav";
 import { HrUserLifecyclePanel } from "@/components/employee/HrUserLifecyclePanel";
 import { LifecycleEventPanel } from "@/components/employee/LifecycleEventPanel";
 import { NewEmployeeButton } from "@/components/employee/NewEmployeeButton";
 import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
+import { OrgChartView } from "@/components/employee/OrgChartView";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
@@ -13,7 +15,14 @@ import {
   getWorkforceReferenceData,
 } from "@/lib/workforce-data";
 
-export default async function EmployeePage() {
+type Props = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function EmployeePage({ searchParams }: Props) {
+  const params = await searchParams;
+  const view = typeof params.view === "string" ? params.view : "directory";
+
   const [roles, users, employees, workforceReferenceData] = await Promise.all([
     prisma.platformRole.findMany({
       orderBy: { roleId: "asc" },
@@ -133,19 +142,29 @@ export default async function EmployeePage() {
         <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
       )}
 
-      <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <EmployeeDirectoryPanel employees={employees} />
-        <EmployeeProfilePanel employee={selectedEmployee} />
-      </div>
+      <div className="mt-8">
+        <EmployeeTabNav />
 
-      <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <OrgAssignmentPanel
-          employee={selectedEmployee}
-          departments={workforceReferenceData.departments}
-          positions={workforceReferenceData.positions}
-          workLocations={workforceReferenceData.workLocations}
-        />
-        <LifecycleEventPanel events={lifecycleEvents} />
+        {view === "orgchart" ? (
+          <OrgChartView employees={employees} />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <EmployeeDirectoryPanel employees={employees} />
+              <EmployeeProfilePanel employee={selectedEmployee} />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <OrgAssignmentPanel
+                employee={selectedEmployee}
+                departments={workforceReferenceData.departments}
+                positions={workforceReferenceData.positions}
+                workLocations={workforceReferenceData.workLocations}
+              />
+              <LifecycleEventPanel events={lifecycleEvents} />
+            </div>
+          </>
+        )}
       </div>
 
       {users.length > 0 && (

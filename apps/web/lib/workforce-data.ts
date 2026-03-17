@@ -27,10 +27,12 @@ export async function getEmployeeDirectoryRows(): Promise<EmployeeDirectoryRow[]
       departmentId: true,
       positionId: true,
       managerEmployeeId: true,
+      dottedLineManagerId: true,
       workLocationId: true,
       department: { select: { name: true } },
       position: { select: { title: true } },
       manager: { select: { displayName: true } },
+      dottedLineManager: { select: { displayName: true } },
       workLocation: { select: { name: true } },
     },
   });
@@ -48,6 +50,8 @@ export async function getEmployeeDirectoryRows(): Promise<EmployeeDirectoryRow[]
     positionTitle: employee.position?.title ?? null,
     managerEmployeeId: employee.managerEmployeeId,
     managerName: employee.manager?.displayName ?? null,
+    dottedLineManagerId: employee.dottedLineManagerId,
+    dottedLineManagerName: employee.dottedLineManager?.displayName ?? null,
     workLocationId: employee.workLocationId,
     workLocationName: employee.workLocation?.name ?? null,
   }));
