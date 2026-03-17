@@ -312,6 +312,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
+    name: "list_project_directory",
+    description: "List files and directories in a project directory. Use '.' or empty string for project root. Helps discover the project structure.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative directory path from project root (use '.' for root)" },
+      },
+      required: ["path"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "read_project_file",
     description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
     inputSchema: {
@@ -908,6 +922,14 @@ export async function executeTool(
 
       const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
       return { success: true, message: `Spec updated — ${totalItems} items captured.` };
+    }
+
+    case "list_project_directory": {
+      const { listProjectDirectory } = await import("@/lib/codebase-tools");
+      const result = listProjectDirectory(String(params.path ?? "."));
+      if ("error" in result) return { success: false, error: result.error, message: result.error };
+      const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
+      return { success: true, message: summary || "Empty directory", data: { entries: result.entries } };
     }
 
     case "read_project_file": {

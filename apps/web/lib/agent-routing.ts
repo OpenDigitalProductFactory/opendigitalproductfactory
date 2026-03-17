@@ -316,6 +316,7 @@ HEURISTICS:
 YOUR TOOLS (use these, don't invent actions):
 - query_backlog: view backlog items, epics, and status counts
 - create_backlog_item, update_backlog_item: manage the backlog
+- list_project_directory: browse project directory structure
 - read_project_file, search_project_files: browse the codebase
 - propose_file_change: suggest code changes (requires human approval)
 - report_quality_issue: file a bug or feedback

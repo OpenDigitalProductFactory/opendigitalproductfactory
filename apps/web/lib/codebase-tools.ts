@@ -123,6 +123,47 @@ export function searchProjectFiles(
   }
 }
 
+export function listProjectDirectory(
+  dirPath: string,
+  options?: { maxDepth?: number },
+): { entries: Array<{ name: string; type: "file" | "dir"; path: string }> } | { error: string } {
+  const safePath = dirPath === "" || dirPath === "." ? "." : dirPath;
+  if (safePath !== "." && !isPathAllowed(safePath)) {
+    return { error: `Access denied: ${safePath}` };
+  }
+
+  const fullPath = safePath === "." ? PROJECT_ROOT : resolve(PROJECT_ROOT, safePath);
+  if (!existsSync(fullPath)) {
+    return { error: `Directory not found: ${safePath}` };
+  }
+
+  try {
+    const { readdirSync, statSync } = require("fs") as typeof import("fs");
+    const items = readdirSync(fullPath, { withFileTypes: true });
+    const entries: Array<{ name: string; type: "file" | "dir"; path: string }> = [];
+
+    for (const item of items) {
+      const itemPath = safePath === "." ? item.name : `${safePath}/${item.name}`;
+      if (!isPathAllowed(itemPath)) continue;
+      if (item.name.startsWith(".")) continue; // skip dotfiles
+      entries.push({
+        name: item.name,
+        type: item.isDirectory() ? "dir" : "file",
+        path: itemPath,
+      });
+    }
+
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return { entries: entries.slice(0, 100) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Read error" };
+  }
+}
+
 export function writeProjectFile(
   filePath: string,
   content: string,
