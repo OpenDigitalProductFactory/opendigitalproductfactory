@@ -428,6 +428,9 @@ export async function callWithFailover(
     }
   }
 
+  // Include cascade info in error for diagnostics
+  const cascadeInfo = filteredPriority.slice(0, limit).map((e) => `${e.providerId}(model=${e.modelId})`).join(", ");
+  attempts.push({ providerId: "_cascade_info", error: `Tried ${limit} of ${filteredPriority.length}: ${cascadeInfo}` });
   throw new NoProvidersAvailableError(attempts);
 }
 
