@@ -164,6 +164,9 @@ model EmployeeProfile {
   leaveBalances       LeaveBalance[]
   leaveRequests       LeaveRequest[]
   leaveApprovals      LeaveRequest[]     @relation("LeaveApprovals")
+  // Time tracking
+  timesheets          TimesheetPeriod[]
+  timesheetApprovals  TimesheetPeriod[]  @relation("TimesheetApprovals")
 
   @@index([status])
   @@index([departmentId])
@@ -1575,4 +1578,51 @@ model LeaveRequest {
   @@index([employeeProfileId])
   @@index([status])
   @@index([startDate, endDate])
+}
+
+// ─── HR Lifecycle: Time Tracking ────────────────────────────────────────────
+
+model TimesheetPeriod {
+  id                String    @id @default(cuid())
+  periodId          String    @unique
+  employeeProfileId String
+  weekStarting      DateTime                    // Monday of the week
+  status            String    @default("draft") // draft | submitted | approved | rejected
+  totalHours        Float     @default(0)
+  totalBreakMinutes Int       @default(0)
+  overtimeHours     Float     @default(0)
+  overtimeThreshold Float     @default(40)      // configurable per-period
+  submittedAt       DateTime?
+  approvedById      String?
+  approvedAt        DateTime?
+  rejectionReason   String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  employeeProfile   EmployeeProfile  @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  approvedBy        EmployeeProfile? @relation("TimesheetApprovals", fields: [approvedById], references: [id])
+  entries           TimesheetEntry[]
+
+  @@unique([employeeProfileId, weekStarting])
+  @@index([employeeProfileId])
+  @@index([status])
+  @@index([weekStarting])
+}
+
+model TimesheetEntry {
+  id                String   @id @default(cuid())
+  timesheetPeriodId String
+  dayOfWeek         Int                        // 0=Mon, 1=Tue, ... 6=Sun
+  date              DateTime
+  hours             Float    @default(0)
+  breakMinutes      Int      @default(0)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  timesheetPeriod   TimesheetPeriod @relation(fields: [timesheetPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([timesheetPeriodId, dayOfWeek])
+  @@index([timesheetPeriodId])
 }
