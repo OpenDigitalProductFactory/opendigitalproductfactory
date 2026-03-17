@@ -25,6 +25,10 @@ import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
+import { resolveRouteContext } from "@/lib/route-context-map";
+import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -209,11 +213,14 @@ export async function sendMessage(input: {
     attachmentContext = `\n--- Uploaded Files ---\n${summaries.join("\n")}`;
   }
 
+  // Check unified coworker feature flag
+  const useUnified = await isUnifiedCoworkerEnabled();
+
   // Resolve agent
   const agent = resolveAgentForRoute(input.routeContext, {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
-  });
+  }, useUnified);
 
   // Build inference context
   const recentMessages = await prisma.agentMessage.findMany({
@@ -227,49 +234,73 @@ export async function sendMessage(input: {
     content: m.content,
   }));
 
-  // Inject route context and user role into system prompt
-  const promptSections = [
-    agent.systemPrompt,
-    "",
-    "Current context:",
-    `- Route: ${input.routeContext}`,
-    `- User role: ${user.platformRole ?? "none"}`,
-    `- Page sensitivity: ${agent.sensitivity}`,
-  ];
+  let populatedPrompt: string;
 
-  if (input.elevatedFormFillEnabled && input.formAssistContext) {
-    promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
-  }
+  if (useUnified) {
+    // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
+    const routeCtx = resolveRouteContext(input.routeContext);
+    const userCtx = { platformRole: user.platformRole, isSuperuser: user.isSuperuser };
+    const granted = getGrantedCapabilities(userCtx);
+    const denied = getDeniedCapabilities(userCtx);
 
-  // Inject Build Studio context — use explicit buildId or auto-resolve on /build route
-  let resolvedBuildId = input.buildId;
-  if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
-    // Auto-resolve: find the user's most recent non-terminal build
-    const latestBuild = await prisma.featureBuild.findFirst({
-      where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
-      orderBy: { updatedAt: "desc" },
-      select: { buildId: true },
+    const routeData = await getRouteDataContext(input.routeContext, user.id!);
+
+    populatedPrompt = assembleSystemPrompt({
+      hrRole: user.platformRole ?? "none",
+      grantedCapabilities: granted,
+      deniedCapabilities: denied,
+      mode: (input.coworkerMode as "advise" | "act") ?? "advise",
+      sensitivity: routeCtx.sensitivity,
+      domainContext: routeCtx.domainContext,
+      domainTools: routeCtx.domainTools,
+      routeData: routeData,
+      attachmentContext,
     });
-    resolvedBuildId = latestBuild?.buildId ?? undefined;
-  }
-  if (resolvedBuildId) {
-    const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
-    if (buildCtx) {
-      promptSections.push(getBuildContextSection(buildCtx));
+  } else {
+    // ── Legacy persona-based prompt assembly ──
+    const promptSections = [
+      agent.systemPrompt,
+      "",
+      "Current context:",
+      `- Route: ${input.routeContext}`,
+      `- User role: ${user.platformRole ?? "none"}`,
+      `- Page sensitivity: ${agent.sensitivity}`,
+    ];
+
+    if (input.elevatedFormFillEnabled && input.formAssistContext) {
+      promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
     }
-  }
 
-  if (attachmentContext) {
-    promptSections.push(attachmentContext);
-  }
+    // Inject Build Studio context — use explicit buildId or auto-resolve on /build route
+    let resolvedBuildId = input.buildId;
+    if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
+      // Auto-resolve: find the user's most recent non-terminal build
+      const latestBuild = await prisma.featureBuild.findFirst({
+        where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+      });
+      resolvedBuildId = latestBuild?.buildId ?? undefined;
+    }
+    if (resolvedBuildId) {
+      const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
+      if (buildCtx) {
+        promptSections.push(getBuildContextSection(buildCtx));
+      }
+    }
 
-  // Inject route-specific page data context
-  const routeData = await getRouteDataContext(input.routeContext, user.id!);
-  if (routeData) {
-    promptSections.push(routeData);
-  }
+    if (attachmentContext) {
+      promptSections.push(attachmentContext);
+    }
 
-  const populatedPrompt = promptSections.join("\n");
+    // Inject route-specific page data context
+    const routeData = await getRouteDataContext(input.routeContext, user.id!);
+    if (routeData) {
+      promptSections.push(routeData);
+    }
+
+    populatedPrompt = promptSections.join("\n");
+  }
 
   // Get available tools for this user
   const availableTools = getAvailableTools({
@@ -278,6 +309,7 @@ export async function sendMessage(input: {
   }, {
     externalAccessEnabled: input.externalAccessEnabled === true,
     mode: input.coworkerMode ?? "advise",
+    unifiedMode: useUnified,
   });
   const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
 
@@ -286,12 +318,13 @@ export async function sendMessage(input: {
     const externalTools = availableTools.filter((t) => t.requiresExternalAccess);
     if (externalTools.length > 0) {
       const toolList = externalTools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
-      promptSections.push(
+      populatedPrompt += [
+        "",
         "",
         "EXTERNAL ACCESS ENABLED — you have the following additional tools this session:",
         toolList,
         "Use these tools when the user asks about external websites, URLs, web searches, or public information.",
-      );
+      ].join("\n");
     }
   }
 
