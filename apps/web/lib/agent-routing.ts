@@ -2,6 +2,7 @@ import { can } from "@/lib/permissions";
 import type { UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
+import { resolveRouteContext } from "@/lib/route-context-map";
 
 /**
  * Shared platform identity preamble — injected into every agent's system prompt.
@@ -353,18 +354,38 @@ WHAT YOU DO NOT DO:
 const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 
 /** Lookup agentId → agentName for rendering historical messages. */
-export const AGENT_NAME_MAP: Record<string, string> = Object.fromEntries(
-  Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName]),
-);
+export const AGENT_NAME_MAP: Record<string, string> = {
+  ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
+  coworker: "Coworker",
+};
 
 /**
  * Resolve which specialist agent should handle the current route.
  * Uses longest prefix match, then checks user capabilities.
+ *
+ * When `useUnified` is true, returns a generic "coworker" agent whose
+ * system prompt is assembled at call-time by the prompt-assembler rather
+ * than pulled from a static persona definition.
  */
 export function resolveAgentForRoute(
   pathname: string,
   userContext: UserContext,
+  useUnified?: boolean,
 ): AgentInfo {
+  if (useUnified) {
+    const routeCtx = resolveRouteContext(pathname);
+    return {
+      agentId: "coworker",
+      agentName: "Coworker",
+      agentDescription: routeCtx.domain,
+      canAssist: true,
+      sensitivity: routeCtx.sensitivity,
+      systemPrompt: "", // Not used in unified mode — built by prompt-assembler
+      skills: routeCtx.skills as AgentSkill[],
+      modelRequirements: {},
+    };
+  }
+
   // Find longest matching prefix
   let bestMatch: RouteAgentEntry = FALLBACK_ENTRY;
   let bestLen = 0;

@@ -92,6 +92,22 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
 ];
 
+/** Get all capabilities granted to a user's role. */
+export function getGrantedCapabilities(user: UserContext): CapabilityKey[] {
+  if (user.isSuperuser) return Object.keys(PERMISSIONS) as CapabilityKey[];
+  const role = user.platformRole;
+  if (!role || !isPlatformRoleId(role)) return [];
+  return (Object.entries(PERMISSIONS) as [CapabilityKey, Permission][])
+    .filter(([, perm]) => perm.roles.includes(role))
+    .map(([cap]) => cap);
+}
+
+/** Get capabilities NOT granted to a user's role. */
+export function getDeniedCapabilities(user: UserContext): CapabilityKey[] {
+  const granted = new Set(getGrantedCapabilities(user));
+  return (Object.keys(PERMISSIONS) as CapabilityKey[]).filter((cap) => !granted.has(cap));
+}
+
 export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {
   return ALL_TILES.filter((t) => can(user, t.capabilityKey));
 }
