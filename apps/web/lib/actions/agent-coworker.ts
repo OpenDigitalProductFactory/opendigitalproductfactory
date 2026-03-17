@@ -29,6 +29,11 @@ import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
+import { classifyTask } from "@/lib/task-classifier";
+import { getTaskType } from "@/lib/task-types";
+import { routeWithPerformance } from "@/lib/agent-router";
+import { loadEndpoints, loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
+import type { RoutingMeta } from "@/lib/process-observer-hook";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -344,6 +349,52 @@ export async function sendMessage(input: {
     ...(dbAgent?.preferredProviderId ? { preferredProviderId: dbAgent.preferredProviderId } : {}),
   };
 
+  // --- Task classification and performance routing (unified mode only) ---
+  let resolvedEndpointId: string | undefined;
+  let taskTypeId: string = "unknown";
+
+  if (useUnified) {
+    // Classify the task
+    const recentContent = chatHistory.slice(-3).map((m) => m.content);
+    const classification = classifyTask(trimmedContent, recentContent);
+    taskTypeId = classification.taskType;
+
+    // Performance-weighted routing (only for confident classifications)
+    if (classification.taskType !== "unknown" && classification.confidence >= 0.5) {
+      const allEndpoints = await loadEndpoints();
+      const profiles = await loadPerformanceProfiles(classification.taskType);
+      const routeCtx = resolveRouteContext(input.routeContext);
+
+      const perfRoute = routeWithPerformance(allEndpoints, profiles, {
+        sensitivity: routeCtx.sensitivity,
+        minCapabilityTier: getTaskType(classification.taskType)?.minCapabilityTier ?? "basic",
+        requiredTags: [classification.taskType],
+        taskType: classification.taskType,
+      });
+
+      if (perfRoute) {
+        resolvedEndpointId = perfRoute.endpointId;
+
+        // Ensure performance profile exists (lazy creation)
+        const taskTypeDef = getTaskType(classification.taskType);
+        if (taskTypeDef) {
+          await ensurePerformanceProfile(perfRoute.endpointId, classification.taskType, taskTypeDef.defaultInstructions);
+        }
+
+        // Inject task-specific instructions
+        const profile = profiles.find((p) => p.endpointId === perfRoute.endpointId);
+        if (profile?.currentInstructions) {
+          populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
+        }
+      }
+    }
+
+    // Apply resolved endpoint as preferred provider
+    if (resolvedEndpointId) {
+      modelReqs.preferredProviderId = resolvedEndpointId;
+    }
+  }
+
   try {
     const result = await callWithFailover(
       chatHistory,
@@ -391,12 +442,21 @@ export async function sendMessage(input: {
                 agentId: agent.agentId,
                 routeContext: input.routeContext,
                 providerId: followUp.providerId,
+                taskType: useUnified ? taskTypeId : null,
+                routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
               },
               select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
             });
 
             // Fire-and-forget: process observer
-            observeConversation(input.threadId, input.routeContext).catch((err) =>
+            const followUpMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
+              endpointId: resolvedEndpointId,
+              taskType: taskTypeId,
+              sensitivity: resolveRouteContext(input.routeContext).sensitivity,
+              userMessage: trimmedContent,
+              aiResponse: followUp.content,
+            } : undefined;
+            observeConversation(input.threadId, input.routeContext, followUpMeta).catch((err) =>
               console.error("[process-observer]", err),
             );
 
@@ -418,12 +478,21 @@ export async function sendMessage(input: {
             agentId: agent.agentId,
             routeContext: input.routeContext,
             providerId: result.providerId,
+            taskType: useUnified ? taskTypeId : null,
+            routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
           },
           select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
         });
 
         // Fire-and-forget: process observer
-        observeConversation(input.threadId, input.routeContext).catch((err) =>
+        const toolResultMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
+          endpointId: resolvedEndpointId,
+          taskType: taskTypeId,
+          sensitivity: resolveRouteContext(input.routeContext).sensitivity,
+          userMessage: trimmedContent,
+          aiResponse: toolResult.message,
+        } : undefined;
+        observeConversation(input.threadId, input.routeContext, toolResultMeta).catch((err) =>
           console.error("[process-observer]", err),
         );
 
@@ -437,14 +506,17 @@ export async function sendMessage(input: {
       const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
 
       // Create the agent message first
+      const proposalContent = result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`;
       const agentMsg = await prisma.agentMessage.create({
         data: {
           threadId: input.threadId,
           role: "assistant",
-          content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+          content: proposalContent,
           agentId: agent.agentId,
           routeContext: input.routeContext,
           providerId: result.providerId,
+          taskType: useUnified ? taskTypeId : null,
+          routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
@@ -462,7 +534,14 @@ export async function sendMessage(input: {
       });
 
       // Fire-and-forget: process observer
-      observeConversation(input.threadId, input.routeContext).catch((err) =>
+      const proposalMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
+        endpointId: resolvedEndpointId,
+        taskType: taskTypeId,
+        sensitivity: resolveRouteContext(input.routeContext).sensitivity,
+        userMessage: trimmedContent,
+        aiResponse: proposalContent,
+      } : undefined;
+      observeConversation(input.threadId, input.routeContext, proposalMeta).catch((err) =>
         console.error("[process-observer]", err),
       );
 
@@ -593,6 +672,8 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       routeContext: input.routeContext,
       providerId: responseProviderId,
+      taskType: useUnified ? taskTypeId : null,
+      routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
     },
     select: {
       id: true,
@@ -605,7 +686,14 @@ export async function sendMessage(input: {
   });
 
   // Fire-and-forget: process observer
-  observeConversation(input.threadId, input.routeContext).catch((err) =>
+  const mainMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
+    endpointId: resolvedEndpointId,
+    taskType: taskTypeId,
+    sensitivity: resolveRouteContext(input.routeContext).sensitivity,
+    userMessage: trimmedContent,
+    aiResponse: responseContent,
+  } : undefined;
+  observeConversation(input.threadId, input.routeContext, mainMeta).catch((err) =>
     console.error("[process-observer]", err),
   );
 
