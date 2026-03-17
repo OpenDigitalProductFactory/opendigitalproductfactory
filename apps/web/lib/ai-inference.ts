@@ -60,8 +60,12 @@ export async function getDecryptedCredential(providerId: string) {
   };
 }
 
+function isAnthropicProvider(providerId: string): boolean {
+  return providerId === "anthropic" || providerId.startsWith("anthropic-");
+}
+
 export function getProviderExtraHeaders(providerId: string): Record<string, string> {
-  if (providerId === "anthropic") return { "anthropic-version": "2023-06-01" };
+  if (isAnthropicProvider(providerId)) return { "anthropic-version": "2023-06-01" };
   return {};
 }
 
@@ -135,7 +139,7 @@ async function buildAuthHeaders(
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
 
     // Anthropic subscription tokens (from `claude setup-token`) use Bearer auth, not x-api-key
-    if (providerId === "anthropic" && isAnthropicOAuthToken(cred.secretRef)) {
+    if (isAnthropicProvider(providerId) && isAnthropicOAuthToken(cred.secretRef)) {
       headers["Authorization"] = `Bearer ${cred.secretRef}`;
       headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     } else {
@@ -173,8 +177,8 @@ export async function callProvider(
   let body: Record<string, unknown>;
   let extractText: (data: Record<string, unknown>) => string;
 
-  if (providerId === "anthropic") {
-    // Anthropic: system prompt is a separate param
+  if (providerId === "anthropic" || providerId.startsWith("anthropic-")) {
+    // Anthropic (including anthropic-sub): system prompt is a separate param
     chatUrl = `${baseUrl}/messages`;
     body = {
       model: modelId,
