@@ -174,6 +174,9 @@ model EmployeeProfile {
   calendarSyncs      CalendarSync[]
   // Addresses
   addresses          EmployeeAddress[]
+  accountableBuilds      FeatureBuild[] @relation("BuildAccountable")
+  accountableEpics       Epic[]         @relation("EpicAccountable")
+  accountableItems       BacklogItem[]  @relation("ItemAccountable")
 
   @@index([status])
   @@index([departmentId])
@@ -505,6 +508,12 @@ model BacklogItem {
   submittedBy      User?           @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   completedAt      DateTime?
   agentId          String?
+  accountableEmployeeId  String?
+  accountableEmployee    EmployeeProfile? @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  claimedById            String?
+  claimedByAgentId       String?
+  claimedAt              DateTime?
+  claimStatus            String?
 }
 
 // ─── Epics ───────────────────────────────────────────────────────────────────
@@ -521,6 +530,12 @@ model Epic {
   submittedBy   User?     @relation("EpicSubmissions", fields: [submittedById], references: [id])
   agentId       String?
   completedAt   DateTime?
+  accountableEmployeeId  String?
+  accountableEmployee    EmployeeProfile? @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
+  claimedById            String?
+  claimedByAgentId       String?
+  claimedAt              DateTime?
+  claimStatus            String?
 
   portfolios EpicPortfolio[]
   items      BacklogItem[]
@@ -1214,6 +1229,22 @@ model FeatureBuild {
   updatedAt        DateTime        @updatedAt
   gitCommitHashes  String[]        @default([])
   productVersions  ProductVersion[]
+
+  // Build Disciplines — evidence
+  designDoc       Json?
+  designReview    Json?
+  buildPlan       Json?
+  planReview      Json?
+  taskResults     Json?
+  verificationOut Json?
+  acceptanceMet   Json?
+
+  // Build Disciplines — ownership
+  accountableEmployeeId  String?
+  accountableEmployee    EmployeeProfile? @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
+  claimedByAgentId       String?
+  claimedAt              DateTime?
+  claimStatus            String?
 
   @@index([phase])
   @@index([createdById])
