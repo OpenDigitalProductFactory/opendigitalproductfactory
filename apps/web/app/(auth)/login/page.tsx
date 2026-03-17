@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: Props) {
         <form
           action={async (formData: FormData) => {
             "use server";
-            await signIn("credentials", {
+            await signIn("workforce", {
               email: formData.get("email"),
               password: formData.get("password"),
               redirectTo: "/workspace",
@@ -64,6 +64,11 @@ export default async function LoginPage({ searchParams }: Props) {
             Forgot password?
           </a>
         </form>
+        <div className="mt-4 text-center">
+          <a href="/customer-login" className="text-xs text-[var(--dpf-muted)] hover:text-white transition-colors">
+            Customer portal login →
+          </a>
+        </div>
       </div>
     </div>
   );
