@@ -197,6 +197,36 @@ function detectUserFriction(messages: ConversationMessage[]): ObservationFinding
   return findings;
 }
 
+// ─── Human Feedback Inference ────────────────────────────────────────────────
+
+/** Infer human satisfaction score from conversation pair (AI response + human follow-up) */
+export function inferHumanScore(
+  aiMessage: ConversationMessage,
+  humanFollowUp: ConversationMessage,
+): number | null {
+  const content = humanFollowUp.content.toLowerCase();
+
+  // Positive signals → score 4
+  if (/\b(thanks|thank you|great|perfect|exactly|awesome|helpful)\b/.test(content)) {
+    return 4;
+  }
+
+  // Negative signals → score 1
+  if (/\b(wrong|incorrect|no[,.]?\s*(that'?s|it'?s) not|you (missed|forgot|didn'?t))\b/.test(content)) {
+    return 1;
+  }
+
+  // Rephrasing detection → score 2
+  if (humanFollowUp.role === "user" && content.length > 20) {
+    if (/\b(again|already asked|i said|i meant)\b/.test(content)) {
+      return 2;
+    }
+  }
+
+  // Neutral — no clear signal
+  return null;
+}
+
 // ─── Main Analyzer ──────────────────────────────────────────────────────────
 
 export function analyzeConversation(messages: ConversationMessage[]): ObservationFinding[] {

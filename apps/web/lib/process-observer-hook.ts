@@ -2,9 +2,9 @@
 // Async fire-and-forget: never blocks the user's response.
 
 import { prisma } from "@dpf/db";
-import { analyzeConversation, type ConversationMessage } from "./process-observer";
+import { analyzeConversation, inferHumanScore, type ConversationMessage } from "./process-observer";
 import { triageAndFile, type BacklogItemData } from "./process-observer-triage";
-import { evaluateAndUpdateProfile } from "./orchestrator-evaluator";
+import { evaluateAndUpdateProfile, updateHumanScore } from "./orchestrator-evaluator";
 import type { SensitivityLevel } from "./agent-router-types";
 
 export type RoutingMeta = {
@@ -34,6 +34,58 @@ export async function observeConversation(
       userMessage: routingMeta.userMessage,
       aiResponse: routingMeta.aiResponse,
     }).catch((err) => console.error("[orchestrator-evaluator]", err));
+  }
+
+  // BRANCH C: Human feedback inference (fires when there are messages to analyze)
+  if (routingMeta === undefined) {
+    // Only infer feedback when we're NOT processing a new AI response
+    // (routingMeta undefined means this is a user message turn, good time to evaluate prior AI)
+    const feedbackMessages = await prisma.agentMessage.findMany({
+      where: { threadId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, role: true, content: true, agentId: true, routeContext: true },
+    });
+
+    if (feedbackMessages.length >= 2) {
+      const feedbackTranscript: ConversationMessage[] = feedbackMessages.reverse().map((m) => ({
+        id: m.id,
+        role: m.role as ConversationMessage["role"],
+        content: m.content,
+        agentId: m.agentId ?? "",
+        routeContext: m.routeContext ?? "",
+      }));
+
+      const assistantMessages = feedbackTranscript.filter((m) => m.role === "assistant");
+      const userMessages = feedbackTranscript.filter((m) => m.role === "user");
+      const lastAssistant = assistantMessages[assistantMessages.length - 1];
+      const lastUser = userMessages[userMessages.length - 1];
+
+      if (lastAssistant && lastUser) {
+        const humanScore = inferHumanScore(lastAssistant, lastUser);
+        if (humanScore !== null) {
+          // Find the prior evaluation for this assistant message and update it
+          prisma.taskEvaluation.updateMany({
+            where: {
+              threadId,
+              humanScore: null,
+            },
+            data: { humanScore },
+          }).catch((err) => console.error("[human-feedback]", err));
+
+          // Also update the performance profile's human score
+          const priorMsg = await prisma.agentMessage.findFirst({
+            where: { threadId, role: "assistant", routedEndpointId: { not: null } },
+            orderBy: { createdAt: "desc" },
+            select: { routedEndpointId: true, taskType: true },
+          });
+          if (priorMsg?.routedEndpointId && priorMsg?.taskType) {
+            updateHumanScore(priorMsg.routedEndpointId, priorMsg.taskType, humanScore)
+              .catch((err) => console.error("[human-feedback-profile]", err));
+          }
+        }
+      }
+    }
   }
 
   // BRANCH A: Existing analysis (respects sampling) — existing code below unchanged
