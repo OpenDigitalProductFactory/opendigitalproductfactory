@@ -8,7 +8,7 @@ import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
-import type { EmploymentEventType, WorkforceStatus } from "@/lib/workforce-types";
+import { validateLifecycleTransition, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
 
 export type WorkforceActionResult = {
   ok: boolean;
@@ -191,37 +191,7 @@ export function validateEmployeeProfileInput(input: EmployeeProfileInput): strin
   return null;
 }
 
-const LIFECYCLE_TRANSITION_MATRIX: Record<WorkforceStatus, WorkforceStatus[]> = {
-  offer: ["onboarding", "inactive"],
-  onboarding: ["active"],
-  active: ["leave", "suspended", "offboarding"],
-  leave: ["active"],
-  suspended: ["active", "offboarding"],
-  offboarding: ["inactive"],
-  inactive: [],
-};
-
-export function validateLifecycleTransition(input: {
-  currentStatus: WorkforceStatus;
-  nextStatus: WorkforceStatus;
-  eventType: EmploymentEventType;
-  terminationDate?: Date | null;
-}): string | null {
-  if (input.eventType === "terminated" && !input.terminationDate) {
-    return "Termination date is required for termination events.";
-  }
-
-  if (input.currentStatus === input.nextStatus) {
-    return "Current status and next status are the same.";
-  }
-
-  const allowed = LIFECYCLE_TRANSITION_MATRIX[input.currentStatus];
-  if (!allowed || !allowed.includes(input.nextStatus)) {
-    return `Cannot transition from "${input.currentStatus}" to "${input.nextStatus}".`;
-  }
-
-  return null;
-}
+// validateLifecycleTransition imported from workforce-types.ts (not a server action file)
 
 async function ensureUserLinkIsAvailable(userId: string | null, employeeProfileId?: string): Promise<string | null> {
   if (!userId) return null;
