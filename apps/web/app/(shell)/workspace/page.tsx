@@ -203,20 +203,20 @@ export default async function WorkspacePage() {
       </p>
       <WorkspaceTiles tiles={tiles} tileStatus={tileStatus} />
 
-      {/* Calendar */}
-      <div className="mt-8">
-        <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
-          Calendar
-        </p>
-        <WorkspaceCalendar events={calendarEvents} />
-      </div>
-
-      {/* Activity Feed */}
-      <div className="mt-8">
-        <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
-          Activity
-        </p>
-        <ActivityFeed items={feedItems} />
+      {/* Calendar + Activity Feed — side by side */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+            Calendar
+          </p>
+          <WorkspaceCalendar events={calendarEvents} />
+        </div>
+        <div>
+          <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+            Activity
+          </p>
+          <ActivityFeed items={feedItems} />
+        </div>
       </div>
     </div>
   );
