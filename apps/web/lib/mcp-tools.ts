@@ -1024,7 +1024,7 @@ export async function executeTool(
       let commitHash: string | undefined;
       try {
         const { commitFile, formatCommitMessage, isGitAvailable } = await import("@/lib/git-utils");
-        if (isGitAvailable()) {
+        if (await isGitAvailable()) {
           // Resolve buildId from thread context (best-effort)
           let buildId: string | undefined;
           if (context?.threadId) {

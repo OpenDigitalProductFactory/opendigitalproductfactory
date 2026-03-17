@@ -242,7 +242,7 @@ export async function shipBuild(input: {
   try {
     const { createTag, isGitAvailable, getLatestTag, getCommitCount, getCurrentCommitHash } = await import("@/lib/git-utils");
 
-    if (isGitAvailable()) {
+    if (await isGitAvailable()) {
       // Capture previous tag BEFORE creating the new one
       previousTag = await getLatestTag();
       gitCommitHash = await getCurrentCommitHash();
