@@ -80,7 +80,8 @@ Each category section renders as a collapsible group:
 
 - Click arrow or header to expand
 - Status summary shows count per status using colored numbers (green/amber/gray)
-- All sections start expanded by default, collapse state stored in client
+- Sections with active services start expanded; sections with zero active services start collapsed
+- Collapse state stored in client (useState, no persistence)
 
 **Expanded:** Shows the sortable list of service rows within that category.
 
@@ -96,7 +97,7 @@ Each row is a collapsible card within its category section:
 | ● | Pinecone | MCP | Subscribed | pub · int | basic | low | edit |
 | ● | Brave Search | MCP | Internal | pub · int | basic | low | edit |
 
-- Status dot: green (active), amber (unconfigured), gray (inactive), blue (detected/unregistered)
+- Status dot: green (active), amber (unconfigured), gray (inactive), blue (detected/unregistered). Each dot has a `title` attribute with the status text for accessibility.
 - Sensitivity clearance shown as abbreviated badges: `pub`, `int`, `con`, `res`
 - Edit button appears on hover
 
@@ -119,16 +120,18 @@ Each row is a collapsible card within its category section:
 
 ### 5. Auto-Discovery
 
-**On page load**, a server action scans for MCP servers configured in the environment:
+**On page load**, a server action scans for MCP servers from two sources:
 
 **Sources to scan:**
-- `.claude/settings.json` — MCP server configurations under the `mcpServers` key
-- `McpServer` table — already-registered MCP server records
+1. **`McpServer` table** (primary) — MCP server records already registered in the database. Each has a `serverId`, `name`, `config` (JSON with connection details), and `status`. Compare `McpServer.serverId` against `ModelProvider.providerId` — any `McpServer` without a matching `ModelProvider` row is a candidate.
+2. **Claude plugins** (secondary) — read `~/.claude/plugins/installed_plugins.json` to detect plugin-based MCP servers (Pinecone, Firebase, Playwright, Context7, etc.). Each plugin entry has a name and package identifier. Compare against existing `ModelProvider.providerId` values.
+
+**Relationship between `McpServer` and `ModelProvider`:** `McpServer.serverId` maps to `ModelProvider.providerId` by naming convention (no FK). `McpServer` is the detection/connection source; `ModelProvider` is the registered endpoint in the workforce registry. When a detected service is registered, a `ModelProvider` row is created with `providerId` matching `McpServer.serverId`. The `McpServer` row is retained as the connection config source.
 
 **Detection flow:**
-1. Read MCP config from environment
-2. Compare against existing `ModelProvider` rows with `endpointType === "service"`
-3. For each detected server not yet registered: return as a "detected" candidate
+1. Load `McpServer` rows and installed plugin entries
+2. Load existing `ModelProvider` rows with `endpointType === "service"`
+3. Any source entry without a matching `ModelProvider.providerId` is returned as a "detected" candidate
 
 **UI treatment:**
 - Banner at top of External Services tab when unregistered services are detected:
@@ -142,6 +145,7 @@ Each row is a collapsible card within its category section:
   - Assign task tags
   - Category auto-set to `"mcp-subscribed"`
 - On confirm: upsert into `ModelProvider` with `endpointType: "service"`, `status: "active"`
+- Registration requires `manage_provider_connections` capability, matching the existing provider configuration pattern
 
 **Already-registered services** that match a detected config show normally — no banner, no action needed.
 
@@ -161,11 +165,26 @@ All three: `endpointType: "service"`, `category: "mcp-internal"`, `costBand: "fr
 
 ## Data Model
 
-No schema changes required. The existing `ModelProvider` model has all needed fields:
-- `endpointType` — "llm" or "service"
-- `category` — extended with "mcp-subscribed" and "mcp-internal" values
-- `sensitivityClearance[]`, `capabilityTier`, `costBand`, `taskTags[]` — routing metadata
-- `mcpTransport`, `maxConcurrency` — MCP-specific config
+No schema migration required. The existing `ModelProvider` model has all needed fields. However, the TypeScript type layer needs updates:
+
+**`ProviderRow` type** (`apps/web/lib/ai-provider-types.ts`) — add MCP manifest fields:
+```ts
+endpointType: string;
+sensitivityClearance: string[];
+capabilityTier: string;
+costBand: string;
+taskTags: string[];
+mcpTransport: string | null;
+maxConcurrency: number | null;
+```
+
+**`RegistryProviderEntry` category union** — extend with `"mcp-subscribed" | "mcp-internal"`.
+
+**`getProviders()` select clause** — add the MCP manifest fields to the Prisma select so they're returned in the query.
+
+**Data migration:** Existing service endpoint rows seeded with `category: "local"` and `endpointType: "service"` should be updated to `category: "mcp-internal"`. The Brave Search `costBand` should be corrected from `"low"` to `"free"`.
+
+**Grouping logic:** The current providers page filters by hardcoded category strings (`"local"`, `"direct"`, `"router"`, `"agent"`). Replace with a two-level grouping function: group by `endpointType` first (LLM vs MCP), then by `category` within each type. Signature: `groupByEndpointTypeAndCategory(providers): Map<string, ProviderRow[]>`.
 
 ## Files Affected
 
@@ -184,14 +203,19 @@ No schema changes required. The existing `ModelProvider` model has all needed fi
 **Server actions:**
 - `apps/web/lib/actions/ai-providers.ts` — add `detectMcpServers()` action, add `registerMcpService()` action
 
+**Type layer:**
+- `apps/web/lib/ai-provider-types.ts` — add MCP manifest fields to `ProviderRow`, extend `RegistryProviderEntry` category union
+
 **Data layer:**
-- `apps/web/lib/ai-provider-data.ts` — extend `getProviders()` to include service endpoints, add grouping helpers
+- `apps/web/lib/ai-provider-data.ts` — add MCP fields to `getProviders()` select, add `groupByEndpointTypeAndCategory()` helper
 
 **Seed script:**
-- `packages/db/scripts/seed-service-endpoints.ts` — seed internal MCP service endpoints
+- `packages/db/scripts/seed-service-endpoints.ts` — update to use `category: "mcp-internal"` and `costBand: "free"` for all internal services
 
 **Provider detail page:**
-- `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx` — show MCP manifest fields (sensitivity, tier, cost, tags) in the detail form for service endpoints
+- `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx` — show MCP manifest fields (sensitivity, tier, cost, tags) in the detail form for service endpoints; update back link text from "AI Providers" to "External Services"
+
+**Existing sections:** Token Spend and Scheduled Jobs sections on the providers page remain unchanged, rendered below the External Services listing.
 
 ## Testing Strategy
 
