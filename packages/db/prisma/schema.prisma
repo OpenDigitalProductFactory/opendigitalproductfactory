@@ -416,12 +416,13 @@ model ImprovementProposal {
 // ─── Branding ────────────────────────────────────────────────────────────────
 
 model BrandingConfig {
-  id          String   @id @default(cuid())
-  scope       String   @unique // "organization" | portfolio slug
-  companyName String
-  tokens      Json
-  logoUrl     String?
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  scope        String   @unique // "organization" | portfolio slug
+  companyName  String
+  tokens       Json
+  logoUrl      String?          // logo for dark theme (white/light logo)
+  logoUrlLight String?          // logo for light theme (dark logo)
+  updatedAt    DateTime @updatedAt
 }
 
 // ─── Platform Config ─────────────────────────────────────────────────────────

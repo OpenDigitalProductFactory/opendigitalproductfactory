@@ -35,6 +35,7 @@ export function BrandingWizard({
   const [step, setStep] = useState<Step>("choose");
   const [name, setName] = useState(existingName ?? "");
   const [logoUrl, setLogoUrl] = useState(existingLogoUrl ?? "");
+  const [logoUrlLight, setLogoUrlLight] = useState("");
   const [accent, setAccent] = useState(existingAccent ?? "#7c8cf8");
   const [font, setFont] = useState(existingFont ?? "Inter, system-ui, sans-serif");
   const [saving, setSaving] = useState(false);
@@ -54,6 +55,7 @@ export function BrandingWizard({
     }
     if (result.companyName) setName(result.companyName);
     if (result.logoUrl) setLogoUrl(result.logoUrl);
+    if (result.logoUrlLight) setLogoUrlLight(result.logoUrlLight);
     if (result.accentColor) setAccent(result.accentColor);
     setStep("preview");
   };
@@ -70,6 +72,7 @@ export function BrandingWizard({
     const fd = new FormData();
     fd.set("companyName", name || "Open Digital Product Factory");
     fd.set("logoUrl", logoUrl);
+    fd.set("logoUrlLight", logoUrlLight);
     fd.set("accent", accent);
     fd.set("fontFamily", font);
     await saveSimpleBrand(fd);
