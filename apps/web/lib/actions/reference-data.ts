@@ -2,6 +2,12 @@
 
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+
+async function requireAuth(): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+}
 
 export type CreateRefResult = {
   ok: boolean;
@@ -15,6 +21,7 @@ export type CreateRefResult = {
 // ---------------------------------------------------------------------------
 
 export async function searchCountries(query: string) {
+  await requireAuth();
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -34,6 +41,7 @@ export async function searchCountries(query: string) {
 }
 
 export async function searchRegions(countryId: string, query: string) {
+  await requireAuth();
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -53,6 +61,7 @@ export async function searchRegions(countryId: string, query: string) {
 }
 
 export async function searchCities(regionId: string, query: string) {
+  await requireAuth();
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -77,6 +86,7 @@ export async function createRegion(
   name: string,
   code?: string,
 ): Promise<CreateRefResult> {
+  await requireAuth();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "Region name is required." };
@@ -121,6 +131,7 @@ export async function createCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
+  await requireAuth();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "City name is required." };
@@ -167,6 +178,7 @@ export async function forceCreateRegion(
   name: string,
   code?: string,
 ): Promise<CreateRefResult> {
+  await requireAuth();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "Region name is required." };
@@ -192,6 +204,7 @@ export async function forceCreateCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
+  await requireAuth();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "City name is required." };

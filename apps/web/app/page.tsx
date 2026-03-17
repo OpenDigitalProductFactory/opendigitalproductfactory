@@ -3,6 +3,9 @@
 // No auth check here — let the destination routes handle auth.
 import Link from "next/link";
 
+// Prevent browser from caching this page as a redirect
+export const dynamic = "force-dynamic";
+
 export default function RootPage() {
   return (
     <div style={{
