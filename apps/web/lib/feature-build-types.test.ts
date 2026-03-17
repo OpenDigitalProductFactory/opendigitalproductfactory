@@ -135,3 +135,79 @@ describe("generatePackId", () => {
     expect(generatePackId()).toMatch(/^FP-[A-Z0-9]{8}$/);
   });
 });
+
+// ─── Phase Gate Tests (Build Disciplines) ────────────────────────────────────
+
+import { checkPhaseGate } from "./feature-build-types";
+
+describe("canTransitionPhase — review→build backward transition", () => {
+  it("allows review to build (backward transition for changes)", () => {
+    expect(canTransitionPhase("review", "build")).toBe(true);
+  });
+});
+
+describe("checkPhaseGate", () => {
+  it("blocks ideate to plan without designDoc and designReview pass", () => {
+    const result = checkPhaseGate("ideate", "plan", {});
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("design");
+  });
+
+  it("allows ideate to plan with designDoc and passing review", () => {
+    const result = checkPhaseGate("ideate", "plan", {
+      designDoc: { problemStatement: "test" },
+      designReview: { decision: "pass", issues: [], summary: "ok" },
+    });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("blocks plan to build without buildPlan and planReview pass", () => {
+    const result = checkPhaseGate("plan", "build", {});
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("plan");
+  });
+
+  it("allows plan to build with buildPlan and passing review", () => {
+    const result = checkPhaseGate("plan", "build", {
+      buildPlan: { fileStructure: [], tasks: [] },
+      planReview: { decision: "pass", issues: [], summary: "ok" },
+    });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("blocks build to review without passing verification", () => {
+    const result = checkPhaseGate("build", "review", {});
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("verification");
+  });
+
+  it("allows build to review with passing verification", () => {
+    const result = checkPhaseGate("build", "review", {
+      verificationOut: { testsPassed: 5, testsFailed: 0, typecheckPassed: true, fullOutput: "", timestamp: "" },
+    });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("blocks build to review when tests fail", () => {
+    const result = checkPhaseGate("build", "review", {
+      verificationOut: { testsPassed: 4, testsFailed: 1, typecheckPassed: true, fullOutput: "", timestamp: "" },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("tests");
+  });
+
+  it("blocks review to ship without all evidence", () => {
+    const result = checkPhaseGate("review", "ship", {});
+    expect(result.allowed).toBe(false);
+  });
+
+  it("allows any phase to failed (no gate)", () => {
+    const result = checkPhaseGate("build", "failed", {});
+    expect(result.allowed).toBe(true);
+  });
+
+  it("allows review to build (backward, no gate)", () => {
+    const result = checkPhaseGate("review", "build", {});
+    expect(result.allowed).toBe(true);
+  });
+});
