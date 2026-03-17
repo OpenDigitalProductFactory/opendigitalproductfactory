@@ -59,6 +59,13 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
         supportedAuthMethods: p.supportedAuthMethods as string[],
         billingLabel:         p.billingLabel,
         costPerformanceNotes: p.costPerformanceNotes,
+        endpointType:         p.endpointType,
+        sensitivityClearance: p.sensitivityClearance as string[],
+        capabilityTier:       p.capabilityTier,
+        costBand:             p.costBand,
+        taskTags:             p.taskTags as string[],
+        mcpTransport:         p.mcpTransport,
+        maxConcurrency:       p.maxConcurrency,
       } satisfies ProviderRow,
       credential: raw ? maskCredential(raw) : null,
     };
@@ -77,6 +84,13 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       supportedAuthMethods: provider.supportedAuthMethods as string[],
       billingLabel:         provider.billingLabel,
       costPerformanceNotes: provider.costPerformanceNotes,
+      endpointType:         provider.endpointType,
+      sensitivityClearance: provider.sensitivityClearance as string[],
+      capabilityTier:       provider.capabilityTier,
+      costBand:             provider.costBand,
+      taskTags:             provider.taskTags as string[],
+      mcpTransport:         provider.mcpTransport,
+      maxConcurrency:       provider.maxConcurrency,
     } satisfies ProviderRow,
     credential: credential ? maskCredential(credential) : null,
   };
@@ -153,3 +167,53 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
     avoidFor: p.avoidFor as string[],
   }));
 });
+
+export type ServiceGroup = {
+  endpointType: string;
+  category: string;
+  displayName: string;
+  providers: ProviderWithCredential[];
+};
+
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  local: "Local",
+  direct: "Direct",
+  agent: "Agent",
+  router: "Routers & Gateways",
+  "mcp-subscribed": "Subscribed",
+  "mcp-internal": "Internal",
+};
+
+const CATEGORY_ORDER: Record<string, number> = {
+  local: 0, direct: 1, agent: 2, router: 3,
+  "mcp-internal": 0, "mcp-subscribed": 1,
+};
+
+export function groupByEndpointTypeAndCategory(
+  providers: ProviderWithCredential[],
+): ServiceGroup[] {
+  const groups = new Map<string, ServiceGroup>();
+
+  for (const pw of providers) {
+    const type = pw.provider.endpointType || "llm";
+    const cat = pw.provider.category;
+    const key = `${type}:${cat}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        endpointType: type,
+        category: cat,
+        displayName: CATEGORY_DISPLAY_NAMES[cat] ?? cat,
+        providers: [],
+      });
+    }
+    groups.get(key)!.providers.push(pw);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    if (a.endpointType !== b.endpointType) {
+      return a.endpointType === "llm" ? -1 : 1;
+    }
+    return (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+  });
+}
