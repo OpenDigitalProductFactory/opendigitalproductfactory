@@ -167,6 +167,9 @@ model EmployeeProfile {
   // Time tracking
   timesheets          TimesheetPeriod[]
   timesheetApprovals  TimesheetPeriod[]  @relation("TimesheetApprovals")
+  // Calendar
+  calendarEvents      CalendarEvent[]
+  calendarSyncs       CalendarSync[]
 
   @@index([status])
   @@index([departmentId])
@@ -560,6 +563,43 @@ model TokenUsage {
   createdAt    DateTime @default(now())
 }
 
+model EndpointTaskPerformance {
+  id                      String    @id @default(cuid())
+  endpointId              String
+  taskType                String
+  evaluationCount         Int       @default(0)
+  successCount            Int       @default(0)
+  avgOrchestratorScore    Float     @default(0)
+  avgHumanScore           Float?
+  recentScores            Float[]   @default([])
+  currentInstructions     String?
+  instructionPhase        String    @default("learning")
+  pinned                  Boolean   @default(false)
+  blocked                 Boolean   @default(false)
+  avgLatencyMs            Float     @default(0)
+  avgTokensUsed           Float     @default(0)
+  lastEvaluatedAt         DateTime?
+  lastInstructionUpdateAt DateTime?
+
+  @@unique([endpointId, taskType])
+}
+
+model TaskEvaluation {
+  id              String   @id @default(cuid())
+  threadId        String
+  endpointId      String
+  taskType        String
+  qualityScore    Float?
+  humanScore      Float?
+  taskContext     String
+  evaluationNotes String?
+  routeContext    String
+  createdAt       DateTime @default(now())
+
+  @@index([endpointId, taskType, createdAt])
+  @@index([threadId])
+}
+
 model ScheduledJob {
   id         String    @id @default(cuid())
   jobId      String    @unique
@@ -901,10 +941,12 @@ model AgentMessage {
   role         String      // user | assistant | system
   content      String
   tone         String?
-  agentId      String?     // specialist agent that authored this response
-  routeContext String?     // route pathname when message was sent
-  providerId   String?     // provider that handled this inference
-  createdAt    DateTime    @default(now())
+  agentId           String?     // specialist agent that authored this response
+  routeContext      String?     // route pathname when message was sent
+  providerId        String?     // provider that handled this inference
+  taskType          String?     // classified task type for routing
+  routedEndpointId  String?     // endpoint that handled this inference
+  createdAt         DateTime    @default(now())
   proposal     AgentActionProposal?
   attachments  AgentAttachment[]
 
