@@ -219,7 +219,7 @@ Fields presented in dependency order — each selection scopes the next:
 4. **Address Line 1** — freeform text
 5. **Address Line 2** — freeform text (optional)
 6. **Postal Code** — freeform text
-7. **Label** — dropdown with common values ("home", "work", "billing", "shipping") plus freeform option
+7. **Label** — dropdown with controlled values ("home", "work", "billing", "shipping", "headquarters", "site")
 
 #### Duplicate Prevention
 
