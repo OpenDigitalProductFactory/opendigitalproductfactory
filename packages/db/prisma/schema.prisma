@@ -31,6 +31,7 @@ model User {
   improvementSubmissions ImprovementProposal[] @relation("ImprovementSubmissions")
   improvementReviews     ImprovementProposal[] @relation("ImprovementReviews")
   backlogSubmissions     BacklogItem[]         @relation("BacklogSubmissions")
+  epicSubmissions        Epic[]            @relation("EpicSubmissions")
   apiTokens       ApiToken[]
   featureBuilds   FeatureBuild[]
 }
@@ -356,6 +357,7 @@ model BacklogItem {
   submittedById   String?
   submittedBy     User?     @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   completedAt     DateTime?
+  agentId         String?
 }
 
 // ─── Epics ───────────────────────────────────────────────────────────────────
@@ -368,6 +370,10 @@ model Epic {
   status      String          @default("open")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  submittedById   String?
+  submittedBy     User?           @relation("EpicSubmissions", fields: [submittedById], references: [id])
+  agentId         String?
+  completedAt     DateTime?
 
   portfolios  EpicPortfolio[]
   items       BacklogItem[]

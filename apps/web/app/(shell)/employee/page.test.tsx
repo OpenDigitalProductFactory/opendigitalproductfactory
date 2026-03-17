@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -88,6 +89,8 @@ beforeEach(() => {
       positionTitle: "HR Manager",
       managerEmployeeId: "emp-db-2",
       managerName: "Grace Hopper",
+      dottedLineManagerId: null,
+      dottedLineManagerName: null,
       workLocationId: "loc-remote",
       workLocationName: "Remote",
     },
@@ -156,6 +159,8 @@ describe("EmployeeDirectoryPanel", () => {
             positionTitle: "HR Manager",
             managerEmployeeId: "emp-db-2",
             managerName: "Grace Hopper",
+            dottedLineManagerId: null,
+            dottedLineManagerName: null,
             workLocationId: "loc-remote",
             workLocationName: "Remote",
           },
@@ -232,7 +237,9 @@ describe("LifecycleEventPanel", () => {
 
 describe("EmployeePage", () => {
   it("renders both workforce context and HR user lifecycle controls", async () => {
-    const html = renderToStaticMarkup(await EmployeePage());
+    const html = renderToStaticMarkup(
+      await EmployeePage({ searchParams: Promise.resolve({}) }),
+    );
 
     expect(html).toContain("Employee directory");
     expect(html).toContain("HR user lifecycle");

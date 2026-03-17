@@ -47,6 +47,8 @@ export type EmployeeDirectoryRow = {
   positionTitle: string | null;
   managerEmployeeId: string | null;
   managerName: string | null;
+  dottedLineManagerId: string | null;
+  dottedLineManagerName: string | null;
   workLocationId: string | null;
   workLocationName: string | null;
 };
