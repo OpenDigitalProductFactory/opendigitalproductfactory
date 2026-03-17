@@ -77,7 +77,8 @@ export default async function EmployeePage({ searchParams }: Props) {
   const currentUserProfile = currentUserId
     ? employees.find((e) => e.userId === currentUserId)
     : null;
-  const weekStart = getCurrentWeekStart();
+  const weekParam = typeof params.week === "string" ? params.week : null;
+  const weekStart = weekParam ? new Date(weekParam + "T00:00:00") : getCurrentWeekStart();
   const currentTimesheet = view === "timesheets" && currentUserProfile
     ? await getTimesheetForWeek(currentUserProfile.id, weekStart)
     : null;
@@ -173,7 +174,6 @@ export default async function EmployeePage({ searchParams }: Props) {
               <TimesheetGrid
                 existingPeriod={currentTimesheet}
                 weekStarting={weekStart.toISOString()}
-                onWeekChange={() => {/* handled client-side via URL params in future */}}
               />
             ) : (
               <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
