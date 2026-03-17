@@ -233,7 +233,9 @@ export async function projectReferenceModel(input: {
 
   const streams = referenceElements.filter((element) => element.kind === "value_stream");
   const stages = referenceElements.filter((element) => element.kind === "value_stream_stage");
-  if (streams.length === 0) throw new Error("Reference model has no value streams to project");
+  if (streams.length === 0) {
+    return { viewId: "", createdView: false, createdElements: 0, updatedElements: 0, createdViewElements: 0, updatedViewElements: 0 };
+  }
 
   const notation = await prisma.eaNotation.findUnique({
     where: { slug: "archimate4" },
