@@ -606,13 +606,6 @@ export async function sendMessage(input: {
       });
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
-      // Diagnostic: log all providers and their statuses
-      const allProviders = await prisma.modelProvider.findMany({
-        select: { providerId: true, name: true, status: true, category: true },
-      });
-      console.warn("[NoProviders] All providers:", allProviders.map((p) => `${p.providerId}(${p.status})`).join(", "));
-
-      // Check if there are inactive providers that could be re-enabled as a last resort
       const inactiveProviders = await prisma.modelProvider.findMany({
         where: { status: "inactive" },
         select: { providerId: true, name: true },
@@ -621,24 +614,14 @@ export async function sendMessage(input: {
 
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
-      // Also check for providers with non-standard statuses (unconfigured, pending, etc.)
-      const nonActiveProviders = allProviders.filter((p) => p.status !== "active");
-      const providerSummary = allProviders.map((p) => `${p.name}: ${p.status}`).join(", ");
-
-      // Surface the actual failover attempts — this is the real diagnostic
-      const failureDetails = e.attempts.length > 0
-        ? e.attempts.map((a) => `${a.providerId}: ${a.error}`).join("; ")
-        : "No providers were tried";
-
       let sysContent: string;
       if (e.attempts.length > 0) {
-        sysContent = `All AI providers failed. Errors: ${failureDetails}`;
+        const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 100)}`).join("; ");
+        sysContent = `All AI providers failed: ${failureDetails}. Check configuration in Platform > AI Providers.`;
       } else if (inactiveProviders.length > 0) {
         sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate a provider, or visit Platform > AI Providers.`;
-      } else if (allProviders.some((p) => p.status === "active")) {
-        sysContent = `Active providers found but none succeeded. ${failureDetails}. Check API keys in Platform > AI Providers.`;
       } else {
-        sysContent = "AI co-workers haven't been set up yet. An administrator can configure them from Platform > AI Providers.";
+        sysContent = "No AI providers are configured. An administrator can set them up from Platform > AI Providers.";
       }
 
       const sysMsg = await prisma.agentMessage.create({

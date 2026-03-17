@@ -174,12 +174,7 @@ export async function getProviderPriority(task: string = "conversation"): Promis
   }
 
   // No config or all stored providers inactive — bootstrap from active providers
-  const bootstrapped = await buildBootstrapPriority();
-  if (bootstrapped.length === 0) {
-    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true, name: true } });
-    console.warn("[getProviderPriority] Bootstrap returned 0 entries. Active providers:", allActive.map((p) => `${p.providerId}(${p.name})`).join(", ") || "NONE");
-  }
-  return bootstrapped;
+  return buildBootstrapPriority();
 }
 
 async function getActiveProviderPolicyInfo(): Promise<ProviderPolicyInfo[]> {
@@ -333,15 +328,11 @@ export async function callWithFailover(
   options?: { tools?: Array<Record<string, unknown>>; task?: TaskKey; modelRequirements?: ModelRequirements },
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority(options?.task ?? "conversation");
-  console.warn("[callWithFailover] priority:", priority.map((p) => `${p.providerId}(model=${p.modelId},tier=${p.capabilityTier})`).join(", ") || "EMPTY");
   if (priority.length === 0) {
-    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true, endpointType: true } });
-    console.warn("[callWithFailover] Active providers in DB:", allActive.map((p) => `${p.providerId}(${p.endpointType})`).join(", ") || "NONE");
     throw new NoProvidersAvailableError([]);
   }
   const providerPolicy = await getActiveProviderPolicyInfo();
   let filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
-  console.warn("[callWithFailover] after sensitivity filter:", filteredPriority.map((p) => p.providerId).join(", ") || "EMPTY");
   if (filteredPriority.length === 0) {
     throw new NoAllowedProvidersForSensitivityError(sensitivity);
   }
@@ -428,9 +419,6 @@ export async function callWithFailover(
     }
   }
 
-  // Include cascade info in error for diagnostics
-  const cascadeInfo = filteredPriority.slice(0, limit).map((e) => `${e.providerId}(model=${e.modelId})`).join(", ");
-  attempts.push({ providerId: "_cascade_info", error: `Tried ${limit} of ${filteredPriority.length}: ${cascadeInfo}` });
   throw new NoProvidersAvailableError(attempts);
 }
 
