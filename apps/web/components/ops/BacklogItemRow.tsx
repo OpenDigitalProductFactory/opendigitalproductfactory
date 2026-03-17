@@ -37,6 +37,9 @@ export function BacklogItemRow({ item, onEdit }: Props) {
         <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 truncate">
           {item.taxonomyNode?.nodeId ?? "—"}
           {item.digitalProduct ? ` · ${item.digitalProduct.name}` : ""}
+          {item.submittedBy ? ` · by ${item.submittedBy.email}` : ""}
+          {" · "}{new Date(item.createdAt).toLocaleDateString()}
+          {item.completedAt ? ` · done ${new Date(item.completedAt).toLocaleDateString()}` : ""}
         </p>
       </div>
 

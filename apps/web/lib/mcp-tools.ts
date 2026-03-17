@@ -422,12 +422,15 @@ export async function executeTool(
   switch (toolName) {
     case "create_backlog_item": {
       const itemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const status = String(params["status"] ?? "open");
       const item = await prisma.backlogItem.create({
         data: {
           itemId,
           title: String(params["title"] ?? "Untitled"),
           type: String(params["type"] ?? "product"),
-          status: String(params["status"] ?? "open"),
+          status,
+          submittedById: userId,
+          ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(typeof params["epicId"] === "string" ? { epicId: params["epicId"] } : {}),
         },
@@ -440,7 +443,15 @@ export async function executeTool(
       if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
       const data: Record<string, unknown> = {};
       if (typeof params["title"] === "string") data["title"] = params["title"];
-      if (typeof params["status"] === "string") data["status"] = params["status"];
+      if (typeof params["status"] === "string") {
+        data["status"] = params["status"];
+        // Track completion date
+        if (params["status"] === "done" && existing.status !== "done") {
+          data["completedAt"] = new Date();
+        } else if (params["status"] !== "done" && existing.status === "done") {
+          data["completedAt"] = null;
+        }
+      }
       if (typeof params["priority"] === "number") data["priority"] = params["priority"];
       if (typeof params["body"] === "string") data["body"] = params["body"];
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
