@@ -1,4 +1,5 @@
 import type { GovernanceDecision, RiskBand } from "./governance-types";
+import type { SensitivityLevel } from "./agent-router-types";
 
 const RISK_BAND_ORDER: Record<RiskBand, number> = {
   low: 1,
@@ -64,4 +65,32 @@ export function resolveGovernedAction(input: ResolveGovernedActionInput): Resolv
   if (exceedsRiskBand(input.riskBand, input.activeGrant.maxRiskBand)) return deny("grant_risk_exceeded");
 
   return allow("delegation_grant");
+}
+
+export type SensitivityOverrideRequest = {
+  pageSensitivity: SensitivityLevel;
+  requestedSensitivity: SensitivityLevel;
+  employeeId: string;
+};
+
+export type SensitivityOverrideResult = {
+  decision: "allow" | "deny";
+  rationale: string;
+};
+
+const SENSITIVITY_ORDER: Record<SensitivityLevel, number> = {
+  public: 0,
+  internal: 1,
+  confidential: 2,
+  restricted: 3,
+};
+
+/** A downgrade is only valid when requested level is LOWER than page level. */
+export function resolveSensitivityOverride(
+  request: SensitivityOverrideRequest,
+): SensitivityOverrideResult {
+  if (SENSITIVITY_ORDER[request.requestedSensitivity] >= SENSITIVITY_ORDER[request.pageSensitivity]) {
+    return { decision: "deny", rationale: "Requested sensitivity is not lower than page sensitivity" };
+  }
+  return { decision: "allow", rationale: `Employee ${request.employeeId} approved downgrade from ${request.pageSensitivity} to ${request.requestedSensitivity}` };
 }
