@@ -15,6 +15,61 @@ export type FeatureBrief = {
   acceptanceCriteria: string[];
 };
 
+// ─── Build Disciplines Evidence Types ────────────────────────────────────────
+
+export type ReviewResult = {
+  decision: "pass" | "fail";
+  issues: Array<{
+    severity: "critical" | "important" | "minor";
+    description: string;
+    location?: string;
+    suggestion?: string;
+  }>;
+  summary: string;
+};
+
+export type BuildDesignDoc = {
+  problemStatement: string;
+  existingFunctionalityAudit: string;
+  alternativesConsidered: string;
+  reusePlan: string;
+  newCodeJustification: string;
+  proposedApproach: string;
+  acceptanceCriteria: string[];
+};
+
+export type BuildPlanDoc = {
+  fileStructure: Array<{ path: string; action: "create" | "modify"; purpose: string }>;
+  tasks: Array<{
+    title: string;
+    testFirst: string;
+    implement: string;
+    verify: string;
+  }>;
+};
+
+export type TaskResult = {
+  taskIndex: number;
+  title: string;
+  testResult: { passed: boolean; output: string };
+  codeReview: ReviewResult;
+  commitSha?: string;
+};
+
+export type VerificationOutput = {
+  testsPassed: number;
+  testsFailed: number;
+  typecheckPassed: boolean;
+  fullOutput: string;
+  timestamp: string;
+};
+
+export type AcceptanceCriterion = {
+  criterion: string;
+  met: boolean;
+  evidence: string;
+};
+
 export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed";
 
 export type FeatureBuildRow = {
@@ -37,6 +92,17 @@ export type FeatureBuildRow = {
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
+  designDoc: BuildDesignDoc | null;
+  designReview: ReviewResult | null;
+  buildPlan: BuildPlanDoc | null;
+  planReview: ReviewResult | null;
+  taskResults: TaskResult[] | null;
+  verificationOut: VerificationOutput | null;
+  acceptanceMet: AcceptanceCriterion[] | null;
+  accountableEmployeeId: string | null;
+  claimedByAgentId: string | null;
+  claimedAt: Date | null;
+  claimStatus: string | null;
 };
 
 export type FeaturePackRow = {
