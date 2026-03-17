@@ -155,12 +155,21 @@ export async function deleteThemePreset(formData: FormData): Promise<void> {
 export type BrandImportResult = {
   ok: true;
   companyName: string | null;
-  logoUrl: string | null;
+  logoUrl: string | null;       // best logo for dark theme (white/light variant)
+  logoUrlLight: string | null;  // best logo for light theme (dark variant)
   accentColor: string | null;
 } | {
   ok: false;
   error: string;
 };
+
+/** Classify a logo URL as dark-bg-friendly (white logo) or light-bg-friendly (dark logo). */
+function classifyLogoVariant(url: string): "dark-bg" | "light-bg" | "unknown" {
+  const lower = url.toLowerCase();
+  if (/[\-_/](white|light|reversed|dark-bg|ondark|on-dark)[\-_./]/i.test(lower)) return "dark-bg";
+  if (/[\-_/](dark|black|light-bg|onlight|on-light)[\-_./]/i.test(lower)) return "light-bg";
+  return "unknown";
+}
 
 /**
  * Fetch a public URL and extract brand assets (logo, colors, company name).
@@ -170,10 +179,31 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
   try {
     const evidence = await fetchPublicWebsiteEvidence(url);
     const analysis: BrandingAnalysisResult = analyzePublicWebsiteBranding(evidence);
+
+    // Classify all logo candidates into dark-bg and light-bg variants
+    let logoForDarkBg: string | null = null;
+    let logoForLightBg: string | null = null;
+
+    for (const candidate of evidence.logoCandidates) {
+      const variant = classifyLogoVariant(candidate);
+      if (variant === "dark-bg" && !logoForDarkBg) logoForDarkBg = candidate;
+      if (variant === "light-bg" && !logoForLightBg) logoForLightBg = candidate;
+    }
+
+    // If no classified variants, use the top candidate (already sorted by preference)
+    // as the dark-bg logo (platform default) and try to find an alternative for light
+    if (!logoForDarkBg && !logoForLightBg) {
+      logoForDarkBg = analysis.logoUrl;
+    } else if (!logoForDarkBg) {
+      // Only found a light-bg variant — also use it as fallback for dark-bg
+      logoForDarkBg = logoForLightBg;
+    }
+
     return {
       ok: true,
       companyName: analysis.companyName,
-      logoUrl: analysis.logoUrl,
+      logoUrl: logoForDarkBg,
+      logoUrlLight: logoForLightBg,
       accentColor: analysis.paletteAccent,
     };
   } catch (err) {
@@ -185,6 +215,7 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
 export async function saveSimpleBrand(formData: FormData): Promise<void> {
   const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
   const logoUrl = readString(formData.get("logoUrl")) || null;
+  const logoUrlLight = readString(formData.get("logoUrlLight")) || null;
   const accent = readString(formData.get("accent")) || "#7c8cf8";
   const fontFamily = readString(formData.get("fontFamily")) || "Inter, system-ui, sans-serif";
 
@@ -192,8 +223,8 @@ export async function saveSimpleBrand(formData: FormData): Promise<void> {
 
   await prisma.brandingConfig.upsert({
     where: { scope: "organization" },
-    update: { companyName, logoUrl, tokens: tokens as unknown as Prisma.InputJsonValue },
-    create: { scope: "organization", companyName, logoUrl, tokens: tokens as unknown as Prisma.InputJsonValue },
+    update: { companyName, logoUrl, logoUrlLight, tokens: tokens as unknown as Prisma.InputJsonValue },
+    create: { scope: "organization", companyName, logoUrl, logoUrlLight, tokens: tokens as unknown as Prisma.InputJsonValue },
   });
 
   revalidateBrandingSurfaces();
