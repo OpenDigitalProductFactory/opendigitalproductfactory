@@ -8,6 +8,8 @@ import { AttentionStrip } from "@/components/shell/AttentionStrip";
 import { prisma } from "@dpf/db";
 import { getCalendarEvents } from "@/lib/calendar-data";
 import { WorkspaceCalendar } from "@/components/workspace/WorkspaceCalendar";
+import { ActivityFeed } from "@/components/workspace/ActivityFeed";
+import { getActivityFeed } from "@/lib/activity-feed-data";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -76,6 +78,17 @@ export default async function WorkspacePage() {
   const calRangeStart = new Date(now.getFullYear(), now.getMonth(), -7);
   const calRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 7);
   const calendarEvents = await getCalendarEvents(calRangeStart, calRangeEnd);
+
+  // Activity feed: determine user's employee profile and role context
+  const currentUserProfile = await prisma.employeeProfile.findUnique({
+    where: { userId: session.user.id ?? "" },
+    select: { id: true, managerEmployeeId: true },
+  }).catch(() => null);
+  const hasDirectReports = currentUserProfile
+    ? await prisma.employeeProfile.count({ where: { managerEmployeeId: currentUserProfile.id } }) > 0
+    : false;
+  const isHR = session.user.isSuperuser || session.user.platformRole === "HR-000" || session.user.platformRole === "HR-100";
+  const feedItems = await getActivityFeed(currentUserProfile?.id ?? null, hasDirectReports, isHR);
 
   const tileStatus: Record<string, TileStatus> = {
     ea_modeler: {
@@ -196,6 +209,14 @@ export default async function WorkspacePage() {
           Calendar
         </p>
         <WorkspaceCalendar events={calendarEvents} />
+      </div>
+
+      {/* Activity Feed */}
+      <div className="mt-8">
+        <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+          Activity
+        </p>
+        <ActivityFeed items={feedItems} />
       </div>
     </div>
   );
