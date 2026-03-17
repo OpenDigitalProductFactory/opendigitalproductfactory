@@ -56,7 +56,11 @@ const NON_CHAT_PATTERN = /embed|whisper|tts|dall-e|moderation|babbage|davinci-00
 
 async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
   const providers = await prisma.modelProvider.findMany({
-    where: { status: "active" },
+    where: {
+      status: "active",
+      // Exclude service endpoints (web search, fetch, etc.) — they can't handle conversation
+      NOT: { endpointType: "service" },
+    },
     orderBy: { outputPricePerMToken: "asc" },
     select: { providerId: true, name: true, outputPricePerMToken: true },
   });
@@ -141,9 +145,9 @@ export async function getProviderPriority(task: string = "conversation"): Promis
     const stored = config.value as ProviderPriorityEntry[] | TaskAwarePriority;
     const entries = resolveTaskPriority(stored, task);
     if (entries.length > 0) {
-      // Filter out providers that are no longer active (disabled, quota-hit, etc.)
+      // Filter out providers that are no longer active or are service endpoints
       const activeProviders = await prisma.modelProvider.findMany({
-        where: { status: "active" },
+        where: { status: "active", NOT: { endpointType: "service" } },
         select: { providerId: true },
       });
       const activeIds = new Set(activeProviders.map((p) => p.providerId));
