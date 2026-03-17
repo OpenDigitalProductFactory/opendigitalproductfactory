@@ -8,7 +8,9 @@ import type { Session } from "next-auth";
 export default auth(function proxy(req: NextRequest & { auth: Session | null }) {
   if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
   if (!req.auth) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    const isPortalRoute = req.nextUrl.pathname.startsWith("/portal");
+    const redirectUrl = isPortalRoute ? "/customer-login" : "/welcome";
+    return NextResponse.redirect(new URL(redirectUrl, req.url));
   }
   // Forward the current pathname as a request header so server components
   // (e.g. shell layout) can read it for active-nav highlighting.
