@@ -419,6 +419,81 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_branding" as CapabilityKey,
     executionMode: "immediate",
   },
+  // ─── HR Lifecycle Tools ─────────────────────────────────────────────────────
+  {
+    name: "create_employee",
+    description: "Create a new employee record (starts in offer or onboarding status). Provide name, email, department, position, manager, and start date.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        firstName: { type: "string", description: "First name" },
+        lastName: { type: "string", description: "Last name" },
+        workEmail: { type: "string", description: "Work email address" },
+        status: { type: "string", enum: ["offer", "onboarding", "active"], description: "Initial status (default: offer)" },
+        departmentId: { type: "string", description: "Department ID (optional)" },
+        positionId: { type: "string", description: "Position ID (optional)" },
+        managerEmployeeId: { type: "string", description: "Manager employee profile ID (optional)" },
+        startDate: { type: "string", description: "Start date ISO string (optional)" },
+      },
+      required: ["firstName", "lastName"],
+    },
+    requiredCapability: "manage_user_lifecycle",
+  },
+  {
+    name: "transition_employee_status",
+    description: "Move an employee through lifecycle stages (e.g. offer → onboarding, onboarding → active, active → offboarding).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        employeeId: { type: "string", description: "Employee ID (e.g. EMP-XXXXX)" },
+        newStatus: { type: "string", enum: ["onboarding", "active", "leave", "suspended", "offboarding", "inactive"], description: "Target status" },
+        reason: { type: "string", description: "Reason for the transition" },
+      },
+      required: ["employeeId", "newStatus"],
+    },
+    requiredCapability: "manage_user_lifecycle",
+  },
+  {
+    name: "propose_leave_policy",
+    description: "Suggest leave policies for an employee based on their location/country. Creates default leave policy records.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        locationContext: { type: "string", description: "Country or region for policy recommendations" },
+        policies: {
+          type: "array",
+          description: "Array of policy suggestions",
+          items: {
+            type: "object",
+            properties: {
+              leaveType: { type: "string" },
+              name: { type: "string" },
+              annualAllocation: { type: "number" },
+              carryoverLimit: { type: "number" },
+            },
+          },
+        },
+      },
+      required: ["locationContext", "policies"],
+    },
+    requiredCapability: "manage_user_lifecycle",
+  },
+  {
+    name: "submit_feedback",
+    description: "Log a feedback note for an employee (praise, constructive, or observation).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toEmployeeId: { type: "string", description: "Employee profile ID receiving feedback" },
+        content: { type: "string", description: "Feedback content" },
+        feedbackType: { type: "string", enum: ["praise", "constructive", "observation"], description: "Type of feedback" },
+        visibility: { type: "string", enum: ["private", "shared", "public"], description: "Visibility (default: private)" },
+      },
+      required: ["toEmployeeId", "content", "feedbackType"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -454,6 +529,7 @@ export async function executeTool(
           type: String(params["type"] ?? "product"),
           status,
           submittedById: userId,
+          agentId: context?.agentId ?? null,
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(typeof params["epicId"] === "string" ? { epicId: params["epicId"] } : {}),
@@ -470,9 +546,11 @@ export async function executeTool(
       if (typeof params["status"] === "string") {
         data["status"] = params["status"];
         // Track completion date
-        if (params["status"] === "done" && existing.status !== "done") {
+        const isTerminal = params["status"] === "done" || params["status"] === "deferred";
+        const wasTerminal = existing.status === "done" || existing.status === "deferred";
+        if (isTerminal && !wasTerminal) {
           data["completedAt"] = new Date();
-        } else if (params["status"] !== "done" && existing.status === "done") {
+        } else if (!isTerminal && wasTerminal) {
           data["completedAt"] = null;
         }
       }
@@ -739,7 +817,7 @@ export async function executeTool(
       const item = createTechDebtItem({ title: String(params["title"] ?? ""), description: String(params["description"] ?? ""), severity: String(params["severity"] ?? "medium") });
       const refactorEpic = await prisma.epic.findUnique({ where: { epicId: "EP-REFACTOR-001" } });
       await prisma.backlogItem.create({
-        data: { itemId: item.itemId, title: item.title, type: item.type, status: item.status, body: item.body, priority: item.priority, ...(refactorEpic ? { epicId: refactorEpic.id } : {}) },
+        data: { itemId: item.itemId, title: item.title, type: item.type, status: item.status, body: item.body, priority: item.priority, submittedById: userId, agentId: context?.agentId ?? null, ...(refactorEpic ? { epicId: refactorEpic.id } : {}) },
       });
       return { success: true, entityId: item.itemId, message: `Tech debt logged: ${item.itemId}` };
     }
@@ -924,6 +1002,140 @@ export async function executeTool(
           fonts: [],
           notes: `Document "${fileName}" received for brand analysis. The AI agent should analyze the base64 content to extract brand assets.`,
         },
+      };
+    }
+
+    case "create_employee": {
+      const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const status = String(params["status"] ?? "offer");
+      const eventType = status === "offer" ? "offer_created" : status === "active" ? "hired" : "onboarding_started";
+
+      const employee = await prisma.employeeProfile.create({
+        data: {
+          employeeId,
+          firstName: String(params["firstName"] ?? ""),
+          lastName: String(params["lastName"] ?? ""),
+          displayName: `${String(params["firstName"] ?? "")} ${String(params["lastName"] ?? "")}`.trim(),
+          workEmail: typeof params["workEmail"] === "string" ? params["workEmail"] : undefined,
+          status,
+          ...(typeof params["departmentId"] === "string" ? { departmentId: params["departmentId"] } : {}),
+          ...(typeof params["positionId"] === "string" ? { positionId: params["positionId"] } : {}),
+          ...(typeof params["managerEmployeeId"] === "string" ? { managerEmployeeId: params["managerEmployeeId"] } : {}),
+          ...(typeof params["startDate"] === "string" ? { startDate: new Date(params["startDate"]) } : {}),
+          employmentEvents: {
+            create: {
+              eventId: `EVT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+              eventType,
+              effectiveAt: typeof params["startDate"] === "string" ? new Date(params["startDate"]) : new Date(),
+              reason: "Created via AI co-worker",
+              actorUserId: userId,
+            },
+          },
+        },
+      });
+      return {
+        success: true,
+        entityId: employee.employeeId,
+        message: `Employee ${employee.displayName} (${employee.employeeId}) created with status "${status}".`,
+      };
+    }
+
+    case "transition_employee_status": {
+      const employee = await prisma.employeeProfile.findUnique({
+        where: { employeeId: String(params["employeeId"]) },
+      });
+      if (!employee) return { success: false, error: "Employee not found", message: `Employee ${String(params["employeeId"])} not found` };
+
+      const newStatus = String(params["newStatus"]);
+      const { validateLifecycleTransition } = await import("@/lib/actions/workforce");
+      const error = validateLifecycleTransition({
+        currentStatus: employee.status as import("@/lib/workforce-types").WorkforceStatus,
+        nextStatus: newStatus as import("@/lib/workforce-types").WorkforceStatus,
+        eventType: "activated",
+        terminationDate: newStatus === "inactive" ? new Date() : null,
+      });
+      if (error) return { success: false, error, message: error };
+
+      const eventMap: Record<string, string> = {
+        onboarding: employee.status === "offer" ? "offer_accepted" : "onboarding_started",
+        active: employee.status === "onboarding" ? "onboarding_completed" : "activated",
+        leave: "leave_started",
+        suspended: "suspended",
+        offboarding: "offboarding_started",
+        inactive: employee.status === "offboarding" ? "offboarding_completed" : "terminated",
+      };
+
+      await prisma.$transaction([
+        prisma.employeeProfile.update({
+          where: { employeeId: String(params["employeeId"]) },
+          data: { status: newStatus },
+        }),
+        prisma.employmentEvent.create({
+          data: {
+            eventId: `EVT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+            employeeProfileId: employee.id,
+            eventType: eventMap[newStatus] ?? "activated",
+            effectiveAt: new Date(),
+            reason: typeof params["reason"] === "string" ? params["reason"] : null,
+            actorUserId: userId,
+          },
+        }),
+      ]);
+
+      return {
+        success: true,
+        entityId: employee.employeeId,
+        message: `${employee.displayName} transitioned from "${employee.status}" to "${newStatus}".`,
+      };
+    }
+
+    case "propose_leave_policy": {
+      const policies = params["policies"] as Array<{ leaveType: string; name: string; annualAllocation: number; carryoverLimit?: number }> | undefined;
+      if (!policies || !Array.isArray(policies)) return { success: false, error: "No policies provided", message: "Provide an array of policy suggestions" };
+
+      let created = 0;
+      for (const p of policies) {
+        const policyId = `LP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+        await prisma.leavePolicy.create({
+          data: {
+            policyId,
+            leaveType: p.leaveType,
+            name: p.name,
+            annualAllocation: p.annualAllocation,
+            carryoverLimit: p.carryoverLimit ?? null,
+            isDefault: true,
+          },
+        });
+        created++;
+      }
+      return {
+        success: true,
+        message: `Created ${created} leave ${created !== 1 ? "policies" : "policy"} for ${String(params["locationContext"])}.`,
+      };
+    }
+
+    case "submit_feedback": {
+      const fromProfile = await prisma.employeeProfile.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+      if (!fromProfile) return { success: false, error: "Your employee profile not found", message: "Cannot submit feedback without an employee profile" };
+
+      const feedbackId = `FB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await prisma.feedbackNote.create({
+        data: {
+          feedbackId,
+          fromEmployeeId: fromProfile.id,
+          toEmployeeId: String(params["toEmployeeId"]),
+          content: String(params["content"]),
+          feedbackType: String(params["feedbackType"] ?? "observation"),
+          visibility: String(params["visibility"] ?? "private"),
+        },
+      });
+      return {
+        success: true,
+        entityId: feedbackId,
+        message: "Feedback submitted.",
       };
     }
 
