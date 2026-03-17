@@ -147,6 +147,18 @@ describe("routeTask", () => {
     expect(result).not.toBeNull();
     expect(result!.endpointId).toBe("ollama-phi");
   });
+
+  it("filters by requiredEndpointType", () => {
+    const request: TaskRequest = {
+      sensitivity: "public",
+      minCapabilityTier: "basic",
+      requiredEndpointType: "llm",
+    };
+    // brave-search is a service endpoint → excluded
+    const result = routeTask(ALL_ENDPOINTS, request);
+    expect(result).not.toBeNull();
+    expect(result!.endpointId).not.toBe("brave-search");
+  });
 });
 
 // ─── routePrimary ────────────────────────────────────────────────────────────
@@ -161,10 +173,21 @@ describe("routePrimary", () => {
 
   it("falls back when highest tier not cleared", () => {
     const result = routePrimary(ALL_ENDPOINTS, "restricted");
-    // Only ollama-llama (analytical) and ollama-phi (basic) have restricted clearance + active
-    // Highest tier = analytical → ollama-llama
+    // Only ollama-llama (analytical, LLM) has restricted clearance + active + analytical+ tier
+    // ollama-phi is basic tier (below analytical minimum) → excluded
     expect(result).not.toBeNull();
     expect(result!.endpointId).toBe("ollama-llama");
+  });
+
+  it("excludes service endpoints from primary routing", () => {
+    // Even if brave-search were the only option for a sensitivity level, it shouldn't be selected
+    const result = routePrimary([braveSearch], "public");
+    expect(result).toBeNull(); // No LLM endpoints available
+  });
+
+  it("excludes basic-tier LLMs from primary routing", () => {
+    const result = routePrimary([ollamaPhi], "public");
+    expect(result).toBeNull(); // ollama-phi is basic tier, below analytical minimum
   });
 });
 

@@ -52,6 +52,9 @@ export function filterEligible(
       if (!hasAllTags) return false;
     }
 
+    // Must match required endpoint type (if specified)
+    if (request.requiredEndpointType && ep.endpointType !== request.requiredEndpointType) return false;
+
     return true;
   });
 }
@@ -122,8 +125,9 @@ export function routeTask(
 }
 
 /**
- * Route primary inference — selects the highest-tier eligible endpoint.
- * Used for the main LLM call in a conversation turn.
+ * Route primary inference — selects the highest-tier eligible LLM endpoint.
+ * Used for the main conversation and orchestrator evaluation calls.
+ * Excludes service endpoints (e.g., Brave Search) and requires analytical+ tier.
  */
 export function routePrimary(
   endpoints: EndpointCandidate[],
@@ -131,7 +135,8 @@ export function routePrimary(
 ): RouteResult {
   return routeTask(endpoints, {
     sensitivity,
-    minCapabilityTier: "basic",
+    minCapabilityTier: "analytical",
+    requiredEndpointType: "llm",
     preferCheap: false,
   });
 }

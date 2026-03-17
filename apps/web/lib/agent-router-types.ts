@@ -10,6 +10,8 @@ export type TaskRequest = {
   minCapabilityTier: CapabilityTier;
   requiredTags?: string[];
   preferCheap?: boolean;
+  /** Filter to a specific endpoint type (e.g., "llm" excludes service endpoints like Brave Search) */
+  requiredEndpointType?: "llm" | "service";
 };
 
 export type EndpointCandidate = {
