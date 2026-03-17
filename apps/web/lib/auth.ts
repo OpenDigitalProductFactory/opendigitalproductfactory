@@ -31,7 +31,7 @@ export type DpfSession = {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  pages: { signIn: "/" },
   providers: [
     // Admin/workforce login
     Credentials({
