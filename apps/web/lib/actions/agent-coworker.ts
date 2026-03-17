@@ -369,6 +369,7 @@ export async function sendMessage(input: {
         sensitivity: routeCtx.sensitivity,
         minCapabilityTier: getTaskType(classification.taskType)?.minCapabilityTier ?? "basic",
         requiredTags: [classification.taskType],
+        requiredEndpointType: "llm",
         taskType: classification.taskType,
       });
 
