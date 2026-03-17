@@ -261,10 +261,7 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       { label: "Ship feature", description: "Deploy the completed feature", capability: "view_platform", prompt: "I'm ready to ship this feature" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
-    modelRequirements: {
-      minCapabilityTier: "deep-thinker",
-      instructionFollowing: "excellent",
-    },
+    modelRequirements: {},
   },
   "/admin": {
     agentId: "admin-assistant",
@@ -347,10 +344,7 @@ WHAT YOU DO NOT DO:
       { label: "Create task", description: "Create a backlog item", capability: "manage_backlog", prompt: "Create a new task" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback." },
     ],
-    modelRequirements: {
-      minCapabilityTier: "deep-thinker",
-      instructionFollowing: "excellent",
-    },
+    modelRequirements: {},
   },
 };
 
