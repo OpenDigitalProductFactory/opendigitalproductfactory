@@ -219,6 +219,8 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
         {types.map((t) => {
           const typeItems = byType.get(t) ?? [];
+          const filteredItems = hideDone ? typeItems.filter((i) => i.status !== "done" && i.status !== "deferred") : typeItems;
+          const hiddenItemCount = typeItems.length - filteredItems.length;
           const label = TYPE_LABELS[t] ?? t;
 
           return (
@@ -235,14 +237,23 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                   + Add item
                 </button>
               </div>
-              {typeItems.length === 0 ? (
-                <p className="text-xs text-[var(--dpf-muted)]">No unassigned {label.toLowerCase()} items.</p>
+              {filteredItems.length === 0 ? (
+                <p className="text-xs text-[var(--dpf-muted)]">
+                  {typeItems.length === 0
+                    ? `No unassigned ${label.toLowerCase()} items.`
+                    : `All ${typeItems.length} items are done. Uncheck "Hide done" to see them.`}
+                </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {typeItems.map((item) => (
+                  {filteredItems.map((item) => (
                     <BacklogItemRow key={item.id} item={item} onEdit={openEdit} />
                   ))}
                 </div>
+              )}
+              {hiddenItemCount > 0 && (
+                <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+                  {hiddenItemCount} completed item{hiddenItemCount !== 1 ? "s" : ""} hidden
+                </p>
               )}
             </section>
           );
