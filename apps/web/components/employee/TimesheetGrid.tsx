@@ -25,7 +25,6 @@ type EntryState = {
 type Props = {
   existingPeriod: TimesheetPeriodRow | null;
   weekStarting: string;
-  onWeekChange: (direction: -1 | 1) => void;
 };
 
 function buildEmptyEntries(weekStarting: string): EntryState[] {
@@ -60,8 +59,15 @@ function buildEntriesFromPeriod(period: TimesheetPeriodRow, weekStarting: string
   return empty;
 }
 
-export function TimesheetGrid({ existingPeriod, weekStarting, onWeekChange }: Props) {
+export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
   const router = useRouter();
+
+  function navigateWeek(direction: -1 | 1) {
+    const current = new Date(weekStarting);
+    current.setDate(current.getDate() + direction * 7);
+    const iso = current.toISOString().split("T")[0]!;
+    router.push(`?view=timesheets&week=${iso}`, { scroll: false });
+  }
   const [isPending, startTransition] = useTransition();
   const [entries, setEntries] = useState<EntryState[]>(
     existingPeriod ? buildEntriesFromPeriod(existingPeriod, weekStarting) : buildEmptyEntries(weekStarting),
@@ -149,9 +155,9 @@ export function TimesheetGrid({ existingPeriod, weekStarting, onWeekChange }: Pr
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => onWeekChange(-1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&larr;</button>
+          <button type="button" onClick={() => navigateWeek(-1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&larr;</button>
           <span className="text-xs text-white font-medium">Week of {weekLabel}</span>
-          <button type="button" onClick={() => onWeekChange(1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&rarr;</button>
+          <button type="button" onClick={() => navigateWeek(1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&rarr;</button>
         </div>
       </div>
 
