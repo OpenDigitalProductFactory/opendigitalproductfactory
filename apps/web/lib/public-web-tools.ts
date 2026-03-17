@@ -160,7 +160,18 @@ function extractLogoCandidates(html: string, baseUrl: string): string[] {
     if (match[2]) add(match[2].trim(), false);
   }
 
-  return [...priority, ...secondary];
+  // Re-sort: prefer logos with "white" or "light" in the path/filename
+  // since the platform uses a dark theme. Push "dark" variants down.
+  const all = [...priority, ...secondary];
+  const preferDarkBg = (url: string): number => {
+    const lower = url.toLowerCase();
+    if (/[\-_/]white[\-_./]|[\-_/]light[\-_./]|[\-_/]dark-bg[\-_./]|[\-_/]reversed[\-_./]/.test(lower)) return -1;
+    if (/[\-_/]dark[\-_./]|[\-_/]black[\-_./]|[\-_/]light-bg[\-_./]/.test(lower)) return 1;
+    return 0;
+  };
+  all.sort((a, b) => preferDarkBg(a) - preferDarkBg(b));
+
+  return all;
 }
 
 export function assertAllowedPublicUrl(input: string): URL {
