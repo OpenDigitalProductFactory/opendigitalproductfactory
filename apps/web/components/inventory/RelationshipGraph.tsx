@@ -24,38 +24,49 @@ export function RelationshipGraph({ data }: Props) {
   const nodesRef = useRef<SimNode[]>([]);
   const linksRef = useRef<SimLink[]>([]);
   const animRef = useRef<number>(0);
+  const temperatureRef = useRef(1.0); // cooling: starts hot, settles to 0
 
-  // Simple force simulation
+  // Simple force simulation with cooling
   const simulate = useCallback(() => {
     const nodes = nodesRef.current;
     const links = linksRef.current;
     const cx = dimensions.width / 2;
     const cy = dimensions.height / 2;
+    const temp = temperatureRef.current;
+
+    // Cool down — simulation settles after ~200 frames
+    if (temp > 0.01) {
+      temperatureRef.current *= 0.98;
+    } else {
+      return; // stable — skip computation
+    }
 
     // Apply forces
     for (const node of nodes) {
-      if (node.x === undefined) { node.x = cx + (Math.random() - 0.5) * 400; node.y = cy + (Math.random() - 0.5) * 300; }
-      node.vx = (node.vx ?? 0) * 0.9;
-      node.vy = (node.vy ?? 0) * 0.9;
+      if (node.x === undefined) { node.x = cx + (Math.random() - 0.5) * 300; node.y = cy + (Math.random() - 0.5) * 200; }
+      node.vx = (node.vx ?? 0) * 0.6; // strong damping
+      node.vy = (node.vy ?? 0) * 0.6;
 
       // Center gravity
-      node.vx! += (cx - node.x!) * 0.001;
-      node.vy! += (cy - node.y!) * 0.001;
+      node.vx! += (cx - node.x!) * 0.002 * temp;
+      node.vy! += (cy - node.y!) * 0.002 * temp;
     }
 
-    // Repulsion between nodes
+    // Repulsion between nodes (capped to prevent explosion)
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i]!;
         const b = nodes[j]!;
         const dx = (a.x ?? 0) - (b.x ?? 0);
         const dy = (a.y ?? 0) - (b.y ?? 0);
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = 200 / (dist * dist);
-        a.vx! += dx * force;
-        a.vy! += dy * force;
-        b.vx! -= dx * force;
-        b.vy! -= dy * force;
+        const dist = Math.max(10, Math.sqrt(dx * dx + dy * dy));
+        const force = Math.min(3, 80 / (dist * dist)) * temp;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        a.vx! += fx;
+        a.vy! += fy;
+        b.vx! -= fx;
+        b.vy! -= fy;
       }
     }
 
@@ -67,19 +78,20 @@ export function RelationshipGraph({ data }: Props) {
       if (!source || !target) continue;
       const dx = (target.x ?? 0) - (source.x ?? 0);
       const dy = (target.y ?? 0) - (source.y ?? 0);
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = (dist - 80) * 0.005;
-      source.vx! += dx * force;
-      source.vy! += dy * force;
-      target.vx! -= dx * force;
-      target.vy! -= dy * force;
+      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const force = (dist - 100) * 0.003 * temp;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      source.vx! += fx;
+      source.vy! += fy;
+      target.vx! -= fx;
+      target.vy! -= fy;
     }
 
     // Apply velocity
     for (const node of nodes) {
       node.x! += node.vx!;
       node.y! += node.vy!;
-      // Bounds
       node.x = Math.max(20, Math.min(dimensions.width - 20, node.x!));
       node.y = Math.max(20, Math.min(dimensions.height - 20, node.y!));
     }
@@ -136,10 +148,11 @@ export function RelationshipGraph({ data }: Props) {
     }
   }, [dimensions, hoveredNode]);
 
-  // Initialize nodes and links
+  // Initialize nodes and links — reset temperature to re-animate
   useEffect(() => {
     nodesRef.current = data.nodes.map((n) => ({ ...n }));
     linksRef.current = data.links.map((l) => ({ ...l }));
+    temperatureRef.current = 1.0;
   }, [data]);
 
   // Resize observer
