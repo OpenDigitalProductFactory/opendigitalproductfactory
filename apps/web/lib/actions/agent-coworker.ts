@@ -606,6 +606,12 @@ export async function sendMessage(input: {
       });
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
+      // Diagnostic: log all providers and their statuses
+      const allProviders = await prisma.modelProvider.findMany({
+        select: { providerId: true, name: true, status: true, category: true },
+      });
+      console.warn("[NoProviders] All providers:", allProviders.map((p) => `${p.providerId}(${p.status})`).join(", "));
+
       // Check if there are inactive providers that could be re-enabled as a last resort
       const inactiveProviders = await prisma.modelProvider.findMany({
         where: { status: "inactive" },
@@ -615,9 +621,15 @@ export async function sendMessage(input: {
 
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
+      // Also check for providers with non-standard statuses (unconfigured, pending, etc.)
+      const nonActiveProviders = allProviders.filter((p) => p.status !== "active");
+      const providerSummary = allProviders.map((p) => `${p.name}: ${p.status}`).join(", ");
+
       let sysContent: string;
       if (inactiveProviders.length > 0) {
-        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate the most recently disabled provider, or visit Platform > AI Providers.`;
+        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate the most recently disabled provider, or visit Platform > AI Providers. [Debug: ${providerSummary}]`;
+      } else if (allProviders.length > 0) {
+        sysContent = `No active AI providers found. Current status: ${providerSummary}. Visit Platform > AI Providers to activate a provider.`;
       } else {
         sysContent = "AI co-workers haven't been set up yet. An administrator can configure them from Platform > AI Providers.";
       }
