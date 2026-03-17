@@ -1,7 +1,7 @@
 [
   {
     "providerId": "anthropic",
-    "name": "Anthropic",
+    "name": "Anthropic (API Key)",
     "category": "direct",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
@@ -13,8 +13,25 @@
     "outputPricePerMToken": 15.00,
     "docsUrl": "https://docs.anthropic.com",
     "consoleUrl": "https://console.anthropic.com/settings/billing",
-    "billingLabel": null,
-    "costPerformanceNotes": null
+    "billingLabel": "Pay-per-token API key",
+    "costPerformanceNotes": "Use API key from console.anthropic.com. Pay-per-token billing."
+  },
+  {
+    "providerId": "anthropic-sub",
+    "name": "Anthropic (Claude Code)",
+    "category": "direct",
+    "baseUrl": "https://api.anthropic.com/v1",
+    "authMethod": "api_key",
+    "supportedAuthMethods": ["api_key"],
+    "authHeader": "x-api-key",
+    "costModel": "token",
+    "families": ["claude-3-5", "claude-4"],
+    "inputPricePerMToken": 0,
+    "outputPricePerMToken": 0,
+    "docsUrl": "https://code.claude.com/docs",
+    "consoleUrl": "https://claude.ai/settings/billing",
+    "billingLabel": "Max subscription (included)",
+    "costPerformanceNotes": "Uses your Claude Code / Max subscription. Run 'claude setup-token' in terminal to generate token. No prompt caching, no 1M context."
   },
   {
     "providerId": "openai",

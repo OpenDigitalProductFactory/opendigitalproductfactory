@@ -88,6 +88,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.electricityRateKwh !== undefined   && { electricityRateKwh:   entry.electricityRateKwh }),
           docsUrl:              entry.docsUrl ?? null,
           consoleUrl:           entry.consoleUrl ?? null,
+          ...((entry as Record<string, unknown>).billingLabel !== undefined && { billingLabel: (entry as Record<string, unknown>).billingLabel as string }),
+          ...((entry as Record<string, unknown>).costPerformanceNotes !== undefined && { costPerformanceNotes: (entry as Record<string, unknown>).costPerformanceNotes as string }),
         },
       });
       updated++;
@@ -111,6 +113,8 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           electricityRateKwh:   entry.electricityRateKwh ?? null,
           docsUrl:              entry.docsUrl ?? null,
           consoleUrl:           entry.consoleUrl ?? null,
+          billingLabel:         (entry as Record<string, unknown>).billingLabel as string ?? null,
+          costPerformanceNotes: (entry as Record<string, unknown>).costPerformanceNotes as string ?? null,
         },
       });
       added++;
