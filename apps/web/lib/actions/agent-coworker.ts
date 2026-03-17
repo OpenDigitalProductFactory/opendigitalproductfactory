@@ -304,6 +304,17 @@ export async function sendMessage(input: {
       promptSections.push(routeData);
     }
 
+    // Semantic memory: recall relevant past conversations
+    const { recallRelevantContext } = await import("@/lib/semantic-memory");
+    const recalledContext = await recallRelevantContext({
+      query: input.content,
+      userId: user.id!,
+      currentThreadId: input.threadId,
+    }).catch(() => null);
+    if (recalledContext) {
+      promptSections.push(recalledContext);
+    }
+
     populatedPrompt = promptSections.join("\n");
   }
 
@@ -687,6 +698,18 @@ export async function sendMessage(input: {
       createdAt: true,
     },
   });
+
+  // Fire-and-forget: store conversation memories in Qdrant
+  import("@/lib/semantic-memory").then(({ storeConversationMemory }) => {
+    const memBase = {
+      userId: user.id!,
+      agentId: agent.agentId,
+      routeContext: input.routeContext,
+      threadId: input.threadId,
+    };
+    storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" }).catch(() => {});
+    storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" }).catch(() => {});
+  }).catch(() => {});
 
   // Fire-and-forget: process observer
   const mainMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {

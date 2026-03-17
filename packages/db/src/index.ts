@@ -3,6 +3,16 @@ export { prisma } from "./client";
 export type { Prisma, PrismaClient } from "../generated/client";
 
 export { neo4jSession, closeNeo4j, runCypher } from "./neo4j";
+
+// Qdrant vector database
+export {
+  ensureCollections as ensureQdrantCollections,
+  upsertVectors,
+  searchSimilar,
+  deleteVectors,
+  isQdrantHealthy,
+  QDRANT_COLLECTIONS,
+} from "./qdrant";
 export { initNeo4jSchema } from "./neo4j-schema";
 export {
   getDownstreamImpact,
