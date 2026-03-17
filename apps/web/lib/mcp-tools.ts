@@ -18,6 +18,7 @@ export type ToolDefinition = {
   requiredCapability: CapabilityKey | null;
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
+  sideEffect?: boolean;
 };
 
 export type ToolResult = {
@@ -46,6 +47,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["title", "type"],
     },
     requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   {
     name: "update_backlog_item",
@@ -62,6 +64,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["itemId"],
     },
     requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   {
     name: "create_digital_product",
@@ -77,6 +80,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["name", "productId"],
     },
     requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   {
     name: "update_lifecycle",
@@ -91,6 +95,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["productId"],
     },
     requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   {
     name: "report_quality_issue",
@@ -106,6 +111,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["type", "title"],
     },
     requiredCapability: null,
+    sideEffect: true,
   },
   {
     name: "search_public_web",
@@ -120,6 +126,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     requiresExternalAccess: true,
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "fetch_public_website",
@@ -134,6 +141,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     requiresExternalAccess: true,
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "analyze_public_website_branding",
@@ -148,6 +156,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_branding",
     requiresExternalAccess: true,
     executionMode: "immediate",
+    sideEffect: false,
   },
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
@@ -170,6 +179,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: true,
   },
   {
     name: "register_digital_product_from_build",
@@ -183,6 +193,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["name", "portfolioSlug"],
     },
     requiredCapability: "manage_capabilities",
+    sideEffect: true,
   },
   {
     name: "create_build_epic",
@@ -196,6 +207,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
+    sideEffect: true,
   },
   // ─── Intake Tools ─────────────────────────────────────────────────────────
   {
@@ -208,6 +220,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "assess_complexity",
@@ -227,6 +240,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "propose_decomposition",
@@ -242,6 +256,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "register_tech_debt",
@@ -257,6 +272,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: true,
   },
   // ─── Build Notes Tool ───────────────────────────────────────────────────
   {
@@ -276,6 +292,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: true,
   },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
@@ -292,6 +309,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "search_project_files",
@@ -307,6 +325,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "propose_file_change",
@@ -321,6 +340,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["path", "description", "newContent"],
     },
     requiredCapability: "manage_capabilities",
+    sideEffect: true,
   },
   // ─── Feedback Loop ──────────────────────────────────────────────────────────
   {
@@ -349,6 +369,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     executionMode: "proposal",
+    sideEffect: true,
   },
   // ─── Provider Management ────────────────────────────────────────────────────
   {
@@ -367,6 +388,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["providerId", "name", "category"],
     },
     requiredCapability: "manage_provider_connections",
+    sideEffect: true,
   },
   {
     name: "update_provider_category",
@@ -380,6 +402,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["providerId", "category"],
     },
     requiredCapability: "manage_provider_connections",
+    sideEffect: true,
   },
   {
     name: "analyze_brand_document",
@@ -402,12 +425,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean },
+  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean },
 ): ToolDefinition[] {
   return PLATFORM_TOOLS.filter(
     (tool) =>
-      (!tool.requiresExternalAccess || options?.externalAccessEnabled === true)
-      && (tool.requiredCapability === null || can(userContext, tool.requiredCapability)),
+      (options?.unifiedMode || !tool.requiresExternalAccess || options?.externalAccessEnabled === true)
+      && (tool.requiredCapability === null || can(userContext, tool.requiredCapability))
+      && (options?.mode !== "advise" || !tool.sideEffect),
   );
 }
 
