@@ -8,7 +8,7 @@ import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
-import { validateLifecycleTransition, validateEmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
+import { validateLifecycleTransition, validateEmployeeProfileInput, type EmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
 
 export type WorkforceActionResult = {
   ok: boolean;
@@ -213,7 +213,9 @@ export async function createEmployeeProfile(input: EmployeeProfileInput): Promis
           displayName,
           workEmail: trimOptional(input.workEmail),
           personalEmail: trimOptional(input.personalEmail),
-          phoneNumber: trimOptional(input.phoneNumber),
+          phoneWork: trimOptional(input.phoneWork),
+          phoneMobile: trimOptional(input.phoneMobile),
+          phoneEmergency: trimOptional(input.phoneEmergency),
           status: input.status,
           employmentTypeId: trimOptional(input.employmentTypeId),
           departmentId: trimOptional(input.departmentId),
@@ -285,7 +287,9 @@ export async function updateEmployeeProfile(input: EmployeeProfileInput): Promis
           displayName,
           workEmail: trimOptional(input.workEmail),
           personalEmail: trimOptional(input.personalEmail),
-          phoneNumber: trimOptional(input.phoneNumber),
+          phoneWork: trimOptional(input.phoneWork),
+          phoneMobile: trimOptional(input.phoneMobile),
+          phoneEmergency: trimOptional(input.phoneEmergency),
           status: input.status,
           employmentTypeId: trimOptional(input.employmentTypeId),
           departmentId: trimOptional(input.departmentId),

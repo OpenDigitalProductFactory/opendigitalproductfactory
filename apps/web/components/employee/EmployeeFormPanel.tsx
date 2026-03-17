@@ -9,10 +9,35 @@ import {
   type EmployeeProfileInput,
 } from "@/lib/actions/workforce";
 import type { WorkforceStatus, EmployeeProfileRecord } from "@/lib/workforce-types";
+import AddressSection from "@/components/employee/AddressSection";
 
 const HIRE_STATUSES: WorkforceStatus[] = ["offer", "onboarding", "active"];
 
 type RefOption = { id: string; label: string };
+
+type AddressWithHierarchy = {
+  id: string;
+  isPrimary: boolean;
+  address: {
+    id: string;
+    label: string;
+    addressLine1: string;
+    addressLine2: string | null;
+    postalCode: string;
+    validatedAt: Date | null;
+    validationSource: string | null;
+    city: {
+      id: string;
+      name: string;
+      region: {
+        id: string;
+        name: string;
+        code: string | null;
+        country: { id: string; name: string; iso2: string; phoneCode: string };
+      };
+    };
+  };
+};
 
 type Props = {
   isOpen: boolean;
@@ -23,6 +48,7 @@ type Props = {
   workLocations: RefOption[];
   employmentTypes: RefOption[];
   existingEmployees: RefOption[];
+  addresses?: AddressWithHierarchy[];
 };
 
 function generateEmployeeId(): string {
@@ -39,7 +65,9 @@ function emptyForm(): EmployeeProfileInput {
     displayName: "",
     workEmail: "",
     personalEmail: "",
-    phoneNumber: "",
+    phoneWork: "",
+    phoneMobile: "",
+    phoneEmergency: "",
     status: "offer",
     departmentId: null,
     positionId: null,
@@ -59,7 +87,9 @@ function formFromEmployee(emp: EmployeeProfileRecord): EmployeeProfileInput {
     displayName: emp.displayName,
     workEmail: emp.workEmail ?? "",
     personalEmail: emp.personalEmail ?? "",
-    phoneNumber: emp.phoneNumber ?? "",
+    phoneWork: emp.phoneWork ?? "",
+    phoneMobile: emp.phoneMobile ?? "",
+    phoneEmergency: emp.phoneEmergency ?? "",
     status: emp.status,
     departmentId: emp.departmentId,
     positionId: emp.positionId,
@@ -85,6 +115,7 @@ export function EmployeeFormPanel({
   workLocations,
   employmentTypes,
   existingEmployees,
+  addresses = [],
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(employee);
@@ -214,8 +245,8 @@ export function EmployeeFormPanel({
               </label>
             </div>
 
-            {/* Contact row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Email row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Work Email</span>
                 <input
@@ -236,14 +267,38 @@ export function EmployeeFormPanel({
                   placeholder="jane@personal.com"
                 />
               </label>
+            </div>
+
+            {/* Phone row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <label className="flex flex-col gap-1">
-                <span className={labelClasses}>Phone Number</span>
+                <span className={labelClasses}>Work Phone</span>
                 <input
                   type="tel"
-                  value={form.phoneNumber ?? ""}
-                  onChange={(e) => setField("phoneNumber", e.target.value)}
+                  value={form.phoneWork ?? ""}
+                  onChange={(e) => setField("phoneWork", e.target.value)}
                   className={inputClasses}
-                  placeholder="+1 555-0100"
+                  placeholder="+14155551234"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={labelClasses}>Mobile Phone</span>
+                <input
+                  type="tel"
+                  value={form.phoneMobile ?? ""}
+                  onChange={(e) => setField("phoneMobile", e.target.value)}
+                  className={inputClasses}
+                  placeholder="+14155551234"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={labelClasses}>Emergency Phone</span>
+                <input
+                  type="tel"
+                  value={form.phoneEmergency ?? ""}
+                  onChange={(e) => setField("phoneEmergency", e.target.value)}
+                  className={inputClasses}
+                  placeholder="+14155551234"
                 />
               </label>
             </div>
@@ -375,6 +430,14 @@ export function EmployeeFormPanel({
                 ))}
               </select>
             </label>
+
+            {/* Addresses (only shown when editing an existing employee) */}
+            {isEdit && employee && (
+              <AddressSection
+                employeeProfileId={employee.id}
+                addresses={addresses}
+              />
+            )}
 
             {error && <p className="text-xs text-red-400">{error}</p>}
           </form>
