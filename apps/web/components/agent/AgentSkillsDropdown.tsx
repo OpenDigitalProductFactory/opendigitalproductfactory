@@ -12,7 +12,7 @@ type Props = {
 };
 
 export function AgentSkillsDropdown({ skills, userContext, onSend }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredSkills = skills.filter(

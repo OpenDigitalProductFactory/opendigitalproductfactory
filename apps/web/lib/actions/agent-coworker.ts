@@ -617,7 +617,7 @@ export async function sendMessage(input: {
 
       let sysContent: string;
       if (inactiveProviders.length > 0) {
-        sysContent = `AI co-workers are temporarily offline. An administrator can re-enable them from Platform > AI Providers.`;
+        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate the most recently disabled provider, or visit Platform > AI Providers.`;
       } else {
         sysContent = "AI co-workers haven't been set up yet. An administrator can configure them from Platform > AI Providers.";
       }
