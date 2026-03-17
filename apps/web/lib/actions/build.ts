@@ -234,10 +234,24 @@ export async function shipBuild(input: {
     return product;
   });
 
-  // Create git tag for this version (best-effort — tag failure does not block shipping)
+  // Git tagging + version tracking (best-effort — failures do not block shipping)
+  let previousTag: string | null = null;
+  let gitCommitHash: string | null = null;
+  let changeCount = 0;
+
   try {
-    const { createTag, isGitAvailable } = await import("@/lib/git-utils");
+    const { createTag, isGitAvailable, getLatestTag, getCommitCount, getCurrentCommitHash } = await import("@/lib/git-utils");
+
     if (isGitAvailable()) {
+      // Capture previous tag BEFORE creating the new one
+      previousTag = await getLatestTag();
+      gitCommitHash = await getCurrentCommitHash();
+
+      if (previousTag) {
+        changeCount = await getCommitCount(previousTag);
+      }
+
+      // Create the new tag
       const tagName = `v${result.version}`;
       const tagMessage = `${input.name} v${result.version}\n\nBuild: ${input.buildId}\nShipped-By: ${userId}`;
       const tagResult = await createTag({ tag: tagName, message: tagMessage });
@@ -247,6 +261,24 @@ export async function shipBuild(input: {
     }
   } catch (err) {
     console.warn("[shipBuild] git tag error:", err);
+  }
+
+  // Create ProductVersion + ChangePromotion records (best-effort)
+  try {
+    const { createProductVersion } = await import("@/lib/version-tracking");
+
+    await createProductVersion({
+      digitalProductId: result.id,
+      version: result.version,
+      gitTag: `v${result.version}`,
+      gitCommitHash: gitCommitHash ?? "unknown",
+      featureBuildId: build.id,
+      shippedBy: userId,
+      changeCount,
+      ...(build.diffSummary ? { changeSummary: build.diffSummary } : {}),
+    });
+  } catch (err) {
+    console.warn("[shipBuild] version tracking failed:", err);
   }
 
   return {
