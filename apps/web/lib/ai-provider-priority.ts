@@ -333,13 +333,15 @@ export async function callWithFailover(
   options?: { tools?: Array<Record<string, unknown>>; task?: TaskKey; modelRequirements?: ModelRequirements },
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority(options?.task ?? "conversation");
+  console.warn("[callWithFailover] priority:", priority.map((p) => `${p.providerId}(model=${p.modelId},tier=${p.capabilityTier})`).join(", ") || "EMPTY");
   if (priority.length === 0) {
-    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true } });
-    console.warn("[callWithFailover] priority empty. Active providers in DB:", allActive.map((p) => p.providerId).join(", ") || "NONE");
+    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true, endpointType: true } });
+    console.warn("[callWithFailover] Active providers in DB:", allActive.map((p) => `${p.providerId}(${p.endpointType})`).join(", ") || "NONE");
     throw new NoProvidersAvailableError([]);
   }
   const providerPolicy = await getActiveProviderPolicyInfo();
   let filteredPriority = filterProviderPriorityBySensitivity(priority, providerPolicy, sensitivity);
+  console.warn("[callWithFailover] after sensitivity filter:", filteredPriority.map((p) => p.providerId).join(", ") || "EMPTY");
   if (filteredPriority.length === 0) {
     throw new NoAllowedProvidersForSensitivityError(sensitivity);
   }
