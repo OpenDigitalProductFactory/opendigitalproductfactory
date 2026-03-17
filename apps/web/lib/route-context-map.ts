@@ -176,7 +176,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "internal",
     domainContext:
       "This page shows the delivery backlog with items, epics, priorities, and statuses. Users create and update work items, track epic progress, and manage delivery flow. Work-in-progress limits and blocker visibility are key operational controls.",
-    domainTools: ["create_backlog_item", "update_backlog_item"],
+    domainTools: ["query_backlog", "create_backlog_item", "update_backlog_item"],
     skills: [
       {
         label: "Create item",
@@ -302,6 +302,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This is the cross-cutting workspace with visibility over all platform areas. Data here is classified as confidential — it spans portfolio, operations, and workforce data. Users manage backlog items, browse the codebase, and propose changes across the platform.",
     domainTools: [
+      "query_backlog",
       "create_backlog_item",
       "update_backlog_item",
       "read_project_file",

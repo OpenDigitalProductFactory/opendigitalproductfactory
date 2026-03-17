@@ -98,6 +98,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "query_backlog",
+    description: "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["open", "in-progress", "done", "deferred"], description: "Filter by status (optional)" },
+        epicId: { type: "string", description: "Filter by epic ID (optional)" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "report_quality_issue",
     description: "Report a bug, suggestion, or question about the platform",
     inputSchema: {
@@ -580,6 +596,41 @@ export async function executeTool(
       if (typeof params["lifecycleStatus"] === "string") updates["lifecycleStatus"] = params["lifecycleStatus"];
       await prisma.digitalProduct.update({ where: { productId: String(params["productId"]) }, data: updates });
       return { success: true, entityId: String(params["productId"]), message: `Updated lifecycle for ${String(params["productId"])}` };
+    }
+
+    case "query_backlog": {
+      const where: Record<string, unknown> = {};
+      if (typeof params["status"] === "string") where["status"] = params["status"];
+      if (typeof params["epicId"] === "string") where["epicId"] = params["epicId"];
+      const limit = typeof params["limit"] === "number" ? Math.min(params["limit"], 50) : 20;
+
+      const [items, epics, totalOpen, totalInProgress, totalDone] = await Promise.all([
+        prisma.backlogItem.findMany({
+          where,
+          orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+          take: limit,
+          select: { itemId: true, title: true, status: true, type: true, priority: true, epicId: true, updatedAt: true },
+        }),
+        prisma.epic.findMany({
+          select: { id: true, epicId: true, title: true, status: true },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        }),
+        prisma.backlogItem.count({ where: { status: "open" } }),
+        prisma.backlogItem.count({ where: { status: "in-progress" } }),
+        prisma.backlogItem.count({ where: { status: "done" } }),
+      ]);
+
+      const summary = `Backlog: ${totalOpen} open, ${totalInProgress} in-progress, ${totalDone} done. ${epics.length} epic(s).`;
+      return {
+        success: true,
+        message: summary,
+        data: {
+          summary: { open: totalOpen, inProgress: totalInProgress, done: totalDone },
+          epics: epics.map((e) => ({ epicId: e.epicId, title: e.title, status: e.status })),
+          items: items.map((i) => ({ itemId: i.itemId, title: i.title, status: i.status, type: i.type, priority: i.priority, epicId: i.epicId })),
+        },
+      };
     }
 
     case "report_quality_issue": {
