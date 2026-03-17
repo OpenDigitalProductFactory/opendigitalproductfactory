@@ -134,7 +134,7 @@ Four collapsible sections on a single page, each rendered by a client component 
 **Actions:**
 - **Inline edit:** Name only (cities have no code).
 - **Deactivate/Reactivate.**
-- **Add city:** Inline form with region dropdown (scoped to selected country if filtered).
+- **Add city:** Inline form with region dropdown (scoped to selected country if filtered). Uses existing `forceCreateCity` to skip near-match check (admin is authoritative).
 
 ### 6. Work Location Panel
 
@@ -144,7 +144,7 @@ Four collapsible sections on a single page, each rendered by a client component 
 
 **Actions:**
 - **Link address:** Opens a mini address form below the card. Reuses the same cascading typeahead pattern from AddressSection (Country → Region → City + street lines + postal code). Creates an Address record and links it via `addressId` on WorkLocation.
-- **Unlink address:** Removes the `addressId` FK (sets to null). Does not delete the Address record.
+- **Unlink address:** Removes the `addressId` FK (sets to null) and soft-deletes the Address record (status: "inactive"), consistent with `deleteEmployeeAddress` behavior.
 
 No create/edit/delete for WorkLocations themselves — those are managed elsewhere (workforce reference data setup). This panel only manages the address link.
 
@@ -152,7 +152,19 @@ No create/edit/delete for WorkLocations themselves — those are managed elsewhe
 
 **File:** `apps/web/lib/actions/reference-data-admin.ts`
 
-All actions require `view_admin` permission (checked via the same `requireAuth` + capability pattern used in workforce admin actions).
+All actions use a `requireAdminCapability()` helper that calls `can(context, "view_admin")` — the same pattern used in `ai-providers.ts` with `requireManageProviders()`. The layout gate is a navigation guard only; server actions must independently verify permission since they are callable as HTTP endpoints.
+
+```typescript
+async function requireAdminCapability() {
+  const session = await auth();
+  const user = session?.user;
+  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_admin")) {
+    throw new Error("Unauthorized");
+  }
+}
+```
+
+### Action Signatures
 
 ```typescript
 // Country
@@ -169,13 +181,24 @@ updateCity(id: string, data: { name?: string }): WorkforceActionResult
 toggleCityStatus(id: string): WorkforceActionResult
 
 // Work Location address linking
-linkWorkLocationAddress(locationId: string, addressData: AddressInput): WorkforceActionResult
+linkWorkLocationAddress(locationId: string, addressData: WorkLocationAddressInput): WorkforceActionResult
   // Creates Address record + sets WorkLocation.addressId in a transaction
 unlinkWorkLocationAddress(locationId: string): WorkforceActionResult
-  // Sets WorkLocation.addressId to null
+  // Sets WorkLocation.addressId to null, soft-deletes the Address (status: "inactive")
 ```
 
-All actions call `revalidatePath("/admin/reference-data")`.
+**`WorkLocationAddressInput` type** (distinct from `AddressInput` which includes employee-specific fields):
+```typescript
+type WorkLocationAddressInput = {
+  label: string;         // typically "headquarters" or "site"
+  addressLine1: string;
+  addressLine2?: string | null;
+  cityId: string;
+  postalCode: string;
+};
+```
+
+All actions call both `revalidatePath("/admin/reference-data")` and `revalidatePath("/employee")` to keep typeahead caches consistent.
 
 ### 8. Data Loading
 
@@ -192,7 +215,6 @@ const [countries, regions, cities, workLocations] = await Promise.all([
     include: {
       region: {
         include: { country: { select: { id: true, name: true, iso2: true } } },
-        select: { id: true, name: true, code: true, country: true },
       },
     },
     orderBy: { name: "asc" },
@@ -227,8 +249,11 @@ No pagination — reference data is small (hundreds of rows, not thousands). Cli
 - Deactivate a region, verify it disappears from employee form typeahead
 - Add a new city via admin panel, verify it appears in employee form typeahead
 - Link an address to a work location, verify it displays
-- Unlink an address, verify WorkLocation.addressId is null
+- Unlink an address, verify WorkLocation.addressId is null and Address.status is "inactive"
 - Admin permission gate: non-admin user gets 404
+- Server action capability check: unauthenticated call throws "Unauthorized"
+- Server action capability check: non-admin user call throws "Unauthorized"
+- AdminTabNav renders 4th tab ("Reference Data") with correct href
 
 ---
 
