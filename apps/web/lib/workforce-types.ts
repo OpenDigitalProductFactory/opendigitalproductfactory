@@ -59,6 +59,54 @@ export function validateLifecycleTransition(input: {
   return null;
 }
 
+// ─── Employee Profile Validation ────────────────────────────────────────────
+
+export type EmployeeProfileInput = {
+  employeeProfileId?: string;
+  employeeId: string;
+  userId?: string | null;
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  displayName?: string | null;
+  workEmail?: string | null;
+  personalEmail?: string | null;
+  phoneNumber?: string | null;
+  status: WorkforceStatus;
+  employmentTypeId?: string | null;
+  departmentId?: string | null;
+  positionId?: string | null;
+  managerEmployeeId?: string | null;
+  dottedLineManagerId?: string | null;
+  workLocationId?: string | null;
+  timezone?: string | null;
+  startDate?: Date | null;
+  confirmationDate?: Date | null;
+  endDate?: Date | null;
+};
+
+export function validateEmployeeProfileInput(input: EmployeeProfileInput): string | null {
+  if (!input.firstName.trim()) return "Enter a first name.";
+  if (!input.lastName.trim()) return "Enter a last name.";
+
+  const selfRefs = [input.employeeProfileId, input.employeeId].filter((value): value is string => Boolean(value?.trim()));
+  if (input.managerEmployeeId && selfRefs.includes(input.managerEmployeeId)) {
+    return "Employee cannot be their own manager.";
+  }
+  if (input.dottedLineManagerId && selfRefs.includes(input.dottedLineManagerId)) {
+    return "Employee cannot be their own manager.";
+  }
+
+  if (input.startDate && input.endDate && input.startDate > input.endDate) {
+    return "Start date must be on or before the end date.";
+  }
+  if (input.startDate && input.confirmationDate && input.confirmationDate < input.startDate) {
+    return "Confirmation date cannot be before the start date.";
+  }
+
+  return null;
+}
+
 // ─── Context Types ──────────────────────────────────────────────────────────
 
 export type WorkforceContext = {
