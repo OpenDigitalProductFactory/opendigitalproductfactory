@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { ReviewCycleRow, FeedbackRow } from "@/lib/review-data";
 import { createReviewCycle, activateReviewCycle } from "@/lib/actions/reviews";
 import { useRouter } from "next/navigation";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -86,17 +87,15 @@ export function ReviewPanel({ cycles, feedback }: Props) {
                 <option value="semi_annual">Semi-Annual</option>
                 <option value="annual">Annual</option>
               </select>
-              <input
-                type="date"
-                value={newCycle.periodStart}
-                onChange={(e) => setNewCycle((p) => ({ ...p, periodStart: e.target.value }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              <DatePicker
+                value={newCycle.periodStart ? new Date(newCycle.periodStart) : null}
+                onChange={(d) => setNewCycle((p) => ({ ...p, periodStart: d ? d.toISOString().slice(0, 10) : "" }))}
+                placeholder="Period start"
               />
-              <input
-                type="date"
-                value={newCycle.periodEnd}
-                onChange={(e) => setNewCycle((p) => ({ ...p, periodEnd: e.target.value }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              <DatePicker
+                value={newCycle.periodEnd ? new Date(newCycle.periodEnd) : null}
+                onChange={(d) => setNewCycle((p) => ({ ...p, periodEnd: d ? d.toISOString().slice(0, 10) : "" }))}
+                placeholder="Period end"
               />
             </div>
             <div className="flex gap-2">

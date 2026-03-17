@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/workforce";
 import type { WorkforceStatus, EmployeeProfileRecord } from "@/lib/workforce-types";
 import AddressSection from "@/components/employee/AddressSection";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const HIRE_STATUSES: WorkforceStatus[] = ["offer", "onboarding", "active"];
 
@@ -321,20 +322,16 @@ export function EmployeeFormPanel({
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1">
                 <span className={labelClasses}>Start Date</span>
-                <input
-                  type="date"
-                  value={formatDateForInput(form.startDate)}
-                  onChange={(e) =>
-                    setField(
-                      "startDate",
-                      e.target.value ? new Date(e.target.value) : null,
-                    )
+                <DatePicker
+                  value={form.startDate ? new Date(form.startDate) : null}
+                  onChange={(d) =>
+                    setField("startDate", d ?? null)
                   }
-                  className={inputClasses}
+                  placeholder="Select start date"
                 />
-              </label>
+              </div>
             </div>
 
             {/* Org assignment row */}

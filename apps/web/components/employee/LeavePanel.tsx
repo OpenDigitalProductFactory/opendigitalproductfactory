@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { LeavePolicyRow, LeaveBalanceRow, LeaveRequestRow } from "@/lib/leave-data";
 import { submitLeaveRequest, approveLeaveRequest, rejectLeaveRequest } from "@/lib/actions/leave";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const LEAVE_COLOURS: Record<string, string> = {
   vacation: "#38bdf8",
@@ -168,17 +169,15 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
               />
             </div>
             <div className="flex gap-2">
-              <input
-                type="date"
-                value={newRequest.startDate}
-                onChange={(e) => setNewRequest((p) => ({ ...p, startDate: e.target.value }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              <DatePicker
+                value={newRequest.startDate ? new Date(newRequest.startDate) : null}
+                onChange={(d) => setNewRequest((p) => ({ ...p, startDate: d ? d.toISOString().slice(0, 10) : "" }))}
+                placeholder="Start date"
               />
-              <input
-                type="date"
-                value={newRequest.endDate}
-                onChange={(e) => setNewRequest((p) => ({ ...p, endDate: e.target.value }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              <DatePicker
+                value={newRequest.endDate ? new Date(newRequest.endDate) : null}
+                onChange={(d) => setNewRequest((p) => ({ ...p, endDate: d ? d.toISOString().slice(0, 10) : "" }))}
+                placeholder="End date"
               />
             </div>
             <input
