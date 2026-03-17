@@ -12,7 +12,7 @@ import { ModelWarmup } from "@/components/shell/ModelWarmup";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) redirect("/");
+  if (!session?.user) redirect("/welcome");
   if (session.user.type === "customer") redirect("/portal");
 
   const user = session.user;
