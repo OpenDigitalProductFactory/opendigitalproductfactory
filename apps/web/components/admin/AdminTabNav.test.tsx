@@ -14,14 +14,16 @@ vi.mock("next/link", () => ({
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 
 describe("AdminTabNav", () => {
-  it("renders Access, Branding, and Settings tabs", () => {
+  it("renders Access, Branding, Reference Data, and Settings tabs", () => {
     const html = renderToStaticMarkup(<AdminTabNav />);
 
     expect(html).toContain('href="/admin"');
     expect(html).toContain('href="/admin/branding"');
+    expect(html).toContain('href="/admin/reference-data"');
     expect(html).toContain('href="/admin/settings"');
     expect(html).toContain(">Access<");
     expect(html).toContain(">Branding<");
+    expect(html).toContain(">Reference Data<");
     expect(html).toContain(">Settings<");
   });
 });
