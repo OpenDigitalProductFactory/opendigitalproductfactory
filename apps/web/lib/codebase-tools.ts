@@ -1,5 +1,6 @@
 // apps/web/lib/codebase-tools.ts
 // Codebase file access with path security for agent tools.
+// Only available on dev instances (INSTANCE_TYPE=dev). Production has no source code.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, relative, isAbsolute, dirname } from "path";
@@ -7,6 +8,20 @@ import { execSync } from "child_process";
 
 // Project root — Next.js runs from apps/web, so go up two levels
 const PROJECT_ROOT = resolve(process.cwd(), "..", "..");
+
+// ─── Instance Type ──────────────────────────────────────────────────────────
+
+/** Returns true if this is a development instance with source code access. */
+export function isDevInstance(): boolean {
+  // INSTANCE_TYPE=dev explicitly enables codebase access
+  // Falls back to NODE_ENV check — development = dev, production = prod
+  const instanceType = process.env.INSTANCE_TYPE;
+  if (instanceType === "dev") return true;
+  if (instanceType === "production") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+const DEV_ONLY_ERROR = "Codebase access is only available on dev instances. Production does not have source code.";
 
 // ─── Path Security ──────────────────────────────────────────────────────────
 
@@ -64,6 +79,7 @@ export function readProjectFile(
   filePath: string,
   options?: { startLine?: number; endLine?: number },
 ): { content: string } | { error: string } {
+  if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const resolved = resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
@@ -89,6 +105,7 @@ export function searchProjectFiles(
   query: string,
   options?: { glob?: string; maxResults?: number },
 ): { results: Array<{ path: string; line: number; text: string }> } | { error: string } {
+  if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const max = options?.maxResults ?? 20;
 
   try {
@@ -127,6 +144,7 @@ export function listProjectDirectory(
   dirPath: string,
   options?: { maxDepth?: number },
 ): { entries: Array<{ name: string; type: "file" | "dir"; path: string }> } | { error: string } {
+  if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const safePath = dirPath === "" || dirPath === "." ? "." : dirPath;
   if (safePath !== "." && !isPathAllowed(safePath)) {
     return { error: `Access denied: ${safePath}` };
@@ -168,6 +186,7 @@ export function writeProjectFile(
   filePath: string,
   content: string,
 ): { ok: true } | { error: string } {
+  if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const resolved = resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
