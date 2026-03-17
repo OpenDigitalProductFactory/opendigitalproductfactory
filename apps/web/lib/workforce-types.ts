@@ -59,6 +59,15 @@ export function validateLifecycleTransition(input: {
   return null;
 }
 
+// ─── E.164 Phone Validation ─────────────────────────────────────────────────
+
+const E164_REGEX = /^\+[1-9]\d{1,14}$/;
+
+export function validateE164(phone: string | null | undefined): boolean {
+  if (!phone) return true; // nullable fields are valid when empty
+  return E164_REGEX.test(phone);
+}
+
 // ─── Employee Profile Validation ────────────────────────────────────────────
 
 export type EmployeeProfileInput = {
@@ -71,7 +80,9 @@ export type EmployeeProfileInput = {
   displayName?: string | null;
   workEmail?: string | null;
   personalEmail?: string | null;
-  phoneNumber?: string | null;
+  phoneWork?: string | null;
+  phoneMobile?: string | null;
+  phoneEmergency?: string | null;
   status: WorkforceStatus;
   employmentTypeId?: string | null;
   departmentId?: string | null;
@@ -88,6 +99,16 @@ export type EmployeeProfileInput = {
 export function validateEmployeeProfileInput(input: EmployeeProfileInput): string | null {
   if (!input.firstName.trim()) return "Enter a first name.";
   if (!input.lastName.trim()) return "Enter a last name.";
+
+  if (input.phoneWork && !validateE164(input.phoneWork)) {
+    return "Phone (work) must be in E.164 format (e.g., +14155551234).";
+  }
+  if (input.phoneMobile && !validateE164(input.phoneMobile)) {
+    return "Phone (mobile) must be in E.164 format (e.g., +14155551234).";
+  }
+  if (input.phoneEmergency && !validateE164(input.phoneEmergency)) {
+    return "Phone (emergency) must be in E.164 format (e.g., +14155551234).";
+  }
 
   const selfRefs = [input.employeeProfileId, input.employeeId].filter((value): value is string => Boolean(value?.trim()));
   if (input.managerEmployeeId && selfRefs.includes(input.managerEmployeeId)) {
@@ -147,7 +168,9 @@ export type EmployeeProfileRecord = {
   displayName: string;
   workEmail: string | null;
   personalEmail: string | null;
-  phoneNumber: string | null;
+  phoneWork: string | null;
+  phoneMobile: string | null;
+  phoneEmergency: string | null;
   status: WorkforceStatus;
   departmentId: string | null;
   departmentName: string | null;

@@ -16,6 +16,7 @@ import {
   getEmployeeProfileByUserId,
   getWorkforceReferenceData,
 } from "@/lib/workforce-data";
+import { getEmployeeAddresses } from "@/lib/address-data";
 import { getTimesheetForWeek, getPendingTimesheetsForManager, getCurrentWeekStart } from "@/lib/timesheet-data";
 import { auth } from "@/lib/auth";
 
@@ -69,9 +70,12 @@ export default async function EmployeePage({ searchParams }: Props) {
   const selectedEmployee = primaryEmployeeUserId
     ? await getEmployeeProfileByUserId(primaryEmployeeUserId)
     : null;
-  const lifecycleEvents = selectedEmployee
-    ? await getEmployeeLifecycleEvents(selectedEmployee.id)
-    : [];
+  const [lifecycleEvents, employeeAddresses] = selectedEmployee
+    ? await Promise.all([
+        getEmployeeLifecycleEvents(selectedEmployee.id),
+        getEmployeeAddresses(selectedEmployee.id),
+      ])
+    : [[], []];
 
   // Timesheet data (only fetch when on timesheets tab)
   const currentUserProfile = currentUserId
@@ -187,7 +191,7 @@ export default async function EmployeePage({ searchParams }: Props) {
           <>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <EmployeeDirectoryPanel employees={employees} />
-              <EmployeeProfilePanel employee={selectedEmployee} />
+              <EmployeeProfilePanel employee={selectedEmployee} addresses={employeeAddresses} />
             </div>
 
             <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
