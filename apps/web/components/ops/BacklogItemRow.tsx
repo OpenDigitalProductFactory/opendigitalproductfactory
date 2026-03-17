@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteBacklogItem } from "@/lib/actions/backlog";
 import { BACKLOG_STATUS_COLOURS, type BacklogItemWithRelations } from "@/lib/backlog";
+import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 
 type Props = {
   item: BacklogItemWithRelations;
@@ -37,6 +38,7 @@ export function BacklogItemRow({ item, onEdit }: Props) {
         <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 truncate">
           {item.taxonomyNode?.nodeId ?? "—"}
           {item.digitalProduct ? ` · ${item.digitalProduct.name}` : ""}
+          {item.agentId ? ` · ${AGENT_NAME_MAP[item.agentId] ?? item.agentId}` : ""}
           {item.submittedBy ? ` · by ${item.submittedBy.email}` : ""}
           {" · "}{new Date(item.createdAt).toLocaleDateString()}
           {item.completedAt ? ` · done ${new Date(item.completedAt).toLocaleDateString()}` : ""}
