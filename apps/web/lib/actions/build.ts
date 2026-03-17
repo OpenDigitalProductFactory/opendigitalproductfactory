@@ -310,6 +310,42 @@ export async function shipBuild(input: {
     console.warn("[shipBuild] version tracking failed:", err);
   }
 
+  // Generate codebase manifest and link to ProductVersion (best-effort)
+  try {
+    const { generateManifest } = await import("@/lib/manifest-generator");
+
+    const manifest = await generateManifest({
+      version: result.version,
+      gitRef: gitCommitHash ?? "unknown",
+      writeFile: true,
+    });
+
+    // Store manifest in DB and link to ProductVersion
+    const dbManifest = await prisma.codebaseManifest.create({
+      data: {
+        version: result.version,
+        gitRef: gitCommitHash ?? "unknown",
+        manifest: manifest as unknown as Prisma.InputJsonValue,
+        digitalProductId: result.id,
+      },
+      select: { id: true },
+    });
+
+    // Link manifest to the ProductVersion (if it was created)
+    const pv = await prisma.productVersion.findFirst({
+      where: { digitalProductId: result.id, version: result.version },
+      select: { id: true },
+    });
+    if (pv) {
+      await prisma.productVersion.update({
+        where: { id: pv.id },
+        data: { manifestId: dbManifest.id },
+      });
+    }
+  } catch (err) {
+    console.warn("[shipBuild] manifest generation failed:", err);
+  }
+
   return {
     productId: result.productId,
     productInternalId: result.id,
