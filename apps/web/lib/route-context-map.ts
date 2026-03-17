@@ -1,0 +1,357 @@
+// apps/web/lib/route-context-map.ts
+// Factual domain context definitions per route — replaces persona-based agent routing.
+
+import type { SensitivityLevel } from "./agent-router-types";
+
+export type RouteContextDef = {
+  routePrefix: string;
+  domain: string;
+  sensitivity: SensitivityLevel;
+  domainContext: string;
+  domainTools: string[];
+  skills: Array<{
+    label: string;
+    description: string;
+    capability: string | null;
+    prompt: string;
+  }>;
+};
+
+export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
+  "/portfolio": {
+    routePrefix: "/portfolio",
+    domain: "Portfolio Management",
+    sensitivity: "internal",
+    domainContext:
+      "This page displays the digital product portfolio organised into four root portfolios with a 481-node DPPM taxonomy tree. Users can review health metrics, budget allocations, and product groupings. Investment balance and risk concentration are the primary analytical dimensions.",
+    domainTools: [
+      "search_portfolio_context",
+      "create_digital_product",
+      "update_lifecycle",
+    ],
+    skills: [
+      {
+        label: "Health summary",
+        description: "Analyse health metrics and flag risks",
+        capability: "view_portfolio",
+        prompt:
+          "Analyse the health metrics for this portfolio — what's strong, what's at risk?",
+      },
+      {
+        label: "Find a product",
+        description: "Search for a digital product in the taxonomy",
+        capability: "view_portfolio",
+        prompt: "Help me find a specific digital product in the portfolio",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/inventory": {
+    routePrefix: "/inventory",
+    domain: "Product Inventory",
+    sensitivity: "internal",
+    domainContext:
+      "This page shows the digital product inventory with lifecycle stages (plan, design, build, production, retirement) and statuses (draft, active, inactive). Users manage individual product records, stage-gate readiness, and portfolio attribution.",
+    domainTools: ["create_digital_product", "update_lifecycle"],
+    skills: [
+      {
+        label: "Lifecycle review",
+        description: "Analyse products by lifecycle stage",
+        capability: "view_inventory",
+        prompt:
+          "Which products need attention based on their lifecycle stage?",
+      },
+      {
+        label: "Stage-gate check",
+        description: "Evaluate whether a product is ready to advance",
+        capability: "view_inventory",
+        prompt:
+          "Help me evaluate whether a product is ready to advance to the next stage",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/ea": {
+    routePrefix: "/ea",
+    domain: "Enterprise Architecture",
+    sensitivity: "internal",
+    domainContext:
+      "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative.",
+    domainTools: [],
+    skills: [
+      {
+        label: "Create a view",
+        description: "Start a new EA view",
+        capability: "manage_ea_model",
+        prompt: "Help me create a new EA view",
+      },
+      {
+        label: "Impact analysis",
+        description: "Trace what changes if a component changes",
+        capability: "view_ea_modeler",
+        prompt: "If I change this component, what else is affected?",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/employee": {
+    routePrefix: "/employee",
+    domain: "Employee Management",
+    sensitivity: "confidential",
+    domainContext:
+      "This page manages role assignments, team structures, HITL tier commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified human in the loop.",
+    domainTools: [],
+    skills: [
+      {
+        label: "Role tiers",
+        description: "Review HITL tiers and SLA commitments",
+        capability: "view_employee",
+        prompt: "Explain the role tiers and their SLA commitments",
+      },
+      {
+        label: "Team structure",
+        description: "View team memberships and assignments",
+        capability: "view_employee",
+        prompt: "Show me the team structure and assignments",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/customer": {
+    routePrefix: "/customer",
+    domain: "Customer Success",
+    sensitivity: "confidential",
+    domainContext:
+      "This page displays customer accounts and service relationships. Data here is classified as confidential — it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, and friction points.",
+    domainTools: [],
+    skills: [
+      {
+        label: "Account overview",
+        description: "Summarise a customer account",
+        capability: "view_customer",
+        prompt: "Give me an overview of this customer account",
+      },
+      {
+        label: "Friction analysis",
+        description: "Identify where customers are struggling",
+        capability: "view_customer",
+        prompt: "Where are customers experiencing friction?",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/ops": {
+    routePrefix: "/ops",
+    domain: "Operations",
+    sensitivity: "internal",
+    domainContext:
+      "This page shows the delivery backlog with items, epics, priorities, and statuses. Users create and update work items, track epic progress, and manage delivery flow. Work-in-progress limits and blocker visibility are key operational controls.",
+    domainTools: ["create_backlog_item", "update_backlog_item"],
+    skills: [
+      {
+        label: "Create item",
+        description: "Add a new backlog item",
+        capability: "manage_backlog",
+        prompt: "Help me create a new backlog item",
+      },
+      {
+        label: "Epic progress",
+        description: "Review how epics are progressing",
+        capability: "view_operations",
+        prompt: "Give me a status report on the current epics",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/build": {
+    routePrefix: "/build",
+    domain: "Build Studio",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ship. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.",
+    domainTools: [
+      "update_feature_brief",
+      "create_build_epic",
+      "register_digital_product_from_build",
+      "search_portfolio_context",
+      "assess_complexity",
+      "propose_decomposition",
+      "register_tech_debt",
+      "save_build_notes",
+    ],
+    skills: [
+      {
+        label: "Start a feature",
+        description: "Begin a new feature build",
+        capability: "view_platform",
+        prompt: "I want to build a new feature",
+      },
+      {
+        label: "Check status",
+        description: "Review build progress",
+        capability: "view_platform",
+        prompt: "What's the status of my current build?",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/platform": {
+    routePrefix: "/platform",
+    domain: "Platform & AI",
+    sensitivity: "confidential",
+    domainContext:
+      "This page manages AI providers, model profiles, token spend, and agent-to-provider assignments. Data here is classified as confidential — it includes API keys, cost data, and infrastructure configuration. Users configure failover chains and optimise capability-per-dollar.",
+    domainTools: ["add_provider", "update_provider_category"],
+    skills: [
+      {
+        label: "Configure provider",
+        description: "Set up a provider connection",
+        capability: "manage_provider_connections",
+        prompt: "Help me configure an AI provider",
+      },
+      {
+        label: "Token spend",
+        description: "Review usage and costs",
+        capability: "view_platform",
+        prompt: "Show me a summary of token usage and costs",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/admin": {
+    routePrefix: "/admin",
+    domain: "Administration",
+    sensitivity: "restricted",
+    domainContext:
+      "This page handles user management, role assignments, branding configuration, and platform settings. Data here is classified as restricted — it includes access control rules, credentials, and security configuration. All changes are auditable.",
+    domainTools: [],
+    skills: [
+      {
+        label: "Manage users",
+        description: "User accounts and roles",
+        capability: "manage_users",
+        prompt: "Help me manage user accounts",
+      },
+      {
+        label: "Set up branding",
+        description: "Configure platform brand and theme",
+        capability: "manage_branding",
+        prompt: "Help me set up the platform branding",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/workspace": {
+    routePrefix: "/workspace",
+    domain: "Workspace",
+    sensitivity: "confidential",
+    domainContext:
+      "This is the cross-cutting workspace with visibility over all platform areas. Data here is classified as confidential — it spans portfolio, operations, and workforce data. Users manage backlog items, browse the codebase, and propose changes across the platform.",
+    domainTools: [
+      "create_backlog_item",
+      "update_backlog_item",
+      "read_project_file",
+      "search_project_files",
+      "propose_file_change",
+    ],
+    skills: [
+      {
+        label: "Backlog status",
+        description: "Review epics and priorities",
+        capability: "view_platform",
+        prompt:
+          "Give me the current backlog status — open epics, what's done, what's next.",
+      },
+      {
+        label: "Create task",
+        description: "Create a backlog item",
+        capability: "manage_backlog",
+        prompt: "Create a new task",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback.",
+      },
+    ],
+  },
+};
+
+/** Default context used when no route prefix matches. */
+export const FALLBACK_ROUTE_CONTEXT: RouteContextDef =
+  ROUTE_CONTEXT_MAP["/workspace"]!;
+
+/**
+ * Resolve which route context applies for a given pathname.
+ * Uses longest prefix match; falls back to workspace.
+ */
+export function resolveRouteContext(pathname: string): RouteContextDef {
+  let best: RouteContextDef = FALLBACK_ROUTE_CONTEXT;
+  let bestLen = 0;
+
+  for (const [prefix, def] of Object.entries(ROUTE_CONTEXT_MAP)) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) {
+      if (prefix.length > bestLen) {
+        bestLen = prefix.length;
+        best = def;
+      }
+    }
+  }
+
+  return best;
+}
