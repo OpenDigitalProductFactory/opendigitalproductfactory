@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/client";
 
 const prisma = new PrismaClient();
 
@@ -9,10 +9,10 @@ const SERVICE_ENDPOINTS = [
     endpointType: "service",
     sensitivityClearance: ["public", "internal"],
     capabilityTier: "basic",
-    costBand: "low",
+    costBand: "free",
     taskTags: ["web-search"],
     status: "active",
-    category: "local",
+    category: "mcp-internal",
     costModel: "token",
     authMethod: "api_key",
   },
@@ -25,7 +25,7 @@ const SERVICE_ENDPOINTS = [
     costBand: "free",
     taskTags: ["web-fetch"],
     status: "active",
-    category: "local",
+    category: "mcp-internal",
     costModel: "compute",
     authMethod: "none",
   },
@@ -38,7 +38,7 @@ const SERVICE_ENDPOINTS = [
     costBand: "free",
     taskTags: ["branding-analysis", "web-fetch"],
     status: "active",
-    category: "local",
+    category: "mcp-internal",
     costModel: "compute",
     authMethod: "none",
   },
