@@ -88,9 +88,99 @@ export default async function ProviderDetailPage({ params }: Props) {
         </div>
       )}
 
-      <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
-        <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
+      {pw.provider.endpointType === "service" ? (
+        <McpServiceDetail provider={pw.provider} />
+      ) : (
+        <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
+          <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-types").ProviderRow }) {
+  const isPluginManaged = provider.category === "mcp-subscribed" && !provider.endpoint && !provider.baseUrl;
+
+  return (
+    <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
+      <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 16 }}>MCP Service Configuration</h2>
+
+      {isPluginManaged && (
+        <div style={{
+          background: "#161625",
+          borderLeft: "3px solid #38bdf8",
+          borderRadius: 6,
+          padding: "12px 16px",
+          marginBottom: 16,
+          fontSize: 12,
+          color: "#b0b0c8",
+          lineHeight: 1.5,
+        }}>
+          This service is managed by a Claude Code plugin. Connection details are handled by the plugin runtime — no manual URL configuration needed.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint Type</div>
+          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.endpointType}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Category</div>
+          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.category}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Transport</div>
+          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.mcpTransport ?? "Plugin-managed"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Status</div>
+          <div style={{ fontSize: 13, color: provider.status === "active" ? "#4ade80" : "#fbbf24" }}>{provider.status}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
+          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.capabilityTier ?? "basic"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost Band</div>
+          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.costBand ?? "free"}</div>
+        </div>
       </div>
+
+      {/* Sensitivity Clearance */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Sensitivity Clearance</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {(provider.sensitivityClearance ?? []).length > 0
+            ? (provider.sensitivityClearance ?? []).map((s: string) => (
+                <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#161625", color: "#b0b0c8" }}>{s}</span>
+              ))
+            : <span style={{ fontSize: 11, color: "#8888a0" }}>None configured</span>
+          }
+        </div>
+      </div>
+
+      {/* Task Tags */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Task Tags</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(provider.taskTags ?? []).length > 0
+            ? (provider.taskTags ?? []).map((tag: string) => (
+                <span key={tag} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#161625", color: "#b0b0c8" }}>{tag}</span>
+              ))
+            : <span style={{ fontSize: 11, color: "#8888a0" }}>None configured</span>
+          }
+        </div>
+      </div>
+
+      {/* Endpoint URL (if manually configured) */}
+      {(provider.endpoint || provider.baseUrl) && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint URL</div>
+          <div style={{ fontSize: 12, color: "#e0e0ff", fontFamily: "monospace" }}>{provider.endpoint ?? provider.baseUrl}</div>
+        </div>
+      )}
     </div>
   );
 }
