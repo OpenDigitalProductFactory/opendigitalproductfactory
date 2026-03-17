@@ -133,11 +133,13 @@ async function buildAuthHeaders(
   if (authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
-    headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
 
-    // Anthropic subscription tokens (from `claude setup-token`) need additional beta headers
+    // Anthropic subscription tokens (from `claude setup-token`) use Bearer auth, not x-api-key
     if (providerId === "anthropic" && isAnthropicOAuthToken(cred.secretRef)) {
+      headers["Authorization"] = `Bearer ${cred.secretRef}`;
       headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    } else {
+      headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
     }
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
