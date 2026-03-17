@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 const TABS = [
   { label: "Directory", value: "directory" },
   { label: "Org Chart", value: "orgchart" },
+  { label: "Timesheets", value: "timesheets" },
 ] as const;
 
 export type EmployeeTab = (typeof TABS)[number]["value"];
