@@ -138,9 +138,22 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
         </div>
       </div>
 
-      {/* Expanded: item list, sorted by active sort */}
+      {/* Expanded: description + item list */}
       {expanded && (
         <div className="border-t border-[var(--dpf-border)] px-8 py-2 bg-[var(--dpf-surface-2)]">
+          {epic.description && (
+            <p className="text-[11px] text-[var(--dpf-muted)] mb-2 whitespace-pre-line">
+              {epic.description.split(/((?:https?|file):\/\/[^\s]+)/g).map((part, i) =>
+                /^(?:https?|file):\/\//.test(part) ? (
+                  <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
+                    {part}
+                  </a>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+              )}
+            </p>
+          )}
           {epic.items.length === 0 ? (
             <p className="text-xs text-[var(--dpf-muted)]">No items in this epic yet.</p>
           ) : (
