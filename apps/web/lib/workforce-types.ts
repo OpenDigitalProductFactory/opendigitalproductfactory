@@ -1,4 +1,5 @@
 export type WorkforceStatus =
+  | "offer"
   | "onboarding"
   | "active"
   | "leave"
@@ -8,7 +9,11 @@ export type WorkforceStatus =
 
 export type EmploymentEventType =
   | "hired"
+  | "offer_created"
+  | "offer_accepted"
+  | "offer_withdrawn"
   | "onboarding_started"
+  | "onboarding_completed"
   | "activated"
   | "manager_changed"
   | "department_changed"
@@ -16,6 +21,7 @@ export type EmploymentEventType =
   | "leave_started"
   | "leave_ended"
   | "offboarding_started"
+  | "offboarding_completed"
   | "terminated"
   | "reactivated";
 

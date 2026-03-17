@@ -39,6 +39,46 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     });
   }
 
+  // Bootstrap: ensure the logged-in user has an EmployeeProfile.
+  // On first login after fresh install, this creates the initial admin employee.
+  if (user.id) {
+    const hasProfile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    if (!hasProfile) {
+      // Ensure reference data exists (fresh install)
+      const empType = await prisma.employmentType.findFirst({ where: { status: "active" } });
+
+      const emailName = user.email?.split("@")[0] ?? "Admin";
+      const employeeId = `EMP-${Date.now().toString(36).toUpperCase()}`;
+      await prisma.employeeProfile.create({
+        data: {
+          employeeId,
+          userId: user.id,
+          firstName: emailName.charAt(0).toUpperCase() + emailName.slice(1),
+          lastName: "",
+          displayName: emailName,
+          workEmail: user.email ?? undefined,
+          status: "active",
+          startDate: new Date(),
+          ...(empType ? { employmentTypeId: empType.id } : {}),
+          employmentEvents: {
+            create: {
+              eventId: `EVT-${Date.now().toString(36).toUpperCase()}`,
+              eventType: "hired",
+              effectiveAt: new Date(),
+              reason: "System bootstrap — first login",
+            },
+          },
+        },
+      }).catch((err: unknown) => {
+        // Unique constraint race — another request already created it
+        console.warn("[bootstrap-employee]", err);
+      });
+    }
+  }
+
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
 
   return (

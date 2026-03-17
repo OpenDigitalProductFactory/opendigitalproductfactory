@@ -128,7 +128,7 @@ model EmployeeProfile {
   workEmail           String?
   personalEmail       String?
   phoneNumber         String?
-  status              String   @default("onboarding") // onboarding | active | leave | suspended | offboarding | inactive
+  status              String   @default("onboarding") // offer | onboarding | active | leave | suspended | offboarding | inactive
   employmentTypeId    String?
   departmentId        String?
   positionId          String?
@@ -154,6 +154,15 @@ model EmployeeProfile {
   employmentEvents    EmploymentEvent[]
   terminationRecord   TerminationRecord?
   headedDepartments   Department[]      @relation("DepartmentHead")
+  // HR lifecycle relations
+  onboardingTasks     OnboardingTask[]
+  reviewInstances     ReviewInstance[]   @relation("ReviewsAsEmployee")
+  reviewsAsReviewer   ReviewInstance[]   @relation("ReviewsAsReviewer")
+  feedbackGiven       FeedbackNote[]     @relation("FeedbackFrom")
+  feedbackReceived    FeedbackNote[]     @relation("FeedbackTo")
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  leaveApprovals      LeaveRequest[]     @relation("LeaveApprovals")
 
   @@index([status])
   @@index([departmentId])
@@ -1379,4 +1388,185 @@ model EaSnapshot {
   elementCount      Int
   relationshipCount Int
   graphJson         Json
+}
+
+// ─── HR Lifecycle: Onboarding ───────────────────────────────────────────────
+
+model OnboardingChecklist {
+  id              String   @id @default(cuid())
+  checklistId     String   @unique
+  name            String
+  checklistType   String   // "onboarding" | "offboarding"
+  departmentId    String?
+  positionId      String?
+  isDefault       Boolean  @default(false)
+  items           Json     // Array of { title, description, assigneeRole, required, dueOffsetDays }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([checklistType])
+}
+
+model OnboardingTask {
+  id                String    @id @default(cuid())
+  taskId            String    @unique
+  employeeProfileId String
+  checklistType     String    // "onboarding" | "offboarding"
+  title             String
+  description       String?
+  assigneeRole      String?   // "hr" | "manager" | "it" | "employee"
+  required          Boolean   @default(true)
+  dueDate           DateTime?
+  status            String    @default("pending") // pending | completed | skipped
+  completedAt       DateTime?
+  completedById     String?
+  createdAt         DateTime  @default(now())
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeProfileId])
+  @@index([status])
+}
+
+// ─── HR Lifecycle: Performance Reviews ──────────────────────────────────────
+
+model ReviewCycle {
+  id          String   @id @default(cuid())
+  cycleId     String   @unique
+  name        String
+  cadence     String   // "quarterly" | "semi_annual" | "annual"
+  periodStart DateTime
+  periodEnd   DateTime
+  status      String   @default("draft") // draft | active | completed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances   ReviewInstance[]
+
+  @@index([status])
+}
+
+model ReviewInstance {
+  id                 String    @id @default(cuid())
+  reviewId           String    @unique
+  cycleId            String
+  employeeProfileId  String
+  reviewerEmployeeId String
+  status             String    @default("pending") // pending | self_review | manager_review | finalized
+  overallRating      String?
+  managerNarrative   String?   @db.Text
+  employeeNarrative  String?   @db.Text
+  finalizedAt        DateTime?
+  sharedAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  cycle              ReviewCycle       @relation(fields: [cycleId], references: [id])
+  employeeProfile    EmployeeProfile   @relation("ReviewsAsEmployee", fields: [employeeProfileId], references: [id])
+  reviewerEmployee   EmployeeProfile   @relation("ReviewsAsReviewer", fields: [reviewerEmployeeId], references: [id])
+  goals              ReviewGoal[]
+
+  @@unique([cycleId, employeeProfileId])
+  @@index([cycleId])
+  @@index([employeeProfileId])
+  @@index([status])
+}
+
+model ReviewGoal {
+  id                String   @id @default(cuid())
+  reviewInstanceId  String
+  title             String
+  description       String?  @db.Text
+  weight            Float?
+  status            String   @default("active") // active | achieved | missed | deferred
+  selfAssessment    String?  @db.Text
+  managerAssessment String?  @db.Text
+  rating            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  reviewInstance    ReviewInstance @relation(fields: [reviewInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([reviewInstanceId])
+}
+
+model FeedbackNote {
+  id             String   @id @default(cuid())
+  feedbackId     String   @unique
+  fromEmployeeId String
+  toEmployeeId   String
+  content        String   @db.Text
+  feedbackType   String   // "praise" | "constructive" | "observation"
+  visibility     String   @default("private") // "private" | "shared" | "public"
+  createdAt      DateTime @default(now())
+
+  fromEmployee   EmployeeProfile @relation("FeedbackFrom", fields: [fromEmployeeId], references: [id])
+  toEmployee     EmployeeProfile @relation("FeedbackTo", fields: [toEmployeeId], references: [id])
+
+  @@index([toEmployeeId])
+  @@index([fromEmployeeId])
+}
+
+// ─── HR Lifecycle: Leave Management ─────────────────────────────────────────
+
+model LeavePolicy {
+  id               String   @id @default(cuid())
+  policyId         String   @unique
+  leaveType        String   // "vacation" | "sick" | "personal" | "parental" | "unpaid"
+  name             String
+  annualAllocation Float
+  accrualRule      String   @default("annual") // "annual" | "monthly" | "none"
+  carryoverLimit   Float?
+  requiresApproval Boolean  @default(true)
+  probationDays    Int      @default(0)
+  locationPattern  String?
+  isDefault        Boolean  @default(false)
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([leaveType])
+  @@index([status])
+}
+
+model LeaveBalance {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  leaveType         String
+  year              Int
+  allocated         Float
+  used              Float    @default(0)
+  carriedOver       Float    @default(0)
+  adjustments       Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeProfileId, leaveType, year])
+  @@index([employeeProfileId])
+}
+
+model LeaveRequest {
+  id                  String    @id @default(cuid())
+  requestId           String    @unique
+  employeeProfileId   String
+  leaveType           String
+  startDate           DateTime
+  endDate             DateTime
+  days                Float
+  reason              String?
+  status              String    @default("pending") // pending | approved | rejected | cancelled
+  approverEmployeeId  String?
+  approvedAt          DateTime?
+  rejectionReason     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  employeeProfile     EmployeeProfile  @relation(fields: [employeeProfileId], references: [id])
+  approver            EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])
+
+  @@index([employeeProfileId])
+  @@index([status])
+  @@index([startDate, endDate])
 }
