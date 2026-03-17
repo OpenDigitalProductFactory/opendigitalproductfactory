@@ -1,17 +1,9 @@
 // apps/web/app/page.tsx
 // Landing page — choose customer portal or employee/admin workspace.
+// No auth check here — let the destination routes handle auth.
 import Link from "next/link";
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 
-export default async function RootPage() {
-  // If already authenticated, redirect to the right place
-  const session = await auth();
-  if (session?.user) {
-    if (session.user.type === "customer") redirect("/portal");
-    redirect("/workspace");
-  }
-
+export default function RootPage() {
   return (
     <div style={{
       minHeight: "100vh",
@@ -30,7 +22,6 @@ export default async function RootPage() {
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {/* Customer Portal */}
           <Link
             href="/customer-login"
             style={{
@@ -41,7 +32,6 @@ export default async function RootPage() {
               borderTop: "3px solid #7c8cf8",
               borderRadius: 10,
               textDecoration: "none",
-              transition: "border-color 0.15s",
             }}
           >
             <div style={{ fontSize: 32, marginBottom: 12 }}>&#x1F465;</div>
@@ -53,7 +43,6 @@ export default async function RootPage() {
             </div>
           </Link>
 
-          {/* Employee / Admin */}
           <Link
             href="/login"
             style={{
@@ -64,7 +53,6 @@ export default async function RootPage() {
               borderTop: "3px solid #4ade80",
               borderRadius: 10,
               textDecoration: "none",
-              transition: "border-color 0.15s",
             }}
           >
             <div style={{ fontSize: 32, marginBottom: 12 }}>&#x1F3E2;</div>
