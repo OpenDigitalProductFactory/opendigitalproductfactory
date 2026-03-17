@@ -364,3 +364,103 @@ export async function getPlatformApiKeyStatus(
 
   return { configured: !!config && typeof config.value === "string" && config.value.length > 0 };
 }
+
+// ─── MCP Service Detection & Registration ────────────────────────────────────
+
+export type DetectedMcpService = {
+  serverId: string;
+  name: string;
+  source: "database" | "plugin";
+  config: Record<string, unknown>;
+};
+
+export async function detectMcpServers(): Promise<DetectedMcpService[]> {
+  const detected: DetectedMcpService[] = [];
+
+  // Source 1: McpServer table
+  const mcpServers = await prisma.mcpServer.findMany();
+  for (const server of mcpServers) {
+    const existing = await prisma.modelProvider.findUnique({
+      where: { providerId: server.serverId },
+    });
+    if (!existing) {
+      detected.push({
+        serverId: server.serverId,
+        name: server.name,
+        source: "database",
+        config: (server.config as Record<string, unknown>) ?? {},
+      });
+    }
+  }
+
+  // Source 2: Claude plugins (best-effort, file may not exist)
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
+    const pluginsPath = path.join(home, ".claude", "plugins", "installed_plugins.json");
+    const raw = await fs.readFile(pluginsPath, "utf-8");
+    const plugins = JSON.parse(raw) as Array<{ package_name?: string; name?: string }>;
+
+    for (const plugin of plugins) {
+      const id = plugin.package_name ?? plugin.name;
+      if (!id) continue;
+      const existing = await prisma.modelProvider.findUnique({
+        where: { providerId: id },
+      });
+      if (!existing && !detected.some((d) => d.serverId === id)) {
+        detected.push({
+          serverId: id,
+          name: plugin.name ?? id,
+          source: "plugin",
+          config: {},
+        });
+      }
+    }
+  } catch {
+    // Plugins file not found or not readable — skip silently
+  }
+
+  return detected;
+}
+
+export async function registerMcpService(input: {
+  providerId: string;
+  name: string;
+  sensitivityClearance: string[];
+  capabilityTier: string;
+  costBand: string;
+  taskTags: string[];
+}): Promise<void> {
+  await requireManageProviders();
+
+  await prisma.modelProvider.upsert({
+    where: { providerId: input.providerId },
+    update: {
+      name: input.name,
+      endpointType: "service",
+      category: "mcp-subscribed",
+      sensitivityClearance: input.sensitivityClearance,
+      capabilityTier: input.capabilityTier,
+      costBand: input.costBand,
+      taskTags: input.taskTags,
+      status: "active",
+    },
+    create: {
+      providerId: input.providerId,
+      name: input.name,
+      endpointType: "service",
+      category: "mcp-subscribed",
+      sensitivityClearance: input.sensitivityClearance,
+      capabilityTier: input.capabilityTier,
+      costBand: input.costBand,
+      taskTags: input.taskTags,
+      status: "active",
+      families: [],
+      enabledFamilies: [],
+      costModel: "token",
+      authMethod: "none",
+      supportedAuthMethods: ["none"],
+    },
+  });
+}
