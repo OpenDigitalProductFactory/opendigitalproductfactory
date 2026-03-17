@@ -966,11 +966,55 @@ export async function executeTool(
       const writeResult = writeProjectFile(path, newContent);
       if ("error" in writeResult) return { success: false, error: writeResult.error, message: writeResult.error };
 
+      // Auto-commit the approved change
+      let commitHash: string | undefined;
+      try {
+        const { commitFile, formatCommitMessage, isGitAvailable } = await import("@/lib/git-utils");
+        if (isGitAvailable()) {
+          // Resolve buildId from thread context (best-effort)
+          let buildId: string | undefined;
+          if (context?.threadId) {
+            const build = await prisma.featureBuild.findFirst({
+              where: { threadId: context.threadId, phase: { in: ["build", "review"] } },
+              select: { buildId: true, id: true },
+            });
+            if (build) buildId = build.buildId;
+          }
+
+          const message = formatCommitMessage({ description, filePath: path, ...(buildId ? { buildId } : {}), approvedBy: userId });
+          const result = await commitFile({ filePath: path, message });
+
+          if ("hash" in result) {
+            commitHash = result.hash;
+
+            // Update AgentActionProposal with commit hash (best-effort)
+            if (context?.threadId) {
+              await prisma.agentActionProposal.updateMany({
+                where: { threadId: context.threadId, actionType: "propose_file_change", status: "approved", gitCommitHash: null },
+                data: { gitCommitHash: commitHash },
+              }).catch(() => {});
+            }
+
+            // Append commit hash to FeatureBuild (best-effort)
+            if (buildId) {
+              await prisma.featureBuild.update({
+                where: { buildId },
+                data: { gitCommitHashes: { push: commitHash } },
+              }).catch(() => {});
+            }
+          } else {
+            console.warn("[propose_file_change] git commit failed:", result.error);
+          }
+        }
+      } catch (err) {
+        console.warn("[propose_file_change] auto-commit error:", err);
+      }
+
       return {
         success: true,
         entityId: path,
-        message: `Applied change to ${path}`,
-        data: { path, diff, description },
+        message: commitHash ? `Applied and committed: ${path}` : `Applied change to ${path}`,
+        data: { path, diff, description, ...(commitHash ? { commitHash } : {}) },
       };
     }
 
