@@ -154,7 +154,20 @@ export async function getProviderPriority(task: string = "conversation"): Promis
       const activeEntries = entries.filter((e) => activeIds.has(e.providerId));
 
       if (activeEntries.length > 0) {
-        return activeEntries.sort((a, b) => a.rank - b.rank);
+        // Merge: stored active entries PLUS any active LLM providers NOT in the stored list
+        // This ensures newly activated providers (like Anthropic) aren't excluded by stale config
+        const storedIds = new Set(activeEntries.map((e) => e.providerId));
+        const allLlmProviders = await prisma.modelProvider.findMany({
+          where: { status: "active", NOT: { endpointType: "service" } },
+          select: { providerId: true },
+        });
+        const missing = allLlmProviders.filter((p) => !storedIds.has(p.providerId));
+        const nextRank = Math.max(...activeEntries.map((e) => e.rank)) + 1;
+        const merged = [
+          ...activeEntries,
+          ...missing.map((p, i) => ({ providerId: p.providerId, modelId: "", rank: nextRank + i, capabilityTier: "unknown" })),
+        ];
+        return merged.sort((a, b) => a.rank - b.rank);
       }
       // All stored providers are inactive — fall through to bootstrap
     }
