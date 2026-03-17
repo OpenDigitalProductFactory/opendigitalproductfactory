@@ -236,6 +236,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
             onDragStart={handleDragStart}
             pendingAutoMessage={pendingAutoMessage}
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
+            onConversationCleared={() => setInitialMessages([])}
           />
           <div
             onMouseDown={handleResizeStart}

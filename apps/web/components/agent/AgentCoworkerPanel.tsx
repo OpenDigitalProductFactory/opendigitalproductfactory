@@ -41,6 +41,7 @@ type Props = {
   onDragStart: (e: React.MouseEvent) => void;
   pendingAutoMessage?: string | null;
   onAutoMessageConsumed?: () => void;
+  onConversationCleared?: () => void;
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
@@ -66,6 +67,7 @@ export function AgentCoworkerPanel({
   onDragStart,
   pendingAutoMessage,
   onAutoMessageConsumed,
+  onConversationCleared,
 }: Props) {
   const pathname = usePathname();
   const [messages, setMessages] = useState<AgentRenderableMessage[]>(() => filterMessages(initialMessages));
@@ -311,6 +313,7 @@ export function AgentCoworkerPanel({
         return;
       }
       setMessages([]);
+      onConversationCleared?.();
     });
   }
 
