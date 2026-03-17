@@ -224,6 +224,8 @@ async function ensureUserLinkIsAvailable(userId: string | null, employeeProfileI
 
 function buildLifecycleCreateEvent(status: WorkforceStatus): EmploymentEventType {
   switch (status) {
+    case "offer":
+      return "offer_created";
     case "active":
       return "activated";
     case "leave":
