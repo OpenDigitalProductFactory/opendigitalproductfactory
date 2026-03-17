@@ -305,6 +305,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "query_backlog",
       "create_backlog_item",
       "update_backlog_item",
+      "list_project_directory",
       "read_project_file",
       "search_project_files",
       "propose_file_change",
