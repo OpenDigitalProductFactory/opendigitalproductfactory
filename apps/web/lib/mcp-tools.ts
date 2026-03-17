@@ -357,6 +357,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── Version Tracking Tools ────────────────────────────────────────────────
+  {
+    name: "query_version_history",
+    description: "List product versions with their git tags, ship dates, change counts, and promotion status. Optionally filter by digital product ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        digitalProductId: { type: "string", description: "Filter by product (optional — returns all if omitted)" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   {
     name: "propose_file_change",
     description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
@@ -951,6 +966,45 @@ export async function executeTool(
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
       return { success: true, message: summary || "No matches found", data: { results: result.results } };
+    }
+
+    case "query_version_history": {
+      const limit = typeof params.limit === "number" ? Math.min(params.limit, 50) : 20;
+      const where = typeof params.digitalProductId === "string"
+        ? { digitalProductId: params.digitalProductId }
+        : {};
+
+      const versions = await prisma.productVersion.findMany({
+        where,
+        orderBy: { shippedAt: "desc" },
+        take: limit,
+        include: {
+          digitalProduct: { select: { productId: true, name: true } },
+          promotions: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, promotionId: true } },
+        },
+      });
+
+      const rows = versions.map((v) => ({
+        product: v.digitalProduct?.name ?? "unknown",
+        productId: v.digitalProduct?.productId ?? "unknown",
+        version: v.version,
+        gitTag: v.gitTag,
+        shippedAt: v.shippedAt.toISOString(),
+        changeCount: v.changeCount,
+        changeSummary: v.changeSummary ?? "",
+        promotionStatus: v.promotions[0]?.status ?? "none",
+        promotionId: v.promotions[0]?.promotionId ?? null,
+      }));
+
+      const summary = rows.map((r) =>
+        `${r.product} ${r.version} (${r.gitTag}) — ${r.promotionStatus} — shipped ${r.shippedAt.slice(0, 10)}`
+      ).join("\n");
+
+      return {
+        success: true,
+        message: summary || "No versions found.",
+        data: { versions: rows },
+      };
     }
 
     case "propose_file_change": {
