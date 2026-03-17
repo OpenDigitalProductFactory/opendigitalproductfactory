@@ -417,6 +417,7 @@ model DigitalProduct {
   featureBuilds          FeatureBuild[]
   versions               ProductVersion[]
   manifests              CodebaseManifest[]
+  serviceOfferings       ServiceOffering[]
 }
 
 // ─── Version Tracking ────────────────────────────────────────────────────────
@@ -478,6 +479,32 @@ model CodebaseManifest {
 
   @@unique([version, digitalProductId])
   @@index([digitalProductId])
+}
+
+model ServiceOffering {
+  id                String          @id @default(cuid())
+  offeringId        String          @unique
+  digitalProductId  String
+  digitalProduct    DigitalProduct  @relation(fields: [digitalProductId], references: [id])
+  name              String
+  description       String?         @db.Text
+  consumers         Json
+  availabilityTarget Float?
+  mttrHours         Float?
+  mtbfHours         Float?
+  rtoHours          Float?
+  rpoHours          Float?
+  supportHours      String?
+  claRef            String?         @db.Text
+  olaRef            String?         @db.Text
+  status            String          @default("draft")
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalProductId])
+  @@index([status])
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
