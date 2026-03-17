@@ -94,6 +94,7 @@ export async function sendMessage(input: {
   threadId: string;
   content: string;
   routeContext: string;
+  coworkerMode?: "advise" | "act";
   externalAccessEnabled?: boolean;
   elevatedFormFillEnabled?: boolean;
   formAssistContext?: AgentFormAssistContext;
@@ -276,6 +277,7 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   }, {
     externalAccessEnabled: input.externalAccessEnabled === true,
+    mode: input.coworkerMode ?? "advise",
   });
   const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
 
