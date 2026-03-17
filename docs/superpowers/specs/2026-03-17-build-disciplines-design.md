@@ -9,6 +9,10 @@
 - `2026-03-14-self-dev-sandbox-design.md` (sandbox execution)
 - `2026-03-17-development-lifecycle-architecture-design.md` (git integration + promotion pipeline)
 
+**Dependencies:**
+- EP-SELFDEV-001 must be implemented first (sandbox execution must work for Build phase)
+- EP-SELFDEV-002 Ship phase features (ChangePromotion, git tags) gracefully degrade if not yet implemented — Ship creates the DigitalProduct but skips promotion workflow
+
 ---
 
 ## Problem Statement
@@ -65,10 +69,98 @@ Adapted from Superpowers' 4 iron laws:
 
 1. **No Plan without Design** — The Ideate phase must produce a design document. A spec-reviewer agent validates it. The user must approve it. Only then does Plan phase unlock.
 2. **No Build without Plan** — The Plan phase must produce a task breakdown with test-first steps. A plan-reviewer agent validates it. The user must approve it. Only then does Build phase unlock.
-3. **No Code without Test** — During Build, every task starts with a failing test. The agent cannot write production code until the test exists and fails. `run_sandbox_tests` is called automatically, output shown to user.
+3. **No Code without Test** — During Build, each task follows a two-step sequence enforced by the system (not just prompt guidance): (a) agent calls `generate_code` with test-only instruction, then the system automatically calls `run_sandbox_tests` and verifies at least one NEW test failure exists; (b) only after RED confirmation does the system allow a second `generate_code` call for implementation code, followed by automatic `run_sandbox_tests` that must show the new test passing. This is system-enforced via the Build phase task runner, not solely prompt-enforced.
 4. **No Ship without Evidence** — Review phase requires: all tests passing (with output), all code reviews resolved (no Critical/Important issues open), verification evidence displayed to user. Only then does Ship unlock.
 
-### 3. Phase-by-Phase Discipline Enforcement
+### 3. Reviewer Agent Architecture
+
+Three reviewer agents enforce quality gates. Each is a separate LLM call using the existing `callWithFailover` infrastructure, dispatched by the Build Studio server action during phase transitions.
+
+**Invocation:** When a phase transition is requested (e.g., Ideate → Plan), the server action calls the appropriate reviewer before allowing the transition. The reviewer runs as an immediate LLM call (not a conversation thread), receives structured input, and returns structured output.
+
+**Provider selection:** Reviewers use the `analysis` task priority list from `getProviderPriority("analysis")`. They do NOT use the same provider as the conversation — this ensures independent review.
+
+**Input/output contract:**
+
+```ts
+type ReviewRequest = {
+  reviewType: "design" | "plan" | "code";
+  content: string;        // the document or code to review
+  context: string;        // project context, acceptance criteria, etc.
+  buildId: string;
+};
+
+type ReviewResult = {
+  decision: "pass" | "fail";
+  issues: Array<{
+    severity: "critical" | "important" | "minor";
+    description: string;
+    location?: string;     // file:line or section reference
+    suggestion?: string;
+  }>;
+  summary: string;
+};
+```
+
+**Storage:** Review results stored as JSON in the evidence fields on `FeatureBuild` (`designReview`, `planReview`, `taskResults`).
+
+**Failure handling:** If the reviewer LLM call fails (timeout, provider error), the phase transition is blocked with an error message. The user can retry. The review is NOT auto-passed on failure.
+
+**Reviewer prompts (injected as system prompt for each call):**
+
+- **Spec reviewer:** "You are reviewing a design document for a feature. Check: problem clearly stated, existing functionality audited, alternatives considered, approach justified, acceptance criteria testable. Return structured ReviewResult."
+- **Plan reviewer:** "You are reviewing an implementation plan. Check: tasks are bite-sized, each task has test-first structure, file paths are specific, no ambiguous steps. Return structured ReviewResult."
+- **Code reviewer:** "You are reviewing code changes for a single task. Check: test exists and covers the change, no duplication with existing code, follows project patterns, no security issues. Return structured ReviewResult."
+
+### 4. Evidence Field Schemas
+
+TypeScript types for the JSON evidence fields stored on `FeatureBuild`:
+
+```ts
+type BuildDesignDoc = {
+  problemStatement: string;
+  existingFunctionalityAudit: string;
+  alternativesConsidered: string;
+  reusePlan: string;
+  newCodeJustification: string;
+  proposedApproach: string;
+  acceptanceCriteria: string[];
+};
+
+type BuildPlanDoc = {
+  fileStructure: Array<{ path: string; action: "create" | "modify"; purpose: string }>;
+  tasks: Array<{
+    title: string;
+    testFirst: string;   // what test to write
+    implement: string;   // what code to write
+    verify: string;      // how to verify
+  }>;
+};
+
+type TaskResult = {
+  taskIndex: number;
+  title: string;
+  testResult: { passed: boolean; output: string };
+  codeReview: ReviewResult;
+  commitSha?: string;
+};
+
+type VerificationOutput = {
+  testsPassed: number;
+  testsFailed: number;
+  typecheckPassed: boolean;
+  fullOutput: string;
+  timestamp: string;
+};
+
+type AcceptanceCriteria = Array<{
+  criterion: string;
+  met: boolean;
+  evidence: string;
+}>;
+```
+
+### 5. Phase-by-Phase Discipline Enforcement
 
 #### Ideate Phase (→ Design Approval gate)
 
@@ -78,7 +170,7 @@ Adapted from Superpowers' 4 iron laws:
 1. Agent explores existing codebase for reuse opportunities (mandatory)
 2. Agent searches for open-source alternatives (mandatory)
 3. Agent asks clarifying questions one at a time
-4. Agent writes a **Design Document** stored as a `BuildDesignDoc` record:
+4. Agent writes a **Design Document** stored as a `designDoc` JSON field on `FeatureBuild`:
    - Problem statement
    - Existing Functionality Audit — what already exists in the codebase
    - Alternatives Considered — open-source, MCP services, existing tools evaluated
@@ -95,7 +187,7 @@ Adapted from Superpowers' 4 iron laws:
 **Current behavior:** Agent summarizes 2-3 bullets, asks "Does this capture it?"
 
 **New behavior:**
-1. Agent produces an **Implementation Plan** stored as a `BuildPlan` record:
+1. Agent produces an **Implementation Plan** stored as a `buildPlan` JSON field on `FeatureBuild`:
    - File structure map — which files will be created/modified
    - Task breakdown — bite-sized steps, each with test-first structure
    - For each task: write failing test → implement → verify → commit
@@ -138,8 +230,10 @@ Adapted from Superpowers' 4 iron laws:
    - Acceptance criteria checklist with pass/fail per criterion
 2. User can:
    - Approve → unlock Ship phase
-   - Request changes → back to Build phase with specific feedback
-   - Reject → archive the build
+   - Request changes → back to Build phase with specific feedback (requires adding `review → build` to `ALLOWED_TRANSITIONS` in `feature-build-types.ts`)
+   - Reject → archive the build (set phase to `"failed"`)
+
+**Phase transition update:** The existing `ALLOWED_TRANSITIONS` map must be extended to support backward transitions for the Review → Build return path. Add `"review": ["ship", "failed", "build"]`.
 
 #### Ship Phase (→ Deployment)
 
@@ -159,7 +253,7 @@ Three roles tracked per work item:
 
 | Role | Field | Purpose |
 |------|-------|---------|
-| **Accountable** | `accountableEmployeeId` | Employee responsible for the area — owns outcomes. Auto-assigned from portfolio area, can be overridden. |
+| **Accountable** | `accountableEmployeeId` | Employee responsible for the area — owns outcomes. FK to `EmployeeProfile` (the HR/workforce identity, not the auth `User`). Auto-assigned from portfolio area via department/position, can be overridden. |
 | **Submitter** | `submittedById` | Human who requested/authorized the work (existing field from EP-OPS-TRACE-001) |
 | **Worker** | `claimedById` + `claimedByAgentId` | Agent + authorizing user actively building |
 
@@ -173,10 +267,13 @@ claimedAt              DateTime? // when work started
 claimStatus            String?   // "active" | "paused" | "released"
 ```
 
+**Note on FeatureBuild:** `claimedById` on FeatureBuild is distinct from `createdById` — a different user can claim an existing build (ownership transfer). If they're the same person, that's the common case but not enforced.
+
 **Rules:**
 - An agent can only hold one active claim per user session
 - Claims visible on backlog page: "COO Agent working on behalf of Mark" badge
-- Stale claims auto-release after 30 minutes of inactivity
+- Stale claims auto-release after 30 minutes of inactivity. "Inactivity" = no agent message sent on the build's thread. Detected by a check in `sendMessage()` — if the last message on a claimed build's thread is older than 30 minutes, release the claim before proceeding. No cron job needed.
+- When a claim is released, the build remains in its current phase. Another agent/user can claim it and continue.
 - User can manually release a claim
 - Build Studio auto-claims when Build phase starts
 - Workspace dashboard: "Active Work" section showing all claimed items
@@ -201,9 +298,9 @@ Every Build produces a complete evidence chain stored in the database:
 
 | Evidence | When Created | Stored As |
 |----------|-------------|-----------|
-| Design document | Ideate phase | `BuildDesignDoc` record (JSON) |
+| Design document | Ideate phase | `designDoc` JSON field on `FeatureBuild` (JSON) |
 | Spec review result | Ideate gate | Review record with pass/fail + issues |
-| Implementation plan | Plan phase | `BuildPlan` record (JSON) |
+| Implementation plan | Plan phase | `buildPlan` JSON field on `FeatureBuild` (JSON) |
 | Plan review result | Plan gate | Review record with pass/fail + issues |
 | Test results per task | Build phase | Array of test run results on FeatureBuild |
 | Code review per task | Build phase | Array of review results on FeatureBuild |
@@ -229,7 +326,7 @@ Every Build produces a complete evidence chain stored in the database:
 
   // Ownership
   accountableEmployeeId  String?
-  accountableEmployee    User?   @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
+  accountableEmployee    EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   claimedByAgentId       String?
   claimedAt              DateTime?
   claimStatus            String?  // "active" | "paused" | "released"
@@ -238,14 +335,14 @@ Every Build produces a complete evidence chain stored in the database:
 **New fields on `Epic` and `BacklogItem`:**
 ```prisma
   accountableEmployeeId  String?
-  accountableEmployee    User?   @relation(...)
+  accountableEmployee    EmployeeProfile?  @relation(...)
   claimedById            String?
   claimedByAgentId       String?
   claimedAt              DateTime?
   claimStatus            String?
 ```
 
-**User model** — add reverse relations for accountability.
+**EmployeeProfile model** — add reverse relations for accountability.
 
 ## Files Affected
 
