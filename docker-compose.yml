@@ -29,6 +29,18 @@ services:
       retries: 5
       start_period: 30s
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   ollama:
     image: ollama/ollama
     restart: unless-stopped
@@ -72,6 +84,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-dev_secret_change_me}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      QDRANT_INTERNAL_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
     depends_on:
       portal-init:
         condition: service_completed_successfully
@@ -97,3 +110,4 @@ volumes:
   pgdata:
   neo4jdata:
   ollama_models:
+  qdrant_data:
