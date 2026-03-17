@@ -96,6 +96,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
+  const [hideDone, setHideDone] = useState(true);
 
   // Unassigned items only (not belonging to any epic)
   const unassigned = items.filter((i) => i.epicId === null);
@@ -132,10 +133,21 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
       {/* ── Epics section ──────────────────────────────────── */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest">
-            Epics
-            <span className="ml-2 normal-case font-normal">{epics.length}</span>
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest">
+              Epics
+              <span className="ml-2 normal-case font-normal">{epics.length}</span>
+            </h2>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideDone}
+                onChange={(e) => setHideDone(e.target.checked)}
+                className="w-3 h-3 rounded border-[var(--dpf-border)] accent-[var(--dpf-accent)]"
+              />
+              <span className="text-[10px] text-[var(--dpf-muted)]">Hide done</span>
+            </label>
+          </div>
           <button
             onClick={openCreateEpic}
             className="text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80"
@@ -144,38 +156,58 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
           </button>
         </div>
 
-        {epics.length === 0 ? (
-          <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>
-        ) : (
-          <div className="rounded border border-[var(--dpf-border)] overflow-hidden">
-            {/* Column headers — widths must match EpicCard row columns */}
-            <div className="flex items-center gap-2 px-2 py-1 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]">
-              <div className="w-4 shrink-0" />
-              {/* col: status — w-14 */}
-              <div className="w-14 shrink-0">
-                <SortButton label="Status" field="status" sort={epicSort} onSort={setEpicSort} />
-              </div>
-              {/* col: title — flex-1 */}
-              <div className="flex-1 min-w-0">
-                <SortButton label="Title" field="title" sort={epicSort} onSort={setEpicSort} />
-              </div>
-              {/* col: portfolio — w-36 hidden sm */}
-              <div className="hidden sm:block w-36 shrink-0">
-                <span className="text-[9px] text-[var(--dpf-muted)]">Portfolio</span>
-              </div>
-              {/* col: progress — w-28 */}
-              <div className="w-28 shrink-0 flex items-center gap-1">
-                <SortButton label="Progress" field="progress" sort={epicSort} onSort={setEpicSort} />
-                <SortButton label="Stories"  field="stories"  sort={epicSort} onSort={setEpicSort} />
-              </div>
-              <div className="w-14 shrink-0" />
-            </div>
+        {(() => {
+          const filteredEpics = hideDone ? epics.filter((e) => e.status !== "done") : epics;
+          const hiddenCount = epics.length - filteredEpics.length;
 
-            {sortEpics(epics, epicSort).map((epic) => (
-              <EpicCard key={epic.id} epic={epic} sort={epicSort} onEdit={openEditEpic} onItemEdit={openEdit} />
-            ))}
-          </div>
-        )}
+          if (epics.length === 0) {
+            return <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>;
+          }
+
+          return (
+            <>
+              <div className="rounded border border-[var(--dpf-border)] overflow-hidden">
+                {/* Column headers — widths must match EpicCard row columns */}
+                <div className="flex items-center gap-2 px-2 py-1 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]">
+                  <div className="w-4 shrink-0" />
+                  {/* col: status — w-14 */}
+                  <div className="w-14 shrink-0">
+                    <SortButton label="Status" field="status" sort={epicSort} onSort={setEpicSort} />
+                  </div>
+                  {/* col: title — flex-1 */}
+                  <div className="flex-1 min-w-0">
+                    <SortButton label="Title" field="title" sort={epicSort} onSort={setEpicSort} />
+                  </div>
+                  {/* col: portfolio — w-36 hidden sm */}
+                  <div className="hidden sm:block w-36 shrink-0">
+                    <span className="text-[9px] text-[var(--dpf-muted)]">Portfolio</span>
+                  </div>
+                  {/* col: progress — w-28 */}
+                  <div className="w-28 shrink-0 flex items-center gap-1">
+                    <SortButton label="Progress" field="progress" sort={epicSort} onSort={setEpicSort} />
+                    <SortButton label="Stories"  field="stories"  sort={epicSort} onSort={setEpicSort} />
+                  </div>
+                  <div className="w-14 shrink-0" />
+                </div>
+
+                {filteredEpics.length === 0 ? (
+                  <div className="px-4 py-3">
+                    <p className="text-xs text-[var(--dpf-muted)]">All {epics.length} epics are done. Uncheck &quot;Hide done&quot; to see them.</p>
+                  </div>
+                ) : (
+                  sortEpics(filteredEpics, epicSort).map((epic) => (
+                    <EpicCard key={epic.id} epic={epic} sort={epicSort} onEdit={openEditEpic} onItemEdit={openEdit} />
+                  ))
+                )}
+              </div>
+              {hiddenCount > 0 && (
+                <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+                  {hiddenCount} completed epic{hiddenCount !== 1 ? "s" : ""} hidden
+                </p>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* ── Unassigned items ───────────────────────────────── */}
