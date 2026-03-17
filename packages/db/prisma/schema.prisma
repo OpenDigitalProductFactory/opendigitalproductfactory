@@ -257,7 +257,7 @@ model Country {
   name        String // Common short name: "United Kingdom"
   iso2        String   @unique
   iso3        String   @unique
-  numericCode String
+  numericCode String   @unique
   phoneCode   String
   status      String   @default("active")
   createdAt   DateTime @default(now())
@@ -278,7 +278,8 @@ model Region {
   updatedAt DateTime @updatedAt
   cities    City[]
 
-  @@unique([countryId, name])
+  // Uniqueness enforced by case-insensitive functional index in migration SQL
+  @@index([countryId, name])
   @@index([countryId])
   @@index([status])
 }
@@ -293,7 +294,8 @@ model City {
   updatedAt DateTime  @updatedAt
   addresses Address[]
 
-  @@unique([regionId, name])
+  // Uniqueness enforced by case-insensitive functional index in migration SQL
+  @@index([regionId, name])
   @@index([regionId])
   @@index([status])
 }
