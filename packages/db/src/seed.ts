@@ -921,6 +921,15 @@ async function seedCoworkerAgents(): Promise<void> {
   console.log(`Seeded ${coworkers.length} coworker agents`);
 }
 
+async function seedPlatformConfig(): Promise<void> {
+  await prisma.platformConfig.upsert({
+    where: { key: "USE_UNIFIED_COWORKER" },
+    update: {},
+    create: { key: "USE_UNIFIED_COWORKER", value: { enabled: false } },
+  });
+  console.log("Seeded platform config flags");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -945,6 +954,7 @@ async function main(): Promise<void> {
   await seedDefaultAdminUser();
   await seedScheduledJobs();
   await seedMcpServers();
+  await seedPlatformConfig();
   console.log("Seed complete.");
 }
 
