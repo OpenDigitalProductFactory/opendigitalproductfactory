@@ -74,26 +74,93 @@ function extractMetaContent(html: string, key: string): string | null {
 }
 
 function extractLogoCandidates(html: string, baseUrl: string): string[] {
-  const candidates = new Set<string>();
+  const priority: string[] = [];   // high confidence — logo in class/id/role
+  const secondary: string[] = [];  // medium — favicons, alt text matches
+  const seen = new Set<string>();
 
+  function add(url: string, isPriority: boolean) {
+    try {
+      const resolved = new URL(url, baseUrl).href;
+      if (!seen.has(resolved)) {
+        seen.add(resolved);
+        (isPriority ? priority : secondary).push(resolved);
+      }
+    } catch { /* invalid URL, skip */ }
+  }
+
+  // 1. <img> tags where class, id, or parent context suggests a logo
+  //    Match: class="logo", class="brand-logo", class="navbar-brand", id="logo", etc.
+  const imgTagMatches = html.matchAll(/<img[^>]*>/gi);
+  for (const m of imgTagMatches) {
+    const tag = m[0];
+    const src = tag.match(/src=["']([^"']+)["']/i)?.[1]?.trim();
+    if (!src) continue;
+
+    const classAttr = (tag.match(/class=["']([^"']+)["']/i)?.[1] ?? "").toLowerCase();
+    const idAttr = (tag.match(/id=["']([^"']+)["']/i)?.[1] ?? "").toLowerCase();
+    const altAttr = (tag.match(/alt=["']([^"']+)["']/i)?.[1] ?? "").toLowerCase();
+
+    const isLogoByAttr = /logo|brand|site-mark/i.test(classAttr)
+      || /logo|brand/i.test(idAttr)
+      || /logo/i.test(src);
+
+    if (isLogoByAttr) {
+      add(src, true);
+    } else if (altAttr.includes("logo") || altAttr.includes("brand")) {
+      add(src, true);
+    }
+  }
+
+  // 2. <a> tags with logo-like class/id containing an <img>
+  //    e.g., <a class="navbar-brand" href="/"><img src="..."></a>
+  const logoAnchorMatches = html.matchAll(/<a[^>]*(?:class|id)=["'][^"']*(?:logo|brand|site-mark)[^"']*["'][^>]*>[\s\S]*?<\/a>/gi);
+  for (const m of logoAnchorMatches) {
+    const innerImgs = m[0].matchAll(/<img[^>]+src=["']([^"']+)["']/gi);
+    for (const img of innerImgs) {
+      if (img[1]) add(img[1].trim(), true);
+    }
+  }
+
+  // 3. <header> or <nav> containing images (first img in header is often the logo)
+  //    Also check <picture><source> and <img> inside <picture>
+  const headerMatch = html.match(/<header[^>]*>[\s\S]*?<\/header>/i);
+  if (headerMatch) {
+    // All images in header — first is highest priority
+    const headerImgs = [...headerMatch[0].matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
+    if (headerImgs[0]?.[1]) add(headerImgs[0][1].trim(), true);
+    // Also check <source> inside <picture> in header
+    const headerSources = [...headerMatch[0].matchAll(/<source[^>]+srcset=["']([^"',\s]+)/gi)];
+    for (const s of headerSources) {
+      if (s[1] && /\.svg|\.png|\.webp/i.test(s[1])) add(s[1].trim(), true);
+    }
+  }
+  const navMatch = html.match(/<nav[^>]*>[\s\S]*?<\/nav>/i);
+  if (navMatch) {
+    const firstImg = navMatch[0].match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (firstImg?.[1]) add(firstImg[1].trim(), false);
+  }
+
+  // 3b. Any <img> whose src path contains common logo asset patterns
+  const allImgs = html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi);
+  for (const m of allImgs) {
+    const src = m[1]?.trim();
+    if (src && /header.*logo|logo.*header|brand.*logo|logo.*brand/i.test(src)) {
+      add(src, true);
+    }
+  }
+
+  // 4. og:image meta tag (often the brand logo or hero image)
+  const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+  if (ogImage?.[1]) add(ogImage[1].trim(), false);
+
+  // 5. Favicons / apple-touch-icon (lowest priority — small, not the main logo)
   const linkMatches = html.matchAll(/<link[^>]+rel=["'][^"']*(icon|apple-touch-icon)[^"']*["'][^>]+href=["']([^"']+)["']/gi);
   for (const match of linkMatches) {
-    const href = match[2]?.trim();
-    if (href) {
-      candidates.add(new URL(href, baseUrl).href);
-    }
+    if (match[2]) add(match[2].trim(), false);
   }
 
-  const imageMatches = html.matchAll(/<img[^>]+(?:src|data-logo)=["']([^"']+)["'][^>]*(?:alt=["']([^"']*)["'])?/gi);
-  for (const match of imageMatches) {
-    const src = match[1]?.trim();
-    const alt = (match[2] ?? "").toLowerCase();
-    if (src && (alt.includes("logo") || /logo/i.test(src))) {
-      candidates.add(new URL(src, baseUrl).href);
-    }
-  }
-
-  return [...candidates];
+  return [...priority, ...secondary];
 }
 
 export function assertAllowedPublicUrl(input: string): URL {
