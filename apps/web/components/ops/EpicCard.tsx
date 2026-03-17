@@ -143,15 +143,34 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
         <div className="border-t border-[var(--dpf-border)] px-8 py-2 bg-[var(--dpf-surface-2)]">
           {epic.description && (
             <p className="text-[11px] text-[var(--dpf-muted)] mb-2 whitespace-pre-line">
-              {epic.description.split(/((?:https?|file):\/\/[^\s]+)/g).map((part, i) =>
-                /^(?:https?|file):\/\//.test(part) ? (
-                  <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
-                    {part}
-                  </a>
-                ) : (
-                  <span key={i}>{part}</span>
-                )
-              )}
+              {epic.description.split(/((?:https?|file):\/\/[^\s]+|docs\/[^\s]+\.md)/g).map((part, i) => {
+                // Internal docs path → serve through portal
+                if (/^docs\/.*\.md$/.test(part)) {
+                  return (
+                    <a key={i} href={`/api/docs?path=${encodeURIComponent(part)}`} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
+                      {part}
+                    </a>
+                  );
+                }
+                // file:// URLs with docs/ path → also serve through portal
+                const fileMatch = part.match(/^file:\/\/\/.*?\/(docs\/.*\.md)$/);
+                if (fileMatch?.[1]) {
+                  return (
+                    <a key={i} href={`/api/docs?path=${encodeURIComponent(fileMatch[1])}`} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
+                      {fileMatch[1]}
+                    </a>
+                  );
+                }
+                // External URLs
+                if (/^https?:\/\//.test(part)) {
+                  return (
+                    <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
+                      {part}
+                    </a>
+                  );
+                }
+                return <span key={i}>{part}</span>;
+              })}
             </p>
           )}
           {epic.items.length === 0 ? (
