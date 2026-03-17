@@ -183,8 +183,9 @@ export async function fetchPublicWebsiteEvidence(url: string): Promise<PublicWeb
   const validatedUrl = assertAllowedPublicUrl(url);
   const response = await fetch(validatedUrl.href, {
     headers: {
-      "User-Agent": "OpenDigitalProductFactory/1.0 (https://github.com/OpenDigitalProductFactory; contact: mark@bodman.com)",
+      "User-Agent": "Mozilla/5.0 (compatible; OpenDigitalProductFactory/1.0; +mailto:mark@bodman.com)",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
     },
     redirect: "follow",
     signal: AbortSignal.timeout(10_000),
