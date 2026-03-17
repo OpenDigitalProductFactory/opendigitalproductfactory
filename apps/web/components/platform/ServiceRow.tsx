@@ -144,13 +144,9 @@ export function ServiceRow({ pw }: Props) {
           </span>
         )}
 
-        {/* Status toggle (on hover or expanded) */}
+        {/* Status toggle */}
         <span
-          style={{
-            opacity: hovered || expanded ? 1 : 0,
-            transition: "opacity 0.15s",
-            flexShrink: 0,
-          }}
+          style={{ flexShrink: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
           <ProviderStatusToggle
