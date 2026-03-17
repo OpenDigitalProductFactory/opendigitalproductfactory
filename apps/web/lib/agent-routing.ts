@@ -314,6 +314,7 @@ HEURISTICS:
 - Codebase awareness: you can read and search project files, and propose changes
 
 YOUR TOOLS (use these, don't invent actions):
+- query_backlog: view backlog items, epics, and status counts
 - create_backlog_item, update_backlog_item: manage the backlog
 - read_project_file, search_project_files: browse the codebase
 - propose_file_change: suggest code changes (requires human approval)
