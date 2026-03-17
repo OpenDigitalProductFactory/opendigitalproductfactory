@@ -8,12 +8,16 @@ import { LifecycleEventPanel } from "@/components/employee/LifecycleEventPanel";
 import { NewEmployeeButton } from "@/components/employee/NewEmployeeButton";
 import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
 import { OrgChartView } from "@/components/employee/OrgChartView";
+import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
+import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
   getEmployeeProfileByUserId,
   getWorkforceReferenceData,
 } from "@/lib/workforce-data";
+import { getTimesheetForWeek, getPendingTimesheetsForManager, getCurrentWeekStart } from "@/lib/timesheet-data";
+import { auth } from "@/lib/auth";
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -58,12 +62,27 @@ export default async function EmployeePage({ searchParams }: Props) {
     getWorkforceReferenceData(),
   ]);
 
+  const session = await auth();
+  const currentUserId = session?.user?.id ?? null;
+
   const primaryEmployeeUserId = employees.find((employee) => employee.userId)?.userId ?? null;
   const selectedEmployee = primaryEmployeeUserId
     ? await getEmployeeProfileByUserId(primaryEmployeeUserId)
     : null;
   const lifecycleEvents = selectedEmployee
     ? await getEmployeeLifecycleEvents(selectedEmployee.id)
+    : [];
+
+  // Timesheet data (only fetch when on timesheets tab)
+  const currentUserProfile = currentUserId
+    ? employees.find((e) => e.userId === currentUserId)
+    : null;
+  const weekStart = getCurrentWeekStart();
+  const currentTimesheet = view === "timesheets" && currentUserProfile
+    ? await getTimesheetForWeek(currentUserProfile.id, weekStart)
+    : null;
+  const pendingTimesheets = view === "timesheets" && currentUserProfile
+    ? await getPendingTimesheetsForManager(currentUserProfile.id)
     : [];
 
   return (
@@ -145,7 +164,24 @@ export default async function EmployeePage({ searchParams }: Props) {
       <div className="mt-8">
         <EmployeeTabNav />
 
-        {view === "orgchart" ? (
+        {view === "timesheets" ? (
+          <div className="space-y-4">
+            {pendingTimesheets.length > 0 && (
+              <TimesheetApprovalPanel pendingTimesheets={pendingTimesheets} />
+            )}
+            {currentUserProfile ? (
+              <TimesheetGrid
+                existingPeriod={currentTimesheet}
+                weekStarting={weekStart.toISOString()}
+                onWeekChange={() => {/* handled client-side via URL params in future */}}
+              />
+            ) : (
+              <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
+                No employee profile linked to your account. Timesheets will appear once your profile is set up.
+              </p>
+            )}
+          </div>
+        ) : view === "orgchart" ? (
           <OrgChartView employees={employees} />
         ) : (
           <>
