@@ -27,22 +27,22 @@ describe("bumpVersion", () => {
 describe("getBuildPhasePrompt", () => {
   it("returns ideate prompt for ideate phase", () => {
     const prompt = getBuildPhasePrompt("ideate");
-    expect(prompt).toContain("search_portfolio_context");
-    expect(prompt).toContain("update_feature_brief");
+    expect(prompt).toContain("search_project_files");
+    expect(prompt).toContain("saveBuildEvidence");
   });
   it("returns plan prompt for plan phase", () => {
     const prompt = getBuildPhasePrompt("plan");
-    expect(prompt).toContain("Here's what I'll build");
-    expect(prompt).toContain("build notes");
+    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("testFirst");
   });
   it("returns build prompt for build phase", () => {
     const prompt = getBuildPhasePrompt("build");
-    expect(prompt).toContain("Automated building");
+    expect(prompt).toContain("buildPlan");
     expect(prompt).toContain("review");
   });
   it("returns review prompt for review phase", () => {
     const prompt = getBuildPhasePrompt("review");
-    expect(prompt).toContain("acceptance criteria");
+    expect(prompt).toContain("acceptanceMet");
     expect(prompt).toContain("Ready to ship");
   });
   it("returns ship prompt for ship phase", () => {
