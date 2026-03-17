@@ -6,6 +6,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import {
   validateFeatureBrief,
   canTransitionPhase,
+  checkPhaseGate,
   generateBuildId,
   bumpVersion,
   type FeatureBrief,
@@ -87,13 +88,41 @@ export async function advanceBuildPhase(
 ): Promise<void> {
   const userId = await requireBuildAccess();
 
-  const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      id: true,
+      phase: true,
+      createdById: true,
+      designDoc: true,
+      designReview: true,
+      buildPlan: true,
+      planReview: true,
+      taskResults: true,
+      verificationOut: true,
+      acceptanceMet: true,
+    },
+  });
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
   const currentPhase = build.phase as BuildPhase;
   if (!canTransitionPhase(currentPhase, targetPhase)) {
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
+  }
+
+  const gate = checkPhaseGate(currentPhase, targetPhase, {
+    designDoc: build.designDoc,
+    designReview: build.designReview,
+    buildPlan: build.buildPlan,
+    planReview: build.planReview,
+    taskResults: build.taskResults,
+    verificationOut: build.verificationOut,
+    acceptanceMet: build.acceptanceMet,
+  });
+
+  if (!gate.allowed) {
+    throw new Error(gate.reason ?? "Phase gate check failed");
   }
 
   await prisma.featureBuild.update({
