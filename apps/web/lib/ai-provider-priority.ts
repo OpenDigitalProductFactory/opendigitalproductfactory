@@ -235,7 +235,7 @@ async function filterByModelRequirements(
 
   return entries.filter((entry) => {
     const profile = profileMap.get(`${entry.providerId}:${entry.modelId}`);
-    if (!profile) return true; // No profile = include as fallback (provider is active, let it try)
+    if (!profile) return false; // No profile = can't verify requirements — let graceful degradation handle it
 
     if (req.minCapabilityTier) {
       const required = TIER_RANK[req.minCapabilityTier] ?? 0;
