@@ -160,7 +160,7 @@ const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
   ideate:   ["plan", "failed"],
   plan:     ["build", "failed"],
   build:    ["review", "failed"],
-  review:   ["ship", "failed"],
+  review:   ["ship", "failed", "build"],
   ship:     ["complete", "failed"],
   complete: [],
   failed:   [],
@@ -170,6 +170,53 @@ export function canTransitionPhase(from: BuildPhase, to: BuildPhase): boolean {
   const allowed = ALLOWED_TRANSITIONS[from];
   if (!allowed) return false;
   return allowed.includes(to);
+}
+
+// ─── Phase Gate Enforcement ──────────────────────────────────────────────────
+
+export type PhaseGateResult = { allowed: boolean; reason?: string };
+
+export function checkPhaseGate(
+  from: BuildPhase,
+  to: BuildPhase,
+  evidence: Record<string, unknown>,
+): PhaseGateResult {
+  if (to === "failed") return { allowed: true };
+  if (from === "review" && to === "build") return { allowed: true };
+
+  if (from === "ideate" && to === "plan") {
+    if (!evidence.designDoc) return { allowed: false, reason: "A design document is required before planning." };
+    const review = evidence.designReview as { decision?: string } | null;
+    if (!review || review.decision !== "pass") return { allowed: false, reason: "Design review must pass before planning." };
+    return { allowed: true };
+  }
+
+  if (from === "plan" && to === "build") {
+    if (!evidence.buildPlan) return { allowed: false, reason: "An implementation plan is required before building." };
+    const review = evidence.planReview as { decision?: string } | null;
+    if (!review || review.decision !== "pass") return { allowed: false, reason: "Plan review must pass before building." };
+    return { allowed: true };
+  }
+
+  if (from === "build" && to === "review") {
+    const verification = evidence.verificationOut as { testsFailed?: number; typecheckPassed?: boolean } | null;
+    if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
+    if ((verification.testsFailed ?? 0) > 0) return { allowed: false, reason: "All tests must pass before review." };
+    if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
+    return { allowed: true };
+  }
+
+  if (from === "review" && to === "ship") {
+    if (!evidence.designDoc) return { allowed: false, reason: "Design document is missing." };
+    if (!evidence.buildPlan) return { allowed: false, reason: "Implementation plan is missing." };
+    if (!evidence.verificationOut) return { allowed: false, reason: "Verification output is missing." };
+    if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
+    const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
+    if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
+    return { allowed: true };
+  }
+
+  return { allowed: true };
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
