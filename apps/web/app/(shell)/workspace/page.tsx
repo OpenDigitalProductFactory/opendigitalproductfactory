@@ -6,6 +6,8 @@ import { WorkspaceTiles } from "@/components/shell/WorkspaceTiles";
 import type { TileStatus } from "@/components/shell/WorkspaceTiles";
 import { AttentionStrip } from "@/components/shell/AttentionStrip";
 import { prisma } from "@dpf/db";
+import { getCalendarEvents } from "@/lib/calendar-data";
+import { WorkspaceCalendar } from "@/components/workspace/WorkspaceCalendar";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -68,6 +70,12 @@ export default async function WorkspacePage() {
         where: { preferredProviderId: { in: inactiveProviderIds } },
       })
     : 0;
+
+  // Calendar: fetch events for current month ± 1 week buffer
+  const now = new Date();
+  const calRangeStart = new Date(now.getFullYear(), now.getMonth(), -7);
+  const calRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 7);
+  const calendarEvents = await getCalendarEvents(calRangeStart, calRangeEnd);
 
   const tileStatus: Record<string, TileStatus> = {
     ea_modeler: {
@@ -181,6 +189,14 @@ export default async function WorkspacePage() {
         Your Workspace
       </p>
       <WorkspaceTiles tiles={tiles} tileStatus={tileStatus} />
+
+      {/* Calendar */}
+      <div className="mt-8">
+        <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+          Calendar
+        </p>
+        <WorkspaceCalendar events={calendarEvents} />
+      </div>
     </div>
   );
 }

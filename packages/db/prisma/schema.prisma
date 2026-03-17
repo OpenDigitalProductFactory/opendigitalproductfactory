@@ -1668,3 +1668,54 @@ model TimesheetEntry {
   @@unique([timesheetPeriodId, dayOfWeek])
   @@index([timesheetPeriodId])
 }
+
+// ─── Calendar ───────────────────────────────────────────────────────────────
+
+model CalendarEvent {
+  id              String    @id @default(cuid())
+  eventId         String    @unique
+  title           String
+  description     String?   @db.Text
+  startAt         DateTime
+  endAt           DateTime?
+  allDay          Boolean   @default(false)
+  eventType       String    // meeting | reminder | deadline | personal | synced
+  category        String    @default("personal") // hr | operations | platform | personal | external
+  ownerEmployeeId String
+  visibility      String    @default("team") // private | team | public
+  recurrence      String?   // null | daily | weekly | monthly | yearly
+  recurrenceEnd   DateTime?
+  color           String?
+  syncSource      String?   // null | google | outlook | ical
+  externalId      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  ownerEmployee   EmployeeProfile @relation(fields: [ownerEmployeeId], references: [id])
+
+  @@index([ownerEmployeeId])
+  @@index([startAt, endAt])
+  @@index([category])
+  @@index([syncSource, externalId])
+}
+
+model CalendarSync {
+  id                String    @id @default(cuid())
+  syncId            String    @unique
+  employeeProfileId String
+  provider          String    // google | outlook | ical
+  connectionData    Json
+  syncDirection     String    @default("inbound") // inbound | outbound | bidirectional
+  filterPattern     String?
+  lastSyncAt        DateTime?
+  status            String    @default("active") // active | paused | error
+  errorMessage      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id])
+
+  @@unique([employeeProfileId, provider])
+  @@index([employeeProfileId])
+  @@index([status])
+}
