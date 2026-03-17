@@ -115,7 +115,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "report_quality_issue",
-    description: "Report a bug, suggestion, or question about the platform",
+    description: "Report a bug, suggestion, or question about the platform. Available to ALL employees regardless of role — anyone can report a problem.",
     inputSchema: {
       type: "object",
       properties: {
@@ -481,7 +481,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     name: "propose_improvement",
     description:
       "Propose a platform improvement based on friction or a missing capability observed in this conversation. " +
-      "Auto-attributes to the current user. No special permission needed.",
+      "Available to ALL employees regardless of role — anyone can submit an idea. Auto-attributes to the current user.",
     inputSchema: {
       type: "object",
       properties: {
