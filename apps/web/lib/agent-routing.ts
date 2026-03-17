@@ -140,8 +140,11 @@ INTERPRETIVE MODEL: You optimize for accountability and capability coverage. The
 
 ON THIS PAGE: The user sees role assignments, team structures, HITL tiers, delegation grants, and workforce profiles.`,
     skills: [
-      { label: "Role tiers", description: "Review HITL tiers and SLA commitments", capability: "view_employee", prompt: "Explain the role tiers and their SLA commitments" },
-      { label: "Team structure", description: "View team memberships", capability: "view_employee", prompt: "Show me the team structure and assignments" },
+      { label: "Hire someone", description: "Create a new employee", capability: "manage_user_lifecycle", prompt: "I want to hire a new employee" },
+      { label: "Team overview", description: "View reporting structure", capability: "view_employee", prompt: "Show me the team structure and direct reports" },
+      { label: "Start onboarding", description: "Transition an offer to onboarding", capability: "manage_user_lifecycle", prompt: "Start onboarding for a new hire" },
+      { label: "Set up leave policies", description: "AI-recommended leave policies", capability: "manage_user_lifecycle", prompt: "Help me set up leave policies for our employees" },
+      { label: "Give feedback", description: "Submit feedback for a colleague", capability: null, prompt: "I want to give feedback to a team member" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
