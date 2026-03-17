@@ -27,28 +27,28 @@ describe("bumpVersion", () => {
 describe("getBuildPhasePrompt", () => {
   it("returns ideate prompt for ideate phase", () => {
     const prompt = getBuildPhasePrompt("ideate");
-    expect(prompt).toContain("Ideate");
-    expect(prompt).toContain("Feature Brief");
+    expect(prompt).toContain("search_portfolio_context");
+    expect(prompt).toContain("update_feature_brief");
   });
   it("returns plan prompt for plan phase", () => {
     const prompt = getBuildPhasePrompt("plan");
-    expect(prompt).toContain("Plan");
     expect(prompt).toContain("Here's what I'll build");
+    expect(prompt).toContain("build notes");
   });
   it("returns build prompt for build phase", () => {
     const prompt = getBuildPhasePrompt("build");
-    expect(prompt).toContain("Build");
-    expect(prompt).toContain("automated build pipeline");
+    expect(prompt).toContain("Automated building");
+    expect(prompt).toContain("review");
   });
   it("returns review prompt for review phase", () => {
     const prompt = getBuildPhasePrompt("review");
-    expect(prompt).toContain("Review");
     expect(prompt).toContain("acceptance criteria");
+    expect(prompt).toContain("Ready to ship");
   });
   it("returns ship prompt for ship phase", () => {
     const prompt = getBuildPhasePrompt("ship");
-    expect(prompt).toContain("Ship");
-    expect(prompt).toContain("digital product");
+    expect(prompt).toContain("register_digital_product_from_build");
+    expect(prompt).toContain("create_build_epic");
   });
   it("returns empty string for terminal phases", () => {
     expect(getBuildPhasePrompt("complete")).toBe("");

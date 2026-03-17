@@ -12,6 +12,10 @@ vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
 }));
 
+vi.mock("@/lib/file-upload", () => ({
+  deleteAttachmentsForThread: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: {

@@ -33,6 +33,50 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: vi.fn(),
 }));
 
+vi.mock("@/lib/feature-flags", () => ({
+  isUnifiedCoworkerEnabled: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("@/lib/route-context", () => ({
+  getRouteDataContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/process-observer-hook", () => ({
+  observeConversation: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/feature-build-data", () => ({
+  getFeatureBuildForContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/file-upload", () => ({
+  deleteAttachmentsForThread: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/route-context-map", () => ({
+  resolveRouteContext: vi.fn().mockReturnValue({
+    routePrefix: "/admin",
+    domain: "Administration",
+    sensitivity: "restricted",
+    domainContext: "Admin context",
+    domainTools: [],
+    skills: [],
+  }),
+}));
+
+vi.mock("@/lib/prompt-assembler", () => ({
+  assembleSystemPrompt: vi.fn().mockReturnValue("assembled prompt"),
+}));
+
+vi.mock("@/lib/permissions", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/permissions")>("@/lib/permissions");
+  return {
+    ...actual,
+    getGrantedCapabilities: vi.fn().mockReturnValue([]),
+    getDeniedCapabilities: vi.fn().mockReturnValue([]),
+  };
+});
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: {
@@ -44,6 +88,12 @@ vi.mock("@dpf/db", () => ({
     agentMessage: {
       create: vi.fn(),
       findMany: vi.fn(),
+    },
+    agentAttachment: {
+      findMany: vi.fn(),
+    },
+    agent: {
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -85,6 +135,8 @@ describe("agent coworker external access", () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" });
     mockPrisma.agentThread.findUnique.mockResolvedValue({ id: "thread-1", userId: "user-1" });
     mockPrisma.agentMessage.findMany.mockResolvedValue([]);
+    mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
+    mockPrisma.agent.findUnique.mockResolvedValue(null);
     mockPrisma.agentMessage.create
       .mockResolvedValueOnce({
         id: "user-msg-1",
@@ -127,7 +179,7 @@ describe("agent coworker external access", () => {
         platformRole: "HR-000",
         isSuperuser: false,
       },
-      { externalAccessEnabled: true },
+      expect.objectContaining({ externalAccessEnabled: true }),
     );
   });
 
