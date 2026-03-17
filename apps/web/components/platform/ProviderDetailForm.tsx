@@ -255,12 +255,17 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       </div>
 
       {/* API key / subscription token credential field */}
-      {selectedAuthMethod === "api_key" && (
+      {selectedAuthMethod === "api_key" && (() => {
+        const isAnthropicApi = provider.providerId === "anthropic";
+        const isAnthropicSub = provider.providerId === "anthropic-sub";
+        const isAnyAnthropic = isAnthropicApi || isAnthropicSub;
+
+        return (
         <div style={{ marginBottom: 16 }}>
-          {provider.providerId.startsWith("anthropic") && (
+          {isAnyAnthropic && (
             <div style={{
               background: "#1a1a30",
-              border: "1px solid #2a2a40",
+              border: `1px solid ${isAnthropicSub ? "#4ade8030" : "#2a2a40"}`,
               borderRadius: 6,
               padding: "10px 12px",
               marginBottom: 12,
@@ -268,39 +273,29 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               lineHeight: 1.6,
               color: "#b0b0c8",
             }}>
-              <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 4 }}>Two credential types supported:</div>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: "#7c8cf8", fontWeight: 600 }}>API Key</span>
-                  <span style={{ color: "#6a6a80" }}> (sk-ant-api...)</span>
-                  <div>Pay-per-token from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#7c8cf8", textDecoration: "none" }}>console.anthropic.com</a></div>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: "#4ade80", fontWeight: 600 }}>Subscription Token</span>
-                  <span style={{ color: "#6a6a80" }}> (sk-ant-oat...)</span>
-                  <div>Uses your Max plan. Run: <code style={{ background: "#0a0a1a", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code></div>
-                </div>
-              </div>
+              {isAnthropicSub ? (
+                <>
+                  <div style={{ fontWeight: 600, color: "#4ade80", marginBottom: 4 }}>Claude Code / Max Subscription</div>
+                  <div>Uses your Claude Max subscription — no per-token cost.</div>
+                  <div style={{ marginTop: 4 }}>
+                    Run <code style={{ background: "#0a0a1a", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code> in your terminal, then paste the token below.
+                  </div>
+                  <div style={{ marginTop: 4, color: "#6a6a80" }}>Limitations: no prompt caching, no 1M context window.</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 600, color: "#7c8cf8", marginBottom: 4 }}>Anthropic API Key</div>
+                  <div>Pay-per-token billing. Get your API key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#7c8cf8", textDecoration: "none" }}>console.anthropic.com</a>.</div>
+                  <div style={{ marginTop: 4, color: "#6a6a80" }}>Full API access including prompt caching and 1M context.</div>
+                </>
+              )}
             </div>
           )}
           <label style={labelStyle}>
-            {provider.providerId.startsWith("anthropic")
-              ? (secretRef.startsWith("sk-ant-oat")
-                ? "Subscription Token (Max plan)"
-                : secretRef.startsWith("sk-ant-api")
-                  ? "API Key (pay-per-token)"
-                  : credential?.secretHint?.includes("oat")
-                    ? "Subscription Token (Max plan)"
-                    : "API Key or Subscription Token")
-              : "API Key"}
+            {isAnthropicSub ? "Subscription Token" : isAnthropicApi ? "API Key" : "API Key"}
             {credential?.secretHint && !secretRef && (
-              <span style={{ color: credential.secretHint.includes("oat") ? "#4ade80" : "#7c8cf8", marginLeft: 8 }}>
+              <span style={{ color: isAnthropicSub ? "#4ade80" : "#7c8cf8", marginLeft: 8 }}>
                 {credential.secretHint}
-                {provider.providerId.startsWith("anthropic") && (
-                  <span style={{ color: "#6a6a80", marginLeft: 4 }}>
-                    ({credential.secretHint.includes("oat") ? "subscription" : "API key"})
-                  </span>
-                )}
               </span>
             )}
           </label>
@@ -310,33 +305,38 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
             placeholder={
-              provider.providerId.startsWith("anthropic")
-                ? "Paste API key (sk-ant-api...) or subscription token (sk-ant-oat...)"
-                : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
+              isAnthropicSub
+                ? "Paste subscription token (sk-ant-oat...)"
+                : isAnthropicApi
+                  ? "Paste API key (sk-ant-api...)"
+                  : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
             }
             style={{
               ...inputStyle,
               fontFamily: "monospace",
-              ...(provider.providerId.startsWith("anthropic") && secretRef.startsWith("sk-ant-oat")
-                ? { borderColor: "#4ade8060" }
-                : provider.providerId.startsWith("anthropic") && secretRef.startsWith("sk-ant-api")
-                  ? { borderColor: "#7c8cf860" }
-                  : {}),
+              ...(isAnthropicSub && secretRef ? { borderColor: "#4ade8060" } : {}),
+              ...(isAnthropicApi && secretRef ? { borderColor: "#7c8cf860" } : {}),
             }}
           />
-          {provider.providerId.startsWith("anthropic") && secretRef && (
-            <div style={{ fontSize: 11, marginTop: 4, color: secretRef.startsWith("sk-ant-oat") ? "#4ade80" : secretRef.startsWith("sk-ant-api") ? "#7c8cf8" : "#f87171" }}>
-              {secretRef.startsWith("sk-ant-oat")
-                ? "Subscription token detected — will use your Max plan (no prompt caching, no 1M context)"
-                : secretRef.startsWith("sk-ant-api")
-                  ? "API key detected — pay-per-token billing"
-                  : secretRef.length > 5
-                    ? "Unrecognized key format — expected sk-ant-api... or sk-ant-oat..."
-                    : ""}
+          {isAnyAnthropic && secretRef && (
+            <div style={{ fontSize: 11, marginTop: 4, color:
+              (isAnthropicSub && !secretRef.startsWith("sk-ant-oat")) || (isAnthropicApi && !secretRef.startsWith("sk-ant-api"))
+                ? "#f87171" : isAnthropicSub ? "#4ade80" : "#7c8cf8"
+            }}>
+              {isAnthropicSub && secretRef.startsWith("sk-ant-oat")
+                ? "Subscription token — uses your Max plan"
+                : isAnthropicSub && secretRef.length > 5
+                  ? "This looks like an API key, not a subscription token. Use the Anthropic (API Key) provider for API keys."
+                  : isAnthropicApi && secretRef.startsWith("sk-ant-api")
+                    ? "API key — pay-per-token billing"
+                    : isAnthropicApi && secretRef.startsWith("sk-ant-oat") && secretRef.length > 5
+                      ? "This looks like a subscription token. Use the Anthropic (Claude Code) provider for subscription tokens."
+                      : ""}
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* OAuth2 Client Credentials fields */}
       {selectedAuthMethod === "oauth2_client_credentials" && (
