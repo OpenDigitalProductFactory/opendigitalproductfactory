@@ -399,6 +399,68 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── Production Read-Only Tools (git-based) ────────────────────────────────
+  {
+    name: "read_source_at_version",
+    description: "Read a file from the codebase at a specific version tag. Uses git history — works in production without source code. Default version: DEPLOYED_VERSION or HEAD.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path" },
+        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
+      },
+      required: ["path"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "search_source_at_version",
+    description: "Search the codebase at a specific version for a text pattern. Uses git grep — works in production without source code.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Text or regex pattern to search" },
+        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
+        glob: { type: "string", description: "File glob filter (e.g., '*.ts')" },
+        maxResults: { type: "number", description: "Max results (default 20)" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "list_source_directory",
+    description: "List directory contents at a specific version. Uses git ls-tree — works in production without source code.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory path (default: root)" },
+        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "compare_versions",
+    description: "Show what changed between two versions — files modified, commit log. Uses git diff.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "Starting version tag (e.g., 'v1.0.0')" },
+        to: { type: "string", description: "Ending version tag (default: HEAD)" },
+      },
+      required: ["from"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   {
     name: "propose_file_change",
     description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
@@ -1096,6 +1158,50 @@ export async function executeTool(
       }
 
       return { success: false, error: "No manifest found. Use generate_codebase_manifest to create one.", message: "No manifest available." };
+    }
+
+    case "read_source_at_version": {
+      const { gitShow, isGitAvailable } = await import("@/lib/git-utils");
+      if (!await isGitAvailable()) return { success: false, error: "Git history is not available in this deployment. Use read_codebase_manifest for codebase orientation.", message: "Git not available." };
+      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
+      const result = await gitShow({ ref, path: String(params.path ?? "") });
+      if ("error" in result) return { success: false, error: result.error, message: result.error };
+      return { success: true, message: result.content, data: { content: result.content } };
+    }
+
+    case "search_source_at_version": {
+      const { gitGrep, isGitAvailable } = await import("@/lib/git-utils");
+      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
+      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
+      const grepOpts: Parameters<typeof gitGrep>[0] = { query: String(params.query ?? ""), ref };
+      if (typeof params.glob === "string") grepOpts.glob = params.glob;
+      if (typeof params.maxResults === "number") grepOpts.maxResults = params.maxResults;
+      const result = await gitGrep(grepOpts);
+      const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
+      return { success: true, message: summary || "No matches found.", data: { results: result.results } };
+    }
+
+    case "list_source_directory": {
+      const { gitLsTree, isGitAvailable } = await import("@/lib/git-utils");
+      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
+      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
+      const result = await gitLsTree({ ref, path: typeof params.path === "string" ? params.path : "" });
+      const summary = result.entries.map((e) => `${e.type === "dir" ? "📁" : "📄"} ${e.path}`).join("\n");
+      return { success: true, message: summary || "Empty directory.", data: { entries: result.entries } };
+    }
+
+    case "compare_versions": {
+      const { gitDiffStat, isGitAvailable, gitLog } = await import("@/lib/git-utils");
+      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
+      const from = String(params.from ?? "");
+      const to = typeof params.to === "string" ? params.to : "HEAD";
+      const diff = await gitDiffStat({ from, to });
+      const log = await gitLog({ from, to, maxCount: 20 });
+      return {
+        success: true,
+        message: diff.summary,
+        data: { filesChanged: diff.filesChanged, summary: diff.summary, commits: log.commits },
+      };
     }
 
     case "propose_file_change": {
