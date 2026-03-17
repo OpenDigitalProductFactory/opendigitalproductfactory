@@ -63,6 +63,13 @@ export type ProviderRow = {
   consoleUrl: string | null;
   billingLabel: string | null;
   costPerformanceNotes: string | null;
+  endpointType: string;
+  sensitivityClearance: string[];
+  capabilityTier: string;
+  costBand: string;
+  taskTags: string[];
+  mcpTransport: string | null;
+  maxConcurrency: number | null;
 };
 
 /** Client-safe credential info — secrets are never sent to the browser. */
@@ -138,7 +145,7 @@ export type RegistryProviderEntry = {
   providerId: string;
   name: string;
   families: string[];
-  category: "direct" | "router" | "agent";
+  category: "direct" | "router" | "agent" | "mcp-subscribed" | "mcp-internal";
   baseUrl: string | null;
   authMethod: "api_key" | "oauth2_client_credentials" | "none";
   supportedAuthMethods: string[];
