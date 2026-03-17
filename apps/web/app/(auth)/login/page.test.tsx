@@ -14,10 +14,13 @@ describe("LoginPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows a forgot password link on the login page", () => {
+  it("shows a forgot password link on the login page", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    const html = renderToStaticMarkup(<LoginPage searchParams={Promise.resolve({})} />);
+    // LoginPage is an async server component; await it to get the JSX tree
+    const element = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    const html = renderToStaticMarkup(element);
 
     expect(html).toContain("Forgot password?");
     expect(html).toContain("/forgot-password");
