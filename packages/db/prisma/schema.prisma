@@ -412,6 +412,52 @@ model DigitalProduct {
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
   featureBuilds          FeatureBuild[]
+  versions               ProductVersion[]
+}
+
+// ─── Version Tracking ────────────────────────────────────────────────────────
+
+model ProductVersion {
+  id               String            @id @default(cuid())
+  digitalProductId String
+  digitalProduct   DigitalProduct    @relation(fields: [digitalProductId], references: [id])
+  version          String
+  gitTag           String
+  gitCommitHash    String
+  featureBuildId   String?
+  featureBuild     FeatureBuild?     @relation(fields: [featureBuildId], references: [id])
+  shippedBy        String
+  shippedAt        DateTime          @default(now())
+  changeCount      Int               @default(0)
+  changeSummary    String?           @db.Text
+  promotions       ChangePromotion[]
+
+  @@unique([digitalProductId, version])
+  @@index([gitTag])
+}
+
+model ChangePromotion {
+  id               String         @id @default(cuid())
+  promotionId      String         @unique
+  productVersionId String
+  productVersion   ProductVersion @relation(fields: [productVersionId], references: [id])
+  status           String         @default("pending")
+  requestedBy      String
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectedBy       String?
+  rejectedAt       DateTime?
+  rationale        String?        @db.Text
+  deployedAt       DateTime?
+  deploymentLog    String?        @db.Text
+  rolledBackAt     DateTime?
+  rolledBackBy     String?
+  rollbackReason   String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([status])
+  @@index([productVersionId])
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
@@ -1069,6 +1115,7 @@ model AgentActionProposal {
   executedAt     DateTime?
   resultEntityId String?
   resultError    String?      @db.Text
+  gitCommitHash  String?
 
   @@index([threadId])
   @@index([status])
@@ -1165,6 +1212,8 @@ model FeatureBuild {
   createdBy        User            @relation(fields: [createdById], references: [id])
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  gitCommitHashes  String[]        @default([])
+  productVersions  ProductVersion[]
 
   @@index([phase])
   @@index([createdById])
