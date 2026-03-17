@@ -65,6 +65,11 @@ export function getProviderExtraHeaders(providerId: string): Record<string, stri
   return {};
 }
 
+/** Detect if an Anthropic key is a subscription OAuth token (from `claude setup-token`) */
+function isAnthropicOAuthToken(apiKey: string): boolean {
+  return apiKey.includes("sk-ant-oat");
+}
+
 export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
   const credential = await getDecryptedCredential(providerId);
   if (!credential) return { error: "No credential configured" };
@@ -126,6 +131,11 @@ async function buildAuthHeaders(
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
+
+    // Anthropic subscription tokens (from `claude setup-token`) need additional beta headers
+    if (providerId === "anthropic" && isAnthropicOAuthToken(cred.secretRef)) {
+      headers["anthropic-beta"] = "claude-code-20250219,oauth-2025-04-20";
+    }
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
