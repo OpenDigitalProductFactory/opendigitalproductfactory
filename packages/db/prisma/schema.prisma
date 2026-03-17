@@ -487,6 +487,15 @@ model ModelProvider {
   billingLabel         String?
   costPerformanceNotes String?
   updatedAt            DateTime @updatedAt
+
+  // MCP Endpoint Manifest (new)
+  endpointType          String    @default("llm")
+  sensitivityClearance  String[]  @default([])
+  capabilityTier        String    @default("basic")
+  costBand              String    @default("free")
+  taskTags              String[]  @default([])
+  mcpTransport          String?
+  maxConcurrency        Int?
 }
 
 model DiscoveredModel {
@@ -556,6 +565,7 @@ model Agent {
   type                String   // orchestrator | specialist | cross-cutting
   description         String?
   status              String   @default("active")
+  archived            Boolean  @default(false)
   createdAt           DateTime @default(now())
   portfolioId         String?
   preferredProviderId String?  // provider to try first for this agent's conversations
@@ -667,6 +677,13 @@ model AuthorizationDecisionLog {
   decision          String   // allow | deny | require_approval
   rationale         Json
   createdAt         DateTime @default(now())
+
+  // Unified coworker audit extensions
+  endpointUsed          String?
+  mode                  String?
+  routeContext          String?
+  sensitivityLevel      String?
+  sensitivityOverride   Boolean?
 
   delegationGrant   DelegationGrant? @relation(fields: [delegationGrantId], references: [id], onDelete: SetNull)
 
