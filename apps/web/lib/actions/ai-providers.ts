@@ -233,14 +233,15 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   if (provider.authMethod === "api_key") {
     const credential = await getDecryptedCredential(providerId);
     if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
-    if (provider.authHeader) {
+
+    // Anthropic subscription tokens use Bearer auth, not x-api-key
+    if (providerId === "anthropic" && isAnthropicOAuthToken(credential.secretRef)) {
+      headers["Authorization"] = `Bearer ${credential.secretRef}`;
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    } else if (provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${credential.secretRef}`
         : credential.secretRef;
-    }
-    // Anthropic subscription tokens need OAuth beta headers
-    if (providerId === "anthropic" && isAnthropicOAuthToken(credential.secretRef)) {
-      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
