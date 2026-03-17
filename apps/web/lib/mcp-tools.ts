@@ -1047,7 +1047,7 @@ export async function executeTool(
       if (!employee) return { success: false, error: "Employee not found", message: `Employee ${String(params["employeeId"])} not found` };
 
       const newStatus = String(params["newStatus"]);
-      const { validateLifecycleTransition } = await import("@/lib/actions/workforce");
+      const { validateLifecycleTransition } = await import("@/lib/workforce-types");
       const error = validateLifecycleTransition({
         currentStatus: employee.status as import("@/lib/workforce-types").WorkforceStatus,
         nextStatus: newStatus as import("@/lib/workforce-types").WorkforceStatus,
