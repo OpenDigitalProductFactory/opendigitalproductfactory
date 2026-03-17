@@ -7,6 +7,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { CalendarEventView } from "@/lib/calendar-data";
 import { CalendarEventPopover } from "./CalendarEventPopover";
+import { CalendarSyncPanel } from "./CalendarSyncPanel";
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   hr: { label: "HR", color: "#a78bfa" },
@@ -133,6 +134,8 @@ export function WorkspaceCalendar({ events }: Props) {
           onClose={() => setCreatePopover(null)}
         />
       )}
+
+      <CalendarSyncPanel />
     </div>
   );
 }
