@@ -411,3 +411,53 @@ export async function createBuildEpic(input: {
     message: `Created epic ${epic.epicId} with 2 backlog items (1 done, 1 open for feedback).`,
   };
 }
+
+// ─── Build Disciplines — Work Claims ─────────────────────────────────────────
+
+export async function claimBuild(
+  buildId: string,
+  agentId?: string,
+): Promise<void> {
+  await requireBuildAccess();
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      claimedByAgentId: agentId ?? null,
+      claimedAt: new Date(),
+      claimStatus: "active",
+    },
+  });
+}
+
+export async function releaseBuildClaim(buildId: string): Promise<void> {
+  await requireBuildAccess();
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      claimedByAgentId: null,
+      claimedAt: null,
+      claimStatus: "released",
+    },
+  });
+}
+
+// ─── Build Disciplines — Evidence Storage ────────────────────────────────────
+
+export async function saveBuildEvidence(
+  buildId: string,
+  field: "designDoc" | "designReview" | "buildPlan" | "planReview" | "taskResults" | "verificationOut" | "acceptanceMet",
+  value: unknown,
+): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: { [field]: value as Prisma.InputJsonValue },
+  });
+}
