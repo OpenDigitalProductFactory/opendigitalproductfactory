@@ -42,63 +42,69 @@ The historical pain point is freeform location entry leading to duplicate, incon
 
 ### 1. Geographic Hierarchy Schema
 
-Three reference tables forming a strict parent-child hierarchy. All follow the existing platform pattern: cuid primary keys, `status` field for soft-delete, `createdAt`/`updatedAt` timestamps.
+Three reference tables forming a strict parent-child hierarchy. All follow the existing platform pattern: `id` as cuid primary key, `status` field for soft-delete, `createdAt`/`updatedAt` timestamps, explicit `onDelete` on all FKs, and `@@index` on all FK columns.
 
 #### Country
 
-Seeded from ISO 3166-1 on first migration (~250 rows). Stable dataset, rarely changes.
+Seeded from ISO 3166-1 on first migration (~250 rows). The `name` field stores the common short name ("United Kingdom"), not the formal ISO name ("United Kingdom of Great Britain and Northern Ireland"). Stable dataset, rarely changes.
 
 ```prisma
 model Country {
-  countryId   String   @id @default(cuid())
-  name        String   // "United Kingdom"
+  id          String   @id @default(cuid())
+  name        String   // "United Kingdom" — common short name
   iso2        String   @unique // "GB"
   iso3        String   @unique // "GBR"
   numericCode String   // "826"
-  phoneCode   String   // "+44"
+  phoneCode   String   // "+44" — note: some countries share codes (US/CA both +1)
   status      String   @default("active") // active | inactive
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   regions     Region[]
+
+  @@index([status])
 }
 ```
 
 #### Region
 
-States, provinces, counties. Starts empty, grows organically through address entry.
+States, provinces, counties. Starts empty, grows organically through address entry. Case-insensitive uniqueness enforced via a raw SQL functional index in the migration: `CREATE UNIQUE INDEX "Region_countryId_name_ci" ON "Region" (LOWER("name"), "countryId")` — the Prisma `@@unique` is kept as a fallback but the functional index is authoritative for duplicate prevention.
 
 ```prisma
 model Region {
-  regionId  String   @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String   // "California"
   code      String?  // "CA" — ISO 3166-2 subdivision code where available
   countryId String
-  country   Country  @relation(fields: [countryId], references: [countryId])
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Restrict)
   status    String   @default("active")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   cities    City[]
 
   @@unique([countryId, name])
+  @@index([countryId])
+  @@index([status])
 }
 ```
 
 #### City
 
-Grows organically. Scoped to a region to prevent ambiguity (Portland, OR vs Portland, ME).
+Grows organically. Scoped to a region to prevent ambiguity (Portland, OR vs Portland, ME). Same case-insensitive functional index pattern as Region: `CREATE UNIQUE INDEX "City_regionId_name_ci" ON "City" (LOWER("name"), "regionId")`.
 
 ```prisma
 model City {
-  cityId    String   @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String   // "San Francisco"
   regionId  String
-  region    Region   @relation(fields: [regionId], references: [regionId])
+  region    Region   @relation(fields: [regionId], references: [id], onDelete: Restrict)
   status    String   @default("active")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   addresses Address[]
 
   @@unique([regionId, name])
+  @@index([regionId])
+  @@index([status])
 }
 ```
 
@@ -106,17 +112,19 @@ model City {
 
 Context-neutral — an address is just geographic data. Sensitivity is determined by the entity relationship, not the address itself.
 
+The `label` field uses a controlled set of values: "home", "work", "billing", "shipping", "headquarters", "site". Stored as a required String (not an enum, consistent with platform pattern) — the UI presents these as a dropdown. Freeform entry is not offered; if a new label is needed it is added to the dropdown options in code, keeping the vocabulary controlled.
+
 ```prisma
 model Address {
-  addressId        String    @id @default(cuid())
-  label            String    // "home", "work", "billing", "shipping", "headquarters", "site"
+  id               String    @id @default(cuid())
+  label            String    // "home" | "work" | "billing" | "shipping" | "headquarters" | "site"
   addressLine1     String
   addressLine2     String?
   cityId           String
-  city             City      @relation(fields: [cityId], references: [cityId])
+  city             City      @relation(fields: [cityId], references: [id], onDelete: Restrict)
   postalCode       String    // String for alphanumeric codes: "SW1A 1AA", "H3Z 2Y7"
-  latitude         Decimal?  // Populated by external validation
-  longitude        Decimal?
+  latitude         Decimal?  @db.Decimal(10, 7) // Populated by external validation (~1cm precision)
+  longitude        Decimal?  @db.Decimal(10, 7)
   validatedAt      DateTime? // Set when geocoding MCP service confirms address
   validationSource String?   // "google-places", "mapbox", etc.
   status           String    @default("active")
@@ -125,25 +133,30 @@ model Address {
 
   employeeAddresses EmployeeAddress[]
   workLocations     WorkLocation[]  // via new optional FK
+
+  @@index([cityId])
+  @@index([status])
 }
 ```
 
 ### 3. Entity Join Tables
 
-Join tables provide context, access scoping, and multi-address support per entity.
+Join tables provide context, access scoping, and multi-address support per entity. An employee may have multiple addresses but only one per label (enforced at application layer — a unique constraint on `[employeeProfileId, label]` is not viable since label lives on Address, not the join).
 
 ```prisma
 model EmployeeAddress {
-  employeeAddressId String          @id @default(cuid())
+  id                String          @id @default(cuid())
   employeeProfileId String
-  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [employeeProfileId])
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
   addressId         String
-  address           Address         @relation(fields: [addressId], references: [addressId])
+  address           Address         @relation(fields: [addressId], references: [id], onDelete: Cascade)
   isPrimary         Boolean         @default(false)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   @@unique([employeeProfileId, addressId])
+  @@index([employeeProfileId])
+  @@index([addressId])
 }
 ```
 
@@ -155,9 +168,11 @@ The existing `WorkLocation` model gains an optional address link. This connects 
 
 ```prisma
 model WorkLocation {
-  // ... existing fields (locationId, name, locationType, timezone, status) ...
+  // ... existing fields (id, locationId, name, locationType, timezone, status) ...
   addressId String?
-  address   Address? @relation(fields: [addressId], references: [addressId])
+  address   Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  @@index([addressId])
 }
 ```
 
@@ -165,16 +180,18 @@ No existing data changes. Office-type locations can now optionally reference the
 
 ### 5. Phone Fields on EmployeeProfile
 
-Added directly to `EmployeeProfile` — simple nullable strings in E.164 format.
+The existing `phoneNumber` field on EmployeeProfile is replaced by three purpose-specific fields. The migration renames `phoneNumber` → `phoneWork` (preserving existing data) and adds the two new fields.
 
 ```prisma
 model EmployeeProfile {
   // ... existing fields ...
-  phoneWork      String? // "+14155551234"
+  phoneWork      String? // replaces existing phoneNumber — "+14155551234"
   phoneMobile    String?
   phoneEmergency String?
 }
 ```
+
+**Migration note:** `ALTER TABLE "EmployeeProfile" RENAME COLUMN "phoneNumber" TO "phoneWork"` preserves existing data. The `EmployeeFormPanel.tsx` and `workforce` server actions must be updated to use the new field names.
 
 E.164 format chosen because:
 - Internationally unambiguous
@@ -207,9 +224,9 @@ Fields presented in dependency order — each selection scopes the next:
 #### Duplicate Prevention
 
 - Country: pre-seeded, unique on iso2/iso3 — no duplicates possible
-- Region: unique constraint on `[countryId, name]` — typeahead search is case-insensitive
-- City: unique constraint on `[regionId, name]` — same case-insensitive search
-- "Add new" flow checks for near-matches before creating (e.g., "San Fran" when "San Francisco" exists)
+- Region: case-insensitive unique index on `[countryId, LOWER(name)]` — database-level enforcement
+- City: case-insensitive unique index on `[regionId, LOWER(name)]` — same pattern
+- "Add new" flow: before creating, the server action queries existing entries with a case-insensitive prefix match (`WHERE LOWER(name) LIKE LOWER(input) || '%'`). If matches exist, they are shown as suggestions ("Did you mean San Francisco?"). The user can select an existing entry or confirm the new one. This is a UX guard, not a hard block — the database unique index is the ultimate enforcement.
 
 ### 7. MCP Validation Integration
 
@@ -250,14 +267,18 @@ Fits the existing `ModelProvider` table:
 
 ### 8. DatePicker Component
 
-A shared date picker replacing all raw `<input type="date">` elements across the platform.
+A shared date picker replacing all raw `<input type="date">` elements across the platform. New dependency: `react-day-picker` added to `apps/web/package.json`.
 
 #### Implementation
 
-- Wraps `react-day-picker` (MIT license, zero dependencies, accessible, already common in shadcn/ui stacks)
-- Dark-theme compatible using existing platform CSS variables
-- Supports single date, date range, and optional time selection
-- Keyboard navigable (arrow keys, enter to select)
+- Wraps `react-day-picker` (MIT license, zero dependencies, accessible, common in shadcn/ui stacks)
+- Dark-theme compatible using existing platform CSS variables (`--background`, `--foreground`, `--accent`, etc.)
+- Component file: `apps/web/components/ui/DatePicker.tsx`
+- **Props interface:** `{ value?: Date | null, onChange: (date: Date | null) => void, mode?: "single" | "range", placeholder?: string, disabled?: boolean }`
+- Returns `Date` objects (not ISO strings) — the consuming server action handles serialization
+- Integrates with the existing form pattern (`inputClasses` / `labelClasses` from EmployeeFormPanel)
+- Keyboard navigable (arrow keys to navigate days, enter to select, escape to close)
+- Does not handle timezone conversion — dates are naive (consistent with existing date fields like `startDate`, `confirmationDate` on EmployeeProfile which are `DateTime` without timezone context)
 
 #### Adoption Points
 
@@ -276,10 +297,11 @@ All existing date inputs across the platform:
 ### Schema Migration
 
 Single Prisma migration adding:
-- `Country`, `Region`, `City` tables
+- `Country`, `Region`, `City` tables (with case-insensitive functional unique indexes via raw SQL)
 - `Address`, `EmployeeAddress` tables
-- `addressId` FK on `WorkLocation` (optional)
-- `phoneWork`, `phoneMobile`, `phoneEmergency` on `EmployeeProfile`
+- `addressId` FK on `WorkLocation` (optional, with `@@index`)
+- Rename `phoneNumber` → `phoneWork` on `EmployeeProfile` (data-preserving `ALTER TABLE RENAME COLUMN`)
+- Add `phoneMobile`, `phoneEmergency` on `EmployeeProfile`
 
 ### Country Seed
 
@@ -343,6 +365,24 @@ Single Prisma migration adding:
 - Phone numbers on EmployeeProfile inherit employee record permissions
 
 ---
+
+## API Layer
+
+All new functionality uses Next.js server actions, consistent with the existing pattern (e.g., `apps/web/lib/actions/workforce.ts`).
+
+### Server Actions
+
+- `searchCountries(query: string)` — case-insensitive search on name, iso2, iso3. Returns `{ id, name, iso2, phoneCode }[]`.
+- `searchRegions(countryId: string, query: string)` — case-insensitive search on name/code, scoped to country. Returns `{ id, name, code }[]`.
+- `searchCities(regionId: string, query: string)` — same pattern, scoped to region.
+- `createRegion(countryId: string, name: string, code?: string)` — with near-match check. Returns created region or error with suggestions.
+- `createCity(regionId: string, name: string)` — same pattern.
+- `createAddress(data: AddressInput)` — creates Address + EmployeeAddress link in a transaction.
+- `updateAddress(addressId: string, data: Partial<AddressInput>)` — updates address fields.
+- `deleteEmployeeAddress(employeeAddressId: string)` — removes the link (soft-deletes the address).
+- `setPrimaryAddress(employeeAddressId: string)` — sets primary, unsets previous primary for same employee.
+
+All typeahead search actions return a maximum of 20 results, ordered by name ascending.
 
 ## Open Questions
 
