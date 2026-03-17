@@ -257,7 +257,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {/* API key / subscription token credential field */}
       {selectedAuthMethod === "api_key" && (
         <div style={{ marginBottom: 16 }}>
-          {provider.providerId === "anthropic" && (
+          {provider.providerId.startsWith("anthropic") && (
             <div style={{
               background: "#1a1a30",
               border: "1px solid #2a2a40",
@@ -284,7 +284,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             </div>
           )}
           <label style={labelStyle}>
-            {provider.providerId === "anthropic"
+            {provider.providerId.startsWith("anthropic")
               ? (secretRef.startsWith("sk-ant-oat")
                 ? "Subscription Token (Max plan)"
                 : secretRef.startsWith("sk-ant-api")
@@ -296,7 +296,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             {credential?.secretHint && !secretRef && (
               <span style={{ color: credential.secretHint.includes("oat") ? "#4ade80" : "#7c8cf8", marginLeft: 8 }}>
                 {credential.secretHint}
-                {provider.providerId === "anthropic" && (
+                {provider.providerId.startsWith("anthropic") && (
                   <span style={{ color: "#6a6a80", marginLeft: 4 }}>
                     ({credential.secretHint.includes("oat") ? "subscription" : "API key"})
                   </span>
@@ -310,21 +310,21 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
             placeholder={
-              provider.providerId === "anthropic"
+              provider.providerId.startsWith("anthropic")
                 ? "Paste API key (sk-ant-api...) or subscription token (sk-ant-oat...)"
                 : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
             }
             style={{
               ...inputStyle,
               fontFamily: "monospace",
-              ...(provider.providerId === "anthropic" && secretRef.startsWith("sk-ant-oat")
+              ...(provider.providerId.startsWith("anthropic") && secretRef.startsWith("sk-ant-oat")
                 ? { borderColor: "#4ade8060" }
-                : provider.providerId === "anthropic" && secretRef.startsWith("sk-ant-api")
+                : provider.providerId.startsWith("anthropic") && secretRef.startsWith("sk-ant-api")
                   ? { borderColor: "#7c8cf860" }
                   : {}),
             }}
           />
-          {provider.providerId === "anthropic" && secretRef && (
+          {provider.providerId.startsWith("anthropic") && secretRef && (
             <div style={{ fontSize: 11, marginTop: 4, color: secretRef.startsWith("sk-ant-oat") ? "#4ade80" : secretRef.startsWith("sk-ant-api") ? "#7c8cf8" : "#f87171" }}>
               {secretRef.startsWith("sk-ant-oat")
                 ? "Subscription token detected — will use your Max plan (no prompt caching, no 1M context)"

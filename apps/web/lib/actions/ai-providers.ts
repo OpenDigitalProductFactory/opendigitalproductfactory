@@ -17,6 +17,7 @@ import {
   getDecryptedCredential,
   getProviderExtraHeaders,
   getProviderBearerToken,
+  isAnthropicProvider,
   isAnthropicOAuthToken,
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
@@ -235,7 +236,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
 
     // Anthropic subscription tokens use Bearer auth, not x-api-key
-    if (providerId === "anthropic" && isAnthropicOAuthToken(credential.secretRef)) {
+    if (isAnthropicProvider(providerId) && isAnthropicOAuthToken(credential.secretRef)) {
       headers["Authorization"] = `Bearer ${credential.secretRef}`;
       headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     } else if (provider.authHeader) {
@@ -254,7 +255,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     let res: Response;
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
-    if (providerId === "anthropic" && headers["anthropic-beta"]?.includes("oauth")) {
+    if (isAnthropicProvider(providerId) && headers["anthropic-beta"]?.includes("oauth")) {
       const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
       const messagesUrl = `${baseUrl}/messages`;
       headers["Content-Type"] = "application/json";

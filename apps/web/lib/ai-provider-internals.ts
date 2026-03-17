@@ -33,8 +33,12 @@ export async function getDecryptedCredential(providerId: string) {
 }
 
 /** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
+export function isAnthropicProvider(providerId: string): boolean {
+  return providerId === "anthropic" || providerId.startsWith("anthropic-");
+}
+
 export function getProviderExtraHeaders(providerId: string): Record<string, string> {
-  if (providerId === "anthropic") return { "anthropic-version": "2023-06-01" };
+  if (isAnthropicProvider(providerId)) return { "anthropic-version": "2023-06-01" };
   return {};
 }
 
