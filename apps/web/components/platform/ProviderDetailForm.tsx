@@ -254,13 +254,54 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         )}
       </div>
 
-      {/* API key credential field */}
+      {/* API key / subscription token credential field */}
       {selectedAuthMethod === "api_key" && (
         <div style={{ marginBottom: 16 }}>
+          {provider.providerId === "anthropic" && (
+            <div style={{
+              background: "#1a1a30",
+              border: "1px solid #2a2a40",
+              borderRadius: 6,
+              padding: "10px 12px",
+              marginBottom: 12,
+              fontSize: 12,
+              lineHeight: 1.6,
+              color: "#b0b0c8",
+            }}>
+              <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 4 }}>Two credential types supported:</div>
+              <div style={{ display: "flex", gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: "#7c8cf8", fontWeight: 600 }}>API Key</span>
+                  <span style={{ color: "#6a6a80" }}> (sk-ant-api...)</span>
+                  <div>Pay-per-token from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#7c8cf8", textDecoration: "none" }}>console.anthropic.com</a></div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: "#4ade80", fontWeight: 600 }}>Subscription Token</span>
+                  <span style={{ color: "#6a6a80" }}> (sk-ant-oat...)</span>
+                  <div>Uses your Max plan. Run: <code style={{ background: "#0a0a1a", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code></div>
+                </div>
+              </div>
+            </div>
+          )}
           <label style={labelStyle}>
-            API Key
+            {provider.providerId === "anthropic"
+              ? (secretRef.startsWith("sk-ant-oat")
+                ? "Subscription Token (Max plan)"
+                : secretRef.startsWith("sk-ant-api")
+                  ? "API Key (pay-per-token)"
+                  : credential?.secretHint?.includes("oat")
+                    ? "Subscription Token (Max plan)"
+                    : "API Key or Subscription Token")
+              : "API Key"}
             {credential?.secretHint && !secretRef && (
-              <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.secretHint}</span>
+              <span style={{ color: credential.secretHint.includes("oat") ? "#4ade80" : "#7c8cf8", marginLeft: 8 }}>
+                {credential.secretHint}
+                {provider.providerId === "anthropic" && (
+                  <span style={{ color: "#6a6a80", marginLeft: 4 }}>
+                    ({credential.secretHint.includes("oat") ? "subscription" : "API key"})
+                  </span>
+                )}
+              </span>
             )}
           </label>
           <input
@@ -268,9 +309,32 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             value={secretRef}
             onChange={(e) => setSecretRef(e.target.value)}
             disabled={!canWrite || isPending}
-            placeholder={credential?.secretHint ? "Enter new key to replace" : "Enter API key"}
-            style={{ ...inputStyle, fontFamily: "monospace" }}
+            placeholder={
+              provider.providerId === "anthropic"
+                ? "Paste API key (sk-ant-api...) or subscription token (sk-ant-oat...)"
+                : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
+            }
+            style={{
+              ...inputStyle,
+              fontFamily: "monospace",
+              ...(provider.providerId === "anthropic" && secretRef.startsWith("sk-ant-oat")
+                ? { borderColor: "#4ade8060" }
+                : provider.providerId === "anthropic" && secretRef.startsWith("sk-ant-api")
+                  ? { borderColor: "#7c8cf860" }
+                  : {}),
+            }}
           />
+          {provider.providerId === "anthropic" && secretRef && (
+            <div style={{ fontSize: 11, marginTop: 4, color: secretRef.startsWith("sk-ant-oat") ? "#4ade80" : secretRef.startsWith("sk-ant-api") ? "#7c8cf8" : "#f87171" }}>
+              {secretRef.startsWith("sk-ant-oat")
+                ? "Subscription token detected — will use your Max plan (no prompt caching, no 1M context)"
+                : secretRef.startsWith("sk-ant-api")
+                  ? "API key detected — pay-per-token billing"
+                  : secretRef.length > 5
+                    ? "Unrecognized key format — expected sk-ant-api... or sk-ant-oat..."
+                    : ""}
+            </div>
+          )}
         </div>
       )}
 
