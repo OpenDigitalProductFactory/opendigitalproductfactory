@@ -11,6 +11,7 @@ import {
   type EpicWithRelations,
   type PortfolioForSelect,
 } from "@/lib/backlog";
+import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 
 type Props = {
   isOpen: boolean;
@@ -166,6 +167,20 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
             <p className="text-xs text-red-400">{error}</p>
           )}
         </form>
+
+        {/* Metadata (read-only) */}
+        {epic && (
+          <div className="px-5 py-3 border-t border-[var(--dpf-border)] space-y-1">
+            <p className="text-[10px] text-[var(--dpf-muted)]">
+              Created: {new Date(epic.createdAt).toLocaleString()}
+              {epic.submittedBy ? ` by ${epic.submittedBy.email}` : ""}
+              {epic.agentId ? ` (${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId})` : ""}
+            </p>
+            <p className="text-[10px] text-[var(--dpf-muted)]">
+              Completed: {epic.completedAt ? new Date(epic.completedAt).toLocaleString() : "—"}
+            </p>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-[var(--dpf-border)] flex gap-2">

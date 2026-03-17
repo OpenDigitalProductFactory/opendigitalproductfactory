@@ -5,6 +5,7 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBacklogItem, updateBacklogItem } from "@/lib/actions/backlog";
 import { registerActiveFormAssist } from "@/lib/agent-form-assist";
+import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import {
   validateBacklogInput,
   type BacklogItemInput,
@@ -267,6 +268,20 @@ export function BacklogPanel({
             <p className="text-xs text-red-400">{error}</p>
           )}
         </form>
+
+        {/* Metadata (read-only) */}
+        {item && (
+          <div className="px-5 py-3 border-t border-[var(--dpf-border)] space-y-1">
+            <p className="text-[10px] text-[var(--dpf-muted)]">
+              Created: {new Date(item.createdAt).toLocaleString()}
+              {item.submittedBy ? ` by ${item.submittedBy.email}` : ""}
+              {item.agentId ? ` (${AGENT_NAME_MAP[item.agentId] ?? item.agentId})` : ""}
+            </p>
+            <p className="text-[10px] text-[var(--dpf-muted)]">
+              Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
+            </p>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-[var(--dpf-border)] flex gap-2">
