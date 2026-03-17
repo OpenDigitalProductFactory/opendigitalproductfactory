@@ -126,7 +126,8 @@ export function BacklogPanel({
       />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-96 bg-[var(--dpf-surface-1)] border-l border-[var(--dpf-border)] z-50 flex flex-col shadow-2xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-8 pointer-events-none">
+      <div className="w-3/4 max-h-[85vh] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg flex flex-col shadow-2xl pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--dpf-border)]">
           <h2 className="text-sm font-semibold text-white">
@@ -284,6 +285,7 @@ export function BacklogPanel({
             {isPending ? "Saving…" : item ? "Save Changes" : "Create Item"}
           </button>
         </div>
+      </div>
       </div>
     </>
   );
