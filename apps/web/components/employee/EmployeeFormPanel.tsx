@@ -9,36 +9,13 @@ import {
   type EmployeeProfileInput,
 } from "@/lib/actions/workforce";
 import type { WorkforceStatus, EmployeeProfileRecord } from "@/lib/workforce-types";
+import type { AddressWithHierarchy } from "@/lib/address-types";
 import AddressSection from "@/components/employee/AddressSection";
 import { DatePicker } from "@/components/ui/DatePicker";
 
 const HIRE_STATUSES: WorkforceStatus[] = ["offer", "onboarding", "active"];
 
 type RefOption = { id: string; label: string };
-
-type AddressWithHierarchy = {
-  id: string;
-  isPrimary: boolean;
-  address: {
-    id: string;
-    label: string;
-    addressLine1: string;
-    addressLine2: string | null;
-    postalCode: string;
-    validatedAt: Date | null;
-    validationSource: string | null;
-    city: {
-      id: string;
-      name: string;
-      region: {
-        id: string;
-        name: string;
-        code: string | null;
-        country: { id: string; name: string; iso2: string; phoneCode: string };
-      };
-    };
-  };
-};
 
 type Props = {
   isOpen: boolean;
@@ -99,12 +76,6 @@ function formFromEmployee(emp: EmployeeProfileRecord): EmployeeProfileInput {
     managerEmployeeId: emp.managerEmployeeId,
     startDate: emp.startDate,
   };
-}
-
-function formatDateForInput(date: Date | null | undefined): string {
-  if (!date) return "";
-  const d = new Date(date);
-  return d.toISOString().split("T")[0];
 }
 
 export function EmployeeFormPanel({

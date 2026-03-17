@@ -8,40 +8,16 @@ import {
   searchCities,
   createRegion,
   createCity,
+  forceCreateRegion,
+  forceCreateCity,
 } from "@/lib/actions/reference-data";
+import type { CreateRefResult } from "@/lib/actions/reference-data";
 import {
   createEmployeeAddress,
   deleteEmployeeAddress,
   setPrimaryAddress,
 } from "@/lib/actions/address";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type AddressWithHierarchy = {
-  id: string;
-  isPrimary: boolean;
-  address: {
-    id: string;
-    label: string;
-    addressLine1: string;
-    addressLine2: string | null;
-    postalCode: string;
-    validatedAt: Date | null;
-    validationSource: string | null;
-    city: {
-      id: string;
-      name: string;
-      region: {
-        id: string;
-        name: string;
-        code: string | null;
-        country: { id: string; name: string; iso2: string; phoneCode: string };
-      };
-    };
-  };
-};
+import type { AddressWithHierarchy } from "@/lib/address-types";
 
 type Props = {
   employeeProfileId: string;
@@ -49,6 +25,12 @@ type Props = {
 };
 
 type RefItem = { id: string; label: string };
+
+type DuplicateSuggestions = {
+  kind: "region" | "city";
+  name: string;
+  items: { id: string; label: string }[];
+};
 
 const LABEL_OPTIONS = [
   "home",
@@ -111,6 +93,7 @@ export default function AddressSection({
   const [addressLine2, setAddressLine2] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [makePrimary, setMakePrimary] = useState(addresses.length === 0);
+  const [duplicates, setDuplicates] = useState<DuplicateSuggestions | null>(null);
 
   // -------------------------------------------------------------------------
   // Search adapters
@@ -188,11 +171,17 @@ export default function AddressSection({
           });
           setCity(null);
           setError(null);
+          setDuplicates(null);
         } else if (result.suggestions && result.suggestions.length > 0) {
-          const names = result.suggestions
-            .map((s) => (s.code ? `${s.name} (${s.code})` : s.name))
-            .join(", ");
-          setError(`${result.message} ${names}`);
+          setDuplicates({
+            kind: "region",
+            name,
+            items: result.suggestions.map((s) => ({
+              id: s.id,
+              label: s.code ? `${s.name} (${s.code})` : s.name,
+            })),
+          });
+          setError(result.message);
         } else {
           setError(result.message);
         }
@@ -212,9 +201,17 @@ export default function AddressSection({
             label: result.created.name,
           });
           setError(null);
+          setDuplicates(null);
         } else if (result.suggestions && result.suggestions.length > 0) {
-          const names = result.suggestions.map((s) => s.name).join(", ");
-          setError(`${result.message} ${names}`);
+          setDuplicates({
+            kind: "city",
+            name,
+            items: result.suggestions.map((s) => ({
+              id: s.id,
+              label: s.name,
+            })),
+          });
+          setError(result.message);
         } else {
           setError(result.message);
         }
@@ -222,6 +219,57 @@ export default function AddressSection({
     },
     [region],
   );
+
+  const handlePickSuggestion = useCallback(
+    (item: RefItem) => {
+      if (!duplicates) return;
+      if (duplicates.kind === "region") {
+        setRegion(item);
+        setCity(null);
+      } else {
+        setCity(item);
+      }
+      setDuplicates(null);
+      setError(null);
+    },
+    [duplicates],
+  );
+
+  const handleForceCreate = useCallback(() => {
+    if (!duplicates) return;
+    startTransition(async () => {
+      let result: CreateRefResult;
+      if (duplicates.kind === "region" && country) {
+        result = await forceCreateRegion(country.id, duplicates.name, undefined);
+        if (result.ok && result.created) {
+          setRegion({
+            id: result.created.id,
+            label: result.created.code
+              ? `${result.created.name} (${result.created.code})`
+              : result.created.name,
+          });
+          setCity(null);
+        }
+      } else if (duplicates.kind === "city" && region) {
+        result = await forceCreateCity(region.id, duplicates.name);
+        if (result.ok && result.created) {
+          setCity({
+            id: result.created.id,
+            label: result.created.name,
+          });
+        }
+      } else {
+        return;
+      }
+
+      if (result.ok) {
+        setDuplicates(null);
+        setError(null);
+      } else {
+        setError(result.message);
+      }
+    });
+  }, [duplicates, country, region]);
 
   // -------------------------------------------------------------------------
   // Save / Delete / Set Primary
@@ -281,6 +329,7 @@ export default function AddressSection({
   function resetForm() {
     setShowForm(false);
     setError(null);
+    setDuplicates(null);
     setLabel("home");
     setCountry(null);
     setRegion(null);
@@ -373,6 +422,36 @@ export default function AddressSection({
           {error && (
             <div className="rounded border border-red-400 bg-red-950/30 px-3 py-2 text-xs text-red-400">
               {error}
+            </div>
+          )}
+
+          {/* Duplicate suggestions panel */}
+          {duplicates && (
+            <div className="rounded border border-yellow-600 bg-yellow-950/30 px-3 py-2 space-y-2">
+              <p className="text-xs text-yellow-400">
+                Did you mean one of these existing {duplicates.kind === "region" ? "regions" : "cities"}?
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {duplicates.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handlePickSuggestion(item)}
+                    disabled={isPending}
+                    className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-foreground)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleForceCreate}
+                disabled={isPending}
+                className="rounded border border-yellow-600 px-2 py-1 text-xs text-yellow-400 hover:bg-yellow-900/40 disabled:opacity-50"
+              >
+                {isPending ? "Creating..." : `Create "${duplicates.name}" anyway`}
+              </button>
             </div>
           )}
 

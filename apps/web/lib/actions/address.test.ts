@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({ user: { id: "test-user-1" } }),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     address: {
@@ -163,7 +167,7 @@ describe("updateAddress", () => {
 // deleteEmployeeAddress
 // ---------------------------------------------------------------------------
 describe("deleteEmployeeAddress", () => {
-  it("soft-deletes the address and removes the join row", async () => {
+  it("soft-deletes the address and removes the join row in a transaction", async () => {
     vi.mocked(prisma.employeeAddress.findUnique).mockResolvedValue({
       id: "ea-1",
       addressId: "addr-1",
@@ -172,16 +176,25 @@ describe("deleteEmployeeAddress", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    vi.mocked(prisma.employeeAddress.delete).mockResolvedValue({} as any);
-    vi.mocked(prisma.address.update).mockResolvedValue({} as any);
+
+    const deleteMock = vi.fn();
+    const updateMock = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn: any) => {
+      const txProxy = {
+        employeeAddress: { delete: deleteMock },
+        address: { update: updateMock },
+      };
+      return fn(txProxy);
+    });
 
     const result = await deleteEmployeeAddress("ea-1");
 
     expect(result.ok).toBe(true);
-    expect(prisma.employeeAddress.delete).toHaveBeenCalledWith({
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(deleteMock).toHaveBeenCalledWith({
       where: { id: "ea-1" },
     });
-    expect(prisma.address.update).toHaveBeenCalledWith({
+    expect(updateMock).toHaveBeenCalledWith({
       where: { id: "addr-1" },
       data: { status: "inactive" },
     });

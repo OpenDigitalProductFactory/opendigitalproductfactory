@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({ user: { id: "test-user-1" } }),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     country: { findMany: vi.fn() },
