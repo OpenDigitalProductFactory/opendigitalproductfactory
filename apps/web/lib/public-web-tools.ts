@@ -179,17 +179,30 @@ export async function searchPublicWeb(query: string): Promise<NormalizedSearchRe
   return normalizeBraveSearchResults(raw);
 }
 
+const FETCH_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; OpenDigitalProductFactory/1.0; +mailto:mark@bodman.com)",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.5",
+};
+
 export async function fetchPublicWebsiteEvidence(url: string): Promise<PublicWebsiteEvidence> {
   const validatedUrl = assertAllowedPublicUrl(url);
-  const response = await fetch(validatedUrl.href, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; OpenDigitalProductFactory/1.0; +mailto:mark@bodman.com)",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
+
+  let response = await fetch(validatedUrl.href, {
+    headers: FETCH_HEADERS,
     redirect: "follow",
     signal: AbortSignal.timeout(10_000),
   });
+
+  // Retry once on 403 — some CDNs/WAFs pass on second attempt
+  if (response.status === 403) {
+    await new Promise((r) => setTimeout(r, 1000));
+    response = await fetch(validatedUrl.href, {
+      headers: FETCH_HEADERS,
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+    });
+  }
 
   if (!response.ok) {
     throw new Error(`Public website fetch failed with HTTP ${response.status}`);
