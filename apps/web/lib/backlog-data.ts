@@ -27,6 +27,7 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       createdAt: true,
       updatedAt: true,
       completedAt: true,
+      agentId: true,
       submittedBy: { select: { email: true } },
       digitalProduct: { select: { id: true, productId: true, name: true } },
       taxonomyNode: { select: { id: true, nodeId: true, name: true } },
@@ -45,6 +46,9 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
       status: true,
       createdAt: true,
       updatedAt: true,
+      submittedBy: { select: { email: true } },
+      agentId: true,
+      completedAt: true,
       portfolios: {
         select: {
           epicId: true,
@@ -66,6 +70,7 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
           createdAt: true,
           updatedAt: true,
           completedAt: true,
+          agentId: true,
           submittedBy: { select: { email: true } },
           digitalProduct: { select: { id: true, productId: true, name: true } },
           taxonomyNode: { select: { id: true, nodeId: true, name: true } },

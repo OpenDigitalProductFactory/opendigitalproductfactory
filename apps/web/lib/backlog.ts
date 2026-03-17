@@ -24,6 +24,7 @@ export type BacklogItemWithRelations = {
   taxonomyNode: { id: string; nodeId: string; name: string } | null;
   submittedBy: { email: string } | null;
   completedAt: Date | null;
+  agentId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -74,6 +75,9 @@ export type EpicWithRelations = {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  submittedBy: { email: string } | null;
+  agentId: string | null;
+  completedAt: Date | null;
   portfolios: EpicPortfolioLink[];
   items: BacklogItemWithRelations[];
 };
