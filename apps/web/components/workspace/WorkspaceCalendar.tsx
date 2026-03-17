@@ -6,6 +6,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { CalendarEventView } from "@/lib/calendar-data";
+import { CalendarEventPopover } from "./CalendarEventPopover";
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   hr: { label: "HR", color: "#a78bfa" },
@@ -21,6 +22,7 @@ type Props = {
 
 export function WorkspaceCalendar({ events }: Props) {
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
 
   function toggleCategory(cat: string) {
     setHiddenCategories((prev) => {
@@ -116,7 +118,21 @@ export function WorkspaceCalendar({ events }: Props) {
         editable={false}
         selectable={true}
         nowIndicator={true}
+        dateClick={(info) => {
+          setCreatePopover({ date: info.dateStr });
+        }}
+        select={(info) => {
+          setCreatePopover({ date: info.startStr, endDate: info.endStr });
+        }}
       />
+
+      {createPopover && (
+        <CalendarEventPopover
+          defaultDate={createPopover.date}
+          defaultEndDate={createPopover.endDate}
+          onClose={() => setCreatePopover(null)}
+        />
+      )}
     </div>
   );
 }
