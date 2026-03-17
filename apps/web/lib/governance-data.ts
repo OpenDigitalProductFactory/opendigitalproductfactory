@@ -107,3 +107,33 @@ export async function createAuthorizationDecisionLog(input: {
     },
   });
 }
+
+export async function createUnifiedAuditLog(input: {
+  actorRef: string;
+  actionKey: string;
+  objectRef: string;
+  decision: "allow" | "deny" | "require_approval";
+  rationale: Record<string, unknown>;
+  endpointUsed?: string;
+  mode?: "advise" | "act";
+  routeContext?: string;
+  sensitivityLevel?: string;
+  sensitivityOverride?: boolean;
+}) {
+  return prisma.authorizationDecisionLog.create({
+    data: {
+      decisionId: crypto.randomUUID(),
+      actorType: "user",
+      actorRef: input.actorRef,
+      actionKey: input.actionKey,
+      objectRef: input.objectRef,
+      decision: input.decision,
+      rationale: input.rationale,
+      endpointUsed: input.endpointUsed,
+      mode: input.mode,
+      routeContext: input.routeContext,
+      sensitivityLevel: input.sensitivityLevel,
+      sensitivityOverride: input.sensitivityOverride,
+    },
+  });
+}
