@@ -4,6 +4,16 @@
 import { prisma } from "@dpf/db";
 import { analyzeConversation, type ConversationMessage } from "./process-observer";
 import { triageAndFile, type BacklogItemData } from "./process-observer-triage";
+import { evaluateAndUpdateProfile } from "./orchestrator-evaluator";
+import type { SensitivityLevel } from "./agent-router-types";
+
+export type RoutingMeta = {
+  endpointId: string;
+  taskType: string;
+  sensitivity: string;
+  userMessage: string;
+  aiResponse: string;
+};
 
 const DEFAULT_SAMPLE_RATE = 5;
 const threadCounter = new Map<string, number>();
@@ -11,7 +21,22 @@ const threadCounter = new Map<string, number>();
 export async function observeConversation(
   threadId: string,
   routeContext: string,
+  routingMeta?: RoutingMeta,
 ): Promise<void> {
+  // BRANCH B: Performance evaluation (always fires, bypasses sampling)
+  if (routingMeta) {
+    evaluateAndUpdateProfile({
+      threadId,
+      endpointId: routingMeta.endpointId,
+      taskType: routingMeta.taskType,
+      routeContext,
+      sensitivity: routingMeta.sensitivity as SensitivityLevel,
+      userMessage: routingMeta.userMessage,
+      aiResponse: routingMeta.aiResponse,
+    }).catch((err) => console.error("[orchestrator-evaluator]", err));
+  }
+
+  // BRANCH A: Existing analysis (respects sampling) — existing code below unchanged
   // /build gets realtime observation; everything else is sampled
   const mode = routeContext.startsWith("/build") ? "realtime" : "sampled";
 
