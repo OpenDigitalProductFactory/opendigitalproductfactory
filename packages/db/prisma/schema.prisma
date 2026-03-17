@@ -30,6 +30,7 @@ model User {
   approvedProposals AgentActionProposal[] @relation("ProposalDecisions")
   improvementSubmissions ImprovementProposal[] @relation("ImprovementSubmissions")
   improvementReviews     ImprovementProposal[] @relation("ImprovementReviews")
+  backlogSubmissions     BacklogItem[]         @relation("BacklogSubmissions")
   apiTokens       ApiToken[]
   featureBuilds   FeatureBuild[]
 }
@@ -343,6 +344,9 @@ model BacklogItem {
   source          String?
   occurrenceCount Int       @default(1)
   lastSeenAt      DateTime?
+  submittedById   String?
+  submittedBy     User?     @relation("BacklogSubmissions", fields: [submittedById], references: [id])
+  completedAt     DateTime?
 }
 
 // ─── Epics ───────────────────────────────────────────────────────────────────

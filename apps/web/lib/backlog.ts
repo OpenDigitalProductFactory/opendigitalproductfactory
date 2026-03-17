@@ -22,6 +22,8 @@ export type BacklogItemWithRelations = {
   epicId: string | null;
   digitalProduct: { id: string; productId: string; name: string } | null;
   taxonomyNode: { id: string; nodeId: string; name: string } | null;
+  submittedBy: { email: string } | null;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
