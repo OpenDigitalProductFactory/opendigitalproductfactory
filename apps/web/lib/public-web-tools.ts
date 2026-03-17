@@ -22,6 +22,7 @@ export type PublicWebsiteEvidence = {
   textExcerpt: string | null;
   themeColor: string | null;
   logoCandidates: string[];
+  colorCandidates: string[];
 };
 
 export type BrandingAnalysisResult = {
@@ -205,7 +206,93 @@ export async function fetchPublicWebsiteEvidence(url: string): Promise<PublicWeb
     textExcerpt: extractTextExcerpt(html),
     themeColor: extractMetaContent(html, "theme-color"),
     logoCandidates: extractLogoCandidates(html, finalUrl),
+    colorCandidates: extractColorCandidates(html),
   };
+}
+
+const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** Normalize 3-char hex to 6-char. */
+function normalizeHex(hex: string): string {
+  const h = hex.replace("#", "");
+  if (h.length === 3) return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  return `#${h}`;
+}
+
+/** Check if a color is too dark or too light to be a useful brand accent. */
+function isUsableAccent(hex: string): boolean {
+  const h = normalizeHex(hex).replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+  // Skip near-black (<25), near-white (>230), and pure grays (r≈g≈b)
+  if (luminance < 25 || luminance > 230) return false;
+  const spread = Math.max(r, g, b) - Math.min(r, g, b);
+  if (spread < 20) return false; // too gray
+  return true;
+}
+
+/**
+ * Extract candidate brand colors from HTML: theme-color meta, inline styles,
+ * CSS blocks, and common brand patterns.
+ */
+function extractColorCandidates(html: string): string[] {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  function addCandidate(hex: string) {
+    const normalized = normalizeHex(hex).toLowerCase();
+    if (!seen.has(normalized) && HEX_RE.test(normalized) && isUsableAccent(normalized)) {
+      seen.add(normalized);
+      candidates.push(normalized);
+    }
+  }
+
+  // 1. theme-color meta tag (highest priority)
+  const themeColorMatch = html.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)["']/i)
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']theme-color["']/i);
+  if (themeColorMatch?.[1] && HEX_RE.test(themeColorMatch[1].trim())) {
+    addCandidate(themeColorMatch[1].trim());
+  }
+
+  // 2. msapplication-TileColor
+  const tileMatch = html.match(/<meta[^>]+name=["']msapplication-TileColor["'][^>]+content=["']([^"']+)["']/i);
+  if (tileMatch?.[1] && HEX_RE.test(tileMatch[1].trim())) {
+    addCandidate(tileMatch[1].trim());
+  }
+
+  // 3. CSS custom properties that look like brand/primary colors
+  const cssVarMatches = html.matchAll(/--(?:brand|primary|accent|main|theme)[^:]*:\s*(#[0-9a-fA-F]{3,6})\b/gi);
+  for (const m of cssVarMatches) {
+    if (m[1]) addCandidate(m[1]);
+  }
+
+  // 4. Colors from inline styles on header, nav, and button elements
+  const inlineMatches = html.matchAll(/<(?:header|nav|a|button)[^>]+style=["'][^"']*(?:background(?:-color)?|color)\s*:\s*(#[0-9a-fA-F]{3,6})\b/gi);
+  for (const m of inlineMatches) {
+    if (m[1]) addCandidate(m[1]);
+  }
+
+  // 5. Colors from <style> blocks (most frequent non-grayscale hex)
+  const styleBlocks = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
+  const hexInCss = new Map<string, number>();
+  for (const block of styleBlocks) {
+    const hexMatches = block.matchAll(/#([0-9a-fA-F]{3,6})\b/g);
+    for (const m of hexMatches) {
+      const hex = normalizeHex(`#${m[1]}`).toLowerCase();
+      if (HEX_RE.test(hex) && isUsableAccent(hex)) {
+        hexInCss.set(hex, (hexInCss.get(hex) ?? 0) + 1);
+      }
+    }
+  }
+  // Sort by frequency, take top 3
+  const sortedCss = [...hexInCss.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [hex] of sortedCss.slice(0, 3)) {
+    addCandidate(hex);
+  }
+
+  return candidates;
 }
 
 export function analyzePublicWebsiteBranding(
@@ -213,7 +300,9 @@ export function analyzePublicWebsiteBranding(
 ): BrandingAnalysisResult {
   const companyName = evidence.title?.trim() || evidence.description?.split(/[.|-]/)[0]?.trim() || null;
   const logoUrl = evidence.logoCandidates[0] ?? null;
-  const paletteAccent = evidence.themeColor;
+
+  const paletteAccent = evidence.colorCandidates[0] ?? evidence.themeColor ?? null;
+
   const notes = [
     evidence.description ? `Description: ${evidence.description}` : null,
     evidence.textExcerpt ? `Excerpt: ${evidence.textExcerpt}` : null,
