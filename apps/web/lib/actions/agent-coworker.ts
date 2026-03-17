@@ -625,11 +625,18 @@ export async function sendMessage(input: {
       const nonActiveProviders = allProviders.filter((p) => p.status !== "active");
       const providerSummary = allProviders.map((p) => `${p.name}: ${p.status}`).join(", ");
 
+      // Surface the actual failover attempts — this is the real diagnostic
+      const failureDetails = e.attempts.length > 0
+        ? e.attempts.map((a) => `${a.providerId}: ${a.error}`).join("; ")
+        : "No providers were tried";
+
       let sysContent: string;
-      if (inactiveProviders.length > 0) {
-        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate the most recently disabled provider, or visit Platform > AI Providers. [Debug: ${providerSummary}]`;
-      } else if (allProviders.length > 0) {
-        sysContent = `No active AI providers found. Current status: ${providerSummary}. Visit Platform > AI Providers to activate a provider.`;
+      if (e.attempts.length > 0) {
+        sysContent = `All AI providers failed. Errors: ${failureDetails}`;
+      } else if (inactiveProviders.length > 0) {
+        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate a provider, or visit Platform > AI Providers.`;
+      } else if (allProviders.some((p) => p.status === "active")) {
+        sysContent = `Active providers found but none succeeded. ${failureDetails}. Check API keys in Platform > AI Providers.`;
       } else {
         sysContent = "AI co-workers haven't been set up yet. An administrator can configure them from Platform > AI Providers.";
       }

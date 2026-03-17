@@ -157,7 +157,12 @@ export async function getProviderPriority(task: string = "conversation"): Promis
   }
 
   // No config or all stored providers inactive — bootstrap from active providers
-  return buildBootstrapPriority();
+  const bootstrapped = await buildBootstrapPriority();
+  if (bootstrapped.length === 0) {
+    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true, name: true } });
+    console.warn("[getProviderPriority] Bootstrap returned 0 entries. Active providers:", allActive.map((p) => `${p.providerId}(${p.name})`).join(", ") || "NONE");
+  }
+  return bootstrapped;
 }
 
 async function getActiveProviderPolicyInfo(): Promise<ProviderPolicyInfo[]> {
@@ -213,7 +218,7 @@ async function filterByModelRequirements(
 
   return entries.filter((entry) => {
     const profile = profileMap.get(`${entry.providerId}:${entry.modelId}`);
-    if (!profile) return false; // No profile = can't verify requirements
+    if (!profile) return true; // No profile = include as fallback (provider is active, let it try)
 
     if (req.minCapabilityTier) {
       const required = TIER_RANK[req.minCapabilityTier] ?? 0;
@@ -312,6 +317,8 @@ export async function callWithFailover(
 ): Promise<FailoverResult> {
   const priority = await getProviderPriority(options?.task ?? "conversation");
   if (priority.length === 0) {
+    const allActive = await prisma.modelProvider.findMany({ where: { status: "active" }, select: { providerId: true } });
+    console.warn("[callWithFailover] priority empty. Active providers in DB:", allActive.map((p) => p.providerId).join(", ") || "NONE");
     throw new NoProvidersAvailableError([]);
   }
   const providerPolicy = await getActiveProviderPolicyInfo();
