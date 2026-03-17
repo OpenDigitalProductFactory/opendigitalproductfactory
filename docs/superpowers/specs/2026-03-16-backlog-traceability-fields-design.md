@@ -15,7 +15,7 @@ The platform targets regulated industries where evidence of decisions is critica
 - Measure cycle time or know when work was completed
 - Reconstruct a timeline of events for audit or incident analysis
 
-The `ImprovementProposal` model already follows the dual-attribution pattern (`proposedByAgentId` + `proposedByUserId`) — this spec extends that pattern to epics and backlog items for consistency.
+The `ImprovementProposal` model uses `submittedById` (FK to User) + `agentId` (string) for dual attribution. This spec extends that same pattern to epics and backlog items.
 
 ## Goals
 
@@ -29,6 +29,7 @@ The `ImprovementProposal` model already follows the dual-attribution pattern (`p
 - Full status history log (can be added later if needed)
 - `startedAt` timestamp for in-progress transition (queryable from `updatedAt` if needed)
 - Retroactive population of existing records
+- Completion attribution (`completedById` / `completedByAgentId`) — valuable for audit but deferred
 
 ---
 
@@ -36,38 +37,51 @@ The `ImprovementProposal` model already follows the dual-attribution pattern (`p
 
 ### Schema Changes
 
-**BacklogItem** — add 3 fields (naming follows existing `submittedBy` convention in schema):
+**BacklogItem** — add fields (partially done: `submittedById` and `completedAt` already exist in schema):
 
 ```prisma
 model BacklogItem {
   // ... existing fields ...
-  submittedById      String?
-  submittedBy        User?     @relation("BacklogSubmissions", fields: [submittedById], references: [id])
-  submittedByAgentId String?   // agent ID if created by AI coworker (e.g., "coo", "ops-coordinator")
-  completedAt        DateTime? // set when status → "done" or "deferred"
+  submittedById   String?
+  submittedBy     User?     @relation("BacklogSubmissions", fields: [submittedById], references: [id])
+  agentId         String?   // agent ID if created by AI coworker (e.g., "coo", "ops-coordinator")
+  completedAt     DateTime? // set when status → "done" or "deferred"
 }
 ```
 
-Note: `submittedById` and `completedAt` are already added to the schema. `submittedByAgentId` still needs to be added.
+Field naming follows the `ImprovementProposal` convention: `submittedById` for user FK, `agentId` for the agent string.
 
-**Epic** — add 3 fields (same naming pattern):
+Note: `submittedById` and `completedAt` already exist on BacklogItem. Only `agentId` needs to be added.
+
+**Epic** — add 3 fields:
 
 ```prisma
 model Epic {
   // ... existing fields ...
-  submittedById      String?
-  submittedBy        User?     @relation("EpicSubmissions", fields: [submittedById], references: [id])
-  submittedByAgentId String?   // agent ID from ROUTE_AGENT_MAP
-  completedAt        DateTime? // set when status → "done"
+  submittedById   String?
+  submittedBy     User?     @relation("EpicSubmissions", fields: [submittedById], references: [id])
+  agentId         String?   // agent ID from ROUTE_AGENT_MAP
+  completedAt     DateTime? // set when status → "done"
 }
 ```
 
-All fields are nullable. Existing records retain `null` values — `createdAt` (already present) serves as the historical timestamp.
+**User model** — add reverse relation:
+
+```prisma
+model User {
+  // ... existing relations ...
+  epicSubmissions  Epic[]  @relation("EpicSubmissions")
+}
+```
+
+The User model already has `backlogSubmissions BacklogItem[] @relation("BacklogSubmissions")` — only the Epic relation is new.
+
+All new fields are nullable. Existing records retain `null` values — `createdAt` (already present) serves as the historical timestamp.
 
 ### Attribution Rules
 
-| Creation Source | `submittedById` | `submittedByAgentId` |
-|----------------|-----------------|---------------------|
+| Creation Source | `submittedById` | `agentId` |
+|----------------|-----------------|-----------|
 | User via UI | Logged-in user ID | `null` |
 | Agent via tool (user session) | Session user ID | Agent ID (e.g., `"coo"`) |
 | Agent via scheduled task | User who scheduled it | Agent ID |
@@ -80,66 +94,92 @@ Both fields can be populated simultaneously — the agent acts, the human author
 - **Cleared** (set to `null`) if status is changed back to `"open"` or `"in-progress"`
 - Captured as `DateTime` for precise event reconstruction
 
+### Session User ID Strategy
+
+Server actions should read the session internally via `auth()` (the same pattern used by `requireManageBacklog` and other permission-gated actions). The `submittedById` is NOT passed from the client — it's resolved server-side from the authenticated session. This prevents clients from self-reporting their own user ID.
+
+### Code Path Audit
+
+Both server actions AND MCP tool handlers create/update these entities via different code paths. ALL paths must set attribution and `completedAt`:
+
+**Creation paths (must set `submittedById` + `agentId`):**
+- `createBacklogItem` server action (UI creates)
+- `create_backlog_item` MCP tool handler in `mcp-tools.ts` (agent creates)
+- `register_tech_debt` MCP tool handler (creates BacklogItem directly via Prisma)
+- `createEpic` server action (UI creates)
+- `create_build_epic` MCP tool handler / `createBuildEpic` action (agent creates)
+
+**Update paths (must handle `completedAt` transitions):**
+- `updateBacklogItem` server action
+- `update_backlog_item` MCP tool handler in `mcp-tools.ts` (calls Prisma directly, NOT through server action)
+- `updateEpic` server action
+
+### Agent Name Resolution
+
+`agentId` stores a plain string like `"coo"` or `"ops-coordinator"`. For UI display, resolve to a human-readable name using the `AGENT_NAME_MAP` constant already exported from `agent-routing.ts`. This map already exists and maps agent IDs to display names (e.g., `"coo"` → `"COO"`, `"ops-coordinator"` → `"Scrum Master"`). Import it in the UI components that need it.
+
 ### UI Changes
 
 **EpicCard row** (ops backlog page):
-- Show created date (formatted as short date) and submitter in the existing row layout
-- If created by agent: show agent name. If created by user: show user email. If both: show "AgentName (via UserEmail)"
+- Add a small metadata line below the title showing created date + submitter
+- Format: `"Mar 16 · mark@example.com"` or `"Mar 16 · Scrum Master (via mark@example.com)"`
+- Uses existing space within the `flex-1` title column — no column layout changes needed
 
 **BacklogItemRow** (ops backlog page):
-- Show created date + submitter inline, similar to epic rows
+- Same metadata format below the item title
 
 **Edit panels** (BacklogPanel, EpicPanel):
 - Read-only metadata section at the bottom of the form showing:
-  - Submitted by: user email and/or agent name
+  - Submitted by: user email and/or agent display name
   - Created at: formatted datetime
   - Completed at: formatted datetime (if applicable, otherwise "—")
 
-### Server Action Changes
-
-**`createEpic`** — accept and store `submittedById` from the session
-
-**`updateEpic`** — when status changes to `"done"`, set `completedAt = new Date()`. When status changes away from `"done"`, set `completedAt = null`.
-
-**`createBacklogItem`** / **`updateBacklogItem`** — same pattern. For items created via `create_backlog_item` MCP tool, pass both `submittedById` (from session user) and `submittedByAgentId` (from the agent context).
-
-**`updateBacklogItem`** — when status changes to `"done"` or `"deferred"`, set `completedAt = new Date()`. When status changes away from terminal states, set `completedAt = null`.
-
 ### Data Queries
 
-**Existing queries** (`getEpics`, `getBacklogItems` in `lib/backlog-data.ts`) need to include the new fields in their `select` clauses, and include the `submittedBy` relation for display name resolution.
+**`getEpics`** and **`getBacklogItems`** in `lib/backlog-data.ts` — extend `select` clauses to include:
+- `submittedById`, `agentId`, `completedAt`
+- `submittedBy: { select: { email: true } }` for display name resolution
 
-**Type updates** (`lib/backlog.ts`) — extend `EpicWithRelations` and `BacklogItemWithRelations` types with the new fields.
+**Type updates** in `lib/backlog.ts`:
+- `BacklogItemWithRelations` — add `agentId: string | null`, ensure `submittedBy` and `completedAt` are present
+- `EpicWithRelations` — add `submittedBy: { email: string } | null`, `agentId: string | null`, `completedAt: Date | null`
 
 ---
 
 ## Files Affected
 
 **Schema:**
-- `packages/db/prisma/schema.prisma` — add fields to Epic model; add `submittedByAgentId` to BacklogItem
+- `packages/db/prisma/schema.prisma` — add `agentId` to BacklogItem; add `submittedById`, `agentId`, `completedAt` to Epic; add `epicSubmissions` relation to User
 
 **Migration:**
 - `packages/db/prisma/migrations/YYYYMMDD_add_traceability_fields/migration.sql`
 
 **Server actions:**
-- `apps/web/lib/actions/backlog.ts` (or equivalent) — update create/update actions for attribution and completedAt
-- `apps/web/lib/mcp-tools.ts` — update `create_backlog_item` tool handler to pass submittedById + submittedByAgentId
+- `apps/web/lib/actions/backlog.ts` — update create/update actions for attribution and completedAt
+- `apps/web/lib/mcp-tools.ts` — update `create_backlog_item`, `update_backlog_item`, `register_tech_debt`, `create_build_epic` handlers
 
 **Data layer:**
 - `apps/web/lib/backlog-data.ts` — extend queries to select new fields + submittedBy relation
 - `apps/web/lib/backlog.ts` — extend TypeScript types
 
 **UI components:**
-- `apps/web/components/ops/EpicCard.tsx` — show created date + submitter
-- `apps/web/components/ops/BacklogItemRow.tsx` — show created date + submitter
+- `apps/web/components/ops/EpicCard.tsx` — show created date + submitter metadata
+- `apps/web/components/ops/BacklogItemRow.tsx` — show created date + submitter metadata
 - `apps/web/components/ops/EpicPanel.tsx` — add read-only metadata section
 - `apps/web/components/ops/BacklogPanel.tsx` — add read-only metadata section
+
+## Future Considerations
+
+- **Completion attribution** (`completedById` / `completedByAgentId`) — who marked the item done, not just who created it
+- **Database index on `completedAt`** — for cycle-time reporting queries (e.g., "items completed this week")
 
 ## Testing Strategy
 
 - Verify new fields are nullable and migration applies cleanly
-- Verify UI creation sets `submittedById` from session
-- Verify agent tool creation sets both `submittedById` and `submittedByAgentId`
+- Verify UI creation sets `submittedById` from session (server-side, not client-passed)
+- Verify agent tool creation sets both `submittedById` and `agentId`
 - Verify `completedAt` is set on status → done/deferred and cleared on reopen
+- Verify MCP tool handlers (`update_backlog_item`, `create_backlog_item`) also handle completedAt and attribution
 - Verify attribution displays correctly in list views and edit panels
 - Verify existing records with null attribution fields render gracefully
+- Verify agent name resolution via AGENT_NAME_MAP displays correctly
