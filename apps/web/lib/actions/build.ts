@@ -234,6 +234,21 @@ export async function shipBuild(input: {
     return product;
   });
 
+  // Create git tag for this version (best-effort — tag failure does not block shipping)
+  try {
+    const { createTag, isGitAvailable } = await import("@/lib/git-utils");
+    if (isGitAvailable()) {
+      const tagName = `v${result.version}`;
+      const tagMessage = `${input.name} v${result.version}\n\nBuild: ${input.buildId}\nShipped-By: ${userId}`;
+      const tagResult = await createTag({ tag: tagName, message: tagMessage });
+      if ("error" in tagResult) {
+        console.warn("[shipBuild] git tag failed:", tagResult.error);
+      }
+    }
+  } catch (err) {
+    console.warn("[shipBuild] git tag error:", err);
+  }
+
   return {
     productId: result.productId,
     productInternalId: result.id,
