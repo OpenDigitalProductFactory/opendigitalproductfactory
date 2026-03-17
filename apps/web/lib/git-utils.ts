@@ -176,3 +176,108 @@ export async function getLatestTag(): Promise<string | null> {
     return null;
   }
 }
+
+// ─── Production Read-Only Git Operations ─────────────────────────────────────
+// These functions work with a read-only .git mount in production.
+// They do NOT require isDevInstance() — that's the point.
+
+export async function gitShow(opts: {
+  ref: string;
+  path: string;
+}): Promise<{ content: string } | { error: string }> {
+  if (!isSafeRef(opts.ref)) return { error: `Invalid ref: ${opts.ref}` };
+  if (!isPathAllowed(opts.path)) return { error: `Path not allowed: ${opts.path}` };
+  try {
+    const { stdout } = await exec(
+      `git show ${JSON.stringify(opts.ref + ":" + opts.path)}`,
+      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    );
+    return { content: stdout };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "git show failed" };
+  }
+}
+
+export async function gitDiffStat(opts: {
+  from: string;
+  to: string;
+}): Promise<{ filesChanged: number; summary: string }> {
+  if (!isSafeRef(opts.from) || !isSafeRef(opts.to)) return { filesChanged: 0, summary: "Invalid refs" };
+  try {
+    const { stdout: stat } = await exec(
+      `git diff --stat ${opts.from}..${opts.to}`,
+      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    );
+    const { stdout: shortlog } = await exec(
+      `git log --oneline ${opts.from}..${opts.to}`,
+      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    );
+    const filesChanged = (stat.match(/\d+ files? changed/) || ["0"])[0]
+      .replace(/ files? changed/, "")
+      .trim();
+    return {
+      filesChanged: parseInt(filesChanged, 10) || 0,
+      summary: `${stat.trim()}\n\nCommits:\n${shortlog.trim()}`,
+    };
+  } catch {
+    return { filesChanged: 0, summary: "Could not compute diff" };
+  }
+}
+
+export async function gitGrep(opts: {
+  query: string;
+  ref: string;
+  glob?: string;
+  maxResults?: number;
+}): Promise<{ results: Array<{ path: string; line: number; text: string }> }> {
+  if (!isSafeRef(opts.ref)) return { results: [] };
+  const max = opts.maxResults ?? 20;
+  try {
+    const globArg = opts.glob ? `-- ${JSON.stringify(opts.glob)}` : "";
+    const { stdout } = await exec(
+      `git grep -n --max-count=${max} ${JSON.stringify(opts.query)} ${opts.ref} ${globArg}`.trim(),
+      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    );
+    const results: Array<{ path: string; line: number; text: string }> = [];
+    for (const line of stdout.split("\n").slice(0, max)) {
+      // Format: ref:path:linenum:text
+      const match = line.match(/^[^:]+:(.+?):(\d+):(.*)$/);
+      if (match) {
+        const [, path, lineNum, text] = match;
+        if (path && lineNum && isPathAllowed(path)) {
+          results.push({ path, line: parseInt(lineNum, 10), text: text?.trim() ?? "" });
+        }
+      }
+    }
+    return { results };
+  } catch {
+    return { results: [] };
+  }
+}
+
+export async function gitLsTree(opts: {
+  ref: string;
+  path: string;
+}): Promise<{ entries: Array<{ name: string; type: "file" | "dir"; path: string }> }> {
+  if (!isSafeRef(opts.ref)) return { entries: [] };
+  const safePath = opts.path === "" || opts.path === "." ? "" : opts.path;
+  if (safePath && !isPathAllowed(safePath)) return { entries: [] };
+  try {
+    const pathArg = safePath ? ` -- ${JSON.stringify(safePath)}` : "";
+    const { stdout } = await exec(
+      `git ls-tree --name-only ${opts.ref}${pathArg}`,
+      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS },
+    );
+    const entries: Array<{ name: string; type: "file" | "dir"; path: string }> = [];
+    for (const name of stdout.trim().split("\n")) {
+      if (!name) continue;
+      const entryPath = safePath ? `${safePath}/${name}` : name;
+      if (!isPathAllowed(entryPath)) continue;
+      // Check if dir by trying ls-tree on it
+      entries.push({ name, type: name.includes(".") ? "file" : "dir", path: entryPath });
+    }
+    return { entries: entries.slice(0, 100) };
+  } catch {
+    return { entries: [] };
+  }
+}
