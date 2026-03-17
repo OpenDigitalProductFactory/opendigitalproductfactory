@@ -191,6 +191,16 @@ export function validateEmployeeProfileInput(input: EmployeeProfileInput): strin
   return null;
 }
 
+const LIFECYCLE_TRANSITION_MATRIX: Record<WorkforceStatus, WorkforceStatus[]> = {
+  offer: ["onboarding", "inactive"],
+  onboarding: ["active"],
+  active: ["leave", "suspended", "offboarding"],
+  leave: ["active"],
+  suspended: ["active", "offboarding"],
+  offboarding: ["inactive"],
+  inactive: [],
+};
+
 export function validateLifecycleTransition(input: {
   currentStatus: WorkforceStatus;
   nextStatus: WorkforceStatus;
@@ -201,8 +211,13 @@ export function validateLifecycleTransition(input: {
     return "Termination date is required for termination events.";
   }
 
-  if (input.currentStatus === "inactive" && input.nextStatus === "onboarding") {
-    return "Inactive employees cannot return to onboarding.";
+  if (input.currentStatus === input.nextStatus) {
+    return "Current status and next status are the same.";
+  }
+
+  const allowed = LIFECYCLE_TRANSITION_MATRIX[input.currentStatus];
+  if (!allowed || !allowed.includes(input.nextStatus)) {
+    return `Cannot transition from "${input.currentStatus}" to "${input.nextStatus}".`;
   }
 
   return null;

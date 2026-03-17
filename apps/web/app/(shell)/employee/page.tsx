@@ -4,6 +4,7 @@ import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryP
 import { EmployeeProfilePanel } from "@/components/employee/EmployeeProfilePanel";
 import { HrUserLifecyclePanel } from "@/components/employee/HrUserLifecyclePanel";
 import { LifecycleEventPanel } from "@/components/employee/LifecycleEventPanel";
+import { NewEmployeeButton } from "@/components/employee/NewEmployeeButton";
 import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
 import {
   getEmployeeDirectoryRows,
@@ -58,11 +59,35 @@ export default async function EmployeePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Employee</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {roles.length} role{roles.length !== 1 ? "s" : ""}
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Employee</h1>
+          <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
+            {roles.length} role{roles.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <NewEmployeeButton
+          departments={workforceReferenceData.departments.map((d) => ({
+            id: d.id,
+            label: d.name,
+          }))}
+          positions={workforceReferenceData.positions.map((p) => ({
+            id: p.id,
+            label: p.title,
+          }))}
+          workLocations={workforceReferenceData.workLocations.map((wl) => ({
+            id: wl.id,
+            label: wl.name,
+          }))}
+          employmentTypes={workforceReferenceData.employmentTypes.map((et) => ({
+            id: et.id,
+            label: et.name,
+          }))}
+          existingEmployees={employees.map((emp) => ({
+            id: emp.id,
+            label: emp.displayName,
+          }))}
+        />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
