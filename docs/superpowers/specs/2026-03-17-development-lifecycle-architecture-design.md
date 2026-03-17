@@ -1052,7 +1052,8 @@ version: <current deployed version>
 | ODPF Portal | `depends_on` | ODPF Graph |
 | ODPF Portal | `depends_on` | ODPF AI Service |
 | ODPF Portal | `depends_on` | ODPF Sandbox |
-| ODPF AI Service | `serves` | ODPF Portal |
+
+All relationships use `depends_on` (`application_component` → `technology_node`), which matches the existing EA rule at seed line 110. The `serves` relationship type is valid in ArchiMate 4 for technology-to-application, but requires a new rule to be added to the seed data — deferred to Phase 5g implementation if the richer relationship vocabulary is needed.
 
 **4. As-deployed topology (InventoryEntity):**
 
