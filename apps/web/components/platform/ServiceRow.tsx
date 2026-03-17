@@ -29,7 +29,7 @@ export function ServiceRow({ pw }: Props) {
   const [hovered, setHovered] = useState(false);
 
   const statusColor = STATUS_COLORS[provider.status] ?? "#8888a0";
-  const typeLabel   = provider.endpointType === "mcp" ? "MCP" : "LLM";
+  const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const billingLabel = getBillingLabel(provider);
 
   return (
@@ -90,8 +90,8 @@ export function ServiceRow({ pw }: Props) {
             fontSize: 9,
             fontWeight: 700,
             letterSpacing: "0.06em",
-            color: provider.endpointType === "mcp" ? "#a78bfa" : "#7c8cf8",
-            background: provider.endpointType === "mcp" ? "#a78bfa18" : "#7c8cf818",
+            color: provider.endpointType === "service" ? "#a78bfa" : "#7c8cf8",
+            background: provider.endpointType === "service" ? "#a78bfa18" : "#7c8cf818",
             padding: "1px 5px",
             borderRadius: 3,
             textTransform: "uppercase",
@@ -176,7 +176,7 @@ export function ServiceRow({ pw }: Props) {
           >
             <DetailItem label="Endpoint URL"     value={provider.baseUrl ?? provider.endpoint ?? "—"} mono />
             <DetailItem label="Auth method"      value={provider.authMethod} />
-            {provider.endpointType === "mcp" && (
+            {provider.endpointType === "service" && (
               <DetailItem label="Transport" value={provider.mcpTransport ?? "—"} />
             )}
             <DetailItem label="Sensitivity"      value={provider.sensitivityClearance.join(", ") || "—"} />
