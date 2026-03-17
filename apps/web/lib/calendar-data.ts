@@ -168,12 +168,12 @@ async function projectLifecycleEvents(rangeStart: Date, rangeEnd: Date): Promise
       status: "active",
       expiresAt: { gte: rangeStart, lte: rangeEnd },
     },
-    select: { id: true, actionKey: true, expiresAt: true },
+    select: { id: true, grantId: true, reason: true, expiresAt: true },
   });
   for (const g of grants) {
     events.push({
       id: `grant-${g.id}`,
-      title: `Grant expiring: ${g.actionKey}`,
+      title: `Grant expiring: ${g.reason ?? g.grantId}`,
       start: g.expiresAt.toISOString(),
       end: null,
       allDay: true,
