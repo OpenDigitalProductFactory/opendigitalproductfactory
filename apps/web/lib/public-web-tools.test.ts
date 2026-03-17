@@ -52,6 +52,7 @@ describe("public web tools", () => {
       logoCandidates: [
         "https://jackjackspack.org/logo.svg",
       ],
+      colorCandidates: ["#4f46e5"],
     });
 
     expect(proposal.companyName).toBe("Jack Jack's Pack");
