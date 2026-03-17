@@ -10,6 +10,7 @@ import type {
   CostBand,
   SensitivityLevel,
 } from "./agent-router-types";
+import type { PerformanceProfile } from "./agent-router-data";
 
 const TIER_ORDER: Record<CapabilityTier, number> = {
   "basic": 1,
@@ -18,11 +19,11 @@ const TIER_ORDER: Record<CapabilityTier, number> = {
   "deep-thinker": 4,
 };
 
-const COST_ORDER: Record<CostBand, number> = {
-  "free": 0,
-  "low": 1,
-  "medium": 2,
-  "high": 3,
+const COST_WEIGHT: Record<CostBand, number> = {
+  "free": 1,
+  "low": 2,
+  "medium": 3,
+  "high": 4,
 };
 
 // ─── Filter ──────────────────────────────────────────────────────────────────
@@ -70,8 +71,8 @@ export function rankEndpoints(
   return [...endpoints].sort((a, b) => {
     const aTier = TIER_ORDER[a.capabilityTier];
     const bTier = TIER_ORDER[b.capabilityTier];
-    const aCost = COST_ORDER[a.costBand];
-    const bCost = COST_ORDER[b.costBand];
+    const aCost = COST_WEIGHT[a.costBand];
+    const bCost = COST_WEIGHT[b.costBand];
 
     // Tiebreaker values computed once
     const aLatency = a.avgLatencyMs ?? Number.MAX_SAFE_INTEGER;
@@ -150,4 +151,63 @@ export function routeSubtask(
     requiredTags: options?.requiredTags,
     preferCheap: true,
   });
+}
+
+// ─── Performance-Weighted Routing ───────────────────────────────────────────
+
+const MIN_EVALUATIONS = 5;
+
+function avgEffectiveScore(perf: PerformanceProfile): number {
+  if (perf.avgHumanScore !== null && perf.avgHumanScore > 0) {
+    return 0.6 * perf.avgHumanScore + 0.4 * perf.avgOrchestratorScore;
+  }
+  return perf.avgOrchestratorScore;
+}
+
+/**
+ * Route using performance profiles — selects the endpoint with the best
+ * quality/cost ratio. Supports pinned overrides and blocked exclusions.
+ * Falls back to tier-based scoring for cold-start endpoints.
+ */
+export function routeWithPerformance(
+  endpoints: EndpointCandidate[],
+  profiles: PerformanceProfile[],
+  request: TaskRequest & { taskType: string },
+): RouteResult {
+  const eligible = filterEligible(endpoints, request);
+  if (eligible.length === 0) return null;
+
+  const profileMap = new Map(profiles.map((p) => [p.endpointId, p]));
+
+  // Pinned override
+  const pinned = eligible.find((ep) => profileMap.get(ep.endpointId)?.pinned);
+  if (pinned) return { endpointId: pinned.endpointId, reason: "pinned" };
+
+  // Block filter
+  const unblocked = eligible.filter((ep) => !profileMap.get(ep.endpointId)?.blocked);
+  if (unblocked.length === 0) return null;
+
+  // Score
+  const scored = unblocked.map((ep) => {
+    const perf = profileMap.get(ep.endpointId);
+    let score: number;
+    if (perf && perf.evaluationCount >= MIN_EVALUATIONS) {
+      score = avgEffectiveScore(perf) / COST_WEIGHT[ep.costBand];
+    } else {
+      score = TIER_ORDER[ep.capabilityTier] / COST_WEIGHT[ep.costBand];
+    }
+    return { ep, score };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const latDiff = (a.ep.avgLatencyMs ?? Infinity) - (b.ep.avgLatencyMs ?? Infinity);
+    if (latDiff !== 0) return latDiff;
+    const failDiff = (a.ep.recentFailures ?? 0) - (b.ep.recentFailures ?? 0);
+    if (failDiff !== 0) return failDiff;
+    return a.ep.endpointId.localeCompare(b.ep.endpointId);
+  });
+
+  const best = scored[0]!;
+  return { endpointId: best.ep.endpointId, reason: `score=${best.score.toFixed(2)}` };
 }
