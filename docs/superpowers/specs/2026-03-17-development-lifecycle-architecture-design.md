@@ -745,6 +745,10 @@ model ChangePromotion {
 
 (Defined in Section 4 — see above for full schema.)
 
+#### ServiceOffering
+
+(Defined in Section 12 — see above for full schema.)
+
 ### Extended Models
 
 #### FeatureBuild — New Fields
@@ -757,13 +761,14 @@ model FeatureBuild {
 }
 ```
 
-#### DigitalProduct — New Relation
+#### DigitalProduct — New Relations
 
 ```prisma
 model DigitalProduct {
   // ... existing fields ...
   versions          ProductVersion[]
   manifests         CodebaseManifest[]
+  serviceOfferings  ServiceOffering[]
 }
 ```
 
@@ -922,6 +927,205 @@ Phases 1-2 (unified coworker identity, MCP routing) are defined in `2026-03-16-u
 
 ---
 
+## Section 12: Digital Product Offering & Operational Commitments
+
+### The Gap
+
+The development lifecycle (Sections 1-11) covers how code moves from dev to production. But it doesn't address how the resulting digital product is **consumed** — by whom, with what commitments, and under what operational agreements. A digital product in production without defined commitments is a technical artifact, not an operational service.
+
+In the "Shift to Digital Product" paradigm, the traditional split between "Business Application" (what it is) and "IT Service" (how it's operated) collapses into a single entity: the **Digital Product**. The `DigitalProduct` model already represents the "what." The `ServiceOffering` model captures the "how it's consumed and operated."
+
+### Service Offering Model
+
+A digital product can have one or more service offerings — different ways it's consumed with different commitment levels. Example: the ODPF itself might have an "Internal Platform Access" offering (for employees building products) and a "Build API" offering (for automated integrations), each with different availability targets.
+
+```prisma
+model ServiceOffering {
+  id                String   @id @default(cuid())
+  offeringId        String   @unique  // "SO-XXXXX"
+  digitalProductId  String
+  digitalProduct    DigitalProduct @relation(fields: [digitalProductId], references: [id])
+
+  name              String          // "Internal Platform Access"
+  description       String?  @db.Text
+
+  // Who consumes this offering
+  consumers         Json            // { roles: ["HR-100", "HR-200"], teams: [], integrations: [] }
+
+  // Operational Commitments
+  availabilityTarget Float?         // percentage, e.g., 99.9
+  mttrHours         Float?          // Mean Time To Repair
+  mtbfHours         Float?          // Mean Time Between Failures
+  rtoHours          Float?          // Recovery Time Objective
+  rpoHours          Float?          // Recovery Point Objective
+  supportHours      String?         // "24x7", "business_hours", "best_effort"
+
+  // Agreement References
+  claRef            String?  @db.Text  // Customer Level Agreement — what's promised to consumers
+  olaRef            String?  @db.Text  // Operational Level Agreement — what's required from support teams
+
+  // Lifecycle
+  status            String   @default("draft")  // draft | active | retired
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([digitalProductId])
+  @@index([status])
+}
+```
+
+### How Commitments Connect to the Development Lifecycle
+
+When a `ChangePromotion` moves to "deployed," the active `ServiceOffering` commitments become the operational contract. This creates accountability:
+
+- **Gate 3 (Deploy)** gains a commitment check: "This version changes modules X and Y. The active offering guarantees 99.9% availability. Does this deployment risk violating the commitment?"
+- **The promotion approval UI** (Phase 5e) shows the active commitments alongside the change diff, so the human approver understands the operational stakes.
+- **Rollback triggers** can reference commitments: "MTTR for this offering is 4 hours. Incident detected 2 hours ago. Rollback recommended to meet commitment."
+
+### Version-Specific Commitments
+
+Commitments are defined at the offering level (not per-version), but they evolve over time. The `effectiveFrom` / `effectiveTo` fields allow commitment versioning:
+
+- v1.0 offering: 95% availability, best-effort support
+- v2.0 offering: 99.9% availability, 24x7 support, 4h MTTR
+
+When reviewing a promotion, the system checks which offering is active at that point in time.
+
+### Relation to Existing Models
+
+| Existing Model | Connection |
+|---|---|
+| `DigitalProduct` | Gains `serviceOfferings ServiceOffering[]` relation |
+| `ChangePromotion` | Promotion approval can reference active offerings for risk assessment |
+| `PlatformRole.slaDurationH` | Existing SLA field on roles becomes one input to the offering's `mttrHours` — role-based escalation SLA feeds the product-level commitment |
+| `PortfolioQualityIssue` | Commitment violations generate quality issues (e.g., `commitment_breach` issue type) |
+
+---
+
+## Section 13: CMDB Self-Registration & Recursive Topology
+
+### The Paradigm Shift
+
+In traditional ITSM, a "Business Application" describes what software does and an "IT Service" describes how it's operated. These are separate CMDB entities with separate owners and separate lifecycles. The Digital Product paradigm collapses this: the `DigitalProduct` IS both the application and the service. The `ServiceOffering` (Section 12) captures what was previously the "Service" definition.
+
+The platform already implements this through the EA and discovery layers:
+
+- **Design topology** — `EaElement` with `EaRelationship` (ArchiMate 4 relationship types: `depends_on`, `serves`, `composed_of`, `realizes`)
+- **As-deployed topology** — `InventoryEntity` with `InventoryRelationship` (discovery-driven: `runs_on`, `hosts`, `depends_on`, `stores_data_in`)
+- **Bridge** — `EaElement.infraCiKey` links design elements to runtime infrastructure; `InventoryEntity.digitalProductId` links discovered infrastructure to digital products
+- **Conformance rules** — `PortfolioQualityIssue` catches gaps like "Application Component must depend on a Technology Node before production"
+
+What's missing is the platform **applying this to itself**.
+
+### Self-Registration: ODPF as Its Own First Digital Product
+
+The ODPF must be the first `DigitalProduct` in its own inventory. This is created during initial seed/bootstrap and maintained as the platform evolves. The self-registration establishes:
+
+**1. DigitalProduct record:**
+
+```
+productId: "DP-ODPF"
+name: "Open Digital Product Factory"
+lifecycleStage: "production"
+lifecycleStatus: "active"
+version: <current deployed version>
+```
+
+**2. Design topology (EaElements):**
+
+| EaElement | Type | Description |
+|---|---|---|
+| ODPF Portal | `application_component` | Main Next.js web application |
+| ODPF Database | `technology_node` | PostgreSQL via Prisma |
+| ODPF Graph | `technology_node` | Neo4j for EA and topology |
+| ODPF AI Service | `technology_node` | Ollama local inference |
+| ODPF Sandbox | `technology_node` | Docker containers for isolated code generation |
+
+**3. Design relationships (EaRelationship):**
+
+| From | Relationship | To |
+|---|---|---|
+| ODPF Portal | `depends_on` | ODPF Database |
+| ODPF Portal | `depends_on` | ODPF Graph |
+| ODPF Portal | `depends_on` | ODPF AI Service |
+| ODPF Portal | `depends_on` | ODPF Sandbox |
+| ODPF AI Service | `serves` | ODPF Portal |
+
+**4. As-deployed topology (InventoryEntity):**
+
+Populated by the existing bootstrap discovery pipeline (`DiscoveryRun` → `DiscoveredItem` → `InventoryEntity`). The Docker Compose services are discoverable infrastructure. The discovery pipeline detects the running containers and creates `InventoryEntity` records:
+
+| InventoryEntity | entityType | Source |
+|---|---|---|
+| portal container | `docker_container` | Docker discovery |
+| postgres container | `docker_container` | Docker discovery |
+| neo4j container | `docker_container` | Docker discovery |
+| ollama container | `docker_container` | Docker discovery |
+
+**5. Bridge — Design to As-Deployed:**
+
+The `EaElement.infraCiKey` field links each design element to its discovered runtime counterpart. The `InventoryEntity.digitalProductId` links discovered infrastructure to the ODPF product record. Together, these create a full traceability chain:
+
+```
+DigitalProduct (DP-ODPF)
+  → EaElement (design: "ODPF Portal" application_component)
+    → infraCiKey → InfraCI (Neo4j: runtime identity)
+      → InventoryEntity (discovered: portal container)
+        → InventoryRelationship (depends_on → postgres container)
+```
+
+### Recursive Application
+
+This pattern is not special-cased for the ODPF — it IS the pattern for any digital product managed by the platform. When a user creates a new digital product through the Build Studio:
+
+1. `DigitalProduct` record is created (already implemented via `shipBuild()`)
+2. Design topology is established through the EA modeling interface (existing `EaElement` creation)
+3. When the product has infrastructure, the discovery pipeline detects it and creates `InventoryEntity` records
+4. The bridge fields (`infraCiKey`, `digitalProductId`) connect design to runtime
+5. `ServiceOffering` records define how the product is consumed
+6. `ProductVersion` records track what's deployed (from this spec)
+7. `ChangePromotion` records track deployment approvals (from this spec)
+8. Conformance rules validate the topology is complete before production promotion
+
+The ODPF's self-registration is simply the first application of this recursive pattern — bootstrap creates the product record, the EA elements, and the discovery pipeline fills in the runtime topology.
+
+### Conformance Rules for Production Readiness
+
+The existing EA conformance system enforces topology completeness. For the development lifecycle, two rules are critical:
+
+1. **"Application Component must depend on a Technology Node before production"** — already defined in the ArchiMate 4 seed. Ensures the design topology is complete before `shipBuild()` can promote to `lifecycleStage: "production"`.
+
+2. **"Digital Product must have an active ServiceOffering before production"** — NEW rule. A product cannot be promoted to production without at least one active offering defining operational commitments. This ensures no product goes live without defined CLA/OLA/MTTR.
+
+These conformance rules become additional checks at Gate 2 (Ship) and Gate 3 (Deploy), generating `PortfolioQualityIssue` findings if violated.
+
+### How This Extends the Migration Strategy
+
+The offering and self-registration work fits naturally as Phase 5f and 5g:
+
+**Phase 5f: Service Offering Model**
+- Add `ServiceOffering` model to Prisma schema
+- Add `serviceOfferings` relation to `DigitalProduct`
+- Create `manage_offering` MCP tool for creating/updating offerings
+- Add offering display to the product detail view
+- Add conformance rule: product needs active offering before production
+- Add commitment visibility to the promotion approval UI (Phase 5e)
+
+**Phase 5g: Platform Self-Registration**
+- Create bootstrap seed for ODPF as `DigitalProduct` (DP-ODPF)
+- Create EaElement records for the Docker Compose services (design topology)
+- Ensure the existing discovery pipeline links discovered containers to DP-ODPF
+- Create initial `ServiceOffering` for the platform (availability, MTTR targets)
+- Create initial `ProductVersion` linking the current deployed version to git
+- Validate end-to-end: design topology → as-deployed topology → offering → version tracking
+
+Phase 5g is the proof point — if the ODPF can fully describe itself using its own models, any product managed within it can do the same.
+
+---
+
 ## Alternatives Considered
 
 ### A: Git Tags + DB Manifest Only (Minimal)
@@ -953,6 +1157,8 @@ Each phase is independently revertable:
 - **Phase 5c (Manifest):** Manifest generation is optional. If it fails, shipping continues. The manifest file is just another file in the repo.
 - **Phase 5d (Production Tools):** Tools are additive registrations. Remove from tool registry to revert. Git mount is a Docker volume — remove from compose to revert.
 - **Phase 5e (Promotion UI):** UI-only. Revert by deploying previous UI.
+- **Phase 5f (Service Offering):** New table is additive. Conformance rule is a new row in EA seed data — remove to revert.
+- **Phase 5g (Self-Registration):** Seed data — delete the DP-ODPF product and associated EaElements to revert. No code changes to undo.
 
 ---
 
@@ -965,10 +1171,12 @@ Each phase is independently revertable:
 | `apps/web/lib/mcp-tools.ts` | Extend `propose_file_change` handler with auto-commit; register 7 new tools |
 | `apps/web/lib/actions/build.ts` | Extend `shipBuild()` with git tag, ProductVersion, ChangePromotion, manifest generation |
 | `apps/web/lib/manifest-generator.ts` | NEW — codebase manifest generation from package.json, schema, directory structure, base template |
-| `packages/db/prisma/schema.prisma` | Add ProductVersion, ChangePromotion, CodebaseManifest models; extend FeatureBuild and AgentActionProposal |
+| `packages/db/prisma/schema.prisma` | Add ProductVersion, ChangePromotion, CodebaseManifest, ServiceOffering models; extend FeatureBuild, DigitalProduct, AgentActionProposal |
 | `docker-compose.yml` | Add `.git` read-only volume mount to portal service; add `DEPLOYED_VERSION` env var |
 | `codebase-manifest.base.json` | NEW — human/AI-maintained base manifest template at project root |
-| `apps/web/app/(protected)/platform/ops/` | Promotion approval UI (Phase 5e) |
+| `apps/web/app/(protected)/platform/ops/` | Promotion approval UI (Phase 5e) with offering commitment display |
+| `packages/db/src/seed-ea-archimate4.ts` | Add conformance rule: product needs active offering before production (Phase 5f) |
+| `packages/db/src/seed-platform-product.ts` | NEW — Bootstrap seed for DP-ODPF product, EaElements, ServiceOffering (Phase 5g) |
 
 ---
 
@@ -993,3 +1201,11 @@ The `rolled_back` status on `ChangePromotion` and `rolledBackBy` / `rollbackReas
 ### SBOM Vulnerability Scanning
 
 The `externalDependencies` section of the codebase manifest can be fed into vulnerability scanners (e.g., Snyk, Trivy, OSV). The manifest is regenerated on each version, so vulnerability status is always current. Findings could flow into the existing backlog as `source: "security_scan"` items.
+
+### Operational Monitoring Integration
+
+With `ServiceOffering` commitments defined, the platform can measure actual performance against targets. The `observationConfig` JSON field on `DigitalProduct` (already in schema) is the integration point for telemetry sources. Future: availability tracking, MTTR measurement against commitment targets, and automatic `commitment_breach` quality issues when targets are missed.
+
+### Recursive Product Management
+
+Phase 5g proves the recursive pattern by self-registering the ODPF. Future products created through the Build Studio follow the same lifecycle: design topology → as-deployed topology → service offering → version tracking → promotion pipeline. The platform becomes its own reference implementation — dogfooding that validates the model before customers use it for their products.
