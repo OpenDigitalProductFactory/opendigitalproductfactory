@@ -416,6 +416,7 @@ model DigitalProduct {
   portfolioQualityIssues PortfolioQualityIssue[]
   featureBuilds          FeatureBuild[]
   versions               ProductVersion[]
+  manifests              CodebaseManifest[]
 }
 
 // ─── Version Tracking ────────────────────────────────────────────────────────
@@ -431,6 +432,8 @@ model ProductVersion {
   featureBuild     FeatureBuild?     @relation(fields: [featureBuildId], references: [id])
   shippedBy        String
   shippedAt        DateTime          @default(now())
+  manifestId       String?          @unique
+  manifest         CodebaseManifest? @relation(fields: [manifestId], references: [id])
   changeCount      Int               @default(0)
   changeSummary    String?           @db.Text
   promotions       ChangePromotion[]
@@ -461,6 +464,20 @@ model ChangePromotion {
 
   @@index([status])
   @@index([productVersionId])
+}
+
+model CodebaseManifest {
+  id               String          @id @default(cuid())
+  version          String
+  gitRef           String
+  manifest         Json
+  digitalProductId String?
+  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id])
+  generatedAt      DateTime        @default(now())
+  productVersion   ProductVersion?
+
+  @@unique([version, digitalProductId])
+  @@index([digitalProductId])
 }
 
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
