@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { SandboxPreview } from "./SandboxPreview";
+import { ClaimBadge } from "./ClaimBadge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
@@ -57,6 +58,17 @@ export function BuildStudio({ builds, portfolios }: Props) {
         createdById: "",
         createdAt: new Date(),
         updatedAt: new Date(),
+        designDoc: null,
+        designReview: null,
+        buildPlan: null,
+        planReview: null,
+        taskResults: null,
+        verificationOut: null,
+        acceptanceMet: null,
+        accountableEmployeeId: null,
+        claimedByAgentId: null,
+        claimedAt: null,
+        claimStatus: null,
       });
       setNewTitle("");
       router.refresh();
@@ -156,7 +168,10 @@ export function BuildStudio({ builds, portfolios }: Props) {
             <>
               <div className="px-4 py-3 border-b border-[var(--dpf-border)] flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-white m-0">{activeBuild.title}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white m-0">{activeBuild.title}</h2>
+                    <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
+                  </div>
                   <span className="text-xs text-[var(--dpf-muted)]">{activeBuild.buildId}</span>
                 </div>
               </div>
@@ -174,6 +189,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
                       brief={activeBuild.brief}
                       phase={activeBuild.phase}
                       diffSummary={activeBuild.diffSummary}
+                      build={activeBuild}
                     />
                   </div>
                 )}

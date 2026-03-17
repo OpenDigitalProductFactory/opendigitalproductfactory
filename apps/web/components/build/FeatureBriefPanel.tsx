@@ -1,18 +1,20 @@
 // apps/web/components/build/FeatureBriefPanel.tsx
 "use client";
 
-import { type FeatureBrief, type BuildPhase } from "@/lib/feature-build-types";
+import { type FeatureBrief, type BuildPhase, type FeatureBuildRow } from "@/lib/feature-build-types";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
+import { EvidenceSummary } from "./EvidenceSummary";
 
 type Props = {
   brief: FeatureBrief | null;
   phase: BuildPhase;
   diffSummary: string | null;
   attachments?: AttachmentInfo[];
+  build?: FeatureBuildRow;
 };
 
-export function FeatureBriefPanel({ brief, phase, diffSummary, attachments }: Props) {
+export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, build }: Props) {
   if (phase === "review" || phase === "ship" || phase === "complete") {
     return (
       <div className="p-4">
@@ -23,6 +25,11 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments }: Pr
           </pre>
         ) : (
           <p className="text-[13px] text-[var(--dpf-muted)]">No changes recorded.</p>
+        )}
+        {phase === "review" && build && (
+          <div className="mt-4">
+            <EvidenceSummary build={build} />
+          </div>
         )}
       </div>
     );
