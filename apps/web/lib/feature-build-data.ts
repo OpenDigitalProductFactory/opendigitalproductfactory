@@ -1,7 +1,7 @@
 // apps/web/lib/feature-build-data.ts
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import type { FeatureBuildRow, FeatureBrief, BuildPhase } from "./feature-build-types";
+import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion } from "./feature-build-types";
 import type { BuildContext } from "./build-agent-prompts";
 import type { AttachmentInfo } from "./agent-coworker-types";
 
@@ -28,6 +28,17 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       createdById: true,
       createdAt: true,
       updatedAt: true,
+      designDoc: true,
+      designReview: true,
+      buildPlan: true,
+      planReview: true,
+      taskResults: true,
+      verificationOut: true,
+      acceptanceMet: true,
+      accountableEmployeeId: true,
+      claimedByAgentId: true,
+      claimedAt: true,
+      claimStatus: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -43,6 +54,13 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     brief: r.brief as FeatureBrief | null,
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
+    designDoc: r.designDoc as BuildDesignDoc | null,
+    designReview: r.designReview as ReviewResult | null,
+    buildPlan: r.buildPlan as BuildPlanDoc | null,
+    planReview: r.planReview as ReviewResult | null,
+    taskResults: r.taskResults as TaskResult[] | null,
+    verificationOut: r.verificationOut as VerificationOutput | null,
+    acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
@@ -71,6 +89,17 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       createdById: true,
       createdAt: true,
       updatedAt: true,
+      designDoc: true,
+      designReview: true,
+      buildPlan: true,
+      planReview: true,
+      taskResults: true,
+      verificationOut: true,
+      acceptanceMet: true,
+      accountableEmployeeId: true,
+      claimedByAgentId: true,
+      claimedAt: true,
+      claimStatus: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -88,6 +117,13 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     brief: r.brief as FeatureBrief | null,
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
+    designDoc: r.designDoc as BuildDesignDoc | null,
+    designReview: r.designReview as ReviewResult | null,
+    buildPlan: r.buildPlan as BuildPlanDoc | null,
+    planReview: r.planReview as ReviewResult | null,
+    taskResults: r.taskResults as TaskResult[] | null,
+    verificationOut: r.verificationOut as VerificationOutput | null,
+    acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
