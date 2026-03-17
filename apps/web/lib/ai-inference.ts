@@ -186,7 +186,18 @@ export async function callProvider(
       system: systemPrompt,
       messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
     };
-    extractText = (d) => (d.content as Array<{ text?: string }>)?.[0]?.text ?? "";
+    // Anthropic tools use { name, description, input_schema } format (not OpenAI's { type: "function", function: {...} })
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => {
+        const fn = (t as { function?: { name?: string; description?: string; parameters?: unknown } }).function;
+        return fn ? { name: fn.name, description: fn.description, input_schema: fn.parameters } : t;
+      });
+    }
+    extractText = (d) => {
+      const content = d.content as Array<{ type?: string; text?: string }> | undefined;
+      // Anthropic returns text blocks and tool_use blocks in the same content array
+      return content?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("") ?? "";
+    };
   } else if (providerId === "gemini") {
     // Gemini: system as first user content, then alternating user/model turns
     chatUrl = `${baseUrl}/models/${modelId}:generateContent`;
@@ -260,16 +271,30 @@ export async function callProvider(
     return 0;
   };
 
-  // Extract tool calls if present (OpenAI-compatible only)
+  // Extract tool calls from response
   let toolCalls: InferenceResult["toolCalls"];
-  const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
-  if (rawMsg?.tool_calls && rawMsg.tool_calls.length > 0) {
-    toolCalls = rawMsg.tool_calls
-      .filter((tc) => tc.function?.name)
-      .map((tc) => ({
-        name: tc.function!.name!,
-        arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
+
+  if (providerId === "anthropic" || providerId.startsWith("anthropic-")) {
+    // Anthropic: tool_use blocks in the content array
+    const contentBlocks = data.content as Array<{ type?: string; name?: string; input?: Record<string, unknown> }> | undefined;
+    const toolUseBlocks = contentBlocks?.filter((b) => b.type === "tool_use" && b.name) ?? [];
+    if (toolUseBlocks.length > 0) {
+      toolCalls = toolUseBlocks.map((b) => ({
+        name: b.name!,
+        arguments: b.input ?? {},
       }));
+    }
+  } else {
+    // OpenAI-compatible: tool_calls in the message object
+    const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
+    if (rawMsg?.tool_calls && rawMsg.tool_calls.length > 0) {
+      toolCalls = rawMsg.tool_calls
+        .filter((tc) => tc.function?.name)
+        .map((tc) => ({
+          name: tc.function!.name!,
+          arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
+        }));
+    }
   }
 
   return {
