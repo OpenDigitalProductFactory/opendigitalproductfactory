@@ -186,27 +186,34 @@ export async function runEndpointTests(opts: {
   probesOnly?: boolean;
   triggeredBy: string;
 }): Promise<EndpointTestResult[]> {
-  // Resolve models to test — iterate over ModelProfile records (providerId + modelId pairs)
-  const modelProfiles = await prisma.modelProfile.findMany({
+  // Get active LLM provider IDs first (ModelProfile has no FK to ModelProvider)
+  const activeProviders = await prisma.modelProvider.findMany({
     where: {
+      status: "active",
+      endpointType: "llm",
       ...(opts.endpointId ? { providerId: opts.endpointId } : {}),
-      ...(opts.modelId ? { modelId: opts.modelId } : {}),
-      // Only test models from active LLM providers
-      provider: { status: "active", endpointType: "llm" },
     },
-    select: { id: true, providerId: true, modelId: true, friendlyName: true },
-    orderBy: [{ providerId: "asc" }, { modelId: "asc" }],
+    select: { providerId: true },
   });
+  const activeProviderIds = activeProviders.map((p) => p.providerId);
+
+  // Resolve models to test — iterate over ModelProfile records (providerId + modelId pairs)
+  const modelProfiles: Array<{ id: string; providerId: string; modelId: string; friendlyName: string }> = [];
+  if (activeProviderIds.length > 0) {
+    const profiles = await prisma.modelProfile.findMany({
+      where: {
+        providerId: { in: activeProviderIds },
+        ...(opts.modelId ? { modelId: opts.modelId } : {}),
+      },
+      select: { id: true, providerId: true, modelId: true, friendlyName: true },
+      orderBy: [{ providerId: "asc" }, { modelId: "asc" }],
+    });
+    modelProfiles.push(...profiles);
+  }
 
   // If no model profiles found, fall back to provider-level (for providers without profiles)
-  if (modelProfiles.length === 0 && opts.endpointId) {
-    const provider = await prisma.modelProvider.findUnique({
-      where: { providerId: opts.endpointId, status: "active", endpointType: "llm" },
-      select: { providerId: true },
-    });
-    if (provider) {
-      modelProfiles.push({ id: "", providerId: provider.providerId, modelId: "default", friendlyName: provider.providerId });
-    }
+  if (modelProfiles.length === 0 && opts.endpointId && activeProviderIds.includes(opts.endpointId)) {
+    modelProfiles.push({ id: "", providerId: opts.endpointId, modelId: "default", friendlyName: opts.endpointId });
   }
 
   const results: EndpointTestResult[] = [];
