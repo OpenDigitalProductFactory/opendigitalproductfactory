@@ -246,11 +246,15 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   }, useUnified);
 
-  // Build inference context
+  // Build inference context: short recent window + semantic recall for older context.
+  // Keep only last 8 messages as raw history — Qdrant semantic recall fills in
+  // relevant older context. This prevents long confused conversations from poisoning
+  // the response and keeps the context window focused.
+  const RECENT_WINDOW = 8;
   const recentMessages = await prisma.agentMessage.findMany({
     where: { threadId: input.threadId },
     orderBy: { createdAt: "desc" },
-    take: 20,
+    take: RECENT_WINDOW,
     select: { role: true, content: true },
   });
   const chatHistory: ChatMessage[] = recentMessages.reverse().map((m) => ({
@@ -337,12 +341,15 @@ export async function sendMessage(input: {
       promptSections.push(routeData);
     }
 
-    // Semantic memory: recall relevant past conversations
+    // Semantic memory: recall relevant context from ALL conversations.
+    // With a short recent window (8 messages), semantic recall is the primary
+    // mechanism for remembering older context — both cross-thread and same-thread.
     const { recallRelevantContext } = await import("@/lib/semantic-memory");
     const recalledContext = await recallRelevantContext({
       query: input.content,
       userId: user.id!,
-      currentThreadId: input.threadId,
+      // Don't exclude current thread — we need older same-thread context too
+      limit: 8,
     }).catch(() => null);
     if (recalledContext) {
       promptSections.push(recalledContext);
