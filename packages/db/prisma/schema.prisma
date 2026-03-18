@@ -34,6 +34,11 @@ model User {
   apiTokens                    ApiToken[]
   featureBuilds                FeatureBuild[]
   userSkills                   UserSkill[]              @relation("UserSkillCreator")
+  taskRequirementsCreated      TaskRequirement[]        @relation("TaskRequirementCreator")
+  taskRequirementsApproved     TaskRequirement[]        @relation("TaskRequirementApprover")
+  policyRulesCreated           PolicyRule[]             @relation("PolicyRuleCreator")
+  customEvalDimsCreated        CustomEvalDimension[]    @relation("CustomEvalDimensionCreator")
+  customEvalDimsApproved       CustomEvalDimension[]    @relation("CustomEvalDimensionApprover")
 }
 
 model UserGroup {
@@ -741,6 +746,42 @@ model ModelProvider {
   // Catalogue discovery
   catalogVisibility    String   @default("visible")   // visible | hidden
   catalogEntry         Json?    // for unconfigured services: description, pricing, enable URL
+
+  // ── Routing Manifest: Hard Constraints ──
+  supportedModalities    Json       @default("{\"input\":[\"text\"],\"output\":[\"text\"]}")
+  supportsToolUse        Boolean    @default(false)
+  supportsStructuredOutput Boolean  @default(false)
+  supportsStreaming       Boolean   @default(true)
+  maxContextTokens       Int?
+  maxOutputTokens        Int?
+  modelRestrictions      String[]   @default([])
+
+  // ── Routing Manifest: Capability Profile (0-100) ──
+  reasoning              Int        @default(50)
+  codegen                Int        @default(50)
+  toolFidelity           Int        @default(50)
+  instructionFollowing   Int        @default(50)
+  structuredOutput       Int        @default(50)
+  conversational         Int        @default(50)
+  contextRetention       Int        @default(50)
+  customScores           Json       @default("{}")
+
+  // ── Routing Manifest: Operational Metrics ──
+  avgLatencyMs           Float?
+  recentFailureRate      Float      @default(0)
+  lastEvalAt             DateTime?
+  lastCallAt             DateTime?
+  costPerInputMToken     Float?
+  costPerOutputMToken    Float?
+
+  // ── Routing Manifest: Provenance ──
+  profileSource          String     @default("seed")
+  profileConfidence      String     @default("low")
+  evalCount              Int        @default(0)
+
+  // ── Routing Manifest: Lifecycle ──
+  retiredAt              DateTime?
+  retiredReason          String?
 }
 
 model DiscoveredModel {
@@ -804,6 +845,8 @@ model EndpointTaskPerformance {
   avgTokensUsed           Float     @default(0)
   lastEvaluatedAt         DateTime?
   lastInstructionUpdateAt DateTime?
+  dimensionScores         Json       @default("{}")
+  profileConfidence       String     @default("low")
 
   @@unique([endpointId, taskType])
 }
@@ -2569,4 +2612,77 @@ model UserSkill {
   @@index([createdById])
   @@index([visibility])
   @@index([routeHint])
+}
+
+// ─── AI Routing Manifest ─────────────────────────────────────────────────────
+
+model TaskRequirement {
+  id                    String    @id @default(cuid())
+  taskType              String    @unique
+  description           String
+  selectionRationale    String
+  requiredCapabilities  Json      @default("{}")
+  preferredMinScores    Json      @default("{}")
+  maxLatencyMs          Int?
+  preferCheap           Boolean   @default(false)
+  defaultInstructions   String?
+  evaluationTokenLimit  Int       @default(500)
+  origin                String    @default("system")
+  createdById           String?
+  createdBy             User?     @relation("TaskRequirementCreator", fields: [createdById], references: [id])
+  approvedById          String?
+  approvedBy            User?     @relation("TaskRequirementApprover", fields: [approvedById], references: [id])
+  approvedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model PolicyRule {
+  id              String    @id @default(cuid())
+  name            String
+  description     String
+  condition       Json
+  action          String    @default("exclude")
+  createdById     String?
+  createdBy       User?     @relation("PolicyRuleCreator", fields: [createdById], references: [id])
+  version         Int       @default(1)
+  effectiveFrom   DateTime  @default(now())
+  effectiveUntil  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model RouteDecisionLog {
+  id                  String    @id @default(cuid())
+  agentMessageId      String?
+  selectedEndpointId  String
+  taskType            String
+  sensitivity         String
+  reason              String
+  fitnessScore        Float
+  candidateTrace      Json
+  excludedTrace       Json
+  policyRulesApplied  String[]  @default([])
+  fallbackChain       String[]  @default([])
+  fallbacksUsed       Json?
+  shadowMode          Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+
+  @@index([taskType])
+  @@index([selectedEndpointId])
+  @@index([createdAt])
+}
+
+model CustomEvalDimension {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  description     String
+  evalScenarios   Json      @default("[]")
+  createdById     String?
+  createdBy       User?     @relation("CustomEvalDimensionCreator", fields: [createdById], references: [id])
+  approvedById    String?
+  approvedBy      User?     @relation("CustomEvalDimensionApprover", fields: [approvedById], references: [id])
+  status          String    @default("draft")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
