@@ -816,6 +816,7 @@ model EndpointTestRun {
   id              String    @id @default(cuid())
   runId           String    @unique
   endpointId      String?
+  modelId         String?
   taskType        String?
   probesOnly      Boolean   @default(false)
   triggeredBy     String
