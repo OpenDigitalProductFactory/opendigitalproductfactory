@@ -10,3 +10,5 @@ export type {
   BuiltinDimension,
 } from "./types";
 export { BUILTIN_DIMENSIONS } from "./types";
+export { routeEndpoint, filterHard, filterByPolicy } from "./pipeline";
+export { computeFitness, normalizeWeights } from "./scoring";
