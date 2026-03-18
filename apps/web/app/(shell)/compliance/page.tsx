@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/compliance/page.tsx
 import { prisma } from "@dpf/db";
+import { RegulatoryAlerts } from "@/components/compliance/RegulatoryAlerts";
+import { ScanStatus } from "@/components/compliance/ScanStatus";
 
 export default async function CompliancePage() {
   const [
@@ -14,6 +16,8 @@ export default async function CompliancePage() {
     recentActivity,
     publishedPolicyCount,
     totalAcks,
+    pendingAlerts,
+    latestScan,
   ] = await Promise.all([
     prisma.regulation.count({ where: { status: "active" } }),
     prisma.obligation.count({ where: { status: "active" } }),
@@ -39,6 +43,16 @@ export default async function CompliancePage() {
     }),
     prisma.policy.count({ where: { lifecycleStatus: "published", status: "active" } }),
     prisma.policyAcknowledgment.count(),
+    prisma.regulatoryAlert.findMany({
+      where: { status: "pending" },
+      include: { regulation: { select: { shortName: true, jurisdiction: true } } },
+      orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+      take: 10,
+    }),
+    prisma.regulatoryMonitorScan.findFirst({
+      orderBy: { startedAt: "desc" },
+      select: { scanId: true, status: true, startedAt: true, regulationsChecked: true, alertsGenerated: true },
+    }),
   ]);
 
   const coveragePct = totalControlCount > 0
@@ -61,6 +75,15 @@ export default async function CompliancePage() {
         <MetricCard label="Open Incidents" value={openIncidentCount} color={openIncidentCount > 0 ? "#ef4444" : "#4ade80"} />
         <MetricCard label="Overdue Actions" value={overdueActionCount} color={overdueActionCount > 0 ? "#ef4444" : "#4ade80"} />
       </div>
+
+      {/* Regulatory Alerts */}
+      <section className="mb-8">
+        <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">Regulatory Alerts</h2>
+        <ScanStatus latestScan={latestScan} />
+        <div className="mt-4">
+          <RegulatoryAlerts alerts={pendingAlerts} />
+        </div>
+      </section>
 
       {/* Upcoming Deadlines */}
       <section className="mb-8">
