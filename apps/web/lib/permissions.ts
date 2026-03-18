@@ -21,7 +21,9 @@ export type CapabilityKey =
   | "manage_user_lifecycle"
   | "manage_provider_connections"
   | "manage_backlog"
-  | "manage_ea_model";
+  | "manage_ea_model"
+  | "view_compliance"
+  | "manage_compliance";
 
 type Permission = {
   roles: PlatformRoleId[];
@@ -45,6 +47,8 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_provider_connections: { roles: ["HR-000"] },
   manage_backlog:              { roles: ["HR-000", "HR-500"] },
   manage_ea_model:             { roles: ["HR-000", "HR-300"] },
+  view_compliance:             { roles: ["HR-000", "HR-100", "HR-200", "HR-300"] },
+  manage_compliance:           { roles: ["HR-000", "HR-200"] },
 };
 
 export type UserContext = {
@@ -90,6 +94,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "#38bdf8" },
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
   { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
+  { key: "compliance", label: "Compliance", route: "/compliance", capabilityKey: "view_compliance",  accentColor: "#ef4444" },
 ];
 
 /** Get all capabilities granted to a user's role. */

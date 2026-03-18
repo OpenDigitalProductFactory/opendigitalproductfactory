@@ -40,6 +40,11 @@ export default async function WorkspacePage() {
     userCount,
     eaViewCount,
     buildCount,
+    activeObligationCount,
+    openIncidentCount,
+    implementedControlCount,
+    totalControlCount,
+    overdueActionCount,
   ] = await Promise.all([
     prisma.digitalProduct.count(),
     prisma.digitalProduct.count({ where: { lifecycleStatus: "active" } }),
@@ -59,6 +64,11 @@ export default async function WorkspacePage() {
     prisma.user.count(),
     prisma.eaView.count(),
     prisma.featureBuild.count(),
+    prisma.obligation.count({ where: { status: "active" } }),
+    prisma.complianceIncident.count({ where: { status: { in: ["open", "investigating"] } } }),
+    prisma.control.count({ where: { implementationStatus: "implemented", status: "active" } }),
+    prisma.control.count({ where: { status: "active" } }),
+    prisma.correctiveAction.count({ where: { status: { in: ["open", "in-progress"] }, dueDate: { lt: new Date() } } }),
   ]);
 
   // Check for agents with inactive preferred providers
@@ -153,6 +163,16 @@ export default async function WorkspacePage() {
       metrics: [
         { label: "Users", value: userCount, color: "#8888a0" },
       ],
+    },
+    compliance: {
+      metrics: [
+        { label: "Obligations", value: activeObligationCount, color: "#ef4444" },
+        { label: "Open incidents", value: openIncidentCount, color: openIncidentCount > 0 ? "#fbbf24" : "#4ade80" },
+        { label: "Controls", value: `${implementedControlCount}/${totalControlCount}`, color: "#38bdf8" },
+      ],
+      ...(overdueActionCount > 0
+        ? { badge: `${overdueActionCount} overdue item${overdueActionCount !== 1 ? "s" : ""}`, badgeColor: "#fbbf24" }
+        : {}),
     },
   };
 
