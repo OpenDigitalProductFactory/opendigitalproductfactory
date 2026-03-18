@@ -134,7 +134,7 @@ A post-commit hook scans for changes to:
 - Spec files (`docs/superpowers/specs/`) — checks Qdrant for an existing entry with matching `spec_ref`; queues re-index if not found
 - Action manifests (`app/**/actions/manifest.ts`) — for each action in the manifest, checks if a knowledge entry with matching `action_name` exists at `production` status; if the knowledge entry is at `build`, promotes to `production`; if no knowledge entry exists, logs a warning (every action needs a spec)
 
-The hook queries Qdrant via the `searchPlatformKnowledge()` function using the `spec_ref` or `action_name` payload filter.
+The hook queries Qdrant via the `lookupCapabilityByFilter()` function using the `spec_ref` or `action_name` payload filter.
 
 ---
 
