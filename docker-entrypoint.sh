@@ -4,8 +4,8 @@ set -e
 echo "=== DPF Portal Init ==="
 
 echo "[1/3] Running database migrations..."
-cd /app
-npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma
+cd /app/packages/db
+npx prisma migrate deploy
 echo "  ✓ Migrations complete"
 
 echo "[2/3] Seeding reference data..."

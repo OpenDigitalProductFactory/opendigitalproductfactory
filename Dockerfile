@@ -9,6 +9,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
+COPY packages/db/prisma.config.ts ./packages/db/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 3: build ───────────────────────────────────────────────────────────
