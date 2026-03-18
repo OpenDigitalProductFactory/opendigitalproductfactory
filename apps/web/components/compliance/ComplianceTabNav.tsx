@@ -14,6 +14,8 @@ const TABS = [
   { label: "Incidents", href: "/compliance/incidents" },
   { label: "Audits", href: "/compliance/audits" },
   { label: "Actions", href: "/compliance/actions" },
+  { label: "Gaps", href: "/compliance/gaps" },
+  { label: "Posture", href: "/compliance/posture" },
   { label: "Submissions", href: "/compliance/submissions" },
 ];
 
