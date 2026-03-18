@@ -188,6 +188,11 @@ model EmployeeProfile {
   auditsPerformed           ComplianceAudit[]        @relation("AuditAuditor")
   regulatorySubmissions     RegulatorySubmission[]   @relation("SubmissionSubmitter")
   complianceAuditLogs       ComplianceAuditLog[]     @relation("ComplianceAuditLogActor")
+  // ─── Policy Management relations ─────────────────────
+  requirementCompletions RequirementCompletion[] @relation("RequirementCompletions")
+  policyAcknowledgments  PolicyAcknowledgment[]  @relation("PolicyAcknowledgments")
+  policiesOwned          Policy[]                @relation("PolicyOwner")
+  policiesApproved       Policy[]                @relation("PolicyApprover")
 
   @@index([status])
   @@index([departmentId])
@@ -2029,6 +2034,7 @@ model Obligation {
   ownerEmployee EmployeeProfile? @relation("ObligationOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
   controls      ControlObligationLink[]
   evidence      ComplianceEvidence[]
+  policies      Policy[]
 
   @@index([regulationId])
   @@index([ownerEmployeeId])
@@ -2316,4 +2322,131 @@ model ComplianceAuditLog {
   @@index([entityType, entityId])
   @@index([performedByEmployeeId])
   @@index([performedAt])
+}
+
+// ─── Internal Policy Management ──────────────────────────────────────────
+
+model Policy {
+  id                    String    @id @default(cuid())
+  policyId              String    @unique
+  title                 String
+  description           String?
+  category              String
+  version               Int       @default(1)
+  lifecycleStatus       String    @default("draft")
+  ownerEmployeeId       String?
+  approvedByEmployeeId  String?
+  approvedAt            DateTime?
+  publishedAt           DateTime?
+  retiredAt             DateTime?
+  effectiveDate         DateTime?
+  reviewDate            DateTime?
+  reviewFrequency       String?
+  fileRef               String?
+  obligationId          String?
+  notes                 String?
+  agentId               String?
+  status                String    @default("active")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  ownerEmployee    EmployeeProfile? @relation("PolicyOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  approvedBy       EmployeeProfile? @relation("PolicyApprover", fields: [approvedByEmployeeId], references: [id], onDelete: SetNull)
+  obligation       Obligation?      @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  requirements     PolicyRequirement[]
+  acknowledgments  PolicyAcknowledgment[]
+
+  @@index([ownerEmployeeId])
+  @@index([approvedByEmployeeId])
+  @@index([obligationId])
+  @@index([lifecycleStatus])
+  @@index([category])
+  @@index([status])
+}
+
+model PolicyRequirement {
+  id              String   @id @default(cuid())
+  requirementId   String   @unique
+  policyId        String
+  title           String
+  requirementType String
+  description     String?
+  frequency       String?
+  applicability   String?
+  dueDays         Int?
+  agentId         String?
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  policy              Policy               @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  trainingRequirement TrainingRequirement?
+  completions         RequirementCompletion[]
+
+  @@index([policyId])
+  @@index([requirementType])
+  @@index([status])
+}
+
+model RequirementCompletion {
+  id                String    @id @default(cuid())
+  completionId      String    @unique
+  requirementId     String
+  employeeProfileId String
+  completedAt       DateTime  @default(now())
+  expiresAt         DateTime?
+  method            String
+  notes             String?
+  agentId           String?
+  status            String    @default("active")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  requirement     PolicyRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile   @relation("RequirementCompletions", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([requirementId, employeeProfileId, status])
+  @@index([requirementId])
+  @@index([employeeProfileId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// TrainingRequirement inherits status from parent PolicyRequirement — no separate status field.
+model TrainingRequirement {
+  id                  String   @id @default(cuid())
+  requirementId       String   @unique
+  trainingTitle       String
+  provider            String?
+  deliveryMethod      String?
+  durationMinutes     Int?
+  externalUrl         String?
+  passingScore        Float?
+  certificateRequired Boolean  @default(false)
+  agentId             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  requirement PolicyRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@index([requirementId])
+}
+
+// Intentionally omits status and updatedAt — acknowledgments are permanent records. Append-only.
+model PolicyAcknowledgment {
+  id                String   @id @default(cuid())
+  policyId          String
+  employeeProfileId String
+  acknowledgedAt    DateTime @default(now())
+  policyVersion     Int
+  method            String   @default("digital-signature")
+  agentId           String?
+  createdAt         DateTime @default(now())
+
+  policy          Policy          @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile @relation("PolicyAcknowledgments", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, employeeProfileId, policyVersion])
+  @@index([policyId])
+  @@index([employeeProfileId])
 }
