@@ -1,4 +1,4 @@
-import type { Prisma } from "../generated/client";
+import type { Prisma } from "../generated/client/client";
 import { prisma } from "./client";
 
 export type ReferenceProjectionType = "value_stream_view";
