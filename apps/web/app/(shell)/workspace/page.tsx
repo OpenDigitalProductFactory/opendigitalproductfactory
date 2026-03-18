@@ -45,6 +45,7 @@ export default async function WorkspacePage() {
     implementedControlCount,
     totalControlCount,
     overdueActionCount,
+    publishedPolicyCount,
   ] = await Promise.all([
     prisma.digitalProduct.count(),
     prisma.digitalProduct.count({ where: { lifecycleStatus: "active" } }),
@@ -69,6 +70,7 @@ export default async function WorkspacePage() {
     prisma.control.count({ where: { implementationStatus: "implemented", status: "active" } }),
     prisma.control.count({ where: { status: "active" } }),
     prisma.correctiveAction.count({ where: { status: { in: ["open", "in-progress"] }, dueDate: { lt: new Date() } } }),
+    prisma.policy.count({ where: { lifecycleStatus: "published", status: "active" } }),
   ]);
 
   // Check for agents with inactive preferred providers
@@ -169,6 +171,7 @@ export default async function WorkspacePage() {
         { label: "Obligations", value: activeObligationCount, color: "#ef4444" },
         { label: "Open incidents", value: openIncidentCount, color: openIncidentCount > 0 ? "#fbbf24" : "#4ade80" },
         { label: "Controls", value: `${implementedControlCount}/${totalControlCount}`, color: "#38bdf8" },
+        { label: "Policies", value: publishedPolicyCount, color: "#a78bfa" },
       ],
       ...(overdueActionCount > 0
         ? { badge: `${overdueActionCount} overdue item${overdueActionCount !== 1 ? "s" : ""}`, badgeColor: "#fbbf24" }
