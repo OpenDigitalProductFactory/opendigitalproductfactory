@@ -53,7 +53,7 @@ Small, fast, binary tests that verify fundamental behavioral compliance. Each pr
 
 ### Layer 2: Task Scenarios
 
-Structured prompt-response pairs per task type that test actual work quality. Only run against endpoints that pass the relevant probes. Each scenario is graded 1-5 by the orchestrator (reusing the existing `evaluateResponse()` pipeline).
+Structured prompt-response pairs per task type that test actual work quality. Only run against endpoints that pass the relevant probes. Each scenario is graded 1-5 by the orchestrator (reusing the evaluation pipeline via `evaluateResponseForTest()`).
 
 **Scenario structure:**
 
@@ -422,7 +422,7 @@ Phases 1-4 are defined in the unified coworker and orchestrated task routing spe
 - Create `endpoint-test-runner.ts` with execution logic
 - Add `source` field to `TaskEvaluation`
 - Add `EndpointTestRun` model
-- Wire runner to `callWithFailover()` and `evaluateResponse()`
+- Wire runner to `callWithFailover()` and `evaluateResponseForTest()`
 
 ### Phase 6b: MCP Tool + Evidence Update
 
