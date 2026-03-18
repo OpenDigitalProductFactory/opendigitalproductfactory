@@ -36,6 +36,10 @@ type TestRun = {
   scenariosPassed: number;
   scenariosFailed: number;
   avgScore: number | null;
+  results: {
+    probes?: Array<{ id: string; category: string; name: string; pass: boolean; reason: string }>;
+    scenarios?: Array<{ id: string; taskType: string; name: string; passed: boolean; assertions: Array<{ description: string; passed: boolean; detail: string }>; orchestratorScore: number | null }>;
+  } | null;
   startedAt: string;
   status: string;
 };
@@ -239,6 +243,8 @@ export default function EndpointPerformancePanel({
               const totalProbes = tr.probesPassed + tr.probesFailed;
               const totalScenarios = tr.scenariosPassed + tr.scenariosFailed;
               const allProbesPass = tr.probesFailed === 0 && totalProbes > 0;
+              const probes = tr.results?.probes ?? [];
+              const scenarios = tr.results?.scenarios ?? [];
               return (
                 <div key={tr.runId} className="p-3 rounded-lg bg-[#161625]">
                   <div className="flex items-center justify-between">
@@ -267,6 +273,51 @@ export default function EndpointPerformancePanel({
                       </span>
                     )}
                   </div>
+
+                  {/* Probe details */}
+                  {probes.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-[#2a2a40] space-y-1">
+                      <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1">Probes</div>
+                      {probes.map((p) => (
+                        <div key={p.id} className="flex items-start gap-2 text-xs">
+                          <span className={`shrink-0 ${p.pass ? "text-green-400" : "text-red-400"}`}>
+                            {p.pass ? "PASS" : "FAIL"}
+                          </span>
+                          <span className="text-[#b0b0c8] shrink-0">[{p.category}]</span>
+                          <span className="text-white">{p.name}</span>
+                          {!p.pass && (
+                            <span className="text-red-300/70 text-[10px] ml-auto">{p.reason}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Scenario details */}
+                  {scenarios.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-[#2a2a40] space-y-1">
+                      <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1">Scenarios</div>
+                      {scenarios.map((s) => (
+                        <div key={s.id} className="text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className={`shrink-0 ${s.passed ? "text-green-400" : "text-red-400"}`}>
+                              {s.passed ? "PASS" : "FAIL"}
+                            </span>
+                            <span className="text-[#b0b0c8] shrink-0">[{s.taskType}]</span>
+                            <span className="text-white">{s.name}</span>
+                            {s.orchestratorScore !== null && (
+                              <span className="ml-auto text-[#8888a0]">Score: {s.orchestratorScore}/5</span>
+                            )}
+                          </div>
+                          {s.assertions?.filter((a) => !a.passed).map((a, i) => (
+                            <div key={i} className="ml-14 text-[10px] text-red-300/70">
+                              {a.description}: {a.detail}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })

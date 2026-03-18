@@ -276,6 +276,13 @@ export async function runEndpointTests(opts: {
           : null,
         completedAt: new Date(),
         status: "completed",
+        results: {
+          probes: probeResults.map((p) => ({ id: p.probeId, category: p.category, name: p.name, pass: p.pass, reason: p.reason })),
+          scenarios: scenarioResults.map((s) => ({
+            id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed,
+            assertions: s.assertionResults, orchestratorScore: s.orchestratorScore,
+          })),
+        } as unknown as import("@dpf/db").Prisma.InputJsonValue,
       },
     });
 
