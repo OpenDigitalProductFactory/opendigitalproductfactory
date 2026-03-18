@@ -452,6 +452,7 @@ export async function sendMessage(input: {
   // --- Task classification and performance routing (unified mode only) ---
   let resolvedEndpointId: string | undefined;
   let taskTypeId: string = "unknown";
+  let manifestRouteDecision: import("@/lib/routing/types").RouteDecision | undefined;
 
   if (useUnified) {
     // Classify the task
@@ -485,6 +486,7 @@ export async function sendMessage(input: {
 
         if (manifestDecision.selectedEndpoint) {
           resolvedEndpointId = manifestDecision.selectedEndpoint;
+          manifestRouteDecision = manifestDecision;
           console.log(
             `[routing] ${classification.taskType}: ${manifestDecision.reason}`,
           );
@@ -531,6 +533,7 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       threadId: input.threadId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
+      ...(manifestRouteDecision ? { routeDecision: manifestRouteDecision } : {}),
     });
 
     // Handle proposal — agent wants to take a side-effecting action that needs approval
