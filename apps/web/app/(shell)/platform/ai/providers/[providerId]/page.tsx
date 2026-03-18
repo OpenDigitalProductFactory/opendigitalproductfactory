@@ -6,6 +6,8 @@ import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
+import { getEndpointPerformance } from "@/lib/actions/endpoint-performance";
+import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
 import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
 
@@ -13,11 +15,12 @@ type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
     getProviders(),
+    getEndpointPerformance(providerId),
   ]);
   if (!pw) notFound();
 
@@ -95,6 +98,14 @@ export default async function ProviderDetailPage({ params }: Props) {
           <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
         </div>
       )}
+
+      <EndpointPerformancePanel
+        endpointId={providerId}
+        performances={perfData.performances}
+        recentEvals={perfData.recentEvals}
+        testRuns={perfData.testRuns}
+        profile={perfData.profile}
+      />
     </div>
   );
 }
