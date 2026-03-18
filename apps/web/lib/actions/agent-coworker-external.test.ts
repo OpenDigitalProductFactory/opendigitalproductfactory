@@ -95,6 +95,9 @@ vi.mock("@dpf/db", () => ({
     agent: {
       findUnique: vi.fn(),
     },
+    modelProvider: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
 }));
 
