@@ -193,6 +193,9 @@ model EmployeeProfile {
   policyAcknowledgments  PolicyAcknowledgment[]  @relation("PolicyAcknowledgments")
   policiesOwned          Policy[]                @relation("PolicyOwner")
   policiesApproved       Policy[]                @relation("PolicyApprover")
+  // ─── Regulatory Intelligence relations ───────────────
+  scansTriggered RegulatoryMonitorScan[] @relation("ScanTriggerer")
+  alertsReviewed RegulatoryAlert[]       @relation("AlertReviewer")
 
   @@index([status])
   @@index([departmentId])
@@ -2004,8 +2007,13 @@ model Regulation {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  lastKnownVersion String?
+  sourceCheckDate  DateTime?
+  changeDetected   Boolean   @default(false)
+
   obligations Obligation[]
   submissions RegulatorySubmission[]
+  alerts      RegulatoryAlert[]
 
   @@index([status])
   @@index([jurisdiction])
@@ -2449,4 +2457,62 @@ model PolicyAcknowledgment {
   @@unique([policyId, employeeProfileId, policyVersion])
   @@index([policyId])
   @@index([employeeProfileId])
+}
+
+// ─── Regulatory Intelligence ────────────────────────────────────────────────
+
+model RegulatoryMonitorScan {
+  id                    String    @id @default(cuid())
+  scanId                String    @unique
+  triggeredBy           String
+  triggeredByEmployeeId String?
+  status                String    @default("running")
+  regulationsChecked    Int       @default(0)
+  alertsGenerated       Int       @default(0)
+  summary               String?
+  agentId               String?
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  errorMessage          String?
+  createdAt             DateTime  @default(now())
+
+  triggeredByEmployee EmployeeProfile? @relation("ScanTriggerer", fields: [triggeredByEmployeeId], references: [id], onDelete: SetNull)
+  alerts              RegulatoryAlert[]
+
+  @@index([triggeredByEmployeeId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model RegulatoryAlert {
+  id                   String    @id @default(cuid())
+  alertId              String    @unique
+  scanId               String
+  regulationId         String?
+  alertType            String
+  severity             String    @default("medium")
+  title                String
+  description          String?
+  sourceUrl            String?
+  sourceSnippet        String?
+  suggestedAction      String?
+  reviewedByEmployeeId String?
+  reviewedAt           DateTime?
+  resolution           String?
+  resolutionNotes      String?
+  agentId              String?
+  status               String    @default("pending")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  scan       RegulatoryMonitorScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  regulation Regulation?           @relation(fields: [regulationId], references: [id], onDelete: SetNull)
+  reviewedBy EmployeeProfile?      @relation("AlertReviewer", fields: [reviewedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([scanId])
+  @@index([regulationId])
+  @@index([reviewedByEmployeeId])
+  @@index([status])
+  @@index([severity])
+  @@index([alertType])
 }
