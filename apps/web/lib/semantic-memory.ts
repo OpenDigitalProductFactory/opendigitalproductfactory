@@ -5,6 +5,7 @@ import { generateEmbedding } from "./embedding";
 import {
   upsertVectors,
   searchSimilar,
+  scrollPoints,
   QDRANT_COLLECTIONS,
 } from "@dpf/db";
 
@@ -151,5 +152,85 @@ export async function searchPlatformKnowledge(params: {
     entityType: String(r.payload["entityType"] ?? ""),
     title: String(r.payload["title"] ?? ""),
     score: r.score,
+  }));
+}
+
+// ─── Store Capability Knowledge ────────────────────────────────────────────
+
+/**
+ * Store a capability (API action / endpoint) as a vector point in platform-knowledge.
+ * Unlike storePlatformKnowledge() which stores text documents, this stores structured
+ * metadata as payload fields for filter-based lookup via lookupCapabilityByFilter().
+ * The embedding is generated from action name + description for semantic search.
+ */
+export async function storeCapabilityKnowledge(params: {
+  specRef: string;
+  actionName: string;
+  route: string;
+  description: string;
+  parameterSummary: string;
+  requiredCapability: string | null;
+  sideEffect: boolean;
+  lifecycleStatus: "planned" | "build" | "production";
+}): Promise<void> {
+  const text = `${params.actionName}: ${params.description}`;
+  const embedding = await generateEmbedding(text);
+  if (!embedding) return;
+
+  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+    {
+      id: `capability-${params.specRef}-${params.actionName}`,
+      vector: embedding,
+      payload: {
+        entityId: params.actionName,
+        entityType: "capability",
+        title: params.description,
+        contentPreview: params.parameterSummary.slice(0, 300),
+        route: params.route,
+        action_name: params.actionName,
+        lifecycle_status: params.lifecycleStatus,
+        side_effect: params.sideEffect,
+        spec_ref: params.specRef,
+        required_capability: params.requiredCapability ?? "",
+        parameter_summary: params.parameterSummary,
+        timestamp: new Date().toISOString(),
+      },
+    },
+  ]);
+}
+
+// ─── Lookup Capability by Filter ───────────────────────────────────────────
+
+/**
+ * Exact-match filter lookup for capabilities stored in platform-knowledge.
+ * Uses scrollPoints() (no embedding vector needed) to find capabilities by
+ * structured payload fields: specRef, actionName, route, lifecycleStatus.
+ * Returns empty array if no filters are provided.
+ */
+export async function lookupCapabilityByFilter(filter: {
+  specRef?: string;
+  actionName?: string;
+  route?: string;
+  lifecycleStatus?: string;
+}): Promise<Array<{ actionName: string; specRef: string; lifecycleStatus: string; route: string }>> {
+  const conditions: Array<Record<string, unknown>> = [];
+  if (filter.specRef) conditions.push({ key: "spec_ref", match: { value: filter.specRef } });
+  if (filter.actionName) conditions.push({ key: "action_name", match: { value: filter.actionName } });
+  if (filter.route) conditions.push({ key: "route", match: { value: filter.route } });
+  if (filter.lifecycleStatus) conditions.push({ key: "lifecycle_status", match: { value: filter.lifecycleStatus } });
+
+  if (conditions.length === 0) return [];
+
+  const points = await scrollPoints(
+    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    { must: conditions },
+    100,
+  );
+
+  return points.map((p) => ({
+    actionName: String(p.payload["action_name"] ?? ""),
+    specRef: String(p.payload["spec_ref"] ?? ""),
+    lifecycleStatus: String(p.payload["lifecycle_status"] ?? ""),
+    route: String(p.payload["route"] ?? ""),
   }));
 }
