@@ -673,9 +673,23 @@ export async function sendMessage(input: {
     .replace(/^(?:In summary|To reiterate|To summarize)[^\n]*$/gim, "")
     // Numbered list items that are just planning ("1. Create...", "2. Update...")
     .replace(/^\d+\.\s*(?:Create|Update|Remove|Add|Delete|Modify|Change|Set|Initiate)\s+(?:a |the |new )?(?:backlog|provider|entry|item|category|record)[^\n]*$/gim, "")
+    // "Can you tell me..." / "Could you provide..." / "Can you share..." — agent asking user for info
+    .replace(/^(?:Can you (?:tell|share|provide|point|clarify|specify|confirm)|Could you (?:tell|share|provide|point|clarify|specify)|Please (?:provide|share|tell|clarify|specify))[^\n]*$/gim, "")
+    // "Which ..." / "What is the ..." questions asking user for technical details
+    .replace(/^(?:Which (?:file|component|library|charting|page|module|framework)|What (?:is the|does the) (?:component|file|graph|chart))[^\n]*$/gim, "")
+    // "I need to see..." / "To help you I need..."
+    .replace(/^(?:I (?:need to|would need to) (?:see|know|understand|locate|find)|To help (?:you|with this)[^\n]*I (?:need|would need))[^\n]*$/gim, "")
+    // "I apologize" / "I appreciate" filler
+    .replace(/^I (?:apologize|appreciate)[^\n]*$/gim, "")
     // Clean up excessive whitespace
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  // Quality gate: if the response was almost entirely stripped (agent was all questions/narration),
+  // replace with an honest fallback rather than showing empty or useless text.
+  if (responseContent.length < 20) {
+    responseContent = "I wasn't able to help with that effectively. I've logged it so the team can follow up. Try rephrasing your request, or use the skills menu in the header for common actions.";
+  }
 
   // Persist agent response
   const agentMsg = await prisma.agentMessage.create({
