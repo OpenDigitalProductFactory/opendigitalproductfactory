@@ -10,6 +10,7 @@ import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
 import { OrgChartView } from "@/components/employee/OrgChartView";
 import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
 import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
+import { MyPoliciesView } from "@/components/employee/MyPoliciesView";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
@@ -187,6 +188,8 @@ export default async function EmployeePage({ searchParams }: Props) {
           </div>
         ) : view === "orgchart" ? (
           <OrgChartView employees={employees} />
+        ) : view === "mypolicies" ? (
+          <MyPoliciesView />
         ) : (
           <>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
