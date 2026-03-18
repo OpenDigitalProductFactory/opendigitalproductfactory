@@ -628,6 +628,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
   },
+  // ─── Endpoint Testing Tools ──────────────────────────────────────────────
+  {
+    name: "run_endpoint_tests",
+    description: "Run the agent test harness against one or all endpoints. Tests capability probes (instruction compliance, tool calling, output format) and task scenarios. Results feed into endpoint performance scores and update ModelProfile with evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        endpointId: { type: "string", description: "Test a specific endpoint (default: all active LLM endpoints)" },
+        taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
+        probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: false)" },
+      },
+    },
+    requiredCapability: "manage_capabilities",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -1505,6 +1521,42 @@ export async function executeTool(
         entityId: feedbackId,
         message: "Feedback submitted.",
       };
+    }
+
+    case "run_endpoint_tests": {
+      const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
+
+      const results = await runEndpointTests({
+        ...(typeof params.endpointId === "string" ? { endpointId: params.endpointId } : {}),
+        ...(typeof params.taskType === "string" ? { taskType: params.taskType } : {}),
+        probesOnly: params.probesOnly === true,
+        triggeredBy: userId,
+      });
+
+      const summary = results.map((r) => {
+        const probesPassed = r.probes.filter((p) => p.pass).length;
+        const probesFailed = r.probes.filter((p) => !p.pass).length;
+        const scenariosPassed = r.scenarios.filter((s) => s.passed).length;
+        const scenariosFailed = r.scenarios.filter((s) => !s.passed).length;
+        const lines = [
+          `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed`,
+        ];
+        if (r.scenarios.length > 0) {
+          lines.push(`Scenarios ${scenariosPassed}/${scenariosPassed + scenariosFailed} passed`);
+        }
+        lines.push(`Instruction following: ${r.instructionFollowing ?? "unknown"}`);
+        if (r.codingCapability) lines.push(`Coding: ${r.codingCapability}`);
+        // List failures
+        for (const p of r.probes.filter((p) => !p.pass)) {
+          lines.push(`  FAIL probe: ${p.name} — ${p.reason}`);
+        }
+        for (const s of r.scenarios.filter((s) => !s.passed)) {
+          lines.push(`  FAIL scenario: ${s.name}`);
+        }
+        return lines.join("\n");
+      }).join("\n\n");
+
+      return { success: true, message: summary || "No endpoints to test.", data: { results } };
     }
 
     default:
