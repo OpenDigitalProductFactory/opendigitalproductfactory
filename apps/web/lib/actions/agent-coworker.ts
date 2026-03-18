@@ -26,7 +26,7 @@ import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
-import { isUnifiedCoworkerEnabled, isManifestRouterEnabled } from "@/lib/feature-flags";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import {
   loadEndpointManifests,
   loadTaskRequirement,
@@ -40,8 +40,7 @@ import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
-import { routeWithPerformance } from "@/lib/agent-router";
-import { loadEndpoints, loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
+import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
@@ -462,58 +461,52 @@ export async function sendMessage(input: {
 
     // Performance-weighted routing (only for confident classifications)
     if (classification.taskType !== "unknown" && classification.confidence >= 0.5) {
-      const allEndpoints = await loadEndpoints();
       const profiles = await loadPerformanceProfiles(classification.taskType);
       const routeCtx = resolveRouteContext(input.routeContext);
 
-      // ── EP-INF-001: Shadow mode — new manifest-based router ──
-      if (await isManifestRouterEnabled()) {
-        try {
-          const [manifests, taskReq, policies, epOverrides] = await Promise.all([
-            loadEndpointManifests(),
-            loadTaskRequirement(classification.taskType),
-            loadPolicyRules(),
-            loadOverrides(classification.taskType),
-          ]);
-          const manifestDecision = routeEndpoint(
-            manifests,
-            taskReq,
-            routeCtx.sensitivity,
-            policies,
-            epOverrides,
-          );
-          // Log the shadow decision — does not affect actual routing
-          await persistRouteDecision(manifestDecision, undefined, true);
+      // ── EP-INF-001: Manifest-based routing (replaces legacy routeWithPerformance) ──
+      try {
+        const [manifests, taskReq, policies, epOverrides] = await Promise.all([
+          loadEndpointManifests(),
+          loadTaskRequirement(classification.taskType),
+          loadPolicyRules(),
+          loadOverrides(classification.taskType),
+        ]);
+        const manifestDecision = routeEndpoint(
+          manifests,
+          taskReq,
+          routeCtx.sensitivity,
+          policies,
+          epOverrides,
+        );
+
+        // Persist routing decision for audit trail
+        await persistRouteDecision(manifestDecision, undefined, false);
+
+        if (manifestDecision.selectedEndpoint) {
+          resolvedEndpointId = manifestDecision.selectedEndpoint;
           console.log(
-            `[EP-INF-001 shadow] ${classification.taskType}: ${manifestDecision.reason}`,
+            `[routing] ${classification.taskType}: ${manifestDecision.reason}`,
           );
-        } catch (err) {
-          console.error("[EP-INF-001 shadow] routing error:", err);
+
+          // Ensure performance profile exists for the selected endpoint
+          const taskTypeDef = getTaskType(classification.taskType);
+          if (taskTypeDef) {
+            await ensurePerformanceProfile(resolvedEndpointId, classification.taskType, taskTypeDef.defaultInstructions);
+          }
+
+          // Inject task-specific instructions from performance profile
+          const profile = profiles.find((p) => p.endpointId === resolvedEndpointId);
+          if (profile?.currentInstructions) {
+            populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
+          }
+        } else {
+          console.warn(
+            `[routing] ${classification.taskType}: no eligible endpoint — falling back to legacy. ${manifestDecision.reason}`,
+          );
         }
-      }
-
-      const perfRoute = routeWithPerformance(allEndpoints, profiles, {
-        sensitivity: routeCtx.sensitivity,
-        minCapabilityTier: getTaskType(classification.taskType)?.minCapabilityTier ?? "basic",
-        requiredTags: [classification.taskType],
-        requiredEndpointType: "llm",
-        taskType: classification.taskType,
-      });
-
-      if (perfRoute) {
-        resolvedEndpointId = perfRoute.endpointId;
-
-        // Ensure performance profile exists (lazy creation)
-        const taskTypeDef = getTaskType(classification.taskType);
-        if (taskTypeDef) {
-          await ensurePerformanceProfile(perfRoute.endpointId, classification.taskType, taskTypeDef.defaultInstructions);
-        }
-
-        // Inject task-specific instructions
-        const profile = profiles.find((p) => p.endpointId === perfRoute.endpointId);
-        if (profile?.currentInstructions) {
-          populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
-        }
+      } catch (err) {
+        console.error("[routing] manifest router error, falling back to legacy:", err);
       }
     }
 
