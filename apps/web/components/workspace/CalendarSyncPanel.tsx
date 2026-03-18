@@ -34,7 +34,7 @@ export function CalendarSyncPanel() {
       setMessage("Fetching calendar feed...");
       const result = await addICalSubscription({
         feedUrl: feedUrl.trim(),
-        name: feedName.trim() || undefined,
+        ...(feedName.trim() ? { name: feedName.trim() } : {}),
       });
       if (result.success) {
         setMessage(`Imported ${result.imported} events`);

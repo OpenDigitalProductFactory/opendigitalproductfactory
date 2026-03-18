@@ -41,7 +41,7 @@ export function WorkspaceCalendar({ events }: Props) {
         id: e.id,
         title: e.title,
         start: e.start,
-        end: e.end ?? undefined,
+        ...(e.end ? { end: e.end } : {}),
         allDay: e.allDay,
         backgroundColor: e.color,
         borderColor: e.color,

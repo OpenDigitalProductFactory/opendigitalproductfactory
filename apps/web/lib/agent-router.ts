@@ -153,7 +153,7 @@ export function routeSubtask(
   return routeTask(endpoints, {
     sensitivity,
     minCapabilityTier: options?.minCapabilityTier ?? "basic",
-    requiredTags: options?.requiredTags,
+    ...(options?.requiredTags ? { requiredTags: options.requiredTags } : {}),
     preferCheap: true,
   });
 }

@@ -262,7 +262,7 @@ export async function reviewAlert(
   }
 
   await logComplianceAction("regulatory-alert", id, "reviewed", employeeId, null, {
-    field: "resolution", newValue: resolution, notes,
+    field: "resolution", newValue: resolution, ...(notes ? { notes } : {}),
   });
   revalidatePath("/compliance");
   return { ok: true, message: "Alert reviewed." };
@@ -297,7 +297,7 @@ export async function dismissAlert(id: string, notes?: string): Promise<Complian
     }
   }
 
-  await logComplianceAction("regulatory-alert", id, "dismissed", employeeId, null, { notes });
+  await logComplianceAction("regulatory-alert", id, "dismissed", employeeId, null, notes ? { notes } : {});
   revalidatePath("/compliance");
   return { ok: true, message: "Alert dismissed." };
 }

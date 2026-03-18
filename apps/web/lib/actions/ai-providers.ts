@@ -24,12 +24,13 @@ import {
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
-async function requireManageProviders(): Promise<void> {
+async function requireManageProviders(): Promise<string> {
   const session = await auth();
   const user = session?.user;
   if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
     throw new Error("Unauthorized");
   }
+  return user.id;
 }
 
 async function requireSession(): Promise<void> {

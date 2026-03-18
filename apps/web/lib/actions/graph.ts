@@ -112,8 +112,8 @@ export async function getFullGraphData(): Promise<GraphData> {
   // Try to enrich with Neo4j graph data (infrastructure CIs, dependencies)
   try {
     for (const p of products.slice(0, 20)) {
-      const neighbours = await getNeighbours(p.productId);
-      for (const n of neighbours) {
+      const { incoming, outgoing } = await getNeighbours(p.productId);
+      for (const n of [...incoming, ...outgoing]) {
         if (!nodeMap.has(n.node.id)) {
           nodeMap.set(n.node.id, {
             id: n.node.id,

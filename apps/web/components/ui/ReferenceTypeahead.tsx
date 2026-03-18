@@ -23,7 +23,7 @@ type ReferenceTypeaheadProps = {
   placeholder?: string;
   onSearch: (query: string) => Promise<RefItem[]>;
   onSelect: (item: RefItem) => void;
-  onAddNew?: (query: string) => void;
+  onAddNew?: ((query: string) => void) | undefined;
   addNewLabel?: string;
   value: RefItem | null;
   disabled?: boolean;
@@ -151,7 +151,7 @@ export function ReferenceTypeahead({
         break;
       case "Enter":
         e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < results.length) {
+        if (activeIndex >= 0 && activeIndex < results.length && results[activeIndex]) {
           handleSelectItem(results[activeIndex]);
         } else if (activeIndex === results.length && showAddNew) {
           handleAddNew();
