@@ -1,5 +1,5 @@
 import { prisma } from "./client.js";
-import type { PrismaClient } from "../generated/client";
+import type { PrismaClient } from "../generated/client/client";
 
 export type EaStructureRuleSeed = {
   notationSlug: string;

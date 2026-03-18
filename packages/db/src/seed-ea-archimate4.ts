@@ -4,7 +4,7 @@
 // Safe to re-run (upsert pattern throughout).
 
 import { prisma } from "./client.js";
-import type { Prisma } from "../generated/client";
+import type { Prisma } from "../generated/client/client";
 
 // ─── Lifecycle constraint sets ────────────────────────────────────────────────
 

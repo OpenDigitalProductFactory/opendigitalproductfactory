@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { prisma } from "./client";
 
 describe("discovery attribution Prisma client", () => {
-  it("exposes software normalization delegates", () => {
-    expect(prisma.discoveredSoftwareEvidence).toBeDefined();
-    expect(prisma.softwareIdentity).toBeDefined();
-    expect(prisma.softwareNormalizationRule).toBeDefined();
+  it("exposes discovery model delegates", () => {
+    expect(prisma.discoveredModel).toBeDefined();
+    expect(prisma.discoveredItem).toBeDefined();
+    expect(prisma.discoveredRelationship).toBeDefined();
   });
 });

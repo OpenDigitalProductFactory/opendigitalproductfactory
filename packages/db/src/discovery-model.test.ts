@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Prisma } from "../generated/client";
+import { Prisma } from "../generated/client/client";
 
 describe("bootstrap discovery Prisma model names", () => {
   it("exposes the new discovery model delegates", () => {

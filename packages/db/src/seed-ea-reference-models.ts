@@ -1,7 +1,7 @@
 import { join } from "path";
 import { readFile, utils } from "xlsx";
 import { prisma } from "./client.js";
-import type { Prisma } from "../generated/client";
+import type { Prisma } from "../generated/client/client";
 import {
   normalizePriorityClass,
   slugifyReferenceModelName,
