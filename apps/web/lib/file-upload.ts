@@ -3,7 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { parseFileContent, capParsedContentSize } from "./file-parsers";
 
-const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "docx"]);
+const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log"]);
 const DEFAULT_MAX_SIZE_MB = 10;
 const MAX_ATTACHMENTS_PER_THREAD = 20;
 const MAX_USER_STORAGE_BYTES = 200 * 1024 * 1024;
