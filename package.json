@@ -10,7 +10,8 @@
     "db:migrate": "pnpm --filter @dpf/db migrate",
     "db:seed": "pnpm --filter @dpf/db seed",
     "db:studio": "pnpm --filter @dpf/db studio",
-    "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts"
+    "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
+    "test:endpoints": "tsx scripts/test-endpoints.ts"
   },
   "engines": { "node": ">=20", "pnpm": ">=9" }
 }
