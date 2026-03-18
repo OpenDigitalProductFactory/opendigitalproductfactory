@@ -14,7 +14,8 @@
     "docsUrl": "https://docs.anthropic.com",
     "consoleUrl": "https://console.anthropic.com/settings/billing",
     "billingLabel": "Pay-per-token API key",
-    "costPerformanceNotes": "Use API key from console.anthropic.com. Pay-per-token billing."
+    "costPerformanceNotes": "Use API key from console.anthropic.com. Pay-per-token billing.",
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "anthropic-sub",
@@ -31,7 +32,8 @@
     "docsUrl": "https://code.claude.com/docs",
     "consoleUrl": "https://claude.ai/settings/billing",
     "billingLabel": "Max subscription (included)",
-    "costPerformanceNotes": "Uses your Claude Code / Max subscription. Run 'claude setup-token' in terminal to generate token. No prompt caching, no 1M context."
+    "costPerformanceNotes": "Uses your Claude Code / Max subscription. Run 'claude setup-token' in terminal to generate token. No prompt caching, no 1M context.",
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "openai",
@@ -48,7 +50,8 @@
     "docsUrl": "https://platform.openai.com/docs",
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "azure-openai",
@@ -65,7 +68,8 @@
     "docsUrl": "https://learn.microsoft.com/en-us/azure/ai-services/openai/",
     "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "gemini",
@@ -82,7 +86,8 @@
     "docsUrl": "https://ai.google.dev/docs",
     "consoleUrl": "https://aistudio.google.com/apikey",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "bedrock",
@@ -99,7 +104,8 @@
     "docsUrl": "https://docs.aws.amazon.com/bedrock/",
     "consoleUrl": "https://console.aws.amazon.com/bedrock/",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "ollama",
@@ -116,7 +122,8 @@
     "docsUrl": "https://github.com/ollama/ollama/blob/main/docs/api.md",
     "consoleUrl": null,
     "billingLabel": "Local compute \u00b7 electricity cost only",
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "xai",
@@ -131,7 +138,8 @@
     "docsUrl": "https://docs.x.ai",
     "consoleUrl": "https://console.x.ai",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "mistral",
@@ -146,7 +154,8 @@
     "docsUrl": "https://docs.mistral.ai",
     "consoleUrl": "https://console.mistral.ai/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "cohere",
@@ -161,7 +170,8 @@
     "docsUrl": "https://docs.cohere.com",
     "consoleUrl": "https://dashboard.cohere.com/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "deepseek",
@@ -176,7 +186,8 @@
     "docsUrl": "https://platform.deepseek.com/api-docs",
     "consoleUrl": "https://platform.deepseek.com/top_up",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "groq",
@@ -191,7 +202,8 @@
     "docsUrl": "https://console.groq.com/docs",
     "consoleUrl": "https://console.groq.com/settings/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "together",
@@ -206,7 +218,8 @@
     "docsUrl": "https://docs.together.ai",
     "consoleUrl": "https://api.together.ai/settings/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "fireworks",
@@ -221,7 +234,8 @@
     "docsUrl": "https://docs.fireworks.ai",
     "consoleUrl": "https://fireworks.ai/account/billing",
     "billingLabel": null,
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "codex",
@@ -238,7 +252,8 @@
     "docsUrl": "https://developers.openai.com/codex/",
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": "Pay-per-use (API key) or Subscription (ChatGPT plan)",
-    "costPerformanceNotes": "Agentic coding specialist. ~3x cheaper than GPT-4o for code tasks. Runs in sandboxed environment with tool use and persistent threads."
+    "costPerformanceNotes": "Agentic coding specialist. ~3x cheaper than GPT-4o for code tasks. Runs in sandboxed environment with tool use and persistent threads.",
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "openrouter",
@@ -253,7 +268,8 @@
     "docsUrl": "https://openrouter.ai/docs",
     "consoleUrl": "https://openrouter.ai/credits",
     "billingLabel": "Pay-per-use \u00b7 rates vary by model",
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "litellm",
@@ -268,7 +284,8 @@
     "docsUrl": "https://docs.litellm.ai",
     "consoleUrl": null,
     "billingLabel": "Pay-per-use \u00b7 rates vary by model",
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "portkey",
@@ -283,7 +300,8 @@
     "docsUrl": "https://docs.portkey.ai",
     "consoleUrl": "https://app.portkey.ai/organisation/billing",
     "billingLabel": "Pay-per-use \u00b7 rates vary by model",
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
   },
   {
     "providerId": "martian",
@@ -298,6 +316,79 @@
     "docsUrl": "https://docs.withmartian.com",
     "consoleUrl": "https://app.withmartian.com/billing",
     "billingLabel": "Pay-per-use \u00b7 rates vary by model",
-    "costPerformanceNotes": null
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible"
+  },
+  {
+    "providerId": "document-parser",
+    "name": "Document Parser",
+    "status": "unconfigured",
+    "endpointType": "service",
+    "category": "mcp-subscribed",
+    "baseUrl": null,
+    "authMethod": "api_key",
+    "supportedAuthMethods": ["api_key"],
+    "authHeader": null,
+    "costModel": "token",
+    "families": [],
+    "enabledFamilies": [],
+    "docsUrl": null,
+    "consoleUrl": null,
+    "billingLabel": "Usage-based pricing",
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible",
+    "catalogEntry": {
+      "description": "Extract structured data from PDFs, spreadsheets, and documents",
+      "pricingInfo": "Usage-based pricing",
+      "enableUrl": "/admin/services"
+    }
+  },
+  {
+    "providerId": "advanced-code-analysis",
+    "name": "Advanced Code Analysis",
+    "status": "unconfigured",
+    "endpointType": "service",
+    "category": "mcp-subscribed",
+    "baseUrl": null,
+    "authMethod": "api_key",
+    "supportedAuthMethods": ["api_key"],
+    "authHeader": null,
+    "costModel": "token",
+    "families": [],
+    "enabledFamilies": [],
+    "docsUrl": null,
+    "consoleUrl": null,
+    "billingLabel": "Usage-based pricing",
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible",
+    "catalogEntry": {
+      "description": "AI-powered code review and security scanning",
+      "pricingInfo": "Usage-based pricing",
+      "enableUrl": "/admin/services"
+    }
+  },
+  {
+    "providerId": "data-enrichment",
+    "name": "Data Enrichment",
+    "status": "unconfigured",
+    "endpointType": "service",
+    "category": "mcp-subscribed",
+    "baseUrl": null,
+    "authMethod": "api_key",
+    "supportedAuthMethods": ["api_key"],
+    "authHeader": null,
+    "costModel": "token",
+    "families": [],
+    "enabledFamilies": [],
+    "docsUrl": null,
+    "consoleUrl": null,
+    "billingLabel": "Usage-based pricing",
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible",
+    "catalogEntry": {
+      "description": "Enrich business data with external sources",
+      "pricingInfo": "Usage-based pricing",
+      "enableUrl": "/admin/services"
+    }
   }
 ]
