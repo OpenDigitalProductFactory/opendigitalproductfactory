@@ -679,5 +679,14 @@ export async function profileModelsInternal(
     totalFailed += batch.filter((b) => !profiledIds.has(b.modelId)).length;
   }
 
+  // ── Verification: run capability probes against each profiled model ──
+  // This replaces guessed codingCapability/instructionFollowing with evidence.
+  try {
+    const { verifyModels } = await import("@/lib/endpoint-test-runner");
+    await verifyModels(providerId, "system:model-profiler");
+  } catch (err) {
+    console.warn("[profiling] probe verification failed (non-blocking):", err);
+  }
+
   return { profiled: totalProfiled, failed: totalFailed };
 }

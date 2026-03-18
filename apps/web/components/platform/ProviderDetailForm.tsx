@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { configureProvider, testProviderAuth, discoverModels, profileModels, verifyProviderModels } from "@/lib/actions/ai-providers";
+import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
 import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
@@ -95,22 +95,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       }
 
       // Step 3: Auto-profile if model count is manageable (≤ 30).
-      // Large catalogs (100+ models) are left for the user to profile selectively.
+      // Profiling now includes capability probe verification — it generates the
+      // descriptive profile AND runs probes to replace guesses with evidence.
       const unprofiled = discovery.discovered - profiles.length;
       if (unprofiled > 0 && discovery.discovered <= 30) {
-        setPipelineStatus(`Profiling ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
+        setPipelineStatus(`Profiling & verifying ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
         const profResult = await profileModels(provider.providerId);
         setProfilingResult(profResult);
-      }
-
-      // Step 4: Auto-verify profiled models with capability probes.
-      // Updates ModelProfile.instructionFollowing with evidence.
-      setPipelineStatus("Verifying model capabilities...");
-      const verifyResult = await verifyProviderModels(provider.providerId);
-      if (verifyResult.verified > 0) {
-        setPipelineStatus(`Verified ${verifyResult.verified} model${verifyResult.verified !== 1 ? "s" : ""}: ${verifyResult.passed} passed, ${verifyResult.failed} failed`);
-        // Brief pause so user can read the result
-        await new Promise((r) => setTimeout(r, 2000));
       }
 
       setPipelineStatus(null);
