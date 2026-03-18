@@ -20,6 +20,7 @@ import {
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
@@ -358,15 +359,29 @@ export async function sendMessage(input: {
     populatedPrompt = promptSections.join("\n");
   }
 
-  // Get available tools for this user
-  const availableTools = getAvailableTools({
+  // Get ALL platform tools (no mode filtering — we filter the merged set below)
+  const allPlatformTools = getAvailableTools({
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, {
     externalAccessEnabled: input.externalAccessEnabled === true,
-    mode: input.coworkerMode ?? "advise",
+    // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
   });
+
+  // Get page-specific actions
+  const pageActions = getActionsForRoute(input.routeContext, {
+    userId: user.id!,
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  });
+
+  // Merge and apply mode filtering once to the combined set
+  const mergedTools = [...allPlatformTools, ...pageActions];
+  const availableTools = input.coworkerMode === "advise"
+    ? mergedTools.filter((t) => !t.sideEffect)
+    : mergedTools;
+
   const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
 
   // When external access is enabled, tell the agent about its web tools
@@ -461,7 +476,7 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       agentId: agent.agentId,
       threadId: input.threadId,
-      modelRequirements: Object.keys(modelReqs).length > 0 ? modelReqs : undefined,
+      ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
     });
 
     // Handle proposal — agent wants to take a side-effecting action that needs approval
@@ -483,7 +498,7 @@ export async function sendMessage(input: {
         data: {
           proposalId, threadId: input.threadId, messageId: agentMsg.id,
           agentId: agent.agentId, actionType: tc.name,
-          parameters: tc.arguments as Prisma.InputJsonValue, status: "proposed",
+          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue, status: "proposed",
         },
         select: { proposalId: true, actionType: true, parameters: true, status: true, resultEntityId: true, resultError: true },
       });
@@ -503,155 +518,6 @@ export async function sendMessage(input: {
       inferenceMs: 0,
       toolCalls: undefined as undefined, // already handled by loop
     };
-
-    // ── AGENTIC LOOP REPLACED THE OLD SINGLE-TOOL HANDLER ──
-    // The old code handled one tool call then did one follow-up. The new agentic
-    // loop is in agentic-loop.ts and chains multiple tool calls automatically.
-    // This block is kept for backward compatibility but should not trigger —
-    // the agentic loop handles all tool calls before returning.
-    if (false && result.toolCalls && result.toolCalls.length > 0) {
-      const tc = result.toolCalls[0]!; // v1: DEPRECATED — agentic loop handles this
-      const toolDefinition = availableTools.find((tool) => tool.name === tc.name);
-
-      if (toolDefinition?.executionMode === "immediate") {
-        const toolResult = await executeTool(
-          tc.name,
-          tc.arguments,
-          user.id,
-          { routeContext: input.routeContext },
-        );
-
-        // If the tool returned data (search results, scores), feed it back to the LLM
-        // so the agent can craft a natural response instead of echoing "Found 12 items"
-        if (toolResult.data && toolResult.success) {
-          const toolContext: ChatMessage[] = [
-            ...chatHistory,
-            { role: "assistant" as const, content: `[Tool ${tc.name} returned: ${JSON.stringify(toolResult.data).slice(0, 2000)}]` },
-            { role: "user" as const, content: "Use the tool results above to continue the conversation naturally. Do not mention the tool by name." },
-          ];
-          try {
-            const followUp = await callWithFailover(
-              toolContext,
-              populatedPrompt,
-              agent.sensitivity,
-              { ...(agent.modelRequirements ? { modelRequirements: agent.modelRequirements } : {}) },
-            );
-            const agentMsg = await prisma.agentMessage.create({
-              data: {
-                threadId: input.threadId,
-                role: "assistant",
-                content: followUp.content,
-                agentId: agent.agentId,
-                routeContext: input.routeContext,
-                providerId: followUp.providerId,
-                taskType: useUnified ? taskTypeId : null,
-                routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
-              },
-              select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-            });
-
-            // Fire-and-forget: process observer
-            const followUpMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
-              endpointId: resolvedEndpointId,
-              taskType: taskTypeId,
-              sensitivity: resolveRouteContext(input.routeContext).sensitivity,
-              userMessage: trimmedContent,
-              aiResponse: followUp.content,
-            } : undefined;
-            observeConversation(input.threadId, input.routeContext, followUpMeta).catch((err) =>
-              console.error("[process-observer]", err),
-            );
-
-            return {
-              userMessage: serializeMessage(userMsg),
-              agentMessage: serializeMessage(agentMsg),
-              ...(toolResult.data !== undefined ? { formAssistUpdate: toolResult.data } : {}),
-            };
-          } catch {
-            // If follow-up LLM call fails, fall through to showing the raw tool message
-          }
-        }
-
-        const agentMsg = await prisma.agentMessage.create({
-          data: {
-            threadId: input.threadId,
-            role: "assistant",
-            content: toolResult.message,
-            agentId: agent.agentId,
-            routeContext: input.routeContext,
-            providerId: result.providerId,
-            taskType: useUnified ? taskTypeId : null,
-            routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
-          },
-          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-        });
-
-        // Fire-and-forget: process observer
-        const toolResultMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
-          endpointId: resolvedEndpointId,
-          taskType: taskTypeId,
-          sensitivity: resolveRouteContext(input.routeContext).sensitivity,
-          userMessage: trimmedContent,
-          aiResponse: toolResult.message,
-        } : undefined;
-        observeConversation(input.threadId, input.routeContext, toolResultMeta).catch((err) =>
-          console.error("[process-observer]", err),
-        );
-
-        return {
-          userMessage: serializeMessage(userMsg),
-          agentMessage: serializeMessage(agentMsg),
-          ...(toolResult.data !== undefined ? { formAssistUpdate: toolResult.data } : {}),
-        };
-      }
-
-      const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-
-      // Create the agent message first
-      const proposalContent = result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`;
-      const agentMsg = await prisma.agentMessage.create({
-        data: {
-          threadId: input.threadId,
-          role: "assistant",
-          content: proposalContent,
-          agentId: agent.agentId,
-          routeContext: input.routeContext,
-          providerId: result.providerId,
-          taskType: useUnified ? taskTypeId : null,
-          routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
-        },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
-
-      // Create the proposal linked to the message
-      const proposal = await prisma.agentActionProposal.create({
-        data: {
-          proposalId,
-          threadId: input.threadId,
-          messageId: agentMsg.id,
-          agentId: agent.agentId,
-          actionType: tc.name,
-          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue,
-        },
-      });
-
-      // Fire-and-forget: process observer
-      const proposalMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
-        endpointId: resolvedEndpointId,
-        taskType: taskTypeId,
-        sensitivity: resolveRouteContext(input.routeContext).sensitivity,
-        userMessage: trimmedContent,
-        aiResponse: proposalContent,
-      } : undefined;
-      observeConversation(input.threadId, input.routeContext, proposalMeta).catch((err) =>
-        console.error("[process-observer]", err),
-      );
-
-      return {
-        userMessage: serializeMessage(userMsg),
-        agentMessage: serializeMessage(agentMsg, proposal),
-      };
-    }
 
     responseContent = result.content;
     responseProviderId = result.providerId;
