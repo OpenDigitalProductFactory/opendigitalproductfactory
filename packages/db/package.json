@@ -21,12 +21,16 @@
     "neo4j:rebuild-ea": "tsx src/neo4j-rebuild-ea.ts"
   },
   "dependencies": {
-    "@prisma/client": "5.22.0",
+    "@prisma/client": "^7.5.0",
+    "@prisma/adapter-pg": "^7.5.0",
+    "dotenv": "^16.4.0",
     "neo4j-driver": "^5.27.0",
+    "pg": "^8.13.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "prisma": "5.22.0",
+    "@types/pg": "^8.11.0",
+    "prisma": "^7.5.0",
     "tsx": "^4.15.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
