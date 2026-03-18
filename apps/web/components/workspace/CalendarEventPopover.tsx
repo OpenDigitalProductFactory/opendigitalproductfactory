@@ -20,7 +20,7 @@ const CATEGORIES = [
 
 type Props = {
   defaultDate?: string;
-  defaultEndDate?: string;
+  defaultEndDate?: string | undefined;
   onClose: () => void;
 };
 
@@ -46,9 +46,9 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
         eventType: form.eventType,
         category: form.category,
         startAt: form.startAt,
-        endAt: form.endAt || undefined,
+        ...(form.endAt ? { endAt: form.endAt } : {}),
         allDay: form.allDay,
-        description: form.description || undefined,
+        ...(form.description ? { description: form.description } : {}),
       });
       if (result.success) {
         onClose();

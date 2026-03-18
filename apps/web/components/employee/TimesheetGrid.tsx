@@ -89,7 +89,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
 
   function handleSave() {
     startTransition(async () => {
-      const result = await saveTimesheetEntries({ weekStarting, entries, notes: notes || undefined });
+      const result = await saveTimesheetEntries({ weekStarting, entries, ...(notes ? { notes } : {}) });
       if (result.success) {
         setMessage("Saved");
         router.refresh();
@@ -104,7 +104,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
     if (!existingPeriod) {
       // Save first, then submit
       startTransition(async () => {
-        const saveResult = await saveTimesheetEntries({ weekStarting, entries, notes: notes || undefined });
+        const saveResult = await saveTimesheetEntries({ weekStarting, entries, ...(notes ? { notes } : {}) });
         if (!saveResult.success || !saveResult.periodId) {
           setMessage(saveResult.error ?? "Save failed");
           return;

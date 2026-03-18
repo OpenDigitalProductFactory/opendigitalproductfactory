@@ -5,7 +5,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 
-export type ComplianceActionResult = { ok: boolean; message: string; id?: string };
+export type ComplianceActionResult = { ok: boolean; message: string; id?: string | undefined };
 
 export async function requireViewCompliance() {
   const session = await auth();

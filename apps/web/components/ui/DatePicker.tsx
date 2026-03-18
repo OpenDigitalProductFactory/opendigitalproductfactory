@@ -80,7 +80,7 @@ export function DatePicker({
             mode="single"
             selected={value ?? undefined}
             onSelect={handleSelect}
-            defaultMonth={value ?? undefined}
+            {...(value ? { defaultMonth: value } : {})}
             style={
               {
                 "--rdp-accent-color": "var(--dpf-accent)",

@@ -18,11 +18,11 @@ const FONT_OPTIONS = [
 type Step = "choose" | "preview" | "finetune";
 
 type Props = {
-  existingName?: string;
-  existingLogoUrl?: string;
-  existingAccent?: string;
-  existingFont?: string;
-  onCancel?: () => void;
+  existingName?: string | undefined;
+  existingLogoUrl?: string | undefined;
+  existingAccent?: string | undefined;
+  existingFont?: string | undefined;
+  onCancel?: (() => void) | undefined;
 };
 
 export function BrandingWizard({

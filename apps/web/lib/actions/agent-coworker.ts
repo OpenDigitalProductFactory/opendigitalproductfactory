@@ -399,6 +399,33 @@ export async function sendMessage(input: {
     }
   }
 
+  // Surface MCP service resources that are discoverable but not yet enabled for this org
+  const availableResources = await prisma.modelProvider.findMany({
+    where: {
+      catalogVisibility: "visible",
+      status: { not: "active" },
+      endpointType: "service",
+    },
+    select: { name: true, catalogEntry: true, costPerformanceNotes: true },
+  });
+  if (availableResources.length > 0) {
+    const resourceHints = availableResources
+      .map((r) => {
+        const desc =
+          (r.catalogEntry as Record<string, unknown>)?.description ??
+          r.costPerformanceNotes ??
+          "External service";
+        return `- ${r.name}: ${desc}`;
+      })
+      .join("\n");
+    populatedPrompt += [
+      "",
+      "",
+      "The following external services are available but not yet enabled for this organization. If a task would benefit from one, mention it to the user:",
+      resourceHints,
+    ].join("\n");
+  }
+
   let responseContent: string;
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;

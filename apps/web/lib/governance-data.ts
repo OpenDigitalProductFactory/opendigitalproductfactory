@@ -113,7 +113,7 @@ export async function createUnifiedAuditLog(input: {
   actionKey: string;
   objectRef: string;
   decision: "allow" | "deny" | "require_approval";
-  rationale: Record<string, unknown>;
+  rationale: import("@dpf/db").Prisma.InputJsonValue;
   endpointUsed?: string;
   mode?: "advise" | "act";
   routeContext?: string;
