@@ -373,7 +373,7 @@ export function routeEndpoint(
   });
 
   // ── Stage 4: Select winner + build fallback chain ──────────────────────────
-  const winner = scored[0];
+  const winner = scored[0]!; // guaranteed non-empty — empty case handled above
   const fallbackEntries = scored.slice(1, 4); // up to 3 fallbacks
 
   // Build full candidate trace (eligible endpoints only, scored)
