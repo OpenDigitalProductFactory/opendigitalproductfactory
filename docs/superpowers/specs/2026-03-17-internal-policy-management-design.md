@@ -71,7 +71,7 @@ model Policy {
   reviewDate            DateTime? // next scheduled review
   reviewFrequency       String?   // "annual" | "biennial" | "quarterly"
   fileRef               String?   // future file storage integration
-  obligationId          String?   // optional link to compliance obligation
+  obligationId          String?   // optional link to compliance obligation (direct FK, more precise than Regulation.sourceType flag)
   notes                 String?
   agentId               String?
   status                String    @default("active")
@@ -102,6 +102,8 @@ approved → published (sets publishedAt — employees can now see and acknowled
 published → retired (sets retiredAt — employees no longer prompted)
 retired → draft (re-activate as new version — increments version number)
 ```
+
+**Retirement behavior:** When a policy is retired, it is removed from employees' pending lists. Existing completions and acknowledgments remain as historical records. No new completions or acknowledgments can be created for retired policies — `acknowledgePolicy` and `completeRequirement` check that the parent policy has `lifecycleStatus: "published"` before proceeding.
 
 #### 1.2 PolicyRequirement
 
@@ -190,6 +192,8 @@ model TrainingRequirement {
 }
 ```
 
+TrainingRequirement inherits its active/inactive status from its parent PolicyRequirement — no separate status field is needed. Deleting the parent cascades to the training record.
+
 #### 1.5 PolicyAcknowledgment
 
 Lightweight "I have read this policy" record tied directly to the policy document. Separate from RequirementCompletion — this is the quick document-level acknowledgment.
@@ -248,7 +252,7 @@ app/(shell)/
         page.tsx        — policy detail + requirements + acknowledgment rates
 ```
 
-The "Policies" tab is added to `ComplianceTabNav` between "Dashboard" and "Regulations".
+The "Policies" tab is added to `ComplianceTabNav` between "Dashboard" and "Regulations". This placement is intentional — for most organizations, internal policies are the primary day-to-day compliance workflow (employees acknowledging policies, completing training), while regulations are the administrative source-of-truth that policies derive from. Policies first, regulations second matches the user workflow priority.
 
 ### 3. Policy List Page (`/compliance/policies`)
 
@@ -265,7 +269,7 @@ The "Policies" tab is added to `ComplianceTabNav` between "Dashboard" and "Regul
 
 ### 5. Employee Integration (`/employee`)
 
-New "My Policies" tab in `EmployeeTabNav`. When viewing own profile:
+New "My Policies" tab in `EmployeeTabNav`, following the existing `?view=mypolicies` query parameter pattern (consistent with Directory, Org Chart, Timesheets). Not a new route — rendered inline within `employee/page.tsx`. When viewing own profile:
 
 - **Pending Acknowledgments**: published policies the employee hasn't acknowledged at current version. "Acknowledge" button per policy.
 - **Pending Training**: training requirements not completed or expired. Link to external training if `externalUrl` set.
@@ -312,11 +316,15 @@ New file `apps/web/lib/actions/policy.ts`. Follows the same auth pattern as comp
 #### Dashboard
 - `getPolicyDashboardMetrics()` — overall acknowledgment rate, overdue training count, lowest-compliance policies
 
+#### Shared Helpers (extracted from compliance.ts)
+
+The helpers `logComplianceAction`, `ensureComplianceCalendarEvent`, and `getSessionEmployeeId` are currently module-private in `compliance.ts`. Chunk 3 of implementation begins by extracting them to a new shared file `apps/web/lib/actions/compliance-helpers.ts` that both `compliance.ts` and `policy.ts` import. This is listed in the Files Affected table below.
+
 #### Audit Logging
-All write actions call the existing `logComplianceAction` helper from compliance.ts (or a re-exported version). The ComplianceAuditLog tracks policy actions with `entityType: "policy"`, `"requirement"`, `"completion"`, `"acknowledgment"`.
+All write actions call `logComplianceAction` from the shared helpers. The ComplianceAuditLog tracks policy actions with `entityType: "policy"`, `"requirement"`, `"completion"`, `"acknowledgment"`.
 
 #### Calendar Integration
-Uses the existing `ensureComplianceCalendarEvent` helper from compliance.ts. Policy review dates and training deadlines create compliance calendar events.
+Uses `ensureComplianceCalendarEvent` from the shared helpers. Policy review dates and training deadlines create compliance calendar events.
 
 ---
 
@@ -327,7 +335,8 @@ Uses the existing `ensureComplianceCalendarEvent` helper from compliance.ts. Pol
 - **Employee self-service** — any authenticated employee with an EmployeeProfile can:
   - View published policies and their own pending requirements
   - Acknowledge policies (`acknowledgePolicy`)
-  - Complete requirements (`completeRequirement`)
+  - Self-complete requirements of type `"acknowledgment"` and `"training"` (`completeRequirement`)
+  - Requirements of type `"attestation"` and `"action"` require `manage_compliance` to mark complete — these represent activities that need verification (e.g., "complete fire drill evacuation" needs an admin to confirm it happened)
   - View their own completion history (`getMyPolicySummary`, `getMyPendingRequirements`)
 - PolicyAcknowledgment is **append-only** — no delete or update. Permanent audit record.
 - RequirementCompletion status can transition to "expired" (system) or "revoked" (admin), but records are never deleted.
@@ -342,8 +351,8 @@ Uses the existing `ensureComplianceCalendarEvent` helper from compliance.ts. Pol
 ### Schema Migration
 Single Prisma migration adding:
 - 5 new models: Policy, PolicyRequirement, RequirementCompletion, TrainingRequirement, PolicyAcknowledgment
-- Reverse relation on Obligation (policies)
-- 4 new reverse relations on EmployeeProfile
+- Reverse relation on Obligation (`policies Policy[]`) — this is a Prisma schema-level change only, no new column or index is added to the Obligation table. The FK lives on Policy.obligationId.
+- 4 new reverse relations on EmployeeProfile (also schema-only, no DB changes)
 
 ### Seed Data
 None — policies are created by users. Example policies (acceptable use, building security, ethics training) can be created through the UI after deployment.
@@ -396,17 +405,21 @@ No backfill required. No existing records affected. No breaking changes.
 | `apps/web/app/(shell)/compliance/policies/page.tsx` | Policy list page |
 | `apps/web/app/(shell)/compliance/policies/[id]/page.tsx` | Policy detail page |
 | `apps/web/components/compliance/CreatePolicyForm.tsx` | Policy create modal form |
+| `apps/web/components/employee/MyPoliciesView.tsx` | Employee My Policies view (pending acks, pending training, history) |
+| `apps/web/lib/actions/compliance-helpers.ts` | Shared helpers extracted from compliance.ts (logComplianceAction, ensureComplianceCalendarEvent, getSessionEmployeeId, requireViewCompliance, requireManageCompliance) |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
 | `packages/db/prisma/schema.prisma` | Add 5 new models + reverse relations on Obligation and EmployeeProfile |
+| `apps/web/lib/actions/compliance.ts` | Update imports to use shared helpers from compliance-helpers.ts |
+| `apps/web/lib/compliance-types.ts` | Add policy-domain entity types to ComplianceAuditLog entityType values |
 | `apps/web/components/compliance/ComplianceTabNav.tsx` | Add "Policies" tab |
 | `apps/web/app/(shell)/compliance/page.tsx` | Add policy compliance metrics section |
 | `apps/web/app/(shell)/workspace/page.tsx` | Add policy count to compliance tile + pending ack badge |
-| `apps/web/components/employee/EmployeeTabNav.tsx` | Add "My Policies" tab |
-| `apps/web/app/(shell)/employee/page.tsx` | Add My Policies view |
+| `apps/web/components/employee/EmployeeTabNav.tsx` | Add "My Policies" tab (view=mypolicies) |
+| `apps/web/app/(shell)/employee/page.tsx` | Add My Policies view using MyPoliciesView component |
 
 ---
 
