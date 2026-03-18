@@ -80,8 +80,10 @@ export function AgentPanelHeader({
           </span>
           <AgentSkillsDropdown
             skills={agent.skills}
+            userSkills={[]}
             userContext={userContext}
             onSend={onSend}
+            onCreateSkill={() => {}}
           />
           {providerInfo && (
             <span style={{ fontSize: 9, color: "#8888a0", fontFamily: "monospace" }}>
