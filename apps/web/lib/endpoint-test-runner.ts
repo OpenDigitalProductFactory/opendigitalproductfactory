@@ -80,8 +80,9 @@ async function runProbe(
 
     const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
+    const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
-      tools: probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
+      ...(probeToolsFormatted ? { tools: probeToolsFormatted } : {}),
       modelRequirements: { preferredProviderId: endpointId },
     });
 
@@ -112,8 +113,9 @@ async function runScenario(
 
     const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 
+    const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
-      tools: scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
+      ...(scenarioToolsFormatted ? { tools: scenarioToolsFormatted } : {}),
       modelRequirements: { preferredProviderId: endpointId },
     });
 
