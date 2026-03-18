@@ -7,8 +7,10 @@ import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import {
   generateRegulationId, generateObligationId, generateControlId,
+  generateAssessmentId, generateIncidentId, generateActionId,
   validateRegulationInput, validateObligationInput, validateControlInput,
   type RegulationInput, type ObligationInput, type ControlInput,
+  type RiskAssessmentInput, type IncidentInput, type CorrectiveActionInput,
 } from "@/lib/compliance-types";
 
 export type ComplianceActionResult = { ok: boolean; message: string; id?: string };
@@ -49,6 +51,30 @@ async function logComplianceAction(
       oldValue: details?.oldValue ?? null,
       newValue: details?.newValue ?? null,
       notes: details?.notes ?? null,
+    },
+  });
+}
+
+// ─── Calendar Integration ───────────────────────────────────────────────────
+
+async function ensureComplianceCalendarEvent(
+  entityType: string, entityId: string, title: string,
+  dueDate: Date, ownerEmployeeId: string, recurrence?: string,
+) {
+  const eventId = `CE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  await prisma.calendarEvent.create({
+    data: {
+      eventId,
+      title,
+      startAt: dueDate,
+      allDay: true,
+      eventType: "deadline",
+      category: "compliance",
+      ownerEmployeeId,
+      visibility: "team",
+      recurrence: recurrence ?? null,
+      complianceEntityType: entityType,
+      complianceEntityId: entityId,
     },
   });
 }
@@ -319,4 +345,293 @@ export async function unlinkControlFromObligation(controlId: string, obligationI
   await logComplianceAction("control", controlId, "unlinked", employeeId, null, { notes: `Unlinked from obligation ${obligationId}` });
   revalidatePath("/compliance");
   return { ok: true, message: "Link removed." };
+}
+
+// ─── Risk Assessment ────────────────────────────────────────────────────────
+
+export async function listRiskAssessments(filters?: { inherentRisk?: string; status?: string; assessedByEmployeeId?: string }) {
+  await requireViewCompliance();
+  return prisma.riskAssessment.findMany({
+    where: {
+      ...(filters?.status ? { status: filters.status } : { status: "active" }),
+      ...(filters?.inherentRisk && { inherentRisk: filters.inherentRisk }),
+      ...(filters?.assessedByEmployeeId && { assessedByEmployeeId: filters.assessedByEmployeeId }),
+    },
+    include: {
+      assessedBy: { select: { id: true, displayName: true } },
+      _count: { select: { controls: true, incidents: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getRiskAssessment(id: string) {
+  await requireViewCompliance();
+  return prisma.riskAssessment.findUniqueOrThrow({
+    where: { id },
+    include: {
+      assessedBy: { select: { id: true, displayName: true } },
+      controls: { include: { control: { select: { id: true, title: true, controlId: true } } } },
+      incidents: { orderBy: { occurredAt: "desc" } },
+    },
+  });
+}
+
+export async function createRiskAssessment(input: RiskAssessmentInput): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  if (!input.title.trim()) return { ok: false, message: "Title is required." };
+
+  const employeeId = await getSessionEmployeeId();
+  const record = await prisma.riskAssessment.create({
+    data: {
+      assessmentId: generateAssessmentId(),
+      title: input.title.trim(),
+      hazard: input.hazard.trim(),
+      likelihood: input.likelihood,
+      severity: input.severity,
+      inherentRisk: input.inherentRisk,
+      scope: input.scope ?? null,
+      residualRisk: input.residualRisk ?? null,
+      assessedByEmployeeId: input.assessedByEmployeeId ?? employeeId,
+      nextReviewDate: input.nextReviewDate ?? null,
+      notes: input.notes ?? null,
+    },
+  });
+
+  await logComplianceAction("risk-assessment", record.id, "created", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Risk assessment created.", id: record.id };
+}
+
+export async function updateRiskAssessment(id: string, input: Partial<RiskAssessmentInput>): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.riskAssessment.update({ where: { id }, data: {
+    ...(input.title !== undefined && { title: input.title.trim() }),
+    ...(input.hazard !== undefined && { hazard: input.hazard.trim() }),
+    ...(input.likelihood !== undefined && { likelihood: input.likelihood }),
+    ...(input.severity !== undefined && { severity: input.severity }),
+    ...(input.inherentRisk !== undefined && { inherentRisk: input.inherentRisk }),
+    ...(input.scope !== undefined && { scope: input.scope }),
+    ...(input.residualRisk !== undefined && { residualRisk: input.residualRisk }),
+    ...(input.assessedByEmployeeId !== undefined && { assessedByEmployeeId: input.assessedByEmployeeId }),
+    ...(input.nextReviewDate !== undefined && { nextReviewDate: input.nextReviewDate }),
+    ...(input.notes !== undefined && { notes: input.notes }),
+  }});
+
+  await logComplianceAction("risk-assessment", id, "updated", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Risk assessment updated." };
+}
+
+export async function linkRiskToControl(riskAssessmentId: string, controlId: string, notes?: string): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  const existing = await prisma.riskControl.findUnique({
+    where: { riskAssessmentId_controlId: { riskAssessmentId, controlId } },
+  });
+  if (existing) return { ok: false, message: "Link already exists." };
+
+  await prisma.riskControl.create({ data: { riskAssessmentId, controlId, mitigationNotes: notes ?? null } });
+  await logComplianceAction("risk-assessment", riskAssessmentId, "linked", employeeId, null, { notes: `Linked to control ${controlId}` });
+  revalidatePath("/compliance");
+  return { ok: true, message: "Risk linked to control." };
+}
+
+export async function unlinkRiskFromControl(riskAssessmentId: string, controlId: string): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.riskControl.delete({ where: { riskAssessmentId_controlId: { riskAssessmentId, controlId } } });
+  await logComplianceAction("risk-assessment", riskAssessmentId, "unlinked", employeeId, null, { notes: `Unlinked from control ${controlId}` });
+  revalidatePath("/compliance");
+  return { ok: true, message: "Link removed." };
+}
+
+// ─── Incident ───────────────────────────────────────────────────────────────
+
+export async function listIncidents(filters?: { severity?: string; status?: string; category?: string; regulatoryNotifiable?: boolean; reportedByEmployeeId?: string }) {
+  await requireViewCompliance();
+  return prisma.complianceIncident.findMany({
+    where: {
+      ...(filters?.severity && { severity: filters.severity }),
+      ...(filters?.status && { status: filters.status }),
+      ...(filters?.category && { category: filters.category }),
+      ...(filters?.regulatoryNotifiable !== undefined && { regulatoryNotifiable: filters.regulatoryNotifiable }),
+      ...(filters?.reportedByEmployeeId && { reportedByEmployeeId: filters.reportedByEmployeeId }),
+    },
+    include: {
+      reportedBy: { select: { id: true, displayName: true } },
+      _count: { select: { correctiveActions: true } },
+    },
+    orderBy: { occurredAt: "desc" },
+  });
+}
+
+export async function getIncident(id: string) {
+  await requireViewCompliance();
+  return prisma.complianceIncident.findUniqueOrThrow({
+    where: { id },
+    include: {
+      reportedBy: { select: { id: true, displayName: true } },
+      riskAssessment: { select: { id: true, title: true, assessmentId: true } },
+      correctiveActions: { orderBy: { createdAt: "desc" } },
+    },
+  });
+}
+
+export async function createIncident(input: IncidentInput): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  if (!input.title.trim()) return { ok: false, message: "Title is required." };
+
+  const employeeId = await getSessionEmployeeId();
+  const record = await prisma.complianceIncident.create({
+    data: {
+      incidentId: generateIncidentId(),
+      title: input.title.trim(),
+      description: input.description ?? null,
+      occurredAt: input.occurredAt,
+      detectedAt: input.detectedAt ?? null,
+      severity: input.severity,
+      category: input.category ?? null,
+      regulatoryNotifiable: input.regulatoryNotifiable ?? false,
+      notificationDeadline: input.notificationDeadline ?? null,
+      rootCause: input.rootCause ?? null,
+      riskAssessmentId: input.riskAssessmentId ?? null,
+      reportedByEmployeeId: input.reportedByEmployeeId ?? employeeId,
+    },
+  });
+
+  // Auto-create calendar deadline for notifiable incidents
+  if (input.regulatoryNotifiable && input.notificationDeadline && employeeId) {
+    await ensureComplianceCalendarEvent(
+      "incident-notification", record.id,
+      `REGULATORY NOTIFICATION: ${input.title}`,
+      input.notificationDeadline, employeeId,
+    );
+  }
+
+  await logComplianceAction("incident", record.id, "created", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Incident recorded.", id: record.id };
+}
+
+export async function updateIncident(id: string, input: Partial<IncidentInput> & { notifiedAt?: Date | null }): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.complianceIncident.update({ where: { id }, data: {
+    ...(input.title !== undefined && { title: input.title.trim() }),
+    ...(input.description !== undefined && { description: input.description }),
+    ...(input.severity !== undefined && { severity: input.severity }),
+    ...(input.category !== undefined && { category: input.category }),
+    ...(input.regulatoryNotifiable !== undefined && { regulatoryNotifiable: input.regulatoryNotifiable }),
+    ...(input.notificationDeadline !== undefined && { notificationDeadline: input.notificationDeadline }),
+    ...(input.notifiedAt !== undefined && { notifiedAt: input.notifiedAt }),
+    ...(input.rootCause !== undefined && { rootCause: input.rootCause }),
+    ...(input.riskAssessmentId !== undefined && { riskAssessmentId: input.riskAssessmentId }),
+  }});
+
+  await logComplianceAction("incident", id, "updated", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Incident updated." };
+}
+
+// ─── Corrective Action ──────────────────────────────────────────────────────
+
+export async function listCorrectiveActions(filters?: { status?: string; sourceType?: string; ownerEmployeeId?: string; overdue?: boolean }) {
+  await requireViewCompliance();
+  return prisma.correctiveAction.findMany({
+    where: {
+      ...(filters?.sourceType && { sourceType: filters.sourceType }),
+      ...(filters?.ownerEmployeeId && { ownerEmployeeId: filters.ownerEmployeeId }),
+      ...(filters?.status && { status: filters.status }),
+      ...(filters?.overdue && { status: { in: ["open", "in-progress"] }, dueDate: { lt: new Date() } }),
+    },
+    include: {
+      owner: { select: { id: true, displayName: true } },
+      incident: { select: { id: true, title: true, incidentId: true } },
+      auditFinding: { select: { id: true, title: true, findingId: true } },
+    },
+    orderBy: { dueDate: "asc" },
+  });
+}
+
+export async function getCorrectiveAction(id: string) {
+  await requireViewCompliance();
+  return prisma.correctiveAction.findUniqueOrThrow({
+    where: { id },
+    include: {
+      owner: { select: { id: true, displayName: true } },
+      verifiedBy: { select: { id: true, displayName: true } },
+      incident: true,
+      auditFinding: true,
+    },
+  });
+}
+
+export async function createCorrectiveAction(input: CorrectiveActionInput): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  if (!input.title.trim()) return { ok: false, message: "Title is required." };
+
+  const employeeId = await getSessionEmployeeId();
+  const record = await prisma.correctiveAction.create({
+    data: {
+      actionId: generateActionId(),
+      title: input.title.trim(),
+      description: input.description ?? null,
+      rootCause: input.rootCause ?? null,
+      sourceType: input.sourceType,
+      incidentId: input.incidentId ?? null,
+      auditFindingId: input.auditFindingId ?? null,
+      ownerEmployeeId: input.ownerEmployeeId ?? employeeId,
+      dueDate: input.dueDate ?? null,
+    },
+  });
+
+  await logComplianceAction("corrective-action", record.id, "created", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Corrective action created.", id: record.id };
+}
+
+export async function updateCorrectiveAction(id: string, input: Partial<CorrectiveActionInput> & { status?: string; completedAt?: Date | null }): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.correctiveAction.update({ where: { id }, data: {
+    ...(input.title !== undefined && { title: input.title.trim() }),
+    ...(input.description !== undefined && { description: input.description }),
+    ...(input.rootCause !== undefined && { rootCause: input.rootCause }),
+    ...(input.ownerEmployeeId !== undefined && { ownerEmployeeId: input.ownerEmployeeId }),
+    ...(input.dueDate !== undefined && { dueDate: input.dueDate }),
+    ...(input.status !== undefined && { status: input.status }),
+    ...(input.completedAt !== undefined && { completedAt: input.completedAt }),
+  }});
+
+  await logComplianceAction("corrective-action", id, "updated", employeeId, null);
+  revalidatePath("/compliance");
+  return { ok: true, message: "Corrective action updated." };
+}
+
+export async function verifyCorrectiveAction(
+  id: string, verifiedByEmployeeId: string, method: string,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.correctiveAction.update({ where: { id }, data: {
+    verificationMethod: method,
+    verificationDate: new Date(),
+    verifiedByEmployeeId,
+    status: "verified",
+  }});
+
+  await logComplianceAction("corrective-action", id, "status-changed", employeeId, null, {
+    field: "status", oldValue: "completed", newValue: "verified",
+    notes: `Verified by ${verifiedByEmployeeId} — method: ${method}`,
+  });
+  revalidatePath("/compliance");
+  return { ok: true, message: "Corrective action verified." };
 }
