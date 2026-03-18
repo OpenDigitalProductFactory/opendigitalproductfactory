@@ -209,11 +209,19 @@ export async function sendMessage(input: {
   if (threadAttachments.length > 0) {
     const summaries = threadAttachments.map((att) => {
       const parsed = att.parsedContent as Record<string, unknown> | null;
-      if (!parsed) return `- ${att.fileName} (not parsed)`;
+      if (!parsed) return `- ${att.fileName} (uploaded but content not available)`;
       const summary = parsed.summary ?? "";
       const columns = Array.isArray(parsed.columns) ? `\n  Columns: ${(parsed.columns as string[]).join(", ")}` : "";
-      const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 1500)}` : "";
-      return `- ${att.fileName}: ${summary}${columns}${text}`;
+      // Include sample data rows for spreadsheets
+      let sampleData = "";
+      if (Array.isArray(parsed.sampleRows) && (parsed.sampleRows as string[][]).length > 0) {
+        const rows = parsed.sampleRows as string[][];
+        const header = Array.isArray(parsed.columns) ? (parsed.columns as string[]).join(" | ") : "";
+        const dataLines = rows.map((r) => r.join(" | ")).join("\n    ");
+        sampleData = header ? `\n  Data:\n    ${header}\n    ${dataLines}` : `\n  Data:\n    ${dataLines}`;
+      }
+      const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 2000)}` : "";
+      return `- ${att.fileName}: ${summary}${columns}${sampleData}${text}`;
     });
     attachmentContext = `\n--- Uploaded Files ---\n${summaries.join("\n")}`;
   }
