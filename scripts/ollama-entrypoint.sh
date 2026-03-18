@@ -73,9 +73,20 @@ if [ "$MODEL_COUNT" = "0" ]; then
   echo "Pulling $MODEL..."
   ollama pull "$MODEL"
   echo "Default model ready: $MODEL"
+
+  # Always pull the embedding model for semantic memory (small, ~274MB)
+  echo "Pulling nomic-embed-text (embedding model for agent memory)..."
+  ollama pull nomic-embed-text
+  echo "Embedding model ready: nomic-embed-text"
 else
   echo "$MODEL_COUNT model(s) already available:"
   ollama list
+
+  # Ensure embedding model is available (may not be if upgrading from older install)
+  if ! ollama list 2>/dev/null | grep -q "nomic-embed-text"; then
+    echo "Pulling nomic-embed-text (embedding model for agent memory)..."
+    ollama pull nomic-embed-text
+  fi
 fi
 
 # 7. Foreground the Ollama process

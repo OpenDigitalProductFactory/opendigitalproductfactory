@@ -10,7 +10,7 @@
 #   1. Clones the repo to <drive>:\OpenDigitalProductFactory
 #   2. Installs pnpm dependencies
 #   3. Creates .env files
-#   4. Starts Docker services (Postgres, Neo4j, Ollama)
+#   4. Starts Docker services (Postgres, Neo4j, Ollama, Qdrant)
 #   5. Runs migrations + seed + full DB restore
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -142,7 +142,7 @@ if (Test-Path $envExamplePath) {
 }
 
 if (-not $SkipDocker) {
-    Write-Step "Starting Docker services (PostgreSQL, Neo4j, Ollama)"
+    Write-Step "Starting Docker services (PostgreSQL, Neo4j, Ollama, Qdrant)"
 
     # Configure Docker volume location on the chosen drive
     $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
@@ -150,7 +150,8 @@ if (-not $SkipDocker) {
         $dockerDataDir,
         (Join-Path $dockerDataDir "pgdata"),
         (Join-Path $dockerDataDir "neo4jdata"),
-        (Join-Path $dockerDataDir "ollama_models")
+        (Join-Path $dockerDataDir "ollama_models"),
+        (Join-Path $dockerDataDir "qdrant_data")
     )) {
         if (-not (Test-Path $dir)) {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -199,6 +200,11 @@ services:
       - "11434:11434"
     volumes:
       - "${dockerDataDirForCompose}/ollama_models:/root/.ollama"${gpuOverride}
+  qdrant:
+    ports:
+      - "6333:6333"
+    volumes:
+      - "${dockerDataDirForCompose}/qdrant_data:/qdrant/storage"
 "@
 
     $overridePath = Join-Path $InstallRoot "docker-compose.override.yml"
@@ -267,6 +273,19 @@ services:
     }
     if ($retries -eq 0) { Write-Warn "Ollama not ready yet — it may still be downloading. Continue anyway." }
     else { Write-Ok "Ollama is ready" }
+
+    Write-Host "  Waiting for Qdrant (vector database for agent memory)..."
+    $retries = 15
+    while ($retries -gt 0) {
+        try {
+            $qdrantReady = Invoke-WebRequest -Uri "http://localhost:6333/readyz" -TimeoutSec 3 -ErrorAction SilentlyContinue
+            if ($qdrantReady.StatusCode -eq 200) { break }
+        } catch {}
+        Start-Sleep -Seconds 2
+        $retries--
+    }
+    if ($retries -eq 0) { Write-Warn "Qdrant not ready yet — agent memory will initialize on first use." }
+    else { Write-Ok "Qdrant is ready" }
 }
 
 # ── Database setup ───────────────────────────────────────────────────────────
