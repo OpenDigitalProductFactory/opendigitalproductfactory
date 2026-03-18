@@ -127,6 +127,11 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
             maxHeight: 160,
           }}
         />
+        {overLimit && (
+          <span style={{ fontSize: 10, color: "#ef4444", flexShrink: 0, alignSelf: "center" }}>
+            {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
+          </span>
+        )}
         <AgentFileUpload
           threadId={threadId}
           disabled={disabled}

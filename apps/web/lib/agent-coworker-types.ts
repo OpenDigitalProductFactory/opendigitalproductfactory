@@ -68,7 +68,7 @@ export type RouteAgentEntry = {
 };
 
 /** Max message content length (chars). */
-export const MAX_MESSAGE_LENGTH = 2000;
+export const MAX_MESSAGE_LENGTH = 10000;
 
 /** Validate message input (pure function, usable from tests and server actions). */
 export function validateMessageInput(input: {
