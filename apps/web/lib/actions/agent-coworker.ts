@@ -26,7 +26,15 @@ import { getFeatureBuildForContext } from "@/lib/feature-build-data";
 import { deleteAttachmentsForThread } from "@/lib/file-upload";
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
-import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
+import { isUnifiedCoworkerEnabled, isManifestRouterEnabled } from "@/lib/feature-flags";
+import {
+  loadEndpointManifests,
+  loadTaskRequirement,
+  loadPolicyRules,
+  loadOverrides,
+  routeEndpoint,
+  persistRouteDecision,
+} from "@/lib/routing";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
@@ -458,6 +466,32 @@ export async function sendMessage(input: {
       const profiles = await loadPerformanceProfiles(classification.taskType);
       const routeCtx = resolveRouteContext(input.routeContext);
 
+      // ── EP-INF-001: Shadow mode — new manifest-based router ──
+      if (await isManifestRouterEnabled()) {
+        try {
+          const [manifests, taskReq, policies, epOverrides] = await Promise.all([
+            loadEndpointManifests(),
+            loadTaskRequirement(classification.taskType),
+            loadPolicyRules(),
+            loadOverrides(classification.taskType),
+          ]);
+          const manifestDecision = routeEndpoint(
+            manifests,
+            taskReq,
+            routeCtx.sensitivity,
+            policies,
+            epOverrides,
+          );
+          // Log the shadow decision — does not affect actual routing
+          await persistRouteDecision(manifestDecision, undefined, true);
+          console.log(
+            `[EP-INF-001 shadow] ${classification.taskType}: ${manifestDecision.reason}`,
+          );
+        } catch (err) {
+          console.error("[EP-INF-001 shadow] routing error:", err);
+        }
+      }
+
       const perfRoute = routeWithPerformance(allEndpoints, profiles, {
         sensitivity: routeCtx.sensitivity,
         minCapabilityTier: getTaskType(classification.taskType)?.minCapabilityTier ?? "basic",
@@ -610,7 +644,7 @@ export async function sendMessage(input: {
 
       let sysContent: string;
       if (e.attempts.length > 0) {
-        const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 100)}`).join("; ");
+        const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 200)}`).join("; ");
         sysContent = `All AI providers failed: ${failureDetails}. Check configuration in Platform > AI Providers.`;
       } else if (inactiveProviders.length > 0) {
         sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate a provider, or visit Platform > AI Providers.`;
