@@ -92,6 +92,7 @@ The `platform-knowledge` collection requires new payload indexes for capability 
 | `route` | keyword | Filter capabilities by page route |
 | `lifecycle_status` | keyword | Filter by planned/build/production |
 | `action_name` | keyword | Look up specific actions |
+| `spec_ref` | keyword | Look up capabilities by originating spec |
 | `side_effect` | bool | Filter read-only vs mutating actions |
 
 These are added alongside the existing `entityType` and `entityId` indexes.
@@ -188,7 +189,7 @@ Each page registers its available server actions in a co-located manifest file.
 ### Format
 
 ```typescript
-// app/(app)/employee/actions/manifest.ts
+// app/(shell)/employee/actions/manifest.ts
 import type { PageActionManifest } from "@/lib/agent-action-types";
 
 export const employeeActions: PageActionManifest = {
@@ -268,8 +269,8 @@ A registry module collects all page manifests and uses longest-prefix matching (
 
 ```typescript
 // lib/agent-action-registry.ts
-import { employeeActions } from "@/app/(app)/employee/actions/manifest";
-import { portfolioActions } from "@/app/(app)/portfolio/actions/manifest";
+import { employeeActions } from "@/app/(shell)/employee/actions/manifest";
+import { portfolioActions } from "@/app/(shell)/portfolio/actions/manifest";
 // ... other pages
 
 const manifests: PageActionManifest[] = [
@@ -544,7 +545,7 @@ Dynamic capability context is injected into Block 5 (domain tools) of the unifie
 ### New Files
 - `lib/agent-action-types.ts` — `PageAction` (extends `ToolDefinition`), `PageActionManifest` types
 - `lib/agent-action-registry.ts` — manifest collector + `getActionsForRoute()` with longest-prefix matching
-- `app/(app)/[route]/actions/manifest.ts` — per-page action manifests (one per instrumented page)
+- `app/(shell)/[route]/actions/manifest.ts` — per-page action manifests (one per instrumented page)
 - `lib/actions/user-skills.ts` — user skill CRUD server actions
 - `lib/semantic-memory.ts` — new `storeCapabilityKnowledge()` function (structured payload fields) + `lookupCapabilityByFilter()` (scroll-based exact-match lookup)
 - Prisma migration for `UserSkill` model
