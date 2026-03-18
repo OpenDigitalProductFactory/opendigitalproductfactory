@@ -6,6 +6,7 @@ const TABS = [
   { label: "Directory", value: "directory" },
   { label: "Org Chart", value: "orgchart" },
   { label: "Timesheets", value: "timesheets" },
+  { label: "My Policies", value: "mypolicies" },
 ] as const;
 
 export type EmployeeTab = (typeof TABS)[number]["value"];
