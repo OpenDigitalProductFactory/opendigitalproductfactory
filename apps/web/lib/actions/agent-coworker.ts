@@ -191,12 +191,17 @@ export async function sendMessage(input: {
   });
 
   // Link attachment to the user message if provided
-  // Link new attachment to this message if provided
   if (input.attachmentId) {
     await prisma.agentAttachment.update({
       where: { id: input.attachmentId },
       data: { messageId: userMsg.id },
     });
+    // Re-fetch so the serialized response includes the attachment
+    const linked = await prisma.agentAttachment.findMany({
+      where: { messageId: userMsg.id },
+      select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
+    });
+    (userMsg as Record<string, unknown>).attachments = linked;
   }
 
   // Always inject all thread attachments so the agent remembers uploaded files
