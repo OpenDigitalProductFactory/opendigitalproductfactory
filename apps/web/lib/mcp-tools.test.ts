@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getAvailableTools } from "./mcp-tools";
+import { getActionsForRoute } from "./agent-action-registry";
 
 describe("mcp tools", () => {
   const adminUser = {
@@ -61,6 +62,21 @@ describe("mcp tools", () => {
       const tool = tools.find((t) => t.name === name);
       expect(tool).toBeDefined();
       expect(tool!.executionMode).toBe("immediate");
+    }
+  });
+});
+
+describe("page action integration", () => {
+  it("getActionsForRoute returns ToolDefinition-compatible objects", () => {
+    const adminUser = { userId: "u-1", platformRole: "HR-000", isSuperuser: false };
+    const actions = getActionsForRoute("/employee", adminUser);
+
+    for (const action of actions) {
+      expect(action).toHaveProperty("name");
+      expect(action).toHaveProperty("description");
+      expect(action).toHaveProperty("inputSchema");
+      expect(action).toHaveProperty("requiredCapability");
+      expect(action).toHaveProperty("specRef");
     }
   });
 });
