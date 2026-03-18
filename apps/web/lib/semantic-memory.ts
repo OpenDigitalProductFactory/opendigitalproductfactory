@@ -74,8 +74,8 @@ export async function recallRelevantContext(params: {
     QDRANT_COLLECTIONS.AGENT_MEMORY,
     embedding,
     filter,
-    params.limit ?? 5,
-    0.7, // minimum similarity score
+    params.limit ?? 8,
+    0.55, // lower threshold — more recall to compensate for short message window
   );
 
   if (results.length === 0) return null;
