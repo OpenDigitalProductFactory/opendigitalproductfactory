@@ -258,6 +258,20 @@ export async function sendMessage(input: {
     content: m.content,
   }));
 
+  // Enrich the last user message with file content so the LLM sees it inline,
+  // not just in the system prompt. LLMs pay more attention to message content
+  // than system prompt context.
+  if (attachmentContext && chatHistory.length > 0) {
+    const lastIdx = chatHistory.length - 1;
+    const last = chatHistory[lastIdx]!;
+    if (last.role === "user") {
+      chatHistory[lastIdx] = {
+        role: "user",
+        content: `${last.content}\n\n${attachmentContext}`,
+      };
+    }
+  }
+
   let populatedPrompt: string;
 
   if (useUnified) {

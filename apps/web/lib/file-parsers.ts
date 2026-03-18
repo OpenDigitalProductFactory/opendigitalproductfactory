@@ -11,10 +11,10 @@ export type ParsedFileContent = {
 const MAX_COLUMNS = 200;
 const MAX_COLUMN_LEN = 100;
 const MAX_CELL_LEN = 200;
-const MAX_SAMPLE_ROWS = 5;
+const MAX_SAMPLE_ROWS = 50;
 const MAX_SECTIONS = 100;
 const MAX_TEXT_LEN = 20_000;
-const MAX_PARSED_JSON_SIZE = 50_000;
+const MAX_PARSED_JSON_SIZE = 100_000;
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + "..." : s;
