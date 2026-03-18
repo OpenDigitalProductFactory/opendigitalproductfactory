@@ -805,10 +805,31 @@ model TaskEvaluation {
   taskContext     String
   evaluationNotes String?
   routeContext    String
+  source          String?
   createdAt       DateTime @default(now())
 
   @@index([endpointId, taskType, createdAt])
   @@index([threadId])
+}
+
+model EndpointTestRun {
+  id              String    @id @default(cuid())
+  runId           String    @unique
+  endpointId      String?
+  taskType        String?
+  probesOnly      Boolean   @default(false)
+  triggeredBy     String
+  probesPassed    Int       @default(0)
+  probesFailed    Int       @default(0)
+  scenariosPassed Int       @default(0)
+  scenariosFailed Int       @default(0)
+  avgScore        Float?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  status          String    @default("running")
+
+  @@index([endpointId])
+  @@index([status])
 }
 
 model ScheduledJob {
