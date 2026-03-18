@@ -721,6 +721,14 @@ export async function sendMessage(input: {
     .replace(/^(?:I (?:need to|would need to) (?:see|know|understand|locate|find)|To help (?:you|with this)[^\n]*I (?:need|would need))[^\n]*$/gim, "")
     // "I apologize" / "I appreciate" filler
     .replace(/^I (?:apologize|appreciate)[^\n]*$/gim, "")
+    // "Give me N seconds/minutes" / "Let me take a moment"
+    .replace(/^(?:Give me|Let me take|This (?:will|may|might) take)[^\n]*$/gim, "")
+    // "my apologies" / "I'm sorry" / "You're right, I should have"
+    .replace(/^(?:My apologies|I'm sorry|You're (?:right|absolutely right))[^\n]*$/gim, "")
+    // "Before I design/build..." / "Quick clarification..." stalling
+    .replace(/^(?:Before I (?:design|build|start|proceed)|Quick (?:clarification|question))[^\n]*$/gim, "")
+    // "One more question:" / "One clarifying question:"
+    .replace(/^(?:One (?:more|last|final|clarifying) question)[^\n]*$/gim, "")
     // Clean up excessive whitespace
     .replace(/\n{3,}/g, "\n\n")
     .trim();
