@@ -12,6 +12,8 @@ export default async function CompliancePage() {
     regulations,
     upcomingDeadlines,
     recentActivity,
+    publishedPolicyCount,
+    totalAcks,
   ] = await Promise.all([
     prisma.regulation.count({ where: { status: "active" } }),
     prisma.obligation.count({ where: { status: "active" } }),
@@ -35,6 +37,8 @@ export default async function CompliancePage() {
       take: 10,
       include: { performedBy: { select: { displayName: true } } },
     }),
+    prisma.policy.count({ where: { lifecycleStatus: "published", status: "active" } }),
+    prisma.policyAcknowledgment.count(),
   ]);
 
   const coveragePct = totalControlCount > 0
@@ -110,6 +114,15 @@ export default async function CompliancePage() {
               ))}
             </div>
         }
+      </section>
+
+      {/* Policy Compliance */}
+      <section className="mt-8">
+        <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">Policy Compliance</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <MetricCard label="Published Policies" value={publishedPolicyCount} color="#a78bfa" />
+          <MetricCard label="Total Acknowledgments" value={totalAcks} color="#4ade80" />
+        </div>
       </section>
     </div>
   );
