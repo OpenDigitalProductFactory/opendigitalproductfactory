@@ -10,7 +10,7 @@
 //   5. Seeds foundational InfraCI nodes (PostgreSQL, Neo4j, Docker host)
 
 // Env vars are supplied via command line — see comment at top.
-import { PrismaClient } from "../generated/client";
+import { prisma } from "../src/client";
 import { initNeo4jSchema } from "../src/neo4j-schema";
 import {
   syncPortfolio,
@@ -20,8 +20,6 @@ import {
   syncDependsOn,
 } from "../src/neo4j-sync";
 import { closeNeo4j } from "../src/neo4j";
-
-const prisma = new PrismaClient();
 
 async function main() {
   // 1. Schema constraints + indexes
@@ -100,6 +98,5 @@ async function main() {
 main()
   .catch((err) => { console.error(err); process.exit(1); })
   .finally(async () => {
-    await prisma.$disconnect();
     await closeNeo4j();
   });

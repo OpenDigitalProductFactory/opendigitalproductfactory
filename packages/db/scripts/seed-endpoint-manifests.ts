@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/client";
 
 async function seed() {
   const providers = await prisma.modelProvider.findMany();
@@ -21,7 +19,7 @@ async function seed() {
     console.log(`${p.providerId}: seeded endpoint manifest`);
   }
   console.log("Done.");
-  await prisma.$disconnect();
+
 }
 
 seed().catch(console.error);

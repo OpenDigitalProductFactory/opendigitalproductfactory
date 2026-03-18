@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/client";
 
 const TIER_MAP: Record<string, string> = {
   "budget": "basic",
@@ -24,7 +22,7 @@ async function migrate() {
     }
   }
   console.log("Done.");
-  await prisma.$disconnect();
+
 }
 
 migrate().catch(console.error);

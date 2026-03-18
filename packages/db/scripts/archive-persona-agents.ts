@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/client";
 
 async function archive() {
   // Create the unified coworker agent row
@@ -21,7 +19,7 @@ async function archive() {
     data: { archived: true },
   });
   console.log(`Archived ${result.count} persona agents. Created/updated coworker agent.`);
-  await prisma.$disconnect();
+
 }
 
 archive().catch(console.error);

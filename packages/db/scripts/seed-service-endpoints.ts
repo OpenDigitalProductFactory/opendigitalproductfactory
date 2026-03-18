@@ -1,6 +1,4 @@
-import { PrismaClient } from "../generated/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/client";
 
 const SERVICE_ENDPOINTS = [
   {
@@ -74,7 +72,7 @@ async function seed() {
     });
     console.log(`Seeded: ${ep.providerId}`);
   }
-  await prisma.$disconnect();
+  // singleton manages its own lifecycle
 }
 
 seed().catch(console.error);
