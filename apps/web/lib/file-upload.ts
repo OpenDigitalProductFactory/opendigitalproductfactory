@@ -12,6 +12,10 @@ const MAGIC_BYTES: Record<string, number[]> = {
   pdf: [0x25, 0x50, 0x44, 0x46],
   xlsx: [0x50, 0x4b, 0x03, 0x04],
   docx: [0x50, 0x4b, 0x03, 0x04],
+  pptx: [0x50, 0x4b, 0x03, 0x04],
+  xls: [0xd0, 0xcf, 0x11, 0xe0],   // OLE compound document
+  doc: [0xd0, 0xcf, 0x11, 0xe0],
+  ppt: [0xd0, 0xcf, 0x11, 0xe0],
 };
 
 async function getUploadStoragePath(): Promise<string> {
@@ -32,7 +36,7 @@ export type UploadError = { error: string; status: number };
 
 export async function handleFileUpload(file: File, threadId: string, userId: string): Promise<UploadResult | UploadError> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!ALLOWED_EXTENSIONS.has(ext)) return { error: "Unsupported file type. Allowed: csv, xlsx, pdf, docx", status: 415 };
+  if (!ALLOWED_EXTENSIONS.has(ext)) return { error: `Unsupported file type (.${ext}). Allowed: ${Array.from(ALLOWED_EXTENSIONS).join(", ")}`, status: 415 };
   if (file.size > DEFAULT_MAX_SIZE_MB * 1024 * 1024) return { error: `File exceeds ${DEFAULT_MAX_SIZE_MB}MB limit`, status: 413 };
 
   const buffer = Buffer.from(await file.arrayBuffer());
