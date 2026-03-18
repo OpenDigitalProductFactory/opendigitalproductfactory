@@ -228,7 +228,13 @@ export async function sendMessage(input: {
       const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 2000)}` : "";
       return `- ${att.fileName}: ${summary}${columns}${sampleData}${text}`;
     });
-    attachmentContext = `\n--- Uploaded Files ---\n${summaries.join("\n")}`;
+    attachmentContext = [
+      "",
+      "FILE UPLOADS — THE USER HAS UPLOADED FILES. THEIR CONTENT IS BELOW.",
+      "You CAN see this data. Do NOT say you cannot read files. Use this data to answer the user's question.",
+      "",
+      ...summaries,
+    ].join("\n");
   }
 
   // Check unified coworker feature flag
