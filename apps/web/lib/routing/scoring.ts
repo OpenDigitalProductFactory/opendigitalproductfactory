@@ -77,7 +77,7 @@ export function computeFitness(
   // Quality fitness: weighted sum of dimension scores
   let qualityFitness = 0;
   for (const [dim, weight] of Object.entries(weights)) {
-    qualityFitness += dimensionScores[dim] * weight;
+    qualityFitness += (dimensionScores[dim] ?? 0) * weight;
   }
 
   let score: number;
