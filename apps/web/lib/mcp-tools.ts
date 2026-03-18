@@ -628,6 +628,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
   },
+  // ─── Knowledge Search ──────────────────────────────────────────────────────
+  {
+    name: "search_knowledge",
+    description: "Search the platform knowledge base for relevant backlog items, epics, improvement proposals, and specs. Uses semantic similarity, not keyword matching.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for" },
+        type: { type: "string", enum: ["backlog", "epic", "improvement", "spec"], description: "Filter by type (optional)" },
+        limit: { type: "number", description: "Max results (default 5)" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
   {
     name: "run_endpoint_tests",
@@ -685,6 +702,15 @@ export async function executeTool(
           ...(typeof params["epicId"] === "string" ? { epicId: params["epicId"] } : {}),
         },
       });
+      // Index in platform knowledge for semantic search
+      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
+        storePlatformKnowledge({
+          entityId: item.itemId,
+          entityType: "backlog",
+          title: String(params["title"] ?? ""),
+          content: String(params["body"] ?? ""),
+        })
+      ).catch(() => {});
       return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
@@ -1325,6 +1351,15 @@ export async function executeTool(
         entityId: proposal.proposalId,
         message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
       };
+      // Index in platform knowledge
+      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
+        storePlatformKnowledge({
+          entityId: proposal.proposalId,
+          entityType: "improvement",
+          title: proposal.title,
+          content: String(params["description"] ?? ""),
+        })
+      ).catch(() => {});
     }
 
     case "add_provider": {
@@ -1521,6 +1556,20 @@ export async function executeTool(
         entityId: feedbackId,
         message: "Feedback submitted.",
       };
+    }
+
+    case "search_knowledge": {
+      const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
+      const results = await searchPlatformKnowledge({
+        query: String(params["query"] ?? ""),
+        entityType: typeof params["type"] === "string" ? params["type"] : undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : 5,
+      });
+      if (results.length === 0) {
+        return { success: true, message: "No matching knowledge found.", data: { results: [] } };
+      }
+      const summary = results.map((r) => `${r.entityType}:${r.entityId} — ${r.title} (${Math.round(r.score * 100)}% match)`).join("\n");
+      return { success: true, message: summary, data: { results } };
     }
 
     case "run_endpoint_tests": {
