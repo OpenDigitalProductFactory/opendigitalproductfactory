@@ -7,10 +7,13 @@ export { neo4jSession, closeNeo4j, runCypher } from "./neo4j";
 // Qdrant vector database
 export {
   ensureCollections as ensureQdrantCollections,
+  ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
+  scrollPoints,
   deleteVectors,
   isQdrantHealthy,
+  hashToNumber,
   QDRANT_COLLECTIONS,
 } from "./qdrant";
 export { initNeo4jSchema } from "./neo4j-schema";
