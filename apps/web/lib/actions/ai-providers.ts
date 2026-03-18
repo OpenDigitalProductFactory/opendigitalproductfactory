@@ -354,6 +354,20 @@ export async function profileModels(
   return profileModelsInternal(providerId, modelIds);
 }
 
+// ─── Model Verification (post-profiling) ─────────────────────────────────────
+
+export async function verifyProviderModels(
+  providerId: string,
+): Promise<{ verified: number; passed: number; failed: number; error?: string }> {
+  const userId = await requireManageProviders();
+  try {
+    const { verifyModels } = await import("@/lib/endpoint-test-runner");
+    return verifyModels(providerId, userId);
+  } catch (err) {
+    return { verified: 0, passed: 0, failed: 0, error: err instanceof Error ? err.message : "Verification failed" };
+  }
+}
+
 // ─── Agent Provider Assignment ──────────────────────────────────────────────
 
 export async function updateAgentPreferredProvider(

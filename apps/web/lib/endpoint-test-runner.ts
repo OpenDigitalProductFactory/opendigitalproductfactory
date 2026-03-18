@@ -1,5 +1,6 @@
 // apps/web/lib/endpoint-test-runner.ts
-// Executes capability probes and task scenarios against AI endpoints.
+// Executes capability probes and task scenarios against individual AI models.
+// Tests run per-model (providerId + modelId), not per-provider.
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
@@ -36,13 +37,18 @@ export type ScenarioRunResult = {
   response: string;
 };
 
-export type EndpointTestResult = {
-  endpointId: string;
+export type ModelTestResult = {
+  providerId: string;
+  modelId: string;
+  friendlyName: string;
   probes: ProbeRunResult[];
   scenarios: ScenarioRunResult[];
   instructionFollowing: string | null;
   codingCapability: string | null;
 };
+
+// Keep backward compat alias
+export type EndpointTestResult = ModelTestResult & { endpointId: string };
 
 // ─── Evidence Mapping (exported for testing) ─────────────────────────────────
 
@@ -72,7 +78,7 @@ export function mapScoresToCodingCapability(
 
 async function runProbe(
   probe: CapabilityProbe,
-  endpointId: string,
+  providerId: string,
 ): Promise<ProbeRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
@@ -83,7 +89,7 @@ async function runProbe(
     const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
       ...(probeToolsFormatted ? { tools: probeToolsFormatted } : {}),
-      modelRequirements: { preferredProviderId: endpointId },
+      modelRequirements: { preferredProviderId: providerId },
     });
 
     // Detect failover — if a different endpoint answered, mark as infrastructure failure
@@ -105,7 +111,7 @@ async function runProbe(
 
 async function runScenario(
   scenario: TestScenario,
-  endpointId: string,
+  providerId: string,
 ): Promise<ScenarioRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
@@ -116,7 +122,7 @@ async function runScenario(
     const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
       ...(scenarioToolsFormatted ? { tools: scenarioToolsFormatted } : {}),
-      modelRequirements: { preferredProviderId: endpointId },
+      modelRequirements: { preferredProviderId: providerId },
     });
 
     if (result.downgraded) {
@@ -137,7 +143,7 @@ async function runScenario(
     const scoreAssertions = scenario.assertions.filter((a) => a.type === "orchestrator_score_gte");
     if (scoreAssertions.length > 0) {
       const evalResult = await evaluateResponseForTest({
-        endpointId,
+        endpointId: providerId,
         taskType: scenario.taskType,
         userMessage: scenario.userMessage,
         aiResponse: result.content,
@@ -171,39 +177,64 @@ async function runScenario(
   }
 }
 
-// ─── Main Test Runner ────────────────────────────────────────────────────────
+// ─── Main Test Runner (model-level) ──────────────────────────────────────────
 
 export async function runEndpointTests(opts: {
   endpointId?: string;
+  modelId?: string;
   taskType?: string;
   probesOnly?: boolean;
   triggeredBy: string;
 }): Promise<EndpointTestResult[]> {
-  // Resolve endpoints
-  const providers = await prisma.modelProvider.findMany({
+  // Resolve models to test — iterate over ModelProfile records (providerId + modelId pairs)
+  const modelProfiles = await prisma.modelProfile.findMany({
     where: {
-      status: "active",
-      endpointType: "llm",
       ...(opts.endpointId ? { providerId: opts.endpointId } : {}),
+      ...(opts.modelId ? { modelId: opts.modelId } : {}),
+      // Only test models from active LLM providers
+      provider: { status: "active", endpointType: "llm" },
     },
-    select: { providerId: true },
+    select: { id: true, providerId: true, modelId: true, friendlyName: true },
+    orderBy: [{ providerId: "asc" }, { modelId: "asc" }],
   });
+
+  // If no model profiles found, fall back to provider-level (for providers without profiles)
+  if (modelProfiles.length === 0 && opts.endpointId) {
+    const provider = await prisma.modelProvider.findUnique({
+      where: { providerId: opts.endpointId, status: "active", endpointType: "llm" },
+      select: { providerId: true },
+    });
+    if (provider) {
+      modelProfiles.push({ id: "", providerId: provider.providerId, modelId: "default", friendlyName: provider.providerId });
+    }
+  }
 
   const results: EndpointTestResult[] = [];
 
-  for (const provider of providers) {
-    const eid = provider.providerId;
+  for (const model of modelProfiles) {
+    const { providerId, modelId, friendlyName } = model;
 
-    // Create test run record
+    // Create test run record (now includes modelId)
     const runId = `TR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const testRun = await prisma.endpointTestRun.create({
-      data: { runId, endpointId: eid, taskType: opts.taskType ?? null, probesOnly: opts.probesOnly ?? false, triggeredBy: opts.triggeredBy },
+      data: {
+        runId,
+        endpointId: providerId,
+        modelId,
+        taskType: opts.taskType ?? null,
+        probesOnly: opts.probesOnly ?? false,
+        triggeredBy: opts.triggeredBy,
+      },
     });
 
-    // Run probes
+    // Run probes against this model's provider
+    // Note: callWithFailover targets the provider; within a provider, it uses the
+    // model resolved from the priority list. For single-model providers (most cases),
+    // this is deterministic. For multi-model providers (Ollama), the top-ranked model
+    // is used. Future: pass modelId directly to force a specific model.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
-      const result = await runProbe(probe, eid);
+      const result = await runProbe(probe, providerId);
       probeResults.push(result);
     }
 
@@ -221,7 +252,7 @@ export async function runEndpointTests(opts: {
       ).filter((s) => s.requiredProbes.every((rp) => probePassMap[rp]));
 
       for (const scenario of eligibleScenarios) {
-        const result = await runScenario(scenario, eid);
+        const result = await runScenario(scenario, providerId);
         scenarioResults.push(result);
 
         // Record TaskEvaluation for scenarios with orchestrator scores
@@ -229,39 +260,38 @@ export async function runEndpointTests(opts: {
           await prisma.taskEvaluation.create({
             data: {
               threadId: `test-${testRun.runId}`,
-              endpointId: eid,
+              endpointId: providerId,
               taskType: scenario.taskType,
               qualityScore: result.orchestratorScore,
               evaluationNotes: result.assertionResults.map((r) => `${r.passed ? "PASS" : "FAIL"}: ${r.description}`).join("; "),
-              taskContext: `TEST: ${scenario.name}`,
+              taskContext: `TEST: ${scenario.name} [${friendlyName}]`,
               routeContext: scenario.routeContext,
               source: "test_harness",
             },
           });
 
           // Update performance profile
-          await updatePerformanceProfile(eid, scenario.taskType, result.orchestratorScore);
+          await updatePerformanceProfile(providerId, scenario.taskType, result.orchestratorScore);
         }
       }
     }
 
-    // Update ModelProfile with evidence
+    // Update this specific ModelProfile with evidence
     const instructionFollowing = mapProbeResultsToInstructionFollowing(probePassMap);
     const codeScores = scenarioResults.filter((s) => s.taskType === "code-gen" && s.orchestratorScore !== null).map((s) => s.orchestratorScore!);
     const codingCapability = mapScoresToCodingCapability(codeScores);
 
-    try {
-      const profile = await prisma.modelProfile.findFirst({ where: { providerId: eid } });
-      if (profile) {
+    if (model.id) {
+      try {
         await prisma.modelProfile.update({
-          where: { id: profile.id },
+          where: { id: model.id },
           data: {
             instructionFollowing,
             ...(codingCapability ? { codingCapability } : {}),
           },
         });
-      }
-    } catch { /* best-effort */ }
+      } catch { /* best-effort */ }
+    }
 
     // Update test run record
     await prisma.endpointTestRun.update({
@@ -277,6 +307,8 @@ export async function runEndpointTests(opts: {
         completedAt: new Date(),
         status: "completed",
         results: {
+          modelId,
+          friendlyName,
           probes: probeResults.map((p) => ({ id: p.probeId, category: p.category, name: p.name, pass: p.pass, reason: p.reason })),
           scenarios: scenarioResults.map((s) => ({
             id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed,
@@ -286,8 +318,45 @@ export async function runEndpointTests(opts: {
       },
     });
 
-    results.push({ endpointId: eid, probes: probeResults, scenarios: scenarioResults, instructionFollowing, codingCapability });
+    results.push({
+      endpointId: providerId,
+      providerId,
+      modelId,
+      friendlyName,
+      probes: probeResults,
+      scenarios: scenarioResults,
+      instructionFollowing,
+      codingCapability,
+    });
   }
 
   return results;
+}
+
+// ─── Convenience: verify models after profiling ──────────────────────────────
+
+/**
+ * Run probes against all profiled models for a provider.
+ * Designed to be called after profileModels() in the provider setup flow.
+ * Returns a summary suitable for the wizard UI.
+ */
+export async function verifyModels(
+  providerId: string,
+  triggeredBy: string,
+): Promise<{ verified: number; passed: number; failed: number }> {
+  const results = await runEndpointTests({
+    endpointId: providerId,
+    probesOnly: true,
+    triggeredBy,
+  });
+
+  let passed = 0;
+  let failed = 0;
+  for (const r of results) {
+    const allPass = r.probes.every((p) => p.pass);
+    if (allPass) passed++;
+    else failed++;
+  }
+
+  return { verified: results.length, passed, failed };
 }

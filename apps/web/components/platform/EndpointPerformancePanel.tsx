@@ -31,12 +31,15 @@ type Evaluation = {
 
 type TestRun = {
   runId: string;
+  modelId: string | null;
   probesPassed: number;
   probesFailed: number;
   scenariosPassed: number;
   scenariosFailed: number;
   avgScore: number | null;
   results: {
+    modelId?: string;
+    friendlyName?: string;
     probes?: Array<{ id: string; category: string; name: string; pass: boolean; reason: string }>;
     scenarios?: Array<{ id: string; taskType: string; name: string; passed: boolean; assertions: Array<{ description: string; passed: boolean; detail: string }>; orchestratorScore: number | null }>;
   } | null;
@@ -250,6 +253,11 @@ export default function EndpointPerformancePanel({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-mono text-[#b0b0c8]">{tr.runId}</span>
+                      {(tr.results?.friendlyName || tr.modelId) && (
+                        <span className="text-xs font-medium text-[#7c8cf8]">
+                          {tr.results?.friendlyName ?? tr.modelId}
+                        </span>
+                      )}
                       <span className={`text-xs ${tr.status === "completed" ? "text-green-400" : "text-yellow-400"}`}>
                         {tr.status}
                       </span>
