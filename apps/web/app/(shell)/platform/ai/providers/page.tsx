@@ -27,7 +27,7 @@ export default async function ProvidersPage() {
   }
 
   // Re-enable providers whose quota reset timer has elapsed
-  const reenableJobs = jobs.filter((j) => j.jobId.startsWith("provider-reenable-") && j.nextRunAt && j.nextRunAt < new Date());
+  const reenableJobs = jobs.filter((j) => j.jobId.startsWith("provider-reenable-") && j.schedule !== "disabled" && j.nextRunAt && j.nextRunAt < new Date());
   for (const job of reenableJobs) {
     const providerId = job.jobId.replace("provider-reenable-", "");
     await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } }).catch(() => {});
