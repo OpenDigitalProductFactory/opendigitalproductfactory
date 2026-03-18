@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { CreateRegulationForm } from "@/components/compliance/CreateRegulationForm";
 
 export default async function RegulationsPage() {
   const regulations = await prisma.regulation.findMany({
@@ -13,6 +14,7 @@ export default async function RegulationsPage() {
           <h1 className="text-xl font-bold text-white">Regulations</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{regulations.length} registered</p>
         </div>
+        <CreateRegulationForm />
       </div>
 
       {regulations.length === 0 ? (
