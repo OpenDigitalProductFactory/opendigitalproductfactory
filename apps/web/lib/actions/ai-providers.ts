@@ -91,6 +91,9 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           consoleUrl:           entry.consoleUrl ?? null,
           ...((entry as Record<string, unknown>).billingLabel !== undefined && { billingLabel: (entry as Record<string, unknown>).billingLabel as string }),
           ...((entry as Record<string, unknown>).costPerformanceNotes !== undefined && { costPerformanceNotes: (entry as Record<string, unknown>).costPerformanceNotes as string }),
+          ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
+          ...(entry.endpointType !== undefined      && { endpointType:      entry.endpointType }),
+          ...(entry.catalogEntry !== undefined      && { catalogEntry:      entry.catalogEntry ?? undefined }),
         },
       });
       updated++;
@@ -116,6 +119,9 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           consoleUrl:           entry.consoleUrl ?? null,
           billingLabel:         (entry as Record<string, unknown>).billingLabel as string ?? null,
           costPerformanceNotes: (entry as Record<string, unknown>).costPerformanceNotes as string ?? null,
+          catalogVisibility:    entry.catalogVisibility ?? "visible",
+          ...(entry.endpointType !== undefined && { endpointType: entry.endpointType }),
+          ...(entry.catalogEntry !== undefined && entry.catalogEntry !== null && { catalogEntry: entry.catalogEntry }),
         },
       });
       added++;

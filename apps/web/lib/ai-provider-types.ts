@@ -159,6 +159,14 @@ export type RegistryProviderEntry = {
   consoleUrl?: string | null;
   billingLabel?: string | null;
   costPerformanceNotes?: string | null;
+  // Catalog fields (EP-AGENT-CAP-001 Task 11)
+  catalogVisibility?: "visible" | "hidden";
+  endpointType?: string;
+  catalogEntry?: {
+    description?: string;
+    pricingInfo?: string;
+    enableUrl?: string;
+  } | null;
 };
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
