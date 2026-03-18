@@ -2515,3 +2515,28 @@ model RegulatoryAlert {
   @@index([severity])
   @@index([alertType])
 }
+
+// ─── Compliance Reporting ───────────────────────────────────────────────────
+
+// Intentionally omits status and updatedAt — snapshots are immutable point-in-time records.
+model ComplianceSnapshot {
+  id                  String   @id @default(cuid())
+  snapshotId          String   @unique
+  takenAt             DateTime @default(now())
+  triggeredBy         String
+  totalRegulations    Int
+  totalObligations    Int
+  coveredObligations  Int
+  totalControls       Int
+  implementedControls Int
+  openIncidents       Int
+  overdueActions      Int
+  publishedPolicies   Int
+  pendingAlerts       Int
+  overallScore        Float
+  regulationBreakdown Json
+  agentId             String?
+  createdAt           DateTime @default(now())
+
+  @@index([takenAt])
+}
