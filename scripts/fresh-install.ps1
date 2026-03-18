@@ -330,7 +330,7 @@ foreach ($sql in $sqlScripts) {
         $name = Split-Path $sql -Leaf
         Write-Host "  Applying $name..."
         try {
-            pnpm --filter @dpf/db exec prisma db execute --file "../../$sql" --schema prisma/schema.prisma 2>$null
+            pnpm --filter @dpf/db exec prisma db execute --file "../../$sql" 2>$null
         } catch {
             Write-Warn "$name had errors (may be expected if already applied)"
         }

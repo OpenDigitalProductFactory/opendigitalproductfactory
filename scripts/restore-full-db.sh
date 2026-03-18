@@ -28,16 +28,14 @@ npx prisma migrate deploy
 
 echo ""
 echo "=== Step 2: Run Prisma seed ==="
-npx prisma db seed
+npx tsx src/seed.ts
 
 echo ""
 echo "=== Step 3: Restore epics + backlog export ==="
-npx prisma db execute --file "$SCRIPT_DIR/db-export-epics-backlog.sql" --schema prisma/schema.prisma
-
+npx prisma db execute --file "$SCRIPT_DIR/db-export-epics-backlog.sql"
 echo ""
 echo "=== Step 4: Restore runtime state (providers, config, builds) ==="
-npx prisma db execute --file "$SCRIPT_DIR/db-export-runtime-state.sql" --schema prisma/schema.prisma
-
+npx prisma db execute --file "$SCRIPT_DIR/db-export-runtime-state.sql"
 echo ""
 echo "=== Step 5: Apply incremental epic scripts ==="
 # These are idempotent (upsert/ON CONFLICT patterns)
