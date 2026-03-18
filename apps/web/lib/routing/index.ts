@@ -20,3 +20,5 @@ export {
   loadOverrides,
   persistRouteDecision,
 } from "./loader";
+export { callWithFallbackChain } from "./fallback";
+export type { FallbackResult } from "./fallback";
