@@ -136,6 +136,14 @@ export async function triggerRegulatoryMonitorScan(
         completedAt: new Date(),
       },
     });
+
+    // Auto-capture compliance snapshot after scan
+    try {
+      const { takeComplianceSnapshot } = await import("@/lib/actions/reporting");
+      await takeComplianceSnapshot("scan-complete");
+    } catch {
+      // Snapshot failure shouldn't fail the scan
+    }
   } catch (err) {
     await prisma.regulatoryMonitorScan.update({
       where: { id: scan.id },
