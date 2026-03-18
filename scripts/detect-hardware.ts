@@ -1,7 +1,5 @@
 import { readFileSync } from "fs";
-import { PrismaClient } from "../packages/db/generated/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../packages/db/src/client";
 
 async function main() {
   // Host profile from installer (passed via env var)
@@ -42,7 +40,6 @@ async function main() {
   });
   console.log("  Container profile:", JSON.stringify(containerProfile));
 
-  await prisma.$disconnect();
 }
 
 main().catch((e) => {
