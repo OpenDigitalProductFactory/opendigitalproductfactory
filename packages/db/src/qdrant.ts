@@ -169,9 +169,10 @@ export async function isQdrantHealthy(): Promise<boolean> {
  */
 export async function scrollPoints(
   collection: string,
-  filter: { must: Array<Record<string, unknown>> },
+  filter: Record<string, unknown>,
   limit = 100,
 ): Promise<Array<{ id: number; payload: Record<string, unknown> }>> {
+  // ensureCollections() not called — scroll is read-only; callers must ensure startup order
   const result = await qdrantFetch(
     `/collections/${collection}/points/scroll`,
     {
@@ -198,14 +199,14 @@ export async function ensurePayloadIndexes(): Promise<void> {
     await qdrantFetch(
       `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
       { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
-    ).catch(() => {});
+    ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for", field, err); });
   }
 
   for (const field of boolFields) {
     await qdrantFetch(
       `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
       { method: "PUT", body: { field_name: field, field_schema: "bool" } },
-    ).catch(() => {});
+    ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for", field, err); });
   }
 }
 
