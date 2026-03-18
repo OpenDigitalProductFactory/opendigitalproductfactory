@@ -63,7 +63,19 @@ export function AgentFileUpload({ threadId, disabled, onUploaded }: Props) {
       >
         {uploading ? "\u23F3" : "\u{1F4CE}"}
       </button>
-      {error && <div className="text-[10px] text-[#f87171] px-1">{error}</div>}
+      {error && (
+        <div style={{
+          padding: "4px 8px",
+          borderRadius: 4,
+          background: "rgba(239,68,68,0.15)",
+          border: "1px solid rgba(239,68,68,0.3)",
+          color: "#f87171",
+          fontSize: 11,
+          flexShrink: 0,
+        }}>
+          {error}
+        </div>
+      )}
     </>
   );
 }
