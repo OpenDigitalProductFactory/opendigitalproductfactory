@@ -85,6 +85,7 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
         evaluationNotes: "Self-evaluation skipped (orchestrator endpoint). Awaiting human feedback.",
         taskContext: userMessage.slice(0, 1000),
         routeContext,
+        source: "conversation",
       },
     });
     return;
@@ -139,6 +140,7 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
       evaluationNotes: parsed.notes?.slice(0, 500) ?? null,
       taskContext: userMessage.slice(0, 1000),
       routeContext,
+      source: "conversation",
     },
   });
 
@@ -181,6 +183,58 @@ export async function updateHumanScore(
   }
 }
 
+// ─── Synchronous evaluation for test harness ─────────────────────────────────
+
+/**
+ * Awaitable variant of evaluation for the test harness.
+ * Unlike evaluateAndUpdateProfile (fire-and-forget), this returns the score.
+ * Does NOT update performance profile — the test runner handles that separately.
+ */
+export async function evaluateResponseForTest(input: {
+  endpointId: string;
+  taskType: string;
+  userMessage: string;
+  aiResponse: string;
+  sensitivity?: SensitivityLevel;
+}): Promise<{ score: number; notes: string } | null> {
+  try {
+    const endpoints = await loadEndpoints();
+    const orchestratorRoute = routePrimary(endpoints, input.sensitivity ?? "internal");
+    if (!orchestratorRoute) return null;
+
+    if (input.endpointId === orchestratorRoute.endpointId) return null;
+
+    const taskDef = getTaskType(input.taskType);
+    const tokenLimit = taskDef?.evaluationTokenLimit ?? 500;
+
+    const evaluationPrompt = [
+      "Score this AI response 1-5 on relevance, completeness, and accuracy.",
+      "",
+      `User asked: ${input.userMessage.slice(0, 400)}`,
+      "",
+      `AI responded: ${input.aiResponse.slice(0, tokenLimit * 4)}`,
+      "",
+      'Return ONLY a JSON object: { "overall": N, "notes": "one sentence" }',
+    ].join("\n");
+
+    const messages: ChatMessage[] = [{ role: "user", content: evaluationPrompt }];
+    const result = await callWithFailover(messages, "You are a quality evaluator. Return only valid JSON.", input.sensitivity ?? "internal", {
+      task: "conversation",
+      modelRequirements: { preferredProviderId: orchestratorRoute.endpointId },
+    });
+
+    const jsonMatch = result.content.match(/\{[^}]+\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]) as { overall: number; notes?: string };
+    if (typeof parsed.overall !== "number" || parsed.overall < 1 || parsed.overall > 5) return null;
+
+    return { score: parsed.overall, notes: parsed.notes ?? "" };
+  } catch {
+    return null;
+  }
+}
+
 // ─── updatePerformanceProfile (internal) ────────────────────────────────────
 
 /**
@@ -196,7 +250,7 @@ export async function updateHumanScore(
  *    practicing->innate (count >= 50, avg >= 4.0, success rate >= 0.9)
  * 8. Persist
  */
-async function updatePerformanceProfile(
+export async function updatePerformanceProfile(
   endpointId: string,
   taskType: string,
   score: number,
