@@ -20,7 +20,7 @@ The platform's AI endpoint routing grew organically and is fragile. The current 
 Specific problems:
 
 1. **Two incompatible tier vocabularies** — the legacy system uses 6 values (`deep-thinker`, `fast-worker`, `specialist`, `budget`, `embedding`, `unknown`), the newer router uses 4 different values (`basic`, `routine`, `analytical`, `deep-thinker`). The DB column is an unvalidated string. Values from one vocabulary silently produce incorrect routing when read by the other system.
-2. **Wrong profile assignments** — Haiku is tagged `deep-thinker`, Opus as `fast-worker` in some profiles. The `profileLocalModel` function produces tier values (`fast-cheap`, `strong`, `moderate`) that exist in neither vocabulary, defaulting them all to budget-tier ranking.
+2. **Wrong profile assignments** — Haiku is tagged `deep-thinker`, Opus as `fast-worker` in some profiles. The `profileLocalModel` function produces `capabilityTier` values (`fast-cheap`, `strong`, `moderate`) and `instructionFollowing` values (`strong`, `moderate`) that exist in neither vocabulary, defaulting them to incorrect rankings.
 3. **Overlapping routing mechanisms** — `buildBootstrapPriority`, `getProviderPriority`, `filterByModelRequirements`, sensitivity filtering, agent `preferredProviderId` shuffle, and `routeWithPerformance` all participate in routing with no clear composition order.
 4. **New router doesn't actually route** — the unified path's `routeWithPerformance` result is used only to set a "preferred provider hint" that gets shuffled to the front of the legacy priority list. The legacy `callWithFailover` still drives the actual call.
 5. **Task tag mismatch** — `routeWithPerformance` requires `requiredTags: [taskType]`, but only 3 of 9 task type IDs match the tags seeded on providers. The new router silently returns `null` for 6 task types.
@@ -96,7 +96,7 @@ Each `ModelProvider` row becomes a fully self-describing endpoint manifest. No e
 - `supportsStreaming`: `Boolean`
 - `maxContextTokens`: `Int` — hard context window limit
 - `maxOutputTokens`: `Int` — hard output limit
-- `modelRestrictions`: `String[]` — for OAuth endpoints, the explicit list of model IDs accessible (replaces trial-and-error discovery)
+- `modelRestrictions`: `String[]` — declarative documentation of which models this endpoint's auth method can access. Enforced at registration/seed time: if the endpoint's `modelId` is not in `modelRestrictions` (when the field is non-empty), registration is rejected. This prevents creating an endpoint row for a model the auth method can't reach (e.g., an Anthropic OAuth endpoint claiming to serve Opus when the subscription only covers Haiku). An empty array means no restrictions.
 
 **Capability Profile** (scored 0–100 — used for ranking):
 - `reasoning`: `Int` — depth of analytical/logical reasoning
@@ -172,21 +172,24 @@ interface TaskRequirement {
   };
 
   // Soft requirements (scored — higher is better, but not disqualifying)
-  preferredMinScores: {
-    reasoning?: number;        // e.g., 70 — prefer endpoints scoring >= 70
-    codegen?: number;
-    toolFidelity?: number;
-    instructionFollowing?: number;
-    structuredOutput?: number;
-    conversational?: number;
-    contextRetention?: number;
-    // custom dimensions can also appear here
-  };
+  // Record<string, number> — built-in dimension names (reasoning, codegen, toolFidelity,
+  // instructionFollowing, structuredOutput, conversational, contextRetention) plus any
+  // custom dimension names defined in CustomEvalDimension. The scoring function iterates
+  // all keys, matching each to either a built-in score field or a customScores entry.
+  preferredMinScores: Record<string, number>;
 
   // Operational constraints
-  maxCostPerCallUsd?: number;  // cost ceiling for this task
-  maxLatencyMs?: number;       // latency ceiling
+  maxLatencyMs?: number;       // latency ceiling (hard filter)
   preferCheap?: boolean;       // when multiple endpoints qualify, prefer lowest cost
+
+  // Default instructions for this task type (used as the canonical reset value when
+  // endpoint-specific instruction refinement regresses, and as the starting instructions
+  // for newly-profiled endpoints)
+  defaultInstructions?: string;
+
+  // Evaluation token limit — how many tokens of the AI response to send to the
+  // orchestrator-evaluator for quality scoring (default: 500)
+  evaluationTokenLimit?: number;
 
   // Provenance
   origin: "system" | "user";
@@ -207,7 +210,7 @@ interface TaskRequirement {
 | `data-extraction` | `supportsStructuredOutput` | `structuredOutput: 70` | prefer cheap | Must produce valid structured output |
 | `code-gen` | `supportsToolUse` | `codegen: 75, instructionFollowing: 60` | quality first | Code quality is critical |
 | `web-search` | `supportsToolUse` | `toolFidelity: 60` | prefer cheap | Must call search tools correctly |
-| `creative` | — | `conversational: 60, reasoning: 50` | quality first | Needs both creativity and coherence |
+| `creative` | — | `conversational: 60, reasoning: 50` | quality first | Needs both creativity and coherence. Note: current `minCapabilityTier: "routine"` was a hard gate; this migration softens it to a preference — a conscious behavioral change since the preferred scores provide finer control |
 | `tool-action` | `supportsToolUse` | `toolFidelity: 70` | quality first | Must call tools accurately and abstain correctly |
 
 ### Key Design Decisions
@@ -227,8 +230,8 @@ interface TaskRequirement {
 - `TASK_TYPES` array in `task-types.ts` — replaced by `TaskRequirement` table (seeded with the same 9 types)
 - `minCapabilityTier` on task types — replaced by `preferredMinScores` (multi-dimensional)
 - `heuristicPatterns` on task types — moved to the task classifier (separate concern)
-- `evaluationTokenLimit` on task types (never used) — removed
-- `defaultInstructions` on task types — moved to `EndpointTaskPerformance` (per-endpoint, not per-task-type)
+- `evaluationTokenLimit` on task types — retained on `TaskRequirement` (used by orchestrator-evaluator to truncate responses for grading)
+- `defaultInstructions` on task types — retained on `TaskRequirement` as the canonical default; endpoint-specific refinements live on `EndpointTaskPerformance.currentInstructions`
 
 ---
 
@@ -251,7 +254,7 @@ Each excluded endpoint gets a policy rejection reason: `"excluded by policy: Fin
 - Sensitivity level not in `sensitivityClearance`
 - Missing any `requiredCapabilities` (e.g., no tool support for a tool-action task)
 - Context window too small (`maxContextTokens < minContextTokens`)
-- Model restricted by auth method (`modelRestrictions` does not include requested model)
+- `modelRestrictions` is non-empty and `modelId` is not in the list (registration-time guard; defensive runtime check)
 - `retiredAt` is set
 
 Each excluded endpoint gets a rejection reason: `"excluded: no tool support"`, `"excluded: sensitivity clearance insufficient for confidential data"`, etc.
@@ -259,16 +262,29 @@ Each excluded endpoint gets a rejection reason: `"excluded: no tool support"`, `
 **Stage 2 — Score:** For each surviving endpoint, compute a composite fitness score.
 
 ```
-fitness = Σ (dimensionScore × dimensionWeight)
+fitness = Σ (endpointScore_d × normalizedWeight_d) × statusMultiplier
 ```
 
-Where weights derive from the task requirement's `preferredMinScores` — dimensions the task cares about are weighted proportionally to their preferred minimum (a dimension with preferred 80 has more weight than one with preferred 40). Dimensions not mentioned in the task requirement get zero weight.
+**Weight calculation:** Each dimension mentioned in `preferredMinScores` gets a weight equal to its preferred minimum divided by the sum of all preferred minimums. Dimensions not mentioned get zero weight.
 
-An endpoint scoring below a preferred minimum isn't excluded, but it scores proportionally lower on that dimension.
+**Worked example — `code-gen` task** (`preferredMinScores: { codegen: 75, instructionFollowing: 60 }`):
 
-If `preferCheap`, cost efficiency is added as a scoring dimension: `costFactor = 1 - (normalizedCost / maxCostInPool)`. If quality-first, cost is a tiebreaker only.
+| | Endpoint A (Sonnet) | Endpoint B (Llama 3.1) | Endpoint C (Haiku) |
+|---|---|---|---|
+| `codegen` score | 91 | 65 | 42 |
+| `instructionFollowing` score | 88 | 70 | 55 |
+| Weight: `codegen` | 75/(75+60) = 0.556 | 0.556 | 0.556 |
+| Weight: `instructionFollowing` | 60/(75+60) = 0.444 | 0.444 | 0.444 |
+| Fitness (quality) | 91×0.556 + 88×0.444 = **89.7** | 65×0.556 + 70×0.444 = **67.2** | 42×0.556 + 55×0.444 = **47.7** |
+| Cost (output $/MToken) | $15.00 | $0.80 | $1.25 |
 
-Degraded endpoints get a penalty multiplier (0.7×) so they sink in ranking but remain available.
+If `preferCheap: false` (quality-first): rank by fitness. Result: **A → B → C**. Cost is tiebreaker only.
+
+If `preferCheap: true`: cost efficiency is added as a weighted dimension. Normalize cost across pool: `costFactor = 1 - (endpointCost / maxCostInPool)`. With max = $15.00: A gets `1 - 15/15 = 0.0`, B gets `1 - 0.8/15 = 0.947`, C gets `1 - 1.25/15 = 0.917`. Final score = `0.6 × qualityFitness + 0.4 × costFactor × 100`. Result: A = 53.8, B = 78.1, C = 65.3 → **B → C → A**.
+
+**Status multiplier:** `active` = 1.0, `degraded` = 0.7. Applied as a post-score multiplier. A degraded endpoint with fitness 89.7 becomes 62.8, sinking it below non-degraded alternatives but keeping it available.
+
+**Cost basis:** Cost is computed per output megatoken (`costPerOutputMToken`) since output tokens dominate cost in most tasks. Input cost is used as a secondary tiebreaker when output costs are equal.
 
 **Stage 3 — Rank:** Sort by fitness score descending. Tiebreaker chain: lower cost → lower recent failure rate → lower latency.
 
@@ -326,6 +342,32 @@ The `fallbackChain` (2nd, 3rd ranked endpoints) replaces the current cascade loo
 
 No silent fallbacks. Every failover step appends to the `RouteDecision` trace.
 
+### Route Decision Persistence
+
+The `RouteDecision` is the regulated audit trail. It must be persisted, not ephemeral.
+
+**Storage:** A new `RouteDecision` table stores the full trace as structured JSON:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `String @id` | Unique decision ID |
+| `agentMessageId` | `String` | FK to `AgentMessage` — which conversation turn triggered this decision |
+| `selectedEndpointId` | `String` | FK to `ModelProvider` — which endpoint was selected |
+| `taskType` | `String` | The classified task type |
+| `sensitivity` | `String` | The sensitivity level applied |
+| `reason` | `String` | Human-readable explanation |
+| `fitnessScore` | `Float` | Winning endpoint's fitness score |
+| `candidateTrace` | `Json` | Full `CandidateTrace[]` — all endpoints considered with scores |
+| `excludedTrace` | `Json` | All excluded endpoints with reasons |
+| `policyRulesApplied` | `String[]` | Policy rules that excluded endpoints |
+| `fallbackChain` | `String[]` | Ordered fallback endpoint IDs |
+| `fallbacksUsed` | `Json` | If failover occurred: which fallbacks were tried, what errors, what succeeded |
+| `createdAt` | `DateTime` | When the decision was made |
+
+**Retention:** Route decisions are retained for the same period as conversation history (configured per organisation). They are queryable from the ops UI: "show me all routing decisions for code-gen tasks in the last 7 days" or "show me every time endpoint X was excluded and why."
+
+**Relationship to existing `RoutingMeta`:** The current `RoutingMeta` type passed to `observeConversation` is replaced by the `RouteDecision` record ID. The observer pipeline reads the full trace from the database rather than receiving a lightweight metadata object.
+
 ### Pinned & Blocked Overrides
 
 Before Stage 0, check for administrative overrides:
@@ -348,6 +390,18 @@ Both overrides are time-limited unless explicitly renewed, logged with the admin
 | `PlatformConfig.provider_priority` JSON blob | Eliminated — routing computed live from manifests |
 | `optimizeProviderPriority` weekly job | Eliminated — no static priority list to maintain |
 | `callWithFailover` cascade loop | `callWithFallbackChain` iterating `RouteDecision.fallbackChain` |
+
+### `callWithFallbackChain` Responsibilities
+
+The new `callWithFallbackChain` replaces `callWithFailover` and must preserve these existing behaviors:
+
+1. **Call dispatch** — calls `callProvider` (unchanged) for the selected endpoint, then each fallback in order on failure
+2. **Status transitions** — marks endpoints `degraded` on rate-limit, `disabled` on persistent/auth failures (replaces the current auto-disable + scheduled re-enable pattern)
+3. **Deprecated model handling** — on `model_not_found`, marks the endpoint `disabled` and flags for human review (replaces `retireDeprecatedModel` which deleted `DiscoveredModel` and `ModelProfile` records)
+4. **Token usage logging** — calls `logTokenUsage` on the endpoint that actually served the request (unchanged)
+5. **Route decision recording** — persists the `RouteDecision` to the database, appending failover attempts to `fallbacksUsed` as they occur
+6. **Process observer integration** — passes the `RouteDecision` record ID to `observeConversation` (replaces the current `RoutingMeta` type)
+7. **Degraded recovery scheduling** — schedules a targeted eval for degraded endpoints to determine recovery (replaces the current `ScheduledJob` that re-enables after 1 hour regardless of actual recovery)
 
 ---
 
@@ -438,9 +492,22 @@ The ops UI can show score history per dimension over time — a line chart makin
 
 - `ModelProfile` table — capability data consolidated onto `ModelProvider` (one source of truth)
 - `ai-profiling.ts:buildProfilingPrompt` (which produces old vocabulary values) — replaced by structured eval scenarios
-- `EndpointTaskPerformance.avgOrchestratorScore` / `avgHumanScore` (single composite scores) — replaced by per-dimension scores
-- `EndpointTaskPerformance.instructionPhase` (`"learning" | "practicing" | "innate"`) — replaced by `profileConfidence` (`"low" | "medium" | "high"`)
 - `optimizeProviderPriority` weekly re-ranking job — replaced by eval-driven profile updates (no static priority list to maintain)
+
+### `EndpointTaskPerformance` — Retained and Refined
+
+The `EndpointTaskPerformance` table is **retained** because per-task-type performance data is valuable — an endpoint may excel at reasoning tasks but struggle with tool-action tasks. Changes:
+
+| Field | Change |
+|---|---|
+| `avgOrchestratorScore` / `avgHumanScore` | Retained — composite scores remain useful for task-level performance tracking |
+| `recentScores` | Retained — rolling window of recent scores for trend detection |
+| `currentInstructions` | Retained — per-endpoint, per-task instruction refinement |
+| `instructionPhase` | Renamed to `profileConfidence` with values `"low" | "medium" | "high"` |
+| `pinned` / `blocked` | Retained — **per-task-type** overrides. The Section 3 pinned/blocked overrides are per-task-type, keyed by `(endpointId, taskType)` |
+| `dimensionScores` | **New** — `Json` field storing per-dimension scores for this specific task type, enabling the production observation feedback loop (Section 4, Source 3) |
+
+The endpoint-level profile on `ModelProvider` is the aggregate across all task types. `EndpointTaskPerformance` holds the per-task-type detail. Production observations update the task-level detail first, then roll up to the endpoint-level profile.
 
 ---
 
@@ -486,7 +553,7 @@ The built-in eval dimensions cover general AI capabilities. Domain-specific qual
 - User defines a **custom dimension** (e.g., `clinicalAccuracy`) with a description
 - User provides **eval scenarios** — input/expected-output pairs specific to their domain
 - The eval loop includes custom scenarios alongside built-in ones
-- Custom dimension scores are stored in `EndpointProfile.customScores` and available for routing
+- Custom dimension scores are stored in `ModelProvider.customScores` and available for routing
 - Custom dimensions appear in task requirement contracts the same way built-in ones do
 
 ### Governance Guardrails
@@ -563,7 +630,7 @@ Remove dead code:
 - `TIER_RANK`, `TIER_ORDER` (all three definitions)
 - `PlatformConfig.provider_priority` key
 - `TaskAwarePriority` type
-- Legacy sensitivity filtering in `agent-sensitivity.ts`
+- `filterProviderPriorityBySensitivity` and `isProviderAllowedForSensitivity` in `agent-sensitivity.ts` (provider filtering — replaced by manifest `sensitivityClearance`). Note: `getRouteSensitivity` (path-to-sensitivity mapping) is retained — the canonical source remains `route-context-map.ts` which already handles this for the unified coworker path
 - `capabilityTier` string column on `ModelProvider` and `ModelProfile`
 - `USE_UNIFIED_COWORKER` feature flag and old unified path in `agent-coworker.ts`
 - `ModelProfile` table (after data migrated to `ModelProvider`)
@@ -648,7 +715,7 @@ Key references used in this research (full list available in research notes):
 | `lib/agent-router-data.ts` | DB hydration | Replaced by manifest loading |
 | `lib/task-classifier.ts` | Regex task classification | Retained (classification is separate from routing) |
 | `lib/task-types.ts` | Static task type registry | Replaced by `TaskRequirement` table |
-| `lib/agent-sensitivity.ts` | Path-based sensitivity | Replaced by manifest `sensitivityClearance` |
+| `lib/agent-sensitivity.ts` | Path-based sensitivity | Provider filtering replaced by manifest `sensitivityClearance`; `getRouteSensitivity` retained via `route-context-map.ts` |
 | `lib/ai-profiling.ts` | LLM-generated profiles | Replaced by structured eval scenarios |
 | `lib/actions/agent-coworker.ts` | Main entry point | Refactored to call `routeEndpoint` |
 | `lib/agentic-loop.ts` | Iterative tool-calling loop | Minor change: receives routed endpoint |
