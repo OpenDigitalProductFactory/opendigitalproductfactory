@@ -771,8 +771,6 @@ model ModelProvider {
   recentFailureRate      Float      @default(0)
   lastEvalAt             DateTime?
   lastCallAt             DateTime?
-  costPerInputMToken     Float?
-  costPerOutputMToken    Float?
 
   // ── Routing Manifest: Provenance ──
   profileSource          String     @default("seed")

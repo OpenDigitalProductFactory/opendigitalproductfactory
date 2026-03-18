@@ -18,8 +18,6 @@ ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "avgLatencyMs" DOUBLE PRECI
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "recentFailureRate" DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "lastEvalAt" TIMESTAMP(3);
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "lastCallAt" TIMESTAMP(3);
-ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "costPerInputMToken" DOUBLE PRECISION;
-ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "costPerOutputMToken" DOUBLE PRECISION;
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "profileSource" TEXT NOT NULL DEFAULT 'seed';
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "profileConfidence" TEXT NOT NULL DEFAULT 'low';
 ALTER TABLE "ModelProvider" ADD COLUMN IF NOT EXISTS "evalCount" INTEGER NOT NULL DEFAULT 0;
@@ -117,3 +115,14 @@ ALTER TABLE "TaskRequirement" ADD CONSTRAINT "TaskRequirement_approvedById_fkey"
 ALTER TABLE "PolicyRule" ADD CONSTRAINT "PolicyRule_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "CustomEvalDimension" ADD CONSTRAINT "CustomEvalDimension_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "CustomEvalDimension" ADD CONSTRAINT "CustomEvalDimension_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Check constraints: capability scores must be 0-100
+ALTER TABLE "ModelProvider" ADD CONSTRAINT "ModelProvider_capability_scores_check"
+  CHECK ("reasoning" BETWEEN 0 AND 100 AND "codegen" BETWEEN 0 AND 100
+    AND "toolFidelity" BETWEEN 0 AND 100 AND "instructionFollowing" BETWEEN 0 AND 100
+    AND "structuredOutput" BETWEEN 0 AND 100 AND "conversational" BETWEEN 0 AND 100
+    AND "contextRetention" BETWEEN 0 AND 100);
+
+-- Check constraint: recentFailureRate must be 0-1
+ALTER TABLE "ModelProvider" ADD CONSTRAINT "ModelProvider_recentFailureRate_check"
+  CHECK ("recentFailureRate" >= 0 AND "recentFailureRate" <= 1);
