@@ -96,9 +96,17 @@ The `platform-knowledge` collection requires new payload indexes for capability 
 
 These are added alongside the existing `entityType` and `entityId` indexes.
 
+**Migration strategy:** The current `ensureCollections()` function only creates indexes when the collection doesn't exist (guarded by `if (!names.has(...))`). Since the `platform-knowledge` collection already exists in deployed environments, a new `ensurePayloadIndexes()` function runs idempotently on startup (Qdrant's PUT index ignores duplicates). This function is called after `ensureCollections()` and creates all required indexes regardless of whether the collection is new or existing.
+
 ### Knowledge Storage Function
 
 The existing `storePlatformKnowledge()` function stores a 300-character `contentPreview` as text. Capability metadata requires structured payload fields for filtering. A new `storeCapabilityKnowledge()` function extends the base function, accepting the structured fields from the table above as individual Qdrant payload fields rather than embedding them in the content string. This preserves filterability for discovery queries.
+
+**Point ID format:** Each capability entry uses the ID `capability-{spec_ref}-{action_name}` (e.g., `capability-EP-EMP-001-create_employee`). This ensures uniqueness when multiple actions originate from the same spec, and provides a stable key for the commit hook to find and update entries.
+
+### Capability Lookup Function
+
+The commit hook and lifecycle transition logic need to find capabilities by exact field match (e.g., "does an entry with `action_name: create_employee` exist?"), not by semantic similarity. A new `lookupCapabilityByFilter()` function uses Qdrant's scroll endpoint with payload filters — no embedding vector required. This is distinct from `searchPlatformKnowledge()` which performs semantic similarity search and is unsuitable for exact-match lookups.
 
 ### When the Platform Changes
 
@@ -301,7 +309,7 @@ model UserSkill {
   routeHint   String?            // route where it was created (informational, not binding)
   visibility  String   @default("personal")  // personal | team | org
   teamId      String?            // set when visibility = "team"
-  team        Team?    @relation(fields: [teamId], references: [teamId])
+  team        Team?    @relation(fields: [teamId], references: [id])
   createdById String
   createdBy   User     @relation("UserSkillCreator", fields: [createdById], references: [id])
   usageCount  Int      @default(0)
@@ -470,7 +478,7 @@ This means the agent knows about a capability as soon as it's designed — befor
 A post-commit hook (`.git/hooks/post-commit` or CI step):
 
 1. Scans for changed spec files in `docs/superpowers/specs/`
-2. Queries Qdrant via `searchPlatformKnowledge()` using the `spec_ref` payload filter to check if the spec is indexed
+2. Queries Qdrant via `lookupCapabilityByFilter()` using the `spec_ref` payload filter to check if the spec is indexed
 3. If not indexed: queues a re-index job
 4. Scans for new/changed action manifests (`**/actions/manifest.ts`)
 5. For each action in the manifest: checks if a knowledge entry with matching `action_name` exists
@@ -538,7 +546,7 @@ Dynamic capability context is injected into Block 5 (domain tools) of the unifie
 - `lib/agent-action-registry.ts` — manifest collector + `getActionsForRoute()` with longest-prefix matching
 - `app/(app)/[route]/actions/manifest.ts` — per-page action manifests (one per instrumented page)
 - `lib/actions/user-skills.ts` — user skill CRUD server actions
-- `lib/semantic-memory.ts` — new `storeCapabilityKnowledge()` function (extends existing `storePlatformKnowledge()` with structured payload fields)
+- `lib/semantic-memory.ts` — new `storeCapabilityKnowledge()` function (structured payload fields) + `lookupCapabilityByFilter()` (scroll-based exact-match lookup)
 - Prisma migration for `UserSkill` model
 - Post-commit hook for spec/manifest change detection and lifecycle promotion
 
@@ -550,7 +558,7 @@ Dynamic capability context is injected into Block 5 (domain tools) of the unifie
 - `apps/web/components/agent/AgentSkillsDropdown.tsx` — bug fix (`isOpen` default), click-outside listener, sectioned layout (platform / org / team / personal / create), user skill display
 - `apps/web/lib/route-context-map.ts` — inject dynamic tools from knowledge + manifest instead of static lists
 - `apps/web/lib/actions/agent-coworker.ts` — capability discovery at conversation start (call `getActionsForRoute()` + merge with `getAvailableTools()`), Advise/Act mode filtering on merged set, skill replay logic
-- `packages/db/src/qdrant.ts` — add payload indexes for `route`, `lifecycle_status`, `action_name`, `side_effect`
+- `packages/db/src/qdrant.ts` — add `ensurePayloadIndexes()` function + payload indexes for `route`, `lifecycle_status`, `action_name`, `side_effect`
 - Spec indexing workflow (brainstorming/planning skill or dedicated indexer)
 
 ### Infrastructure
