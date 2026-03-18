@@ -3,6 +3,8 @@
 // This is the core behavioral difference between a chatbot and an agent.
 
 import { callWithFailover, type FailoverResult } from "./ai-provider-priority";
+import { callWithFallbackChain, type FallbackResult } from "./routing/fallback";
+import type { RouteDecision } from "./routing/types";
 import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
 import type { ChatMessage } from "./ai-inference";
 
@@ -37,6 +39,7 @@ export async function runAgenticLoop(params: {
   agentId: string;
   threadId: string;
   modelRequirements?: Record<string, unknown>;
+  routeDecision?: RouteDecision;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -49,28 +52,46 @@ export async function runAgenticLoop(params: {
     agentId,
     threadId,
     modelRequirements,
+    routeDecision,
   } = params;
 
   let messages = [...chatHistory];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
-  let lastResult: FailoverResult | null = null;
+  let lastResult: FailoverResult | FallbackResult | null = null;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    const result = await callWithFailover(
-      messages,
-      systemPrompt,
-      sensitivity,
-      {
-        ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-        ...(modelRequirements && Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
-      },
-    );
+    let result: FailoverResult | FallbackResult;
+
+    if (routeDecision?.selectedEndpoint) {
+      // EP-INF-001: Use manifest-based routing with fallback chain
+      const fbResult = await callWithFallbackChain(
+        routeDecision,
+        messages,
+        systemPrompt,
+        toolsForProvider,
+      );
+      result = fbResult;
+    } else {
+      // Legacy path: callWithFailover builds its own priority list
+      result = await callWithFailover(
+        messages,
+        systemPrompt,
+        sensitivity,
+        {
+          ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+          ...(modelRequirements && Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
+        },
+      );
+    }
 
     lastResult = result;
-    totalInputTokens += result.inputTokens ?? 0;
-    totalOutputTokens += result.outputTokens ?? 0;
+    // Handle both token formats: FailoverResult has flat fields, FallbackResult has nested
+    const inputTok = "inputTokens" in result ? (result as FailoverResult).inputTokens : result.tokenUsage?.inputTokens;
+    const outputTok = "outputTokens" in result ? (result as FailoverResult).outputTokens : result.tokenUsage?.outputTokens;
+    totalInputTokens += inputTok ?? 0;
+    totalOutputTokens += outputTok ?? 0;
 
     // No tool calls — agent is done, return the text response
     if (!result.toolCalls || result.toolCalls.length === 0) {
