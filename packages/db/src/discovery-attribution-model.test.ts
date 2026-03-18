@@ -1,11 +1,5 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { PrismaClient } from "../generated/client";
-
-const prisma = new PrismaClient();
-
-afterAll(async () => {
-  await prisma.$disconnect();
-});
+import { describe, expect, it } from "vitest";
+import { prisma } from "./client";
 
 describe("discovery attribution Prisma client", () => {
   it("exposes software normalization delegates", () => {

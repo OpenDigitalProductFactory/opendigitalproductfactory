@@ -2,9 +2,7 @@
 // Bootstrap seed: registers the ODPF platform as its own first Digital Product.
 // Run as part of initial setup or after schema migration.
 
-import { PrismaClient } from "../generated/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "./client";
 
 export async function seedPlatformProduct() {
   console.log("Seeding platform product (DP-ODPF)...");
