@@ -1,5 +1,5 @@
 // apps/web/lib/semantic-memory.test.ts
-// Tests for capability knowledge storage and filter-based lookup (EP-AGENT-CAP-001 Task 2).
+// Tests for semantic-memory.ts — platform knowledge storage and retrieval.
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -124,6 +124,7 @@ describe("lookupCapabilityByFilter", () => {
       "platform-knowledge",
       {
         must: [
+          { key: "entityType", match: { value: "capability" } },
           { key: "route", match: { value: "/employee" } },
           { key: "lifecycle_status", match: { value: "production" } },
         ],
@@ -176,6 +177,7 @@ describe("lookupCapabilityByFilter", () => {
       "platform-knowledge",
       {
         must: [
+          { key: "entityType", match: { value: "capability" } },
           { key: "action_name", match: { value: "create_employee" } },
         ],
       },

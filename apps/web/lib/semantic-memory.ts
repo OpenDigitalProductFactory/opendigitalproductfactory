@@ -181,6 +181,10 @@ export async function storeCapabilityKnowledge(params: {
     {
       id: `capability-${params.specRef}-${params.actionName}`,
       vector: embedding,
+      // Shared fields (entityId, entityType, title, contentPreview) use camelCase
+      // for backward compatibility with searchPlatformKnowledge() results.
+      // Capability-specific fields use snake_case to match Qdrant payload indexes
+      // created by ensurePayloadIndexes() — Qdrant requires exact field name matches.
       payload: {
         entityId: params.actionName,
         entityType: "capability",
@@ -220,6 +224,7 @@ export async function lookupCapabilityByFilter(filter: {
   if (filter.lifecycleStatus) conditions.push({ key: "lifecycle_status", match: { value: filter.lifecycleStatus } });
 
   if (conditions.length === 0) return [];
+  conditions.unshift({ key: "entityType", match: { value: "capability" } });
 
   const points = await scrollPoints(
     QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
