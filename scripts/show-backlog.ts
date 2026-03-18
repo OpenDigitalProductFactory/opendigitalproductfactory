@@ -1,8 +1,6 @@
 // Quick backlog summary — run with:
 // cd packages/db && npx tsx ../../scripts/show-backlog.ts
-import { PrismaClient } from "../packages/db/generated/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../packages/db/src/client";
 
 async function main() {
   const epics = await prisma.epic.findMany({
@@ -49,4 +47,4 @@ async function main() {
   console.log(`Total: ${epics.length} epics, ${totalItems} items, ${totalDone} done\n`);
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main().catch(console.error);
