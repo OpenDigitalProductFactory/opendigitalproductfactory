@@ -7,6 +7,14 @@
 - Only use seed content when the user explicitly asks about bootstrap data, migrations, or initial setup behavior.
 - If live DB access fails, state that clearly and label any fallback output as a seed/default snapshot, not live state.
 
+## Never Fabricate
+
+- Do not make things up. If you don't know, say so or ask for pointers.
+- Always research existing code, specs, patterns, and conventions before creating something new.
+- Do not fabricate test cases, configurations, architecture patterns, or data without grounding them in what actually exists.
+- If no clear precedent exists, ask the user for direction rather than inventing.
+- This applies to both code generation AND conversational responses — never claim a capability, status, or result that isn't verified.
+
 ## Mutation Safety
 
 - Do not edit `seed.ts` to represent day-to-day runtime changes.
