@@ -1,4 +1,5 @@
 // packages/db/src/client.ts
+import "dotenv/config";
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
