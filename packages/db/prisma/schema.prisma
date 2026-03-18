@@ -177,6 +177,17 @@ model EmployeeProfile {
   accountableBuilds      FeatureBuild[] @relation("BuildAccountable")
   accountableEpics       Epic[]         @relation("EpicAccountable")
   accountableItems       BacklogItem[]  @relation("ItemAccountable")
+  // ─── Compliance Engine relations ─────────────────────
+  obligationOwnership       Obligation[]             @relation("ObligationOwner")
+  controlOwnership          Control[]                @relation("ControlOwner")
+  evidenceCollected         ComplianceEvidence[]     @relation("EvidenceCollector")
+  riskAssessments           RiskAssessment[]         @relation("RiskAssessor")
+  incidentsReported         ComplianceIncident[]     @relation("IncidentReporter")
+  correctiveActionsOwned    CorrectiveAction[]       @relation("CorrectiveActionOwner")
+  correctiveActionsVerified CorrectiveAction[]       @relation("CorrectiveActionVerifier")
+  auditsPerformed           ComplianceAudit[]        @relation("AuditAuditor")
+  regulatorySubmissions     RegulatorySubmission[]   @relation("SubmissionSubmitter")
+  complianceAuditLogs       ComplianceAuditLog[]     @relation("ComplianceAuditLogActor")
 
   @@index([status])
   @@index([departmentId])
@@ -1919,6 +1930,10 @@ model CalendarEvent {
   @@index([startAt, endAt])
   @@index([category])
   @@index([syncSource, externalId])
+  complianceEntityType String?
+  complianceEntityId   String?
+
+  @@index([complianceEntityType, complianceEntityId])
 }
 
 model CalendarSync {
@@ -1940,4 +1955,342 @@ model CalendarSync {
   @@unique([employeeProfileId, provider])
   @@index([employeeProfileId])
   @@index([status])
+}
+
+// ─── Compliance Engine ──────────────────────────────────────────────────────
+
+model Regulation {
+  id            String   @id @default(cuid())
+  regulationId  String   @unique
+  name          String
+  shortName     String
+  jurisdiction  String
+  industry      String?
+  sourceType    String   @default("external")
+  effectiveDate DateTime?
+  reviewDate    DateTime?
+  sourceUrl     String?
+  notes         String?
+  agentId       String?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  obligations Obligation[]
+  submissions RegulatorySubmission[]
+
+  @@index([status])
+  @@index([jurisdiction])
+  @@index([sourceType])
+}
+
+model Obligation {
+  id              String    @id @default(cuid())
+  obligationId    String    @unique
+  regulationId    String
+  title           String
+  description     String?
+  reference       String?
+  category        String?
+  frequency       String?
+  applicability   String?
+  penaltySummary  String?
+  ownerEmployeeId String?
+  reviewDate      DateTime?
+  agentId         String?
+  status          String    @default("active")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  regulation    Regulation       @relation(fields: [regulationId], references: [id], onDelete: Restrict)
+  ownerEmployee EmployeeProfile? @relation("ObligationOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  controls      ControlObligationLink[]
+  evidence      ComplianceEvidence[]
+
+  @@index([regulationId])
+  @@index([ownerEmployeeId])
+  @@index([status])
+  @@index([category])
+}
+
+model Control {
+  id                   String    @id @default(cuid())
+  controlId            String    @unique
+  title                String
+  description          String?
+  controlType          String
+  implementationStatus String    @default("planned")
+  ownerEmployeeId      String?
+  reviewFrequency      String?
+  lastReviewedAt       DateTime?
+  nextReviewDate       DateTime?
+  effectiveness        String?
+  agentId              String?
+  status               String    @default("active")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  ownerEmployee   EmployeeProfile?      @relation("ControlOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  obligations     ControlObligationLink[]
+  evidence        ComplianceEvidence[]
+  riskAssessments RiskControl[]
+  auditFindings   AuditFinding[]
+
+  @@index([ownerEmployeeId])
+  @@index([status])
+  @@index([implementationStatus])
+  @@index([controlType])
+}
+
+model ControlObligationLink {
+  id           String   @id @default(cuid())
+  controlId    String
+  obligationId String
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  control    Control    @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@unique([controlId, obligationId])
+  @@index([controlId])
+  @@index([obligationId])
+}
+
+model ComplianceEvidence {
+  id                    String    @id @default(cuid())
+  evidenceId            String    @unique
+  title                 String
+  evidenceType          String
+  description           String?
+  obligationId          String?
+  controlId             String?
+  collectedAt           DateTime  @default(now())
+  collectedByEmployeeId String?
+  fileRef               String?
+  retentionUntil        DateTime?
+  supersededById        String?
+  agentId               String?
+  status                String    @default("active")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  obligation   Obligation?         @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  control      Control?            @relation(fields: [controlId], references: [id], onDelete: SetNull)
+  collectedBy  EmployeeProfile?    @relation("EvidenceCollector", fields: [collectedByEmployeeId], references: [id], onDelete: SetNull)
+  supersededBy ComplianceEvidence? @relation("EvidenceSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   ComplianceEvidence[] @relation("EvidenceSupersession")
+
+  @@index([obligationId])
+  @@index([controlId])
+  @@index([collectedByEmployeeId])
+  @@index([status])
+  @@index([evidenceType])
+}
+
+model RiskAssessment {
+  id                   String    @id @default(cuid())
+  assessmentId         String    @unique
+  title                String
+  scope                String?
+  hazard               String
+  likelihood           String
+  severity             String
+  inherentRisk         String
+  residualRisk         String?
+  assessedByEmployeeId String?
+  assessedAt           DateTime  @default(now())
+  nextReviewDate       DateTime?
+  notes                String?
+  agentId              String?
+  status               String    @default("active")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  assessedBy EmployeeProfile? @relation("RiskAssessor", fields: [assessedByEmployeeId], references: [id], onDelete: SetNull)
+  controls   RiskControl[]
+  incidents  ComplianceIncident[]
+
+  @@index([assessedByEmployeeId])
+  @@index([status])
+  @@index([inherentRisk])
+}
+
+model RiskControl {
+  id               String   @id @default(cuid())
+  riskAssessmentId String
+  controlId        String
+  mitigationNotes  String?
+  createdAt        DateTime @default(now())
+
+  riskAssessment RiskAssessment @relation(fields: [riskAssessmentId], references: [id], onDelete: Cascade)
+  control        Control        @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  @@unique([riskAssessmentId, controlId])
+  @@index([riskAssessmentId])
+  @@index([controlId])
+}
+
+model ComplianceIncident {
+  id                   String    @id @default(cuid())
+  incidentId           String    @unique
+  title                String
+  description          String?
+  occurredAt           DateTime
+  detectedAt           DateTime?
+  severity             String
+  category             String?
+  regulatoryNotifiable Boolean   @default(false)
+  notificationDeadline DateTime?
+  notifiedAt           DateTime?
+  rootCause            String?
+  riskAssessmentId     String?
+  reportedByEmployeeId String?
+  agentId              String?
+  status               String    @default("open")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  riskAssessment    RiskAssessment?  @relation(fields: [riskAssessmentId], references: [id], onDelete: SetNull)
+  reportedBy        EmployeeProfile? @relation("IncidentReporter", fields: [reportedByEmployeeId], references: [id], onDelete: SetNull)
+  correctiveActions CorrectiveAction[]
+
+  @@index([riskAssessmentId])
+  @@index([reportedByEmployeeId])
+  @@index([status])
+  @@index([severity])
+  @@index([regulatoryNotifiable])
+}
+
+model CorrectiveAction {
+  id                   String    @id @default(cuid())
+  actionId             String    @unique
+  title                String
+  description          String?
+  rootCause            String?
+  sourceType           String
+  incidentId           String?
+  auditFindingId       String?
+  ownerEmployeeId      String?
+  dueDate              DateTime?
+  completedAt          DateTime?
+  verificationMethod   String?
+  verificationDate     DateTime?
+  verifiedByEmployeeId String?
+  agentId              String?
+  status               String    @default("open")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  incident     ComplianceIncident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  auditFinding AuditFinding?       @relation(fields: [auditFindingId], references: [id], onDelete: SetNull)
+  owner        EmployeeProfile?    @relation("CorrectiveActionOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  verifiedBy   EmployeeProfile?    @relation("CorrectiveActionVerifier", fields: [verifiedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([incidentId])
+  @@index([auditFindingId])
+  @@index([ownerEmployeeId])
+  @@index([verifiedByEmployeeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ComplianceAudit {
+  id                String    @id @default(cuid())
+  auditId           String    @unique
+  title             String
+  auditType         String
+  scope             String?
+  auditorName       String?
+  auditorEmployeeId String?
+  scheduledAt       DateTime?
+  conductedAt       DateTime?
+  completedAt       DateTime?
+  overallRating     String?
+  notes             String?
+  agentId           String?
+  status            String    @default("planned")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  auditor  EmployeeProfile? @relation("AuditAuditor", fields: [auditorEmployeeId], references: [id], onDelete: SetNull)
+  findings AuditFinding[]
+
+  @@index([auditorEmployeeId])
+  @@index([status])
+  @@index([auditType])
+}
+
+model AuditFinding {
+  id          String    @id @default(cuid())
+  findingId   String    @unique
+  auditId     String
+  controlId   String?
+  title       String
+  description String?
+  findingType String
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+  agentId     String?
+  status      String    @default("open")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  audit             ComplianceAudit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  control           Control?           @relation(fields: [controlId], references: [id], onDelete: SetNull)
+  correctiveActions CorrectiveAction[]
+
+  @@index([auditId])
+  @@index([controlId])
+  @@index([status])
+}
+
+model RegulatorySubmission {
+  id                    String    @id @default(cuid())
+  submissionId          String    @unique
+  title                 String
+  regulationId          String?
+  recipientBody         String
+  submissionType        String
+  submittedAt           DateTime?
+  dueDate               DateTime?
+  submittedByEmployeeId String?
+  confirmationRef       String?
+  responseReceived      Boolean   @default(false)
+  responseDate          DateTime?
+  responseSummary       String?
+  notes                 String?
+  agentId               String?
+  status                String    @default("draft")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  regulation  Regulation?      @relation(fields: [regulationId], references: [id], onDelete: SetNull)
+  submittedBy EmployeeProfile? @relation("SubmissionSubmitter", fields: [submittedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([regulationId])
+  @@index([submittedByEmployeeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// Intentionally omits status and updatedAt — records are permanent and immutable.
+model ComplianceAuditLog {
+  id                    String   @id @default(cuid())
+  entityType            String
+  entityId              String
+  action                String
+  field                 String?
+  oldValue              String?
+  newValue              String?
+  performedByEmployeeId String?
+  agentId               String?
+  performedAt           DateTime @default(now())
+  notes                 String?
+
+  performedBy EmployeeProfile? @relation("ComplianceAuditLogActor", fields: [performedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([performedByEmployeeId])
+  @@index([performedAt])
 }
