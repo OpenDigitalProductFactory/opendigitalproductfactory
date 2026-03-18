@@ -33,6 +33,7 @@ model User {
   epicSubmissions              Epic[]                   @relation("EpicSubmissions")
   apiTokens                    ApiToken[]
   featureBuilds                FeatureBuild[]
+  userSkills                   UserSkill[]              @relation("UserSkillCreator")
 }
 
 model UserGroup {
@@ -98,6 +99,7 @@ model Team {
 
   memberships TeamMembership[]
   ownerships  AgentOwnership[]
+  userSkills  UserSkill[]
 }
 
 model TeamMembership {
@@ -735,6 +737,10 @@ model ModelProvider {
   taskTags             String[] @default([])
   mcpTransport         String?
   maxConcurrency       Int?
+
+  // Catalogue discovery
+  catalogVisibility    String   @default("visible")   // visible | hidden
+  catalogEntry         Json?    // for unconfigured services: description, pricing, enable URL
 }
 
 model DiscoveredModel {
@@ -2539,4 +2545,28 @@ model ComplianceSnapshot {
   createdAt           DateTime @default(now())
 
   @@index([takenAt])
+}
+
+// ─── User Skills ──────────────────────────────────────────────────────────────
+
+model UserSkill {
+  id          String   @id @default(cuid())
+  skillId     String   @unique  // "SK-XXXXX" human-readable
+  name        String
+  intent      String   @db.Text
+  constraints String[] @default([])
+  tags        String[] @default([])
+  routeHint   String?
+  visibility  String   @default("personal")  // personal | team | org
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id])
+  createdById String
+  createdBy   User     @relation("UserSkillCreator", fields: [createdById], references: [id])
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([visibility])
+  @@index([routeHint])
 }
