@@ -160,10 +160,59 @@ export async function isQdrantHealthy(): Promise<boolean> {
   }
 }
 
+// ─── Scroll (filter-only) ───────────────────────────────────────────────────
+
+/**
+ * Scroll-based point lookup with payload filters. No embedding vector required.
+ * Use this for exact-match lookups (e.g., "find all capabilities with action_name X").
+ * Distinct from searchSimilar() which requires an embedding vector.
+ */
+export async function scrollPoints(
+  collection: string,
+  filter: { must: Array<Record<string, unknown>> },
+  limit = 100,
+): Promise<Array<{ id: number; payload: Record<string, unknown> }>> {
+  const result = await qdrantFetch(
+    `/collections/${collection}/points/scroll`,
+    {
+      method: "POST",
+      body: { filter, limit, with_payload: true },
+    },
+  ) as { result?: { points?: Array<{ id: number; payload: Record<string, unknown> }> } };
+  return result.result?.points ?? [];
+}
+
+// ─── Payload Indexes ───────────────────────────────────────────────────────
+
+/**
+ * Idempotently ensures all required payload indexes exist on platform-knowledge.
+ * Qdrant PUT index ignores duplicates, so this is safe to call on every startup.
+ * Separate from ensureCollections() because indexes need to be added to
+ * existing collections, not just new ones.
+ */
+export async function ensurePayloadIndexes(): Promise<void> {
+  const keywordFields = ["route", "lifecycle_status", "action_name", "spec_ref"];
+  const boolFields = ["side_effect"];
+
+  for (const field of keywordFields) {
+    await qdrantFetch(
+      `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
+      { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
+    ).catch(() => {});
+  }
+
+  for (const field of boolFields) {
+    await qdrantFetch(
+      `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
+      { method: "PUT", body: { field_name: field, field_schema: "bool" } },
+    ).catch(() => {});
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Convert string ID to numeric hash for Qdrant (which prefers numeric IDs) */
-function hashToNumber(str: string): number {
+export function hashToNumber(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
