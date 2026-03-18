@@ -40,7 +40,7 @@ const PROFILES: ProfileSeed[] = [
     contextRetention: 85,
   },
   {
-    providerId: "anthropic-subscription",
+    providerId: "anthropic-sub",
     supportsToolUse: true,
     supportsStructuredOutput: true,
     supportsStreaming: true,
