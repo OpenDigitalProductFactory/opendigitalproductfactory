@@ -38,7 +38,7 @@ export function AgentFileUpload({ threadId, disabled, onUploaded }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.xlsx,.pdf,.docx,.txt,.json,.md,.xml,.yaml,.yml,.tsv,.log"
+        accept=".csv,.xls,.xlsx,.pdf,.doc,.docx,.txt,.json,.md,.xml,.yaml,.yml,.tsv,.log,.ppt,.pptx,.rtf"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) handleFile(f);
