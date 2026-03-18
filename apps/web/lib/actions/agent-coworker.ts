@@ -448,19 +448,69 @@ export async function sendMessage(input: {
   }
 
   try {
-    const result = await callWithFailover(
+    // ── Agentic execution loop ──────────────────────────────────────────────
+    // Agent calls tools iteratively until it responds with text only (max 6 iterations).
+    const { runAgenticLoop } = await import("@/lib/agentic-loop");
+    const agenticResult = await runAgenticLoop({
       chatHistory,
-      populatedPrompt,
-      agent.sensitivity,
-      {
-        ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-        ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
-      },
-    );
+      systemPrompt: populatedPrompt,
+      sensitivity: agent.sensitivity,
+      tools: availableTools,
+      toolsForProvider,
+      userId: user.id!,
+      routeContext: input.routeContext,
+      agentId: agent.agentId,
+      threadId: input.threadId,
+      modelRequirements: Object.keys(modelReqs).length > 0 ? modelReqs : undefined,
+    });
 
-    // Handle tool calls — execute read-only tools immediately, propose side-effecting tools.
-    if (result.toolCalls && result.toolCalls.length > 0) {
-      const tc = result.toolCalls[0]!; // v1: one proposal per message
+    // Handle proposal — agent wants to take a side-effecting action that needs approval
+    if (agenticResult.proposal) {
+      const tc = agenticResult.proposal;
+      const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+      const agentMsg = await prisma.agentMessage.create({
+        data: {
+          threadId: input.threadId, role: "assistant",
+          content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+          agentId: agent.agentId, routeContext: input.routeContext,
+          providerId: agenticResult.providerId,
+          taskType: useUnified ? taskTypeId : null,
+          routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
+        },
+        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      });
+      const proposal = await prisma.agentActionProposal.create({
+        data: {
+          proposalId, threadId: input.threadId, messageId: agentMsg.id,
+          agentId: agent.agentId, actionType: tc.name,
+          parameters: tc.arguments as Prisma.InputJsonValue, status: "proposed",
+        },
+        select: { proposalId: true, actionType: true, parameters: true, status: true, resultEntityId: true, resultError: true },
+      });
+      observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
+      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
+    }
+
+    // Map agentic result to the shape downstream code expects
+    const result = {
+      content: agenticResult.content,
+      providerId: agenticResult.providerId,
+      modelId: agenticResult.modelId,
+      downgraded: agenticResult.downgraded,
+      downgradeMessage: agenticResult.downgradeMessage,
+      inputTokens: agenticResult.totalInputTokens,
+      outputTokens: agenticResult.totalOutputTokens,
+      inferenceMs: 0,
+      toolCalls: undefined as undefined, // already handled by loop
+    };
+
+    // ── AGENTIC LOOP REPLACED THE OLD SINGLE-TOOL HANDLER ──
+    // The old code handled one tool call then did one follow-up. The new agentic
+    // loop is in agentic-loop.ts and chains multiple tool calls automatically.
+    // This block is kept for backward compatibility but should not trigger —
+    // the agentic loop handles all tool calls before returning.
+    if (false && result.toolCalls && result.toolCalls.length > 0) {
+      const tc = result.toolCalls[0]!; // v1: DEPRECATED — agentic loop handles this
       const toolDefinition = availableTools.find((tool) => tool.name === tc.name);
 
       if (toolDefinition?.executionMode === "immediate") {

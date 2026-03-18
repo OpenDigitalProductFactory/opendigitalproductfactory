@@ -80,14 +80,12 @@ export function AgentCoworkerPanel({
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
   const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
-  const [cooMode, setCooMode] = useState(false);
+  const [devMode, setDevMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const routeAgent: AgentInfo = resolveAgentForRoute(pathname, userContext);
-  const cooAgent: AgentInfo = resolveAgentForRoute("/workspace", userContext);
-  const agent = cooMode ? cooAgent : routeAgent;
-  const isCoo = agent.agentId === "coo";
-  const canUseCoo = userContext.isSuperuser || userContext.platformRole === "HR-000";
+  const agent = routeAgent;
+  const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
   // Elapsed time counter for thinking indicator
@@ -173,12 +171,13 @@ export function AgentCoworkerPanel({
       const result = await sendMessage({
         threadId,
         content,
-        routeContext: cooMode ? "/workspace" : pathname,
-        coworkerMode: coworkerMode,
-        externalAccessEnabled: coworkerMode === "act" ? true : externalAccessEnabled,
+        routeContext: pathname,
+        coworkerMode: devMode ? "act" as const : coworkerMode,
+        externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
+        devMode,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
-        ...(!cooMode && activeBuildId ? { buildId: activeBuildId } : {}),
+        ...(activeBuildId ? { buildId: activeBuildId } : {}),
         ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
       });
       if ("error" in result) {
@@ -335,9 +334,9 @@ export function AgentCoworkerPanel({
         onClose={onClose}
         onDragStart={onDragStart}
         providerInfo={lastProviderInfo}
-        cooMode={cooMode}
-        canUseCoo={canUseCoo}
-        onToggleCoo={() => setCooMode((prev) => !prev)}
+        devMode={devMode}
+        canUseDev={canUseDev}
+        onToggleDev={() => setDevMode((prev) => !prev)}
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
         sensitivityLevel={agent.sensitivity}
