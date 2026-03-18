@@ -864,6 +864,16 @@ async function seedScheduledJobs(): Promise<void> {
       nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
+  await prisma.scheduledJob.upsert({
+    where: { jobId: "regulatory-monitor" },
+    update: {},
+    create: {
+      jobId: "regulatory-monitor",
+      name: "Monthly Regulatory Monitor Scan",
+      schedule: "monthly",
+      nextRunAt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+    },
+  });
   console.log("Seeded scheduled jobs");
 }
 
