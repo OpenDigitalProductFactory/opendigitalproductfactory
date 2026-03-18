@@ -4,6 +4,7 @@
 **Date:** 2026-03-17
 **Epic:** Compliance Engine Core
 **Scope:** Universal regulatory compliance lifecycle engine — obligation registry, control framework, evidence collection, risk assessment, incident management, corrective action tracking, audit management, compliance calendar, immutable audit trail, workspace tile + `/compliance` route
+**Dependencies:** CalendarEvent model (EP-CAL-001, already implemented), EmployeeProfile (HR Core, already implemented), Agent model (already implemented)
 
 ---
 
@@ -85,6 +86,7 @@ model Regulation {
   updatedAt     DateTime @updatedAt
 
   obligations Obligation[]
+  submissions RegulatorySubmission[]
 
   @@index([status])
   @@index([jurisdiction])
@@ -194,15 +196,17 @@ model ComplianceEvidence {
   collectedByEmployeeId String?
   fileRef               String?   // reference to uploaded file (future file storage integration)
   retentionUntil        DateTime? // when this record can be disposed
-  supersededById        String?   // if this evidence was replaced
+  supersededById        String?   // points to the NEW evidence that replaced this one
   agentId               String?
   status                String    @default("active") // "active" | "superseded" | "expired"
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  obligation  Obligation?      @relation(fields: [obligationId], references: [id], onDelete: SetNull)
-  control     Control?         @relation(fields: [controlId], references: [id], onDelete: SetNull)
-  collectedBy EmployeeProfile? @relation("EvidenceCollector", fields: [collectedByEmployeeId], references: [id], onDelete: SetNull)
+  obligation   Obligation?         @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  control      Control?            @relation(fields: [controlId], references: [id], onDelete: SetNull)
+  collectedBy  EmployeeProfile?    @relation("EvidenceCollector", fields: [collectedByEmployeeId], references: [id], onDelete: SetNull)
+  supersededBy ComplianceEvidence? @relation("EvidenceSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   ComplianceEvidence[] @relation("EvidenceSupersession")
 
   @@index([obligationId])
   @@index([controlId])
@@ -321,6 +325,7 @@ model CorrectiveAction {
   @@index([incidentId])
   @@index([auditFindingId])
   @@index([ownerEmployeeId])
+  @@index([verifiedByEmployeeId])
   @@index([status])
   @@index([dueDate])
 }
@@ -403,8 +408,10 @@ model RegulatorySubmission {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  regulation  Regulation?      @relation(fields: [regulationId], references: [id], onDelete: SetNull)
   submittedBy EmployeeProfile? @relation("SubmissionSubmitter", fields: [submittedByEmployeeId], references: [id], onDelete: SetNull)
 
+  @@index([regulationId])
   @@index([submittedByEmployeeId])
   @@index([status])
   @@index([dueDate])
@@ -413,7 +420,7 @@ model RegulatorySubmission {
 
 #### 1.9 ComplianceAuditLog (Immutable Trail)
 
-Separate from the existing `AuthorizationDecisionLog` — tracks every action in the compliance domain.
+Separate from the existing `AuthorizationDecisionLog` — tracks every action in the compliance domain. Intentionally omits `status` and `updatedAt` — records are permanent and immutable. This is a deliberate deviation from the standard platform pattern.
 
 ```prisma
 model ComplianceAuditLog {
@@ -439,7 +446,7 @@ model ComplianceAuditLog {
 
 #### 1.10 CalendarEvent Extension
 
-Two new nullable fields on the existing CalendarEvent model for compliance back-linking:
+Two new nullable fields on the existing CalendarEvent model (validated against the implemented schema at `packages/db/prisma/schema.prisma` line 1896) for compliance back-linking. The existing model already has `category String @default("personal")` and `eventType String` which compliance uses as `category: "compliance"` and `eventType: "deadline"`. The `recurrence String?` field supports recurring compliance deadlines. The `ownerEmployeeId` FK links to the compliance item owner's EmployeeProfile.
 
 ```prisma
 model CalendarEvent {
@@ -695,9 +702,10 @@ No backfill required. No existing records affected. CalendarEvent gains two null
 
 ## Security & Access Control
 
-- `view_compliance` (HR-000, HR-100, HR-200, HR-300) — read access to all compliance data and dashboard
-- `manage_compliance` (HR-000, HR-200) — create, update, link, supersede actions
+- `view_compliance` (HR-000, HR-100, HR-200, HR-300) — read access to all compliance data and dashboard. Broad access is intentional: compliance touches every function (HR needs training compliance, EA needs ISO 27001 visibility, ops manages the engine). Frontline roles (HR-400, HR-500) interact with compliance through their own domains (e.g., completing training, acknowledging policies) rather than viewing the compliance register directly.
+- `manage_compliance` (HR-000, HR-200) — create, update, link, supersede actions. Restricted to admin and operations — the compliance engine is a managed system, not self-service.
 - Layout auth gate uses `view_compliance`; all write server actions check `manage_compliance`
+- Calendar integration: compliance CalendarEvents are created via the `ensureComplianceCalendarEvent` helper which uses the existing `createCalendarEvent` server action pattern (session-based auth, requires valid EmployeeProfile). No separate calendar capability is required — the existing calendar infrastructure has no capability-based permission model.
 - ComplianceAuditLog is **append-only** — no update/delete server actions, no soft-delete. Records are permanent.
 - ComplianceEvidence is **immutable** — no updateEvidence action. Only supersedeEvidence creates a new record with a back-link.
 - All EmployeeProfile FKs use `onDelete: SetNull` — compliance records persist when employees leave
@@ -741,6 +749,91 @@ No backfill required. No existing records affected. CalendarEvent gains two null
 - Workspace tile NOT visible for HR-400, HR-500
 - Write actions rejected for HR-100, HR-300 (read-only roles)
 - Write actions permitted for HR-000, HR-200
+
+---
+
+## Files Affected
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `packages/db/prisma/migrations/YYYYMMDD_compliance_engine_core/migration.sql` | Schema migration for all 13 new tables + CalendarEvent extension |
+| `apps/web/lib/actions/compliance.ts` | All compliance server actions (CRUD, linking, dashboard aggregation, audit logging) |
+| `apps/web/lib/compliance-types.ts` | TypeScript types for compliance entities, filter params, input types |
+| `apps/web/app/(shell)/compliance/layout.tsx` | Auth gate (view_compliance) + horizontal tab navigation |
+| `apps/web/app/(shell)/compliance/page.tsx` | Dashboard — compliance posture overview |
+| `apps/web/app/(shell)/compliance/regulations/page.tsx` | Regulation registry list |
+| `apps/web/app/(shell)/compliance/regulations/[id]/page.tsx` | Regulation detail + obligations |
+| `apps/web/app/(shell)/compliance/obligations/page.tsx` | Obligation list with filters |
+| `apps/web/app/(shell)/compliance/controls/page.tsx` | Control registry with filters |
+| `apps/web/app/(shell)/compliance/evidence/page.tsx` | Evidence library with filters |
+| `apps/web/app/(shell)/compliance/risks/page.tsx` | Risk assessment register |
+| `apps/web/app/(shell)/compliance/incidents/page.tsx` | Incident log with filters |
+| `apps/web/app/(shell)/compliance/audits/page.tsx` | Audit schedule and history |
+| `apps/web/app/(shell)/compliance/audits/[id]/page.tsx` | Audit detail + findings |
+| `apps/web/app/(shell)/compliance/actions/page.tsx` | Corrective action tracker |
+| `apps/web/app/(shell)/compliance/submissions/page.tsx` | Regulatory submission log |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `packages/db/prisma/schema.prisma` | Add 13 new models, add 2 fields to CalendarEvent, add reverse relations to EmployeeProfile |
+| `apps/web/lib/permissions.ts` | Add `view_compliance` + `manage_compliance` capabilities, add compliance tile to ALL_TILES |
+| `apps/web/app/(shell)/workspace/page.tsx` | Add compliance metric queries (obligation count, incident count, control coverage, overdue count) + tile status entry |
+
+---
+
+## Implementation Order
+
+Seven chunks, sequenced by dependency:
+
+### Chunk 1: Schema Migration
+- Add all 13 new models to `schema.prisma`
+- Add CalendarEvent extension fields
+- Add EmployeeProfile reverse relations
+- Run `prisma migrate dev`
+- **Gate:** Migration succeeds, `prisma generate` produces valid client
+
+### Chunk 2: Permissions + Tile
+- Add `view_compliance` and `manage_compliance` to `permissions.ts`
+- Add compliance tile to `ALL_TILES`
+- Add compliance metric queries to workspace page
+- **Gate:** Tile visible for HR-000/100/200/300, hidden for HR-400/500
+
+### Chunk 3: Server Actions — Core CRUD
+- `compliance.ts`: Regulation, Obligation, Control CRUD
+- ControlObligationLink linking/unlinking
+- ComplianceAuditLog helper (used by all write actions)
+- **Gate:** Create/read/update for core entities, audit log entries written
+
+### Chunk 4: Server Actions — Risk, Incident, Corrective Action
+- RiskAssessment + RiskControl CRUD and linking
+- ComplianceIncident CRUD with CalendarEvent creation for notifiable incidents
+- CorrectiveAction CRUD including `verifyCorrectiveAction`
+- **Gate:** Full incident → corrective action → verification lifecycle works
+
+### Chunk 5: Server Actions — Audit, Evidence, Submission, Dashboard
+- ComplianceAudit + AuditFinding CRUD
+- ComplianceEvidence create + supersede (immutable pattern)
+- RegulatorySubmission CRUD
+- `getComplianceDashboard()` aggregation query
+- `ensureComplianceCalendarEvent` helper
+- **Gate:** Dashboard returns accurate metrics, evidence immutability enforced
+
+### Chunk 6: Route Pages — Dashboard + List Views
+- Layout with auth gate and tab navigation
+- Dashboard page with posture metrics, upcoming deadlines, recent activity, regulation cards
+- All 9 list pages with filters
+- **Gate:** All pages render, filters work, data displays correctly
+
+### Chunk 7: Route Pages — Detail Views + Modals
+- Regulation detail page (with obligations list)
+- Audit detail page (with findings list)
+- Create/edit modals for all entity types
+- Coverage indicators, overdue highlights, immutable evidence UX
+- **Gate:** Full CRUD workflow through UI, all UX behaviors described in spec working
 
 ---
 
