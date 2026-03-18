@@ -108,6 +108,16 @@ export async function createEpic(input: EpicInput): Promise<void> {
         })),
       });
     }
+
+    // Index in platform knowledge for semantic search
+    import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
+      storePlatformKnowledge({
+        entityId: epic.epicId,
+        entityType: "epic",
+        title: input.title,
+        content: input.description ?? "",
+      })
+    ).catch(() => {});
   });
 }
 

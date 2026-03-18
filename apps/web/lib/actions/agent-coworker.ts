@@ -819,8 +819,14 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       threadId: input.threadId,
     };
-    storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" }).catch(() => {});
-    storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" }).catch(() => {});
+    // Skip trivial messages that add noise to semantic search
+    const isSubstantive = (text: string) => text.length > 15 && !/^(?:ok|yes|no|thanks|thank you|sure|got it|hello|hi|hey)$/i.test(text.trim());
+    if (isSubstantive(trimmedContent)) {
+      storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" }).catch(() => {});
+    }
+    if (isSubstantive(responseContent)) {
+      storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" }).catch(() => {});
+    }
   }).catch(() => {});
 
   // Fire-and-forget: process observer
