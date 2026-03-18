@@ -51,19 +51,22 @@ Tracks each monthly (or manual) scan run.
 model RegulatoryMonitorScan {
   id                 String    @id @default(cuid())
   scanId             String    @unique // "SCAN-XXXXXXXX"
-  triggeredBy        String    // "scheduled" | "manual"
-  status             String    @default("running") // "running" | "completed" | "failed"
-  regulationsChecked Int       @default(0)
-  alertsGenerated    Int       @default(0)
-  summary            String?   // LLM-generated summary of findings
-  agentId            String?
-  startedAt          DateTime  @default(now())
-  completedAt        DateTime?
-  errorMessage       String?
-  createdAt          DateTime  @default(now())
+  triggeredBy              String    // "scheduled" | "manual"
+  triggeredByEmployeeId    String?   // who triggered (null for scheduled, set for manual)
+  status                   String    @default("running") // "running" | "completed" | "failed"
+  regulationsChecked       Int       @default(0)
+  alertsGenerated          Int       @default(0)
+  summary                  String?   // LLM-generated summary of findings
+  agentId                  String?
+  startedAt                DateTime  @default(now())
+  completedAt              DateTime?
+  errorMessage             String?
+  createdAt                DateTime  @default(now())
 
-  alerts RegulatoryAlert[]
+  triggeredByEmployee EmployeeProfile? @relation("ScanTriggerer", fields: [triggeredByEmployeeId], references: [id], onDelete: SetNull)
+  alerts              RegulatoryAlert[]
 
+  @@index([triggeredByEmployeeId])
   @@index([status])
   @@index([startedAt])
 }
@@ -128,11 +131,12 @@ model Regulation {
 
 #### 1.4 EmployeeProfile Extension
 
-Add reverse relation:
+Add reverse relations:
 ```prisma
 model EmployeeProfile {
   // ... existing relations ...
-  alertsReviewed RegulatoryAlert[] @relation("AlertReviewer")
+  scansTriggered RegulatoryMonitorScan[] @relation("ScanTriggerer")
+  alertsReviewed RegulatoryAlert[]       @relation("AlertReviewer")
 }
 ```
 
@@ -188,6 +192,8 @@ Respond in JSON:
 - **Partial failure:** individual regulation check failures don't stop the scan. Failed checks noted in scan summary. Successfully checked regulations get updated `sourceCheckDate`.
 - **No regulations registered:** scan completes immediately with `regulationsChecked: 0`. Not an error.
 - **No sourceUrl:** the agent uses regulation name + jurisdiction for the query. Less precise but still useful.
+- **Concurrent scans:** manual trigger is rejected if a scan is already in status "running". Returns `{ ok: false, message: "A scan is already in progress." }`.
+- **LLM knowledge cutoff:** the LLM's training data has a cutoff date. Detection accuracy depends on how recent the model's knowledge is. For regulations with a `sourceUrl`, future enhancements could add web scraping to provide the LLM with actual source content rather than relying on parametric knowledge.
 
 ### 3. Alert Management
 
@@ -243,19 +249,19 @@ New file `apps/web/lib/actions/regulatory-monitor.ts`. Uses shared helpers from 
 #### Alert Management
 - `listAlerts(filters?)` — filterable by status, severity, alertType, regulationId
 - `getAlert(id)` — full detail
-- `reviewAlert(id, resolution, notes?)` — marks reviewed, sets resolution
-- `dismissAlert(id, notes?)` — shortcut for dismiss resolution
-- `createObligationFromAlert(alertId, obligationInput)` — creates obligation, marks alert actioned
+- `reviewAlert(id, resolution, notes?)` — sets `status: "reviewed"` + `resolution` (one of: "flagged-for-further-review", "regulation-updated", "obligation-created"). Used when the alert needs action or has been acted on but not dismissed.
+- `dismissAlert(id, notes?)` — sets `status: "dismissed"` + `resolution: "dismissed"` directly. Skips "reviewed" state — this is a shortcut for false positives or irrelevant alerts.
+- `createObligationFromAlert(alertId, obligationInput)` — creates obligation, sets alert `status: "actioned"` + `resolution: "obligation-created"`
 
 #### Dashboard
 - `getRegulatoryAlertSummary()` — pending counts by severity, last scan info
 
 ### 6. Calendar Integration
 
-Uses existing `ensureComplianceCalendarEvent` helper:
+Uses existing `ensureComplianceCalendarEvent` helper. Note: this helper always creates a new CalendarEvent (no upsert). This is intentional for scans — each scan creates a one-off event for the *next* scan date, not a recurring event. After 12 months, there will be 12 past scan events (useful as historical markers) plus 1 upcoming.
 
-- **Monthly scan schedule:** recurring CalendarEvent with `complianceEntityType: "regulatory-scan"`, `recurrence: "monthly"`
-- **High/critical alert deadlines:** CalendarEvent with `complianceEntityType: "alert-review"`, due date = alert creation + 7 days
+- **Next scan date:** each completed scan creates a CalendarEvent for the first day of the next month with `complianceEntityType: "regulatory-scan"`, `complianceEntityId: scanId`. One-off, not recurring.
+- **High/critical alert deadlines:** CalendarEvent with `complianceEntityType: "alert-review"`, `complianceEntityId: alertId`, due date = alert creation + 7 days. One-off.
 
 Both appear on the workspace calendar alongside all other compliance deadlines.
 
@@ -292,8 +298,9 @@ Single Prisma migration adding:
 - Reverse relation `alertsReviewed` on EmployeeProfile
 
 ### Seed Data
-- ScheduledJob record: `regulatory-monitor` with `schedule: "monthly"`
-- CalendarEvent for first scan: recurring monthly
+Seeded via the idempotent seed script (not the migration — migrations are DDL only):
+- ScheduledJob record: `regulatory-monitor` with `schedule: "monthly"`, `nextRunAt: first day of next month`
+- CalendarEvent for first scan: one-off event for first day of next month
 
 ### Existing Data
 - Regulation records gain 3 nullable fields (default null/false). No backfill needed.
@@ -348,7 +355,8 @@ Single Prisma migration adding:
 
 | File | Change |
 |------|--------|
-| `packages/db/prisma/schema.prisma` | Add 2 new models, extend Regulation (3 fields + alerts relation), EmployeeProfile reverse relation |
+| `packages/db/prisma/schema.prisma` | Add 2 new models, extend Regulation (3 fields + alerts relation), EmployeeProfile + ScanTriggerer reverse relations |
+| `apps/web/lib/compliance-types.ts` | Add `"regulatory-scan"` and `"alert-review"` to complianceEntityType values; add `"regulatory-scan"` and `"regulatory-alert"` to ComplianceAuditLog entityType values |
 | `apps/web/app/(shell)/compliance/page.tsx` | Add alert summary and scan status sections |
 | `apps/web/app/(shell)/workspace/page.tsx` | Add pending alert count to compliance tile badge |
 
