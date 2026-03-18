@@ -1,5 +1,5 @@
 -- Seed Calendaring Core epic
--- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-calendaring-epic.sql --schema prisma/schema.prisma
+-- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-calendaring-epic.sql
 --
 -- Architecture note (from legacy ADR-0007):
 --   PostgreSQL is the canonical scheduling authority.

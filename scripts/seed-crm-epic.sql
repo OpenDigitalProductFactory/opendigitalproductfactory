@@ -1,5 +1,5 @@
 -- Seed CRM Core epic
--- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-crm-epic.sql --schema prisma/schema.prisma
+-- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-crm-epic.sql
 DO $$
 DECLARE
   sold_id        TEXT;

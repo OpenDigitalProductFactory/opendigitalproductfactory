@@ -1,6 +1,6 @@
 -- Update the existing Finance epic to capture ERPNext + AP/AR/Payroll/Tax/Cart/CRM scope.
 -- Run from repo root with:
---   cd packages/db && npx prisma db execute --file ../../scripts/update-finance-epic.sql --schema prisma/schema.prisma
+--   cd packages/db && npx prisma db execute --file ../../scripts/update-finance-epic.sql
 
 DO $$
 DECLARE

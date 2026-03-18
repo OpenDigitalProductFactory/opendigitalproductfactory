@@ -1,6 +1,6 @@
 -- EP-CAL-001: Calendar Infrastructure — Unified Scheduling & Event System
 -- Run from repo root with:
---   cd packages/db && npx prisma db execute --file ../../scripts/update-calendar-epic.sql --schema prisma/schema.prisma
+--   cd packages/db && npx prisma db execute --file ../../scripts/update-calendar-epic.sql
 
 DO $$
 DECLARE

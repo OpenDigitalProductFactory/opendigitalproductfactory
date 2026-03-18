@@ -1,5 +1,5 @@
 -- Seed HR Core epic
--- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-hr-epic.sql --schema prisma/schema.prisma
+-- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-hr-epic.sql
 DO $$
 DECLARE
   employees_id   TEXT;

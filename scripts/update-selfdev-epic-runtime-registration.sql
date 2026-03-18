@@ -1,7 +1,7 @@
 -- Update the AI-Driven Platform Self-Development epic to capture
 -- automatic inventory and digital product registration for downloaded runtimes.
 -- Run from repo root with:
---   cd packages/db && npx prisma db execute --file ../../scripts/update-selfdev-epic-runtime-registration.sql --schema prisma/schema.prisma
+--   cd packages/db && npx prisma db execute --file ../../scripts/update-selfdev-epic-runtime-registration.sql
 
 DO $$
 DECLARE

@@ -1,5 +1,5 @@
 -- Seed 5 vision epics and their initial backlog item stories
--- Run via: cd packages/db && npx prisma db execute --file ../../scripts/seed-vision-epics.sql --schema prisma/schema.prisma
+-- Run via: cd packages/db && npx prisma db execute --file ../../scripts/seed-vision-epics.sql
 DO $$
 DECLARE
   foundational_id   TEXT;
