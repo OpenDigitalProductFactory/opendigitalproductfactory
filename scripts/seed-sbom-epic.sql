@@ -1,5 +1,5 @@
 -- Seed SBOM Management epic
--- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-sbom-epic.sql --schema prisma/schema.prisma
+-- Run: cd packages/db && npx prisma db execute --file ../../scripts/seed-sbom-epic.sql
 --
 -- Architecture notes from legacy design (2026-03-03):
 --   • CycloneDX 1.6 JSON as canonical SBOM format (not SPDX)
