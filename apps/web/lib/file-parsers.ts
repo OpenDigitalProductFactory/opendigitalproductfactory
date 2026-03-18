@@ -81,12 +81,24 @@ export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
   return base;
 }
 
+function parseTextFile(buffer: Buffer, fileName: string): ParsedFileContent {
+  const text = buffer.toString("utf-8");
+  return {
+    type: "document",
+    summary: `${text.length} characters`,
+    fullText: truncate(text, MAX_TEXT_LEN),
+  };
+}
+
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
-  if (mimeType === "text/csv" || ext === "csv") return parseCsv(buffer);
-  if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ext === "xlsx") return parseXlsx(buffer);
+  if (mimeType === "text/csv" || ext === "csv" || ext === "tsv") return parseCsv(buffer);
+  if (ext === "xls" || ext === "xlsx" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || mimeType === "application/vnd.ms-excel") return parseXlsx(buffer);
   if (mimeType === "application/pdf" || ext === "pdf") return parsePdf(buffer);
-  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || ext === "docx") return parseDocx(buffer);
+  if (ext === "doc" || ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") return parseDocx(buffer);
+  // Text-based formats
+  if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log", "rtf"].includes(ext)) return parseTextFile(buffer, fileName);
+  if (mimeType?.startsWith("text/")) return parseTextFile(buffer, fileName);
   return null;
 }
 
