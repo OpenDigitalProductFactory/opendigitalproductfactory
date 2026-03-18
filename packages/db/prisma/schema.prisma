@@ -824,6 +824,7 @@ model EndpointTestRun {
   scenariosPassed Int       @default(0)
   scenariosFailed Int       @default(0)
   avgScore        Float?
+  results         Json?
   startedAt       DateTime  @default(now())
   completedAt     DateTime?
   status          String    @default("running")
