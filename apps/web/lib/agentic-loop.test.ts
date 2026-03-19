@@ -20,21 +20,21 @@ import { executeTool } from "./mcp-tools";
 describe("shouldNudge", () => {
   it("nudges on first iteration when model returns text-only with tools available", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 0, maxIterations: 25,
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
       hasTools: true, executedToolCount: 0, responseLength: 44,
     })).toBe(true);
   });
 
   it("does not nudge when no tools available", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 0, maxIterations: 25,
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
       hasTools: false, executedToolCount: 0, responseLength: 44,
     })).toBe(false);
   });
 
   it("does not nudge on first iteration when response is long and not narration", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 2, maxIterations: 25,
+      continuationNudges: 0, iteration: 2, maxIterations: 40,
       hasTools: true, executedToolCount: 3, responseLength: 250,
       responseText: "The feature brief describes the notification system and acceptance criteria.",
     })).toBe(false);
@@ -42,7 +42,7 @@ describe("shouldNudge", () => {
 
   it("nudges when response contains code narration patterns", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 3, maxIterations: 25,
+      continuationNudges: 0, iteration: 3, maxIterations: 40,
       hasTools: true, executedToolCount: 5, responseLength: 500,
       responseText: "Here's the exact code to add to agent-routing.ts for each agent.",
     })).toBe(true);
@@ -50,14 +50,14 @@ describe("shouldNudge", () => {
 
   it("nudges when tools were used and model stalls with short response", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 3, maxIterations: 25,
+      continuationNudges: 0, iteration: 3, maxIterations: 40,
       hasTools: true, executedToolCount: 2, responseLength: 5,
     })).toBe(true);
   });
 
   it("does not nudge if already nudged once", () => {
     expect(shouldNudge({
-      continuationNudges: 1, iteration: 0, maxIterations: 25,
+      continuationNudges: 1, iteration: 0, maxIterations: 40,
       hasTools: true, executedToolCount: 0, responseLength: 44,
     })).toBe(false);
   });
