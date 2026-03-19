@@ -14,6 +14,7 @@ export type RouteContextDef = {
     description: string;
     capability: string | null;
     prompt: string;
+    taskType?: "conversation" | "code_generation" | "analysis";
   }>;
 };
 
@@ -25,18 +26,21 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
     label: "Analyze this page",
     description: "Get key insights about what's on this page",
     capability: null,
+    taskType: "conversation",
     prompt: "This is a CONVERSATION request, not a tool request. Look at the PAGE DATA section in your context. Tell me what's important — key data I might miss, actionable items, missing elements, or things that need attention. Do NOT call any tools. Just read what you already know about this page and give me 2-3 sentences of insight. If nothing notable, say 'looks good!'",
   },
   {
     label: "Do this for me",
     description: "Perform the primary action on this page",
     capability: null,
+    taskType: "conversation",
     prompt: "Look at what this page is for and do the main thing a human would do here. If it's a form, fill it out with sensible defaults. If it's a list, create a new entry. If it's a dashboard, summarize what needs attention. Use your tools — don't describe what to do, just do it.",
   },
   {
     label: "Add a skill",
     description: "Add a new skill to this page's agent",
     capability: null,
+    taskType: "code_generation",
     prompt: "I want to add a new skill to this page's agent. A skill is a quick-action button that triggers a specific prompt. Ask me what the skill should do, then use propose_file_change to add it to the skills array in route-context-map.ts for this route.",
   },
 ];
