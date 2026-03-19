@@ -7,6 +7,47 @@ import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 
+/**
+ * Load social auth credentials from PlatformConfig DB into process.env.
+ * Called at startup and after admin saves new credentials.
+ * This bridges DB-stored credentials to NextAuth's env-var-based provider config.
+ */
+const SOCIAL_AUTH_DB_KEYS = [
+  "google_client_id",
+  "google_client_secret",
+  "apple_client_id",
+  "apple_client_secret",
+  "apple_team_id",
+  "apple_key_id",
+];
+
+export async function syncSocialAuthCredentials(): Promise<void> {
+  try {
+    const configs = await prisma.platformConfig.findMany({
+      where: { key: { in: SOCIAL_AUTH_DB_KEYS } },
+      select: { key: true, value: true },
+    });
+    for (const config of configs) {
+      if (typeof config.value === "string" && config.value.length > 0) {
+        const envKey = config.key.toUpperCase();
+        process.env[envKey] = config.value;
+      }
+    }
+    // Auto-enable social auth if at least Google is configured
+    const hasGoogle = !!process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== "not-configured";
+    const hasApple = !!process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_ID !== "not-configured";
+    if (hasGoogle || hasApple) {
+      process.env.ENABLE_SOCIAL_AUTH = "true";
+      process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH = "true";
+    }
+  } catch {
+    // DB not available yet — env vars will be used as-is
+  }
+}
+
+// Sync credentials from DB on module load
+syncSocialAuthCredentials();
+
 export type UserType = "admin" | "customer";
 
 export type DpfSession = {
@@ -95,19 +136,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         };
       },
     }),
-    // Social providers (customer-only, gated by env var)
-    ...(process.env.ENABLE_SOCIAL_AUTH === "true"
-      ? [
-          Google({
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-          }),
-          Apple({
-            clientId: process.env.APPLE_CLIENT_ID!,
-            clientSecret: process.env.APPLE_CLIENT_SECRET!,
-          }),
-        ]
-      : []),
+    // Social providers — credentials sourced from PlatformConfig DB (admin settings page)
+    // with env var fallback. Always registered; if credentials are empty, the OAuth
+    // redirect will fail at the provider's end with a clear error.
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "not-configured",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "not-configured",
+    }),
+    Apple({
+      clientId: process.env.APPLE_CLIENT_ID ?? "not-configured",
+      clientSecret: process.env.APPLE_CLIENT_SECRET ?? "not-configured",
+    }),
   ],
   callbacks: {
     async signIn({ user, account }) {
