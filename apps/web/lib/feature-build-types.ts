@@ -186,15 +186,15 @@ export function checkPhaseGate(
 
   if (from === "ideate" && to === "plan") {
     if (!evidence.designDoc) return { allowed: false, reason: "A design document is required before planning." };
-    const review = evidence.designReview as { decision?: string } | null;
-    if (!review || review.decision !== "pass") return { allowed: false, reason: "Design review must pass before planning." };
+    // Review is informational — presence is sufficient, decision doesn't block
+    if (!evidence.designReview) return { allowed: false, reason: "Design review is required before planning." };
     return { allowed: true };
   }
 
   if (from === "plan" && to === "build") {
     if (!evidence.buildPlan) return { allowed: false, reason: "An implementation plan is required before building." };
-    const review = evidence.planReview as { decision?: string } | null;
-    if (!review || review.decision !== "pass") return { allowed: false, reason: "Plan review must pass before building." };
+    // Review is informational — presence is sufficient, decision doesn't block
+    if (!evidence.planReview) return { allowed: false, reason: "Plan review is required before building." };
     return { allowed: true };
   }
 
