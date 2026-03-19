@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSandboxCreateArgs,
+  buildSandboxNetworkName,
   parseSandboxPort,
   SANDBOX_IMAGE,
   SANDBOX_RESOURCE_LIMITS,
@@ -48,6 +49,31 @@ describe("buildSandboxCreateArgs", () => {
   it("does not use --network=none (sandbox needs npm access)", () => {
     const args = buildSandboxCreateArgs("FB-X", 3002);
     expect(args).not.toContain("--network=none");
+  });
+
+  it("includes --network flag when networkName provided", () => {
+    const args = buildSandboxCreateArgs("FB-ABC12345", 3001, {
+      networkName: "dpf-sandbox-net-FB-ABC12345",
+    });
+    expect(args).toContain("--network=dpf-sandbox-net-FB-ABC12345");
+  });
+
+  it("includes -e flags for env vars when provided", () => {
+    const args = buildSandboxCreateArgs("FB-X", 3002, {
+      envVars: {
+        DATABASE_URL: "postgresql://dpf:dpf_sandbox@db:5432/dpf",
+        NEO4J_URI: "bolt://neo4j:7687",
+      },
+    });
+    expect(args).toContain("-e");
+    expect(args).toContain("DATABASE_URL=postgresql://dpf:dpf_sandbox@db:5432/dpf");
+    expect(args).toContain("NEO4J_URI=bolt://neo4j:7687");
+  });
+});
+
+describe("buildSandboxNetworkName", () => {
+  it("builds network name from buildId", () => {
+    expect(buildSandboxNetworkName("FB-ABC12345")).toBe("dpf-sandbox-net-FB-ABC12345");
   });
 });
 

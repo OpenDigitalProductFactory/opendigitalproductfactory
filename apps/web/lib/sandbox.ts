@@ -21,18 +21,41 @@ export const SANDBOX_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function buildSandboxCreateArgs(buildId: string, hostPort: number): string[] {
+export function buildSandboxNetworkName(buildId: string): string {
+  return `dpf-sandbox-net-${buildId}`;
+}
+
+export function buildSandboxCreateArgs(
+  buildId: string,
+  hostPort: number,
+  options?: {
+    networkName?: string;
+    envVars?: Record<string, string>;
+  },
+): string[] {
   // No --network=none: sandbox needs npm registry access for pnpm install.
   // Internal services (postgres, neo4j) are protected by not mounting .env
   // or any credentials. For production, use a custom network with port filtering.
-  return [
+  const args: string[] = [
     "create",
     "--name", `dpf-sandbox-${buildId}`,
     "--cpus=" + String(SANDBOX_RESOURCE_LIMITS.cpus),
     "--memory=" + String(SANDBOX_RESOURCE_LIMITS.memoryMb) + "m",
-    "-p", `${hostPort}:3000`,
-    SANDBOX_IMAGE,
   ];
+
+  if (options?.networkName) {
+    args.push(`--network=${options.networkName}`);
+  }
+
+  if (options?.envVars) {
+    for (const [key, value] of Object.entries(options.envVars)) {
+      args.push("-e", `${key}=${value}`);
+    }
+  }
+
+  args.push("-p", `${hostPort}:3000`, SANDBOX_IMAGE);
+
+  return args;
 }
 
 export function parseSandboxPort(output: string): number | null {
@@ -46,8 +69,12 @@ export function parseSandboxPort(output: string): number | null {
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
-export async function createSandbox(buildId: string, hostPort: number): Promise<string> {
-  const args = buildSandboxCreateArgs(buildId, hostPort);
+export async function createSandbox(
+  buildId: string,
+  hostPort: number,
+  options?: { networkName?: string; envVars?: Record<string, string> },
+): Promise<string> {
+  const args = buildSandboxCreateArgs(buildId, hostPort, options);
   const { stdout } = await exec(`docker ${args.join(" ")}`);
   return stdout.trim();
 }
@@ -74,6 +101,36 @@ export async function destroySandbox(containerId: string): Promise<void> {
   await exec(`docker rm -f ${containerId}`).catch(() => {
     // Container may already be removed — ignore
   });
+}
+
+export async function createSandboxNetwork(buildId: string): Promise<string> {
+  const name = buildSandboxNetworkName(buildId);
+  await exec(`docker network create ${name}`);
+  return name;
+}
+
+export async function destroySandboxNetwork(networkName: string): Promise<void> {
+  await exec(`docker network rm ${networkName}`).catch(() => {});
+}
+
+export async function destroyFullSandboxStack(
+  buildId: string,
+  state: {
+    containerId?: string;
+    dbContainerId?: string;
+    neo4jContainerId?: string;
+    qdrantContainerId?: string;
+    networkId?: string;
+  },
+): Promise<void> {
+  const ids = [
+    state.containerId,
+    state.dbContainerId,
+    state.neo4jContainerId,
+    state.qdrantContainerId,
+  ].filter(Boolean);
+  await Promise.all(ids.map((id) => exec(`docker rm -f ${id}`).catch(() => {})));
+  if (state.networkId) await destroySandboxNetwork(state.networkId);
 }
 
 export async function isSandboxRunning(containerId: string): Promise<boolean> {
