@@ -205,6 +205,7 @@ describe("agent coworker external access", () => {
       inferenceMs: 10,
       toolCalls: [
         {
+          id: "mock_id",
           name: "analyze_public_website_branding",
           arguments: {
             url: "https://jackjackspack.org",

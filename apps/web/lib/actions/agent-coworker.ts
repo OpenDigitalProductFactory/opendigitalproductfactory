@@ -277,9 +277,10 @@ export async function sendMessage(input: {
     const lastIdx = chatHistory.length - 1;
     const last = chatHistory[lastIdx]!;
     if (last.role === "user") {
+      const lastText = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
       chatHistory[lastIdx] = {
         role: "user",
-        content: `${last.content}\n\n${attachmentContext}`,
+        content: `${lastText}\n\n${attachmentContext}`,
       };
     }
   }
@@ -456,7 +457,7 @@ export async function sendMessage(input: {
 
   if (useUnified) {
     // Classify the task
-    const recentContent = chatHistory.slice(-3).map((m) => m.content);
+    const recentContent = chatHistory.slice(-3).map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
     const classification = classifyTask(trimmedContent, recentContent);
     taskTypeId = classification.taskType;
 
@@ -670,38 +671,19 @@ export async function sendMessage(input: {
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
   }
 
-  // Sanitize: strip tool narration that some LLMs emit as text instead of tool calls.
+  // Sanitize: strip only agent self-talk that is never useful to the user.
+  // The agentic loop's continuation nudge handles "narrate instead of act" — so
+  // we only strip filler/apologies here, NOT action-intent language.
+  const rawResponseBeforeSanitize = responseContent;
   responseContent = responseContent
-    // "Action: tool_name(...)" or "Action: Create/Update/Remove..."
-    .replace(/^Action:?\s*[^\n]*$/gm, "")
-    // "Step N: ..." planning
-    .replace(/^Step \d+:?\s*[^\n]*$/gm, "")
-    // "Self-correction:", "Here's my plan:", "My plan is:", "I will now..."
-    .replace(/^(?:Self-correction|Here's my plan|My plan is|I (?:will|am going to|need to|have to) (?:now |immediately |proceed |also |then )?(?:create|update|add|remove|delete|modify|change|set|initiate|execute|implement))[^\n]*$/gim, "")
-    // "Let me read/search/call/look/check..."
-    .replace(/^Let me (?:read|search|call|look|check|find|query|analyze|investigate|examine|review)[^\n]*$/gim, "")
-    // "What you need to do next" / "What's next?" sections with content
-    .replace(/^What(?:'s| you need to do) next[^\n]*$/gim, "")
-    // "In summary:" / "To reiterate:" / "To summarize:" sections
-    .replace(/^(?:In summary|To reiterate|To summarize)[^\n]*$/gim, "")
-    // Numbered list items that are just planning ("1. Create...", "2. Update...")
-    .replace(/^\d+\.\s*(?:Create|Update|Remove|Add|Delete|Modify|Change|Set|Initiate)\s+(?:a |the |new )?(?:backlog|provider|entry|item|category|record)[^\n]*$/gim, "")
-    // "Can you tell me..." / "Could you provide..." / "Can you share..." — agent asking user for info
-    .replace(/^(?:Can you (?:tell|share|provide|point|clarify|specify|confirm)|Could you (?:tell|share|provide|point|clarify|specify)|Please (?:provide|share|tell|clarify|specify))[^\n]*$/gim, "")
-    // "Which ..." / "What is the ..." questions asking user for technical details
-    .replace(/^(?:Which (?:file|component|library|charting|page|module|framework)|What (?:is the|does the) (?:component|file|graph|chart))[^\n]*$/gim, "")
-    // "I need to see..." / "To help you I need..."
-    .replace(/^(?:I (?:need to|would need to) (?:see|know|understand|locate|find)|To help (?:you|with this)[^\n]*I (?:need|would need))[^\n]*$/gim, "")
-    // "I apologize" / "I appreciate" filler
-    .replace(/^I (?:apologize|appreciate)[^\n]*$/gim, "")
-    // "Give me N seconds/minutes" / "Let me take a moment"
+    // "Action: tool_name(...)" — raw tool-call narration leaked as text
+    .replace(/^Action:?\s*\w+\([^\n]*$/gm, "")
+    // "Self-correction:" — agent internal monologue
+    .replace(/^Self-correction:?\s*[^\n]*$/gim, "")
+    // Filler apologies
+    .replace(/^(?:I (?:apologize|appreciate)|My apologies|I'm sorry)[^\n]*$/gim, "")
+    // Stalling ("Give me a moment", "This will take...")
     .replace(/^(?:Give me|Let me take|This (?:will|may|might) take)[^\n]*$/gim, "")
-    // "my apologies" / "I'm sorry" / "You're right, I should have"
-    .replace(/^(?:My apologies|I'm sorry|You're (?:right|absolutely right))[^\n]*$/gim, "")
-    // "Before I design/build..." / "Quick clarification..." stalling
-    .replace(/^(?:Before I (?:design|build|start|proceed)|Quick (?:clarification|question))[^\n]*$/gim, "")
-    // "One more question:" / "One clarifying question:"
-    .replace(/^(?:One (?:more|last|final|clarifying) question)[^\n]*$/gim, "")
     // Clean up excessive whitespace
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -709,6 +691,13 @@ export async function sendMessage(input: {
   // Quality gate: if the response was almost entirely stripped (agent was all questions/narration),
   // replace with an honest fallback rather than showing empty or useless text.
   if (responseContent.length < 20) {
+    console.warn(
+      `[quality-gate] Response too short (${responseContent.length} chars). ` +
+      `Raw from loop (${rawResponseBeforeSanitize.length} chars): ${JSON.stringify(rawResponseBeforeSanitize.slice(0, 500))} | ` +
+      `After sanitize: ${JSON.stringify(responseContent)} | ` +
+      `Provider: ${responseProviderId}/${responseModelId} | ` +
+      `Route: ${input.routeContext}`,
+    );
     responseContent = "I wasn't able to help with that effectively. I've logged it so the team can follow up. Try rephrasing your request, or use the skills menu in the header for common actions.";
   }
 

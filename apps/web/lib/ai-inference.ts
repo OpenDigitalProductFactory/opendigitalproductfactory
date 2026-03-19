@@ -8,9 +8,19 @@ import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** Anthropic-style content blocks for structured tool-calling messages */
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string };
+
 export type ChatMessage = {
-  role: "user" | "assistant" | "system";
-  content: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string | ContentBlock[];
+  /** Tool calls the assistant made (present when role=assistant and model called tools) */
+  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  /** For role=tool messages: which tool call this result responds to */
+  toolCallId?: string;
 };
 
 export type InferenceResult = {
@@ -18,7 +28,7 @@ export type InferenceResult = {
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
-  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -45,7 +55,7 @@ function classifyHttpError(status: number, providerId: string, body: string): In
   if (status === 404) {
     return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status);
   }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 200)}`, "provider_error", providerId, status);
+  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status);
 }
 
 // ─── Auth Helpers (extracted from actions/ai-providers.ts) ───────────────────
@@ -76,6 +86,32 @@ export function isAnthropicOAuthToken(apiKey: string): boolean {
 
 /** Beta headers required for Anthropic subscription token auth */
 export const ANTHROPIC_OAUTH_BETA_HEADERS = "claude-code-20250219,oauth-2025-04-20";
+
+/**
+ * Read the current access token from Claude Code's local credentials file.
+ * OAuth access tokens are short-lived; Claude Code auto-refreshes them.
+ * This keeps the platform in sync without manual re-entry.
+ */
+function getClaudeCodeOAuthToken(): string | null {
+  try {
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+    const raw = fs.readFileSync(credPath, "utf-8");
+    const creds = JSON.parse(raw);
+    const oauth = creds?.claudeAiOauth;
+    if (!oauth?.accessToken) return null;
+    // Check expiry (5-minute buffer)
+    if (oauth.expiresAt && oauth.expiresAt < Date.now() + 5 * 60 * 1000) {
+      console.warn("[getClaudeCodeOAuthToken] Token expired or expiring soon");
+      return null;
+    }
+    return oauth.accessToken;
+  } catch {
+    return null;
+  }
+}
 
 export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
   const credential = await getDecryptedCredential(providerId);
@@ -138,9 +174,11 @@ async function buildAuthHeaders(
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
 
-    // Anthropic subscription tokens (from `claude setup-token`) use Bearer auth, not x-api-key
+    // Anthropic subscription tokens (from `claude setup-token`) use Bearer auth, not x-api-key.
+    // These tokens are short-lived; prefer the live token from Claude Code's credentials file.
     if (isAnthropicProvider(providerId) && isAnthropicOAuthToken(cred.secretRef)) {
-      headers["Authorization"] = `Bearer ${cred.secretRef}`;
+      const liveToken = getClaudeCodeOAuthToken() ?? cred.secretRef;
+      headers["Authorization"] = `Bearer ${liveToken}`;
       headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     } else {
       headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
@@ -153,6 +191,34 @@ async function buildAuthHeaders(
   // "none" auth (e.g., local Ollama) — no auth headers needed
 
   return headers;
+}
+
+// ─── Tool Call Extraction Helpers ─────────────────────────────────────────────
+
+/** Extract tool calls from Anthropic content blocks, preserving IDs */
+export function extractAnthropicToolCalls(
+  contentBlocks: Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }>,
+): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
+  return contentBlocks
+    .filter((b) => b.type === "tool_use" && b.name)
+    .map((b) => ({
+      id: b.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
+      name: b.name!,
+      arguments: b.input ?? {},
+    }));
+}
+
+/** Extract tool calls from OpenAI-compatible tool_calls array, preserving IDs */
+export function extractOpenAIToolCalls(
+  rawToolCalls: Array<{ id?: string; function?: { name?: string; arguments?: string } }>,
+): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
+  return rawToolCalls
+    .filter((tc) => tc.function?.name)
+    .map((tc) => ({
+      id: tc.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
+      name: tc.function!.name!,
+      arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
+    }));
 }
 
 // ─── callProvider ────────────────────────────────────────────────────────────
@@ -184,7 +250,9 @@ export async function callProvider(
       model: modelId,
       max_tokens: 4096,
       system: systemPrompt,
-      messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
+      messages: messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({ role: m.role, content: m.content })),
     };
     // Anthropic tools use { name, description, input_schema } format (not OpenAI's { type: "function", function: {...} })
     if (tools && tools.length > 0) {
@@ -207,7 +275,9 @@ export async function callProvider(
       contents.push({ role: "model", parts: [{ text: "Understood. I will follow these instructions." }] });
     }
     for (const m of messages) {
-      contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] });
+      if (m.role === "tool") continue; // Gemini doesn't support tool role — skip
+      const textContent = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+      contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: textContent }] });
     }
     body = { contents };
     extractText = (d) => {
@@ -221,7 +291,10 @@ export async function callProvider(
     chatUrl = `${apiBase}/chat/completions`;
     const allMessages = [
       { role: "system" as const, content: systemPrompt },
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      ...messages.map((m) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      })),
     ];
     body = { model: modelId, messages: allMessages, max_tokens: 4096, keep_alive: -1 };
     if (tools && tools.length > 0) {
@@ -271,29 +344,19 @@ export async function callProvider(
     return 0;
   };
 
-  // Extract tool calls from response
+  // Extract tool calls from response (using shared helpers that preserve IDs)
   let toolCalls: InferenceResult["toolCalls"];
 
   if (providerId === "anthropic" || providerId.startsWith("anthropic-")) {
     // Anthropic: tool_use blocks in the content array
-    const contentBlocks = data.content as Array<{ type?: string; name?: string; input?: Record<string, unknown> }> | undefined;
-    const toolUseBlocks = contentBlocks?.filter((b) => b.type === "tool_use" && b.name) ?? [];
-    if (toolUseBlocks.length > 0) {
-      toolCalls = toolUseBlocks.map((b) => ({
-        name: b.name!,
-        arguments: b.input ?? {},
-      }));
-    }
+    const contentBlocks = data.content as Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
+    toolCalls = extractAnthropicToolCalls(contentBlocks ?? []);
+    if (toolCalls.length === 0) toolCalls = undefined;
   } else {
     // OpenAI-compatible: tool_calls in the message object
-    const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
+    const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
     if (rawMsg?.tool_calls && rawMsg.tool_calls.length > 0) {
-      toolCalls = rawMsg.tool_calls
-        .filter((tc) => tc.function?.name)
-        .map((tc) => ({
-          name: tc.function!.name!,
-          arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
-        }));
+      toolCalls = extractOpenAIToolCalls(rawMsg.tool_calls);
     }
   }
 
