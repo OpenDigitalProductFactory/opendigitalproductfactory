@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Import pure functions that don't need mocks
+import { shouldNudge, detectFabrication } from "./agentic-loop";
+
 vi.mock("./ai-provider-priority", () => ({
   callWithFailover: vi.fn(),
 }));
@@ -13,6 +16,69 @@ vi.mock("./mcp-tools", () => ({
 import { runAgenticLoop } from "./agentic-loop";
 import { callWithFailover } from "./ai-provider-priority";
 import { executeTool } from "./mcp-tools";
+
+describe("shouldNudge", () => {
+  it("nudges on first iteration when model returns text-only with tools available", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 25,
+      hasTools: true, executedToolCount: 0, responseLength: 44,
+    })).toBe(true);
+  });
+
+  it("does not nudge when no tools available", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 25,
+      hasTools: false, executedToolCount: 0, responseLength: 44,
+    })).toBe(false);
+  });
+
+  it("does not nudge when response is long (genuine answer, > 200 chars)", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 25,
+      hasTools: true, executedToolCount: 0, responseLength: 250,
+    })).toBe(false);
+  });
+
+  it("nudges when tools were used and model stalls with short response", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 3, maxIterations: 25,
+      hasTools: true, executedToolCount: 2, responseLength: 5,
+    })).toBe(true);
+  });
+
+  it("does not nudge if already nudged once", () => {
+    expect(shouldNudge({
+      continuationNudges: 1, iteration: 0, maxIterations: 25,
+      hasTools: true, executedToolCount: 0, responseLength: 44,
+    })).toBe(false);
+  });
+});
+
+describe("detectFabrication", () => {
+  it("detects completion claim with zero tools executed", () => {
+    expect(detectFabrication("I've built the feature and deployed it.", 0, false)).toBe(true);
+  });
+
+  it("does not flag when tools were executed", () => {
+    expect(detectFabrication("I've built the feature.", 3, false)).toBe(false);
+  });
+
+  it("does not flag when proposal was returned", () => {
+    expect(detectFabrication("I've created the deployment.", 0, true)).toBe(false);
+  });
+
+  it("does not flag informational responses", () => {
+    expect(detectFabrication("The feature brief describes a notification system.", 0, false)).toBe(false);
+  });
+
+  it("detects 'TESTS PASS' with no tools", () => {
+    expect(detectFabrication("TESTS PASS\n✅ All 4 criteria met", 0, false)).toBe(true);
+  });
+
+  it("detects 'SHIPPED TO STAGING'", () => {
+    expect(detectFabrication("SHIPPED TO STAGING. Feature live at /build.", 0, false)).toBe(true);
+  });
+});
 
 describe("runAgenticLoop", () => {
   beforeEach(() => {
@@ -53,7 +119,7 @@ describe("runAgenticLoop", () => {
       data: { files: ["a.ts", "b.ts", "c.ts"] },
     });
 
-    // Iteration 1: model responds with text only
+    // Iteration 1: model responds with text only (short → nudge fires)
     mockFailover.mockResolvedValueOnce({
       content: "I found 3 agent-related files: a.ts, b.ts, c.ts.",
       providerId: "anthropic-sub",
@@ -65,9 +131,21 @@ describe("runAgenticLoop", () => {
       inferenceMs: 400,
     });
 
+    // Iteration 2: after nudge, model gives longer final answer → exits loop
+    mockFailover.mockResolvedValueOnce({
+      content: "I found 3 agent-related files: a.ts, b.ts, c.ts. These contain the component structure, routing logic, and message state management you'll need for the alert feature. The AgentFAB component already has a status indicator.",
+      providerId: "anthropic-sub",
+      modelId: "claude-haiku-4-5-20251001",
+      downgraded: false,
+      downgradeMessage: null,
+      inputTokens: 300,
+      outputTokens: 100,
+      inferenceMs: 500,
+    });
+
     const result = await runAgenticLoop(baseParams);
 
-    expect(result.content).toBe("I found 3 agent-related files: a.ts, b.ts, c.ts.");
+    expect(result.content).toContain("I found 3 agent-related files");
     expect(result.executedTools).toHaveLength(1);
 
     // Verify the messages passed to the second callWithFailover call
@@ -85,9 +163,10 @@ describe("runAgenticLoop", () => {
     expect(toolMsg!.content).toContain("Found 3 files");
   });
 
-  it("returns text-only response when no tool calls", async () => {
+  it("returns text-only response when no tool calls (after nudge)", async () => {
     const mockFailover = vi.mocked(callWithFailover);
 
+    // First response: short text-only → triggers nudge (iteration 0, < 200 chars)
     mockFailover.mockResolvedValueOnce({
       content: "Hello! How can I help?",
       providerId: "anthropic-sub",
@@ -99,8 +178,21 @@ describe("runAgenticLoop", () => {
       inferenceMs: 200,
     });
 
+    // Second response after nudge: still text-only → exits loop
+    mockFailover.mockResolvedValueOnce({
+      content: "I can help you build features. What would you like to create?",
+      providerId: "anthropic-sub",
+      modelId: "claude-haiku-4-5-20251001",
+      downgraded: false,
+      downgradeMessage: null,
+      inputTokens: 80,
+      outputTokens: 30,
+      inferenceMs: 200,
+    });
+
     const result = await runAgenticLoop(baseParams);
-    expect(result.content).toBe("Hello! How can I help?");
+    // After nudge, returns the second response
+    expect(result.content).toBe("I can help you build features. What would you like to create?");
     expect(result.executedTools).toHaveLength(0);
     expect(result.proposal).toBeNull();
   });
@@ -129,7 +221,7 @@ describe("runAgenticLoop", () => {
       .mockResolvedValueOnce({ success: true, message: "Found 3 files" })
       .mockResolvedValueOnce({ success: true, message: "Found 2 files" });
 
-    // Final response
+    // Iteration 1: model responds with text only (short → nudge fires)
     mockFailover.mockResolvedValueOnce({
       content: "Found agent and coworker files.",
       providerId: "anthropic-sub",
@@ -141,10 +233,22 @@ describe("runAgenticLoop", () => {
       inferenceMs: 400,
     });
 
+    // Iteration 2: after nudge, model gives longer response → exits loop
+    mockFailover.mockResolvedValueOnce({
+      content: "I found agent-related files in the project. The main coworker panel is in AgentCoworkerPanel.tsx and the agent routing is in agent-routing.ts. Both files contain the patterns you need for your feature.",
+      providerId: "anthropic-sub",
+      modelId: "claude-haiku-4-5-20251001",
+      downgraded: false,
+      downgradeMessage: null,
+      inputTokens: 300,
+      outputTokens: 100,
+      inferenceMs: 500,
+    });
+
     const result = await runAgenticLoop(baseParams);
     expect(result.executedTools).toHaveLength(2);
 
-    // Should have ONE assistant message and TWO tool result messages
+    // Should have ONE assistant message and TWO tool result messages in second call
     const secondCallMessages = mockFailover.mock.calls[1]![0];
     const toolMsgs = secondCallMessages.filter((m: any) => m.role === "tool");
     expect(toolMsgs).toHaveLength(2);

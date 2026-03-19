@@ -46,6 +46,15 @@ export function EvidenceSummary({ build }: Props) {
         ? `${build.acceptanceMet.filter((c) => c.met).length}/${build.acceptanceMet.length} met`
         : "Not evaluated",
     },
+    {
+      label: "UX Acceptance Tests",
+      status: (build as Record<string, unknown>).uxTestResults
+        ? ((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).every((s) => s.passed) ? "pass" : "fail"
+        : "missing",
+      detail: (build as Record<string, unknown>).uxTestResults
+        ? `${((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).filter((s) => s.passed).length}/${((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).length} passed`
+        : "Not run",
+    },
   ];
 
   const STATUS_COLORS: Record<string, string> = {

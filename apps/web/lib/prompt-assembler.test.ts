@@ -195,4 +195,16 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("HR-300");
     expect(prompt).toContain("authorized to:");
   });
+
+  // EP-SELF-DEV-002: Anti-fabrication rule (rule 15)
+  it("includes anti-fabrication rule (rule 15)", () => {
+    const prompt = assembleSystemPrompt(fullInput);
+    expect(prompt).toContain("NEVER describe code you haven't written through a tool");
+  });
+
+  // EP-SELF-DEV-002: Tool-first rule (rule 16)
+  it("includes tool-first rule (rule 16)", () => {
+    const prompt = assembleSystemPrompt(fullInput);
+    expect(prompt).toContain("your FIRST action must be a tool call");
+  });
 });

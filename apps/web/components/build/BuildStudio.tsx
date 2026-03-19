@@ -8,6 +8,7 @@ import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { SandboxPreview } from "./SandboxPreview";
 import { ClaimBadge } from "./ClaimBadge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
+import { getFeatureBuild } from "@/lib/actions/build-read";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 
@@ -31,6 +32,22 @@ export function BuildStudio({ builds, portfolios }: Props) {
       window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail: null }));
     };
   }, [activeBuild?.buildId]);
+
+  // SSE subscription for live refresh when agent updates the build
+  useEffect(() => {
+    if (!activeBuild?.threadId) return;
+    const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
+    es.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (["brief:update", "phase:change", "evidence:update"].includes(data.type)) {
+          const fresh = await getFeatureBuild(activeBuild.buildId);
+          if (fresh) setActiveBuild(fresh);
+        }
+      } catch { /* ignore parse errors */ }
+    };
+    return () => es.close();
+  }, [activeBuild?.threadId, activeBuild?.buildId]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;

@@ -8,7 +8,41 @@ import type { RouteDecision } from "./routing/types";
 import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
 import type { ChatMessage } from "./ai-inference";
 
-const MAX_ITERATIONS = 6;
+// Safety ceiling — NOT a behavioral limit. The loop terminates when the model
+// responds with text only (no tool calls), matching the Anthropic API pattern
+// where the loop runs until stop_reason === "end_turn". This limit only prevents
+// runaway loops. The model decides when it's done.
+const MAX_ITERATIONS = 25;
+
+// ─── Extracted for testability ──────────────────────────────────────────────
+
+/** Determine whether the loop should nudge the model to use tools. */
+const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched)\b|tests?\s+pass/i;
+
+/** Detect when the agent claims completion without having called any tools. */
+export function detectFabrication(
+  response: string,
+  executedToolCount: number,
+  hasProposal: boolean,
+): boolean {
+  if (executedToolCount > 0 || hasProposal) return false;
+  return COMPLETION_CLAIM_PATTERN.test(response);
+}
+
+export function shouldNudge(params: {
+  continuationNudges: number;
+  iteration: number;
+  maxIterations: number;
+  hasTools: boolean;
+  executedToolCount: number;
+  responseLength: number;
+}): boolean {
+  return params.continuationNudges < 1
+    && params.iteration < params.maxIterations - 1
+    && params.hasTools
+    && (params.executedToolCount > 0 || params.iteration === 0)
+    && params.responseLength < 200;
+}
 
 export type AgenticResult = {
   /** Final text response from the agent */
@@ -40,6 +74,7 @@ export async function runAgenticLoop(params: {
   threadId: string;
   modelRequirements?: Record<string, unknown>;
   routeDecision?: RouteDecision;
+  onProgress?: (event: import("./agent-event-bus").AgentEvent) => void;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -53,6 +88,7 @@ export async function runAgenticLoop(params: {
     threadId,
     modelRequirements,
     routeDecision,
+    onProgress,
   } = params;
 
   let messages = [...chatHistory];
@@ -61,6 +97,7 @@ export async function runAgenticLoop(params: {
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: FailoverResult | FallbackResult | null = null;
   let continuationNudges = 0;
+  let fabricationRetried = false;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     let result: FailoverResult | FallbackResult;
@@ -105,45 +142,49 @@ export async function runAgenticLoop(params: {
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
 
-      // Detect "stalled intent": agent narrates or acknowledges but doesn't call tools.
-      // Only nudge once per loop, and only if iterations remain.
-      const hasTools = toolsForProvider && toolsForProvider.length > 0;
-      const canNudge = continuationNudges < 1 && iteration < MAX_ITERATIONS - 1 && hasTools;
+      // Safety net: nudge the model to use tools if it responded with text-only.
+      // Catches both mid-workflow stalls AND first-iteration zero-tool responses.
+      const shouldNudgeNow = shouldNudge({
+        continuationNudges,
+        iteration,
+        maxIterations: MAX_ITERATIONS,
+        hasTools: !!(toolsForProvider && toolsForProvider.length > 0),
+        executedToolCount: executedTools.length,
+        responseLength: trimmed.length,
+      });
 
-      if (canNudge) {
-        // Pattern (a): After tool use, agent says it will continue but stops
-        const postToolStall = executedTools.length > 0
-          && /(?:now I (?:have enough|can|will|'ll)|(?:I(?:'ll| will| need to| am going to| can now| have enough to)) (?:design|create|build|implement|proceed|set up|start|prepare|draft|generate|produce|write|put together|outline|define|propose))/i.test(trimmed);
-        // Pattern (b): Agent narrates tool intent instead of calling tool
-        const toolIntentNarration = /(?:(?:let me|I(?:'ll| will| can| should| need to)) (?:search|read|look|check|find|query|analyze|investigate|examine|review|fetch|scan|browse|inspect|explore))/i.test(trimmed);
-        // Pattern (c): Short ack/affirmation without action
-        const shortAck = trimmed.length < 80
-          && /^(?:sure|ok|okay|absolutely|of course|certainly|right|yes|got it|understood|will do|on it|searching|looking|checking|let me|ready|perfect|great)/i.test(trimmed);
-        // Pattern (d): Empty or trivially short response — model returned nothing useful
-        const emptyResponse = trimmed.length < 5;
-        // Pattern (e): Contamination — model mimics internal message formatting
-        // instead of actually calling tools (e.g. outputs "[Calling tool_name]" as text)
-        const contamination = /^\[(?:Calling|Tool result|tool used)/i.test(trimmed);
+      if (shouldNudgeNow) {
+        continuationNudges++;
+        const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
+        console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response)`);
+        messages = [
+          ...messages,
+          ...(trimmed.length > 0
+            ? [{ role: "assistant" as const, content: result.content }]
+            : []),
+          {
+            role: "user" as const,
+            content: `Continue — your available tools include: ${toolNames}. Call the most relevant one.`,
+          },
+        ];
+        continue;
+      }
 
-        if (postToolStall || toolIntentNarration || shortAck || emptyResponse || contamination) {
-          continuationNudges++;
-          const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
-          console.log(
-            `[agentic-loop] nudging: postTool=${postToolStall} toolIntent=${toolIntentNarration} ` +
-            `shortAck=${shortAck} empty=${emptyResponse} contamination=${contamination}`,
-          );
-          messages = [
-            ...messages,
-            ...(trimmed.length > 0
-              ? [{ role: "assistant" as const, content: result.content }]
-              : []),
-            {
-              role: "user" as const,
-              content: `[System: Do not narrate or ask for permission — call a tool now. Your available tools include: ${toolNames}. Pick the most relevant one and call it.]`,
-            },
-          ];
-          continue;
-        }
+      // Fabrication guardrail: if agent claims completion without calling tools, retry once
+      if (!fabricationRetried && detectFabrication(trimmed, executedTools.length, false)) {
+        fabricationRetried = true;
+        console.warn(
+          `[agentic-loop] fabrication detected: claimed completion with 0 tools. Retrying.`,
+        );
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content: "You claimed to complete actions but called no tools. Use your available tools to actually perform the work, or state honestly what you cannot do and create a backlog item.",
+          },
+        ];
+        continue;
       }
 
       return {
@@ -188,6 +229,8 @@ export async function runAgenticLoop(params: {
       }
 
       // Immediate tools — execute
+      onProgress?.({ type: "tool:start", tool: tc.name, iteration });
+
       const toolResult = await executeTool(
         tc.name,
         tc.arguments,
@@ -197,6 +240,7 @@ export async function runAgenticLoop(params: {
 
       executedTools.push({ name: tc.name, result: toolResult });
       iterationResults.push({ tc, toolResult });
+      onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
     }
 
     // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
@@ -219,9 +263,13 @@ export async function runAgenticLoop(params: {
     ];
   }
 
-  // Max iterations reached — return whatever we have
+  // Safety limit reached — log it so we can tune if needed
+  console.warn(
+    `[agentic-loop] hit MAX_ITERATIONS (${MAX_ITERATIONS}). executedTools=${executedTools.length}. ` +
+    `This may indicate the model needs more room or is stuck in a loop.`,
+  );
   return {
-    content: lastResult?.content || "I've completed the available actions. Let me know if you need anything else.",
+    content: lastResult?.content || "I ran into a limit while working on this. Try breaking your request into smaller steps.",
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,
