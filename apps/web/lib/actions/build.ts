@@ -134,6 +134,24 @@ export async function advanceBuildPhase(
     where: { buildId },
     data: { phase: targetPhase },
   });
+
+  // Auto-launch sandbox when entering Build phase
+  if (targetPhase === "build") {
+    try {
+      const { createSandbox, startSandbox } = await import("@/lib/sandbox");
+      const port = 3001 + Math.floor(Math.random() * 100);
+      const containerId = await createSandbox(buildId, port);
+      await startSandbox(containerId);
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { sandboxId: containerId, sandboxPort: port },
+      });
+      console.log(`[build] Sandbox auto-launched for ${buildId} on port ${port}`);
+    } catch (err) {
+      console.warn(`[build] Sandbox auto-launch failed for ${buildId}:`, err);
+      // Non-fatal — agent can fall back to propose_file_change
+    }
+  }
 }
 
 // ─── Update Sandbox Info ─────────────────────────────────────────────────────
