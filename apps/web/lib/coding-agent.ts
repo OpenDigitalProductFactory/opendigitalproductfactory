@@ -2,8 +2,9 @@
 // Orchestrates code generation inside a sandbox container.
 
 import { execInSandbox } from "@/lib/sandbox";
-import { getProviderPriority } from "@/lib/ai-provider-priority";
+import { getProviderPriority, callWithFailover } from "@/lib/ai-provider-priority";
 import type { FeatureBrief } from "@/lib/feature-build-types";
+import type { AgentEvent } from "@/lib/agent-event-bus";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -65,11 +66,11 @@ export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unk
     `Title: ${brief.title}`,
     `Description: ${brief.description}`,
     `Portfolio: ${brief.portfolioContext}`,
-    `Target Roles: ${brief.targetRoles.join(", ")}`,
-    `Data Needs: ${brief.dataNeeds}`,
+    `Target Roles: ${Array.isArray(brief.targetRoles) ? brief.targetRoles.join(", ") : brief.targetRoles ?? "All"}`,
+    `Data Needs: ${brief.dataNeeds ?? "None specified"}`,
     "",
     "## Acceptance Criteria",
-    ...brief.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`),
+    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`) : [String(brief.acceptanceCriteria ?? "Not specified")]),
     "",
     "## Implementation Plan",
     JSON.stringify(plan, null, 2),
@@ -126,5 +127,111 @@ export async function runSandboxTests(containerId: string): Promise<SandboxTestR
     typeCheckPassed,
     testOutput,
     typeCheckOutput,
+  };
+}
+
+// ─── Auto-Execute Build Plan ────────────────────────────────────────────────
+// Called by the system when build phase starts. Runs the coding agent against
+// the sandbox with the approved plan. Does NOT depend on the coworker agent.
+
+export type BuildExecutionResult = {
+  success: boolean;
+  filesChanged: string[];
+  testResult: SandboxTestResult | null;
+  summary: string;
+  providerId: string;
+  modelId: string;
+  error?: string;
+};
+
+export async function executeBuildPlan(params: {
+  containerId: string;
+  brief: FeatureBrief;
+  plan: Record<string, unknown>;
+  onProgress?: (event: AgentEvent) => void;
+}): Promise<BuildExecutionResult> {
+  const { containerId, brief, plan, onProgress } = params;
+
+  // 1. Check coding readiness
+  onProgress?.({ type: "tool:start", tool: "checkCodingReadiness", iteration: 0 });
+  const readiness = await checkCodingReadiness();
+  if (!readiness.ready || !readiness.bestProvider) {
+    return {
+      success: false, filesChanged: [], testResult: null,
+      summary: readiness.message,
+      providerId: "none", modelId: "none",
+      error: "No coding-capable provider available.",
+    };
+  }
+  onProgress?.({ type: "tool:complete", tool: "checkCodingReadiness", success: true });
+
+  // 2. Build the code generation prompt
+  const prompt = buildCodeGenPrompt(brief, plan);
+
+  // 3. Call the LLM for code generation
+  onProgress?.({ type: "tool:start", tool: "generate_code", iteration: 1 });
+  let llmResponse: string;
+  let providerId: string;
+  let modelId: string;
+  try {
+    const result = await callWithFailover(
+      [{ role: "user", content: prompt }],
+      "You are a code generation agent. Output file contents in the specified format. Do not explain — just write code.",
+      "internal",
+      { task: "code_generation" },
+    );
+    llmResponse = result.content;
+    providerId = result.providerId;
+    modelId = result.modelId;
+  } catch (err) {
+    return {
+      success: false, filesChanged: [], testResult: null,
+      summary: `Code generation failed: ${err instanceof Error ? err.message : String(err)}`,
+      providerId: readiness.bestProvider.providerId,
+      modelId: readiness.bestProvider.modelId,
+      error: String(err),
+    };
+  }
+  onProgress?.({ type: "tool:complete", tool: "generate_code", success: true });
+
+  // 4. Parse file outputs from LLM response and write to sandbox
+  onProgress?.({ type: "tool:start", tool: "write_files_to_sandbox", iteration: 2 });
+  const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|js|jsx|css|json)?\n([\s\S]*?)```/g;
+  const filesChanged: string[] = [];
+  let match;
+  while ((match = filePattern.exec(llmResponse)) !== null) {
+    const filePath = match[1]!.trim();
+    const fileContent = match[2]!;
+    try {
+      // Ensure directory exists and write file
+      const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+      if (dir) await execInSandbox(containerId, `mkdir -p "${dir}"`);
+      // Write file content via heredoc
+      await execInSandbox(containerId, `cat > "${filePath}" << 'CODEGEN_EOF'\n${fileContent}\nCODEGEN_EOF`);
+      filesChanged.push(filePath);
+    } catch (err) {
+      console.warn(`[coding-agent] Failed to write ${filePath}:`, err);
+    }
+  }
+  onProgress?.({ type: "tool:complete", tool: "write_files_to_sandbox", success: filesChanged.length > 0 });
+
+  // 5. Run tests
+  onProgress?.({ type: "tool:start", tool: "run_sandbox_tests", iteration: 3 });
+  const testResult = await runSandboxTests(containerId);
+  onProgress?.({ type: "tool:complete", tool: "run_sandbox_tests", success: testResult.passed });
+
+  const summary = [
+    `Code generated by ${providerId}/${modelId}.`,
+    `${filesChanged.length} file(s) written: ${filesChanged.join(", ") || "none"}`,
+    `Tests: ${testResult.passed ? "PASS" : "FAIL"}. Typecheck: ${testResult.typeCheckPassed ? "PASS" : "FAIL"}.`,
+  ].join(" ");
+
+  return {
+    success: filesChanged.length > 0,
+    filesChanged,
+    testResult,
+    summary,
+    providerId,
+    modelId,
   };
 }
