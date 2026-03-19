@@ -485,6 +485,8 @@ model ChangePromotion {
   rolledBackAt     DateTime?
   rolledBackBy     String?
   rollbackReason   String?        @db.Text
+  backupId         String?
+  backup           PromotionBackup? @relation(fields: [backupId], references: [id])
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -1371,6 +1373,7 @@ model FeatureBuild {
   verificationOut Json?
   acceptanceMet   Json?
   uxTestResults   Json? // Playwright UX test step results with screenshots
+  buildExecState  Json? // BuildExecutionState: checkpoint for pipeline recovery
 
   // Build Disciplines — ownership
   accountableEmployeeId  String?
@@ -1381,6 +1384,7 @@ model FeatureBuild {
 
   // Activity log
   activities      BuildActivity[]
+  promotionBackups PromotionBackup[]
 
   @@index([phase])
   @@index([createdById])
@@ -1396,6 +1400,19 @@ model BuildActivity {
   createdAt DateTime     @default(now())
 
   @@index([buildId, createdAt])
+}
+
+model PromotionBackup {
+  id         String            @id @default(cuid())
+  buildId    String
+  build      FeatureBuild      @relation(fields: [buildId], references: [buildId])
+  timestamp  DateTime          @default(now())
+  filePath   String
+  sizeBytes  Int
+  status     String            @default("complete") // complete | failed | restored
+  promotions ChangePromotion[]
+
+  @@index([buildId])
 }
 
 model FeaturePack {
