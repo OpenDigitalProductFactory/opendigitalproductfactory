@@ -1,0 +1,17 @@
+{
+  "name": "@dpf/api-client",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dpf/types": "workspace:*",
+    "@dpf/validators": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
