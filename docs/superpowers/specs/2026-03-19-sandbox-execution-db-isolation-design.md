@@ -1,5 +1,7 @@
 # EP-SELF-DEV-003: Sandbox Execution & Database Isolation
 
+**Status:** Implemented (2026-03-19)
+
 ## Problem Statement
 
 The Build Studio pipeline works through Ideate → Plan → Build phases. The sandbox Docker container launches (`dpf-sandbox` image, `sleep infinity`, port mapped), but execution fails because:
