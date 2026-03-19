@@ -399,7 +399,16 @@ export async function savePlatformApiKey(
 ): Promise<{ ok: true }> {
   await requireManageProviders();
 
-  const allowedKeys = ["brave_search_api_key", "upload_storage_path"];
+  const allowedKeys = [
+    "brave_search_api_key",
+    "upload_storage_path",
+    "google_client_id",
+    "google_client_secret",
+    "apple_client_id",
+    "apple_client_secret",
+    "apple_team_id",
+    "apple_key_id",
+  ];
   if (!allowedKeys.includes(key)) throw new Error(`Unknown platform key: ${key}`);
 
   await prisma.platformConfig.upsert({
@@ -407,6 +416,14 @@ export async function savePlatformApiKey(
     create: { key, value },
     update: { value },
   });
+
+  // If a social auth credential was saved, sync all credentials to process.env
+  // so NextAuth picks them up without a server restart
+  const socialKeys = ["google_client_id", "google_client_secret", "apple_client_id", "apple_client_secret", "apple_team_id", "apple_key_id"];
+  if (socialKeys.includes(key)) {
+    const { syncSocialAuthCredentials } = await import("@/lib/auth");
+    await syncSocialAuthCredentials();
+  }
 
   return { ok: true };
 }
