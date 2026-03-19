@@ -2,7 +2,7 @@
 
 import type { SerializedViewElement } from "@/lib/ea-types";
 
-import { buildValueStreamLayout } from "./value-stream-layout";
+import { buildValueStreamGroupLayout } from "./value-stream-layout";
 
 type Props = {
   data: SerializedViewElement;
@@ -15,7 +15,11 @@ function chevronClipPath(inset = 28): string {
 
 export function StructuredValueStreamNode({ data, selected = false }: Props) {
   const childStages = data.childViewElements ?? [];
-  const layout = buildValueStreamLayout(childStages.map((stage) => stage.element.name));
+  const layout = buildValueStreamGroupLayout({
+    stageLabels: childStages.map((stage) => stage.element.name),
+    origin: { x: 0, y: 0 },
+  });
+
   const childIssueCount = childStages.reduce((sum, stage) => sum + stage.structureIssueCount, 0);
   const issueCount = data.structureIssueCount > 0 ? data.structureIssueCount : childIssueCount;
 
@@ -28,18 +32,19 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
     <div
       data-value-stream-band="true"
       style={{
-        width: layout.bandWidth + 24,
-        minHeight: layout.bandHeight,
+        width: layout.band.width,
+        minHeight: layout.band.height,
         clipPath: chevronClipPath(),
         border: `2px solid ${bandBorder}`,
         background: "linear-gradient(135deg, #ffd6a0 0%, #ffbf72 45%, #f7a74d 100%)",
         boxShadow: bandShadow,
-        padding: "14px 88px 16px 36px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
+        padding: 0,
+        display: "grid",
+        gridTemplateRows: `${layout.layout.bandHeaderHeight}px 1fr`,
+        position: "relative",
       }}
     >
+      {/* Header section */}
       <div
         data-value-stream-header="true"
         style={{
@@ -47,6 +52,8 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: 20,
+          padding: "14px 88px 16px 36px",
+          borderBottom: "1px solid rgba(194, 65, 12, 0.2)",
         }}
       >
         <div data-value-stream-title-block="true" style={{ minWidth: 0 }}>
@@ -127,6 +134,34 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
             </div>
           ) : null}
         </div>
+      </div>
+
+      {/* Stages container */}
+      <div
+        data-value-stream-stages="true"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          padding: `${layout.layout.bandStageTop - layout.layout.bandHeaderHeight}px 0 ${layout.layout.bandHeight - layout.layout.bandHeaderHeight - layout.layout.bandStageTop - layout.layout.stageHeight}px 0`,
+          gap: `${layout.layout.stageGap}px`,
+          paddingLeft: `${layout.layout.bandInsetLeft}px`,
+          overflow: "visible",
+          position: "relative",
+        }}
+      >
+        {childStages.map((stage, idx) => (
+          <div
+            key={stage.id}
+            data-value-stream-stage-slot={stage.id}
+            style={{
+              flexShrink: 0,
+              width: layout.stages[idx]?.width ?? 120,
+              height: layout.layout.stageHeight,
+            }}
+          >
+            {/* Stage node will be rendered here by the flow renderer */}
+          </div>
+        ))}
       </div>
     </div>
   );
