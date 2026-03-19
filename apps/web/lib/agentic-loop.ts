@@ -17,16 +17,37 @@ const MAX_ITERATIONS = 25;
 // ─── Extracted for testability ──────────────────────────────────────────────
 
 /** Determine whether the loop should nudge the model to use tools. */
-const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched)\b|tests?\s+pass/i;
+const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched|starting up|initializing|applying|generating)\b|tests?\s+pass/i;
 
-/** Detect when the agent claims completion without having called any tools. */
+// Narration patterns: agent describes code for the user instead of calling tools
+const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to add|change|pattern)|add (?:this |the following )|insert (?:this |before )|exact (?:lines|code|changes)|manually|copy[- ]paste)/i;
+
+// Tools that actually build/write — not just read/search
+const BUILD_TOOL_NAMES = new Set([
+  "saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan",
+  "launch_sandbox", "generate_code", "iterate_sandbox",
+  "run_sandbox_tests", "deploy_feature", "generate_ux_test", "run_ux_test",
+  "propose_file_change", "update_feature_brief", "create_backlog_item",
+]);
+
+/** Detect when the agent claims completion or narrates code without having called build tools. */
 export function detectFabrication(
   response: string,
   executedToolCount: number,
   hasProposal: boolean,
+  executedToolNames?: string[],
 ): boolean {
-  if (executedToolCount > 0 || hasProposal) return false;
-  return COMPLETION_CLAIM_PATTERN.test(response);
+  if (hasProposal) return false;
+
+  // If no tools were called at all, any completion claim is fabrication
+  if (executedToolCount === 0) return COMPLETION_CLAIM_PATTERN.test(response);
+
+  // If tools were called but none were BUILD tools (only read/search), and the
+  // response narrates code for the user — that's still fabrication
+  const usedBuildTool = executedToolNames?.some((n) => BUILD_TOOL_NAMES.has(n)) ?? false;
+  if (!usedBuildTool && NARRATION_PATTERN.test(response)) return true;
+
+  return false;
 }
 
 export function shouldNudge(params: {
@@ -36,12 +57,22 @@ export function shouldNudge(params: {
   hasTools: boolean;
   executedToolCount: number;
   responseLength: number;
+  responseText?: string;
 }): boolean {
-  return params.continuationNudges < 1
-    && params.iteration < params.maxIterations - 1
-    && params.hasTools
-    && (params.executedToolCount > 0 || params.iteration === 0)
-    && params.responseLength < 200;
+  if (params.continuationNudges >= 1) return false;
+  if (params.iteration >= params.maxIterations - 1) return false;
+  if (!params.hasTools) return false;
+
+  // First iteration with no tools called — always nudge
+  if (params.executedToolCount === 0 && params.iteration === 0) return true;
+
+  // Short response after using tools — model may have stalled
+  if (params.executedToolCount > 0 && params.responseLength < 200) return true;
+
+  // Agent is narrating code instead of using tools — nudge to use build tools
+  if (params.responseText && NARRATION_PATTERN.test(params.responseText)) return true;
+
+  return false;
 }
 
 export type AgenticResult = {
@@ -151,6 +182,7 @@ export async function runAgenticLoop(params: {
         hasTools: !!(toolsForProvider && toolsForProvider.length > 0),
         executedToolCount: executedTools.length,
         responseLength: trimmed.length,
+        responseText: trimmed,
       });
 
       if (shouldNudgeNow) {
@@ -164,14 +196,14 @@ export async function runAgenticLoop(params: {
             : []),
           {
             role: "user" as const,
-            content: `Continue — your available tools include: ${toolNames}. Call the most relevant one.`,
+            content: `Do NOT describe code. Use your tools to make changes directly. Your build tools include: ${toolNames}. Call the most relevant one NOW — saveBuildEvidence to save evidence, launch_sandbox to start a sandbox, propose_file_change to modify files directly, or generate_code to write code in the sandbox.`,
           },
         ];
         continue;
       }
 
       // Fabrication guardrail: if agent claims completion without calling tools, retry once
-      if (!fabricationRetried && detectFabrication(trimmed, executedTools.length, false)) {
+      if (!fabricationRetried && detectFabrication(trimmed, executedTools.length, false, executedTools.map((t) => t.name))) {
         fabricationRetried = true;
         console.warn(
           `[agentic-loop] fabrication detected: claimed completion with 0 tools. Retrying.`,
@@ -181,7 +213,7 @@ export async function runAgenticLoop(params: {
           { role: "assistant" as const, content: result.content },
           {
             role: "user" as const,
-            content: "You claimed to complete actions but called no tools. Use your available tools to actually perform the work, or state honestly what you cannot do and create a backlog item.",
+            content: "STOP. You described code or claimed actions without using tools. Do NOT show code to the user. Call saveBuildEvidence to save your design, launch_sandbox to start the sandbox, propose_file_change to modify files, or create_backlog_item if you cannot proceed. Call a tool NOW.",
           },
         ];
         continue;
