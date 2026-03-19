@@ -52,13 +52,40 @@ model UserGroup {
 }
 
 model CustomerContact {
-  id           String          @id @default(cuid())
-  email        String          @unique
-  passwordHash String?
-  accountId    String
-  account      CustomerAccount @relation(fields: [accountId], references: [id])
-  isActive     Boolean         @default(true)
-  createdAt    DateTime        @default(now())
+  id               String           @id @default(cuid())
+  email            String           @unique
+  name             String?
+  passwordHash     String?
+  accountId        String
+  account          CustomerAccount  @relation(fields: [accountId], references: [id])
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  socialIdentities SocialIdentity[]
+}
+
+model SocialIdentity {
+  id                String          @id @default(cuid())
+  provider          String
+  providerAccountId String
+  email             String?
+  contactId         String
+  contact           CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  linkedAt          DateTime        @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([contactId])
+}
+
+model AccountInvite {
+  id        String          @id @default(cuid())
+  code      String          @unique
+  accountId String
+  account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy String?
+  expiresAt DateTime?
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime        @default(now())
 }
 
 model PasswordResetToken {
@@ -1050,6 +1077,7 @@ model CustomerAccount {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
   contacts  CustomerContact[]
+  invites   AccountInvite[]
 }
 
 // ─── Runtime Advisory ────────────────────────────────────────────────────────
