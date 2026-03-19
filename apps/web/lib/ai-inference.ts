@@ -221,6 +221,53 @@ export function extractOpenAIToolCalls(
     }));
 }
 
+// ─── Message Formatting Helpers ──────────────────────────────────────────────
+
+/** Format a ChatMessage for the Anthropic Messages API */
+export function formatMessageForAnthropic(msg: ChatMessage): Record<string, unknown> {
+  // Tool result messages → Anthropic uses role=user with tool_result content block
+  if (msg.role === "tool" && msg.toolCallId) {
+    return {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" }],
+    };
+  }
+  // Assistant messages with tool calls → content block array with text + tool_use blocks
+  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+    const textContent = typeof msg.content === "string" ? msg.content : "";
+    return {
+      role: "assistant",
+      content: [
+        ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
+        ...msg.toolCalls.map((tc) => ({ type: "tool_use" as const, id: tc.id, name: tc.name, input: tc.arguments })),
+      ],
+    };
+  }
+  // Plain messages — pass through with string content
+  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
+}
+
+/** Format a ChatMessage for the OpenAI Chat Completions API */
+export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown> {
+  // Tool result messages → role=tool with tool_call_id
+  if (msg.role === "tool" && msg.toolCallId) {
+    return { role: "tool", tool_call_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" };
+  }
+  // Assistant messages with tool calls → tool_calls field
+  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+    return {
+      role: "assistant",
+      content: typeof msg.content === "string" ? msg.content : "",
+      tool_calls: msg.toolCalls.map((tc) => ({
+        id: tc.id, type: "function",
+        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+      })),
+    };
+  }
+  // Plain messages — pass through with string content
+  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
+}
+
 // ─── callProvider ────────────────────────────────────────────────────────────
 
 export async function callProvider(
@@ -252,7 +299,7 @@ export async function callProvider(
       system: systemPrompt,
       messages: messages
         .filter((m) => m.role !== "system")
-        .map((m) => ({ role: m.role, content: m.content })),
+        .map((m) => formatMessageForAnthropic(m)),
     };
     // Anthropic tools use { name, description, input_schema } format (not OpenAI's { type: "function", function: {...} })
     if (tools && tools.length > 0) {
@@ -291,10 +338,7 @@ export async function callProvider(
     chatUrl = `${apiBase}/chat/completions`;
     const allMessages = [
       { role: "system" as const, content: systemPrompt },
-      ...messages.map((m) => ({
-        role: m.role,
-        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      })),
+      ...messages.map((m) => formatMessageForOpenAI(m)),
     ];
     body = { model: modelId, messages: allMessages, max_tokens: 4096, keep_alive: -1 };
     if (tools && tools.length > 0) {
