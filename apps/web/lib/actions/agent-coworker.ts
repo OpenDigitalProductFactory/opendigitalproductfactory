@@ -390,7 +390,13 @@ export async function sendMessage(input: {
     ? mergedTools.filter((t) => !t.sideEffect)
     : mergedTools;
 
-  const toolsForProvider = availableTools.length > 0 ? toolsToOpenAIFormat(availableTools) : undefined;
+  // Conversation-only detection: if the message is a conversational skill (analyze, advise),
+  // strip tools entirely so the model responds with text instead of trying to call tools.
+  const isConversationOnly = /^This is a CONVERSATION request/i.test(trimmedContent);
+
+  const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
+    ? toolsToOpenAIFormat(availableTools)
+    : undefined;
 
   // When external access is enabled, tell the agent about its web tools
   if (input.externalAccessEnabled) {
