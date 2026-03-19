@@ -1,0 +1,244 @@
+# EP-AUTH-001: Social Identity Sign-In for Customers
+
+**Status:** Draft
+**Date:** 2026-03-19
+**Epic:** EP-AUTH-001 — Social Identity Sign-In for Customers
+**Scope:** Add Google and Apple sign-in to the customer portal alongside existing email/password
+**Related specs:** None
+**Dependencies:** None (builds on existing NextAuth v5 + CustomerContact model)
+
+## Problem Statement
+
+Customer sign-up and sign-in currently requires email/password only. Modern SaaS applications offer social identity providers (Google, Apple) as a faster, more familiar onboarding path. The current approach creates friction — customers must create and remember yet another password. Adding social sign-in reduces sign-up abandonment and aligns with user expectations.
+
+## Goals
+
+- Add Google and Apple as sign-in options for the customer portal
+- Support account linking when a social email matches an existing contact
+- Enable new customers to onboard via social sign-in with deferred company association
+- Allow customers to link additional providers from account settings (link-only, no unlink)
+- Upgrade password hashing from SHA-256 to bcrypt as part of the auth surface expansion
+- Include step-by-step provider credential setup guides for Google and Apple
+
+## Non-Goals
+
+- Employee/workforce social sign-in — employees remain on credential-based auth
+- Microsoft identity provider — tracked as separate backlog item under EP-AUTH-001
+- Unlinking providers from account settings (prevents self-lockout)
+- SAML/SSO for enterprise customers
+- Replacing NextAuth — we extend the existing configuration
+
+## Design
+
+### 1. Data Model
+
+New `SocialIdentity` table to track linked providers per customer contact:
+
+```prisma
+model SocialIdentity {
+  id                String          @id @default(cuid())
+  provider          String          // "google" | "apple"
+  providerAccountId String          // Google sub / Apple user ID
+  email             String?         // Email from provider (may differ from contact email)
+  contactId         String
+  contact           CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  linkedAt          DateTime        @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([contactId])
+}
+```
+
+Changes to `CustomerContact`:
+- Add `socialIdentities SocialIdentity[]` relation
+- `passwordHash` remains nullable — contacts who sign up via social provider may never set a password
+
+No changes to the `User` (employee) model. Social sign-in is customer-only.
+
+### 2. Authentication Flows
+
+All flows use NextAuth v5's built-in OAuth handling. The routing logic lives in the `signIn` and `jwt` callbacks.
+
+#### Flow 1: Social sign-in — existing linked identity
+
+1. Customer clicks "Sign in with Google/Apple" on `/customer-login`
+2. NextAuth redirects to provider, customer authorizes
+3. `signIn` callback looks up `SocialIdentity` by `(provider, providerAccountId)`
+4. Found → load `CustomerContact` and its `CustomerAccount`, populate JWT, sign in complete
+
+#### Flow 2: Social sign-in — email matches existing contact, no linked identity (prompt-to-link)
+
+1. Same OAuth flow, but `SocialIdentity` lookup returns nothing
+2. Check if the provider's email matches an existing `CustomerContact.email`
+3. Match found → redirect to `/customer-link-account`
+4. Page displays: "We found an account with this email. Enter your password to link your [provider] account."
+5. Customer enters password → verify against `CustomerContact.passwordHash` → create `SocialIdentity` row → sign in
+6. Provider info carried through the linking step via a short-lived signed JWT (5 min expiry)
+
+#### Flow 3: Social sign-in — no match (new customer onboarding)
+
+1. Same OAuth flow, no `SocialIdentity`, no email match
+2. Redirect to `/customer-complete-profile`
+3. Customer sees name/email from provider (pre-filled, read-only)
+4. Two options: enter invite code to join an existing `CustomerAccount`, or enter company name to create a new one
+5. On submit → create `CustomerAccount` (if new) + `CustomerContact` + `SocialIdentity` in a single transaction
+6. Sign in complete
+
+#### Existing flows (unchanged)
+
+Email/password signup (`/customer-signup`) and login (`/customer-login` credential form) continue to work as-is.
+
+### 3. NextAuth Configuration
+
+**Current state:** `apps/web/lib/auth.ts` configures NextAuth with JWT session strategy and two credential providers ("workforce" and "customer").
+
+**Changes:**
+
+Add Google and Apple as additional providers:
+
+```ts
+import Google from "next-auth/providers/google";
+import Apple from "next-auth/providers/apple";
+
+// Added alongside existing CredentialsProvider entries
+Google({
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+}),
+Apple({
+  clientId: process.env.APPLE_CLIENT_ID!,
+  clientSecret: process.env.APPLE_CLIENT_SECRET!,
+})
+```
+
+**Environment variables:**
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (or path to `.p8` file)
+
+**Callback changes:**
+
+- `signIn` callback: intercept social provider sign-ins, execute the three-flow routing logic, return redirect URLs for `/customer-link-account` or `/customer-complete-profile` when needed
+- `jwt` callback: after social sign-in completes (post link or onboard), populate token with `type: "customer"`, `contactId`, `accountId`, `accountName` — same shape as current customer credential flow
+- `session` callback: unchanged — already maps JWT fields to `DpfSession`
+
+**Key constraint:** Social providers must only create customer sessions, never workforce sessions. The `signIn` callback enforces this — social sign-in always resolves to a `CustomerContact`, never a `User`.
+
+### 4. UI Changes
+
+#### Updated: `/customer-login`
+
+Social sign-in buttons (Google, Apple) placed above the existing email/password form, separated by an "or sign in with email" divider. Layout:
+
+1. "Continue with Google" button (with Google logo)
+2. "Continue with Apple" button (with Apple logo)
+3. Horizontal divider: "or sign in with email"
+4. Existing email/password form (unchanged)
+5. Existing "Don't have an account? Sign up" link
+
+#### New: `/customer-link-account`
+
+Prompt-to-link page shown when social email matches an existing contact:
+
+- Provider icon and message: "We found an account with [email]. Enter your password to link your [provider] account."
+- Single password field
+- "Link Account & Sign In" button
+- "Not your account? Sign in differently" escape link
+- Rate-limited: max 5 attempts per session
+
+#### New: `/customer-complete-profile`
+
+New customer onboarding after first social sign-in:
+
+- Shows provider avatar, name, and email (read-only, from provider)
+- Tabbed interface: "Create Company" | "Join with Invite Code"
+- Create Company tab: single "Company Name" field
+- Join tab: single "Invite Code" field
+- "Complete Setup" button
+- All created in one transaction (CustomerAccount + CustomerContact + SocialIdentity)
+
+#### Updated: `/customer-signup`
+
+Add the same social sign-in buttons above the existing registration form. Clicking them starts Flow 3 (new customer onboarding via provider).
+
+#### New: Account Settings — Linked Identities
+
+Section within customer account settings:
+
+- Lists all sign-in methods: email/password + each social provider
+- Linked providers show provider name, linked email, and "Linked" badge
+- Unlinked providers show a "Link" button that initiates the OAuth flow
+- No "Unlink" action — prevents self-lockout
+
+### 5. Security
+
+- **Password hashing upgrade:** Migrate from SHA-256 to bcrypt (`bcryptjs`, already installed). Existing hashes can be migrated lazily — on next successful password login, re-hash with bcrypt and update the row.
+- **CSRF:** NextAuth handles CSRF protection natively for OAuth flows.
+- **Email verification:** Google and Apple both provide `email_verified` in their token responses. Social sign-ins with verified emails skip separate verification.
+- **Rate limiting:** The `/customer-link-account` page rate-limits password attempts (5 per session) to prevent brute-force on the linking flow.
+- **Apple "Hide My Email":** Apple lets users relay their email (e.g., `xyz@privaterelay.appleid.com`). This won't match any existing contact, so it routes to Flow 3 (new customer onboarding) — correct behavior.
+- **Temporary state tokens:** Provider info carried through link/onboard flows uses a short-lived signed JWT (5 min expiry), not plain cookies.
+- **Social providers are customer-only:** The `signIn` callback explicitly prevents social sign-ins from creating workforce sessions.
+
+### 6. Provider Setup Guides
+
+#### Google OAuth Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Navigate to **APIs & Services → OAuth consent screen**
+4. Configure consent screen:
+   - User type: External
+   - App name: your platform name
+   - Authorized domains: your production domain
+   - Scopes: `email`, `profile`, `openid`
+5. Navigate to **APIs & Services → Credentials**
+6. Click **Create Credentials → OAuth 2.0 Client IDs**
+7. Application type: Web application
+8. Add authorized redirect URI: `https://<your-domain>/api/auth/callback/google`
+   - For local dev: `http://localhost:3000/api/auth/callback/google`
+9. Copy Client ID and Client Secret to environment variables
+
+#### Apple Sign In Setup
+
+1. Go to [Apple Developer Portal](https://developer.apple.com/) (requires paid Apple Developer account, $99/year)
+2. Navigate to **Certificates, Identifiers & Profiles**
+3. Register an **App ID** (if not already done):
+   - Enable "Sign in with Apple" capability
+4. Register a **Services ID**:
+   - This becomes your `APPLE_CLIENT_ID`
+   - Configure domains and return URLs:
+     - Domain: your production domain
+     - Return URL: `https://<your-domain>/api/auth/callback/apple`
+5. Create a **Key** for Sign in with Apple:
+   - Download the `.p8` private key file (only downloadable once)
+   - Note the Key ID → `APPLE_KEY_ID`
+6. Note your Team ID (top right of developer portal) → `APPLE_TEAM_ID`
+7. The client secret for Apple is a JWT generated from the private key — NextAuth's Apple provider handles this automatically when given the key, team ID, and key ID
+
+#### Environment Variables Summary
+
+```env
+# Google
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Apple
+APPLE_CLIENT_ID=your-apple-services-id
+APPLE_CLIENT_SECRET=your-apple-private-key-contents
+APPLE_TEAM_ID=your-apple-team-id
+APPLE_KEY_ID=your-apple-key-id
+```
+
+### 7. Migration Strategy
+
+1. **Schema migration:** Add `SocialIdentity` table, add relation to `CustomerContact`
+2. **Password hash migration:** Add bcrypt hashing for new passwords immediately. Existing SHA-256 hashes migrate lazily — on successful login, re-hash with bcrypt and update the row. Both hash formats are checked during the transition period.
+3. **Feature rollout:** Social buttons can be hidden behind an environment flag (`ENABLE_SOCIAL_AUTH=true`) for staged rollout
+4. **Rollback:** If issues arise, disable social providers by removing the env flag. Existing email/password auth is unaffected. `SocialIdentity` rows persist harmlessly.
+
+### 8. Future Considerations (Out of Scope)
+
+- **Microsoft provider:** Tracked as backlog item `BI-*` under EP-AUTH-001, priority 3
+- **Customer storefront:** Tracked as EP-STORE-001. Social sign-in will feed into storefront auth when that epic begins.
+- **Provider unlinking:** May be added later with safeguards (e.g., require at least one active method)
+- **Enterprise SSO (SAML/OIDC):** Separate epic if needed for workforce or large customer accounts
