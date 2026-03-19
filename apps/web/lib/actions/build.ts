@@ -146,109 +146,77 @@ export async function advanceBuildPhase(
   }
 }
 
-/** System-level build execution — no coworker agent involved. */
+/** System-level build execution — delegates to checkpoint pipeline. */
 async function autoExecuteBuild(buildId: string): Promise<void> {
   const { agentEventBus } = await import("@/lib/agent-event-bus");
+  const { runBuildPipeline } = await import("@/lib/build-pipeline");
 
-  // Load build record
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { brief: true, buildPlan: true, designDoc: true, title: true, threadId: true },
+    select: { buildExecState: true, threadId: true },
   });
-  if (!build?.buildPlan) {
-    console.warn(`[build] Cannot auto-execute: missing plan for ${buildId}`);
-    return;
-  }
-
-  // Construct brief from designDoc if brief wasn't saved separately
-  if (!build.brief && build.designDoc) {
-    const doc = build.designDoc as Record<string, unknown>;
-    const syntheticBrief = {
-      title: build.title ?? "Untitled",
-      description: (doc.proposedApproach as string) ?? (doc.problemStatement as string) ?? "",
-      portfolioContext: "",
-      targetRoles: [],
-      inputs: [],
-      dataNeeds: "",
-      acceptanceCriteria: Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [],
-    };
-    build.brief = syntheticBrief;
-    // Persist so future reads have it
-    await prisma.featureBuild.update({ where: { buildId }, data: { brief: syntheticBrief as any } });
-    console.log(`[build] Synthesized brief from designDoc for ${buildId}`);
-  }
-
-  if (!build.brief) {
-    console.warn(`[build] Cannot auto-execute: no brief or designDoc for ${buildId}`);
-    return;
-  }
 
   const emit = (event: import("@/lib/agent-event-bus").AgentEvent) => {
-    if (build.threadId) agentEventBus.emit(build.threadId, event);
+    if (build?.threadId) agentEventBus.emit(build.threadId, event);
   };
 
-  // 1. Launch sandbox
-  emit({ type: "tool:start", tool: "launch_sandbox", iteration: 0 });
-  let containerId: string;
-  let port: number;
-  try {
-    const { createSandbox, startSandbox } = await import("@/lib/sandbox");
-    port = 3001 + Math.floor(Math.random() * 100);
-    containerId = await createSandbox(buildId, port);
-    await startSandbox(containerId);
+  const updateState = async (state: import("@/lib/build-exec-types").BuildExecutionState) => {
     await prisma.featureBuild.update({
       where: { buildId },
-      data: { sandboxId: containerId, sandboxPort: port },
+      data: {
+        buildExecState: state as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        ...(state.containerId ? { sandboxId: state.containerId } : {}),
+        ...(state.hostPort ? { sandboxPort: state.hostPort } : {}),
+      },
     });
-    emit({ type: "tool:complete", tool: "launch_sandbox", success: true });
-    emit({ type: "phase:change", buildId, phase: "build" });
-    console.log(`[build] Sandbox launched for ${buildId} on port ${port}`);
-  } catch (err) {
-    emit({ type: "tool:complete", tool: "launch_sandbox", success: false });
-    console.warn(`[build] Sandbox launch failed for ${buildId}:`, err);
+  };
 
-    // Fallback: run coding agent without sandbox (propose_file_change path)
-    // For now just log — the coworker can still use propose_file_change
-    await prisma.buildActivity.create({
-      data: { buildId, tool: "launch_sandbox", summary: `Sandbox launch failed: ${err instanceof Error ? err.message : String(err)}` },
-    }).catch(() => {});
-    return;
+  const result = await runBuildPipeline({
+    buildId,
+    existingState: build?.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null,
+    updateState,
+    emit,
+  });
+
+  // Log completion
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "runBuildPipeline",
+      summary: result.step === "complete"
+        ? "Build pipeline completed successfully"
+        : `Build pipeline failed at step: ${result.failedAt ?? result.step}`,
+    },
+  }).catch(() => {});
+}
+
+export async function retryBuildExecution(buildId: string): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true, buildExecState: true, phase: true },
+  });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+
+  const state = build.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null;
+  if (!state || state.step !== "failed") {
+    throw new Error("Build is not in a failed state. Cannot retry.");
   }
 
-  // 2. Run coding agent against sandbox
-  const { executeBuildPlan } = await import("@/lib/coding-agent");
-  const result = await executeBuildPlan({
-    containerId,
-    brief: build.brief as import("@/lib/feature-build-types").FeatureBrief,
-    plan: build.buildPlan as Record<string, unknown>,
-    onProgress: emit,
-  });
+  // Reset phase back to build if it was set to failed
+  if (build.phase === "failed") {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { phase: "build" },
+    });
+  }
 
-  // 3. Save results to build record
-  const verificationData = result.testResult ? {
-    testsPassed: result.testResult.passed ? 1 : 0,
-    testsFailed: result.testResult.passed ? 0 : 1,
-    typecheckPassed: result.testResult.typeCheckPassed,
-    testOutput: result.testResult.testOutput.slice(0, 5000),
-    typeCheckOutput: result.testResult.typeCheckOutput.slice(0, 5000),
-  } : null;
-
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: {
-      codingProvider: `${result.providerId}/${result.modelId}`,
-      ...(verificationData ? { verificationOut: verificationData as unknown as import("@dpf/db").Prisma.InputJsonValue } : {}),
-    },
-  });
-
-  await prisma.buildActivity.create({
-    data: { buildId, tool: "executeBuildPlan", summary: result.summary },
-  }).catch(() => {});
-
-  // 4. Emit evidence update so Build page refreshes
-  emit({ type: "evidence:update", buildId, field: "verificationOut" });
-
-  console.log(`[build] Auto-execution complete for ${buildId}: ${result.summary}`);
+  // Fire-and-forget retry — picks up from failed step
+  autoExecuteBuild(buildId).catch((err) =>
+    console.error(`[build] retryBuildExecution failed for ${buildId}:`, err),
+  );
 }
 
 // ─── Update Sandbox Info ─────────────────────────────────────────────────────
