@@ -12,9 +12,10 @@ import type { ChatMessage } from "./ai-inference";
 // responds with text only (no tool calls), matching the Anthropic API pattern
 // where the loop runs until stop_reason === "end_turn". This limit only prevents
 // runaway loops. The model decides when it's done.
-// Safety net only — the loop exits naturally when the model responds with text-only.
-// This prevents infinite loops from bugs, not from normal workflows.
-const MAX_ITERATIONS = 200;
+// Safety nets — the loop exits naturally when the model responds with text-only.
+// These prevent infinite loops from bugs, not from normal workflows.
+const MAX_ITERATIONS = 100;
+const MAX_DURATION_MS = 120_000; // 2 minutes — no single message should take longer
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -131,8 +132,14 @@ export async function runAgenticLoop(params: {
   let lastResult: FailoverResult | FallbackResult | null = null;
   let continuationNudges = 0;
   let fabricationRetried = false;
+  const startTime = Date.now();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    // Time ceiling — prevent stuck loops from running for minutes
+    if (Date.now() - startTime > MAX_DURATION_MS) {
+      console.warn(`[agentic-loop] hit MAX_DURATION (${MAX_DURATION_MS}ms). executedTools=${executedTools.length}.`);
+      break;
+    }
     let result: FailoverResult | FallbackResult;
 
     if (routeDecision?.selectedEndpoint) {
