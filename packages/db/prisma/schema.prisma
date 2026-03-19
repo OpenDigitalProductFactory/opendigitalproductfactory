@@ -39,6 +39,8 @@ model User {
   policyRulesCreated           PolicyRule[]             @relation("PolicyRuleCreator")
   customEvalDimsCreated        CustomEvalDimension[]    @relation("CustomEvalDimensionCreator")
   customEvalDimsApproved       CustomEvalDimension[]    @relation("CustomEvalDimensionApprover")
+  notifications                Notification[]
+  pushDevices                  PushDeviceRegistration[]
 }
 
 model UserGroup {
@@ -1324,6 +1326,60 @@ model ApiToken {
   name      String
   expiresAt DateTime?
   createdAt DateTime  @default(now())
+}
+
+// ─── Mobile Notifications ──────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // approval_request | compliance_alert | agent_response | backlog_assigned | epic_status
+  title     String
+  body      String?
+  deepLink  String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+model PushDeviceRegistration {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  platform  String   // ios | android
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, platform])
+}
+
+// ─── Dynamic Content ────────────────────────────────────────────────────────
+
+model DynamicForm {
+  id             String   @id @default(cuid())
+  formId         String   @unique
+  title          String
+  version        Int      @default(1)
+  fields         Json
+  submitAction   String?
+  offlineCapable Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DynamicView {
+  id         String   @id @default(cuid())
+  viewId     String   @unique
+  title      String
+  type       String
+  layout     Json
+  dataSource String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 // ─── Platform Issue Reporting ────────────────────────────────────────────────
