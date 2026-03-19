@@ -458,6 +458,28 @@ The updated Review phase:
 
 3. **SSE connection limits** — Browsers limit concurrent SSE connections per domain (typically 6). If multiple tabs are open, connections may queue. HTTP/2 multiplexing mitigates this. Not a problem for typical single-tab usage.
 
+## Lessons Learned (2026-03-19 implementation)
+
+### Haiku cannot orchestrate multi-step tool workflows
+
+Haiku (claude-haiku-4-5) will narrate, fabricate, loop, and ask questions rather than call tools in sequence. No amount of prompt engineering fixes this — 17 rules, fabrication guardrails, nudges, and explicit tool names in retry messages all failed.
+
+**Resolution:** Split responsibilities. Haiku handles conversation (ideate, clarify, present results). The system handles execution (sandbox lifecycle, code generation, phase transitions). The coding agent uses the best available model via `getProviderPriority("code_generation")`.
+
+### Conversation skills must strip tools from the request
+
+When a skill is conversational (analyze, advise, summarize), the model must respond with text. But system prompt rules about using tools overpower any user message saying "don't use tools." The fix: detect conversation skills and set `toolsForProvider = undefined`. No tools available = model must respond conversationally.
+
+**Pattern:** Skills carry a `taskType` field. `conversation` type skills prefix their prompt with "This is a CONVERSATION request" which the server action detects and strips tools. `code_generation` skills route to a capable model. This is enforced at the infrastructure level, not the prompt level.
+
+### Phase prompts must not contradict the identity block
+
+The identity block says "NEVER ask clarifying questions." The ideate phase prompt said "ASK clarifying questions." Haiku followed whichever instruction it saw last and looped. All phase prompts must align with the identity block rules.
+
+### Page data context is required for analysis skills
+
+The "Analyze this page" skill needs actual data to analyze. Routes without a context provider in `route-context.ts` leave the PAGE DATA section empty — the model has nothing to read and falls back to asking for instructions.
+
 ## References
 
 - [Self-Dev Sandbox Design (EP-SELF-DEV-001)](2026-03-14-self-dev-sandbox-design.md)
