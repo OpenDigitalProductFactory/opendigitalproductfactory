@@ -1,6 +1,6 @@
 # EP-AUTH-001: Social Identity Sign-In for Customers
 
-**Status:** Draft
+**Status:** Implemented
 **Date:** 2026-03-19
 **Epic:** EP-AUTH-001 — Social Identity Sign-In for Customers
 **Scope:** Add Google and Apple sign-in to the customer portal alongside existing email/password
