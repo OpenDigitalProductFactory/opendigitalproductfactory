@@ -78,3 +78,19 @@ export async function triggerEndpointTests(endpointId: string, probesOnly: boole
     triggeredBy: userId,
   });
 }
+
+export async function triggerDimensionEval(endpointId?: string) {
+  const userId = await requireViewAccess();
+  const session = await auth();
+  if (!session?.user || !can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_capabilities")) {
+    throw new Error("Running dimension eval requires manage_capabilities permission");
+  }
+
+  if (endpointId) {
+    const { runDimensionEval } = await import("@/lib/routing/eval-runner");
+    return runDimensionEval(endpointId, userId);
+  } else {
+    const { runAllDimensionEvals } = await import("@/lib/routing/eval-runner");
+    return runAllDimensionEvals(userId);
+  }
+}
