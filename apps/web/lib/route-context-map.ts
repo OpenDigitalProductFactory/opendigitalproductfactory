@@ -25,7 +25,7 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
     label: "Analyze this page",
     description: "Get key insights about what's on this page",
     capability: null,
-    prompt: "Analyze this page and tell me what's important. Focus on what I might miss: key data, actionable items, missing elements, or configuration issues. Be concise (2-3 sentences max). If nothing notable, just say 'looks good!'",
+    prompt: "This is a CONVERSATION request, not a tool request. Look at the PAGE DATA section in your context. Tell me what's important — key data I might miss, actionable items, missing elements, or things that need attention. Do NOT call any tools. Just read what you already know about this page and give me 2-3 sentences of insight. If nothing notable, say 'looks good!'",
   },
   {
     label: "Do this for me",
