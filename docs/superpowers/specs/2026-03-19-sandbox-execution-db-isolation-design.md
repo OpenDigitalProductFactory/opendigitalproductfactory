@@ -346,6 +346,8 @@ Added packages:
 | EP-HIVE-MIND-001 | Hive Mind — Community Contribution Pipeline | Bidirectional change flow between customer instances and the common project. Implements Modes 2 (community clone) and 3 (customer fork) of `SandboxSourceStrategy`. | Section 2 strategy interface |
 | EP-INSTALL-REFACTOR | Refactor Install Scripts for Dual-Path Setup | Update install scripts for two clear paths: (1) Developer native — `pnpm dev`, local tooling, contributor workflow. (2) Customer iterative — Docker-based platform with self-development sandbox enabled. The sandbox process is what makes path 2 viable. | Sections 1 + 2 complete |
 | EP-SANDBOX-NEO4J-SEED | Neo4j + Qdrant Sandbox Seeding | Add seed data for graph relationships and vector embeddings in sandbox. `neo4j-admin dump/load` and Qdrant snapshot restore. | Section 1 container infrastructure |
+| EP-SANDBOX-POOL | Warm Sandbox Pool | Pre-warm 1-N sandbox stacks (steps 1-4 of pipeline) so builds start near-instantly. Refresh pool after each production promotion. Pool size configurable in admin settings. A warm sandbox is one at checkpoint `deps_installed` — ready for code generation. | Section 3 checkpoint pipeline |
+| EP-CHANGE-MGMT-001 | Deployment Calendar & Change Management | Scheduled promotion windows for sandbox→production changes. Approval workflows, calendar-based deployment slots, freeze periods. Promotion flow (`sandbox-promotion.ts`) becomes calendar-aware — approved changes queue until the next window rather than applying immediately. | Section 4 promotion flow |
 
 ---
 
