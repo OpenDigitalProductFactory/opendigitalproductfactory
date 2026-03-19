@@ -61,11 +61,11 @@ Each of the 7 capability dimensions has a set of ~10 deterministic prompts with 
 | Dimension | Test Type | Scoring Method |
 |---|---|---|
 | `reasoning` | Multi-step logic problems with known answers | Correct answer = 10pts, partial = 5pts, wrong = 0pts. Sum and normalize to 0–100. |
-| `codegen` | "Write function X" → run output against test cases | Pass rate across test cases × 100 |
-| `toolFidelity` | Present tool schemas → validate call structure, correct arguments, correct abstention | Schema validity × argument correctness × abstention accuracy |
+| `codegen` | "Write function X" → static analysis (AST structure check, expected function signature, pattern matching against reference solution). Runtime test execution deferred until sandbox infrastructure is available. | % of structural checks passed × 100 |
+| `toolFidelity` | Present tool schemas → validate call structure, correct arguments, correct abstention. Each test scores 3 sub-checks independently (0 or 1 each): (a) called the right tool, (b) arguments match expected types/values, (c) correctly abstained when no tool fits. Dimension score = average of all sub-check scores × 100. | (tool_correct + args_correct + abstention_correct) / total_checks × 100 |
 | `instructionFollowing` | Give specific format constraints → check compliance | % of constraints satisfied |
 | `structuredOutput` | Request JSON matching a schema → validate against schema | Schema conformance rate × 100 |
-| `conversational` | Multi-turn coherence prompts (orchestrator-graded 1–5, scaled) | Average orchestrator score × 20 |
+| `conversational` | Multi-turn coherence prompts, graded by the highest-tier endpoint that is NOT the endpoint under evaluation (avoids self-evaluation). If the endpoint under test IS the top-tier orchestrator, grade with the next-best endpoint. | Average grader score (1–5) × 20 |
 | `contextRetention` | Needle-in-haystack at 25%, 50%, 75% of context window | Retrieval accuracy × 100 |
 
 ### Test Execution Flow
@@ -73,7 +73,7 @@ Each of the 7 capability dimensions has a set of ~10 deterministic prompts with 
 1. Operator triggers eval from ops UI — per-endpoint or all active endpoints
 2. For each endpoint × dimension: run the golden test set
 3. Score each response using the dimension-specific scoring method
-4. Compute new dimension score using weighted rolling average: `newScore = 0.7 × evalScore + 0.3 × previousScore`
+4. Compute new dimension score: on the **first eval** (`evalCount == 0`), use the raw eval score directly (`newScore = evalScore`) since the previous score is seed data. On subsequent evals, use the weighted rolling average: `newScore = 0.7 × evalScore + 0.3 × previousScore`
 5. Update `ModelProvider` capability fields
 6. Update provenance: `profileSource = "evaluated"`, increment `evalCount`, set `lastEvalAt`
 7. Update confidence: `profileConfidence = "medium"` if evalCount < 5, `"high"` if >= 5
@@ -81,7 +81,7 @@ Each of the 7 capability dimensions has a set of ~10 deterministic prompts with 
 
 ### Drift Detection
 
-After computing new scores, compare against previous values:
+Drift detection compares the **raw eval score** against the **previous stored score** (before the rolling average is applied). This avoids the dampening effect of the smoothing formula and catches real capability changes even when the rolling average masks them:
 
 | Delta | Action |
 |---|---|
@@ -97,18 +97,31 @@ Golden test sets are stored as a static registry in code (similar to how `TASK_T
 
 ```typescript
 interface GoldenTest {
+  id: string;                               // e.g., "reasoning-001"
+  version: number;                          // incremented when test content changes
   dimension: BuiltinDimension;
   prompt: string;
   systemPrompt?: string;
-  tools?: Array<Record<string, unknown>>;  // for toolFidelity tests
+  tools?: Array<Record<string, unknown>>;   // for toolFidelity tests
   expectedSchema?: object;                  // for structuredOutput tests
-  scoring: "exact" | "partial" | "orchestrator" | "schema" | "tool_call";
+  scoring: "exact" | "partial" | "orchestrator" | "structural" | "schema" | "tool_call" | "retrieval";
   expectedOutput?: string;                  // for exact/partial scoring
   maxTokens?: number;
 }
 ```
 
-Tests are versioned — if a golden test is updated, the old version is retained for comparison (so drift detection isn't triggered by test changes).
+- `"structural"` — AST/pattern-based code analysis (for codegen)
+- `"retrieval"` — needle-in-haystack extraction accuracy (for contextRetention)
+
+Tests are versioned — if a golden test is updated, the old version is retained in the `EndpointTestRun.results` JSON for comparison. Drift detection compares scores only across the same test version.
+
+### Error Handling for Golden Tests
+
+If a golden test prompt fails (endpoint unavailable, timeout, malformed response):
+- The individual test is scored as 0 (failed)
+- The eval continues with remaining tests — one failure doesn't abort the dimension
+- The `EndpointTestRun.results` records the failure reason per prompt
+- If more than half the prompts in a dimension fail, that dimension's score is marked as `"inconclusive"` and the previous score is retained (no update). The operator sees a warning in the ops UI.
 
 ---
 
@@ -129,6 +142,9 @@ When the orchestrator evaluates a conversation, the task type determines which c
 | `creative` | `conversational` | `reasoning` |
 | `web-search` | `toolFidelity` | — |
 | `status-query` | `instructionFollowing` | — |
+| `unknown` | — (dropped) | — |
+
+Observations with `taskType: "unknown"` are silently dropped — no dimension update. The classifier's low-confidence output shouldn't influence capability profiles.
 
 ### Score Translation
 
@@ -163,7 +179,11 @@ This is deliberately small — production observations shift scores slowly. Gold
 
 - **Golden test recency protection:** Production observations do not update a dimension within 24 hours of a golden test eval on that dimension. The golden test result is authoritative during that window.
 - **Score clamping:** All scores are clamped to [0, 100]. No runaway drift from a burst of bad conversations.
-- **Minimum observation threshold:** At least 5 production observations on a dimension are required before feedback affects the `ModelProvider` profile. Until then, observations are accumulated in `EndpointTaskPerformance.dimensionScores` but not propagated.
+- **Minimum observation threshold (two-stage accumulation):** Production observations follow a two-stage flow:
+  1. **Accumulate:** Each observation writes its delta to `EndpointTaskPerformance.dimensionScores` as a per-task-type running tally: `{ "reasoning": { "count": 3, "totalDelta": +12 } }`. The count and totalDelta are incremented per observation.
+  2. **Propagate:** Once a dimension's observation count across ALL task types reaches 5, the average delta (`totalDelta / count`) is applied to `ModelProvider`'s dimension field. After propagation, the tally resets.
+
+  This means 5 observations on the same dimension from different task types (e.g., 2 from `reasoning`, 3 from `creative`) satisfy the threshold together. The per-task-type detail is preserved in `EndpointTaskPerformance.dimensionScores` for diagnostics.
 - **Secondary dimensions receive half the delta:** For task types with a secondary dimension (e.g., `code-gen` → `instructionFollowing`), the secondary dimension receives `dimensionDelta / 2`.
 
 ---
