@@ -5,6 +5,8 @@ const PUBLIC_PATHS = [
   "/welcome",
   "/customer-login",
   "/customer-signup",
+  "/customer-link-account",
+  "/customer-complete-profile",
   "/api/auth",
   "/api/health",
   "/api/calendar/feed",
