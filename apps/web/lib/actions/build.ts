@@ -204,6 +204,8 @@ export async function deleteFeatureBuild(buildId: string): Promise<void> {
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
+  // Delete related records first (foreign key constraints)
+  await prisma.buildActivity.deleteMany({ where: { buildId } });
   await prisma.featureBuild.delete({ where: { buildId } });
 }
 
