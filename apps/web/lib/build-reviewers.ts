@@ -39,8 +39,10 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }
 
 export function buildPlanReviewPrompt(plan: BuildPlanDoc): string {
-  const taskList = plan.tasks.map((t, i) => `  ${i + 1}. ${t.title}: test="${t.testFirst}" impl="${t.implement}" verify="${t.verify}"`).join("\n");
-  const fileList = plan.fileStructure.map((f) => `  ${f.action}: ${f.path} — ${f.purpose}`).join("\n");
+  const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+  const files = Array.isArray(plan?.fileStructure) ? plan.fileStructure : [];
+  const taskList = tasks.map((t, i) => `  ${i + 1}. ${t?.title ?? "Untitled"}: test="${t?.testFirst ?? ""}" impl="${t?.implement ?? ""}" verify="${t?.verify ?? ""}"`).join("\n") || "  (no tasks defined)";
+  const fileList = files.map((f) => `  ${f?.action ?? "?"}: ${f?.path ?? "?"} — ${f?.purpose ?? ""}`).join("\n") || "  (no file structure defined)";
 
   return `You are reviewing an implementation plan for a platform feature.
 
