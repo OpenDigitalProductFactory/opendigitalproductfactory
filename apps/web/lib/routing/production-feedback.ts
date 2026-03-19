@@ -72,7 +72,7 @@ export async function updateEndpointDimensionScores(
   });
 
   const currentDimScores: Record<string, DimensionTally> =
-    (existing?.dimensionScores as Record<string, DimensionTally>) ?? {};
+    (existing?.dimensionScores as unknown as Record<string, DimensionTally>) ?? {};
 
   // Accumulate deltas
   for (const { dimension, weight } of mappings) {
@@ -86,11 +86,11 @@ export async function updateEndpointDimensionScores(
   // Upsert EndpointTaskPerformance (creates record if first observation for this task type)
   await prisma.endpointTaskPerformance.upsert({
     where: { endpointId_taskType: { endpointId, taskType } },
-    update: { dimensionScores: currentDimScores },
+    update: { dimensionScores: currentDimScores as any },
     create: {
       endpointId,
       taskType,
-      dimensionScores: currentDimScores,
+      dimensionScores: currentDimScores as any,
     },
   });
 
@@ -103,7 +103,7 @@ export async function updateEndpointDimensionScores(
   // Aggregate tallies across all task types
   const aggregated: Record<string, DimensionTally> = {};
   for (const p of allPerfs) {
-    const scores = (p.dimensionScores as Record<string, DimensionTally>) ?? {};
+    const scores = (p.dimensionScores as unknown as Record<string, DimensionTally>) ?? {};
     for (const [dim, tally] of Object.entries(scores)) {
       if (!aggregated[dim]) aggregated[dim] = { count: 0, totalDelta: 0 };
       aggregated[dim].count += tally.count;
@@ -143,7 +143,7 @@ export async function updateEndpointDimensionScores(
 
     // Reset tallies for propagated dimensions across all task types
     for (const p of allPerfs) {
-      const scores = (p.dimensionScores as Record<string, DimensionTally>) ?? {};
+      const scores = (p.dimensionScores as unknown as Record<string, DimensionTally>) ?? {};
       let changed = false;
       for (const dim of resetDimensions) {
         if (scores[dim]) {
@@ -154,7 +154,7 @@ export async function updateEndpointDimensionScores(
       if (changed) {
         await prisma.endpointTaskPerformance.update({
           where: { id: p.id },
-          data: { dimensionScores: scores },
+          data: { dimensionScores: scores as any },
         });
       }
     }
