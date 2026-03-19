@@ -1,14 +1,16 @@
 # Social Identity Sign-In Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** Implemented (2026-03-19)
 
 **Goal:** Add Google and Apple sign-in to the customer portal alongside existing email/password, with account linking and new customer onboarding.
 
-**Architecture:** Extend existing NextAuth v5 config with Google/Apple providers. New `SocialIdentity` and `AccountInvite` Prisma models. Three auth flows (direct sign-in, prompt-to-link, new customer onboard) routed via the `signIn` callback. Bcrypt upgrade for password hashing.
+**Architecture:** Extend existing NextAuth v5 config with Google/Apple providers. New `SocialIdentity` and `AccountInvite` Prisma models. Three auth flows (direct sign-in, prompt-to-link, new customer onboard) routed via the `signIn` callback. Bcrypt upgrade for password hashing. Admin settings panel for provider credential management.
 
 **Tech Stack:** NextAuth v5 (beta.30), Prisma, PostgreSQL, React, bcryptjs, jose (JWT signing for temp tokens)
 
 **Spec:** `docs/superpowers/specs/2026-03-19-social-identity-signin-design.md`
+
+**Activation:** Admin → Settings → Social Sign-In for Customers. Enter provider credentials, social buttons appear automatically on customer login/signup pages. No env file editing or server restart needed.
 
 ---
 

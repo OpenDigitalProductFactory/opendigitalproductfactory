@@ -206,62 +206,50 @@ Section within customer account settings:
 - **Temporary state tokens:** Provider info carried through link/onboard flows uses a short-lived signed JWT (5 min expiry), not plain cookies.
 - **Social providers are customer-only:** The `signIn` callback explicitly prevents social sign-ins from creating workforce sessions.
 
-### 6. Provider Setup Guides
+### 6. Provider Setup & Activation
 
-#### Google OAuth Setup
+All provider configuration is done through the **Admin → Settings** page in the platform UI. No environment file editing or server restarts required.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Navigate to **APIs & Services → OAuth consent screen**
-4. Configure consent screen:
-   - User type: External
-   - App name: your platform name
-   - Authorized domains: your production domain
-   - Scopes: `email`, `profile`, `openid`
-5. Navigate to **APIs & Services → Credentials**
-6. Click **Create Credentials → OAuth 2.0 Client IDs**
-7. Application type: Web application
-8. Add authorized redirect URI: `https://<your-domain>/api/auth/callback/google`
-   - For local dev: `http://localhost:3000/api/auth/callback/google`
-9. Copy Client ID and Client Secret to environment variables
+#### How to enable social sign-in
 
-#### Apple Sign In Setup
+1. Log in as an admin (role HR-000)
+2. Navigate to **Admin → Settings**
+3. Scroll to **Social Sign-In for Customers**
+4. Click **Show setup guide** for Google or Apple to see step-by-step instructions
+5. Enter the credentials in the fields and click **Save**
+6. Social sign-in buttons appear on the customer login/signup pages automatically
 
-1. Go to [Apple Developer Portal](https://developer.apple.com/) (requires paid Apple Developer account, $99/year)
-2. Navigate to **Certificates, Identifiers & Profiles**
-3. Register an **App ID** (if not already done):
-   - Enable "Sign in with Apple" capability
-4. Register a **Services ID**:
-   - This becomes your `APPLE_CLIENT_ID`
-   - Configure domains and return URLs:
-     - Domain: your production domain
-     - Return URL: `https://<your-domain>/api/auth/callback/apple`
-5. Create a **Key** for Sign in with Apple:
-   - Download the `.p8` private key file (only downloadable once)
-   - Note the Key ID → `APPLE_KEY_ID`
-6. Note your Team ID (top right of developer portal) → `APPLE_TEAM_ID`
-7. The client secret for Apple is a JWT generated from the private key — NextAuth's Apple provider handles this automatically when given the key, team ID, and key ID
+Credentials are stored in the `PlatformConfig` database table and synced to the auth system on save. At least one provider must be fully configured for social buttons to appear.
 
-#### Environment Variables Summary
+#### Google OAuth (free, ~10 minutes)
 
-```env
-# Google
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
+- **Account type:** Personal Google account — no business account required
+- **Cost:** Free (Google OAuth is part of the free tier, no credit card needed)
+- **Localhost:** Works for development — add `http://localhost:3000/api/auth/callback/google` as a redirect URI
+- **Domain:** For production, add `https://<your-domain>/api/auth/callback/google`. Domain does not need public WHOIS — Google verifies via DNS or meta tag
+- **Testing mode:** Up to 100 test users without domain verification
 
-# Apple
-APPLE_CLIENT_ID=your-apple-services-id
-APPLE_CLIENT_SECRET=your-apple-private-key-contents
-APPLE_TEAM_ID=your-apple-team-id
-APPLE_KEY_ID=your-apple-key-id
-```
+Setup: Google Cloud Console → create project → APIs & Services → OAuth consent screen → Credentials → OAuth 2.0 Client ID (Web application). Full guide available in the admin settings panel.
+
+#### Apple Sign In (~20 minutes, $99/year)
+
+- **Account type:** Personal or organizational Apple Developer account ($99/year)
+- **Localhost:** Not supported — Apple requires a real domain. Use a tunnel (e.g., ngrok) for local development
+- **Domain:** Does not need public WHOIS — Apple verifies through its own developer portal
+- **Private key:** The `.p8` key file can only be downloaded once — store it safely
+
+Setup: Apple Developer Portal → Certificates, Identifiers & Profiles → App ID + Services ID + Key. Full guide available in the admin settings panel.
+
+#### Recommendation
+
+Start with **Google only** — it's free, fast, and works on localhost. Add Apple later when you have a domain and the developer account.
 
 ### 7. Migration Strategy
 
 1. **Schema migration:** Add `SocialIdentity` table, `AccountInvite` table, add `name` field to `CustomerContact`, add relations
 2. **Password hash migration:** Add bcrypt hashing for new passwords immediately. Existing SHA-256 hashes migrate lazily — on successful login, re-hash with bcrypt and update the row. Both hash formats are checked during the transition period.
-3. **Feature rollout:** Social buttons can be hidden behind an environment flag (`ENABLE_SOCIAL_AUTH=true`) for staged rollout
-4. **Rollback:** If issues arise, disable social providers by removing the env flag. Existing email/password auth is unaffected. `SocialIdentity` rows persist harmlessly.
+3. **Feature rollout:** Social buttons appear automatically when credentials are configured via Admin → Settings. No manual env var editing needed.
+4. **Rollback:** Remove credentials from Admin → Settings. Social buttons disappear. Existing email/password auth is unaffected. `SocialIdentity` rows persist harmlessly.
 
 ### 8. Future Considerations (Out of Scope)
 
