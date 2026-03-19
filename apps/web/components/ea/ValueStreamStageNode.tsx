@@ -64,10 +64,47 @@ export function ValueStreamStageNode({ data, selected = false }: Props) {
         position: "relative",
       }}
     >
-      <div data-stage-handle-top="true">{renderHandle(Position.Top, "data-stage-handle-top")}</div>
-      <div data-stage-handle-right="true">{renderHandle(Position.Right, "data-stage-handle-right")}</div>
-      <div data-stage-handle-bottom="true">{renderHandle(Position.Bottom, "data-stage-handle-bottom")}</div>
-      <div data-stage-handle-left="true">{renderHandle(Position.Left, "data-stage-handle-left")}</div>
+      {/* Handles positioned absolutely at the edges */}
+      <div
+        style={{
+          position: "absolute",
+          top: "-5px",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
+      >
+        {renderHandle(Position.Top, "data-stage-handle-top")}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          right: "-5px",
+          top: "50%",
+          transform: "translateY(-50%)",
+        }}
+      >
+        {renderHandle(Position.Right, "data-stage-handle-right")}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          bottom: "-5px",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
+      >
+        {renderHandle(Position.Bottom, "data-stage-handle-bottom")}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: "-5px",
+          top: "50%",
+          transform: "translateY(-50%)",
+        }}
+      >
+        {renderHandle(Position.Left, "data-stage-handle-left")}
+      </div>
 
       <div
         style={{
