@@ -11,7 +11,7 @@ export interface FallbackResult {
   providerId: string;
   modelId: string;
   content: string;
-  toolCalls: Array<{ name: string; arguments: Record<string, unknown> }>;
+  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   tokenUsage?: { inputTokens: number; outputTokens: number };
   downgraded: boolean;
   downgradeMessage: string | null;
