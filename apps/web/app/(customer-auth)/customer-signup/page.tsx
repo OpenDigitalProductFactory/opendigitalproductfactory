@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { customerSignup } from "@/lib/actions/customer-auth";
+import { SocialButtons, SocialDivider } from "@/components/social-buttons";
 
 export default function CustomerSignupPage() {
   const router = useRouter();
@@ -61,6 +62,13 @@ export default function CustomerSignupPage() {
         <p style={{ color: "#8888a0", fontSize: 13, marginBottom: 24 }}>
           Sign up for the customer portal
         </p>
+
+        {process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true" && (
+          <>
+            <SocialButtons />
+            <SocialDivider />
+          </>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>

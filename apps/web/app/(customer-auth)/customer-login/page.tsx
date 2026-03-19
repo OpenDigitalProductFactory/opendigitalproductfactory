@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SocialButtons, SocialDivider } from "@/components/social-buttons";
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -53,6 +54,13 @@ export default function CustomerLoginPage() {
         <p style={{ color: "#8888a0", fontSize: 13, marginBottom: 24 }}>
           Sign in to your account
         </p>
+
+        {process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true" && (
+          <>
+            <SocialButtons />
+            <SocialDivider />
+          </>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
