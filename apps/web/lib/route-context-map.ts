@@ -17,6 +17,30 @@ export type RouteContextDef = {
   }>;
 };
 
+// ─── Universal Skills (added to every route) ────────────────────────────────
+// These appear on every page, giving the agent baseline page-interaction ability.
+
+const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
+  {
+    label: "Analyze this page",
+    description: "Get key insights about what's on this page",
+    capability: null,
+    prompt: "Analyze this page and tell me what's important. Focus on what I might miss: key data, actionable items, missing elements, or configuration issues. Be concise (2-3 sentences max). If nothing notable, just say 'looks good!'",
+  },
+  {
+    label: "Do this for me",
+    description: "Perform the primary action on this page",
+    capability: null,
+    prompt: "Look at what this page is for and do the main thing a human would do here. If it's a form, fill it out with sensible defaults. If it's a list, create a new entry. If it's a dashboard, summarize what needs attention. Use your tools — don't describe what to do, just do it.",
+  },
+  {
+    label: "Add a skill",
+    description: "Add a new skill to this page's agent",
+    capability: null,
+    prompt: "I want to add a new skill to this page's agent. A skill is a quick-action button that triggers a specific prompt. Ask me what the skill should do, then use propose_file_change to add it to the skills array in route-context-map.ts for this route.",
+  },
+];
+
 export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
   "/portfolio": {
     routePrefix: "/portfolio",
@@ -36,6 +60,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         capability: "view_portfolio",
         prompt:
           "Analyse the health metrics for this portfolio — what's strong, what's at risk?",
+      },
+      {
+        label: "Register a product",
+        description: "Create a new digital product in the portfolio",
+        capability: "view_portfolio",
+        prompt: "Help me register a new digital product. Ask me for the name and which portfolio it belongs to, then create it.",
       },
       {
         label: "Find a product",
@@ -60,6 +90,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This page shows the digital product inventory with lifecycle stages (plan, design, build, production, retirement) and statuses (draft, active, inactive). Users manage individual product records, stage-gate readiness, and portfolio attribution.",
     domainTools: ["create_digital_product", "update_lifecycle"],
     skills: [
+      {
+        label: "Advance a product",
+        description: "Move a product to the next lifecycle stage",
+        capability: "view_inventory",
+        prompt: "Help me advance a product to the next lifecycle stage. Check the stage-gate criteria and update the lifecycle.",
+      },
       {
         label: "Lifecycle review",
         description: "Analyse products by lifecycle stage",
@@ -121,6 +157,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainTools: [],
     skills: [
       {
+        label: "Assign a role",
+        description: "Assign or update an employee's role",
+        capability: "view_employee",
+        prompt: "Help me assign or update an employee's role. Ask me which employee and what role, then make the change.",
+      },
+      {
         label: "Role tiers",
         description: "Review HITL tiers and SLA commitments",
         capability: "view_employee",
@@ -149,6 +191,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This page displays customer accounts and service relationships. Data here is classified as confidential — it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, and friction points.",
     domainTools: [],
     skills: [
+      {
+        label: "Add a customer",
+        description: "Register a new customer account",
+        capability: "view_customer",
+        prompt: "Help me register a new customer account. Ask me for the details, then create it.",
+      },
       {
         label: "Account overview",
         description: "Summarise a customer account",
@@ -262,6 +310,18 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainTools: ["add_provider", "update_provider_category"],
     skills: [
       {
+        label: "Add a provider",
+        description: "Register a new AI provider",
+        capability: "manage_provider_connections",
+        prompt: "Help me add and configure a new AI provider. Walk me through the setup.",
+      },
+      {
+        label: "Optimize providers",
+        description: "Rebalance provider priorities for cost and capability",
+        capability: "manage_provider_connections",
+        prompt: "Run the provider priority optimization — rebalance for best capability-per-dollar.",
+      },
+      {
         label: "Configure provider",
         description: "Set up a provider connection",
         capability: "manage_provider_connections",
@@ -324,6 +384,18 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "The agent should understand the regulation currently being viewed and its obligations when on a regulation detail page.",
     domainTools: [],
     skills: [
+      {
+        label: "Add a regulation",
+        description: "Register a new regulation to track",
+        capability: "manage_compliance",
+        prompt: "Help me register a new regulation. Ask me for the name, jurisdiction, and key details, then create it with its obligations.",
+      },
+      {
+        label: "Map a control",
+        description: "Link a control to an obligation for coverage",
+        capability: "manage_compliance",
+        prompt: "Help me map a control to an obligation. Show me which obligations have gaps and let me pick one to address.",
+      },
       {
         label: "Gap assessment",
         description: "Analyse compliance coverage gaps",
@@ -397,6 +469,7 @@ export const FALLBACK_ROUTE_CONTEXT: RouteContextDef =
 /**
  * Resolve which route context applies for a given pathname.
  * Uses longest prefix match; falls back to workspace.
+ * Merges universal skills into every route's skills array.
  */
 export function resolveRouteContext(pathname: string): RouteContextDef {
   let best: RouteContextDef = FALLBACK_ROUTE_CONTEXT;
@@ -411,5 +484,10 @@ export function resolveRouteContext(pathname: string): RouteContextDef {
     }
   }
 
-  return best;
+  // Merge universal skills — page-specific first, then universal, then "Report an issue" last
+  const reportIssue = best.skills.find((s) => s.label === "Report an issue");
+  const pageSkills = best.skills.filter((s) => s.label !== "Report an issue");
+  const mergedSkills = [...UNIVERSAL_SKILLS, ...pageSkills, ...(reportIssue ? [reportIssue] : [])];
+
+  return { ...best, skills: mergedSkills };
 }
