@@ -4,8 +4,8 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Apple from "next-auth/providers/apple";
 import { prisma } from "@dpf/db";
-import { verifyPassword, hashPassword } from "./password.js";
-import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+import { verifyPassword, hashPassword } from "./password";
+import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 
 export type UserType = "admin" | "customer";
 
