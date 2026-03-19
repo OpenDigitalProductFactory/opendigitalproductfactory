@@ -8,6 +8,7 @@ import { callWithFailover } from "./ai-provider-priority";
 import { routePrimary } from "./agent-router";
 import { loadEndpoints } from "./agent-router-data";
 import { getTaskType } from "./task-types";
+import { updateEndpointDimensionScores } from "./routing/production-feedback";
 import type { SensitivityLevel } from "./agent-router-types";
 import type { ChatMessage } from "./ai-inference";
 
@@ -146,6 +147,11 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
 
   // 8. Update performance profile
   await updatePerformanceProfile(endpointId, taskType, score);
+
+  // EP-INF-001-P6: Feed orchestrator score into routing dimension profiles
+  await updateEndpointDimensionScores(input.endpointId, input.taskType, score).catch((err) =>
+    console.error("[orchestrator-evaluator] dimension score update failed:", err),
+  );
 }
 
 // ─── updateHumanScore ───────────────────────────────────────────────────────
