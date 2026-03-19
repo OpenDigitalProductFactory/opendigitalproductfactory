@@ -11,6 +11,11 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/platform/ai/providers": getProvidersContext,
   "/ops": getOpsContext,
   "/compliance": getComplianceContext,
+  "/workspace": getWorkspaceContext,
+  "/portfolio": getPortfolioContext,
+  "/inventory": getInventoryContext,
+  "/employee": getEmployeeContext,
+  "/build": getBuildContext,
 };
 
 export async function getRouteDataContext(routeContext: string, userId: string): Promise<RouteContextResult> {
@@ -250,5 +255,107 @@ async function getOpsContext(): Promise<string> {
     "",
     "ALL BACKLOG ITEMS:",
     ...itemLines,
+  ].join("\n");
+}
+
+// ─── Cross-Cutting Workspace Context ──────────────────────────────────────
+
+async function getWorkspaceContext(): Promise<string> {
+  const [itemCount, openItems, epicCount, buildCount, productCount, providerCount] = await Promise.all([
+    prisma.backlogItem.count(),
+    prisma.backlogItem.count({ where: { status: { in: ["open", "in-progress"] } } }),
+    prisma.epic.count(),
+    prisma.featureBuild.count({ where: { phase: { notIn: ["complete", "failed"] } } }),
+    prisma.digitalProduct.count(),
+    prisma.modelProvider.count({ where: { status: "active" } }),
+  ]);
+
+  return [
+    "\nPAGE DATA — Workspace Overview:",
+    `Backlog: ${itemCount} items total, ${openItems} open/in-progress across ${epicCount} epics`,
+    `Products: ${productCount} digital products registered`,
+    `Builds: ${buildCount} active feature builds`,
+    `AI: ${providerCount} active providers`,
+  ].join("\n");
+}
+
+// ─── Portfolio Context ───────────────────────────────────────────────────
+
+async function getPortfolioContext(): Promise<string> {
+  const [portfolioCount, productCount, nodeCount] = await Promise.all([
+    prisma.portfolio.count(),
+    prisma.digitalProduct.count(),
+    prisma.taxonomyNode.count(),
+  ]);
+
+  const portfolios = await prisma.portfolio.findMany({
+    orderBy: { name: "asc" },
+    select: { name: true, _count: { select: { products: true } } },
+  });
+
+  return [
+    "\nPAGE DATA — Portfolio:",
+    `${portfolioCount} portfolios, ${productCount} products, ${nodeCount} taxonomy nodes`,
+    "",
+    ...portfolios.map((p) => `- ${p.name}: ${p._count.products} products`),
+  ].join("\n");
+}
+
+// ─── Inventory Context ──────────────────────────────────────────────────
+
+async function getInventoryContext(): Promise<string> {
+  const products = await prisma.digitalProduct.findMany({
+    orderBy: { name: "asc" },
+    select: { productId: true, name: true, lifecycleStage: true, status: true, version: true },
+    take: 30,
+  });
+
+  const byStage = new Map<string, number>();
+  for (const p of products) {
+    byStage.set(p.lifecycleStage, (byStage.get(p.lifecycleStage) ?? 0) + 1);
+  }
+
+  return [
+    "\nPAGE DATA — Inventory:",
+    `${products.length} products`,
+    `By stage: ${[...byStage.entries()].map(([s, c]) => `${s}=${c}`).join(", ")}`,
+    "",
+    ...products.map((p) => `- ${p.productId}: ${p.name} [${p.lifecycleStage}/${p.status}] v${p.version}`),
+  ].join("\n");
+}
+
+// ─── Employee Context ───────────────────────────────────────────────────
+
+async function getEmployeeContext(): Promise<string> {
+  const employees = await prisma.employeeProfile.findMany({
+    orderBy: { displayName: "asc" },
+    select: { displayName: true, jobTitle: true, department: true },
+    take: 30,
+  });
+
+  return [
+    "\nPAGE DATA — Employees:",
+    `${employees.length} employee profiles`,
+    "",
+    ...employees.map((e) => `- ${e.displayName}: ${e.jobTitle ?? "no title"}, ${e.department ?? "no dept"}`),
+  ].join("\n");
+}
+
+// ─── Build Studio Context ───────────────────────────────────────────────
+
+async function getBuildContext(userId: string): Promise<string> {
+  const builds = await prisma.featureBuild.findMany({
+    where: { createdById: userId },
+    orderBy: { updatedAt: "desc" },
+    select: { buildId: true, title: true, phase: true, sandboxPort: true },
+    take: 10,
+  });
+
+  if (builds.length === 0) return "\nPAGE DATA — Build Studio:\nNo builds yet. Create one to get started.";
+
+  return [
+    "\nPAGE DATA — Build Studio:",
+    `${builds.length} builds:`,
+    ...builds.map((b) => `- ${b.buildId}: ${b.title} [${b.phase}]${b.sandboxPort ? ` (sandbox: port ${b.sandboxPort})` : ""}`),
   ].join("\n");
 }
