@@ -60,6 +60,7 @@ export async function runAgenticLoop(params: {
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: FailoverResult | FallbackResult | null = null;
+  let continuationNudges = 0;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     let result: FailoverResult | FallbackResult;
@@ -93,8 +94,58 @@ export async function runAgenticLoop(params: {
     totalInputTokens += inputTok ?? 0;
     totalOutputTokens += outputTok ?? 0;
 
-    // No tool calls — agent is done, return the text response
+    // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
+      const trimmed = result.content.trim();
+
+      // Diagnostic: log raw response so we can trace stalls
+      console.log(
+        `[agentic-loop] iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
+        `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
+        `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
+      );
+
+      // Detect "stalled intent": agent narrates or acknowledges but doesn't call tools.
+      // Only nudge once per loop, and only if iterations remain.
+      const hasTools = toolsForProvider && toolsForProvider.length > 0;
+      const canNudge = continuationNudges < 1 && iteration < MAX_ITERATIONS - 1 && hasTools;
+
+      if (canNudge) {
+        // Pattern (a): After tool use, agent says it will continue but stops
+        const postToolStall = executedTools.length > 0
+          && /(?:now I (?:have enough|can|will|'ll)|(?:I(?:'ll| will| need to| am going to| can now| have enough to)) (?:design|create|build|implement|proceed|set up|start|prepare|draft|generate|produce|write|put together|outline|define|propose))/i.test(trimmed);
+        // Pattern (b): Agent narrates tool intent instead of calling tool
+        const toolIntentNarration = /(?:(?:let me|I(?:'ll| will| can| should| need to)) (?:search|read|look|check|find|query|analyze|investigate|examine|review|fetch|scan|browse|inspect|explore))/i.test(trimmed);
+        // Pattern (c): Short ack/affirmation without action
+        const shortAck = trimmed.length < 80
+          && /^(?:sure|ok|okay|absolutely|of course|certainly|right|yes|got it|understood|will do|on it|searching|looking|checking|let me|ready|perfect|great)/i.test(trimmed);
+        // Pattern (d): Empty or trivially short response — model returned nothing useful
+        const emptyResponse = trimmed.length < 5;
+        // Pattern (e): Contamination — model mimics internal message formatting
+        // instead of actually calling tools (e.g. outputs "[Calling tool_name]" as text)
+        const contamination = /^\[(?:Calling|Tool result|tool used)/i.test(trimmed);
+
+        if (postToolStall || toolIntentNarration || shortAck || emptyResponse || contamination) {
+          continuationNudges++;
+          const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
+          console.log(
+            `[agentic-loop] nudging: postTool=${postToolStall} toolIntent=${toolIntentNarration} ` +
+            `shortAck=${shortAck} empty=${emptyResponse} contamination=${contamination}`,
+          );
+          messages = [
+            ...messages,
+            ...(trimmed.length > 0
+              ? [{ role: "assistant" as const, content: result.content }]
+              : []),
+            {
+              role: "user" as const,
+              content: `[System: Do not narrate or ask for permission — call a tool now. Your available tools include: ${toolNames}. Pick the most relevant one and call it.]`,
+            },
+          ];
+          continue;
+        }
+      }
+
       return {
         content: result.content,
         providerId: result.providerId,
@@ -108,7 +159,12 @@ export async function runAgenticLoop(params: {
       };
     }
 
-    // Process tool calls
+    // Collect all immediate tool results for this iteration
+    const iterationResults: Array<{
+      tc: { id: string; name: string; arguments: Record<string, unknown> };
+      toolResult: ToolResult;
+    }> = [];
+
     for (const tc of result.toolCalls) {
       const toolDef = tools.find((t) => t.name === tc.name);
 
@@ -131,7 +187,7 @@ export async function runAgenticLoop(params: {
         };
       }
 
-      // Immediate tools — execute and continue the loop
+      // Immediate tools — execute
       const toolResult = await executeTool(
         tc.name,
         tc.arguments,
@@ -140,20 +196,27 @@ export async function runAgenticLoop(params: {
       );
 
       executedTools.push({ name: tc.name, result: toolResult });
-
-      // Add the tool call and result to the message history for the next iteration
-      messages = [
-        ...messages,
-        {
-          role: "assistant" as const,
-          content: result.content || `[Calling ${tc.name}]`,
-        },
-        {
-          role: "user" as const,
-          content: `[Tool result for ${tc.name}: ${toolResult.success ? toolResult.message : `Error: ${toolResult.error}`}${toolResult.data ? `\nData: ${JSON.stringify(toolResult.data).slice(0, 3000)}` : ""}]`,
-        },
-      ];
+      iterationResults.push({ tc, toolResult });
     }
+
+    // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
+    // This gives the model its own tool-call history in the native structured format
+    // that callProvider will serialize correctly per provider.
+    messages = [
+      ...messages,
+      {
+        role: "assistant" as const,
+        content: result.content,
+        toolCalls: result.toolCalls,
+      },
+      ...iterationResults.map(({ tc, toolResult }) => ({
+        role: "tool" as const,
+        content: toolResult.success
+          ? `${toolResult.message}${toolResult.data ? `\n${JSON.stringify(toolResult.data).slice(0, 3000)}` : ""}`
+          : `Error: ${toolResult.error ?? "unknown error"}`,
+        toolCallId: tc.id,
+      })),
+    ];
   }
 
   // Max iterations reached — return whatever we have

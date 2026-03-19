@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { extractAnthropicToolCalls, extractOpenAIToolCalls } from "./ai-inference";
+import {
+  extractAnthropicToolCalls,
+  extractOpenAIToolCalls,
+  formatMessageForAnthropic,
+  formatMessageForOpenAI,
+} from "./ai-inference";
+import type { ChatMessage } from "./ai-inference";
 
 describe("extractToolCalls", () => {
   describe("Anthropic format", () => {
@@ -43,6 +49,89 @@ describe("extractToolCalls", () => {
       ];
       const result = extractOpenAIToolCalls(toolCalls);
       expect(result[0]!.id).toMatch(/^synth_/);
+    });
+  });
+});
+
+describe("formatMessagesForProvider", () => {
+  describe("Anthropic", () => {
+    it("formats assistant message with toolCalls as content block array", () => {
+      const msg: ChatMessage = {
+        role: "assistant",
+        content: "Searching...",
+        toolCalls: [{ id: "toolu_01A", name: "search", arguments: { q: "agent" } }],
+      };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted.role).toBe("assistant");
+      expect(formatted.content).toEqual([
+        { type: "text", text: "Searching..." },
+        { type: "tool_use", id: "toolu_01A", name: "search", input: { q: "agent" } },
+      ]);
+    });
+
+    it("formats assistant with empty content and toolCalls", () => {
+      const msg: ChatMessage = {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "toolu_01A", name: "search", arguments: { q: "agent" } }],
+      };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted.content).toEqual([
+        { type: "tool_use", id: "toolu_01A", name: "search", input: { q: "agent" } },
+      ]);
+    });
+
+    it("converts tool role message to user with tool_result block", () => {
+      const msg: ChatMessage = {
+        role: "tool",
+        content: "Found 3 files",
+        toolCallId: "toolu_01A",
+      };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted.role).toBe("user");
+      expect(formatted.content).toEqual([
+        { type: "tool_result", tool_use_id: "toolu_01A", content: "Found 3 files" },
+      ]);
+    });
+
+    it("passes plain messages unchanged", () => {
+      const msg: ChatMessage = { role: "user", content: "hello" };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted).toEqual({ role: "user", content: "hello" });
+    });
+  });
+
+  describe("OpenAI-compatible", () => {
+    it("formats assistant message with tool_calls field", () => {
+      const msg: ChatMessage = {
+        role: "assistant",
+        content: "Searching...",
+        toolCalls: [{ id: "call_abc", name: "search", arguments: { q: "agent" } }],
+      };
+      const formatted = formatMessageForOpenAI(msg);
+      expect(formatted.role).toBe("assistant");
+      expect(formatted.content).toBe("Searching...");
+      expect(formatted.tool_calls).toEqual([
+        { id: "call_abc", type: "function", function: { name: "search", arguments: '{"q":"agent"}' } },
+      ]);
+    });
+
+    it("formats tool role message with tool_call_id", () => {
+      const msg: ChatMessage = {
+        role: "tool",
+        content: "Found 3 files",
+        toolCallId: "call_abc",
+      };
+      const formatted = formatMessageForOpenAI(msg);
+      expect(formatted.role).toBe("tool");
+      expect(formatted.tool_call_id).toBe("call_abc");
+      expect(formatted.content).toBe("Found 3 files");
+    });
+
+    it("passes plain messages unchanged", () => {
+      const msg: ChatMessage = { role: "user", content: "hello" };
+      const formatted = formatMessageForOpenAI(msg);
+      expect(formatted).toEqual({ role: "user", content: "hello" });
     });
   });
 });
