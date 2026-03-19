@@ -1,4 +1,4 @@
-# EP-SELF-DEV-002: Sandbox Execution & Database Isolation
+# EP-SELF-DEV-003: Sandbox Execution & Database Isolation
 
 ## Problem Statement
 
@@ -35,35 +35,49 @@ Each sandbox gets its own ephemeral database containers — complete process iso
 | `dpf-sandbox-neo4j-{buildId}` | `neo4j:5-community` | Isolated graph database | 512MB, 1 CPU |
 | `dpf-sandbox-qdrant-{buildId}` | `qdrant/qdrant:latest` | Isolated vector store | 256MB, 0.5 CPU |
 
-Total per sandbox stack: ~5.3GB memory. Reasonable for a dev workstation.
+Total per sandbox stack: ~5.3GB memory limits. Reasonable for a dev workstation. Note: Neo4j 5 community edition may use most of its 512MB limit under load — if OOM occurs, increase to 768MB. This is acceptable since Neo4j starts empty and seeding is future scope.
 
 **Docker networking:**
 
-All 4 containers join a shared Docker network `dpf-sandbox-net-{buildId}`. The app container receives environment variables pointing to its sandbox-local databases:
+All 4 containers join a shared Docker network `dpf-sandbox-net-{buildId}`. The app container receives environment variables via `-e` flags on `docker create`, pointing to its sandbox-local databases:
 
 ```
 DATABASE_URL=postgresql://dpf:dpf_sandbox@dpf-sandbox-db-{buildId}:5432/dpf
 NEO4J_URI=bolt://dpf-sandbox-neo4j-{buildId}:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=dpf_sandbox
 QDRANT_INTERNAL_URL=http://dpf-sandbox-qdrant-{buildId}:6333
 ```
+
+The Neo4j sandbox container is created with `NEO4J_AUTH=neo4j/dpf_sandbox` to match the app container's credentials.
 
 **Lifecycle:**
 
 1. Create Docker network `dpf-sandbox-net-{buildId}`
-2. Create + start all 4 containers on that network
-3. Wait for postgres healthcheck (`pg_isready`, up to 30s)
+2. Create + start all 4 containers on that network (app container gets `-e` flags for all database URLs)
+3. Wait for all database healthchecks (up to 30s each):
+   - Postgres: `pg_isready -U dpf` via `docker exec`
+   - Neo4j: `wget -qO /dev/null http://localhost:7474` via `docker exec`
+   - Qdrant: `wget -qO /dev/null http://localhost:6333/readyz` via `docker exec`
 4. Run `prisma migrate deploy` inside the app container against the sandbox postgres
-5. Seed data: `pg_dump --data-only` from production postgres → `psql` into sandbox postgres
+5. Seed data from production postgres (runs from the **host**, not the sandbox container):
+   - `docker exec <production-postgres> pg_dump --data-only -U dpf dpf | docker exec -i <sandbox-postgres> psql -U dpf dpf`
+   - This avoids cross-network connectivity issues — both commands run from the host which has access to both containers
 6. Neo4j + Qdrant start empty (seed strategies are future scope — see EP-SANDBOX-NEO4J-SEED)
 7. On sandbox destroy: remove all 4 containers + the network
+
+**Port allocation:** Sequential scan starting from 3001. Check each port with `docker exec` or `netstat` equivalent. First available port is used. On retry (port conflict), increment and scan again. Range: 3001-3100.
 
 **New file:** `apps/web/lib/sandbox-db.ts`
 
 Functions:
-- `createSandboxDbStack(buildId)` — Creates network + 3 database containers, returns container IDs
+- `createSandboxDbStack(buildId)` — Creates network + 3 database containers with env vars, returns container IDs
 - `waitForSandboxDb(dbContainerId)` — Polls `pg_isready` with timeout
-- `seedSandboxDb(appContainerId, productionDbUrl)` — `pg_dump | psql` pipeline
+- `waitForSandboxNeo4j(neo4jContainerId)` — Polls Neo4j HTTP endpoint with timeout
+- `waitForSandboxQdrant(qdrantContainerId)` — Polls Qdrant readyz endpoint with timeout
+- `seedSandboxDb(productionDbContainerName, sandboxDbContainerId)` — `pg_dump | psql` pipeline via host
 - `destroySandboxDbStack(buildId, state)` — Removes all DB containers + network
+- `findAvailablePort(startPort, endPort)` — Sequential port scan, returns first available
 
 ### Section 2: Workspace Initialization
 
@@ -223,37 +237,61 @@ const DESTRUCTIVE_PATTERNS = [
 # Restore database from pre-promotion backup
 psql -U dpf -d dpf < backups/pre-promote-{buildId}-{timestamp}.sql
 
-# Revert code changes
-git checkout -- .
+# Revert code changes (apply reverse patch, not blanket git checkout)
+git diff HEAD~1 | git apply -R
+# Or if committed: git revert <promotion-commit-hash>
 
 # Verify
 pnpm prisma migrate status
 pnpm test
 ```
 
-**New schema addition:**
+Note: Do NOT use `git checkout -- .` as it discards ALL uncommitted changes, not just the promotion. Use a targeted reverse patch or `git revert` to undo only the promoted changes.
+
+**New schema additions:**
 
 ```prisma
 model PromotionBackup {
-  id        String   @id @default(cuid())
-  buildId   String
-  timestamp DateTime @default(now())
-  filePath  String   // path to pg_dump file
-  sizeBytes Int
-  status    String   @default("complete") // complete | failed | restored
+  id         String            @id @default(cuid())
+  buildId    String
+  build      FeatureBuild      @relation(fields: [buildId], references: [buildId])
+  timestamp  DateTime          @default(now())
+  filePath   String            // path to pg_dump file on host
+  sizeBytes  Int
+  status     String            @default("complete") // complete | failed | restored
+  promotions ChangePromotion[] // reverse relation — promotions linked to this backup
 
   @@index([buildId])
 }
 ```
 
+**Backup storage:** Backups are written to `backups/` in the project root on the host filesystem. This directory persists beyond any container lifecycle. The host runs `pg_dump` via `docker exec` against the production postgres container. If the portal runs in a container, `backups/` must be a volume mount.
+
+**Schema change — add `backupId` to `ChangePromotion`:**
+
+The existing `ChangePromotion` model gets a new optional field to link to the backup:
+
+```prisma
+// Add to ChangePromotion model:
+backupId         String?
+backup           PromotionBackup? @relation(fields: [backupId], references: [id])
+```
+
+**Schema change — add `promotionBackups` relation to `FeatureBuild`:**
+
+```prisma
+// Add to FeatureBuild model:
+promotionBackups PromotionBackup[]
+```
+
 **New file:** `apps/web/lib/sandbox-promotion.ts`
 
 Functions:
-- `backupProductionDb(buildId)` — pg_dump with timestamped filename, returns PromotionBackup record
+- `backupProductionDb(buildId)` — `pg_dump` via `docker exec` against production postgres, saves to `backups/`, returns PromotionBackup record
 - `scanForDestructiveOps(migrationSql)` — Pattern matching, returns warnings array
-- `extractAndCategorizeDiff(containerId)` — Separates migration files from code files
-- `applyPromotionPatch(diffPatch, migrationFiles)` — Apply code + run migrations
-- `getRestoreInstructions(backupId)` — Returns documented restore procedure
+- `extractAndCategorizeDiff(containerId)` — Separates migration files from code files in the diff
+- `applyPromotionPatch(diffPatch, migrationFiles)` — Apply code patch + copy migrations + run `prisma migrate deploy`
+- `getRestoreInstructions(backupId)` — Returns documented restore procedure for the specific backup
 
 ### Section 5: Coding Agent Update
 
@@ -263,9 +301,38 @@ Remove the rule "Do NOT modify the database schema" from `buildCodeGenPrompt`. T
 
 ```
 - Schema changes are allowed. Add new models/fields to prisma/schema.prisma as needed.
-- After schema changes, run: prisma migrate dev --name <descriptive-name>
+- After schema changes, use `prisma db push` to apply changes to the sandbox database.
+  This syncs the schema without creating migration files — faster for iterative development.
+- Do NOT use `prisma migrate dev` — the sandbox baseline was set up with `prisma migrate deploy`.
+  Migration files will be generated during promotion to production, not during sandbox development.
 - Do NOT drop existing tables or columns without explicit instruction.
 ```
+
+**Rationale for `prisma db push` over `prisma migrate dev`:**
+- `db push` is designed for prototyping — it applies schema changes directly without creating migration files
+- `migrate dev` requires interactive confirmation in some scenarios and can conflict with the baseline migrations from `migrate deploy`
+- Migration files for production are extracted during promotion (Section 4), not generated during sandbox coding
+- This matches the two-step flow: sandbox uses `db push` for speed, promotion uses `migrate deploy` for safety
+
+### Section 6: Dockerfile.sandbox Update
+
+**Change to `Dockerfile.sandbox`:**
+
+Install PostgreSQL client tools needed for database seeding and promotion operations:
+
+```dockerfile
+FROM node:20-alpine
+RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN apk add --no-cache git postgresql16-client curl
+WORKDIR /workspace
+# No secrets, no Docker socket
+# Resource limits applied at container creation
+CMD ["sleep", "infinity"]
+```
+
+Added packages:
+- `postgresql16-client` — provides `pg_dump` and `psql` for data seeding
+- `curl` — used for healthcheck probes against Qdrant and other HTTP services
 
 ---
 
@@ -282,11 +349,11 @@ Remove the rule "Do NOT modify the database schema" from `buildCodeGenPrompt`. T
 
 ## Acceptance Criteria
 
-1. **Sandbox stack launches** — `autoExecuteBuild` creates 4 containers (app + postgres + neo4j + qdrant) on an isolated Docker network. All containers start and become healthy.
+1. **Sandbox stack launches** — `runBuildPipeline` creates 4 containers (app + postgres + neo4j + qdrant) on an isolated Docker network. All containers start and pass their healthchecks (postgres: `pg_isready`, neo4j: HTTP 7474, qdrant: readyz 6333).
 2. **Database is isolated** — The sandbox postgres is a separate container with its own data. Schema changes in the sandbox do not affect the production database. Production data is seeded into the sandbox via `pg_dump/psql`.
 3. **Workspace is initialized** — The sandbox container has the project source code, `node_modules` installed, Prisma client generated, and `next dev` running. `git diff` shows only changes made by the coding agent.
 4. **Checkpoint recovery works** — When a pipeline step fails, the build record shows which step failed and why. The "Retry from [step]" action resumes from the failed step without recreating containers that are already running.
-5. **Coding agent can modify schema** — Generated code can include Prisma schema changes. `prisma migrate dev` runs in the sandbox. Tests run against the sandbox database.
+5. **Coding agent can modify schema** — Generated code can include Prisma schema changes. `prisma db push` applies schema changes in the sandbox. Tests run against the sandbox database.
 6. **Promotion backs up first** — Before any migration is applied to production, `pg_dump` creates a backup. The backup record exists in the database. Promotion fails if backup fails.
 7. **Destructive operations flagged** — Migration SQL containing DROP TABLE, DROP COLUMN, ALTER TYPE, or RENAME triggers a warning in the promotion review.
 8. **End-to-end flow** — A feature with schema changes can be ideated, planned, built in the sandbox (with working database), tested, approved, backed up, and promoted to production.
@@ -308,16 +375,19 @@ Remove the rule "Do NOT modify the database schema" from `buildCodeGenPrompt`. T
 
 | File | Change |
 |------|--------|
-| `apps/web/lib/sandbox.ts` | Add network creation/teardown, update `createSandbox` to join sandbox network |
-| `apps/web/lib/actions/build.ts` | Replace `autoExecuteBuild` with checkpoint pipeline, add `retryBuildExecution` action |
-| `apps/web/lib/coding-agent.ts` | Remove "Do NOT modify database schema" rule, allow schema changes in sandbox |
+| `apps/web/lib/sandbox.ts` | Add network creation/teardown, update `createSandbox` to join sandbox network, add `-e` flags for database URLs |
+| `apps/web/lib/actions/build.ts` | Replace `autoExecuteBuild` with `runBuildPipeline` checkpoint pipeline, add `retryBuildExecution` action |
+| `apps/web/lib/coding-agent.ts` | Replace "Do NOT modify database schema" rule with `prisma db push` instructions |
+| `Dockerfile.sandbox` | Add `postgresql16-client` and `curl` packages |
 
 ### Schema Changes
 
 | Change | Purpose |
 |--------|---------|
 | Add `buildExecState Json?` to `FeatureBuild` | Checkpoint state for pipeline recovery |
-| Add `PromotionBackup` model | Track pre-promotion database backups |
+| Add `promotionBackups PromotionBackup[]` to `FeatureBuild` | Relation to backup records |
+| Add `PromotionBackup` model with `build` relation | Track pre-promotion database backups |
+| Add `backupId String?` + relation to `ChangePromotion` | Link promotion records to their backup |
 
 ---
 
@@ -330,13 +400,37 @@ Remove the rule "Do NOT modify the database schema" from `buildCodeGenPrompt`. T
 
 ## Risks
 
-1. **Resource pressure** — A full sandbox stack uses ~5.3GB RAM. On machines with 16GB, this limits concurrent sandboxes to 1-2. Mitigated by the 30-minute sandbox timeout and explicit destroy.
+1. **Resource pressure** — A full sandbox stack uses ~5.3GB RAM limits. On machines with 16GB, this limits concurrent sandboxes to 1-2. Mitigated by the 30-minute sandbox timeout and explicit destroy.
 2. **Seed data timing** — `pg_dump/psql` on a large production database could take minutes. Mitigated initially by small data sizes; the EP-SANDBOX-DATA epic addresses this for growth.
-3. **Port conflicts** — Random port allocation (3001-3100) could collide with other services. Mitigated by checking port availability before allocation and retry logic in step 1.
+3. **Port conflicts** — Sequential port allocation (3001-3100) could collide with other services. Mitigated by `findAvailablePort()` scanning for the first open port and retry logic in step 1.
 4. **Windows Docker Desktop** — `docker exec` with tar pipes may behave differently on Windows. Mitigated by testing the tar pipeline in the implementation phase and using PowerShell-compatible commands where needed.
+5. **Disk space per sandbox** — Source copy (~50MB) + `node_modules` from `pnpm install` (~500MB-1GB) + build artifacts can consume significant space within the 10GB container disk limit. Mitigated by excluding heavy directories during copy and monitoring available space.
+
+## End-to-End Flow Summary
+
+For clarity, here is the complete flow from "user clicks Build" to "promoted to production":
+
+1. User creates a feature in Build Studio, agent completes Ideate and Plan phases
+2. `advanceBuildPhase(buildId, "build")` triggers `runBuildPipeline(buildId)` (non-blocking)
+3. **Pipeline Step 1:** Create Docker network + 4 containers (app, postgres, neo4j, qdrant) → checkpoint `sandbox_created`
+4. **Pipeline Step 2:** Wait for DB healthchecks, `prisma migrate deploy`, seed production data → checkpoint `db_ready`
+5. **Pipeline Step 3:** Copy source via tar, `git init`, baseline commit → checkpoint `workspace_initialized`
+6. **Pipeline Step 4:** `pnpm install`, `prisma generate`, `pnpm dev &` → checkpoint `deps_installed`
+7. **Pipeline Step 5:** LLM generates code, writes files to sandbox, `prisma db push` for schema changes → checkpoint `code_generated`
+8. **Pipeline Step 6:** `pnpm test` + `tsc --noEmit` → checkpoint `tests_run`
+9. **Pipeline Step 7:** Save results to build record → checkpoint `complete`
+10. User reviews in Build Studio (live preview + test results)
+11. User approves → triggers promotion flow (Section 4):
+    a. Pre-flight: scan migrations for destructive ops
+    b. Backup: `pg_dump` production database (hard gate)
+    c. Extract: categorize diff into code + migration files
+    d. Apply: code patch + `prisma migrate deploy` against production
+    e. Record: ChangePromotion + BuildActivity entries
+
+If any pipeline step fails (3-9), the checkpoint shows where. "Retry from [step]" resumes without rebuilding completed steps. Promotion (11) is a separate human-initiated action, not part of the automated pipeline.
 
 ## References
 
-- [EP-SELF-DEV-002 Process Fix Spec](2026-03-18-self-dev-process-fix-design.md)
-- [Self-Dev Sandbox Design (EP-SELF-DEV-001)](2026-03-14-self-dev-sandbox-design.md)
-- [Development Lifecycle Architecture](2026-03-17-development-lifecycle-architecture-design.md)
+- [EP-SELF-DEV-002 Process Fix Spec](2026-03-18-self-dev-process-fix-design.md) — predecessor spec, addresses agent fabrication + tool registration
+- [Self-Dev Sandbox Design (EP-SELF-DEV-001)](2026-03-14-self-dev-sandbox-design.md) — original sandbox concept
+- [Development Lifecycle Architecture](2026-03-17-development-lifecycle-architecture-design.md) — dev→git→production promotion pipeline
