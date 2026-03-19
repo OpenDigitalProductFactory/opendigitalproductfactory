@@ -1,4 +1,27 @@
 -- CreateTable
+CREATE TABLE "ComplianceSnapshot" (
+    "id" TEXT NOT NULL,
+    "snapshotId" TEXT NOT NULL,
+    "takenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "triggeredBy" TEXT NOT NULL,
+    "totalRegulations" INTEGER NOT NULL,
+    "totalObligations" INTEGER NOT NULL,
+    "coveredObligations" INTEGER NOT NULL,
+    "totalControls" INTEGER NOT NULL,
+    "implementedControls" INTEGER NOT NULL,
+    "openIncidents" INTEGER NOT NULL,
+    "overdueActions" INTEGER NOT NULL,
+    "publishedPolicies" INTEGER NOT NULL,
+    "pendingAlerts" INTEGER NOT NULL,
+    "overallScore" DOUBLE PRECISION NOT NULL,
+    "regulationBreakdown" JSONB NOT NULL,
+    "agentId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ComplianceSnapshot_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "UserSkill" (
     "id" TEXT NOT NULL,
     "skillId" TEXT NOT NULL,
@@ -18,6 +41,12 @@ CREATE TABLE "UserSkill" (
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX "ComplianceSnapshot_snapshotId_key" ON "ComplianceSnapshot"("snapshotId");
+
+-- CreateIndex
+CREATE INDEX "ComplianceSnapshot_takenAt_idx" ON "ComplianceSnapshot"("takenAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "UserSkill_skillId_key" ON "UserSkill"("skillId");
 
 -- CreateIndex
@@ -34,7 +63,3 @@ ALTER TABLE "UserSkill" ADD CONSTRAINT "UserSkill_teamId_fkey" FOREIGN KEY ("tea
 
 -- AddForeignKey
 ALTER TABLE "UserSkill" ADD CONSTRAINT "UserSkill_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AlterTable
-ALTER TABLE "ModelProvider" ADD COLUMN "catalogVisibility" TEXT NOT NULL DEFAULT 'visible',
-ADD COLUMN "catalogEntry" JSONB;

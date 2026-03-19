@@ -11,11 +11,13 @@ const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 export function CreateRegulationForm() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     const form = new FormData(e.currentTarget);
     const result = await createRegulation({
       name: form.get("name") as string,
@@ -29,6 +31,8 @@ export function CreateRegulationForm() {
     if (result.ok) {
       setOpen(false);
       router.refresh();
+    } else {
+      setError(result.message ?? "Failed to create regulation.");
     }
   }
 
@@ -66,6 +70,7 @@ export function CreateRegulationForm() {
             <label className={labelClasses}>Notes</label>
             <textarea name="notes" rows={2} className={inputClasses} />
           </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-white">Cancel</button>
             <button type="submit" disabled={loading}

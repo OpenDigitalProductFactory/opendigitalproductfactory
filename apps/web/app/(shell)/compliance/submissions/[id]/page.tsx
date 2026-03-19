@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSubmission } from "@/lib/actions/reporting";
+import { getSubmission, transitionSubmissionStatus } from "@/lib/actions/reporting";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -9,6 +10,30 @@ const STATUS_COLORS: Record<string, string> = {
   submitted: "bg-blue-900/30 text-blue-400",
   acknowledged: "bg-green-900/30 text-green-400",
   rejected: "bg-red-900/30 text-red-400",
+};
+
+const SUBMISSION_TRANSITIONS: Record<string, string[]> = {
+  draft: ["pending"],
+  pending: ["submitted", "draft"],
+  submitted: ["acknowledged", "rejected"],
+  rejected: ["draft"],
+  acknowledged: [],
+};
+
+const SUBMISSION_TRANSITION_LABELS: Record<string, string> = {
+  pending: "Mark Pending",
+  submitted: "Mark Submitted",
+  acknowledged: "Acknowledge",
+  rejected: "Reject",
+  draft: "Return to Draft",
+};
+
+const SUBMISSION_TRANSITION_STYLES: Record<string, string> = {
+  pending: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
+  submitted: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
+  acknowledged: "bg-green-700 text-white hover:bg-green-600",
+  rejected: "bg-red-700 text-white hover:bg-red-600",
+  draft: "bg-gray-700 text-gray-200 hover:bg-gray-600",
 };
 
 export default async function SubmissionDetailPage({ params }: Props) {
@@ -24,9 +49,17 @@ export default async function SubmissionDetailPage({ params }: Props) {
   const daysRemaining = submission.dueDate
     ? Math.ceil((new Date(submission.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     : null;
+  const availableTransitions = SUBMISSION_TRANSITIONS[submission.status] ?? [];
 
   return (
     <div>
+      {/* Breadcrumb */}
+      <div className="mb-2">
+        <Link href="/compliance/submissions" className="text-xs text-[var(--dpf-muted)] hover:text-white">Submissions</Link>
+        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+        <span className="text-xs text-white">{submission.title}</span>
+      </div>
+
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-white">{submission.title}</h1>
@@ -36,6 +69,21 @@ export default async function SubmissionDetailPage({ params }: Props) {
         </div>
         <p className="text-sm text-[var(--dpf-muted)]">{submission.recipientBody} · {submission.submissionType}</p>
       </div>
+
+      {/* Status Transitions */}
+      {availableTransitions.length > 0 && (
+        <div className="flex items-center gap-2 mb-6">
+          <span className="text-xs text-[var(--dpf-muted)] mr-1">Transition:</span>
+          {availableTransitions.map((target) => (
+            <form key={target} action={async () => { "use server"; await transitionSubmissionStatus(id, target); }}>
+              <button type="submit"
+                className={`px-3 py-1.5 text-xs font-medium rounded ${SUBMISSION_TRANSITION_STYLES[target] ?? "bg-[var(--dpf-accent)] text-white hover:opacity-90"}`}>
+                {SUBMISSION_TRANSITION_LABELS[target] ?? target}
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
 
       {/* Metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">

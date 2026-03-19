@@ -1,4 +1,7 @@
-import { prisma } from "@dpf/db";
+import { listAudits } from "@/lib/actions/compliance";
+import { AUDIT_TYPES, AUDIT_STATUSES } from "@/lib/compliance-types";
+import Link from "next/link";
+import { CreateAuditForm } from "@/components/compliance/CreateAuditForm";
 
 const STATUS_COLORS: Record<string, string> = {
   planned: "bg-blue-900/30 text-blue-400",
@@ -7,14 +10,16 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-gray-900/30 text-gray-400",
 };
 
-export default async function AuditsPage() {
-  const audits = await prisma.complianceAudit.findMany({
-    include: {
-      auditor: { select: { id: true, displayName: true } },
-      _count: { select: { findings: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+type Props = { searchParams: Promise<{ auditType?: string; status?: string }> };
+
+export default async function AuditsPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  const filters = {
+    ...(sp.auditType && { auditType: sp.auditType }),
+    ...(sp.status && { status: sp.status }),
+  };
+  const hasFilters = Object.keys(filters).length > 0;
+  const audits = await listAudits(hasFilters ? filters : undefined);
 
   return (
     <div>
@@ -23,10 +28,42 @@ export default async function AuditsPage() {
           <h1 className="text-xl font-bold text-white">Audits</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{audits.length} total</p>
         </div>
+        <CreateAuditForm />
       </div>
 
+      {/* Filter bar */}
+      <form className="flex flex-wrap gap-3 mb-6">
+        <select name="auditType" defaultValue={sp.auditType ?? ""}
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          <option value="">All types</option>
+          {AUDIT_TYPES.map((t) => (
+            <option key={t} value={t}>{t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+          ))}
+        </select>
+
+        <select name="status" defaultValue={sp.status ?? ""}
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          <option value="">All statuses</option>
+          {AUDIT_STATUSES.map((s) => (
+            <option key={s} value={s}>{s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+          ))}
+        </select>
+
+        <button type="submit"
+          className="text-xs px-3 py-1.5 rounded-md bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity">
+          Filter
+        </button>
+
+        {hasFilters && (
+          <Link href="/compliance/audits"
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            Clear
+          </Link>
+        )}
+      </form>
+
       {audits.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No audits scheduled yet.</p>
+        <p className="text-sm text-[var(--dpf-muted)]">No audits match the current filters.</p>
       ) : (
         <div className="space-y-2">
           {audits.map((a) => (

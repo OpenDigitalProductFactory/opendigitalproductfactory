@@ -1,5 +1,8 @@
 import { prisma } from "@dpf/db";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
+import { EditRegulationForm } from "@/components/compliance/EditRegulationForm";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -21,10 +24,18 @@ export default async function RegulationDetailPage({ params }: Props) {
 
   return (
     <div>
+      {/* Breadcrumb */}
+      <div className="mb-2">
+        <Link href="/compliance/regulations" className="text-xs text-[var(--dpf-muted)] hover:text-white">Regulations</Link>
+        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+        <span className="text-xs text-white">{regulation.shortName}</span>
+      </div>
+
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-white">{regulation.shortName}</h1>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{regulation.jurisdiction}</span>
+          <EditRegulationForm id={regulation.id} regulation={regulation} />
         </div>
         <p className="text-sm text-[var(--dpf-muted)]">{regulation.name}</p>
         {regulation.sourceUrl && (
@@ -56,7 +67,13 @@ export default async function RegulationDetailPage({ params }: Props) {
         )}
       </div>
 
-      <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">Obligations</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest">Obligations</h2>
+        <CreateObligationForm
+          regulations={[{ id: regulation.id, shortName: regulation.shortName }]}
+          defaultRegulationId={regulation.id}
+        />
+      </div>
       {regulation.obligations.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No obligations defined yet.</p>
       ) : (
