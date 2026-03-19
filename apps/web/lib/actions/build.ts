@@ -153,10 +153,33 @@ async function autoExecuteBuild(buildId: string): Promise<void> {
   // Load build record
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { brief: true, buildPlan: true, threadId: true },
+    select: { brief: true, buildPlan: true, designDoc: true, title: true, threadId: true },
   });
-  if (!build?.brief || !build.buildPlan) {
-    console.warn(`[build] Cannot auto-execute: missing brief or plan for ${buildId}`);
+  if (!build?.buildPlan) {
+    console.warn(`[build] Cannot auto-execute: missing plan for ${buildId}`);
+    return;
+  }
+
+  // Construct brief from designDoc if brief wasn't saved separately
+  if (!build.brief && build.designDoc) {
+    const doc = build.designDoc as Record<string, unknown>;
+    const syntheticBrief = {
+      title: build.title ?? "Untitled",
+      description: (doc.proposedApproach as string) ?? (doc.problemStatement as string) ?? "",
+      portfolioContext: "",
+      targetRoles: [],
+      inputs: [],
+      dataNeeds: "",
+      acceptanceCriteria: Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [],
+    };
+    build.brief = syntheticBrief;
+    // Persist so future reads have it
+    await prisma.featureBuild.update({ where: { buildId }, data: { brief: syntheticBrief as any } });
+    console.log(`[build] Synthesized brief from designDoc for ${buildId}`);
+  }
+
+  if (!build.brief) {
+    console.warn(`[build] Cannot auto-execute: no brief or designDoc for ${buildId}`);
     return;
   }
 
