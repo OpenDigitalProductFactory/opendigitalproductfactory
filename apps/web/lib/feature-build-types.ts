@@ -2,6 +2,7 @@
 // Pure types and helpers for the Build Studio. No server imports.
 
 import * as crypto from "crypto";
+import type { BuildExecutionState } from "./build-exec-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ export type FeatureBuildRow = {
   claimedByAgentId: string | null;
   claimedAt: Date | null;
   claimStatus: string | null;
+  buildExecState: BuildExecutionState | null;
 };
 
 export type FeaturePackRow = {
