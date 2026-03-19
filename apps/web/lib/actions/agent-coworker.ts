@@ -523,6 +523,7 @@ export async function sendMessage(input: {
     // ── Agentic execution loop ──────────────────────────────────────────────
     // Agent calls tools iteratively until it responds with text only (max 6 iterations).
     const { runAgenticLoop } = await import("@/lib/agentic-loop");
+    const { agentEventBus } = await import("@/lib/agent-event-bus");
     const agenticResult = await runAgenticLoop({
       chatHistory,
       systemPrompt: populatedPrompt,
@@ -535,7 +536,11 @@ export async function sendMessage(input: {
       threadId: input.threadId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       ...(manifestRouteDecision ? { routeDecision: manifestRouteDecision } : {}),
+      onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });
+
+    // Signal loop completion to SSE subscribers
+    agentEventBus.emit(input.threadId, { type: "done" });
 
     // Handle proposal — agent wants to take a side-effecting action that needs approval
     if (agenticResult.proposal) {

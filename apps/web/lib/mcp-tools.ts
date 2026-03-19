@@ -310,6 +310,106 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
+  {
+    name: "saveBuildEvidence",
+    description: "Save evidence to a FeatureBuild record. Fields: designDoc, buildPlan, taskResults, verificationOut, acceptanceMet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update" },
+        value: { description: "JSON value to store" },
+      },
+      required: ["field", "value"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "reviewDesignDoc",
+    description: "Submit the design document for AI review. Returns pass/fail with issues.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "reviewBuildPlan",
+    description: "Submit the implementation plan for AI review. Returns pass/fail with issues.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "launch_sandbox",
+    description: "Launch a Docker sandbox container for code generation. Requires approval.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "proposal",
+    sideEffect: true,
+  },
+  {
+    name: "generate_code",
+    description: "Send a code generation instruction to the coding agent inside the sandbox.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instruction: { type: "string", description: "What to generate or change" },
+      },
+      required: ["instruction"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "iterate_sandbox",
+    description: "Send a refinement instruction to the coding agent in the sandbox.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instruction: { type: "string", description: "Refinement instruction" },
+      },
+      required: ["instruction"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "run_sandbox_tests",
+    description: "Run unit tests and typecheck inside the sandbox container.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "deploy_feature",
+    description: "Extract the git diff from sandbox and deploy to the platform. Requires approval.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "manage_capabilities",
+    executionMode: "proposal",
+    sideEffect: true,
+  },
+  {
+    name: "generate_ux_test",
+    description: "Generate a Playwright test script from acceptance criteria for the sandbox.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "run_ux_test",
+    description: "Execute the Playwright UX test against the sandbox. Returns step-by-step results with screenshots.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
     name: "list_project_directory",
@@ -678,6 +778,23 @@ export function getAvailableTools(
 }
 
 // ─── Tool Execution ──────────────────────────────────────────────────────────
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Fire-and-forget: log tool activity for the Build Studio activity timeline. */
+function logBuildActivity(buildId: string, tool: string, summary: string): void {
+  prisma.buildActivity.create({ data: { buildId, tool, summary } }).catch(() => {});
+}
+
+/** Resolve the active (non-complete, non-failed) FeatureBuild for the current user. */
+async function resolveActiveBuildId(userId: string): Promise<string | null> {
+  const build = await prisma.featureBuild.findFirst({
+    where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+    orderBy: { updatedAt: "desc" },
+    select: { buildId: true },
+  });
+  return build?.buildId ?? null;
+}
 
 export async function executeTool(
   toolName: string,
@@ -1068,6 +1185,183 @@ export async function executeTool(
 
       const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
       return { success: true, message: `Spec updated — ${totalItems} items captured.` };
+    }
+
+    // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────
+
+    case "saveBuildEvidence": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build found.", message: "No active build." };
+      const field = String(params.field ?? "");
+      const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"];
+      if (!allowedFields.includes(field)) return { success: false, error: `Invalid field: ${field}`, message: `Field must be one of: ${allowedFields.join(", ")}` };
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { [field]: params.value as import("@dpf/db").Prisma.InputJsonValue },
+      });
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field });
+      logBuildActivity(buildId, "saveBuildEvidence", `Evidence "${field}" saved.`);
+      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
+    }
+
+    case "reviewDesignDoc": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
+      if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
+      const { buildDesignReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
+      const { callWithFailover } = await import("@/lib/ai-provider-priority");
+      const llmResult = await callWithFailover(
+        [{ role: "user", content: prompt }], "You are a design reviewer.", "internal", {},
+      );
+      const review = parseReviewResponse(llmResult.content);
+      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
+      logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
+      return { success: true, message: `Design review: ${review.decision}. ${review.summary}`, data: { review } };
+    }
+
+    case "reviewBuildPlan": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
+      if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
+      const { buildPlanReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const prompt = buildPlanReviewPrompt(build.buildPlan as Parameters<typeof buildPlanReviewPrompt>[0]);
+      const { callWithFailover } = await import("@/lib/ai-provider-priority");
+      const llmResult = await callWithFailover(
+        [{ role: "user", content: prompt }], "You are a plan reviewer.", "internal", {},
+      );
+      const review = parseReviewResponse(llmResult.content);
+      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
+      logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
+      return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
+    }
+
+    case "launch_sandbox": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const { createSandbox, startSandbox } = await import("@/lib/sandbox");
+      const port = 3001 + Math.floor(Math.random() * 100);
+      const containerId = await createSandbox(buildId, port);
+      await startSandbox(containerId);
+      await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: containerId, sandboxPort: port } });
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+      logBuildActivity(buildId, "launch_sandbox", `Sandbox launched on port ${port}.`);
+      return { success: true, message: `Sandbox launched on port ${port}.`, entityId: buildId, data: { containerId, port } };
+    }
+
+    case "generate_code": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
+      if (!build?.sandboxId) return { success: false, error: "Sandbox not running. Launch it first.", message: "No sandbox." };
+      if (!build.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
+      const { buildCodeGenPrompt } = await import("@/lib/coding-agent");
+      const { execInSandbox } = await import("@/lib/sandbox");
+      const prompt = buildCodeGenPrompt(
+        build.brief as Parameters<typeof buildCodeGenPrompt>[0],
+        (build.buildPlan ?? {}) as Record<string, unknown>,
+        String(params.instruction ?? ""),
+      );
+      await execInSandbox(build.sandboxId, `cat > /tmp/codegen-prompt.txt << 'PROMPT_EOF'\n${prompt}\nPROMPT_EOF`);
+      return { success: true, message: "Code generation instruction sent to sandbox.", data: { instruction: String(params.instruction ?? "") } };
+    }
+
+    case "iterate_sandbox": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      const { execInSandbox } = await import("@/lib/sandbox");
+      const output = await execInSandbox(build.sandboxId, String(params.instruction ?? "echo 'No instruction'"));
+      return { success: true, message: "Refinement applied.", data: { output: output.slice(0, 2000) } };
+    }
+
+    case "run_sandbox_tests": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      const { runSandboxTests } = await import("@/lib/coding-agent");
+      const results = await runSandboxTests(build.sandboxId);
+      const verificationData = {
+        testsPassed: results.passed ? 1 : 0,
+        testsFailed: results.passed ? 0 : 1,
+        typecheckPassed: results.typeCheckPassed,
+        testOutput: results.testOutput.slice(0, 5000),
+        typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
+      };
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { verificationOut: verificationData as unknown as import("@dpf/db").Prisma.InputJsonValue },
+      });
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
+      logBuildActivity(buildId, "run_sandbox_tests", `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.`);
+      return {
+        success: true,
+        message: results.passed && results.typeCheckPassed
+          ? "All tests pass, typecheck clean."
+          : `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.`,
+        data: verificationData,
+      };
+    }
+
+    case "deploy_feature": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      const { extractDiff } = await import("@/lib/sandbox");
+      const diff = await extractDiff(build.sandboxId);
+      await prisma.featureBuild.update({ where: { buildId }, data: { diffPatch: diff, diffSummary: diff.slice(0, 500) } });
+      return { success: true, message: "Diff extracted. Ready for approval.", data: { diffLength: diff.length, summary: diff.slice(0, 500) } };
+    }
+
+    case "generate_ux_test": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxPort: true, brief: true } });
+      if (!build?.sandboxPort || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
+      const { generateTestScript } = await import("@/lib/playwright-runner");
+      const brief = build.brief as { acceptanceCriteria?: string[] };
+      const script = generateTestScript(`http://localhost:${build.sandboxPort}`, brief.acceptanceCriteria ?? [], buildId);
+      const { exec: execCb } = await import("child_process");
+      const { promisify } = await import("util");
+      const exec = promisify(execCb);
+      await exec(`docker exec playwright sh -c 'mkdir -p /scripts && cat > /scripts/${buildId}.spec.ts << SCRIPT_EOF\n${script}\nSCRIPT_EOF'`);
+      return { success: true, message: "UX test script generated.", data: { script } };
+    }
+
+    case "run_ux_test": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const { runPlaywrightTest } = await import("@/lib/playwright-runner");
+      const steps = await runPlaywrightTest(buildId);
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      for (let i = 0; i < steps.length; i++) {
+        if (context?.threadId) {
+          agentEventBus.emit(context.threadId, {
+            type: "test:step",
+            stepIndex: i,
+            description: steps[i]!.step,
+            screenshot: steps[i]!.screenshotUrl ?? undefined,
+            passed: steps[i]!.passed,
+          });
+        }
+      }
+      await prisma.featureBuild.update({ where: { buildId }, data: { uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "uxTestResults" });
+      const passed = steps.filter((s) => s.passed).length;
+      logBuildActivity(buildId, "run_ux_test", `UX tests: ${passed}/${steps.length} passed.`);
+      return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps } };
     }
 
     case "list_project_directory": {

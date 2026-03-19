@@ -90,11 +90,26 @@ export function AgentCoworkerPanel({
 
   // Elapsed time counter for thinking indicator
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  const [currentTool, setCurrentTool] = useState<string | null>(null);
   useEffect(() => {
     if (!isPending) { setThinkingSeconds(0); return; }
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [isPending]);
+
+  // SSE for tool-level progress
+  useEffect(() => {
+    if (!isPending || !threadId) { setCurrentTool(null); return; }
+    const es = new EventSource(`/api/agent/stream?threadId=${threadId}`);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "tool:start") setCurrentTool(data.tool);
+        if (data.type === "tool:complete" || data.type === "done") setCurrentTool(null);
+      } catch { /* ignore */ }
+    };
+    return () => { es.close(); setCurrentTool(null); };
+  }, [isPending, threadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -168,54 +183,63 @@ export function AgentCoworkerPanel({
     if (attachmentForThisMessage) setPendingAttachment(null);
 
     startTransition(async () => {
-      const result = await sendMessage({
-        threadId,
-        content,
-        routeContext: pathname,
-        coworkerMode: devMode ? "act" as const : coworkerMode,
-        externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
-        elevatedFormFillEnabled: elevatedAssistEnabled,
-        ...(formAssistContext ? { formAssistContext } : {}),
-        ...(activeBuildId ? { buildId: activeBuildId } : {}),
-        ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
-      });
-      if ("error" in result) {
-        console.warn("sendMessage error:", result.error);
+      try {
+        const result = await sendMessage({
+          threadId,
+          content,
+          routeContext: pathname,
+          coworkerMode: devMode ? "act" as const : coworkerMode,
+          externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
+          elevatedFormFillEnabled: elevatedAssistEnabled,
+          ...(formAssistContext ? { formAssistContext } : {}),
+          ...(activeBuildId ? { buildId: activeBuildId } : {}),
+          ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
+        });
+        if ("error" in result) {
+          console.warn("sendMessage error:", result.error);
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
+            ),
+          );
+          return;
+        }
+        if ("providerInfo" in result) {
+          const info = (result as { providerInfo?: { providerId: string; modelId: string } }).providerInfo;
+          if (info) setLastProviderInfo(info);
+        }
+        const newMessages: AgentRenderableMessage[] = [];
+        if ("systemMessage" in result && result.systemMessage) {
+          newMessages.push(result.systemMessage);
+        }
+        newMessages.push(result.agentMessage);
+        if ("formAssistUpdate" in result && result.formAssistUpdate && activeFormAssist) {
+          activeFormAssist.applyFieldUpdates(result.formAssistUpdate);
+          newMessages.push({
+            id: `local-form-assist-${Date.now()}`,
+            role: "system",
+            content: "Applied the agent's suggested field updates to the active form for your review.",
+            agentId: agent.agentId,
+            routeContext: pathname,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        setMessages((prev) => {
+          const reconciled = prev.flatMap((message) =>
+            message.id === optimisticMessage.id
+              ? [reconcileOptimisticMessage(message, result.userMessage)]
+              : [message],
+          );
+          return [...reconciled, ...newMessages];
+        });
+      } catch (e) {
+        console.error("[submitMessage]", e);
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
           ),
         );
-        return;
       }
-      if ("providerInfo" in result) {
-        const info = (result as { providerInfo?: { providerId: string; modelId: string } }).providerInfo;
-        if (info) setLastProviderInfo(info);
-      }
-      const newMessages: AgentRenderableMessage[] = [];
-      if ("systemMessage" in result && result.systemMessage) {
-        newMessages.push(result.systemMessage);
-      }
-      newMessages.push(result.agentMessage);
-      if ("formAssistUpdate" in result && result.formAssistUpdate && activeFormAssist) {
-        activeFormAssist.applyFieldUpdates(result.formAssistUpdate);
-        newMessages.push({
-          id: `local-form-assist-${Date.now()}`,
-          role: "system",
-          content: "Applied the agent's suggested field updates to the active form for your review.",
-          agentId: agent.agentId,
-          routeContext: pathname,
-          createdAt: new Date().toISOString(),
-        });
-      }
-      setMessages((prev) => {
-        const reconciled = prev.flatMap((message) =>
-          message.id === optimisticMessage.id
-            ? [reconcileOptimisticMessage(message, result.userMessage)]
-            : [message],
-        );
-        return [...reconciled, ...newMessages];
-      });
     });
   }
 
@@ -399,11 +423,13 @@ export function AgentCoworkerPanel({
               <span style={{ fontSize: 11 }}>
                 {isClearing
                   ? "Clearing conversation"
-                  : thinkingSeconds < 5
-                    ? `${agent.agentName} is thinking`
-                    : thinkingSeconds < 15
-                      ? `${agent.agentName} is working on it`
-                      : `${agent.agentName} is still working (${thinkingSeconds}s)`}
+                  : currentTool
+                    ? `${agent.agentName} is using ${currentTool.replace(/_/g, " ")}...`
+                    : thinkingSeconds < 5
+                      ? `${agent.agentName} is thinking`
+                      : thinkingSeconds < 15
+                        ? `${agent.agentName} is working on it`
+                        : `${agent.agentName} is still working (${thinkingSeconds}s)`}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>

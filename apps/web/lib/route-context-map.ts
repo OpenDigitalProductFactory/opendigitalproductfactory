@@ -214,6 +214,21 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "propose_decomposition",
       "register_tech_debt",
       "save_build_notes",
+      // Build Studio lifecycle (EP-SELF-DEV-002)
+      "saveBuildEvidence",
+      "reviewDesignDoc",
+      "reviewBuildPlan",
+      "launch_sandbox",
+      "generate_code",
+      "iterate_sandbox",
+      "run_sandbox_tests",
+      "deploy_feature",
+      "generate_ux_test",
+      "run_ux_test",
+      // Codebase access (needed for Ideate phase search)
+      "read_project_file",
+      "search_project_files",
+      "list_project_directory",
     ],
     skills: [
       {
@@ -285,6 +300,46 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Configure platform brand and theme",
         capability: "manage_branding",
         prompt: "Help me set up the platform branding",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/compliance": {
+    routePrefix: "/compliance",
+    domain: "Compliance & Regulatory",
+    sensitivity: "confidential",
+    domainContext:
+      "This page manages regulatory compliance — regulations, obligations, controls, evidence, risk assessments, incidents, corrective actions, audits, policies, and regulatory submissions. " +
+      "Data here is classified as confidential — it contains regulatory exposure, control gaps, incident records, and audit findings. " +
+      "The compliance engine tracks obligation-to-control coverage, posture scoring, and gap assessment. " +
+      "Key workflows: register regulations and their obligations, map controls to obligations for coverage, collect evidence, manage incidents with regulatory notification deadlines, " +
+      "track corrective actions, run audits, manage internal policies with employee acknowledgments, and submit regulatory reports. " +
+      "The agent should understand the regulation currently being viewed and its obligations when on a regulation detail page.",
+    domainTools: [],
+    skills: [
+      {
+        label: "Gap assessment",
+        description: "Analyse compliance coverage gaps",
+        capability: "view_compliance",
+        prompt: "Show me where our compliance gaps are — which obligations have no controls?",
+      },
+      {
+        label: "Posture report",
+        description: "Review overall compliance health",
+        capability: "view_compliance",
+        prompt: "What is our current compliance posture score and what's dragging it down?",
+      },
+      {
+        label: "Add obligation",
+        description: "Create a new regulatory obligation",
+        capability: "manage_compliance",
+        prompt: "Help me add a new obligation to this regulation",
       },
       {
         label: "Report an issue",

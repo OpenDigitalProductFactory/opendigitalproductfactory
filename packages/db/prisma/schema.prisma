@@ -1370,6 +1370,7 @@ model FeatureBuild {
   taskResults     Json?
   verificationOut Json?
   acceptanceMet   Json?
+  uxTestResults   Json? // Playwright UX test step results with screenshots
 
   // Build Disciplines — ownership
   accountableEmployeeId  String?
@@ -1378,9 +1379,23 @@ model FeatureBuild {
   claimedAt              DateTime?
   claimStatus            String?
 
+  // Activity log
+  activities      BuildActivity[]
+
   @@index([phase])
   @@index([createdById])
   @@index([digitalProductId])
+}
+
+model BuildActivity {
+  id        String       @id @default(cuid())
+  buildId   String
+  build     FeatureBuild @relation(fields: [buildId], references: [buildId])
+  tool      String
+  summary   String
+  createdAt DateTime     @default(now())
+
+  @@index([buildId, createdAt])
 }
 
 model FeaturePack {

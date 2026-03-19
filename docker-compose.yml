@@ -109,8 +109,20 @@ services:
     profiles: ["build-images"]  # only built when explicitly requested
     command: ["echo", "Image built successfully"]
 
+  # ─── Playwright (UX test runner for Build Studio) ──────────────────────
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    volumes:
+      - playwright_scripts:/scripts
+      - playwright_results:/results
+    network_mode: host  # Access sandbox containers on mapped ports
+    profiles: ["build-images"]
+    command: ["sleep", "infinity"]  # Kept alive, tests executed on demand
+
 volumes:
   pgdata:
   neo4jdata:
   ollama_models:
   qdrant_data:
+  playwright_scripts:
+  playwright_results:
