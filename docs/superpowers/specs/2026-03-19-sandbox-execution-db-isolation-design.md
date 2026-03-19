@@ -348,6 +348,8 @@ Added packages:
 | EP-SANDBOX-NEO4J-SEED | Neo4j + Qdrant Sandbox Seeding | Add seed data for graph relationships and vector embeddings in sandbox. `neo4j-admin dump/load` and Qdrant snapshot restore. | Section 1 container infrastructure |
 | EP-SANDBOX-POOL | Warm Sandbox Pool | Pre-warm 1-N sandbox stacks (steps 1-4 of pipeline) so builds start near-instantly. Refresh pool after each production promotion. Pool size configurable in admin settings. A warm sandbox is one at checkpoint `deps_installed` — ready for code generation. | Section 3 checkpoint pipeline |
 | EP-CHANGE-MGMT-001 | Deployment Calendar & Change Management | Scheduled promotion windows for sandbox→production changes. Approval workflows, calendar-based deployment slots, freeze periods. Promotion flow (`sandbox-promotion.ts`) becomes calendar-aware — approved changes queue until the next window rather than applying immediately. | Section 4 promotion flow |
+| EP-DOCS-001 | Baseline Help Documentation | Create user-facing help documentation for all existing platform functionality based on current codebase, specs, and git history. Covers all areas: workspace, portfolios, Build Studio, AI workforce, GRC, backlog, admin. Establishes the documentation structure and conventions for ongoing maintenance. | None (standalone) |
+| EP-DOCS-002 | Auto-Documentation on Deployment | When changes promote from sandbox to production, automatically generate/update help documentation as part of the promotion pipeline. Analyzes the diff to identify user-facing changes, generates doc updates, and includes them in the promotion review. For local dev (external path), AGENTS.md is updated as features are built. | EP-DOCS-001 (establishes doc structure), Section 4 promotion flow |
 
 ---
 
