@@ -225,10 +225,11 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "deploy_feature",
       "generate_ux_test",
       "run_ux_test",
-      // Codebase access (needed for Ideate phase search)
+      // Codebase access (needed for Ideate phase search + Build fallback)
       "read_project_file",
       "search_project_files",
       "list_project_directory",
+      "propose_file_change",
     ],
     skills: [
       {

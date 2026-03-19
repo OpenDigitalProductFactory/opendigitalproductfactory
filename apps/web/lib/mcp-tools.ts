@@ -324,7 +324,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Internal build workflow — available in advise mode
   },
   {
     name: "reviewDesignDoc",
@@ -332,7 +332,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Internal build workflow — available in advise mode
   },
   {
     name: "reviewBuildPlan",
@@ -340,14 +340,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Internal build workflow — available in advise mode
   },
   {
     name: "launch_sandbox",
-    description: "Launch a Docker sandbox container for code generation. Requires approval.",
+    description: "Launch a Docker sandbox container for code generation. Sandbox is isolated, resource-limited, and auto-destroyed after 30 minutes.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
-    executionMode: "proposal",
+    executionMode: "immediate", // Sandbox is isolated — no HITL needed
     sideEffect: true,
   },
   {
@@ -362,7 +362,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Writes to sandbox only, not production — available in advise mode
   },
   {
     name: "iterate_sandbox",
@@ -376,7 +376,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Writes to sandbox only, not production — available in advise mode
   },
   {
     name: "run_sandbox_tests",
@@ -400,7 +400,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Writes test script to sandbox — available in advise mode
   },
   {
     name: "run_ux_test",

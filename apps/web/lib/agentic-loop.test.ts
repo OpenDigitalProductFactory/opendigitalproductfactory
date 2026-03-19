@@ -32,11 +32,20 @@ describe("shouldNudge", () => {
     })).toBe(false);
   });
 
-  it("does not nudge when response is long (genuine answer, > 200 chars)", () => {
+  it("does not nudge on first iteration when response is long and not narration", () => {
     expect(shouldNudge({
-      continuationNudges: 0, iteration: 0, maxIterations: 25,
-      hasTools: true, executedToolCount: 0, responseLength: 250,
+      continuationNudges: 0, iteration: 2, maxIterations: 25,
+      hasTools: true, executedToolCount: 3, responseLength: 250,
+      responseText: "The feature brief describes the notification system and acceptance criteria.",
     })).toBe(false);
+  });
+
+  it("nudges when response contains code narration patterns", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 3, maxIterations: 25,
+      hasTools: true, executedToolCount: 5, responseLength: 500,
+      responseText: "Here's the exact code to add to agent-routing.ts for each agent.",
+    })).toBe(true);
   });
 
   it("nudges when tools were used and model stalls with short response", () => {
@@ -59,8 +68,8 @@ describe("detectFabrication", () => {
     expect(detectFabrication("I've built the feature and deployed it.", 0, false)).toBe(true);
   });
 
-  it("does not flag when tools were executed", () => {
-    expect(detectFabrication("I've built the feature.", 3, false)).toBe(false);
+  it("does not flag when build tools were executed", () => {
+    expect(detectFabrication("I've built the feature.", 3, false, ["saveBuildEvidence", "generate_code"])).toBe(false);
   });
 
   it("does not flag when proposal was returned", () => {
@@ -77,6 +86,20 @@ describe("detectFabrication", () => {
 
   it("detects 'SHIPPED TO STAGING'", () => {
     expect(detectFabrication("SHIPPED TO STAGING. Feature live at /build.", 0, false)).toBe(true);
+  });
+
+  it("detects narration with only read tools (no build tools)", () => {
+    expect(detectFabrication(
+      "Here's the exact code to add to agent-routing.ts:\n```{ label: 'Analyze' }```",
+      5, false, ["read_project_file", "search_project_files"],
+    )).toBe(true);
+  });
+
+  it("does not flag narration when build tools were used", () => {
+    expect(detectFabrication(
+      "Here's what I added to the code.",
+      3, false, ["saveBuildEvidence", "propose_file_change"],
+    )).toBe(false);
   });
 });
 
