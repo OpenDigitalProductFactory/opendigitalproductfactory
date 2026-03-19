@@ -177,7 +177,7 @@ This is deliberately small — production observations shift scores slowly. Gold
 
 ### Guardrails
 
-- **Golden test recency protection:** Production observations do not update a dimension within 24 hours of a golden test eval on that dimension. The golden test result is authoritative during that window.
+- **Golden test recency protection:** Production observations do not update any dimension within 24 hours of a golden test eval on the endpoint. This is endpoint-wide (uses `ModelProvider.lastEvalAt`), not per-dimension — a simplification. Per-dimension recency tracking can be added later if needed by storing per-dimension timestamps in a JSON field.
 - **Score clamping:** All scores are clamped to [0, 100]. No runaway drift from a burst of bad conversations.
 - **Minimum observation threshold (two-stage accumulation):** Production observations follow a two-stage flow:
   1. **Accumulate:** Each observation writes its delta to `EndpointTaskPerformance.dimensionScores` as a per-task-type running tally: `{ "reasoning": { "count": 3, "totalDelta": +12 } }`. The count and totalDelta are incremented per observation.
@@ -235,7 +235,7 @@ All audit data is queryable from the ops UI via the existing `RouteDecisionLog` 
 | `apps/web/lib/routing/eval-scoring.ts` | **New** — dimension-specific scoring functions (exact match, schema validation, tool-call validation, etc.) |
 | `apps/web/lib/routing/production-feedback.ts` | **New** — `updateEndpointDimensionScores`, task-to-dimension mapping, guardrails |
 | `apps/web/lib/orchestrator-evaluator.ts` | **Modified** — add call to `updateEndpointDimensionScores` after existing `updatePerformanceProfile` |
-| `apps/web/lib/actions/ai-providers.ts` | **Modified** — add `runDimensionEval` server action for ops UI trigger |
+| `apps/web/lib/actions/endpoint-performance.ts` | **Modified** — add `triggerDimensionEval` server action alongside existing `triggerEndpointTests` |
 | Ops UI components | **Modified** — eval trigger buttons, score display, drift indicators |
 | `apps/web/lib/routing/eval-runner.test.ts` | **New** — tests for eval orchestration and drift detection |
 | `apps/web/lib/routing/eval-scoring.test.ts` | **New** — tests for scoring functions |
