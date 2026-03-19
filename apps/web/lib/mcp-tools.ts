@@ -1209,27 +1209,29 @@ export async function executeTool(
         const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
         const build = await prisma.featureBuild.findUnique({ where: { buildId } });
         if (build) {
-          const current = build.phase as BuildPhase;
+          const current = build.phase as string;
           // Only auto-advance plan→build (triggers sandbox) and build→review.
           // ideate→plan is agent-driven — agent needs to finish the conversation first.
           const NEXT_PHASE: Record<string, string> = { plan: "build", build: "review" };
           const next = NEXT_PHASE[current];
-          if (next && canTransitionPhase(current, next)) {
-            const gate = checkPhaseGate(current, next, {
+          console.log(`[saveBuildEvidence] auto-advance check: current=${current} next=${next ?? "none"} field=${field}`);
+          if (next && canTransitionPhase(current as any, next as any)) {
+            const gate = checkPhaseGate(current as any, next as any, {
               designDoc: build.designDoc, designReview: build.designReview,
               buildPlan: build.buildPlan, planReview: build.planReview,
               taskResults: build.taskResults, verificationOut: build.verificationOut,
               acceptanceMet: build.acceptanceMet,
             });
+            console.log(`[saveBuildEvidence] gate: allowed=${gate.allowed} reason=${gate.reason ?? "ok"}`);
             if (gate.allowed) {
-              await advanceBuildPhase(buildId, next);
+              await advanceBuildPhase(buildId, next as any);
               if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: next });
               logBuildActivity(buildId, "phase:advance", `Phase advanced: ${current} → ${next}`);
             }
           }
         }
       } catch (err) {
-        console.warn("[saveBuildEvidence] auto-advance failed:", err);
+        console.error("[saveBuildEvidence] auto-advance failed:", err);
       }
 
       return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
