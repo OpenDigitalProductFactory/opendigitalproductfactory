@@ -4,3 +4,6 @@ RUN apk add --no-cache git
 WORKDIR /workspace
 # No database access, no secrets, no Docker socket
 # Resource limits applied at container creation
+
+# Keep container alive — coding agent executes commands via docker exec
+CMD ["sleep", "infinity"]
