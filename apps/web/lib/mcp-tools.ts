@@ -1202,6 +1202,34 @@ export async function executeTool(
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field });
       logBuildActivity(buildId, "saveBuildEvidence", `Evidence "${field}" saved.`);
+
+      // Auto-advance phase when evidence satisfies the next gate
+      try {
+        const { advanceBuildPhase } = await import("@/lib/actions/build");
+        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+        if (build) {
+          const current = build.phase as BuildPhase;
+          const NEXT_PHASE: Record<string, BuildPhase> = { ideate: "plan", plan: "build", build: "review" };
+          const next = NEXT_PHASE[current];
+          if (next && canTransitionPhase(current, next)) {
+            const gate = checkPhaseGate(current, next, {
+              designDoc: build.designDoc, designReview: build.designReview,
+              buildPlan: build.buildPlan, planReview: build.planReview,
+              taskResults: build.taskResults, verificationOut: build.verificationOut,
+              acceptanceMet: build.acceptanceMet,
+            });
+            if (gate.allowed) {
+              await advanceBuildPhase(buildId, next);
+              if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: next });
+              logBuildActivity(buildId, "phase:advance", `Phase advanced: ${current} → ${next}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[saveBuildEvidence] auto-advance failed:", err);
+      }
+
       return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
     }
 
