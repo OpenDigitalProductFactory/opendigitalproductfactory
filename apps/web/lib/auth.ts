@@ -2,15 +2,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@dpf/db";
-
-// Simple SHA-256 hash check (matches seed.ts — upgrade to bcrypt for production)
-async function hashPassword(password: string): Promise<string> {
-  const data = new TextEncoder().encode(password);
-  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { verifyPassword, hashPassword } from "./password.js";
 
 export type UserType = "admin" | "customer";
 
@@ -48,8 +40,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           include: { groups: { include: { platformRole: true } } },
         });
         if (!user || !user.isActive) return null;
-        const hash = await hashPassword(credentials.password as string);
-        if (hash !== user.passwordHash) return null;
+        const { valid, needsRehash } = await verifyPassword(credentials.password as string, user.passwordHash);
+        if (!valid) return null;
+        if (needsRehash) {
+          const newHash = await hashPassword(credentials.password as string);
+          await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+        }
         return {
           id: user.id,
           email: user.email,
@@ -78,8 +74,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
         if (!contact || !contact.isActive || !contact.passwordHash) return null;
         if (contact.account.status === "inactive") return null;
-        const hash = await hashPassword(credentials.password as string);
-        if (hash !== contact.passwordHash) return null;
+        const { valid, needsRehash } = await verifyPassword(credentials.password as string, contact.passwordHash);
+        if (!valid) return null;
+        if (needsRehash) {
+          const newHash = await hashPassword(credentials.password as string);
+          await prisma.customerContact.update({ where: { id: contact.id }, data: { passwordHash: newHash } });
+        }
         return {
           id: contact.id,
           email: contact.email,
