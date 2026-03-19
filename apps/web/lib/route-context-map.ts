@@ -20,7 +20,7 @@ export type RouteContextDef = {
 // ─── Universal Skills (added to every route) ────────────────────────────────
 // These appear on every page, giving the agent baseline page-interaction ability.
 
-const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
+export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
   {
     label: "Analyze this page",
     description: "Get key insights about what's on this page",

@@ -2,7 +2,7 @@ import { can } from "@/lib/permissions";
 import type { UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
-import { resolveRouteContext } from "@/lib/route-context-map";
+import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
 
 /**
  * Shared platform identity preamble — injected into every agent's system prompt.
@@ -399,6 +399,11 @@ export function resolveAgentForRoute(
     }
   }
 
+  // Merge universal skills: universal first, then page-specific, "Report an issue" last
+  const reportIssue = bestMatch.skills.find((s) => s.label === "Report an issue");
+  const pageSkills = bestMatch.skills.filter((s) => s.label !== "Report an issue");
+  const mergedSkills = [...(UNIVERSAL_SKILLS as typeof bestMatch.skills), ...pageSkills, ...(reportIssue ? [reportIssue] : [])];
+
   // Ungated routes (capability null) — always canAssist
   if (bestMatch.capability === null) {
     return {
@@ -408,7 +413,7 @@ export function resolveAgentForRoute(
       canAssist: true,
       sensitivity: bestMatch.sensitivity,
       systemPrompt: PLATFORM_PREAMBLE + bestMatch.systemPrompt,
-      skills: bestMatch.skills,
+      skills: mergedSkills,
       ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
     };
   }
@@ -423,7 +428,7 @@ export function resolveAgentForRoute(
     canAssist,
     sensitivity: bestMatch.sensitivity ?? getRouteSensitivity(pathname),
     systemPrompt: bestMatch.systemPrompt,
-    skills: bestMatch.skills,
+    skills: mergedSkills,
     ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
   };
 }
