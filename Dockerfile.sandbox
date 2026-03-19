@@ -1,8 +1,8 @@
 FROM node:20-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache git
+RUN apk add --no-cache git postgresql16-client curl
 WORKDIR /workspace
-# No database access, no secrets, no Docker socket
+# No secrets, no Docker socket
 # Resource limits applied at container creation
 
 # Keep container alive — coding agent executes commands via docker exec
