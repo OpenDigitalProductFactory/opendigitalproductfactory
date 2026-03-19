@@ -26,3 +26,4 @@ export { runDimensionEval, runAllDimensionEvals, computeNewScore, detectDrift } 
 export type { EvalRunResult } from "./eval-runner";
 export { scoreDimension } from "./eval-scoring";
 export { GOLDEN_TESTS, getTestsForDimension } from "./golden-tests";
+export { updateEndpointDimensionScores } from "./production-feedback";
