@@ -3,14 +3,7 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-
-async function hashPassword(password: string): Promise<string> {
-  const data = new TextEncoder().encode(password);
-  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { hashPassword } from "@/lib/password";
 
 export async function customerSignup(input: {
   email: string;
