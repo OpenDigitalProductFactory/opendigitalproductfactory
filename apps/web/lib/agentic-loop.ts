@@ -140,6 +140,42 @@ export async function runAgenticLoop(params: {
       console.warn(`[agentic-loop] hit MAX_DURATION (${MAX_DURATION_MS}ms). executedTools=${executedTools.length}.`);
       break;
     }
+
+    // Repetition detector — if the same tool has been called 3+ times, the model is stuck
+    const toolCallCounts = new Map<string, number>();
+    for (const t of executedTools) {
+      toolCallCounts.set(t.name, (toolCallCounts.get(t.name) ?? 0) + 1);
+    }
+    const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
+    if (repeatedTool && iteration > 5) {
+      console.warn(`[agentic-loop] tool repetition: ${repeatedTool[0]} called ${repeatedTool[1]} times. Breaking loop.`);
+      messages = [
+        ...messages,
+        {
+          role: "user" as const,
+          content: `You've called ${repeatedTool[0]} ${repeatedTool[1]} times. Stop retrying and give the user a summary of what you accomplished so far. If something isn't working, say so honestly.`,
+        },
+      ];
+      // Allow one more iteration for the model to respond with a summary, then exit
+      const summaryResult = await (routeDecision?.selectedEndpoint
+        ? callWithFallbackChain(routeDecision, messages, systemPrompt, toolsForProvider)
+        : callWithFailover(messages, systemPrompt, sensitivity, {
+            ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+            ...(modelRequirements && Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
+          }));
+      return {
+        content: summaryResult.content || "I got stuck in a loop. Here's what I have so far — please check the build evidence.",
+        providerId: summaryResult.providerId,
+        modelId: summaryResult.modelId,
+        downgraded: summaryResult.downgraded,
+        downgradeMessage: summaryResult.downgradeMessage,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
+    }
+
     let result: FailoverResult | FallbackResult;
 
     if (routeDecision?.selectedEndpoint) {
