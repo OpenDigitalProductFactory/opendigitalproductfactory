@@ -1210,9 +1210,8 @@ export async function executeTool(
         const build = await prisma.featureBuild.findUnique({ where: { buildId } });
         if (build) {
           const current = build.phase as string;
-          // Only auto-advance plan→build (triggers sandbox) and build→review.
-          // ideate→plan is agent-driven — agent needs to finish the conversation first.
-          const NEXT_PHASE: Record<string, string> = { plan: "build", build: "review" };
+          // Auto-advance when evidence satisfies the gate.
+          const NEXT_PHASE: Record<string, string> = { ideate: "plan", plan: "build", build: "review" };
           const next = NEXT_PHASE[current];
           console.log(`[saveBuildEvidence] auto-advance check: current=${current} next=${next ?? "none"} field=${field}`);
           if (next && canTransitionPhase(current as any, next as any)) {
