@@ -22,3 +22,7 @@ export {
 } from "./loader";
 export { callWithFallbackChain } from "./fallback";
 export type { FallbackResult } from "./fallback";
+export { runDimensionEval, runAllDimensionEvals, computeNewScore, detectDrift } from "./eval-runner";
+export type { EvalRunResult } from "./eval-runner";
+export { scoreDimension } from "./eval-scoring";
+export { GOLDEN_TESTS, getTestsForDimension } from "./golden-tests";
