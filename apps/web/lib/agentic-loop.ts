@@ -12,7 +12,7 @@ import type { ChatMessage } from "./ai-inference";
 // responds with text only (no tool calls), matching the Anthropic API pattern
 // where the loop runs until stop_reason === "end_turn". This limit only prevents
 // runaway loops. The model decides when it's done.
-const MAX_ITERATIONS = 25;
+const MAX_ITERATIONS = 40;
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
