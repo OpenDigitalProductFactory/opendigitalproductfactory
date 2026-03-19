@@ -109,12 +109,10 @@ export function searchProjectFiles(
   const max = options?.maxResults ?? 20;
 
   try {
-    const args = ["-rn", "--max-count", String(max)];
-    if (options?.glob) args.push("--include", options.glob);
-    args.push(query, ".");
-
+    // Use git grep (cross-platform, available wherever git is installed)
+    const globArg = options?.glob ? `-- "${options.glob}"` : "";
     const output = execSync(
-      `grep ${args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(" ")}`,
+      `git grep -n --max-count=${max} ${JSON.stringify(query)} HEAD ${globArg}`.trim(),
       {
         cwd: PROJECT_ROOT,
         encoding: "utf-8",
@@ -125,7 +123,8 @@ export function searchProjectFiles(
 
     const results: Array<{ path: string; line: number; text: string }> = [];
     for (const line of output.split("\n").slice(0, max)) {
-      const match = line.match(/^\.[\\/](.+?):(\d+):(.*)$/);
+      // git grep format: HEAD:path/to/file:lineNum:matched text
+      const match = line.match(/^(?:HEAD:)?(.+?):(\d+):(.*)$/);
       if (match) {
         const [, path, lineNum, text] = match;
         if (path && lineNum && isPathAllowed(path)) {

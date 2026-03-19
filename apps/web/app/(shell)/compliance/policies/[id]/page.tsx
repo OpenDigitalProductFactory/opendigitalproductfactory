@@ -1,5 +1,8 @@
 import { prisma } from "@dpf/db";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { transitionPolicyStatus } from "@/lib/actions/policy";
+import { EditPolicyForm } from "@/components/compliance/EditPolicyForm";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -9,6 +12,30 @@ const STATUS_COLORS: Record<string, string> = {
   approved: "bg-blue-900/30 text-blue-400",
   published: "bg-green-900/30 text-green-400",
   retired: "bg-gray-900/30 text-gray-400",
+};
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  "draft":     ["in-review"],
+  "in-review": ["approved", "draft"],
+  "approved":  ["published"],
+  "published": ["retired"],
+  "retired":   ["draft"],
+};
+
+const TRANSITION_LABELS: Record<string, string> = {
+  "in-review": "Submit for Review",
+  approved: "Approve",
+  published: "Publish",
+  retired: "Retire",
+  draft: "Return to Draft",
+};
+
+const TRANSITION_STYLES: Record<string, string> = {
+  "in-review": "bg-[var(--dpf-accent)] text-white hover:opacity-90",
+  approved: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
+  published: "bg-green-700 text-white hover:bg-green-600",
+  retired: "bg-red-700 text-white hover:bg-red-600",
+  draft: "bg-gray-700 text-gray-200 hover:bg-gray-600",
 };
 
 export default async function PolicyDetailPage({ params }: Props) {
@@ -36,18 +63,42 @@ export default async function PolicyDetailPage({ params }: Props) {
   if (!policy) notFound();
 
   const totalEmployees = await prisma.employeeProfile.count({ where: { status: "active" } });
+  const availableTransitions = VALID_TRANSITIONS[policy.lifecycleStatus] ?? [];
 
   return (
     <div>
+      {/* Breadcrumb */}
+      <div className="mb-2">
+        <Link href="/compliance/policies" className="text-xs text-[var(--dpf-muted)] hover:text-white">Policies</Link>
+        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+        <span className="text-xs text-white">{policy.title}</span>
+      </div>
+
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-white">{policy.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[policy.lifecycleStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
             {policy.lifecycleStatus}
           </span>
+          <EditPolicyForm id={policy.id} policy={policy} />
         </div>
         {policy.description && <p className="text-sm text-[var(--dpf-muted)]">{policy.description}</p>}
       </div>
+
+      {/* Lifecycle Transitions */}
+      {availableTransitions.length > 0 && (
+        <div className="flex items-center gap-2 mb-6">
+          <span className="text-xs text-[var(--dpf-muted)] mr-1">Transition:</span>
+          {availableTransitions.map((target) => (
+            <form key={target} action={async () => { "use server"; await transitionPolicyStatus(id, target); }}>
+              <button type="submit"
+                className={`px-3 py-1.5 text-xs font-medium rounded ${TRANSITION_STYLES[target] ?? "bg-[var(--dpf-accent)] text-white hover:opacity-90"}`}>
+                {TRANSITION_LABELS[target] ?? target}
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
 
       {/* Metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -76,7 +127,7 @@ export default async function PolicyDetailPage({ params }: Props) {
       {/* Obligation link */}
       {policy.obligation ? (
         <p className="text-xs text-blue-400 mb-6">
-          Linked to obligation: <a href={`/compliance/obligations`} className="underline">{policy.obligation.title}</a>
+          Linked to obligation: <a href={`/compliance/obligations/${policy.obligation.id}`} className="underline">{policy.obligation.title}</a>
         </p>
       ) : (
         <p className="text-xs text-[var(--dpf-muted)] mb-6">Not linked to a regulation.</p>

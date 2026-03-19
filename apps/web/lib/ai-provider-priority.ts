@@ -71,13 +71,27 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
     const p = providers[i]!;
 
     // Try ModelProfile first (has capabilityTier)
-    const profile = await prisma.modelProfile.findFirst({
+    // Fetch all profiles and sort in JS using TIER_RANK — Prisma's alphabetical
+    // sort on the string field gets the order wrong (e.g., "specialist" > "deep-thinker").
+    const profiles = await prisma.modelProfile.findMany({
       where: { providerId: p.providerId },
-      orderBy: [{ capabilityTier: "desc" }, { costTier: "asc" }],
-      select: { modelId: true, capabilityTier: true },
+      select: { modelId: true, capabilityTier: true, costTier: true },
     });
 
-    if (profile && !NON_CHAT_PATTERN.test(profile.modelId)) {
+    // Sort: highest tier first, then cheapest cost tier, then prefer non-dated model aliases
+    const chatProfiles = profiles.filter((pr) => !NON_CHAT_PATTERN.test(pr.modelId));
+    chatProfiles.sort((a, b) => {
+      const tierDiff = (TIER_RANK[b.capabilityTier] ?? 0) - (TIER_RANK[a.capabilityTier] ?? 0);
+      if (tierDiff !== 0) return tierDiff;
+      // Prefer non-dated model aliases (e.g., "claude-sonnet-4-6" over "claude-sonnet-4-6-20250514")
+      const aIsDated = /\d{8}$/.test(a.modelId) ? 1 : 0;
+      const bIsDated = /\d{8}$/.test(b.modelId) ? 1 : 0;
+      if (aIsDated !== bIsDated) return aIsDated - bIsDated;
+      return (a.costTier ?? "").localeCompare(b.costTier ?? "");
+    });
+    const profile = chatProfiles[0];
+
+    if (profile) {
       entries.push({
         providerId: p.providerId,
         modelId: profile.modelId,
@@ -434,13 +448,23 @@ export async function optimizeProviderPriority(): Promise<{ ranked: number }> {
 
   for (const p of providers) {
     // Best chat-capable model by capability (desc) then cost (asc)
-    const profile = await prisma.modelProfile.findFirst({
+    // Sort in JS using TIER_RANK — Prisma alphabetical sort gets order wrong.
+    const allProfiles = await prisma.modelProfile.findMany({
       where: { providerId: p.providerId },
-      orderBy: [{ capabilityTier: "desc" }, { costTier: "asc" }],
       select: { modelId: true, capabilityTier: true, costTier: true },
     });
+    const chatProfiles = allProfiles.filter((pr) => !NON_CHAT_PATTERN.test(pr.modelId));
+    chatProfiles.sort((a, b) => {
+      const tierDiff = (TIER_ORDER[b.capabilityTier] ?? 0) - (TIER_ORDER[a.capabilityTier] ?? 0);
+      if (tierDiff !== 0) return tierDiff;
+      const aIsDated = /\d{8}$/.test(a.modelId) ? 1 : 0;
+      const bIsDated = /\d{8}$/.test(b.modelId) ? 1 : 0;
+      if (aIsDated !== bIsDated) return aIsDated - bIsDated;
+      return (a.costTier ?? "").localeCompare(b.costTier ?? "");
+    });
+    const profile = chatProfiles[0];
 
-    if (profile && !NON_CHAT_PATTERN.test(profile.modelId)) {
+    if (profile) {
       entries.push({
         providerId: p.providerId,
         modelId: profile.modelId,

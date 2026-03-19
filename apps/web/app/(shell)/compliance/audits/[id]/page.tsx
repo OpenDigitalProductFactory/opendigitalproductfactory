@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 type Props = { params: Promise<{ id: string }> };
@@ -29,6 +30,13 @@ export default async function AuditDetailPage({ params }: Props) {
 
   return (
     <div>
+      {/* Breadcrumb */}
+      <div className="mb-2">
+        <Link href="/compliance/audits" className="text-xs text-[var(--dpf-muted)] hover:text-white">Audits</Link>
+        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+        <span className="text-xs text-white">{audit.title}</span>
+      </div>
+
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white">{audit.title}</h1>
         <div className="flex gap-2 mt-1">
