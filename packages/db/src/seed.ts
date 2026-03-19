@@ -696,6 +696,226 @@ async function seedMvpEpics(): Promise<void> {
   console.log(`Seeded 3 MVP epics: ${llmEpic.epicId} (${llmItems.length} items), ${deployEpic.epicId} (${deployItems.length} items), ${execEpic.epicId} (${execItems.length} items)`);
 }
 
+async function seedMobileCompanionEpics(): Promise<void> {
+  const foundPortfolio = await prisma.portfolio.findUnique({ where: { slug: "foundational" } });
+  const mfgPortfolio = await prisma.portfolio.findUnique({ where: { slug: "manufacturing_and_delivery" } });
+  if (!foundPortfolio || !mfgPortfolio) throw new Error("Required portfolios not seeded");
+
+  const dpfPortal = await prisma.digitalProduct.findUnique({ where: { productId: "dpf-portal" } });
+  if (!dpfPortal) throw new Error("dpf-portal digital product not seeded");
+
+  const taxNode = await prisma.taxonomyNode.findUnique({ where: { nodeId: "manufacturing_and_delivery" } });
+  if (!taxNode) throw new Error("manufacturing_and_delivery taxonomy node not seeded");
+
+  // ── EP-REST-API-001 — Platform REST API v1 ────────────────────────────────
+  const restApiEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-REST-API-001" },
+    update: {
+      title: "Platform REST API v1",
+      description:
+        "Extract business logic from server actions into shared functions. Expose as versioned REST endpoints. JWT auth alongside existing session auth. OpenAPI spec generation.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-REST-API-001",
+      title: "Platform REST API v1",
+      description:
+        "Extract business logic from server actions into shared functions. Expose as versioned REST endpoints. JWT auth alongside existing session auth. OpenAPI spec generation.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: restApiEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: restApiEpic.id, portfolioId: foundPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: restApiEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: restApiEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const restApiItems = [
+    { itemId: "BI-REST-001", title: "Extract shared business logic from server actions into packages/api/", priority: 1, body: "Refactor existing server actions to separate business logic from Next.js-specific concerns. Create packages/api/ with shared functions callable from both server actions and REST route handlers." },
+    { itemId: "BI-REST-002", title: "JWT auth middleware (issue, refresh, validate alongside NextAuth sessions, using ApiToken model for refresh tokens)", priority: 2, body: "Implement JWT middleware that issues and validates access tokens (15-min TTL) alongside existing NextAuth sessions. Use ApiToken model for refresh tokens (30-day TTL, rotated on refresh). Dual auth: check Bearer header first, fall back to session cookie." },
+    { itemId: "BI-REST-003", title: "Auth endpoints (login, refresh, logout, me)", priority: 3, body: "POST /api/v1/auth/login (email+password → JWT pair), POST /api/v1/auth/refresh (rotate tokens), POST /api/v1/auth/logout (invalidate refresh token), GET /api/v1/auth/me (current user + role + capabilities)." },
+    { itemId: "BI-REST-004", title: "Workspace endpoints (dashboard, activity)", priority: 4, body: "GET /api/v1/workspace/dashboard (tiles, metrics, calendar items), GET /api/v1/workspace/activity (recent activity feed). Cursor-based pagination." },
+    { itemId: "BI-REST-005", title: "Portfolio endpoints (tree, detail, products)", priority: 5, body: "GET /api/v1/portfolio/tree (full hierarchy), GET /api/v1/portfolio/:id (detail + health), GET /api/v1/portfolio/:id/products (products under portfolio)." },
+    { itemId: "BI-REST-006", title: "Ops endpoints (epics CRUD, backlog CRUD)", priority: 6, body: "GET/POST /api/v1/ops/epics, PATCH /api/v1/ops/epics/:id, GET/POST /api/v1/ops/backlog, PATCH/DELETE /api/v1/ops/backlog/:id. Filterable list with cursor pagination." },
+    { itemId: "BI-REST-007", title: "Agent endpoints (message, thread, stream SSE, proposals)", priority: 7, body: "POST /api/v1/agent/message (send to specialist), GET /api/v1/agent/thread (conversation history), GET /api/v1/agent/stream (SSE real-time responses), GET /api/v1/agent/proposals (pending HITL proposals)." },
+    { itemId: "BI-REST-008", title: "Governance endpoints (approvals, decisions)", priority: 8, body: "GET /api/v1/governance/approvals (AgentActionProposal where status=proposed), POST /api/v1/governance/approvals/:id (update status + decidedById/decidedAt), GET /api/v1/governance/decisions (AuthorizationDecisionLog audit trail)." },
+    { itemId: "BI-REST-009", title: "Customer endpoints (accounts CRUD)", priority: 9, body: "GET /api/v1/customer/accounts (customer list), GET /api/v1/customer/accounts/:id (detail), PATCH /api/v1/customer/accounts/:id (update). Cursor-based pagination, capability-gated." },
+    { itemId: "BI-REST-010", title: "Compliance endpoints (alerts, incidents, controls, regulations, audit findings, corrective actions)", priority: 10, body: "GET /api/v1/compliance/alerts, /incidents, /controls, /regulations, /audits/:id/findings, /corrective-actions. Read-only list endpoints for mobile field reference." },
+    { itemId: "BI-REST-011", title: "Notification + push device DB models and endpoints", priority: 11, body: "Create Notification and PushDeviceRegistration Prisma models + migration. Endpoints: GET /api/v1/notifications (feed), PATCH /api/v1/notifications/:id/read, POST /api/v1/notifications/register-device (FCM/APNs token)." },
+    { itemId: "BI-REST-012", title: "Dynamic content endpoints (forms, views — returns empty until builder exists)", priority: 12, body: "GET /api/v1/dynamic/forms, GET /api/v1/dynamic/forms/:id, POST /api/v1/dynamic/forms/:id/submit, GET /api/v1/dynamic/views, GET /api/v1/dynamic/views/:id/data. Returns empty arrays until portal form builder lands." },
+    { itemId: "BI-REST-013", title: "OpenAPI spec generation + typed client in packages/api-client/", priority: 13, body: "Auto-generate OpenAPI 3.1 spec from route handlers. Generate typed TypeScript client in packages/api-client/ consumable by both web and mobile. Publish as internal package." },
+    { itemId: "BI-REST-014", title: "Shared Zod validators in packages/validators/", priority: 14, body: "Create packages/validators/ with Zod schemas for all API request/response shapes. Shared between REST route handlers (server-side) and api-client (client-side). Single source of truth for validation." },
+    { itemId: "BI-REST-015", title: "REST API test suite (Vitest + supertest, matching web test framework)", priority: 15, body: "Comprehensive test suite for all REST endpoints using Vitest + supertest. Test auth flows, CRUD operations, pagination, error responses, capability gates. Matches existing web test conventions." },
+    { itemId: "BI-REST-016", title: "File upload endpoint (POST /api/v1/upload, multipart, 10MB limit, image/pdf)", priority: 16, body: "POST /api/v1/upload accepting multipart/form-data. Max 10MB per file, accepted types: image/jpeg, image/png, image/heic, application/pdf. Returns { fileId, url }. Used by camera and signature fields in dynamic forms." },
+    { itemId: "BI-REST-017", title: "SSE stream migration (replace /api/agent/stream with /api/v1/agent/stream)", priority: 17, body: "Migrate SSE stream endpoint to /api/v1/agent/stream accepting both JWT and session auth. Deprecate old /api/agent/stream route. Ensure backward compatibility during migration period." },
+  ];
+
+  for (const item of restApiItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: restApiEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: restApiEpic.id },
+    });
+  }
+
+  // ── EP-MOBILE-FOUND-001 — Mobile Companion App Foundation ─────────────────
+  const mobileFoundEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-MOBILE-FOUND-001" },
+    update: {
+      title: "Mobile Companion App Foundation",
+      description:
+        "Expo project scaffold, auth flow, navigation shell, offline infrastructure, push notifications.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-MOBILE-FOUND-001",
+      title: "Mobile Companion App Foundation",
+      description:
+        "Expo project scaffold, auth flow, navigation shell, offline infrastructure, push notifications.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileFoundEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: mobileFoundEpic.id, portfolioId: foundPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileFoundEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: mobileFoundEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const mobileFoundItems = [
+    { itemId: "BI-MOB-001", title: "Expo project scaffold in apps/mobile/ with pnpm workspace integration", priority: 1, body: "Initialize Expo SDK 53+ managed workflow project in apps/mobile/. Configure pnpm workspace integration, TypeScript strict mode, path aliases. Link shared packages (types, api-client, validators)." },
+    { itemId: "BI-MOB-002", title: "Expo Router tab navigation (Home, Ops, Portfolio, Customers, More)", priority: 2, body: "File-based routing with Expo Router. Bottom tab navigator with five tabs: Home (workspace), Ops, Portfolio, Customers, More. Stack navigators nested within each tab for drill-down screens." },
+    { itemId: "BI-MOB-003", title: "Auth flow (login screen, JWT storage in Secure Storage, biometric unlock)", priority: 3, body: "Login screen with email+password. Store JWT access+refresh tokens in expo-secure-store with biometric access control (requireAuthentication: true). Auto-refresh on app open. Redirect to login when refresh token expired." },
+    { itemId: "BI-MOB-004", title: "API client integration (packages/api-client/ consuming /api/v1/*)", priority: 4, body: "Integrate the typed REST client from packages/api-client/ into the mobile app. Configure base URL, auth header injection, automatic token refresh on 401, error handling." },
+    { itemId: "BI-MOB-005", title: "Offline cache layer (SQLite for entities, MMKV for tokens/prefs)", priority: 5, body: "expo-sqlite for relational entity caching (dashboard, epics, backlog, customers). react-native-mmkv for key-value storage (tokens, preferences, cache schema version). Repository pattern for testable storage interfaces." },
+    { itemId: "BI-MOB-006", title: "Push notification setup (expo-notifications, FCM/APNs, device registration)", priority: 6, body: "Configure expo-notifications for both iOS (APNs) and Android (FCM). Register device token via POST /api/v1/notifications/register-device. Handle notification permissions, token refresh, and foreground/background notification display." },
+    { itemId: "BI-MOB-007", title: "Deep linking (notification tap → correct screen)", priority: 7, body: "Configure Expo Router deep linking so notification taps navigate to the correct screen using the deepLink field from Notification model. Handle cold start and warm start deep link scenarios." },
+    { itemId: "BI-MOB-008", title: "Testing harness (jest-expo, RNTL, MSW, renderWithProviders, Maestro config)", priority: 8, body: "Set up jest-expo with React Native Testing Library. Configure MSW msw/native for API mocking. Create renderWithProviders test helper with Zustand stores and navigation context. Configure Maestro for E2E flows." },
+    { itemId: "BI-MOB-009", title: "EAS Build + Submit configuration (eas.json, credentials, CI workflow)", priority: 9, body: "Configure eas.json with development, preview, and production build profiles. Set up EAS credentials for iOS code signing and Android keystore. GitHub Actions workflow for CI: type check, lint, Jest tests, then trigger EAS build." },
+    { itemId: "BI-MOB-010", title: "App theming (match platform brand tokens, dark mode, typography)", priority: 10, body: "NativeWind v4 configuration matching platform brand tokens. Dark mode support matching web theme. Typography scale, spacing tokens, color palette. Minimum touch targets: 44x44pt iOS, 48x48dp Android." },
+  ];
+
+  for (const item of mobileFoundItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileFoundEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileFoundEpic.id },
+    });
+  }
+
+  // ── EP-MOBILE-FEAT-001 — Mobile Companion App Features ────────────────────
+  const mobileFeatEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-MOBILE-FEAT-001" },
+    update: {
+      title: "Mobile Companion App Features",
+      description:
+        "Core feature screens with full offline caching and test coverage.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-MOBILE-FEAT-001",
+      title: "Mobile Companion App Features",
+      description:
+        "Core feature screens with full offline caching and test coverage.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileFeatEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: mobileFeatEpic.id, portfolioId: foundPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileFeatEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: mobileFeatEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const mobileFeatItems = [
+    { itemId: "BI-MOB-011", title: "Workspace dashboard (tiles, calendar, activity feed, quick actions)", priority: 1, body: "Home tab screen displaying health metric tiles per area, calendar widget with upcoming items, recent activity feed, and quick action buttons (create item, approve, message agent). Cached in SQLite with 'Last synced' indicator." },
+    { itemId: "BI-MOB-012", title: "Epic list + detail screen", priority: 2, body: "Ops tab epic list grouped and filterable by status/portfolio. Epic detail screen showing description, status, and linked backlog items. Pull-to-refresh with offline cache fallback." },
+    { itemId: "BI-MOB-013", title: "Backlog item list + detail + create/edit", priority: 3, body: "Backlog item list within Ops tab, filterable by status/priority/epic. Detail screen with all fields. Create and edit forms with validation from packages/validators/. Mutations queued when offline." },
+    { itemId: "BI-MOB-014", title: "Portfolio tree + node detail (read-only)", priority: 4, body: "Portfolio tab with collapsible hierarchy tree view. Node detail screen showing health metrics, budget info, and linked products. Product detail with read-only lifecycle view. Cached for offline browsing." },
+    { itemId: "BI-MOB-015", title: "Customer list + detail + edit", priority: 5, body: "Customers tab with searchable, filterable customer list. Customer detail screen showing contacts, accounts, and history. Edit capability for customer fields with capability-gated access." },
+    { itemId: "BI-MOB-016", title: "Agent co-worker FAB (route-aware specialist, SSE streaming, thread history)", priority: 6, body: "Floating action button persistent across all tabs. Routes to correct specialist based on current screen context (Ops → ops-coordinator, Portfolio → portfolio-advisor). Real-time SSE streaming in foreground. Push notification for background responses. Thread history synced with web." },
+    { itemId: "BI-MOB-017", title: "Approvals queue + approve/reject flow", priority: 7, body: "More tab approvals screen showing AgentActionProposal records where status=proposed. Approve/reject with optional rationale. Updates reflected in real-time. Capability-gated to authorized users." },
+    { itemId: "BI-MOB-018", title: "Compliance alerts + incident list", priority: 8, body: "More tab compliance section showing active regulatory alerts and compliance incidents. Read-only list with detail drill-down. Useful for field reference by compliance officers." },
+    { itemId: "BI-MOB-019", title: "Notification history screen", priority: 9, body: "More tab notification history showing all notifications with read/unread status. Mark as read on tap. Deep link navigation to relevant screen on notification tap. Paginated with cursor-based loading." },
+    { itemId: "BI-MOB-020", title: "Profile + settings screen", priority: 10, body: "More tab profile screen showing current user info, role, and capabilities. Settings for notification preferences, biometric unlock toggle, cache management (clear cache), and app version info." },
+    { itemId: "BI-MOB-021", title: "Maestro E2E flows for all feature screens", priority: 11, body: "Maestro YAML E2E test flows: login, backlog CRUD, agent chat, approval flow, offline cache, customer view, deep link navigation. Runs on EAS Workflows — Android on Linux, iOS on macOS." },
+  ];
+
+  for (const item of mobileFeatItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileFeatEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileFeatEpic.id },
+    });
+  }
+
+  // ── EP-MOBILE-DYN-001 — Mobile Dynamic Content Renderer ───────────────────
+  const mobileDynEpic = await prisma.epic.upsert({
+    where: { epicId: "EP-MOBILE-DYN-001" },
+    update: {
+      title: "Mobile Dynamic Content Renderer",
+      description:
+        "Schema-driven form and view rendering engine. Consumes definitions from /api/v1/dynamic/*.",
+      status: "open",
+    },
+    create: {
+      epicId: "EP-MOBILE-DYN-001",
+      title: "Mobile Dynamic Content Renderer",
+      description:
+        "Schema-driven form and view rendering engine. Consumes definitions from /api/v1/dynamic/*.",
+      status: "open",
+    },
+  });
+
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileDynEpic.id, portfolioId: foundPortfolio.id } },
+    update: {},
+    create: { epicId: mobileDynEpic.id, portfolioId: foundPortfolio.id },
+  });
+  await prisma.epicPortfolio.upsert({
+    where: { epicId_portfolioId: { epicId: mobileDynEpic.id, portfolioId: mfgPortfolio.id } },
+    update: {},
+    create: { epicId: mobileDynEpic.id, portfolioId: mfgPortfolio.id },
+  });
+
+  const mobileDynItems = [
+    { itemId: "BI-MOB-022", title: "Form renderer engine (field type → native component mapping)", priority: 1, body: "Core rendering engine that maps form field definitions to native React Native components. Reads DynamicForm schema from /api/v1/dynamic/forms/:id and renders appropriate input components. Handles form state, dirty tracking, and submit flow." },
+    { itemId: "BI-MOB-023", title: "Form field types (text, select, date, camera, signature, location, lookup)", priority: 2, body: "Native component implementations for all field types: TextInput (text/textarea), BottomSheet picker (select), native date picker (date), expo-camera (camera), canvas drawing (signature), expo-location (location), searchable list (lookup), numeric input (number), Switch (checkbox/toggle), multi-select BottomSheet, radio button group." },
+    { itemId: "BI-MOB-024", title: "Form validation engine (schema-driven, client-side)", priority: 3, body: "Client-side validation engine driven by form field definitions. Validates required fields, min/max constraints, type-specific rules. Shows inline error messages. Blocks submission until valid. Server validates again on submit." },
+    { itemId: "BI-MOB-025", title: "Form offline submission queue (for offlineCapable forms)", priority: 4, body: "Forms marked offlineCapable: true pre-cache their schema and lookup data. Submissions queued in SQLite when offline with Pending badge. Automatic retry on reconnect. Queue management UI showing pending submissions." },
+    { itemId: "BI-MOB-026", title: "View renderer engine (widget type → native component mapping)", priority: 5, body: "Core rendering engine that maps DynamicView layout definitions to native widget components. Reads view schema from /api/v1/dynamic/views/:id, fetches data from dataSource endpoint, and renders widget grid." },
+    { itemId: "BI-MOB-027", title: "View widget types (stat-card, charts, list, map)", priority: 6, body: "Native widget implementations: stat-card (large number + label), bar-chart/pie-chart (react-native-chart-kit), scrollable list/table, map (react-native-maps with markers). Each widget handles its expected data shape." },
+    { itemId: "BI-MOB-028", title: "Dynamic content caching (schema versioning, stale detection)", priority: 7, body: "Cache form and view schemas in SQLite with version tracking. Detect stale schemas on app open by comparing cached version with server version. Drop and re-fetch when version changes. Schema version stored in MMKV as cacheSchemaVersion." },
+    { itemId: "BI-MOB-029", title: "Dynamic content test suite (renderer tests for all field/widget types)", priority: 8, body: "Jest + RNTL tests for form renderer (every field type renders correctly, validation fires, submit works), view renderer (every widget type renders, data binding works), and offline queue (enqueue, replay, error handling). MSW mocks for dynamic API endpoints." },
+  ];
+
+  for (const item of mobileDynItems) {
+    await prisma.backlogItem.upsert({
+      where: { itemId: item.itemId },
+      update: { title: item.title, priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileDynEpic.id },
+      create: { itemId: item.itemId, title: item.title, status: "open", priority: item.priority, body: item.body, type: "product", digitalProductId: dpfPortal.id, taxonomyNodeId: taxNode.id, epicId: mobileDynEpic.id },
+    });
+  }
+
+  console.log(`Seeded 4 mobile companion epics: ${restApiEpic.epicId} (${restApiItems.length} items), ${mobileFoundEpic.epicId} (${mobileFoundItems.length} items), ${mobileFeatEpic.epicId} (${mobileFeatItems.length} items), ${mobileDynEpic.epicId} (${mobileDynItems.length} items)`);
+}
+
 async function seedDefaultAdminUser(): Promise<void> {
   // Creates a default HR-000 user for initial access. Change password immediately.
   const adminRole = await prisma.platformRole.findUnique({ where: { roleId: "HR-000" } });
@@ -961,6 +1181,7 @@ async function main(): Promise<void> {
   await seedThemeBrandingEpic();
   await seedDarkThemeUsabilityEpic();
   await seedMvpEpics();
+  await seedMobileCompanionEpics();
   await seedDefaultAdminUser();
   await seedScheduledJobs();
   await seedMcpServers();
