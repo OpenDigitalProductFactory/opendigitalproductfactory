@@ -292,7 +292,7 @@ export async function runDimensionEval(
           inconclusive: d.inconclusive,
           tests: d.testResults,
         })),
-      },
+      } as any,
     },
   });
 
