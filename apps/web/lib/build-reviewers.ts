@@ -16,7 +16,7 @@ Alternatives Considered: ${doc.alternativesConsidered}
 Reuse Plan: ${doc.reusePlan}
 New Code Justification: ${doc.newCodeJustification}
 Proposed Approach: ${doc.proposedApproach}
-Acceptance Criteria: ${doc.acceptanceCriteria.join("; ")}
+Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : doc.acceptanceCriteria ?? "Not specified"}
 
 PROJECT CONTEXT:
 ${projectContext}
