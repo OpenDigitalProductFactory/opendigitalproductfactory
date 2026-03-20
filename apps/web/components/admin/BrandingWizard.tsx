@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { saveSimpleBrand, importBrandFromUrl } from "@/lib/actions/branding";
-import { OOTB_PRESETS } from "@/lib/branding-presets";
-import { BrandingPreview } from "./BrandingPreview";
+import { OOTB_PRESETS, deriveThemeTokens } from "@/lib/branding-presets";
+import { BrandingDualPreview } from "./BrandingPreview";
 
 const FONT_OPTIONS = [
   { label: "Inter", value: "Inter, system-ui, sans-serif" },
@@ -251,12 +251,16 @@ export function BrandingWizard({
           {/* Right: preview */}
           <div className="flex flex-col gap-2">
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Live preview</p>
-            <BrandingPreview
-              companyName={name}
-              logoUrl={logoUrl}
-              accentColor={accent}
-              fontFamily={font}
-            />
+            {(() => { const tokens = deriveThemeTokens(accent); return (
+              <BrandingDualPreview
+                companyName={name}
+                logoUrl={logoUrl}
+                accentColor={accent}
+                fontFamily={font}
+                darkTokens={{ bg: tokens.dark.palette.bg, surface1: tokens.dark.palette.surface1, border: tokens.dark.palette.border, muted: tokens.dark.palette.muted, text: tokens.dark.palette.text, accent: tokens.dark.palette.accent }}
+                lightTokens={{ bg: tokens.light.palette.bg, surface1: tokens.light.palette.surface1, border: tokens.light.palette.border, muted: tokens.light.palette.muted, text: tokens.light.palette.text, accent: tokens.light.palette.accent }}
+              />
+            ); })()}
           </div>
         </div>
       </div>
@@ -355,12 +359,16 @@ export function BrandingWizard({
         {/* Preview */}
         <div className="flex flex-col gap-2">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Live preview</p>
-          <BrandingPreview
-            companyName={name}
-            logoUrl={logoUrl}
-            accentColor={accent}
-            fontFamily={font}
-          />
+          {(() => { const tokens = deriveThemeTokens(accent); return (
+            <BrandingDualPreview
+              companyName={name}
+              logoUrl={logoUrl}
+              accentColor={accent}
+              fontFamily={font}
+              darkTokens={{ bg: tokens.dark.palette.bg, surface1: tokens.dark.palette.surface1, border: tokens.dark.palette.border, muted: tokens.dark.palette.muted, text: tokens.dark.palette.text, accent: tokens.dark.palette.accent }}
+              lightTokens={{ bg: tokens.light.palette.bg, surface1: tokens.light.palette.surface1, border: tokens.light.palette.border, muted: tokens.light.palette.muted, text: tokens.light.palette.text, accent: tokens.light.palette.accent }}
+            />
+          ); })()}
         </div>
       </div>
     </div>

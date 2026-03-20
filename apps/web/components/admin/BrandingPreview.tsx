@@ -172,3 +172,38 @@ export function BrandingPreview({
     </div>
   );
 }
+
+type DualProps = {
+  companyName: string;
+  logoUrl: string;
+  accentColor: string;
+  fontFamily: string;
+  darkTokens?: { bg: string; surface1: string; border: string; muted: string; text: string; accent: string };
+  lightTokens?: { bg: string; surface1: string; border: string; muted: string; text: string; accent: string };
+};
+
+export function BrandingDualPreview({ companyName, logoUrl, accentColor, fontFamily, darkTokens, lightTokens }: DualProps) {
+  const defaultDark = { bg: "#0f0f1a", surface1: "#15151f", border: "#2a2a3a", muted: "#6b7280", text: "#e2e2f0", accent: accentColor };
+  const defaultLight = { bg: "#fafafa", surface1: "#ffffff", border: "#d4d4dc", muted: "#6b7280", text: "#1a1a2e", accent: accentColor };
+  const dk = darkTokens ?? defaultDark;
+  const lt = lightTokens ?? defaultLight;
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <p className="text-xs text-[var(--dpf-muted)] mb-2 font-medium">Light</p>
+        <BrandingPreview
+          companyName={companyName} logoUrl={logoUrl} accentColor={lt.accent} fontFamily={fontFamily}
+          bgColor={lt.bg} surface1Color={lt.surface1} borderColor={lt.border} mutedColor={lt.muted} textColor={lt.text}
+        />
+      </div>
+      <div>
+        <p className="text-xs text-[var(--dpf-muted)] mb-2 font-medium">Dark</p>
+        <BrandingPreview
+          companyName={companyName} logoUrl={logoUrl} accentColor={dk.accent} fontFamily={fontFamily}
+          bgColor={dk.bg} surface1Color={dk.surface1} borderColor={dk.border} mutedColor={dk.muted} textColor={dk.text}
+        />
+      </div>
+    </div>
+  );
+}
