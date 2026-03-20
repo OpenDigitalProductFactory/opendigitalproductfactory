@@ -94,12 +94,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         return;
       }
 
-      // Step 3: Auto-profile if model count is manageable (≤ 30).
-      // Profiling now includes capability probe verification — it generates the
-      // descriptive profile AND runs probes to replace guesses with evidence.
-      const unprofiled = discovery.discovered - profiles.length;
-      if (unprofiled > 0 && discovery.discovered <= 30) {
-        setPipelineStatus(`Profiling & verifying ${unprofiled} model${unprofiled !== 1 ? "s" : ""}...`);
+      // Step 3: Sync routing profiles for all discovered models.
+      // Uses metadata extraction + family baseline registry — no LLM calls, instant.
+      if (discovery.discovered > 0) {
+        setPipelineStatus(`Syncing routing profiles for ${discovery.discovered} model${discovery.discovered !== 1 ? "s" : ""}...`);
         const profResult = await profileModels(provider.providerId);
         setProfilingResult(profResult);
       }
@@ -111,9 +109,16 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   function handleRefreshModels() {
     startTransition(async () => {
-      setPipelineStatus("Refreshing models...");
+      setPipelineStatus("Discovering models...");
       const discovery = await discoverModels(provider.providerId);
       setDiscoveryResult(discovery);
+
+      if (discovery.discovered > 0) {
+        setPipelineStatus("Syncing routing profiles...");
+        const profResult = await profileModels(provider.providerId);
+        setProfilingResult(profResult);
+      }
+
       setPipelineStatus(null);
       router.refresh();
     });
@@ -461,7 +466,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             disabled={isPending}
             style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
           >
-            {isPending ? "Discovering models..." : "Refresh Models"}
+            {isPending ? "Syncing..." : "Sync Models & Profiles"}
           </button>
           {isPending && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--dpf-muted)" }} className="animate-pulse">

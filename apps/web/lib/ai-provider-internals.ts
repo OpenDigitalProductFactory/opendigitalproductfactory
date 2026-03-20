@@ -12,12 +12,8 @@ import {
   getTestUrl,
   parseModelsResponse,
 } from "@/lib/ai-provider-types";
-import {
-  rankProvidersByCost,
-  buildProfilingPrompt,
-  parseProfilingResponse,
-  type ProfileResult,
-} from "@/lib/ai-profiling";
+import { extractModelMetadata } from "@/lib/routing/metadata-extractor";
+import { getBaselineForModel } from "@/lib/routing/family-baselines";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
@@ -127,215 +123,9 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
   }
 }
 
-// ─── Internal helpers (not exported — only used within this module) ──────────
-
-/** Known cheap models per provider for profiling tasks. */
-const PROFILING_MODELS: Record<string, string> = {
-  anthropic:      "claude-haiku-4-5-20251001",
-  openai:         "gpt-4o-mini",
-  "azure-openai": "gpt-4o-mini",
-  gemini:         "gemini-2.0-flash",
-  cohere:         "command-r",
-  mistral:        "mistral-small-latest",
-  deepseek:       "deepseek-chat",
-  groq:           "llama-3.1-8b-instant",
-  together:       "meta-llama/Llama-3-8b-chat-hf",
-  fireworks:      "accounts/fireworks/models/llama-v3p1-8b-instruct",
-  xai:            "grok-2-latest",
-  openrouter:     "meta-llama/llama-3.1-8b-instruct:free",
-};
-
-/** Pick a model for profiling: prefer discovered models (proven valid), then known defaults. */
-async function getProfilingModel(providerId: string): Promise<string> {
-  // Prefer a discovered model — we know the account has access to it
-  const discovered = await prisma.discoveredModel.findMany({
-    where: { providerId },
-    orderBy: { modelId: "asc" },
-    select: { modelId: true },
-  });
-
-  if (discovered.length > 0) {
-    // Try to match a known cheap model from the discovered list
-    const known = PROFILING_MODELS[providerId];
-    if (known && discovered.some((d) => d.modelId === known)) return known;
-
-    // Otherwise pick the first discovered model that looks like a chat model
-    // (skip embedding-only, whisper, tts, dall-e, etc.)
-    const skipPatterns = /embed|whisper|tts|dall-e|moderation|babbage|davinci-00/i;
-    const chatModel = discovered.find((d) => !skipPatterns.test(d.modelId));
-    if (chatModel) return chatModel.modelId;
-
-    // Last resort: first discovered model
-    return discovered[0]!.modelId;
-  }
-
-  // No discovered models — use the hardcoded default
-  const known = PROFILING_MODELS[providerId];
-  if (known) return known;
-
-  throw new Error(`No known or discovered model for profiling on ${providerId}`);
-}
-
-async function callProviderForProfiling(
-  profilingProviderId: string,
-  prompt: string,
-): Promise<{ text: string; inputTokens: number | undefined; outputTokens: number | undefined }> {
-  const prov = await prisma.modelProvider.findUnique({ where: { providerId: profilingProviderId } });
-  if (!prov) throw new Error("Provider not found");
-
-  const baseUrl = prov.baseUrl ?? prov.endpoint;
-  if (!baseUrl) throw new Error("No base URL");
-
-  const model = await getProfilingModel(profilingProviderId);
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...getProviderExtraHeaders(profilingProviderId),
-  };
-
-  if (prov.authMethod === "api_key") {
-    const cred = await getDecryptedCredential(profilingProviderId);
-    if (!cred?.secretRef || !prov.authHeader) throw new Error("No credential");
-    headers[prov.authHeader] = prov.authHeader === "Authorization"
-      ? `Bearer ${cred.secretRef}` : cred.secretRef;
-  } else if (prov.authMethod === "oauth2_client_credentials") {
-    const tokenResult = await getProviderBearerToken(profilingProviderId);
-    if ("error" in tokenResult) throw new Error(tokenResult.error);
-    headers["Authorization"] = `Bearer ${tokenResult.token}`;
-  }
-
-  // Each provider family has its own endpoint + request/response shape
-  let chatUrl: string;
-  let body: Record<string, unknown>;
-  let extractText: (data: Record<string, unknown>) => string;
-
-  if (profilingProviderId === "anthropic") {
-    chatUrl = `${baseUrl}/messages`;
-    body = { model, max_tokens: 4096, messages: [{ role: "user", content: prompt }] };
-    extractText = (d) => (d.content as Array<{ text?: string }>)?.[0]?.text ?? "";
-  } else if (profilingProviderId === "cohere") {
-    chatUrl = `${baseUrl}/chat`;
-    body = { model, message: prompt, max_tokens: 4096 };
-    extractText = (d) => (d.text as string) ?? "";
-  } else if (profilingProviderId === "gemini") {
-    // Gemini uses generateContent endpoint with different structure
-    chatUrl = `${baseUrl}/models/${model}:generateContent`;
-    body = { contents: [{ parts: [{ text: prompt }] }] };
-    extractText = (d) => {
-      const candidates = d.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined;
-      return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    };
-  } else {
-    // OpenAI-compatible (OpenAI, Azure, Mistral, Groq, Together, Fireworks, xAI, OpenRouter, LiteLLM, etc.)
-    const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-    chatUrl = `${apiBase}/chat/completions`;
-    body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 4096, keep_alive: -1 };
-    extractText = (d) => {
-      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string } }>)?.[0]?.message;
-      return msg?.content || msg?.reasoning || "";
-    };
-  }
-
-  const res = await fetch(chatUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(600_000), // 10min — profiling generates detailed JSON, local models are slow
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    // Auto-retire deprecated/removed models (404 with "no longer available" or "not found")
-    if (res.status === 404) {
-      const modelRef = await prisma.discoveredModel.findFirst({
-        where: { providerId: profilingProviderId, modelId: model },
-      });
-      if (modelRef) {
-        await prisma.discoveredModel.delete({ where: { id: modelRef.id } }).catch(() => {});
-        await prisma.modelProfile.deleteMany({
-          where: { providerId: profilingProviderId, modelId: model },
-        }).catch(() => {});
-        console.warn(`[profiling] Retired deprecated model ${model} from ${profilingProviderId}`);
-      }
-    }
-    // Auto-disable on quota exhaustion (429) — same as callWithFailover
-    if (res.status === 429) {
-      await prisma.modelProvider.update({
-        where: { providerId: profilingProviderId },
-        data: { status: "inactive" },
-      }).catch(() => {});
-      const nextRunAt = new Date(Date.now() + 60 * 60 * 1000);
-      await prisma.scheduledJob.upsert({
-        where: { jobId: `provider-reenable-${profilingProviderId}` },
-        create: {
-          jobId: `provider-reenable-${profilingProviderId}`,
-          name: `Re-enable ${profilingProviderId} after quota reset`,
-          schedule: "once",
-          nextRunAt,
-          lastStatus: "scheduled",
-          lastError: errBody.slice(0, 500),
-        },
-        update: { nextRunAt, lastStatus: "scheduled", lastError: errBody.slice(0, 500) },
-      }).catch(() => {});
-    }
-    throw new Error(`${profilingProviderId}: HTTP ${res.status} from ${profilingProviderId}: ${errBody.slice(0, 200)}`);
-  }
-  const data = await res.json() as Record<string, unknown>;
-
-  const text = extractText(data);
-  const usage = extractTokenUsage(data);
-
-  return {
-    text,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-  };
-}
-
-async function logTokenUsage(input: {
-  agentId: string;
-  providerId: string;
-  contextKey: string;
-  inputTokens: number;
-  outputTokens: number;
-  inferenceMs?: number;
-}): Promise<void> {
-  // Internal helper — callers (profileModelsInternal) already guard at the action layer
-
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
-
-  let costUsd = 0;
-  if (provider) {
-    if (provider.costModel === "compute" && input.inferenceMs !== undefined) {
-      costUsd = computeComputeCost(
-        input.inferenceMs,
-        provider.computeWatts ?? 150,
-        provider.electricityRateKwh ?? 0.12,
-      );
-    } else if (provider.costModel === "token") {
-      costUsd = computeTokenCost(
-        input.inputTokens,
-        input.outputTokens,
-        provider.inputPricePerMToken ?? 0,
-        provider.outputPricePerMToken ?? 0,
-      );
-    }
-  }
-
-  await prisma.tokenUsage.create({
-    data: {
-      agentId:      input.agentId,
-      providerId:   input.providerId,
-      contextKey:   input.contextKey,
-      inputTokens:  input.inputTokens,
-      outputTokens: input.outputTokens,
-      ...(input.inferenceMs !== undefined && { inferenceMs: input.inferenceMs }),
-      costUsd,
-    },
-  });
-}
-
 // ─── Exported internal functions (no auth guard) ─────────────────────────────
+
+
 
 export async function discoverModelsInternal(
   providerId: string,
@@ -447,115 +237,12 @@ export async function discoverModelsInternal(
   return { discovered: models.length, newCount };
 }
 
-// ─── Model Specialization Detection ─────────────────────────────────────────
 
-type ModelSpecialization = "general" | "code" | "vision" | "embedding" | "math" | "instruct";
-
-const SPECIALIZATION_PATTERNS: Array<{ pattern: RegExp; type: ModelSpecialization }> = [
-  { pattern: /embed|nomic-embed|bge-|e5-|gte-|mxbai-embed/i, type: "embedding" },
-  { pattern: /llava|bakllava|moondream|minicpm-v/i, type: "vision" },
-  { pattern: /codellama|codegemma|codestral|deepseek-coder|starcoder|codeqwen|qwen2\.5-coder/i, type: "code" },
-  { pattern: /mathstral|deepseek-math|wizard-math/i, type: "math" },
-  { pattern: /instruct/i, type: "instruct" },
-];
-
-function detectSpecialization(modelId: string): ModelSpecialization {
-  const lower = modelId.toLowerCase();
-  for (const { pattern, type } of SPECIALIZATION_PATTERNS) {
-    if (pattern.test(lower)) return type;
-  }
-  return "general";
-}
-
-const SPECIALIZATION_PROFILES: Record<ModelSpecialization, {
-  bestFor: string[];
-  avoidFor: string[];
-  summaryPrefix: string;
-  codingCapability: (paramB: number) => string;
-  supportsToolUse: boolean;
-}> = {
-  general: {
-    bestFor: ["reasoning", "conversation", "analysis"],
-    avoidFor: [],
-    summaryPrefix: "General-purpose",
-    codingCapability: (b) => b >= 10 ? "strong" : "basic",
-    supportsToolUse: true,
-  },
-  code: {
-    bestFor: ["code generation", "code review", "debugging", "refactoring"],
-    avoidFor: ["creative writing", "general conversation"],
-    summaryPrefix: "Code-specialized",
-    codingCapability: () => "strong",
-    supportsToolUse: true,
-  },
-  vision: {
-    bestFor: ["image understanding", "visual Q&A", "screenshot analysis"],
-    avoidFor: ["code generation", "complex reasoning"],
-    summaryPrefix: "Vision-capable",
-    codingCapability: () => "basic",
-    supportsToolUse: false,
-  },
-  embedding: {
-    bestFor: ["text embeddings", "semantic search", "RAG"],
-    avoidFor: ["conversation", "generation", "reasoning"],
-    summaryPrefix: "Embedding",
-    codingCapability: () => "none",
-    supportsToolUse: false,
-  },
-  math: {
-    bestFor: ["mathematical reasoning", "formal proofs", "quantitative analysis"],
-    avoidFor: ["creative writing", "general conversation"],
-    summaryPrefix: "Math-specialized",
-    codingCapability: (b) => b >= 10 ? "strong" : "moderate",
-    supportsToolUse: true,
-  },
-  instruct: {
-    bestFor: ["instruction following", "structured output", "task completion"],
-    avoidFor: [],
-    summaryPrefix: "Instruction-tuned",
-    codingCapability: (b) => b >= 10 ? "strong" : "moderate",
-    supportsToolUse: true,
-  },
-};
-
-/** Generate a profile for a local Ollama model from its metadata without calling an LLM. */
-function profileLocalModel(modelId: string, rawMetadata: Record<string, unknown>): ProfileResult {
-  const sizeBytes = (rawMetadata.size as number) ?? 0;
-  const sizeGb = sizeBytes / 1_073_741_824;
-  const paramMatch = modelId.match(/(\d+\.?\d*)b/i);
-  const paramB = paramMatch?.[1] ? parseFloat(paramMatch[1]) : (sizeGb > 15 ? 32 : sizeGb > 5 ? 14 : sizeGb > 2 ? 8 : 1.7);
-
-  const spec = detectSpecialization(modelId);
-  const profile = SPECIALIZATION_PROFILES[spec];
-
-  // Embedding models are always "fast-cheap" — they don't generate text
-  const capabilityTier = spec === "embedding" ? "fast-cheap"
-    : paramB >= 30 ? "deep-thinker" : paramB >= 10 ? "strong" : paramB >= 5 ? "moderate" : "fast-cheap";
-  const speedRating = spec === "embedding" ? "fast"
-    : paramB >= 30 ? "slow" : paramB >= 10 ? "moderate" : "fast";
-
-  const sizeLabel = spec === "embedding" ? `${Math.round(sizeGb * 1000)}M dimensional` : `${paramB}B parameter`;
-  const qualityLabel = paramB >= 30
-    ? "High quality reasoning and generation."
-    : paramB >= 10
-      ? "Good balance of quality and speed."
-      : "Fast responses, suitable for targeted tasks.";
-
-  return {
-    modelId,
-    friendlyName: modelId.replace(/:/, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    summary: `${profile.summaryPrefix} ${sizeLabel} model via Ollama. ${spec === "embedding" ? "Generates vector embeddings for semantic search." : qualityLabel}`,
-    capabilityTier,
-    costTier: "$",
-    bestFor: profile.bestFor,
-    avoidFor: [...profile.avoidFor, ...(paramB < 10 && spec !== "embedding" ? ["complex reasoning", "long-form generation"] : [])],
-    contextWindow: spec === "embedding" ? null : "32768",
-    speedRating,
-    codingCapability: profile.codingCapability(paramB),
-    instructionFollowing: spec === "embedding" ? null : paramB >= 10 ? "strong" : "moderate",
-  };
-}
-
+/**
+ * EP-INF-002: Sync model profiles for all (or specified) discovered models.
+ * Uses rawMetadata extraction + family baseline registry — no LLM calls.
+ * Run after discovery to populate routing dimension scores and pricing.
+ */
 export async function profileModelsInternal(
   providerId: string,
   modelIds?: string[],
@@ -563,176 +250,87 @@ export async function profileModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { profiled: 0, failed: 0, error: "Provider not found" };
 
-  // Get models to profile
   const whereClause = modelIds
     ? { providerId, modelId: { in: modelIds } }
     : { providerId };
   const models = await prisma.discoveredModel.findMany({ where: whereClause });
   if (models.length === 0) return { profiled: 0, failed: 0, error: "No models to profile" };
 
-  // Local providers (Ollama): profile from metadata without calling an LLM.
-  // Self-profiling a large local model is too slow and unreliable (thinking mode,
-  // token limits, OOM on split GPU/CPU loads).
-  if (providerId === "ollama") {
-    let profiled = 0;
-    for (const m of models) {
-      const profile = profileLocalModel(m.modelId, m.rawMetadata as Record<string, unknown>);
-      const spec = detectSpecialization(m.modelId);
-      const toolUse = SPECIALIZATION_PROFILES[spec].supportsToolUse;
-      await prisma.modelProfile.upsert({
-        where: { providerId_modelId: { providerId, modelId: profile.modelId } },
-        create: { providerId, ...profile, supportsToolUse: toolUse, generatedBy: "local-metadata" },
-        update: { ...profile, supportsToolUse: toolUse, generatedBy: "local-metadata", generatedAt: new Date() },
-      });
-      profiled++;
-    }
-    return { profiled, failed: 0 };
-  }
+  let profiled = 0;
+  for (const m of models) {
+    const metadata = extractModelMetadata(providerId, m.rawMetadata as Record<string, unknown>);
+    const baseline = getBaselineForModel(m.modelId);
 
-  // Find cheapest active provider to do the profiling
-  const allProviders = await prisma.modelProvider.findMany({
-    select: { providerId: true, status: true, outputPricePerMToken: true },
-  });
-  const ranked = rankProvidersByCost(allProviders);
-  if (ranked.length === 0) return { profiled: 0, failed: 0, error: "No active AI provider available for profiling" };
-
-  // Build prompt
-  const modelEntries = models.map((m) => ({
-    modelId: m.modelId,
-    providerName: provider.name,
-    rawMetadata: m.rawMetadata as Record<string, unknown>,
-  }));
-
-  // Batch in groups of 20
-  let totalProfiled = 0;
-  let totalFailed = 0;
-
-  for (let i = 0; i < modelEntries.length; i += 20) {
-    const batch = modelEntries.slice(i, i + 20);
-    const prompt = buildProfilingPrompt(batch);
-
-    let profiles: ProfileResult[] = [];
-    let usedProviderId: string | null = null;
-    let lastError: string | null = null;
-
-    // Try each provider in cost order
-    for (const candidateId of ranked) {
-      try {
-        const result = await callProviderForProfiling(candidateId, prompt);
-        profiles = parseProfilingResponse(result.text);
-
-        // If JSON parse failed, retry once with a stricter prompt
-        if (profiles.length === 0) {
-          const stricterPrompt =
-            "IMPORTANT: Respond ONLY with a valid JSON array. No markdown code fences, no explanation text.\n\n" +
-            prompt;
-          const retryResult = await callProviderForProfiling(candidateId, stricterPrompt);
-          profiles = parseProfilingResponse(retryResult.text);
-
-          if (profiles.length > 0) {
-            usedProviderId = candidateId;
-            await logTokenUsage({
-              agentId: "system:model-profiler",
-              providerId: candidateId,
-              contextKey: `profile-${providerId}-batch-${i}`,
-              inputTokens: (result.inputTokens ?? 0) + (retryResult.inputTokens ?? 0),
-              outputTokens: (result.outputTokens ?? 0) + (retryResult.outputTokens ?? 0),
-            });
-            break;
-          }
-
-          lastError = `${candidateId}: response was not valid JSON`;
-          await logTokenUsage({
-            agentId: "system:model-profiler",
-            providerId: candidateId,
-            contextKey: `profile-${providerId}-batch-${i}-failed`,
-            inputTokens: 0,
-            outputTokens: 0,
-          }).catch(() => {});
-          continue;
+    const scoreFields = baseline
+      ? {
+          reasoning:                 baseline.scores.reasoning,
+          codegen:                   baseline.scores.codegen,
+          toolFidelity:              baseline.scores.toolFidelity,
+          instructionFollowingScore: baseline.scores.instructionFollowing,
+          structuredOutputScore:     baseline.scores.structuredOutput,
+          conversational:            baseline.scores.conversational,
+          contextRetention:          baseline.scores.contextRetention,
+          profileSource:             "seed",
+          profileConfidence:         baseline.confidence,
         }
+      : {
+          reasoning:                 50,
+          codegen:                   50,
+          toolFidelity:              50,
+          instructionFollowingScore: 50,
+          structuredOutputScore:     50,
+          conversational:            50,
+          contextRetention:          50,
+          profileSource:             "seed",
+          profileConfidence:         "low",
+        };
 
-        usedProviderId = candidateId;
-        await logTokenUsage({
-          agentId: "system:model-profiler",
-          providerId: candidateId,
-          contextKey: `profile-${providerId}-batch-${i}`,
-          inputTokens: result.inputTokens ?? 0,
-          outputTokens: result.outputTokens ?? 0,
-        });
-        break;
-      } catch (err) {
-        lastError = `${candidateId}: ${err instanceof Error ? err.message : "Unknown error"}`;
-        console.error(`[profiling] ${lastError}`);
-        await logTokenUsage({
-          agentId: "system:model-profiler",
-          providerId: candidateId,
-          contextKey: `profile-${providerId}-batch-${i}-failed`,
-          inputTokens: 0,
-          outputTokens: 0,
-        }).catch(() => {});
-        continue;
-      }
-    }
+    // Derive legacy display fields from available data (no LLM needed)
+    const friendlyName = m.modelId
+      .replace(/[-_:]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const reasoning = scoreFields.reasoning;
+    const capabilityTier = reasoning >= 85 ? "deep-thinker"
+      : reasoning >= 70 ? "strong"
+      : reasoning >= 50 ? "moderate"
+      : "fast-cheap";
+    const price = metadata.outputPricePerMToken;
+    const costTier = price == null ? "$" : price < 5 ? "$" : price < 15 ? "$$" : "$$$";
 
-    // If all providers failed for this batch, return a user-friendly error
-    if (profiles.length === 0 && lastError) {
-      const isQuota = lastError.includes("429");
-      const friendlyError = isQuota
-        ? "Provider hit its usage quota and has been disabled. It will be re-enabled in about 1 hour. Configure another provider to continue profiling."
-        : lastError;
-      return { profiled: totalProfiled, failed: batch.length, error: friendlyError };
-    }
-
-    // Save successful profiles
-    for (const profile of profiles) {
-      await prisma.modelProfile.upsert({
-        where: { providerId_modelId: { providerId, modelId: profile.modelId } },
-        create: {
-          providerId,
-          modelId: profile.modelId,
-          friendlyName: profile.friendlyName,
-          summary: profile.summary,
-          capabilityTier: profile.capabilityTier,
-          costTier: profile.costTier,
-          bestFor: profile.bestFor,
-          avoidFor: profile.avoidFor,
-          contextWindow: profile.contextWindow ?? null,
-          speedRating: profile.speedRating ?? null,
-          codingCapability: profile.codingCapability ?? null,
-          instructionFollowing: profile.instructionFollowing ?? null,
-          generatedBy: usedProviderId ?? "unknown",
-        },
-        update: {
-          friendlyName: profile.friendlyName,
-          summary: profile.summary,
-          capabilityTier: profile.capabilityTier,
-          costTier: profile.costTier,
-          bestFor: profile.bestFor,
-          avoidFor: profile.avoidFor,
-          contextWindow: profile.contextWindow ?? null,
-          speedRating: profile.speedRating ?? null,
-          codingCapability: profile.codingCapability ?? null,
-          instructionFollowing: profile.instructionFollowing ?? null,
-          generatedBy: usedProviderId ?? "unknown",
-          generatedAt: new Date(),
-        },
-      });
-      totalProfiled++;
-    }
-
-    const profiledIds = new Set(profiles.map((p) => p.modelId));
-    totalFailed += batch.filter((b) => !profiledIds.has(b.modelId)).length;
+    await prisma.modelProfile.upsert({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      create: {
+        providerId,
+        modelId:       m.modelId,
+        friendlyName,
+        summary:       `${provider.name} model. Routing profile sourced from family baseline registry.`,
+        capabilityTier,
+        costTier,
+        bestFor:       ["general purpose tasks"],
+        avoidFor:      [],
+        ...scoreFields,
+        maxContextTokens:     metadata.maxContextTokens,
+        maxOutputTokens:      metadata.maxOutputTokens,
+        inputPricePerMToken:  metadata.inputPricePerMToken,
+        outputPricePerMToken: metadata.outputPricePerMToken,
+        supportsToolUse:      metadata.supportsToolUse ?? provider.supportsToolUse,
+        generatedBy:          "system:metadata-sync",
+      },
+      update: {
+        ...scoreFields,
+        capabilityTier,
+        costTier,
+        maxContextTokens:     metadata.maxContextTokens,
+        maxOutputTokens:      metadata.maxOutputTokens,
+        inputPricePerMToken:  metadata.inputPricePerMToken,
+        outputPricePerMToken: metadata.outputPricePerMToken,
+        supportsToolUse:      metadata.supportsToolUse ?? provider.supportsToolUse,
+        generatedBy:          "system:metadata-sync",
+        generatedAt:          new Date(),
+      },
+    });
+    profiled++;
   }
 
-  // ── Verification: run capability probes against each profiled model ──
-  // This replaces guessed codingCapability/instructionFollowing with evidence.
-  try {
-    const { verifyModels } = await import("@/lib/endpoint-test-runner");
-    await verifyModels(providerId, "system:model-profiler");
-  } catch (err) {
-    console.warn("[profiling] probe verification failed (non-blocking):", err);
-  }
-
-  return { profiled: totalProfiled, failed: totalFailed };
+  return { profiled, failed: 0 };
 }
