@@ -381,6 +381,8 @@ export async function discoverModelsInternal(
   const models = parseModelsResponse(providerId, json);
   let newCount = 0;
 
+  const freshModelIds = new Set(models.map((m) => m.modelId));
+
   for (const m of models) {
     const existing = await prisma.discoveredModel.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
@@ -395,6 +397,50 @@ export async function discoverModelsInternal(
         data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
       });
       newCount++;
+    }
+  }
+
+  // ── EP-INF-002: Discovery reconciliation — detect gone models ──
+  const isLocalProvider = providerId === "ollama";
+  if (!isLocalProvider) {
+    const allKnown = await prisma.discoveredModel.findMany({
+      where: { providerId },
+      select: { id: true, modelId: true, missedDiscoveryCount: true },
+    });
+
+    for (const known of allKnown) {
+      if (freshModelIds.has(known.modelId)) {
+        // Model still exists — reset counter and reactivate if retired
+        if (known.missedDiscoveryCount > 0) {
+          await prisma.discoveredModel.update({
+            where: { id: known.id },
+            data: { missedDiscoveryCount: 0 },
+          });
+          await prisma.modelProfile.updateMany({
+            where: { providerId, modelId: known.modelId, modelStatus: "retired" },
+            data: { modelStatus: "active", retiredAt: null, retiredReason: null },
+          });
+        }
+      } else {
+        // Model not in fresh list — increment counter
+        const newMissedCount = known.missedDiscoveryCount + 1;
+        await prisma.discoveredModel.update({
+          where: { id: known.id },
+          data: { missedDiscoveryCount: newMissedCount },
+        });
+
+        if (newMissedCount >= 2) {
+          await prisma.modelProfile.updateMany({
+            where: { providerId, modelId: known.modelId },
+            data: {
+              modelStatus: "retired",
+              retiredAt: new Date(),
+              retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
+            },
+          });
+          console.log(`[discovery] Retired model ${known.modelId} from ${providerId} (missed ${newMissedCount} discoveries)`);
+        }
+      }
     }
   }
 
