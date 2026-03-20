@@ -216,43 +216,171 @@ Built for regulated industries from day one — not retrofitted.
 
 ## Architecture
 
-```
-+--------------------------------------------------+
-|                    Browser                        |
-|  +----------+ +-----------+ +------------------+ |
-|  |Workspace | | 8 Route   | | AI Coworker      | |
-|  |  Tiles   | |  Areas    | | Panel + Skills   | |
-|  +----------+ +-----------+ +------------------+ |
-+--------------------+-----------------------------+
-                     |
-+--------------------+-----------------------------+
-|             Next.js 14 App Router                 |
-|   Server Components - Server Actions - Auth.js    |
-|   Typed Permission Registry - AI Inference Engine |
-+----+----------+---------------+-----------------+
-     |          |               |
-+--------+ +--------+ +--------------+
-| Prisma | |  Neo4j | |   Ollama     |
-|    +   | |    5   | | (local AI)   |
-|Postgres| | (graph)| |  or Cloud    |
-|   16   | |        | |  Providers   |
-+--------+ +--------+ +--------------+
+The platform has two deployment models and one shared architectural core:
+
+- **Customer mode** - the full platform runs inside Docker with one exposed web port
+- **Native developer mode** - the databases and local AI run in Docker, while the app runs locally via `pnpm dev`
+- **Sandbox build loop** - isolated, on-demand containers support governed feature generation, preview, and testing
+
+For a deeper architecture walkthrough, see [docs/architecture/platform-overview.md](h:\OpenDigitalProductFactory\docs\architecture\platform-overview.md).
+
+### Platform Overview
+
+```mermaid
+flowchart TB
+    subgraph Clients
+        browser[Browser]
+        mobile[Mobile app<br/>planned / active design]
+        operator[Human operator / approver]
+    end
+
+    subgraph Core["Current runtime core"]
+        init[portal-init<br/>migrate, seed, detect hardware]
+        portal[portal<br/>Next.js app, auth, AI orchestration]
+        postgres[(PostgreSQL)]
+        neo4j[(Neo4j)]
+        qdrant[(Qdrant)]
+        ollama[Ollama<br/>local inference]
+    end
+
+    ext[External AI providers<br/>optional]
+    sandbox[On-demand sandbox stack<br/>preview, test, diff, isolated services]
+
+    browser --> portal
+    mobile -. REST API / SSE .-> portal
+    init --> postgres
+    portal --> postgres
+    portal --> neo4j
+    portal --> qdrant
+    portal --> ollama
+    portal -. multi-provider routing .-> ext
+    portal -. launch / inspect / promote .-> sandbox
+    operator --> portal
+    operator -. HITL approval .-> sandbox
 ```
 
-The entire stack runs on your machine in Docker. No cloud required. No data leaves your network.
+**Current runtime:** `portal`, `portal-init`, `postgres`, `neo4j`, `qdrant`, and `ollama` are defined in `docker-compose.yml`. Sandbox containers are launched on demand from the `dpf-sandbox` image and are not part of the always-on runtime.
+
+### Deployment Model 1: Customer Mode
+
+This is the target end-user install. Everything runs in Docker. Only the web app is exposed on port `3000`. Databases and local AI remain internal to the stack.
+
+```mermaid
+flowchart LR
+    user[Customer user]
+
+    subgraph host["Customer machine / server"]
+        subgraph docker["Docker runtime"]
+            portal[portal<br/>published :3000]
+            init[portal-init<br/>one-shot]
+            postgres[(postgres)]
+            neo4j[(neo4j)]
+            qdrant[(qdrant)]
+            ollama[ollama<br/>optional GPU passthrough]
+            sandbox[sandbox containers<br/>on demand]
+        end
+    end
+
+    user --> portal
+    init --> postgres
+    portal --> postgres
+    portal --> neo4j
+    portal --> qdrant
+    portal --> ollama
+    portal -. create / destroy .-> sandbox
+```
+
+**Use this mode when:** you want the simplest install, local data ownership, internal-only infrastructure services, and minimal setup overhead.
+
+### Deployment Model 2: Native Developer Mode
+
+This is the contributor and advanced operator workflow. The app runs locally for hot reload and IDE debugging, while the stateful services stay in Docker.
+
+```mermaid
+flowchart LR
+    browser[Browser]
+
+    subgraph workstation["Developer workstation"]
+        localapp[Local Next.js app<br/>pnpm --filter web dev]
+
+        subgraph docker["Docker sidecars"]
+            postgres[(postgres<br/>:5432)]
+            neo4j[(neo4j<br/>:7474 / :7687)]
+            ollama[ollama<br/>:11434]
+            qdrant[(qdrant<br/>internal by default)]
+            sandbox[sandbox containers<br/>on demand]
+        end
+    end
+
+    browser --> localapp
+    localapp --> postgres
+    localapp --> neo4j
+    localapp --> ollama
+    localapp --> qdrant
+    localapp -. launch / inspect .-> sandbox
+```
+
+**Use this mode when:** you need local IDE integration, debugging, hot reload, direct access to Dockerized stateful services, or frequent development work.
+
+### Sandbox and Iterative Build Loop
+
+The platform is evolving toward a governed self-improvement loop. Some pieces exist today: sandbox image creation, isolated source/workspace setup, dev-server preview, diff extraction, and optional isolated Postgres/Neo4j/Qdrant sandbox services. The full autonomous iterative flow is a target architecture and should be read as directional.
+
+```mermaid
+flowchart TD
+    request[Feature request / change request]
+    brief[Feature brief + plan in portal]
+    launch[Launch isolated sandbox network and containers]
+    workspace[Copy source into /workspace<br/>baseline git state]
+    iterate[Coding agent iterates inside sandbox]
+    preview[Live preview / logs / inspection]
+    verify[Run tests and verification]
+    review[Human review of diff and result]
+    promote[Promote approved diff back to main platform]
+    learn[Feed outcomes into routing, eval, and improvement loops]
+
+    request --> brief
+    brief --> launch
+    launch --> workspace
+    workspace --> iterate
+    iterate --> preview
+    preview --> verify
+    verify --> review
+    review -->|approve| promote
+    review -->|request changes| iterate
+    promote --> learn
+```
+
+### Hardware Recommendations
+
+The installer already detects host CPU, RAM, and GPU/VRAM and picks a local default model accordingly. These tiers are the practical guidance for choosing hardware.
+
+| Tier | CPU | RAM | Storage | GPU | Best for |
+|------|-----|-----|---------|-----|----------|
+| **Minimum viable local run** | Modern 4 cores | 16 GB | 50-100 GB SSD | None required | Evaluation, admin use, external-provider-first usage, light local AI |
+| **Recommended for serious use** | 8+ cores | 32 GB | 100-200 GB NVMe SSD | Optional, 8-12 GB VRAM recommended | Small teams, local-first AI, better responsiveness, moderate sandbox iteration |
+| **Best for self-building / sandbox-heavy use** | 12+ cores | 64 GB+ | 200+ GB NVMe SSD | 16 GB+ VRAM recommended | Frequent sandbox launches, heavier local models, preview/test loops, future self-improvement workflows |
+
+**Current local model auto-selection:** the platform chooses a default Ollama model based on detected RAM and VRAM. On constrained CPU-only systems it falls back to smaller Qwen variants; on stronger GPU-backed systems it selects larger defaults automatically.
 
 ---
 
 ## Docker Deployment
 
-4-service Docker Compose stack:
+### Current Compose Stack
 
 | Service | Purpose |
 |---------|---------|
-| `portal` | Next.js standalone app (port 3000) |
-| `postgres` | PostgreSQL 16 (internal only — no external access) |
-| `neo4j` | Neo4j 5 Community (internal only) |
-| `ollama` | Local AI inference (internal only) |
+| `portal-init` | One-shot bootstrap job that waits for infrastructure, runs migrations, and prepares the runtime |
+| `portal` | Main Next.js standalone application, published on port `3000` in customer mode |
+| `postgres` | PostgreSQL 16 for transactional and application data |
+| `neo4j` | Neo4j 5 Community for graph and relationship-heavy workloads |
+| `qdrant` | Vector store for semantic retrieval, embeddings, and memory-style search |
+| `ollama` | Local AI inference runtime with automatic default-model selection |
+| `sandbox-image` | Build target for the on-demand sandbox image used by iterative build workflows |
+| `playwright` | Optional tooling image used in the `build-images` profile |
+
+In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres`, `neo4j`, and `ollama` so the app can run locally while the stateful services remain containerized.
 
 ```bash
 docker compose up -d       # Start everything
