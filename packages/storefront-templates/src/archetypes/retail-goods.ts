@@ -9,7 +9,7 @@ const CONTACT_FIELDS = [
 
 export const retailGoodsArchetypes: ArchetypeDefinition[] = [
   {
-    archetypeId: "retail-shop",
+    archetypeId: "retail-goods",
     name: "Retail Shop",
     category: "retail-goods",
     ctaType: "purchase",

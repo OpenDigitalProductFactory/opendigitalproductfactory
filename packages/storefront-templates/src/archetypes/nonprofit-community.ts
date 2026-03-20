@@ -10,7 +10,10 @@ const CONTACT_FIELDS = [
 const DONATION_FORM_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
   { name: "email", label: "Email", type: "email" as const, required: true },
+  { name: "donationAmount", label: "Donation amount", type: "select" as const, required: true, options: ["£5", "£10", "£25", "£50", "£100", "Other"] },
+  { name: "customAmount", label: "Custom amount (£)", type: "text" as const, required: false, placeholder: "e.g. 30" },
   { name: "campaignId", label: "Campaign", type: "text" as const, required: false },
+  { name: "isAnonymous", label: "Make donation anonymous?", type: "select" as const, required: false, options: ["No", "Yes"] },
   { name: "notes", label: "Message", type: "textarea" as const, required: false },
 ];
 

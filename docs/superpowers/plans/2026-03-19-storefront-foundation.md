@@ -533,7 +533,7 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
 
 `src/archetypes/education-training.ts` — archetypes: `corporate-training`, `tutoring`, `music-school`, `driving-school`. Mix of `purchase` and `inquiry`. `music-school` items: instrument lessons per type. `driving-school` items: lesson packs.
 
-`src/archetypes/pet-services.ts` — archetypes: `pet-grooming`, `pet-care`, `kennel`. `ctaType: "booking"`. Form schema includes petSize, breed.
+`src/archetypes/pet-services.ts` — archetypes: `pet-grooming`, `dog-walking`, `pet-boarding`. `ctaType: "booking"`. Form schema includes petSize, breed.
 
 `src/archetypes/food-hospitality.ts` — archetypes: `restaurant` (booking, table reservation form with covers + date), `catering` (inquiry), `bakery` (purchase).
 

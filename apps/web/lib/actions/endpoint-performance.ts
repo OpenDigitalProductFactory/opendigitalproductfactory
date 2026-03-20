@@ -106,6 +106,36 @@ export async function getRoutingProfile(endpointId: string) {
   return provider ? JSON.parse(JSON.stringify(provider)) : null;
 }
 
+export async function getRoutingProfiles(endpointId: string) {
+  await requireViewAccess();
+
+  const profiles = await prisma.modelProfile.findMany({
+    where: { providerId: endpointId },
+    select: {
+      modelId: true,
+      friendlyName: true,
+      reasoning: true,
+      codegen: true,
+      toolFidelity: true,
+      instructionFollowingScore: true,
+      structuredOutputScore: true,
+      conversational: true,
+      contextRetention: true,
+      profileSource: true,
+      profileConfidence: true,
+      evalCount: true,
+      lastEvalAt: true,
+      maxContextTokens: true,
+      supportsToolUse: true,
+      modelStatus: true,
+      retiredAt: true,
+    },
+    orderBy: [{ modelStatus: "asc" }, { reasoning: "desc" }],
+  });
+
+  return JSON.parse(JSON.stringify(profiles));
+}
+
 export async function getRecentRouteDecisions(endpointId?: string, limit = 20) {
   await requireViewAccess();
 
