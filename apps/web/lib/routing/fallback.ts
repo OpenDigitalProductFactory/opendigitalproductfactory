@@ -6,6 +6,8 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
+import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
+import { scheduleRecovery } from "./rate-recovery";
 
 export interface FallbackResult {
   providerId: string;
@@ -78,6 +80,10 @@ export async function callWithFallbackChain(
         tools,
       );
 
+      // EP-INF-004: Record successful request for rate tracking
+      recordRequest(entry.providerId, entry.modelId,
+        (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
+
       const downgraded = i > 0;
       return {
         providerId: entry.providerId,
@@ -98,26 +104,51 @@ export async function callWithFallbackChain(
       attempts.push({ endpointId: entry.providerId, error: errMsg });
       console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
 
-      // Handle specific error types — update provider status accordingly
       if (e instanceof InferenceError) {
+        // EP-INF-004: Record the failed request too
+        recordRequest(entry.providerId, entry.modelId);
+
         if (e.code === "rate_limit") {
-          // Mark degraded (not disabled) — stays in the routing pool at lower priority.
-          // This differs from callWithFailover which fully disables on rate_limit.
-          await prisma.modelProvider
-            .update({
-              where: { providerId: entry.providerId },
-              data: { status: "degraded" },
+          // EP-INF-004: Learn from response headers if available
+          learnFromRateLimitResponse(entry.providerId, entry.modelId, e.headers);
+
+          // EP-INF-004: Degrade the specific MODEL, not the provider
+          await prisma.modelProfile
+            .updateMany({
+              where: { providerId: entry.providerId, modelId: entry.modelId },
+              data: { modelStatus: "degraded" },
             })
             .catch((err) =>
               console.error(
-                `[callWithFallbackChain] failed to mark ${entry.providerId} degraded:`,
+                `[callWithFallbackChain] failed to mark ${entry.providerId}/${entry.modelId} degraded:`,
                 err,
               ),
             );
-        } else if (e.code === "model_not_found" || e.code === "auth") {
-          // Mark disabled — requires human review before re-enabling.
-          // "model_not_found" means the model was removed on the provider side.
-          // "auth" means credentials are invalid.
+
+          // EP-INF-004: Schedule auto-recovery
+          const retryMs = extractRetryAfterMs(e.headers) ?? 60_000;
+          scheduleRecovery(entry.providerId, entry.modelId, retryMs);
+
+        } else if (e.code === "model_not_found") {
+          // EP-INF-004: Retire the specific model, not the provider
+          await prisma.modelProfile
+            .updateMany({
+              where: { providerId: entry.providerId, modelId: entry.modelId },
+              data: {
+                modelStatus: "retired",
+                retiredAt: new Date(),
+                retiredReason: "model_not_found from provider",
+              },
+            })
+            .catch((err) =>
+              console.error(
+                `[callWithFallbackChain] failed to retire ${entry.providerId}/${entry.modelId}:`,
+                err,
+              ),
+            );
+
+        } else if (e.code === "auth") {
+          // Auth errors remain at provider level — credentials are shared
           await prisma.modelProvider
             .update({
               where: { providerId: entry.providerId },
