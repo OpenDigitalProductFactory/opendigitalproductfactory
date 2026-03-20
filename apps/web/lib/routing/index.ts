@@ -27,3 +27,7 @@ export type { EvalRunResult } from "./eval-runner";
 export { scoreDimension } from "./eval-scoring";
 export { GOLDEN_TESTS, getTestsForDimension } from "./golden-tests";
 export { updateEndpointDimensionScores } from "./production-feedback";
+export { getBaselineForModel } from "./family-baselines";
+export type { FamilyBaseline } from "./family-baselines";
+export { extractModelMetadata } from "./metadata-extractor";
+export type { ExtractedMetadata } from "./metadata-extractor";

@@ -13,44 +13,52 @@ import type {
 
 /**
  * Load all active/degraded endpoints as EndpointManifest objects.
+ * Queries ModelProfile joined with ModelProvider — each manifest entry represents
+ * a specific model, not just a provider.
  */
 export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
-  const providers = await prisma.modelProvider.findMany({
+  const profiles = await prisma.modelProfile.findMany({
     where: {
-      status: { in: ["active", "degraded"] },
-      endpointType: "llm",
+      modelStatus: "active",
       retiredAt: null,
+      provider: {
+        status: { in: ["active", "degraded"] },
+        endpointType: "llm",
+      },
+    },
+    include: {
+      provider: true,
     },
   });
 
-  return providers.map((p) => ({
-    id: p.providerId,
-    providerId: p.providerId,
-    name: p.name,
-    endpointType: p.endpointType,
-    status: p.status as EndpointManifest["status"],
-    sensitivityClearance: p.sensitivityClearance as SensitivityLevel[],
-    supportsToolUse: p.supportsToolUse,
-    supportsStructuredOutput: p.supportsStructuredOutput,
-    supportsStreaming: p.supportsStreaming,
-    maxContextTokens: p.maxContextTokens,
-    maxOutputTokens: p.maxOutputTokens,
-    modelRestrictions: p.modelRestrictions,
-    reasoning: p.reasoning,
-    codegen: p.codegen,
-    toolFidelity: p.toolFidelity,
-    instructionFollowing: p.instructionFollowing,
-    structuredOutput: p.structuredOutput,
-    conversational: p.conversational,
-    contextRetention: p.contextRetention,
-    customScores: (p.customScores as Record<string, number>) ?? {},
-    avgLatencyMs: p.avgLatencyMs,
-    recentFailureRate: p.recentFailureRate,
-    // Map DB field name to routing domain field name
-    costPerOutputMToken: p.outputPricePerMToken,
-    profileSource: p.profileSource as EndpointManifest["profileSource"],
-    profileConfidence: p.profileConfidence as EndpointManifest["profileConfidence"],
-    retiredAt: p.retiredAt,
+  return profiles.map((mp) => ({
+    id: mp.providerId,
+    providerId: mp.providerId,
+    modelId: mp.modelId,
+    name: mp.friendlyName || mp.modelId,
+    endpointType: mp.provider.endpointType,
+    status: mp.provider.status as EndpointManifest["status"],
+    sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
+    supportsToolUse: mp.supportsToolUse || mp.provider.supportsToolUse,
+    supportsStructuredOutput: mp.provider.supportsStructuredOutput,
+    supportsStreaming: mp.provider.supportsStreaming,
+    maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
+    maxOutputTokens: mp.maxOutputTokens ?? mp.provider.maxOutputTokens,
+    modelRestrictions: mp.provider.modelRestrictions,
+    reasoning: mp.reasoning,
+    codegen: mp.codegen,
+    toolFidelity: mp.toolFidelity,
+    instructionFollowing: mp.instructionFollowingScore,
+    structuredOutput: mp.structuredOutputScore,
+    conversational: mp.conversational,
+    contextRetention: mp.contextRetention,
+    customScores: (mp.customScores as Record<string, number>) ?? {},
+    avgLatencyMs: mp.provider.avgLatencyMs,
+    recentFailureRate: mp.provider.recentFailureRate,
+    costPerOutputMToken: mp.outputPricePerMToken ?? mp.provider.outputPricePerMToken,
+    profileSource: mp.profileSource as EndpointManifest["profileSource"],
+    profileConfidence: mp.profileConfidence as EndpointManifest["profileConfidence"],
+    retiredAt: mp.retiredAt,
   }));
 }
 
@@ -148,6 +156,7 @@ export async function persistRouteDecision(
     data: {
       agentMessageId: agentMessageId ?? null,
       selectedEndpointId: decision.selectedEndpoint ?? "none",
+      selectedModelId: decision.selectedModelId ?? null,
       taskType: decision.taskType,
       sensitivity: decision.sensitivity,
       reason: decision.reason,

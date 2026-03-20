@@ -12,6 +12,7 @@ import { computeFitness, normalizeWeights } from "./scoring";
 const BASE_ENDPOINT: EndpointManifest = {
   id: "base",
   providerId: "test",
+  modelId: "test-model",
   name: "Base",
   endpointType: "chat",
   status: "active",
@@ -41,6 +42,7 @@ const BASE_ENDPOINT: EndpointManifest = {
 const sonnet: EndpointManifest = {
   ...BASE_ENDPOINT,
   id: "sonnet",
+  modelId: "claude-sonnet-4-5",
   name: "Claude Sonnet",
   reasoning: 88,
   codegen: 91,
@@ -53,6 +55,7 @@ const sonnet: EndpointManifest = {
 const llama: EndpointManifest = {
   ...BASE_ENDPOINT,
   id: "llama",
+  modelId: "llama3.1",
   name: "Llama 3.1",
   reasoning: 65,
   codegen: 65,
@@ -66,6 +69,7 @@ const llama: EndpointManifest = {
 const haiku: EndpointManifest = {
   ...BASE_ENDPOINT,
   id: "haiku",
+  modelId: "claude-haiku-3-5",
   name: "Claude Haiku",
   status: "degraded",
   reasoning: 42,

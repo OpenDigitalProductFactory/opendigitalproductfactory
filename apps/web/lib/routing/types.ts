@@ -7,12 +7,13 @@
 
 export type SensitivityLevel = "public" | "internal" | "confidential" | "restricted";
 
-// ── Endpoint Manifest (loaded from ModelProvider) ──
+// ── Endpoint Manifest (loaded from ModelProfile joined with ModelProvider) ──
 
 export interface EndpointManifest {
   // Identity
   id: string;
   providerId: string;
+  modelId: string;     // from ModelProfile
   name: string;
   endpointType: string;
   status: "active" | "degraded" | "disabled" | "unconfigured" | "retired";
@@ -85,6 +86,7 @@ export interface PolicyCondition {
 
 export interface CandidateTrace {
   endpointId: string;
+  modelId: string;
   endpointName: string;
   fitnessScore: number;
   dimensionScores: Record<string, number>;
@@ -95,6 +97,7 @@ export interface CandidateTrace {
 
 export interface RouteDecision {
   selectedEndpoint: string | null;
+  selectedModelId: string | null;
   reason: string;
   fitnessScore: number;
   fallbackChain: string[];
