@@ -163,7 +163,7 @@ export function deriveLightTokens(accent: string, opts?: DeriveOptions): ThemeTo
   const surface1 = "#ffffff";
   const surface2 = "#f4f4f6";
   const text = "#1a1a2e";
-  const border = "#d4d4dc";
+  const border = ensureContrast("#d4d4dc", bg, 3);
   const muted = ensureContrast("#6b7280", bg, 4.5);
   const accentAdj = ensureContrast(accent, bg, 4.5);
 
