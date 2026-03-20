@@ -97,12 +97,50 @@ export async function submitOrder(
   data: {
     customerEmail: string;
     items: Array<{ itemId: string; name: string; qty: number; unitPrice: number }>;
-    totalAmount: number | string;
+    totalAmount: number | string; // ignored — recalculated server-side
     currency?: string;
   }
 ): Promise<ActionResult> {
   const storefront = await getPublishedStorefront(slug);
   if (!storefront) return { success: false, error: "Storefront not found or not published" };
+
+  if (!data.items || data.items.length === 0) {
+    return { success: false, error: "Order must contain at least one item" };
+  }
+
+  // Look up authoritative prices for all submitted item IDs in one query
+  const itemIds = data.items.map((i) => i.itemId);
+  const dbItems = await prisma.storefrontItem.findMany({
+    where: {
+      itemId: { in: itemIds },
+      storefrontId: storefront.id,
+      isActive: true,
+    },
+    select: { itemId: true, priceAmount: true },
+  });
+
+  const priceMap = new Map(dbItems.map((r) => [r.itemId, r.priceAmount]));
+
+  // Validate every line item against database prices
+  for (const line of data.items) {
+    const dbPrice = priceMap.get(line.itemId);
+    if (dbPrice === undefined) {
+      return { success: false, error: `Item not found: ${line.itemId}` };
+    }
+    if (dbPrice === null) {
+      return { success: false, error: `Item has no price configured: ${line.itemId}` };
+    }
+    const actualPrice = dbPrice.toNumber();
+    if (Math.abs(actualPrice - line.unitPrice) > 0.001) {
+      return { success: false, error: `Price mismatch for item ${line.itemId}` };
+    }
+  }
+
+  // Compute total server-side — never trust caller-supplied totalAmount
+  const computedTotal = data.items.reduce((sum, line) => {
+    const actualPrice = priceMap.get(line.itemId)!.toNumber();
+    return sum + actualPrice * line.qty;
+  }, 0);
 
   const ref = makeRef("ORD");
   const created = await prisma.storefrontOrder.create({
@@ -110,8 +148,8 @@ export async function submitOrder(
       orderRef: ref,
       storefrontId: storefront.id,
       customerEmail: data.customerEmail,
-      items: data.items,
-      totalAmount: data.totalAmount,
+      items: data.items as never,
+      totalAmount: computedTotal,
       currency: data.currency ?? "GBP",
     },
     select: { orderRef: true },

@@ -16,9 +16,11 @@ export default async function StorefrontSettingsPage() {
 
   async function updateSettings(formData: FormData) {
     "use server";
-    const id = formData.get("id") as string;
+    // Re-derive the config ID server-side. Never trust a client-supplied ID.
+    const record = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+    if (!record) redirect("/storefront/setup");
     await prisma.storefrontConfig.update({
-      where: { id },
+      where: { id: record.id },
       data: {
         tagline: (formData.get("tagline") as string) || null,
         description: (formData.get("description") as string) || null,
@@ -33,7 +35,6 @@ export default async function StorefrontSettingsPage() {
   return (
     <form action={updateSettings} style={{ maxWidth: 480, display: "flex", flexDirection: "column", gap: 16 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600 }}>Settings</h2>
-      <input type="hidden" name="id" value={config.id} />
       {[
         { name: "tagline", label: "Tagline", defaultValue: config.tagline ?? "" },
         { name: "description", label: "Description", defaultValue: config.description ?? "" },
