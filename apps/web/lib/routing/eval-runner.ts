@@ -4,7 +4,7 @@
  */
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import { callProvider } from "@/lib/ai-inference";
+import { callProvider, InferenceError } from "@/lib/ai-inference";
 import type { BuiltinDimension } from "./types";
 import { BUILTIN_DIMENSIONS } from "./types";
 import { getTestsForDimension, type GoldenTest, type ScoringMethod } from "./golden-tests";
@@ -91,13 +91,13 @@ function scoreResponse(
   }
 }
 
-/** Run a single golden test against an endpoint. */
+/** Run a single golden test against an endpoint, with one rate-limit retry. */
 async function runGoldenTest(
   endpointId: string,
   modelId: string,
   test: GoldenTest,
 ): Promise<TestResult> {
-  try {
+  const attempt = async (): Promise<TestResult> => {
     const messages = [{ role: "user" as const, content: test.prompt }];
     const result = await callProvider(
       endpointId,
@@ -106,7 +106,6 @@ async function runGoldenTest(
       test.systemPrompt ?? "You are a helpful assistant.",
       test.tools,
     );
-
     const score = scoreResponse(test, result.content, result.toolCalls ?? []);
     return {
       testId: test.id,
@@ -115,9 +114,26 @@ async function runGoldenTest(
       score,
       response: result.content.slice(0, 500),
     };
+  };
+
+  try {
+    return await attempt();
   } catch (e) {
+    // Single retry for rate limits — wait 10 s then try once more
+    if (e instanceof InferenceError && e.code === "rate_limit") {
+      console.warn(`[eval-runner] rate limited on ${endpointId}/${modelId} (test ${test.id}), retrying in 10 s`);
+      await new Promise((r) => setTimeout(r, 10_000));
+      try {
+        return await attempt();
+      } catch (e2) {
+        const msg = e2 instanceof Error ? e2.message : String(e2);
+        console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
+        return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error" };
+      }
+    }
+
     const errorMessage = e instanceof Error ? e.message : String(e);
-    console.error(`[eval-runner] test ${test.id} failed on ${endpointId}/${modelId}: ${errorMessage}`);
+    console.error(`[eval-runner] test ${test.id} failed on ${endpointId}/${modelId} (model: ${modelId}): ${errorMessage}`);
     return {
       testId: test.id,
       version: test.version,
@@ -169,8 +185,12 @@ async function evalDimension(
   const tests = getTestsForDimension(dimension);
   const testResults: TestResult[] = [];
 
-  for (const test of tests) {
-    const result = await runGoldenTest(endpointId, modelId, test);
+  for (let i = 0; i < tests.length; i++) {
+    if (i > 0) {
+      // 500 ms between tests to avoid triggering burst rate limits
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const result = await runGoldenTest(endpointId, modelId, tests[i]!);
     testResults.push(result);
   }
 
