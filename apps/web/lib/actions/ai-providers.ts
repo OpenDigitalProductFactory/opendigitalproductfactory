@@ -348,6 +348,11 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
     await syncProviderRegistry();
     return;
   }
+  if (jobId === "mcp-catalog-sync") {
+    const { triggerMcpCatalogSync } = await import("@/lib/actions/mcp-catalog");
+    await triggerMcpCatalogSync();
+    return;
+  }
   console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);
 }
 
