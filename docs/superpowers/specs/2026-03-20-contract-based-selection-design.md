@@ -368,14 +368,20 @@ const decision = routeEndpointV2(manifests, contract, policies, overrides);
 
 The old path fires if `inferContract` fails or returns null. In practice it won't fail (deterministic), but the fallback exists for safety.
 
-### Reused Functions from pipeline.ts
+### Reused vs Duplicated Logic
 
-To avoid duplication, extract and export these from `pipeline.ts` for reuse in `pipeline-v2.ts`:
-- `checkOverrides()` — pin/block logic
-- `filterByPolicy()` — policy rule evaluation
-- Tiebreaker sort logic (cost, failure rate, latency)
+- `filterByPolicy()` — already exported from `pipeline.ts`, reused directly
+- Pin/block override logic — inline in `routeEndpoint()`, duplicated in `pipeline-v2.ts` (~30 lines)
+- `getExclusionReason()` — NOT reused (takes `TaskRequirementContract`). A new `getExclusionReasonV2()` is created in `pipeline-v2.ts` that takes `RequestContract` and reads sensitivity from `contract.sensitivity`
+- `averageRelevantDimensions()` — new helper in `cost-ranking.ts`, uses exported `getDimensionsForTask()` from `production-feedback.ts` + a dimension score lookup map
 
-If these are already exported, no changes needed. If they're internal, export them.
+### Capability Null Handling
+
+`ModelCardCapabilities` fields are `boolean | null`. In feasibility checks and success probability, use `!== true` (not `!value`) so that `null` (unknown) is treated conservatively as "does not have capability." This matches the EP-INF-003 principle: unknowns must not satisfy hard requirements.
+
+### Audit Trail
+
+The `RouteDecision` type is unchanged in this epic. Estimated cost and success probability are computed for ranking but not persisted in the route decision log. EP-INF-005b will extend `RouteDecision` with recipe and cost audit fields when the execution plan output is introduced.
 
 ---
 
