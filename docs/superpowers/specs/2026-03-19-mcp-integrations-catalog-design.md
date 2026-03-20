@@ -106,7 +106,7 @@ model McpCatalogSync {
 
 ### Archetype derivation
 
-`archetypeIds` is populated during sync using a tag→archetype ruleset defined in code (e.g. `"payments"` → `["retail-goods", "food-hospitality", "fitness-recreation", "education-training"]`). No separate mapping table — the ruleset is a config object in the sync service, extensible without a migration. Ruleset values are the exact `archetypeId` strings defined in `StorefrontArchetype` (e.g. `"retail-goods"`, `"veterinary-clinic"`). The ruleset is treated as a trusted config — no runtime validation against the `StorefrontArchetype` table on each sync. If an archetype is removed from the platform, the corresponding ruleset entry is updated in the same PR. Entries missing enrichment fields from Glama (logo, rating, pricing) leave those fields `null` — not a sync failure.
+`archetypeIds` is populated during sync using a tag→archetype ruleset defined in code (e.g. `"payments"` → `["retail-goods", "food-hospitality", "fitness-recreation", "education-training"]`). No separate mapping table — the ruleset is a config object in the sync service, extensible without a migration. Ruleset values are `StorefrontArchetype.category` strings (e.g. `"retail-goods"`, `"food-hospitality"`, `"professional-services"`) — one level above the leaf `archetypeId`. This makes the ruleset more maintainable: new leaf archetypes added within a category are automatically included without ruleset updates. The 10 valid category strings are: `retail-goods`, `food-hospitality`, `fitness-recreation`, `education-training`, `pet-services`, `professional-services`, `trades-maintenance`, `nonprofit-community`, `healthcare-wellness`, `beauty-personal-care`. The `search_integrations` tool filters by matching `McpIntegration.archetypeIds` against the querying business's `StorefrontArchetype.category`. The ruleset is treated as a trusted config — no runtime validation against the `StorefrontArchetype` table on each sync. If an archetype is removed from the platform, the corresponding ruleset entry is updated in the same PR. Entries missing enrichment fields from Glama (logo, rating, pricing) leave those fields `null` — not a sync failure.
 
 ---
 
@@ -128,7 +128,7 @@ model McpCatalogSync {
    a. Enrich with Glama metadata — parallel requests, max 10 concurrent, 100ms delay between batches
    b. Derive archetypeIds from tags using ruleset
    c. Upsert into McpIntegration (conflict key: registryId)
-4. Mark entries absent from this sync as status: "deprecated"
+4. Mark entries absent from this sync as status: "deprecated" — identified by `lastSyncedAt < syncStartedAt` (not by `notIn` array, which exceeds PostgreSQL bind-parameter limits at scale)
 5. Update McpCatalogSync (status: "success", totalFetched, totalUpserted, totalNew, totalRemoved)
 6. On unrecoverable error → status: "failed", error logged to McpCatalogSync.error
 ```
@@ -224,7 +224,7 @@ The Coworker calls this tool when:
 
 | Concern | Approach |
 |---|---|
-| Admin-only sync trigger | Sync Now server action requires `manage_platform_settings` capability |
+| Admin-only sync trigger | Sync Now server action requires `manage_provider_connections` capability (HR-000 only) |
 | Schedule config | Persisted via existing platform settings; same capability gate |
 | Catalog browse | Read-only; available to all authenticated shell users — no sensitive data exposed |
 | AI tool | `requiredCapability: null` — read-only, no side effects, safe for all roles |
