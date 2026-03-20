@@ -197,22 +197,42 @@ describe("agent coworker external access", () => {
         executionMode: "immediate",
       },
     ]);
-    mockCallWithFailover.mockResolvedValue({
-      content: "",
-      providerId: "ollama-local",
-      inputTokens: 1,
-      outputTokens: 1,
-      inferenceMs: 10,
-      toolCalls: [
-        {
-          id: "mock_id",
-          name: "analyze_public_website_branding",
-          arguments: {
-            url: "https://jackjackspack.org",
+    mockCallWithFailover
+      .mockResolvedValueOnce({
+        content: "",
+        providerId: "ollama-local",
+        inputTokens: 1,
+        outputTokens: 1,
+        inferenceMs: 10,
+        toolCalls: [
+          {
+            id: "mock_id",
+            name: "analyze_public_website_branding",
+            arguments: {
+              url: "https://jackjackspack.org",
+            },
           },
-        },
-      ],
-    });
+        ],
+      })
+      .mockResolvedValue({
+        content: [
+          "I've analyzed Jack Jack's Pack and found the following branding details.",
+          "```agent-form",
+          JSON.stringify({
+            fieldUpdates: {
+              companyName: "Jack Jack's Pack",
+              logoUrl: "https://jackjackspack.org/logo.svg",
+              paletteAccent: "#4f46e5",
+            },
+          }),
+          "```",
+        ].join("\n"),
+        providerId: "ollama-local",
+        inputTokens: 1,
+        outputTokens: 1,
+        inferenceMs: 10,
+        toolCalls: [],
+      });
     mockExecuteTool.mockResolvedValue({
       success: true,
       message: "Derived branding suggestions for Jack Jack's Pack.",
@@ -244,7 +264,7 @@ describe("agent coworker external access", () => {
       "analyze_public_website_branding",
       { url: "https://jackjackspack.org" },
       "user-1",
-      { routeContext: "/admin" },
+      expect.objectContaining({ routeContext: "/admin" }),
     );
     expect(result).not.toHaveProperty("error");
     if (!("error" in result)) {

@@ -35,7 +35,13 @@ describe("parseFileContent", () => {
     expect(result!.columns).toEqual(["A", "B"]);
   });
   it("returns null for unsupported type", async () => {
-    const result = await parseFileContent(Buffer.from("hello"), "text/plain", "test.txt");
+    const result = await parseFileContent(Buffer.from("hello"), "application/octet-stream", "test.bin");
     expect(result).toBeNull();
+  });
+
+  it("parses plain text files as documents", async () => {
+    const result = await parseFileContent(Buffer.from("hello"), "text/plain", "test.txt");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("document");
   });
 });

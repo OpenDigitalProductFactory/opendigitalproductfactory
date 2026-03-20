@@ -26,7 +26,8 @@ describe("resolveRouteContext", () => {
   it("falls back to workspace for unknown routes", () => {
     const ctx = resolveRouteContext("/unknown/path");
     expect(ctx.domain).toBe("Workspace");
-    expect(ctx).toBe(FALLBACK_ROUTE_CONTEXT);
+    expect(ctx.routePrefix).toBe(FALLBACK_ROUTE_CONTEXT.routePrefix);
+    expect(ctx.sensitivity).toBe(FALLBACK_ROUTE_CONTEXT.sensitivity);
   });
 
   it("falls back to workspace for root path", () => {

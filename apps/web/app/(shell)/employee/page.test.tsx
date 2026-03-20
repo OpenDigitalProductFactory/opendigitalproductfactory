@@ -1,9 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+  };
+});
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } }),
+}));
+
+vi.mock("@/lib/address-data", () => ({
+  getEmployeeAddresses: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/lib/timesheet-data", () => ({
+  getTimesheetForWeek: vi.fn().mockResolvedValue(null),
+  getPendingTimesheetsForManager: vi.fn().mockResolvedValue([]),
+  getCurrentWeekStart: vi.fn().mockReturnValue(new Date("2026-03-16")),
 }));
 
 vi.mock("@dpf/db", () => ({

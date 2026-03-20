@@ -73,7 +73,8 @@ describe("StructuredValueStreamNode", () => {
     expect(html).toContain("data-value-stream-header");
     expect(html).toContain("data-value-stream-title-block");
     expect(html).toContain("data-value-stream-meta-block");
-    expect(html).not.toContain("value-stream-stage");
+    // Stage slot containers are present (for the flow renderer) but stage content is not embedded
+    expect(html).toContain("data-value-stream-stage-slot");
     expect(html).not.toContain("Request");
     expect(html).not.toContain("Support");
   });

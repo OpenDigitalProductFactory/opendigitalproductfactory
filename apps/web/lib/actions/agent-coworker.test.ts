@@ -14,13 +14,13 @@ describe("validateMessageInput", () => {
     expect(validateMessageInput({ content: "   ", routeContext: "/portfolio" })).toMatch(/empty/i);
   });
 
-  it("rejects content over 2000 chars", () => {
-    const long = "x".repeat(2001);
-    expect(validateMessageInput({ content: long, routeContext: "/portfolio" })).toMatch(/2000/);
+  it("rejects content over 10000 chars", () => {
+    const long = "x".repeat(10001);
+    expect(validateMessageInput({ content: long, routeContext: "/portfolio" })).toMatch(/10000/);
   });
 
-  it("accepts content at exactly 2000 chars", () => {
-    const exact = "x".repeat(2000);
+  it("accepts content at exactly 10000 chars", () => {
+    const exact = "x".repeat(10000);
     expect(validateMessageInput({ content: exact, routeContext: "/portfolio" })).toBeNull();
   });
 
