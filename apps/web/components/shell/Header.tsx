@@ -12,6 +12,7 @@ type Props = {
   isSuperuser: boolean;
   brandName: string;
   brandLogoUrl: string | null;
+  brandLogoUrlLight?: string | null;
   userId?: string | null;
 };
 
@@ -25,7 +26,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey 
   { label: "Build",        href: "/build",        capability: "view_platform" },
 ];
 
-export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, userId }: Props) {
+export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, brandLogoUrlLight, userId }: Props) {
   const visibleItems = NAV_ITEMS.filter(
     (item) => item.capability === null || can({ platformRole, isSuperuser }, item.capability)
   );
@@ -33,6 +34,8 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
   const companyName = brandName.trim().length > 0 ? brandName : "DPF";
   const logoSource = brandLogoUrl?.trim() ?? "";
   const hasLogo = logoSource.length > 0;
+  const logoLight = brandLogoUrlLight?.trim() ?? "";
+  const hasLightLogo = logoLight.length > 0;
   const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
@@ -57,6 +60,22 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
         <div className="flex items-center gap-2">
           {hasLogo && !logoFailed ? (
             <div className="h-14 flex items-center">
+              {hasLightLogo ? (
+                <>
+                  <img
+                    src={logoLight}
+                    alt={`${companyName} logo`}
+                    className="logo-light block h-full w-auto max-w-[220px] object-contain"
+                    onError={() => { setLogoFailed(true); }}
+                  />
+                  <img
+                    src={logoSource}
+                    alt={`${companyName} logo`}
+                    className="logo-dark block h-full w-auto max-w-[220px] object-contain"
+                    onError={() => { setLogoFailed(true); }}
+                  />
+                </>
+              ) : (
                 <img
                   src={logoSource}
                   alt={`${companyName} logo`}
@@ -66,6 +85,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
                     setLogoFailed(true);
                   }}
                 />
+              )}
             </div>
           ) : (
             <div className="w-14 h-14 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] overflow-hidden grid place-items-center">
@@ -84,7 +104,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, use
         <form action={signOutAction}>
           <button
             type="submit"
-            className="text-xs text-[var(--dpf-muted)] hover:text-white transition-colors"
+            className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
           >
             Sign out
           </button>
