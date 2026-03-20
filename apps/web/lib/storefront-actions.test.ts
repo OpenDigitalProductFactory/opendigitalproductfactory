@@ -6,6 +6,7 @@ vi.mock("@dpf/db", () => ({
     storefrontConfig: { findFirst: vi.fn() },
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
+    storefrontOrder: { create: vi.fn() },
     storefrontDonation: { create: vi.fn() },
   },
 }));
@@ -13,16 +14,14 @@ vi.mock("@dpf/db", () => ({
 import { submitInquiry, submitDonation } from "./storefront-actions";
 import { prisma } from "@dpf/db";
 
-const mockPublishedStorefront = { id: "sf-1", isPublished: true };
-const mockUnpublishedStorefront = { id: "sf-1", isPublished: false };
+const mockPublishedStorefront = { id: "sf-1" };
 
 describe("submitInquiry", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns error when storefront is not published", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
-      mockUnpublishedStorefront as never
-    );
+    // WHERE { isPublished: true } returns null when unpublished — simulate that here
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null as never);
     const result = await submitInquiry("acme-vet", {
       customerEmail: "a@b.com",
       customerName: "Alice",
