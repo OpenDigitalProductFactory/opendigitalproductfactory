@@ -6,8 +6,10 @@ import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
-import { getEndpointPerformance } from "@/lib/actions/endpoint-performance";
+import { getEndpointPerformance, getRoutingProfile, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
 import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
+import RoutingProfilePanel from "@/components/platform/RoutingProfilePanel";
+import RouteDecisionLog from "@/components/platform/RouteDecisionLog";
 import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
 
@@ -15,12 +17,14 @@ type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders, perfData] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfile, routeDecisions] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
     getProviders(),
     getEndpointPerformance(providerId),
+    getRoutingProfile(providerId),
+    getRecentRouteDecisions(providerId),
   ]);
   if (!pw) notFound();
 
@@ -94,9 +98,15 @@ export default async function ProviderDetailPage({ params }: Props) {
       {pw.provider.endpointType === "service" ? (
         <McpServiceDetail provider={pw.provider} />
       ) : (
-        <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
-          <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
-        </div>
+        <>
+          <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
+            <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
+          </div>
+
+          {routingProfile && (
+            <RoutingProfilePanel endpointId={providerId} {...routingProfile} />
+          )}
+        </>
       )}
 
       <EndpointPerformancePanel
@@ -106,6 +116,10 @@ export default async function ProviderDetailPage({ params }: Props) {
         testRuns={perfData.testRuns}
         profile={perfData.profile}
       />
+
+      {routeDecisions.length > 0 && (
+        <RouteDecisionLog decisions={routeDecisions} />
+      )}
     </div>
   );
 }

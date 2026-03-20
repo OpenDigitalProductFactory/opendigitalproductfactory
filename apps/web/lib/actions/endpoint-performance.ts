@@ -79,6 +79,56 @@ export async function triggerEndpointTests(endpointId: string, probesOnly: boole
   });
 }
 
+export async function getRoutingProfile(endpointId: string) {
+  await requireViewAccess();
+
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId: endpointId },
+    select: {
+      reasoning: true,
+      codegen: true,
+      toolFidelity: true,
+      instructionFollowing: true,
+      structuredOutput: true,
+      conversational: true,
+      contextRetention: true,
+      profileSource: true,
+      profileConfidence: true,
+      evalCount: true,
+      lastEvalAt: true,
+      supportsToolUse: true,
+      supportsStructuredOutput: true,
+      supportsStreaming: true,
+      maxContextTokens: true,
+    },
+  });
+
+  return provider ? JSON.parse(JSON.stringify(provider)) : null;
+}
+
+export async function getRecentRouteDecisions(endpointId?: string, limit = 20) {
+  await requireViewAccess();
+
+  const decisions = await prisma.routeDecisionLog.findMany({
+    where: endpointId ? { selectedEndpointId: endpointId } : {},
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      taskType: true,
+      selectedEndpointId: true,
+      sensitivity: true,
+      reason: true,
+      fitnessScore: true,
+      policyRulesApplied: true,
+      shadowMode: true,
+      createdAt: true,
+    },
+  });
+
+  return JSON.parse(JSON.stringify(decisions));
+}
+
 export async function triggerDimensionEval(endpointId?: string) {
   const userId = await requireViewAccess();
   const session = await auth();
