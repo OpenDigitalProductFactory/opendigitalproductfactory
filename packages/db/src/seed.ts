@@ -8,6 +8,7 @@ import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
+import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import * as crypto from "crypto";
 
 const DATA_DIR = join(__dirname, "..", "data");
@@ -1215,6 +1216,17 @@ async function main(): Promise<void> {
   await seedScheduledJobs();
   await seedMcpServers();
   await seedPlatformConfig();
+  await seedStorefrontArchetypes(prisma);
+  await prisma.epic.upsert({
+    where: { epicId: "EP-STORE-001" },
+    create: {
+      epicId: "EP-STORE-001",
+      title: "Storefront Foundation",
+      description: "Public-facing storefront with archetype-driven CTA, unified sign-in, and shell admin. Spec: docs/superpowers/specs/2026-03-19-storefront-foundation-design.md",
+      status: "open",
+    },
+    update: {},
+  });
   console.log("Seed complete.");
 }
 
