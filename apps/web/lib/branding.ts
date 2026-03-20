@@ -22,9 +22,11 @@ function safeString(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 }
 
-export function buildBrandingStyleTag(tokens: unknown): string {
-  if (!isRecord(tokens)) return "";
+function isDualTokens(tokens: unknown): tokens is { dark: TokenRecord; light: TokenRecord } {
+  return isRecord(tokens) && isRecord((tokens as any).dark) && isRecord((tokens as any).light);
+}
 
+function buildCssBlock(tokens: TokenRecord): string {
   const palette = isRecord(tokens.palette) ? tokens.palette : {};
   const typography = isRecord(tokens.typography) ? tokens.typography : {};
 
@@ -32,6 +34,7 @@ export function buildBrandingStyleTag(tokens: unknown): string {
     ["--dpf-bg", safeString(palette.bg)],
     ["--dpf-surface-1", safeString(palette.surface1)],
     ["--dpf-surface-2", safeString(palette.surface2)],
+    ["--dpf-text", safeString(palette.text)],
     ["--dpf-accent", safeString(palette.accent)],
     ["--dpf-muted", safeString(palette.muted)],
     ["--dpf-border", safeString(palette.border)],
@@ -39,12 +42,33 @@ export function buildBrandingStyleTag(tokens: unknown): string {
     ["--dpf-font-heading", safeString(typography.headingFontFamily)],
   ];
 
-  const declarations = pairs
+  return pairs
     .filter((p): p is [string, string] => p[1] !== null)
     .map(([prop, val]) => `  ${prop}: ${val};`)
     .join("\n");
+}
 
+export function buildBrandingStyleTag(tokens: unknown): string {
+  if (!isRecord(tokens)) return "";
+
+  if (isDualTokens(tokens)) {
+    const lightDecls = buildCssBlock(tokens.light as TokenRecord);
+    const darkDecls = buildCssBlock(tokens.dark as TokenRecord);
+    if (lightDecls.length === 0 && darkDecls.length === 0) return "";
+
+    let css = "";
+    if (lightDecls.length > 0) {
+      css += `:root {\n${lightDecls}\n}`;
+    }
+    if (darkDecls.length > 0) {
+      const indented = darkDecls.split("\n").map(line => `  ${line}`).join("\n");
+      css += `\n@media (prefers-color-scheme: dark) {\n  :root {\n${indented}\n  }\n}`;
+    }
+    return css;
+  }
+
+  // Legacy flat tokens fallback
+  const declarations = buildCssBlock(tokens as TokenRecord);
   if (declarations.length === 0) return "";
-
   return `:root {\n${declarations}\n}`;
 }
