@@ -343,8 +343,8 @@ describe("filterHard – EP-INF-003 modelClass filter", () => {
     });
     const result = filterHard([embedding, chat], makeRequirement(), "internal");
     expect(result.eligible).toHaveLength(1);
-    expect(result.eligible[0].modelId).toBe("gpt-4o");
-    expect(result.excluded[0].excludedReason).toContain("modelClass");
+    expect(result.eligible[0]!.modelId).toBe("gpt-4o");
+    expect(result.excluded[0]!.excludedReason).toContain("modelClass");
   });
 
   it("excludes image_gen models from chat routing", () => {
