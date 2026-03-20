@@ -811,15 +811,18 @@ model ModelProvider {
   // ── Routing Manifest: Lifecycle ──
   retiredAt              DateTime?
   retiredReason          String?
+
+  modelProfiles          ModelProfile[]
 }
 
 model DiscoveredModel {
-  id           String   @id @default(cuid())
-  providerId   String
-  modelId      String
-  rawMetadata  Json
-  discoveredAt DateTime @default(now())
-  lastSeenAt   DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  providerId           String
+  modelId              String
+  rawMetadata          Json
+  discoveredAt         DateTime @default(now())
+  lastSeenAt           DateTime @updatedAt
+  missedDiscoveryCount Int      @default(0)
 
   @@unique([providerId, modelId])
 }
@@ -842,6 +845,38 @@ model ModelProfile {
   generatedBy          String
   generatedAt          DateTime @default(now())
 
+  // ── Relation to parent provider ──
+  provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
+
+  // ── Routing Profile: Hard Constraints ──
+  maxContextTokens          Int?
+  maxOutputTokens           Int?
+  inputPricePerMToken       Float?
+  outputPricePerMToken      Float?
+  supportedModalities       Json       @default("{\"input\":[\"text\"],\"output\":[\"text\"]}")
+
+  // ── Routing Profile: Capability Scores (0-100) ──
+  reasoning                 Int        @default(50)
+  codegen                   Int        @default(50)
+  toolFidelity              Int        @default(50)
+  instructionFollowingScore Int        @default(50)
+  structuredOutputScore     Int        @default(50)
+  conversational            Int        @default(50)
+  contextRetention          Int        @default(50)
+  customScores              Json       @default("{}")
+
+  // ── Routing Profile: Provenance ──
+  profileSource             String     @default("seed")
+  profileConfidence         String     @default("low")
+  evalCount                 Int        @default(0)
+  lastEvalAt                DateTime?
+
+  // ── Lifecycle ──
+  modelStatus               String     @default("active")
+  retiredAt                 DateTime?
+  retiredReason             String?
+  lastSeenAt                DateTime?
+
   @@unique([providerId, modelId])
 }
 
@@ -860,6 +895,7 @@ model TokenUsage {
 model EndpointTaskPerformance {
   id                      String    @id @default(cuid())
   endpointId              String
+  modelId                 String?
   taskType                String
   evaluationCount         Int       @default(0)
   successCount            Int       @default(0)
@@ -2770,6 +2806,7 @@ model RouteDecisionLog {
   id                  String    @id @default(cuid())
   agentMessageId      String?
   selectedEndpointId  String
+  selectedModelId     String?
   taskType            String
   sensitivity         String
   reason              String
