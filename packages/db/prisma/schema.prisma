@@ -41,6 +41,10 @@ model User {
   userSkills                   UserSkill[]              @relation("UserSkillCreator")
   invoicesCreated              Invoice[]                @relation("InvoiceCreations")
   paymentsCreated              Payment[]                @relation("PaymentCreations")
+  engagementAssignments        Engagement[]             @relation("EngagementAssignments")
+  opportunityAssignments       Opportunity[]            @relation("OpportunityAssignments")
+  activitiesCreated            Activity[]               @relation("ActivityCreations")
+  quotesCreated                Quote[]                  @relation("QuoteCreations")
 }
 
 model UserGroup {
@@ -74,6 +78,9 @@ model CustomerContact {
   socialIdentities SocialIdentity[]
   accountRoles     ContactAccountRole[]
   invoices         Invoice[]
+  engagements      Engagement[]
+  opportunities    Opportunity[]
+  activities       Activity[]
 
   @@index([lastName])
   @@index([phone])
@@ -459,6 +466,7 @@ model DigitalProduct {
   portfolioQualityIssues PortfolioQualityIssue[]
   versions               ProductVersion[]
   serviceOfferings       ServiceOffering[]
+  quoteLineItems         QuoteLineItem[]
 }
 
 model ProductVersion {
@@ -682,12 +690,45 @@ model PlatformCapability {
 }
 
 model McpServer {
-  id        String   @id @default(cuid())
-  serverId  String   @unique
-  name      String
-  config    Json
-  status    String   @default("unconfigured")
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  serverId        String    @unique
+  name            String
+  config          Json
+  status          String    @default("unconfigured")
+  transport       String?
+  category        String?
+  tags            String[]  @default([])
+  healthStatus    String    @default("unknown")
+  lastHealthCheck DateTime?
+  lastHealthError String?
+  integrationId   String?
+  activatedBy     String?
+  activatedAt     DateTime?
+  deactivatedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  integration     McpIntegration? @relation(fields: [integrationId], references: [id])
+  tools           McpServerTool[]
+
+  @@index([status])
+  @@index([category])
+}
+
+model McpServerTool {
+  id           String   @id @default(cuid())
+  serverId     String
+  toolName     String
+  description  String?
+  inputSchema  Json
+  isEnabled    Boolean  @default(true)
+  discoveredAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  server       McpServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, toolName])
+  @@index([serverId])
 }
 
 model CredentialEntry {
@@ -1075,6 +1116,11 @@ model CustomerAccount {
   parentAccount   CustomerAccount?     @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
   childAccounts   CustomerAccount[]    @relation("AccountHierarchy")
   invoices        Invoice[]
+  engagements     Engagement[]
+  opportunities   Opportunity[]
+  activities      Activity[]
+  quotes          Quote[]
+  salesOrders     SalesOrder[]
 
   @@index([status])
   @@index([parentAccountId])
@@ -1096,6 +1142,177 @@ model ContactAccountRole {
   @@index([contactId])
   @@index([accountId])
   @@index([isPrimary])
+}
+
+model Engagement {
+  id            String           @id @default(cuid())
+  engagementId  String           @unique // ENG-<uuid>
+  title         String
+  status        String           @default("new")
+  // new | contacted | qualified | unqualified | converted
+  source        String?          // web_inquiry | manual | referral | import
+  sourceRefId   String?          // FK to StorefrontInquiry.id if source=web_inquiry
+  accountId     String?
+  contactId     String           // Identity anchor — required
+  assignedToId  String?
+  notes         String?
+  convertedToId String?          // FK to Opportunity.id when converted
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  account       CustomerAccount? @relation(fields: [accountId], references: [id])
+  contact       CustomerContact  @relation(fields: [contactId], references: [id])
+  assignedTo    User?            @relation("EngagementAssignments", fields: [assignedToId], references: [id])
+
+  @@index([status])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([assignedToId])
+}
+
+model Opportunity {
+  id             String           @id @default(cuid())
+  opportunityId  String           @unique // OPP-<uuid>
+  title          String
+  stage          String           @default("qualification")
+  // qualification | discovery | proposal | negotiation | closed_won | closed_lost
+  isDormant      Boolean          @default(false)
+  probability    Int              @default(10) // 0-100%
+  expectedValue  Decimal?
+  currency       String           @default("GBP")
+  expectedClose  DateTime?
+  actualClose    DateTime?
+  lostReason     String?
+  accountId      String
+  contactId      String?
+  assignedToId   String?
+  engagementId   String?          // FK to Engagement (if converted from engagement)
+  notes          String?
+  stageChangedAt DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  account        CustomerAccount  @relation(fields: [accountId], references: [id])
+  contact        CustomerContact? @relation(fields: [contactId], references: [id])
+  assignedTo     User?            @relation("OpportunityAssignments", fields: [assignedToId], references: [id])
+  activities     Activity[]
+  quotes         Quote[]
+
+  @@index([stage])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([expectedClose])
+  @@index([isDormant])
+}
+
+model Quote {
+  id              String          @id @default(cuid())
+  quoteId         String          @unique // QUO-<uuid>
+  quoteNumber     String          @unique // QUO-2026-0001 (sequential)
+  version         Int             @default(1)
+  previousId      String?         // FK to previous Quote version (amendment chain)
+  status          String          @default("draft")
+  // draft | sent | accepted | rejected | expired | superseded
+  opportunityId   String
+  accountId       String
+  validFrom       DateTime        @default(now())
+  validUntil      DateTime
+  subtotal        Decimal         // sum of line totals
+  discountType    String          @default("percentage") // percentage | fixed
+  discountValue   Decimal         @default(0)
+  taxAmount       Decimal         @default(0)
+  totalAmount     Decimal
+  currency        String          @default("GBP")
+  terms           String?
+  notes           String?
+  sentAt          DateTime?
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  createdById     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  opportunity     Opportunity     @relation(fields: [opportunityId], references: [id])
+  account         CustomerAccount @relation(fields: [accountId], references: [id])
+  createdBy       User?           @relation("QuoteCreations", fields: [createdById], references: [id])
+  previous        Quote?          @relation("QuoteVersions", fields: [previousId], references: [id])
+  revisions       Quote[]         @relation("QuoteVersions")
+  lineItems       QuoteLineItem[]
+  salesOrder      SalesOrder?
+
+  @@index([opportunityId])
+  @@index([accountId])
+  @@index([status])
+}
+
+model QuoteLineItem {
+  id              String          @id @default(cuid())
+  quoteId         String
+  productId       String?         // FK to DigitalProduct (optional — ad-hoc lines)
+  description     String
+  quantity        Int             @default(1)
+  unitPrice       Decimal
+  discountPercent Decimal         @default(0)
+  taxPercent      Decimal         @default(0)
+  lineTotal       Decimal         // unitPrice * quantity * (1 - discountPercent/100)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+
+  quote           Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product         DigitalProduct? @relation(fields: [productId], references: [id])
+
+  @@index([quoteId])
+}
+
+model SalesOrder {
+  id              String          @id @default(cuid())
+  orderRef        String          @unique // SO-2026-0001 (sequential)
+  status          String          @default("confirmed")
+  // confirmed | in_progress | fulfilled | cancelled
+  quoteId         String          @unique // 1:1 with accepted Quote
+  accountId       String
+  totalAmount     Decimal
+  currency        String          @default("GBP")
+  fulfilledAt     DateTime?
+  cancelledAt     DateTime?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  quote           Quote           @relation(fields: [quoteId], references: [id])
+  account         CustomerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([status])
+}
+
+model Activity {
+  id            String           @id @default(cuid())
+  activityId    String           @unique // ACT-<uuid>
+  type          String
+  // note | call | email | meeting | task | status_change | quote_event | system
+  subject       String
+  body          String?
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+  accountId     String?
+  contactId     String?
+  opportunityId String?
+  createdById   String?          // null for system-generated events
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  account       CustomerAccount? @relation(fields: [accountId], references: [id])
+  contact       CustomerContact? @relation(fields: [contactId], references: [id])
+  opportunity   Opportunity?     @relation(fields: [opportunityId], references: [id])
+  createdBy     User?            @relation("ActivityCreations", fields: [createdById], references: [id])
+
+  @@index([accountId])
+  @@index([contactId])
+  @@index([opportunityId])
+  @@index([createdAt])
+  @@index([type])
 }
 
 model Organization {
@@ -2947,6 +3164,8 @@ model McpIntegration {
   @@index([status])
   // Note: B-tree index — array containment (@>) queries need a raw GIN migration (follow-on)
   @@index([tags])
+
+  mcpServers    McpServer[]
 }
 
 model McpCatalogSync {
