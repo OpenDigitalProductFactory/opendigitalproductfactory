@@ -12,7 +12,7 @@ MIGRATIONS_DIR="packages/db/prisma/migrations"
 
 # Get files staged for commit that are MODIFICATIONS (M) inside the migrations dir.
 # New files (A = added) are fine — that's a new migration being created.
-MODIFIED_MIGRATIONS=$(git diff --cached --name-status | awk '$1 == "M" && $2 ~ /^'"$MIGRATIONS_DIR"'/ { print $2 }')
+MODIFIED_MIGRATIONS=$(git diff --cached --name-status | grep "^M" | awk '{print $2}' | grep "^$MIGRATIONS_DIR")
 
 if [ -n "$MODIFIED_MIGRATIONS" ]; then
   echo ""
