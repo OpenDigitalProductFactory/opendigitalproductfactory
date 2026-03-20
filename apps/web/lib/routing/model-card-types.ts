@@ -101,7 +101,7 @@ export interface ModelCard {
   rawMetadataHash: string;
 
   dimensionScores: ModelCardDimensionScores;
-  dimensionScoreSource: "provider" | "family_baseline" | "evaluated" | "production";
+  dimensionScoreSource: "inferred" | "provider" | "family_baseline" | "evaluated" | "production";
 }
 
 /** Empty capabilities — all null. */
