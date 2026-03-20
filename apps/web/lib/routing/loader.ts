@@ -10,6 +10,8 @@ import type {
   EndpointOverride,
   SensitivityLevel,
 } from "./types";
+import type { ModelCardCapabilities, ModelCardPricing } from "./model-card-types";
+import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 
 /**
  * Load all active/degraded endpoints as EndpointManifest objects.
@@ -32,14 +34,14 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
   });
 
   return profiles.map((mp) => ({
-    id: mp.providerId,
+    id: mp.id,
     providerId: mp.providerId,
     modelId: mp.modelId,
     name: mp.friendlyName || mp.modelId,
     endpointType: mp.provider.endpointType,
     status: mp.provider.status as EndpointManifest["status"],
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
-    supportsToolUse: mp.supportsToolUse || mp.provider.supportsToolUse,
+    supportsToolUse: (mp.capabilities as any)?.toolUse ?? mp.supportsToolUse ?? mp.provider.supportsToolUse,
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
     supportsStreaming: mp.provider.supportsStreaming,
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
@@ -55,10 +57,23 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
     customScores: (mp.customScores as Record<string, number>) ?? {},
     avgLatencyMs: mp.provider.avgLatencyMs,
     recentFailureRate: mp.provider.recentFailureRate,
-    costPerOutputMToken: mp.outputPricePerMToken ?? mp.provider.outputPricePerMToken,
+    costPerOutputMToken: (mp.pricing as any)?.outputPerMToken ?? mp.outputPricePerMToken ?? mp.provider.outputPricePerMToken,
     profileSource: mp.profileSource as EndpointManifest["profileSource"],
     profileConfidence: mp.profileConfidence as EndpointManifest["profileConfidence"],
     retiredAt: mp.retiredAt,
+
+    // EP-INF-003: ModelCard fields
+    modelClass: mp.modelClass ?? "chat",
+    modelFamily: mp.modelFamily ?? null,
+    inputModalities: (mp.inputModalities as string[]) ?? ["text"],
+    outputModalities: (mp.outputModalities as string[]) ?? ["text"],
+    capabilities: (mp.capabilities as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
+    pricing: (mp.pricing as ModelCardPricing) ?? EMPTY_PRICING,
+    supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    deprecationDate: mp.deprecationDate ?? null,
+    metadataSource: mp.metadataSource ?? "inferred",
+    metadataConfidence: mp.metadataConfidence ?? "low",
+    perRequestLimits: mp.perRequestLimits as any ?? null,
   }));
 }
 
