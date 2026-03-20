@@ -82,6 +82,12 @@ Verified problems:
 4. Changes to the routing pipeline ranking logic — the pipeline already consumes `EndpointManifest`; this epic fills it with real data.
 5. Shadow mode or production validation gates (production deployment concern, not dev).
 
+## Known Bugs Fixed in This Epic
+
+1. **`extractModelMetadata` call-site argument mismatch.** At `ai-provider-internals.ts` line 261, `extractModelMetadata(providerId, m.rawMetadata)` passes `rawMetadata` in the `modelId` position (function expects 3 args: `providerId, modelId, rawMetadata`). The new adapter interface takes `(modelId, rawMetadata)` separately and the call-site is updated.
+
+2. **`EndpointManifest.id` collapses all models to provider ID.** At `loader.ts` line 35, `id: mp.providerId` means all models from the same provider share one routing identity. This breaks pin/block overrides, fallback chains, and performance aggregation for multi-model providers. Fixed in this epic: `id` becomes `mp.id` (the ModelProfile primary key), providing a unique routing identity per model. `providerId` remains available as a separate field.
+
 ---
 
 ## Section 1: ModelCard Schema
@@ -125,6 +131,12 @@ interface ModelCard {
   reliableKnowledgeCutoff: string | null;
 
   // ── Lifecycle ──────────────────────────────────────────────────
+  // ModelCard status represents model-level lifecycle from the provider.
+  // EndpointManifest status represents operational routing status.
+  // Mapping: "deprecated" → manifest "degraded" (still works but should migrate),
+  //          "preview" → manifest "active" (routable but marked experimental),
+  //          "disabled"/"unconfigured" remain provider-level statuses on ModelProvider,
+  //          not on ModelCard (they're about the provider account, not the model).
   status: "active" | "degraded" | "deprecated" | "retired" | "preview";
   deprecationDate: Date | null;
   retiredAt: Date | null;
@@ -186,17 +198,22 @@ interface ModelCardPricing {
   reasoningPerMToken: number | null;
   requestFixed: number | null;
   webSearchPerRequest: number | null;
-  discount: number | null;
+  discount: number | null;          // OpenRouter discount multiplier (0.0-1.0, e.g., 0.5 = 50% off)
 }
 
+// DimensionScores are ALWAYS fully populated — never sparse.
+// The priority cascade fills capability booleans and pricing (which can be null),
+// but dimension scores are always resolved to a concrete number before storage.
+// Default: 50 for all dimensions (neutral). Family baselines override if matched.
+// Evaluated/production scores override baselines.
 interface ModelCardDimensionScores {
-  reasoning: number;
-  codegen: number;
-  toolFidelity: number;
-  instructionFollowing: number;
-  structuredOutput: number;
-  conversational: number;
-  contextRetention: number;
+  reasoning: number;      // default: 50
+  codegen: number;        // default: 50
+  toolFidelity: number;   // default: 50
+  instructionFollowing: number; // default: 50
+  structuredOutput: number;     // default: 50
+  conversational: number;       // default: 50
+  contextRetention: number;     // default: 50
   custom: Record<string, number>;
 }
 ```
@@ -227,7 +244,10 @@ The current `metadata-extractor.ts` is a single function with format-sniffing. T
 interface ProviderAdapter {
   providerId: string;
 
-  /** Parse raw API response into discovered models */
+  /** Parse raw API response into discovered models.
+   *  Replaces the shared parseModelsResponse() in ai-provider-types.ts
+   *  which currently handles all providers in one function. Each adapter
+   *  owns its own parsing logic. The shared function is removed. */
   parseDiscoveryResponse(json: unknown): DiscoveredModel[];
 
   /** Extract a ModelCard from a single model's raw metadata */
@@ -249,6 +269,7 @@ Richest capabilities data of any provider. The Models API (`GET /v1/models`) ret
 |---|---|---|
 | maxInputTokens | API | `model.max_input_tokens` |
 | maxOutputTokens | API | `model.max_tokens` |
+| capabilities.toolUse | Curated | Not exposed in API; set `true` for all chat models (Anthropic docs confirm tool use support across the Claude family) |
 | capabilities.structuredOutput | API | `capabilities.structured_outputs.supported` |
 | capabilities.batch | API | `capabilities.batch.supported` |
 | capabilities.citations | API | `capabilities.citations.supported` |
@@ -259,12 +280,15 @@ Richest capabilities data of any provider. The Models API (`GET /v1/models`) ret
 | capabilities.adaptiveThinking | API | `capabilities.thinking.types.adaptive.supported` |
 | capabilities.effortLevels | API | Collect keys from `capabilities.effort` where `.supported === true` |
 | capabilities.contextManagement | API | `capabilities.context_management.supported` |
+| capabilities.streaming | Curated | `true` for all Anthropic chat models |
 | pricing | Curated | From pricing page — not in API response |
 | trainingDataCutoff | Curated | From model overview page |
 | modelClass | Inferred | All current Anthropic models are "chat" |
 | metadataConfidence | — | "high" |
 
 **Implementation note:** Discovery should call `GET /v1/models` (which returns the capabilities object) instead of or in addition to the current `/models` connectivity probe.
+
+**Verification requirement:** The capability field paths above (e.g., `capabilities.structured_outputs.supported`, `capabilities.thinking.types.adaptive.supported`) are derived from the Anthropic API documentation as of 2026-03-20. These paths MUST be verified against a live `GET /v1/models` response before implementing the adapter. Capture a real response as a test fixture in `__fixtures__/anthropic-models-response.json`.
 
 ### OpenRouter Adapter
 
@@ -279,7 +303,7 @@ Widest model coverage, good structured metadata.
 | capabilities.toolUse | API | `"tools" in supported_parameters` |
 | capabilities.structuredOutput | API | `"structured_outputs" in supported_parameters` |
 | capabilities.streaming | API | `"stream" in supported_parameters` |
-| pricing.inputPerMToken | API | `pricing.prompt` (× 1e6 for per-M conversion) |
+| pricing.inputPerMToken | API | `pricing.prompt` (see unit note below) |
 | pricing.outputPerMToken | API | `pricing.completion` (× 1e6) |
 | pricing.cacheReadPerMToken | API | `pricing.input_cache_read` (× 1e6) |
 | pricing.cacheWritePerMToken | API | `pricing.input_cache_write` (× 1e6) |
@@ -296,7 +320,11 @@ Widest model coverage, good structured metadata.
 | instructType | API | `architecture.instruct_type` |
 | deprecationDate | API | `expiration_date` |
 | perRequestLimits | API | `per_request_limits` |
-| metadataConfidence | — | "high" for pricing/context, "medium" for capabilities |
+| metadataConfidence | — | "high" (OpenRouter provides rich structured data across all fields) |
+
+**Pricing unit conversion:** OpenRouter publishes prices as per-token strings (e.g., `"0.000003"` = $0.000003 per token). The ModelCard stores prices as per-million-tokens (e.g., `3.0` = $3.00 per million tokens). Multiply OpenRouter values by 1,000,000 to convert. Getting this wrong produces costs off by six orders of magnitude. The existing `metadata-extractor.ts` already does this conversion correctly at line 61.
+
+**`top_provider.max_completion_tokens` verification:** The existing extractor returns `null` for `maxOutputTokens` with the comment "OpenRouter doesn't expose this per-model." The `top_provider.max_completion_tokens` field appears in the OpenRouter API schema. Verify against a live API response before implementing — if the field exists but was overlooked, use it; if it doesn't exist in practice, fall back to null.
 
 ### OpenAI Adapter
 
@@ -320,10 +348,10 @@ Moderate metadata from API.
 |---|---|---|
 | maxInputTokens | API | `inputTokenLimit` |
 | maxOutputTokens | API | `outputTokenLimit` |
-| capabilities.toolUse | API | `"generateContent" in supportedGenerationMethods` |
+| capabilities.toolUse | API | `"generateContent" in supportedGenerationMethods` (approximation — `generateContent` is the general method, not tool-specific; `metadataConfidence` for this field is "low") |
 | modelClass | Inferred | `"embedContent" in supportedGenerationMethods` → embedding, else chat |
 | pricing | Curated | Not in API response |
-| metadataConfidence | — | "medium" |
+| metadataConfidence | — | "medium" (context limits authoritative, capabilities approximate) |
 
 ### Ollama Adapter
 
@@ -357,6 +385,11 @@ function classifyModel(
   if (/^tts-/i.test(modelId)) return "speech";
   if (/^whisper/i.test(modelId)) return "audio";
   if (/^omni-moderation/i.test(modelId)) return "moderation";
+  if (/^codex/i.test(modelId)) return "code";
+
+  // "realtime" is reserved for future OpenAI Realtime API models.
+  // Currently no model ID patterns map to it — it will be assigned
+  // when the platform adds realtime provider support.
 
   return "chat";
 }
@@ -387,7 +420,7 @@ Provider API → parseModelsResponse() → store DiscoveredModel(rawMetadata)
 
 **Key change:** LLM-based profiling (`generateModelProfile`) is replaced by deterministic adapter extraction. No LLM call needed to know that `claude-opus-4-6` supports structured output — the API says so. Faster, cheaper, more reliable, auditable.
 
-LLM-based profiling is retained only for generating `friendlyName` and `summary` for display purposes — fields that benefit from natural language but don't affect routing.
+LLM-based profiling is retained only for generating `friendlyName` and `summary` for display purposes — fields that benefit from natural language but don't affect routing. These fields remain on `ModelProfile` as database columns (not part of the `ModelCard` interface). The `ModelCard` covers routing-relevant data; `friendlyName` and `summary` are display-only and populated separately by the retained LLM path or manually curated.
 
 ### Priority Cascade for Field Population
 
@@ -422,7 +455,7 @@ Each level only fills fields left null by the level above.
 |---|---|---|---|
 | `modelFamily` | String? | null | Model family grouping |
 | `modelClass` | String | "chat" | Hard routing filter |
-| `maxInputTokens` | Int? | null | Replaces `maxContextTokens` naming |
+| `maxInputTokens` | Int? | null | New column alongside existing `maxContextTokens` (see note below) |
 | `inputModalities` | Json | `["text"]` | Structured input modality list |
 | `outputModalities` | Json | `["text"]` | Structured output modality list |
 | `capabilities` | Json | `{}` | `ModelCardCapabilities` object |
@@ -439,6 +472,14 @@ Each level only fills fields left null by the level above.
 | `lastMetadataRefresh` | DateTime? | null | Last adapter run time |
 | `rawMetadataHash` | String? | null | SHA-256 for drift detection |
 
+**Column clarification — `maxInputTokens` vs `maxContextTokens` vs `contextWindow`:**
+
+The current schema has two overlapping columns:
+- `maxContextTokens Int?` (line 789) — added in EP-INF-002, stores integer token count. Used by routing.
+- `contextWindow String?` (line 773) — legacy display column, stores freetext like "128k". Not used by routing.
+
+This spec adds `maxInputTokens Int?` as a new column alongside `maxContextTokens`. During Phase 3, `loadEndpointManifests()` reads `maxInputTokens` with fallback to `maxContextTokens`. During Phase 4, `maxContextTokens` and `contextWindow` are both removed.
+
 **Deprecated columns (retained in Phase 1, removed in Phase 4):**
 
 | Column | Replaced By |
@@ -448,6 +489,7 @@ Each level only fills fields left null by the level above.
 | `bestFor` | `capabilities` + `modelClass` |
 | `avoidFor` | `capabilities` + `modelClass` |
 | `contextWindow` (String) | `maxInputTokens` (Int) |
+| `maxContextTokens` (Int) | `maxInputTokens` (Int) — rename for consistency with provider APIs |
 | `speedRating` | Actual latency measurements |
 | `supportsToolUse` (Boolean) | `capabilities.toolUse` |
 | `codingCapability` | `codegen` score + capabilities |
@@ -486,6 +528,8 @@ Family baselines become the last-resort fallback for models where:
 ---
 
 ## Section 6: Drift Detection
+
+**Hash computation:** `rawMetadataHash` is a SHA-256 of `JSON.stringify(rawMetadata, Object.keys(rawMetadata).sort())` — sorted keys ensure deterministic serialization so equivalent objects with different key orders don't produce false drift signals.
 
 When discovery runs and `rawMetadata` has changed (detected by `rawMetadataHash` comparison):
 
