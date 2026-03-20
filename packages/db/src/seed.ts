@@ -1076,6 +1076,18 @@ async function seedScheduledJobs(): Promise<void> {
     },
   });
   await prisma.scheduledJob.upsert({
+    where:  { jobId: "mcp-catalog-sync" },
+    create: {
+      jobId:     "mcp-catalog-sync",
+      name:      "MCP Integrations Catalog Sync",
+      schedule:  "weekly",
+      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    update: {
+      schedule: "weekly",  // preserve operational state on re-seed
+    },
+  });
+  await prisma.scheduledJob.upsert({
     where: { jobId: "provider-priority-optimizer" },
     update: {},
     create: {
