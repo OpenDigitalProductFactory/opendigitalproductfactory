@@ -215,27 +215,28 @@ export interface EvalRunResult {
 }
 
 /**
- * Run a full dimension evaluation for one endpoint.
- * Updates ModelProvider capability scores and creates an EndpointTestRun record.
+ * Run a full dimension evaluation for one endpoint/model pair.
+ * Updates ModelProfile capability scores and creates an EndpointTestRun record.
  */
 export async function runDimensionEval(
-  endpointId: string,
+  providerId: string,
+  modelId: string,
   triggeredBy: string,
 ): Promise<EvalRunResult> {
-  const modelId = await resolveModelId(endpointId);
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId: endpointId },
+  const modelProfile = await prisma.modelProfile.findUnique({
+    where: { providerId_modelId: { providerId, modelId } },
   });
 
-  if (!provider) throw new Error(`Provider ${endpointId} not found`);
+  if (!modelProfile) throw new Error(`ModelProfile ${providerId}/${modelId} not found`);
 
+  const currentEvalCount = modelProfile.evalCount;
   const runId = `DE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
   // Create the test run record
   await prisma.endpointTestRun.create({
     data: {
       runId,
-      endpointId,
+      endpointId: providerId,
       modelId,
       taskType: "dimension-eval",
       triggeredBy,
@@ -246,12 +247,12 @@ export async function runDimensionEval(
   // Evaluate each dimension
   const dimensions: DimensionEvalResult[] = [];
   for (const dim of BUILTIN_DIMENSIONS) {
-    const previousScore = provider[dim] as number;
-    const result = await evalDimension(endpointId, modelId, dim, previousScore, provider.evalCount);
+    const previousScore = modelProfile[dim] as number;
+    const result = await evalDimension(providerId, modelId, dim, previousScore, currentEvalCount);
     dimensions.push(result);
   }
 
-  // Update ModelProvider with new scores (skip inconclusive dimensions)
+  // Update ModelProfile with new scores (skip inconclusive dimensions)
   const scoreUpdates: Record<string, number> = {};
   for (const d of dimensions) {
     if (!d.inconclusive) {
@@ -262,16 +263,15 @@ export async function runDimensionEval(
   const hasDrift = dimensions.some((d) => d.drift.severity !== "none");
   const hasSevereDrift = dimensions.some((d) => d.drift.severity === "severe");
 
-  await prisma.modelProvider.update({
-    where: { providerId: endpointId },
+  await prisma.modelProfile.update({
+    where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
       profileSource: "evaluated",
-      profileConfidence: (provider.evalCount + 1) >= 5 ? "high" : "medium",
+      profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
       evalCount: { increment: 1 },
       lastEvalAt: new Date(),
-      // Mark degraded on severe drift
-      ...(hasSevereDrift ? { status: "degraded" } : {}),
+      ...(hasSevereDrift ? { modelStatus: "degraded" } : {}),
     },
   });
 
@@ -297,7 +297,7 @@ export async function runDimensionEval(
   });
 
   return {
-    endpointId,
+    endpointId: providerId,
     modelId,
     dimensions,
     testRunId: runId,
@@ -307,21 +307,25 @@ export async function runDimensionEval(
 }
 
 /**
- * Run dimension evaluation for ALL active endpoints.
+ * Run dimension evaluation for ALL active model profiles.
  */
 export async function runAllDimensionEvals(triggeredBy: string): Promise<EvalRunResult[]> {
-  const providers = await prisma.modelProvider.findMany({
-    where: { status: { in: ["active", "degraded"] }, endpointType: "llm", retiredAt: null },
-    select: { providerId: true },
+  const models = await prisma.modelProfile.findMany({
+    where: {
+      modelStatus: "active",
+      retiredAt: null,
+      provider: { status: { in: ["active", "degraded"] }, endpointType: "llm" },
+    },
+    select: { providerId: true, modelId: true },
   });
 
   const results: EvalRunResult[] = [];
-  for (const p of providers) {
+  for (const m of models) {
     try {
-      const result = await runDimensionEval(p.providerId, triggeredBy);
+      const result = await runDimensionEval(m.providerId, m.modelId, triggeredBy);
       results.push(result);
     } catch (e) {
-      console.error(`[eval-runner] failed to evaluate ${p.providerId}:`, e);
+      console.error(`[eval-runner] failed to evaluate ${m.providerId}/${m.modelId}:`, e);
     }
   }
   return results;

@@ -28,6 +28,7 @@ const REGRESSION_WINDOW = 5;
 export type EvaluateInput = {
   threadId: string;
   endpointId: string;
+  modelId?: string;
   taskType: string;
   userMessage: string;
   aiResponse: string;
@@ -149,7 +150,7 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
   await updatePerformanceProfile(endpointId, taskType, score);
 
   // EP-INF-001-P6: Feed orchestrator score into routing dimension profiles
-  await updateEndpointDimensionScores(input.endpointId, input.taskType, score).catch((err) =>
+  await updateEndpointDimensionScores(input.endpointId, input.modelId ?? "", input.taskType, score).catch((err) =>
     console.error("[orchestrator-evaluator] dimension score update failed:", err),
   );
 }

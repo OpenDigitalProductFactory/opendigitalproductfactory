@@ -57,6 +57,7 @@ interface DimensionTally {
  */
 export async function updateEndpointDimensionScores(
   endpointId: string,
+  modelId: string,
   taskType: string,
   orchestratorScore: number,
 ): Promise<void> {
@@ -86,11 +87,12 @@ export async function updateEndpointDimensionScores(
   // Upsert EndpointTaskPerformance (creates record if first observation for this task type)
   await prisma.endpointTaskPerformance.upsert({
     where: { endpointId_taskType: { endpointId, taskType } },
-    update: { dimensionScores: currentDimScores as any },
+    update: { dimensionScores: currentDimScores as any, modelId },
     create: {
       endpointId,
       taskType,
       dimensionScores: currentDimScores as any,
+      modelId,
     },
   });
 

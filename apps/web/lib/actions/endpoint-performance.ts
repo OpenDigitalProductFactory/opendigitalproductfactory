@@ -129,16 +129,16 @@ export async function getRecentRouteDecisions(endpointId?: string, limit = 20) {
   return JSON.parse(JSON.stringify(decisions));
 }
 
-export async function triggerDimensionEval(endpointId?: string) {
+export async function triggerDimensionEval(endpointId: string, modelId?: string) {
   const userId = await requireViewAccess();
   const session = await auth();
   if (!session?.user || !can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_capabilities")) {
     throw new Error("Running dimension eval requires manage_capabilities permission");
   }
 
-  if (endpointId) {
+  if (modelId) {
     const { runDimensionEval } = await import("@/lib/routing/eval-runner");
-    return runDimensionEval(endpointId, userId);
+    return runDimensionEval(endpointId, modelId, userId);
   } else {
     const { runAllDimensionEvals } = await import("@/lib/routing/eval-runner");
     return runAllDimensionEvals(userId);
