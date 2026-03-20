@@ -37,7 +37,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </a>
       </div>
 
-      <Suspense>
+      <Suspense fallback={null}>
         <IntegrationCatalogFilters />
       </Suspense>
 

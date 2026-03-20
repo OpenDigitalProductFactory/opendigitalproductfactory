@@ -45,6 +45,7 @@ export function McpSyncButton({ disabled }: { disabled?: boolean }) {
         evtSource.onerror = () => {
           evtSource.close();
           setProgress(null);
+          setError("Sync connection lost. Check sync history for status.");
           router.refresh();
         };
       }

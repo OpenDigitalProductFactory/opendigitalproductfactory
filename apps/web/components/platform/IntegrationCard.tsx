@@ -1,12 +1,14 @@
 // apps/web/components/platform/IntegrationCard.tsx
 
+import { Decimal } from "@prisma/client/runtime/library";
+
 type Integration = {
   name: string;
   vendor: string | null;
   shortDescription: string | null;
   category: string;
   pricingModel: string | null;
-  rating: unknown;
+  rating: Decimal | number | null;
   ratingCount: number | null;
   isVerified: boolean;
   documentationUrl: string | null;
@@ -22,11 +24,10 @@ const PRICING_BADGES: Record<string, string> = {
 
 export function IntegrationCard({ integration }: { integration: Integration }) {
   const rating =
-    typeof integration.rating === "number"
+    integration.rating instanceof Decimal
+      ? integration.rating.toNumber()
+      : typeof integration.rating === "number"
       ? integration.rating
-      : integration.rating &&
-        typeof (integration.rating as { toNumber?: () => number }).toNumber === "function"
-      ? (integration.rating as { toNumber: () => number }).toNumber()
       : null;
 
   return (
