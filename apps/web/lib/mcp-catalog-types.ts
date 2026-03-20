@@ -27,60 +27,51 @@ export interface GlamaServerEntry {
 // ─── Tag → Archetype ruleset ──────────────────────────────────────────────────
 
 /**
- * Maps registry/Glama tags to StorefrontArchetype.archetypeId values.
- * Values must match the exact archetypeId strings seeded in StorefrontArchetype.
+ * Maps registry/Glama tags to StorefrontArchetype.category strings.
+ * Values must match the exact category strings seeded in StorefrontArchetype.
  * Update this config in the same PR as any archetype addition/removal.
  */
 export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   // Payments / commerce
-  payments:     ["retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-grooming", "pet-care", "professional-services"],
-  ecommerce:    ["retail-goods", "artisan-goods", "florist", "food-hospitality"],
-  commerce:     ["retail-goods", "artisan-goods", "restaurant", "catering", "bakery"],
-  pos:          ["retail-goods", "food-hospitality"],
+  payments:    ["retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-services", "professional-services"],
+  ecommerce:   ["retail-goods", "food-hospitality"],
+  commerce:    ["retail-goods", "food-hospitality"],
+  pos:         ["retail-goods", "food-hospitality"],
   // Booking / scheduling
-  booking:      ["veterinary-clinic", "dental-practice", "physiotherapy", "counselling", "optician", "hair-salon", "barber-shop", "nail-salon", "beauty-spa", "personal-trainer", "pet-grooming", "pet-care", "gym", "yoga-studio", "dance-studio"],
-  scheduling:   ["veterinary-clinic", "dental-practice", "physiotherapy", "counselling", "optician", "hair-salon", "barber-shop"],
-  calendar:     ["veterinary-clinic", "dental-practice", "corporate-training", "tutoring"],
+  booking:     ["healthcare-wellness", "beauty-personal-care", "pet-services", "fitness-recreation"],
+  scheduling:  ["healthcare-wellness", "beauty-personal-care"],
+  calendar:    ["healthcare-wellness", "education-training"],
   // Marketing / email
-  email:        ["retail-goods", "fitness-recreation", "nonprofit-community", "charity", "sports-club"],
-  marketing:    ["retail-goods", "food-hospitality", "fitness-recreation", "professional-services"],
-  crm:          ["it-managed-services", "legal-services", "accounting", "marketing-agency", "consulting", "facilities-maintenance"],
+  email:       ["retail-goods", "fitness-recreation", "nonprofit-community"],
+  marketing:   ["retail-goods", "food-hospitality", "fitness-recreation", "professional-services"],
+  crm:         ["professional-services", "trades-maintenance"],
   // Website / content
-  cms:          ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community", "media-content"],
-  wordpress:    ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
+  cms:         ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
+  wordpress:   ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
   // Cloud / infrastructure
-  cloud:        ["it-managed-services", "consulting", "marketing-agency"],
-  storage:      ["it-managed-services", "consulting"],
+  cloud:       ["professional-services"],
+  storage:     ["professional-services"],
   // Source control
-  git:          ["it-managed-services", "consulting", "corporate-training"],
+  git:         ["professional-services", "education-training"],
   // Donations / nonprofit
-  donations:    ["pet-rescue", "animal-shelter", "community-shelter", "charity", "sports-club"],
-  nonprofit:    ["pet-rescue", "animal-shelter", "community-shelter", "charity", "sports-club"],
+  donations:   ["nonprofit-community"],
+  nonprofit:   ["nonprofit-community"],
   // Communication
-  messaging:    ["it-managed-services", "consulting", "facilities-maintenance"],
-  slack:        ["it-managed-services", "consulting"],
+  messaging:   ["professional-services", "trades-maintenance"],
+  slack:       ["professional-services"],
   // Finance / accounting
-  accounting:   ["accounting", "legal-services", "it-managed-services"],
-  invoicing:    ["accounting", "it-managed-services", "consulting", "facilities-maintenance", "plumber", "electrician"],
-  // Analytics (cross-cutting — applies to all archetypes)
-  analytics:    [
-    "retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-grooming", "pet-care",
-    "artisan-goods", "florist", "restaurant", "catering", "bakery",
-    "veterinary-clinic", "dental-practice", "physiotherapy", "counselling", "optician",
-    "hair-salon", "barber-shop", "nail-salon", "beauty-spa", "personal-trainer", "gym", "yoga-studio", "dance-studio",
-    "corporate-training", "tutoring",
-    "nonprofit-community", "charity", "sports-club",
-    "professional-services",
-    "it-managed-services", "legal-services", "accounting", "marketing-agency", "consulting", "facilities-maintenance",
-    "media-content",
-    "pet-rescue", "animal-shelter", "community-shelter",
-    "plumber", "electrician",
+  accounting:  ["professional-services"],
+  invoicing:   ["professional-services", "trades-maintenance"],
+  // Analytics (cross-cutting — applies to all categories)
+  analytics:   [
+    "retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-services",
+    "professional-services", "trades-maintenance", "nonprofit-community", "healthcare-wellness", "beauty-personal-care",
   ],
 };
 
 /**
- * Derives archetypeIds for a set of tags using ARCHETYPE_TAG_RULESET.
- * Returns deduplicated array of matching archetypeId strings.
+ * Derives category strings for a set of tags using ARCHETYPE_TAG_RULESET.
+ * Returns deduplicated array of matching StorefrontArchetype.category strings.
  */
 export function deriveArchetypeIds(tags: string[]): string[] {
   const ids = new Set<string>();
