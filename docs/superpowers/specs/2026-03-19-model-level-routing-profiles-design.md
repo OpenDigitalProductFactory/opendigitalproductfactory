@@ -57,6 +57,10 @@ Move routing profiles from `ModelProvider` (one per provider) to `ModelProfile` 
 Add to the existing `ModelProfile` model:
 
 ```prisma
+  // ── Relation to parent provider ──
+  provider                 ModelProvider @relation(fields: [providerId], references: [providerId])
+  // (Add `modelProfiles ModelProfile[]` to ModelProvider model)
+
   // ── Routing Profile: Hard Constraints ──
   maxContextTokens         Int?
   maxOutputTokens          Int?
@@ -115,7 +119,11 @@ The existing `lastSeenAt` field (using `@updatedAt`) already tracks when a model
   missedDiscoveryCount     Int        @default(0)
 ```
 
-This counts consecutive discoveries where the model was NOT in the provider's `/models` response. Reset to 0 when the model is seen. When it reaches 2+, the model is retired.
+This counts consecutive discoveries where the model was NOT in the provider's `/models` response. Reset to 0 when the model is seen. When it reaches the retirement threshold, the model is retired.
+
+**Retirement thresholds by provider type:**
+- Cloud providers (OpenRouter, Anthropic, OpenAI, etc.): 2 missed discoveries → retired. Cloud model lists are authoritative.
+- Local providers (Ollama): **skip disappearance detection entirely**. Ollama's `/api/tags` only shows models loaded in memory, not all downloaded models. A model evicted from VRAM is still on disk and fully functional. Ollama models are only retired manually or when the model file is deleted.
 
 ---
 
@@ -123,17 +131,38 @@ This counts consecutive discoveries where the model was NOT in the provider's `/
 
 ### EndpointManifest Now Represents a Model
 
-The `EndpointManifest` type gains a `modelId` field:
+The `EndpointManifest` type gains a `modelId` field. The `id` remains the `providerId` for backward compatibility with existing `EndpointTaskPerformance` and `RouteDecisionLog` records. A new `modelId` field is added:
 
 ```typescript
 interface EndpointManifest {
-  id: string;          // "${providerId}::${modelId}" — unique composite key
+  id: string;          // providerId — backward compatible with existing records
   providerId: string;  // from ModelProvider
-  modelId: string;     // from ModelProfile
+  modelId: string;     // from ModelProfile — NEW
   name: string;        // ModelProfile.friendlyName or modelId
-  // ... all existing fields
+  // ... all existing fields (dimension scores now from ModelProfile, not ModelProvider)
 }
 ```
+
+### Endpoint Identity Strategy
+
+**`EndpointTaskPerformance`** and **`RouteDecisionLog`** currently key on `endpointId` as a plain `providerId`. Rather than changing the key format (which would orphan all existing data), add a `modelId` column to both tables:
+
+- `EndpointTaskPerformance`: add `modelId String?`. The `@@unique` constraint stays on `[endpointId, taskType]` for now — a future migration can add `modelId` to the constraint once all records have it populated.
+- `RouteDecisionLog`: add `selectedModelId String?` (already noted in Section 1).
+
+New records are written with both `endpointId` (providerId) and `modelId`. Historical records have `modelId: null` — they predate model-level routing.
+
+### BUILTIN_DIMENSIONS Name Mapping
+
+The `BUILTIN_DIMENSIONS` array uses `"instructionFollowing"` and `"structuredOutput"`. The `ModelProfile` DB fields use `instructionFollowingScore` and `structuredOutputScore` (to avoid collision with existing string fields). The **loader** maps DB names to manifest names:
+
+```typescript
+// In loadEndpointManifests:
+instructionFollowing: mp.instructionFollowingScore,
+structuredOutput: mp.structuredOutputScore,
+```
+
+`BUILTIN_DIMENSIONS` and `EndpointManifest` field names stay unchanged — the mapping happens at the DB boundary only.
 
 ### loadEndpointManifests() — Join Provider + Model
 
@@ -227,7 +256,7 @@ const MODEL_FAMILY_BASELINES: Array<{
   { pattern: /gpt-4o(?!-mini)/i,  scores: { reasoning: 88, codegen: 85, toolFidelity: 88, instructionFollowingScore: 85, structuredOutputScore: 82, conversational: 85, contextRetention: 78 }, confidence: "medium" },
   { pattern: /gpt-4o-mini/i,      scores: { reasoning: 68, codegen: 62, toolFidelity: 65, instructionFollowingScore: 68, structuredOutputScore: 65, conversational: 70, contextRetention: 58 }, confidence: "medium" },
   { pattern: /gpt-4-turbo/i,      scores: { reasoning: 82, codegen: 80, toolFidelity: 82, instructionFollowingScore: 80, structuredOutputScore: 78, conversational: 80, contextRetention: 72 }, confidence: "medium" },
-  { pattern: /o[134]-/i,          scores: { reasoning: 95, codegen: 88, toolFidelity: 75, instructionFollowingScore: 82, structuredOutputScore: 75, conversational: 70, contextRetention: 80 }, confidence: "medium" },
+  { pattern: /(?:^|\/)?o[134]-/i,  scores: { reasoning: 95, codegen: 88, toolFidelity: 75, instructionFollowingScore: 82, structuredOutputScore: 75, conversational: 70, contextRetention: 80 }, confidence: "medium" },
 
   // Meta Llama
   { pattern: /llama.*3\.1.*405b/i, scores: { reasoning: 80, codegen: 75, toolFidelity: 60, instructionFollowingScore: 72, structuredOutputScore: 55, conversational: 75, contextRetention: 65 }, confidence: "low" },
@@ -263,6 +292,15 @@ The current "Profile Models" button becomes "Sync Profiles":
 4. Report: N models synced, M new, K retired
 
 No LLM calls. Fast, free, deterministic, repeatable.
+
+**New model handling:** When a `DiscoveredModel` exists but no `ModelProfile` row exists (new model, never profiled), the sync creates a `ModelProfile` with:
+- `friendlyName`: the modelId (e.g., "claude-sonnet-4-5")
+- `summary`: "Auto-profiled from provider metadata"
+- `capabilityTier`: mapped from family baseline (`reasoning >= 80` → "deep-thinker", `>= 60` → "fast-worker", else "budget")
+- `costTier`: mapped from extracted pricing
+- `bestFor` / `avoidFor`: empty arrays (populated by evals later)
+- `generatedBy`: "metadata-extraction"
+- All routing dimension scores from family baseline or defaults (50s)
 
 ---
 
