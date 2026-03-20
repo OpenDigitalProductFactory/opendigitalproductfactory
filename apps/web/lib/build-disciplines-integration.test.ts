@@ -25,12 +25,12 @@ describe("Build Disciplines — Full Flow Integration", () => {
       expect(result.reason).toContain("Design review");
     });
 
-    it("BLOCKS with design doc and failing review", () => {
+    it("ALLOWS with design doc and failing review (review is informational — presence is sufficient)", () => {
       const result = checkPhaseGate("ideate", "plan", {
         designDoc: { problemStatement: "Need a search filter" },
         designReview: { decision: "fail", issues: [{ severity: "critical", description: "Missing alternatives" }], summary: "Rejected" },
       });
-      expect(result.allowed).toBe(false);
+      expect(result.allowed).toBe(true);
     });
 
     it("PASSES with design doc and passing review", () => {

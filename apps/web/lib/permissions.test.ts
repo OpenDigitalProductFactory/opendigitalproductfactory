@@ -60,7 +60,7 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).toContain("inventory");
   });
 
-  it("superuser gets all 10 tiles regardless of role", () => {
-    expect(getWorkspaceTiles(superuser).length).toBe(10);
+  it("superuser gets all 11 tiles regardless of role", () => {
+    expect(getWorkspaceTiles(superuser).length).toBe(11);
   });
 });
