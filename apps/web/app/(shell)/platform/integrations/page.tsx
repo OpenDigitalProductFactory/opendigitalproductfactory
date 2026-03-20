@@ -21,6 +21,13 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     limit: 60,
   });
 
+  // Fetch which integrations have active servers
+  const activeLinks = await prisma.mcpServer.findMany({
+    where: { integrationId: { not: null }, status: "active" },
+    select: { id: true, integrationId: true },
+  });
+  const activeMap = new Map(activeLinks.map((s) => [s.integrationId, s.id]));
+
   const totalCount = await prisma.mcpIntegration.count({ where: { status: "active" } });
 
   return (
@@ -48,7 +55,13 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {integrations.map((integration) => (
-            <IntegrationCard key={integration.id} integration={integration} />
+            <IntegrationCard
+                key={integration.id}
+                integration={{
+                  ...integration,
+                  activeServerId: activeMap.get(integration.id) ?? null,
+                }}
+              />
           ))}
         </div>
       )}
