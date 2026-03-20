@@ -1,14 +1,11 @@
 import type { PublicItem } from "@/lib/storefront-types";
 import { CtaButton } from "./CtaButton";
 
-const PRICE_TYPE_LABELS: Record<string, string> = {
-  fixed: "",
-  from: "From ",
+// prefix: text before currency symbol; suffix: unit after amount
+const PRICE_PREFIX: Record<string, string> = { from: "From " };
+const PRICE_SUFFIX: Record<string, string> = {
   "per-hour": "/hr",
   "per-session": "/session",
-  free: "Free",
-  donation: "Donation",
-  quote: "POA",
 };
 
 function formatPrice(item: PublicItem): string | null {
@@ -16,10 +13,10 @@ function formatPrice(item: PublicItem): string | null {
   if (!item.priceAmount && item.priceType === "quote") return "POA";
   if (!item.priceAmount && item.priceType === "donation") return "Donation";
   if (!item.priceAmount) return null;
-  const prefix = PRICE_TYPE_LABELS[item.priceType ?? ""] ?? "";
-  const suffix = item.priceType === "per-hour" ? "/hr"
-    : item.priceType === "per-session" ? "/session" : "";
-  return `${prefix}${item.priceCurrency === "GBP" ? "£" : item.priceCurrency}${item.priceAmount}${suffix}`;
+  const prefix = PRICE_PREFIX[item.priceType ?? ""] ?? "";
+  const suffix = PRICE_SUFFIX[item.priceType ?? ""] ?? "";
+  const currency = item.priceCurrency === "GBP" ? "£" : item.priceCurrency;
+  return `${prefix}${currency}${item.priceAmount}${suffix}`;
 }
 
 export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string }) {
