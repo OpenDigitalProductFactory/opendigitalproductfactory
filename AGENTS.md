@@ -64,6 +64,27 @@
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included so the user can verify.
 
+## Data Model Stewardship
+
+When adding any large feature, audit the existing schema for refactoring opportunities before finalising the new data model. Do not proceed with a spec until this audit is complete.
+
+### Indicators that refactoring is needed
+
+- A domain-specific model is being re-used as a shared concept (e.g. reading org name from `BrandingConfig`)
+- The same logical data (name, slug, address, contact info) appears independently in two or more existing models
+- A new feature needs "meta" data (identity, location, ownership) that has no canonical home in the schema
+
+### What to do
+
+1. Identify the shared concept and propose a canonical model for it
+2. Update consuming models to reference the canonical model (FK or nullable override)
+3. Note any other refactoring opportunities discovered but deferred — add them to the spec's "future refactoring" section so they are not lost
+4. Document the decision in the spec; do not silently absorb the refactor into implementation
+
+### Standing example
+
+`Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, not from environment variables, not from a bespoke field on another model.
+
 ## Design Principles
 
 These principles apply to all new UI development on the platform.
