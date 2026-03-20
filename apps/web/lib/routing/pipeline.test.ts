@@ -18,6 +18,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
   return {
     id: "ep-default",
     providerId: "test",
+    modelId: "test-model",
     name: "Default Endpoint",
     endpointType: "chat",
     status: "active",
@@ -51,6 +52,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
 const sonnet = makeEndpoint({
   id: "ep-sonnet",
   providerId: "anthropic",
+  modelId: "claude-sonnet-4-5",
   name: "Claude Sonnet",
   reasoning: 88,
   codegen: 91,
@@ -60,6 +62,7 @@ const sonnet = makeEndpoint({
 const llama = makeEndpoint({
   id: "ep-llama",
   providerId: "ollama",
+  modelId: "llama3.1",
   name: "Llama 3.1",
   sensitivityClearance: ["public", "internal", "confidential", "restricted"],
   reasoning: 55,
@@ -71,6 +74,7 @@ const llama = makeEndpoint({
 
 const noTools = makeEndpoint({
   id: "ep-no-tools",
+  modelId: "basic-model",
   name: "No Tools Endpoint",
   supportsToolUse: false,
   toolFidelity: 0,
@@ -78,6 +82,7 @@ const noTools = makeEndpoint({
 
 const retired = makeEndpoint({
   id: "ep-retired",
+  modelId: "old-model",
   name: "Retired Endpoint",
   retiredAt: new Date("2026-01-01"),
 });

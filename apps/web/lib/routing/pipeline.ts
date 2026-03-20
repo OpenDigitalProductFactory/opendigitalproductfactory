@@ -88,6 +88,7 @@ export function filterByPolicy(
       for (const ep of removedByRule) {
         excluded.push({
           endpointId: ep.id,
+          modelId: ep.modelId,
           endpointName: ep.name,
           fitnessScore: 0,
           dimensionScores: {},
@@ -190,6 +191,7 @@ export function filterHard(
     } else {
       excluded.push({
         endpointId: ep.id,
+        modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
         dimensionScores: {},
@@ -247,6 +249,7 @@ export function routeEndpoint(
         const result = computeFitness(ep, requirement, endpoints);
         allCandidates.push({
           endpointId: ep.id,
+          modelId: ep.modelId,
           endpointName: ep.name,
           fitnessScore: result.fitness,
           dimensionScores: result.dimensionScores,
@@ -258,12 +261,14 @@ export function routeEndpoint(
 
       return {
         selectedEndpoint: pinnedEp.id,
+        selectedModelId: pinnedEp.modelId,
         reason: `Pinned override: ${pinnedEp.name} (${pinnedEp.providerId}) forced for task type '${requirement.taskType}'. Fitness: ${fitness.toFixed(1)}.`,
         fitnessScore: fitness,
         fallbackChain: [],
         candidates: [
           {
             endpointId: pinnedEp.id,
+            modelId: pinnedEp.modelId,
             endpointName: pinnedEp.name,
             fitnessScore: fitness,
             dimensionScores,
@@ -293,6 +298,7 @@ export function routeEndpoint(
     if (blockedIds.has(ep.id)) {
       allCandidates.push({
         endpointId: ep.id,
+        modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
         dimensionScores: {},
@@ -332,6 +338,7 @@ export function routeEndpoint(
   if (working.length === 0) {
     return {
       selectedEndpoint: null,
+      selectedModelId: null,
       reason: `No eligible endpoints for task type '${requirement.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.`,
       fitnessScore: 0,
       fallbackChain: [],
@@ -379,6 +386,7 @@ export function routeEndpoint(
   // Build full candidate trace (eligible endpoints only, scored)
   const eligibleTraces: CandidateTrace[] = scored.map(({ ep, fitness, dimensionScores }) => ({
     endpointId: ep.id,
+    modelId: ep.modelId,
     endpointName: ep.name,
     fitnessScore: fitness,
     dimensionScores,
@@ -405,6 +413,7 @@ export function routeEndpoint(
 
   return {
     selectedEndpoint: winner.ep.id,
+    selectedModelId: winner.ep.modelId,
     reason,
     fitnessScore: winner.fitness,
     fallbackChain: fullFallbackChain,
