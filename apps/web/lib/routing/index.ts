@@ -50,3 +50,9 @@ export type { ProviderAdapter, DiscoveredModelEntry } from "./adapter-interface"
 export { getAdapter, extractModelCardWithFallback } from "./adapter-registry";
 export { classifyModel } from "./model-classifier";
 export { computeMetadataHash } from "./metadata-hash";
+
+// EP-INF-005a: Contract-based selection
+export type { RequestContract } from "./request-contract";
+export { inferContract } from "./request-contract";
+export { estimateCost, estimateSuccessProbability, rankByCostPerSuccess } from "./cost-ranking";
+export { routeEndpointV2 } from "./pipeline-v2";
