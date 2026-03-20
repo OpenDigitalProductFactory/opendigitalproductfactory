@@ -12,8 +12,7 @@ import {
   getTestUrl,
   parseModelsResponse,
 } from "@/lib/ai-provider-types";
-import { extractModelMetadata } from "@/lib/routing/metadata-extractor";
-import { getBaselineForModel } from "@/lib/routing/family-baselines";
+import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
@@ -258,44 +257,67 @@ export async function profileModelsInternal(
 
   let profiled = 0;
   for (const m of models) {
-    const metadata = extractModelMetadata(providerId, m.rawMetadata as Record<string, unknown>);
-    const baseline = getBaselineForModel(m.modelId);
-
-    const scoreFields = baseline
-      ? {
-          reasoning:                 baseline.scores.reasoning,
-          codegen:                   baseline.scores.codegen,
-          toolFidelity:              baseline.scores.toolFidelity,
-          instructionFollowingScore: baseline.scores.instructionFollowing,
-          structuredOutputScore:     baseline.scores.structuredOutput,
-          conversational:            baseline.scores.conversational,
-          contextRetention:          baseline.scores.contextRetention,
-          profileSource:             "seed",
-          profileConfidence:         baseline.confidence,
-        }
-      : {
-          reasoning:                 50,
-          codegen:                   50,
-          toolFidelity:              50,
-          instructionFollowingScore: 50,
-          structuredOutputScore:     50,
-          conversational:            50,
-          contextRetention:          50,
-          profileSource:             "seed",
-          profileConfidence:         "low",
-        };
+    const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
 
     // Derive legacy display fields from available data (no LLM needed)
-    const friendlyName = m.modelId
-      .replace(/[-_:]/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-    const reasoning = scoreFields.reasoning;
+    const friendlyName = card.displayName !== m.modelId
+      ? card.displayName
+      : m.modelId
+          .replace(/[-_:]/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+    const reasoning = card.dimensionScores.reasoning;
     const capabilityTier = reasoning >= 85 ? "deep-thinker"
       : reasoning >= 70 ? "strong"
       : reasoning >= 50 ? "moderate"
       : "fast-cheap";
-    const price = metadata.outputPricePerMToken;
+    const price = card.pricing.outputPerMToken;
     const costTier = price == null ? "$" : price < 5 ? "$" : price < 15 ? "$$" : "$$$";
+
+    // EP-INF-003: ModelCard fields for upsert
+    const cardFields = {
+      modelFamily: card.modelFamily,
+      modelClass: card.modelClass,
+      maxInputTokens: card.maxInputTokens,
+      inputModalities: card.inputModalities,
+      outputModalities: card.outputModalities,
+      capabilities: card.capabilities as any,
+      pricing: card.pricing as any,
+      supportedParameters: card.supportedParameters,
+      defaultParameters: card.defaultParameters as any,
+      instructType: card.instructType,
+      trainingDataCutoff: card.trainingDataCutoff,
+      reliableKnowledgeCutoff: card.reliableKnowledgeCutoff,
+      deprecationDate: card.deprecationDate,
+      perRequestLimits: card.perRequestLimits as any,
+      metadataSource: card.metadataSource,
+      metadataConfidence: card.metadataConfidence,
+      lastMetadataRefresh: new Date(),
+      rawMetadataHash: card.rawMetadataHash,
+      // Backward compat
+      maxContextTokens: card.maxInputTokens,
+      inputPricePerMToken: card.pricing.inputPerMToken,
+      outputPricePerMToken: card.pricing.outputPerMToken,
+      supportsToolUse: card.capabilities.toolUse ?? false,
+      // Dimension scores
+      reasoning: card.dimensionScores.reasoning,
+      codegen: card.dimensionScores.codegen,
+      toolFidelity: card.dimensionScores.toolFidelity,
+      instructionFollowingScore: card.dimensionScores.instructionFollowing,
+      structuredOutputScore: card.dimensionScores.structuredOutput,
+      conversational: card.dimensionScores.conversational,
+      contextRetention: card.dimensionScores.contextRetention,
+      profileSource: (() => {
+        switch (card.dimensionScoreSource) {
+          case "family_baseline": return "seed";
+          case "inferred": return "seed";
+          case "provider": return "seed";
+          case "evaluated": return "evaluated";
+          case "production": return "production";
+          default: return "seed";
+        }
+      })(),
+      profileConfidence: card.metadataConfidence,
+    };
 
     await prisma.modelProfile.upsert({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
@@ -303,28 +325,18 @@ export async function profileModelsInternal(
         providerId,
         modelId:       m.modelId,
         friendlyName,
-        summary:       `${provider.name} model. Routing profile sourced from family baseline registry.`,
+        summary:       `${provider.name} model. Routing profile sourced from adapter registry.`,
         capabilityTier,
         costTier,
         bestFor:       ["general purpose tasks"],
         avoidFor:      [],
-        ...scoreFields,
-        maxContextTokens:     metadata.maxContextTokens,
-        maxOutputTokens:      metadata.maxOutputTokens,
-        inputPricePerMToken:  metadata.inputPricePerMToken,
-        outputPricePerMToken: metadata.outputPricePerMToken,
-        supportsToolUse:      metadata.supportsToolUse ?? provider.supportsToolUse,
+        ...cardFields,
         generatedBy:          "system:metadata-sync",
       },
       update: {
-        ...scoreFields,
+        ...cardFields,
         capabilityTier,
         costTier,
-        maxContextTokens:     metadata.maxContextTokens,
-        maxOutputTokens:      metadata.maxOutputTokens,
-        inputPricePerMToken:  metadata.inputPricePerMToken,
-        outputPricePerMToken: metadata.outputPricePerMToken,
-        supportsToolUse:      metadata.supportsToolUse ?? provider.supportsToolUse,
         generatedBy:          "system:metadata-sync",
         generatedAt:          new Date(),
       },
