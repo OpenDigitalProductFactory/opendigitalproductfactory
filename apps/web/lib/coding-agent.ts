@@ -90,6 +90,8 @@ export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unk
     "- After schema changes, use `prisma db push` to apply changes to the sandbox database.",
     "- Do NOT use `prisma migrate dev` — use `prisma db push` for sandbox iteration.",
     "- Do NOT drop existing tables or columns without explicit instruction.",
+    "- When a schema change moves or renames existing data (e.g. moving a column to a new model, adding a non-nullable FK), document the required backfill SQL in a comment block at the top of the affected schema file section. Format: '// MIGRATION NOTE: <table> backfill required — <SQL summary>'. This comment is used when promoting the change to production via a proper migration file.",
+    "- Do NOT silently discard existing data. If a field is being deprecated in favour of a new model, keep the old column in the sandbox schema until the backfill is verified.",
     "- Do NOT access any external services",
     "- Output each file as: ### FILE: <path>\\n```typescript\\n<content>\\n```",
   );
@@ -209,8 +211,8 @@ export async function executeBuildPlan(params: {
       // Ensure directory exists and write file
       const dir = filePath.substring(0, filePath.lastIndexOf("/"));
       if (dir) await execInSandbox(containerId, `mkdir -p "${dir}"`);
-      // Write file content via heredoc
-      await execInSandbox(containerId, `cat > "${filePath}" << 'CODEGEN_EOF'\n${fileContent}\nCODEGEN_EOF`);
+      const encodedContent = Buffer.from(fileContent).toString("base64");
+      await execInSandbox(containerId, `echo ${encodedContent} | base64 -d > "${filePath}"`);
       filesChanged.push(filePath);
     } catch (err) {
       console.warn(`[coding-agent] Failed to write ${filePath}:`, err);
