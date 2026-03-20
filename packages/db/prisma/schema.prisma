@@ -2914,6 +2914,13 @@ model TaskRequirement {
   approvedAt           DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+  // EP-INF-005a: Contract template fields
+  reasoningDepthDefault      String    @default("medium")
+  budgetClassDefault         String    @default("balanced")
+  interactionModeDefault     String    @default("sync")
+  supportedInputModalities   Json      @default("[\"text\"]")
+  supportedOutputModalities  Json      @default("[\"text\"]")
+  residencyPolicy            String?
   approvedBy           User?     @relation("TaskRequirementApprover", fields: [approvedById], references: [id])
   createdBy            User?     @relation("TaskRequirementCreator", fields: [createdById], references: [id])
 }
