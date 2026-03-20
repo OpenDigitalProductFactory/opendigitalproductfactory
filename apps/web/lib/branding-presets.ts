@@ -3,6 +3,7 @@ export type ThemeTokens = {
   palette: {
     bg: string; surface1: string; surface2: string;
     accent: string; muted: string; border: string;
+    text: string;  // NEW
   };
   typography: { fontFamily: string; headingFontFamily: string };
   spacing: { xs: string; sm: string; md: string; lg: string; xl: string };
@@ -41,6 +42,47 @@ function mixWithDark(accent: string, darkBase: string, ratio: number): string {
   return rgbToHex(dr + (ar - dr) * ratio, dg + (ag - dg) * ratio, db + (ab - db) * ratio);
 }
 
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const [r, g, b] = hexToRgb(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+export function hslToHex(h: number, s: number, l: number): string {
+  const sn = s / 100, ln = l / 100;
+  const a = sn * Math.min(ln, 1 - ln);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = ln - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * Math.max(0, Math.min(1, color)));
+  };
+  return rgbToHex(f(0), f(8), f(4));
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(color1: string, color2: string): number {
+  const l1 = relativeLuminance(color1);
+  const l2 = relativeLuminance(color2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 type DeriveOptions = { fontFamily?: string; headingFontFamily?: string };
 
 export function deriveThemeTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
@@ -56,7 +98,7 @@ export function deriveThemeTokens(accent: string, opts?: DeriveOptions): ThemeTo
 
   return {
     version: "1.0.0",
-    palette: { bg, surface1, surface2, accent, muted, border },
+    palette: { bg, surface1, surface2, accent, muted, border, text: "#e2e2f0" },
     typography: { fontFamily: font, headingFontFamily: headingFont },
     spacing: { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px" },
     radius: { sm: "6px", md: "10px", lg: "14px", xl: "18px" },
