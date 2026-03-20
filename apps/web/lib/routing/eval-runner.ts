@@ -245,18 +245,26 @@ export async function runDimensionEval(
   });
 
   // Evaluate each dimension
+  // Map BUILTIN_DIMENSIONS names to ModelProfile DB field names
+  const dimToDbField: Record<string, string> = {
+    instructionFollowing: "instructionFollowingScore",
+    structuredOutput: "structuredOutputScore",
+  };
   const dimensions: DimensionEvalResult[] = [];
   for (const dim of BUILTIN_DIMENSIONS) {
-    const previousScore = modelProfile[dim] as number;
+    const dbField = dimToDbField[dim] ?? dim;
+    const previousScore = (modelProfile as Record<string, unknown>)[dbField] as number ?? 50;
     const result = await evalDimension(providerId, modelId, dim, previousScore, currentEvalCount);
     dimensions.push(result);
   }
 
   // Update ModelProfile with new scores (skip inconclusive dimensions)
+  // Map dimension names to DB field names for the two that differ
   const scoreUpdates: Record<string, number> = {};
   for (const d of dimensions) {
     if (!d.inconclusive) {
-      scoreUpdates[d.dimension] = d.newScore;
+      const dbField = dimToDbField[d.dimension] ?? d.dimension;
+      scoreUpdates[dbField] = d.newScore;
     }
   }
 
