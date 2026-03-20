@@ -11,6 +11,7 @@ type Props = {
   surface1Color?: string;
   borderColor?: string;
   mutedColor?: string;
+  textColor?: string;
 };
 
 function initialsFrom(name: string): string {
@@ -29,6 +30,7 @@ export function BrandingPreview({
   surface1Color = "#15151f",
   borderColor = "#2a2a3a",
   mutedColor = "#6b7280",
+  textColor = "#e2e2f0",
 }: Props) {
   const cssVars = {
     "--preview-bg": bgColor,
@@ -37,6 +39,7 @@ export function BrandingPreview({
     "--preview-border": borderColor,
     "--preview-muted": mutedColor,
     "--preview-font": fontFamily,
+    "--preview-text": textColor,
   } as CSSProperties;
 
   const hasLogo = logoUrl.trim().length > 0;
@@ -83,14 +86,14 @@ export function BrandingPreview({
                 justifyContent: "center",
                 fontSize: "10px",
                 fontWeight: "bold",
-                color: "#fff",
+                color: "var(--preview-text)",
                 flexShrink: 0,
               }}
             >
               {initials}
             </div>
           )}
-          <span style={{ color: "#fff", fontWeight: 600, fontSize: "13px" }}>{displayName}</span>
+          <span style={{ color: "var(--preview-text)", fontWeight: 600, fontSize: "13px" }}>{displayName}</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: "12px" }}>
             {["Dashboard", "Products", "Settings"].map((label) => (
               <span key={label} style={{ fontSize: "11px", color: "var(--preview-muted)", cursor: "default" }}>
@@ -112,7 +115,7 @@ export function BrandingPreview({
               marginBottom: "12px",
             }}
           >
-            <p style={{ color: "#fff", fontWeight: 600, fontSize: "13px", marginBottom: "4px" }}>
+            <p style={{ color: "var(--preview-text)", fontWeight: 600, fontSize: "13px", marginBottom: "4px" }}>
               Sample card title
             </p>
             <p style={{ color: "var(--preview-muted)", fontSize: "11px", lineHeight: "1.5" }}>
