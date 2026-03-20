@@ -61,7 +61,9 @@ export default async function PortalLayout({ children }: { children: React.React
           <form action={async () => {
             "use server";
             const { signOut } = await import("@/lib/auth");
-            await signOut({ redirectTo: "/customer-login" });
+            const { resolveOrgSlug } = await import("@/lib/storefront-data");
+            const slug = await resolveOrgSlug();
+            await signOut({ redirectTo: `/s/${slug ?? "store"}/sign-in` });
           }}>
             <button
               type="submit"
