@@ -70,6 +70,14 @@ export type ProviderRow = {
   taskTags: string[];
   mcpTransport: string | null;
   maxConcurrency: number | null;
+  // Routing dimension scores (0–100)
+  reasoning: number;
+  codegen: number;
+  toolFidelity: number;
+  instructionFollowing: number;
+  structuredOutput: number;
+  conversational: number;
+  contextRetention: number;
 };
 
 /** Client-safe credential info — secrets are never sent to the browser. */

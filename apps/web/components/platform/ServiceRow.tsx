@@ -12,6 +12,62 @@ const STATUS_COLORS: Record<string, string> = {
   inactive:     "#8888a0",
 };
 
+const ROUTING_DIMENSION_LABELS: Record<string, string> = {
+  reasoning:            "Reasoning",
+  codegen:              "Codegen",
+  toolFidelity:         "Tools",
+  instructionFollowing: "Instruct",
+  structuredOutput:     "Structure",
+  conversational:       "Convo",
+  contextRetention:     "Context",
+};
+
+function scoreColor(score: number): string {
+  if (score >= 80) return "rgba(74, 222, 128, 0.15)";
+  if (score >= 50) return "rgba(251, 191, 36, 0.15)";
+  return "rgba(239, 68, 68, 0.15)";
+}
+
+function scoreTextColor(score: number): string {
+  if (score >= 80) return "#4ade80";
+  if (score >= 50) return "#fbbf24";
+  return "#ef4444";
+}
+
+type RoutingScorePillsProps = {
+  provider: ProviderWithCredential["provider"];
+};
+
+function RoutingScorePills({ provider }: RoutingScorePillsProps) {
+  const dimensions = Object.keys(ROUTING_DIMENSION_LABELS) as (keyof typeof ROUTING_DIMENSION_LABELS)[];
+  const scored = dimensions
+    .map((key) => ({ key, label: ROUTING_DIMENSION_LABELS[key], score: provider[key as keyof typeof provider] as number }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  return (
+    <span className="hidden sm:flex" style={{ display: "flex", gap: 3, flexShrink: 0, alignItems: "center" }}>
+      {scored.map(({ key, label, score }) => (
+        <span
+          key={key}
+          title={`${label}: ${score}/100`}
+          style={{
+            fontSize: 10,
+            fontFamily: "monospace",
+            background: scoreColor(score),
+            color: scoreTextColor(score),
+            padding: "1px 5px",
+            borderRadius: 3,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}: {score}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 const SENSITIVITY_ABBR: Record<string, string> = {
   public:       "pub",
   internal:     "int",
@@ -122,6 +178,11 @@ export function ServiceRow({ pw }: Props) {
               </span>
             ))}
           </span>
+        )}
+
+        {/* Routing dimension scores — LLM only, hidden on small screens */}
+        {provider.endpointType === "llm" && (
+          <RoutingScorePills provider={provider} />
         )}
 
         {/* Capability tier — hidden on small screens */}
