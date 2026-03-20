@@ -10,6 +10,7 @@ export type AgentEvent =
   | { type: "evidence:update"; buildId: string; field: string }
   | { type: "iteration"; iteration: number; toolCount: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
+  | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
   | { type: "done" };
 
 type Handler = (event: AgentEvent) => void;
