@@ -104,3 +104,27 @@ export function requireCapability(
     );
   }
 }
+
+/**
+ * Like authenticateRequest but additionally verifies the caller is an employee
+ * (type === "admin"). Use for API routes that must never be called by customers.
+ */
+export async function requireEmployeeAuth(request: Request): Promise<AuthResult> {
+  const result = await authenticateRequest(request);
+  if (result.user.type !== "admin") {
+    throw apiError("FORBIDDEN", "This endpoint requires employee authentication", 403);
+  }
+  return result;
+}
+
+/**
+ * Like authenticateRequest but additionally verifies the caller is a customer
+ * (type === "customer"). Use for portal-only API routes.
+ */
+export async function requireCustomerAuth(request: Request): Promise<AuthResult> {
+  const result = await authenticateRequest(request);
+  if (result.user.type !== "customer") {
+    throw apiError("FORBIDDEN", "This endpoint requires customer authentication", 403);
+  }
+  return result;
+}
