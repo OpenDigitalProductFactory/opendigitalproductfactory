@@ -3215,6 +3215,7 @@ model Invoice {
   lastReminderAt  DateTime?
   erpSyncStatus   String?             @default("pending")
   erpRefId        String?
+  payToken        String?             @unique
   createdById     String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
