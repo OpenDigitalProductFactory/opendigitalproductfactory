@@ -1,0 +1,35 @@
+#!/bin/sh
+# Guard: prevent modification of already-committed Prisma migration files.
+#
+# Migration files are immutable once committed. Modifying them after they've
+# been applied causes DB drift — Prisma detects the checksum mismatch and
+# refuses to run new migrations without a full reset.
+#
+# To fix drift: use `prisma migrate resolve --applied <name>` to re-sync
+# checksums. Never edit a migration file after it has been committed.
+
+MIGRATIONS_DIR="packages/db/prisma/migrations"
+
+# Get files staged for commit that are MODIFICATIONS (M) inside the migrations dir.
+# New files (A = added) are fine — that's a new migration being created.
+MODIFIED_MIGRATIONS=$(git diff --cached --name-status | awk '$1 == "M" && $2 ~ /^'"$MIGRATIONS_DIR"'/ { print $2 }')
+
+if [ -n "$MODIFIED_MIGRATIONS" ]; then
+  echo ""
+  echo "ERROR: Committed migration files cannot be modified."
+  echo ""
+  echo "The following migration file(s) were already committed and must not be changed:"
+  echo "$MODIFIED_MIGRATIONS" | sed 's/^/  /'
+  echo ""
+  echo "Why: Modifying applied migrations corrupts Prisma's checksum tracking and"
+  echo "causes DB drift. Other environments (and production) will break on next migrate."
+  echo ""
+  echo "What to do instead:"
+  echo "  - To fix a past migration:  create a NEW migration that corrects it"
+  echo "  - To resolve drift:         npx prisma migrate resolve --applied <name>"
+  echo "  - To add missing backfill:  create a new data-only migration"
+  echo ""
+  exit 1
+fi
+
+exit 0
