@@ -798,6 +798,25 @@ model ModelProfile {
   structuredOutputScore     Int           @default(50)
   supportedModalities       Json          @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
   toolFidelity              Int           @default(50)
+  // EP-INF-003: ModelCard fields
+  modelFamily               String?
+  modelClass                String        @default("chat")
+  maxInputTokens            Int?
+  inputModalities           Json          @default("[\"text\"]")
+  outputModalities          Json          @default("[\"text\"]")
+  capabilities              Json          @default("{}")
+  pricing                   Json          @default("{}")
+  supportedParameters       Json          @default("[]")
+  defaultParameters         Json?
+  instructType              String?
+  trainingDataCutoff        String?
+  reliableKnowledgeCutoff   String?
+  deprecationDate           DateTime?
+  perRequestLimits          Json?
+  metadataSource            String        @default("inferred")
+  metadataConfidence        String        @default("low")
+  lastMetadataRefresh       DateTime?
+  rawMetadataHash           String?
   provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
 
   @@unique([providerId, modelId])
