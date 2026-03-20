@@ -39,23 +39,45 @@ export class InferenceError extends Error {
     public readonly code: "network" | "auth" | "rate_limit" | "model_not_found" | "provider_error",
     public readonly providerId: string,
     public readonly statusCode?: number,
+    public readonly headers?: Record<string, string>,
   ) {
     super(message);
     this.name = "InferenceError";
   }
 }
 
-function classifyHttpError(status: number, providerId: string, body: string): InferenceError {
+function classifyHttpError(
+  status: number,
+  providerId: string,
+  body: string,
+  responseHeaders?: Headers,
+): InferenceError {
+  // Extract rate-limit-relevant headers
+  const rateLimitHeaders: Record<string, string> | undefined = responseHeaders
+    ? Object.fromEntries(
+        [...responseHeaders.entries()].filter(
+          ([k]) =>
+            k.startsWith("x-ratelimit") ||
+            k.startsWith("anthropic-ratelimit") ||
+            k === "retry-after",
+        ),
+      )
+    : undefined;
+
+  const headers = rateLimitHeaders && Object.keys(rateLimitHeaders).length > 0
+    ? rateLimitHeaders
+    : undefined;
+
   if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status);
+    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers);
   }
   if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status);
+    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers);
   }
   if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status);
+    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers);
   }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status);
+  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers);
 }
 
 // ─── Auth Helpers (extracted from actions/ai-providers.ts) ───────────────────
@@ -84,8 +106,12 @@ export function isAnthropicOAuthToken(apiKey: string): boolean {
   return apiKey.includes("sk-ant-oat");
 }
 
-/** Beta headers required for Anthropic subscription token auth */
-export const ANTHROPIC_OAUTH_BETA_HEADERS = "claude-code-20250219,oauth-2025-04-20";
+/**
+ * Beta header required for Anthropic subscription (OAuth) token inference.
+ * Only `oauth-2025-04-20` is needed here — `claude-code-20250219` is for Claude Code
+ * agentic features and causes HTTP 400 on non-agentic calls (e.g. evals, Haiku).
+ */
+export const ANTHROPIC_OAUTH_BETA_HEADERS = "oauth-2025-04-20";
 
 /**
  * Read the current access token from Claude Code's local credentials file.
@@ -372,7 +398,7 @@ export async function callProvider(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    throw classifyHttpError(res.status, providerId, errBody);
+    throw classifyHttpError(res.status, providerId, errBody, res.headers);
   }
 
   const data = await res.json() as Record<string, unknown>;
