@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -6,14 +6,17 @@ import {
   RefreshControl,
   ActivityIndicator,
   View,
+  Pressable,
 } from "react-native";
-import { colors, spacing } from "@/src/lib/theme";
+import { colors, spacing, borderRadius } from "@/src/lib/theme";
 import { EpicCard } from "@/src/components/EpicCard";
 import { useOpsStore } from "@/src/features/ops/ops.store";
-import type { Epic } from "@dpf/types";
+import { api } from "@/src/lib/apiClient";
+import type { Epic, DynamicFormSchema } from "@dpf/types";
 
 export default function OpsScreen() {
   const { epics, isLoading, error, fetchEpics } = useOpsStore();
+  const [dynamicForms, setDynamicForms] = useState<DynamicFormSchema[]>([]);
 
   const refresh = useCallback(() => {
     return fetchEpics();
@@ -22,6 +25,13 @@ export default function OpsScreen() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    api.dynamic
+      .listForms()
+      .then((r) => setDynamicForms(r.data))
+      .catch(() => {});
+  }, []);
 
   return (
     <FlatList<Epic>
@@ -44,6 +54,20 @@ export default function OpsScreen() {
           {error ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+          {dynamicForms.length > 0 ? (
+            <View style={styles.dynamicSection}>
+              <Text style={styles.dynamicHeading}>Forms</Text>
+              {dynamicForms.map((form) => (
+                <Pressable
+                  key={form.formId}
+                  style={styles.dynamicItem}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.dynamicItemText}>{form.title}</Text>
+                </Pressable>
+              ))}
             </View>
           ) : null}
         </View>
@@ -98,5 +122,29 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: spacing.xl,
+  },
+  dynamicSection: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  dynamicHeading: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+  },
+  dynamicItem: {
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  dynamicItemText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: "500",
   },
 });

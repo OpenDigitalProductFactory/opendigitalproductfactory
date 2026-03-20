@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { api } from "@/src/lib/apiClient";
+import type { DynamicFormSchema, DynamicViewSchema } from "@dpf/types";
 
 interface MenuItemProps {
   title: string;
@@ -27,6 +29,19 @@ function MenuItem({ title, icon, onPress }: MenuItemProps) {
 
 export default function MoreScreen() {
   const router = useRouter();
+  const [dynamicForms, setDynamicForms] = useState<DynamicFormSchema[]>([]);
+  const [dynamicViews, setDynamicViews] = useState<DynamicViewSchema[]>([]);
+
+  useEffect(() => {
+    api.dynamic
+      .listForms()
+      .then((r) => setDynamicForms(r.data))
+      .catch(() => {});
+    api.dynamic
+      .listViews()
+      .then((r) => setDynamicViews(r.data))
+      .catch(() => {});
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -51,6 +66,27 @@ export default function MoreScreen() {
         icon="person-outline"
         onPress={() => router.push("/more/profile")}
       />
+      {dynamicForms.length > 0 || dynamicViews.length > 0 ? (
+        <View style={styles.dynamicSection}>
+          <Text style={styles.dynamicHeading}>Custom Content</Text>
+          {dynamicForms.map((form) => (
+            <MenuItem
+              key={form.formId}
+              title={form.title}
+              icon="document-text-outline"
+              onPress={() => {}}
+            />
+          ))}
+          {dynamicViews.map((view) => (
+            <MenuItem
+              key={view.viewId}
+              title={view.title}
+              icon="bar-chart-outline"
+              onPress={() => {}}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -85,5 +121,16 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  dynamicSection: {
+    marginTop: spacing.md,
+  },
+  dynamicHeading: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
 });
