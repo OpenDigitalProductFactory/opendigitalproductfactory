@@ -94,12 +94,12 @@ export function WorkspaceCalendar({ events }: Props) {
           font-size: 11px;
         }
         .fc .fc-col-header-cell { color: var(--dpf-muted); font-size: 10px; text-transform: uppercase; }
-        .fc .fc-daygrid-day-number { color: #e0e0ff; font-size: 11px; }
-        .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: #7c8cf8; font-weight: 700; }
-        .fc .fc-button { background: var(--dpf-surface-2); border-color: var(--dpf-border); color: #e0e0ff; font-size: 11px; padding: 4px 10px; }
+        .fc .fc-daygrid-day-number { color: var(--dpf-text); font-size: 11px; }
+        .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: var(--dpf-accent); font-weight: 700; }
+        .fc .fc-button { background: var(--dpf-surface-2); border-color: var(--dpf-border); color: var(--dpf-text); font-size: 11px; padding: 4px 10px; }
         .fc .fc-button:hover { background: rgba(124,140,248,0.15); }
-        .fc .fc-button-active { background: rgba(124,140,248,0.2) !important; border-color: #7c8cf8 !important; }
-        .fc .fc-toolbar-title { color: #fff; font-size: 15px; font-weight: 600; }
+        .fc .fc-button-active { background: rgba(124,140,248,0.2) !important; border-color: var(--dpf-accent) !important; }
+        .fc .fc-toolbar-title { color: var(--dpf-text); font-size: 15px; font-weight: 600; }
         .fc .fc-event { border-radius: 3px; padding: 1px 3px; font-size: 10px; cursor: pointer; }
         .fc .fc-daygrid-event-dot { display: none; }
         .fc .fc-scrollgrid { border-color: var(--dpf-border); }
