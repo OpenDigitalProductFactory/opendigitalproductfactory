@@ -60,7 +60,33 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).toContain("inventory");
   });
 
-  it("superuser gets all 12 tiles regardless of role", () => {
-    expect(getWorkspaceTiles(superuser).length).toBe(12);
+  it("superuser gets all 13 tiles regardless of role", () => {
+    expect(getWorkspaceTiles(superuser).length).toBe(13);
+  });
+});
+
+describe("finance permissions", () => {
+  it("grants view_finance to HR-000 and HR-200", () => {
+    expect(can({ platformRole: "HR-000", isSuperuser: false }, "view_finance")).toBe(true);
+    expect(can({ platformRole: "HR-200", isSuperuser: false }, "view_finance")).toBe(true);
+  });
+
+  it("denies view_finance to HR-400", () => {
+    expect(can({ platformRole: "HR-400", isSuperuser: false }, "view_finance")).toBe(false);
+  });
+
+  it("grants manage_finance to HR-000 and HR-200", () => {
+    expect(can({ platformRole: "HR-000", isSuperuser: false }, "manage_finance")).toBe(true);
+    expect(can({ platformRole: "HR-200", isSuperuser: false }, "manage_finance")).toBe(true);
+  });
+
+  it("includes Finance workspace tile for HR-200", () => {
+    const tiles = getWorkspaceTiles({ platformRole: "HR-200", isSuperuser: false });
+    expect(tiles.some((t) => t.key === "finance")).toBe(true);
+  });
+
+  it("superuser gets finance access", () => {
+    expect(can({ platformRole: null, isSuperuser: true }, "view_finance")).toBe(true);
+    expect(can({ platformRole: null, isSuperuser: true }, "manage_finance")).toBe(true);
   });
 });
