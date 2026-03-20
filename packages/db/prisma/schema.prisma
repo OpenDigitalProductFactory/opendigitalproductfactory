@@ -704,6 +704,9 @@ model BrandingConfig {
   logoUrl      String? // logo for dark theme (white/light logo)
   logoUrlLight String? // logo for light theme (dark logo)
   updatedAt    DateTime @updatedAt
+
+  organizationId String?       @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 }
 
 // ─── Platform Config ─────────────────────────────────────────────────────────
@@ -1116,6 +1119,26 @@ model CustomerAccount {
   updatedAt DateTime          @updatedAt
   contacts  CustomerContact[]
   invites   AccountInvite[]
+}
+
+// ─── Organization ─────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  orgId     String   @unique              // format: "ORG-XXXXXX"
+  name      String                        // trading name — primary identity source
+  legalName String?
+  slug      String   @unique              // used in /s/[slug]
+  industry  String?
+  website   String?
+  email     String?
+  phone     String?
+  address   Json?                         // { street, city, postcode, country }
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brandingConfig BrandingConfig?
 }
 
 // ─── Runtime Advisory ────────────────────────────────────────────────────────
