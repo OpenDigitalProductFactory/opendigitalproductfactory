@@ -32,6 +32,17 @@ export type { FamilyBaseline } from "./family-baselines";
 export { extractModelMetadata } from "./metadata-extractor";
 export type { ExtractedMetadata } from "./metadata-extractor";
 
+// EP-INF-004: Rate limits & capacity
+export type { CapacityStatus } from "./rate-tracker";
+export {
+  recordRequest,
+  checkModelCapacity,
+  setModelLimits,
+  learnFromRateLimitResponse,
+  extractRetryAfterMs,
+} from "./rate-tracker";
+export { scheduleRecovery, cancelRecovery } from "./rate-recovery";
+
 // EP-INF-003: ModelCard types and adapter registry
 export type { ModelCard, ModelCardCapabilities, ModelCardPricing, ModelClass, ModelCardDimensionScores } from "./model-card-types";
 export { EMPTY_CAPABILITIES, EMPTY_PRICING, DEFAULT_DIMENSION_SCORES } from "./model-card-types";
