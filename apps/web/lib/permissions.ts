@@ -24,7 +24,9 @@ export type CapabilityKey =
   | "manage_backlog"
   | "manage_ea_model"
   | "view_compliance"
-  | "manage_compliance";
+  | "manage_compliance"
+  | "view_finance"
+  | "manage_finance";
 
 type Permission = {
   roles: PlatformRoleId[];
@@ -51,6 +53,8 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_ea_model:             { roles: ["HR-000", "HR-300"] },
   view_compliance:             { roles: ["HR-000", "HR-100", "HR-200", "HR-300"] },
   manage_compliance:           { roles: ["HR-000", "HR-200"] },
+  view_finance:                { roles: ["HR-000", "HR-200"] },
+  manage_finance:              { roles: ["HR-000", "HR-200"] },
 };
 
 export type UserContext = {
@@ -97,6 +101,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
   { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
   { key: "compliance", label: "Compliance", route: "/compliance", capabilityKey: "view_compliance",  accentColor: "#ef4444" },
+  { key: "finance",    label: "Finance",    route: "/finance",    capabilityKey: "view_finance",     accentColor: "#22c55e" },
   { key: "storefront", label: "Storefront", route: "/storefront", capabilityKey: "view_storefront",  accentColor: "#f59e0b" },
 ];
 
