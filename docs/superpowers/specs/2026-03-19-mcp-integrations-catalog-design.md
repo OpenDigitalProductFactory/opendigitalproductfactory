@@ -78,6 +78,7 @@ model McpIntegration {
   @@index([pricingModel])
   @@index([isVerified])
   @@index([status])
+  @@index([tags])  // GIN index for array containment queries (tags @> ARRAY[...])
 }
 ```
 
@@ -87,22 +88,25 @@ One row per sync run. Used for admin history view and progress tracking.
 
 ```prisma
 model McpCatalogSync {
-  id            String    @id @default(cuid())
-  triggeredBy   String    // "schedule" | "admin" | userId
-  startedAt     DateTime  @default(now())
-  completedAt   DateTime?
-  status        String    @default("running")  // "running" | "success" | "failed"
-  totalFetched  Int?
-  totalUpserted Int?
-  totalNew      Int?
-  totalRemoved  Int?      // entries marked deprecated since last sync
-  error         String?   @db.Text
+  id                  String    @id @default(cuid())
+  triggeredBy         String    // "schedule" | "manual"
+  triggeredByUserId   String?   // populated when triggeredBy === "manual"; matches User.id
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  status              String    @default("running")  // "running" | "success" | "failed"
+  totalFetched        Int?
+  totalUpserted       Int?
+  totalNew            Int?
+  totalRemoved        Int?      // entries marked deprecated since last sync
+  error               String?   @db.Text
 }
 ```
 
+**`triggeredBy` semantics:** always one of the two literals `"schedule"` or `"manual"`. For manual admin triggers, `triggeredByUserId` holds the authenticated user's `User.id` for audit attribution — matching the `triggeredByEmployeeId` pattern used in `RegulatoryMonitorScan`. The sync history table displays the user's name when `triggeredByUserId` is present.
+
 ### Archetype derivation
 
-`archetypeIds` is populated during sync using a tag→archetype ruleset defined in code (e.g. `"payments"` → `["retail-goods", "food-hospitality", "fitness-recreation", "education-training"]`). No separate mapping table — the ruleset is a config object in the sync service, extensible without a migration. Entries missing enrichment fields from Glama (logo, rating, pricing) leave those fields `null` — not a sync failure.
+`archetypeIds` is populated during sync using a tag→archetype ruleset defined in code (e.g. `"payments"` → `["retail-goods", "food-hospitality", "fitness-recreation", "education-training"]`). No separate mapping table — the ruleset is a config object in the sync service, extensible without a migration. Ruleset values are the exact `archetypeId` strings defined in `StorefrontArchetype` (e.g. `"retail-goods"`, `"veterinary-clinic"`). The ruleset is treated as a trusted config — no runtime validation against the `StorefrontArchetype` table on each sync. If an archetype is removed from the platform, the corresponding ruleset entry is updated in the same PR. Entries missing enrichment fields from Glama (logo, rating, pricing) leave those fields `null` — not a sync failure.
 
 ---
 
@@ -129,12 +133,18 @@ model McpCatalogSync {
 6. On unrecoverable error → status: "failed", error logged to McpCatalogSync.error
 ```
 
+### Scheduling mechanism
+
+The sync job is registered as a `ScheduledJob` record (`jobId: "mcp-catalog-sync"`) following the existing platform pattern. The `ScheduledJob.schedule` field stores the cron expression (e.g. `"0 2 * * 0"` for Sunday 02:00 UTC). `nextRunAt` and `lastRunAt` are maintained by `computeNextRunAt()` — the same utility already used by other scheduled jobs. The admin schedule config UI writes to this `ScheduledJob` record.
+
+Automated execution: the platform does not run a persistent background process. Scheduled jobs fire via the existing poll-on-request mechanism — a lightweight check at the start of relevant API requests compares `nextRunAt` to `now()` and fires overdue jobs. No external cron runner, Vercel cron config, or `node-cron` package is needed or added.
+
 ### Entry points
 
-Both entry points call the same sync service function:
+Both entry points call the same `runMcpCatalogSync()` service function in `lib/actions/mcp-catalog.ts`:
 
-- **Admin "Sync Now"** — server action called from `/platform/integrations/sync`; shows real-time progress via the existing long-running ops UI pattern (§5)
-- **Cron job** — scheduled weekly; `triggeredBy: "schedule"`; logs to `McpCatalogSync` only
+- **Admin "Sync Now"** — server action; authenticated admin triggers manually; `triggeredBy: "manual"`, `triggeredByUserId` set to session user ID; emits `sync:progress` events on the `agentEventBus` keyed by the `McpCatalogSync.id` for the SSE stream; UI subscribes to that key for real-time progress display (fetched, upserted, new, deprecated counts). `sync:progress` is a new event type added to the `AgentEvent` union in `agent-event-bus.ts`.
+- **Scheduled** — fired by the poll-on-request mechanism when `nextRunAt` is overdue; `triggeredBy: "schedule"`; `triggeredByUserId: null`; no SSE stream — logs to `McpCatalogSync` only.
 
 ### Rate limiting
 
@@ -150,7 +160,7 @@ New top-level section in the shell nav alongside Workforce, Storefront, etc.
 
 - **Grid view** — `McpIntegration` cards: logo, name, vendor, `shortDescription`, category badge, pricing badge (`FREE` / `PAID` / `FREEMIUM` / `OSS`), star rating + count, verified tick
 - **Filters** — category, pricingModel, archetypeIds (multi-select), isVerified toggle
-- **Search** — full-text against `name`, `shortDescription`, `tags` — local DB query only, no external call at browse time
+- **Search** — keyword search against `name`, `shortDescription`, `tags` using Prisma `contains` / `ILIKE` on text fields and array containment on `tags` — local DB query only, no external call at browse time. The `@@index([tags])` GIN index on `McpIntegration` makes tag containment queries efficient at catalog scale.
 - **Detail drawer** — opens on card click: full `description`, all tags, rating breakdown, `installCount`, links to `documentationUrl` and `repositoryUrl`
 
 ### Sync management — `/platform/integrations/sync`
