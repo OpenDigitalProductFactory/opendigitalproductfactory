@@ -132,6 +132,25 @@ export default async function PlatformPage() {
               Provider registry, credentials, token spend
             </p>
           </Link>
+          <Link
+            href="/platform/integrations"
+            style={{
+              display: "block",
+              padding: 16,
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+              borderLeft: "4px solid #10b981",
+              borderRadius: 8,
+              textDecoration: "none",
+            }}
+          >
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#e0e0ff", margin: "0 0 4px" }}>
+              Integrations
+            </p>
+            <p style={{ fontSize: 10, color: "#8888a0", margin: 0 }}>
+              MCP catalog, sync, archetype recommendations
+            </p>
+          </Link>
         </div>
       </div>
     </div>
