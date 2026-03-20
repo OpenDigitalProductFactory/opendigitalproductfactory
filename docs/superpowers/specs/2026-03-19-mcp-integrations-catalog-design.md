@@ -135,7 +135,7 @@ model McpCatalogSync {
 
 ### Scheduling mechanism
 
-The sync job is registered as a `ScheduledJob` record (`jobId: "mcp-catalog-sync"`) following the existing platform pattern. The `ScheduledJob.schedule` field stores the cron expression (e.g. `"0 2 * * 0"` for Sunday 02:00 UTC). `nextRunAt` and `lastRunAt` are maintained by `computeNextRunAt()` — the same utility already used by other scheduled jobs. The admin schedule config UI writes to this `ScheduledJob` record.
+The sync job is registered as a `ScheduledJob` record (`jobId: "mcp-catalog-sync"`) following the existing platform pattern. The `ScheduledJob.schedule` field stores a `ScheduleValue` named interval — `"weekly"` by default. `nextRunAt` and `lastRunAt` are maintained by `computeNextRunAt()` (`apps/web/lib/ai-provider-types.ts`) — the same utility used by all other scheduled jobs. The default `nextRunAt` is seeded to the next Sunday 02:00 UTC on first registration. The admin schedule config UI presents the four existing `ScheduleValue` options (`daily`, `weekly`, `monthly`, `disabled`) — no cron expression entry; day-of-week and time precision are not supported in this epic and are deferred to EP-INT-004.
 
 Automated execution: the platform does not run a persistent background process. Scheduled jobs fire via the existing poll-on-request mechanism — a lightweight check at the start of relevant API requests compares `nextRunAt` to `now()` and fires overdue jobs. No external cron runner, Vercel cron config, or `node-cron` package is needed or added.
 
@@ -168,7 +168,7 @@ New top-level section in the shell nav alongside Workforce, Storefront, etc.
 - Last sync: timestamp, status badge, counts summary
 - **Sync Now** button — disabled while `status: "running"`; shows real-time progress (fetched, upserted, new, deprecated) using existing long-running ops progress pattern
 - **Sync history table** — `McpCatalogSync` rows: date, triggeredBy, duration, totalFetched, totalNew, totalRemoved, status
-- **Schedule config** — day-of-week + time picker for cron; enable/disable toggle; persisted to platform settings
+- **Schedule config** — `ScheduleValue` selector (`daily` / `weekly` / `monthly` / `disabled`); persisted to the `ScheduledJob` record for `"mcp-catalog-sync"`
 
 ---
 
