@@ -1,0 +1,121 @@
+import type { ArchetypeDefinition } from "../types";
+
+const CONTACT_FIELDS = [
+  { name: "name", label: "Full name", type: "text" as const, required: true },
+  { name: "email", label: "Email", type: "email" as const, required: true },
+  { name: "phone", label: "Phone", type: "tel" as const, required: false },
+  { name: "notes", label: "Additional notes", type: "textarea" as const, required: false },
+];
+
+export const educationTrainingArchetypes: ArchetypeDefinition[] = [
+  {
+    archetypeId: "corporate-training",
+    name: "Corporate Training",
+    category: "education-training",
+    ctaType: "inquiry",
+    tags: ["corporate", "training", "L&D", "business"],
+    itemTemplates: [
+      { name: "Leadership Training", description: "Developing leadership skills at all levels", priceType: "quote" },
+      { name: "Team Building", description: "Facilitated workshops to improve team cohesion", priceType: "from" },
+      { name: "Technical Skills Training", description: "Role-specific technical upskilling", priceType: "quote" },
+      { name: "Communication & Presentation", description: "Business communication and presentation skills", priceType: "from" },
+      { name: "Compliance Training", description: "Regulatory and compliance training programmes", priceType: "from" },
+      { name: "Bespoke Programme Design", description: "Custom training curriculum for your organisation", priceType: "quote" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Training Programmes", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Client Feedback", sortOrder: 3 },
+      { type: "contact", title: "Enquire Now", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "companyName", label: "Company name", type: "text" as const, required: true },
+      { name: "companySize", label: "Number of delegates", type: "select" as const, required: false, options: ["1–5", "6–15", "16–30", "31–50", "50+"] },
+      { name: "currentSituation", label: "Training needs", type: "textarea" as const, required: false },
+    ],
+  },
+  {
+    archetypeId: "tutoring",
+    name: "Tutoring",
+    category: "education-training",
+    ctaType: "booking",
+    tags: ["tutoring", "education", "school", "academic"],
+    itemTemplates: [
+      { name: "Maths Tutoring", description: "One-to-one maths tuition — all levels", priceType: "per-hour", bookingDurationMinutes: 60 },
+      { name: "English Tutoring", description: "Reading, writing, and comprehension support", priceType: "per-hour", bookingDurationMinutes: 60 },
+      { name: "Science Tutoring", description: "Physics, chemistry, and biology tuition", priceType: "per-hour", bookingDurationMinutes: 60 },
+      { name: "Exam Preparation", description: "Intensive preparation for GCSEs, A-levels, or SATs", priceType: "per-hour", bookingDurationMinutes: 90 },
+      { name: "Online Session", description: "Remote tutoring via video call", priceType: "per-hour", bookingDurationMinutes: 60 },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Subjects", sortOrder: 1 },
+      { type: "about", title: "About", sortOrder: 2 },
+      { type: "testimonials", title: "Parent Reviews", sortOrder: 3 },
+      { type: "contact", title: "Book a Trial Session", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "studentAge", label: "Student age / year group", type: "text" as const, required: true },
+      { name: "subject", label: "Subject", type: "select" as const, required: true, options: ["Maths", "English", "Science", "History", "Languages", "Other"] },
+      { name: "examBoard", label: "Exam board (if applicable)", type: "text" as const, required: false },
+    ],
+  },
+  {
+    archetypeId: "music-school",
+    name: "Music School",
+    category: "education-training",
+    ctaType: "booking",
+    tags: ["music", "lessons", "education", "instruments"],
+    itemTemplates: [
+      { name: "Guitar Lessons", description: "Electric, acoustic, or classical guitar tuition", priceType: "per-session", bookingDurationMinutes: 30 },
+      { name: "Piano Lessons", description: "Classical and contemporary piano tuition", priceType: "per-session", bookingDurationMinutes: 30 },
+      { name: "Drum Lessons", description: "Kit and percussion lessons for all abilities", priceType: "per-session", bookingDurationMinutes: 30 },
+      { name: "Singing Lessons", description: "Vocal technique and performance coaching", priceType: "per-session", bookingDurationMinutes: 30 },
+      { name: "Music Theory", description: "Grade-by-grade music theory tuition", priceType: "per-session", bookingDurationMinutes: 45 },
+      { name: "Exam Preparation", description: "ABRSM and Trinity grade exam coaching", priceType: "per-session", bookingDurationMinutes: 45 },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Lessons", sortOrder: 1 },
+      { type: "about", title: "About the School", sortOrder: 2 },
+      { type: "team", title: "Our Teachers", sortOrder: 3 },
+      { type: "contact", title: "Enrol Today", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "instrument", label: "Instrument", type: "select" as const, required: true, options: ["Guitar", "Piano", "Drums", "Singing", "Bass", "Violin", "Saxophone", "Other"] },
+      { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Complete beginner", "Some experience", "Intermediate", "Advanced"] },
+      { name: "studentAge", label: "Student age", type: "text" as const, required: false },
+    ],
+  },
+  {
+    archetypeId: "driving-school",
+    name: "Driving School",
+    category: "education-training",
+    ctaType: "purchase",
+    tags: ["driving", "lessons", "test", "licence"],
+    itemTemplates: [
+      { name: "1-Hour Lesson", description: "Individual driving lesson with a qualified instructor", priceType: "fixed", bookingDurationMinutes: 60, ctaType: "booking" },
+      { name: "Block of 10 Lessons", description: "Save with a block booking of 10 lessons", priceType: "fixed", ctaType: "purchase" },
+      { name: "Intensive Week Course", description: "Pass in a week with a structured intensive course", priceType: "from", ctaType: "purchase" },
+      { name: "Theory Test Preparation", description: "Online theory test practice and coaching", priceType: "fixed", ctaType: "purchase" },
+      { name: "Pass Plus", description: "Post-test advanced driving course", priceType: "fixed", ctaType: "purchase" },
+      { name: "Motorway Lesson", description: "Motorway driving experience post-test", priceType: "fixed", bookingDurationMinutes: 120, ctaType: "booking" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Courses & Lessons", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Pass Stories", sortOrder: 3 },
+      { type: "contact", title: "Book a Lesson", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "experience", label: "Driving experience", type: "select" as const, required: true, options: ["Complete beginner", "Some lessons previously", "Returning after a break", "Refresher course"] },
+      { name: "transmission", label: "Transmission preference", type: "select" as const, required: false, options: ["Manual", "Automatic", "Either"] },
+    ],
+  },
+];

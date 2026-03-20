@@ -1,0 +1,151 @@
+import type { ArchetypeDefinition } from "../types";
+
+const INQUIRY_BASE_FIELDS = [
+  { name: "name", label: "Full name", type: "text" as const, required: true },
+  { name: "email", label: "Email", type: "email" as const, required: true },
+  { name: "phone", label: "Phone", type: "tel" as const, required: false },
+];
+
+const BUSINESS_FIELDS = [
+  { name: "companyName", label: "Company name", type: "text" as const, required: false },
+  { name: "companySize", label: "Company size", type: "select" as const, required: false, options: ["1–10", "11–50", "51–200", "201–500", "500+"] },
+  { name: "budgetRange", label: "Budget range", type: "select" as const, required: false, options: ["Under £1k", "£1k–£5k", "£5k–£20k", "£20k–£100k", "£100k+", "Not sure"] },
+  { name: "currentSituation", label: "Current situation", type: "textarea" as const, required: false },
+];
+
+export const professionalServicesArchetypes: ArchetypeDefinition[] = [
+  {
+    archetypeId: "it-managed-services",
+    name: "IT Managed Services",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["IT", "managed services", "technology", "support"],
+    itemTemplates: [
+      { name: "Managed IT Support", description: "Monthly helpdesk and infrastructure management", priceType: "from" },
+      { name: "Cybersecurity Assessment", description: "Full audit of your security posture", priceType: "fixed" },
+      { name: "Cloud Migration", description: "Migrate your systems to the cloud", priceType: "quote" },
+      { name: "Backup & Disaster Recovery", description: "Automated backup and recovery planning", priceType: "from" },
+      { name: "Network Infrastructure", description: "Design and deployment of business networks", priceType: "quote" },
+      { name: "Microsoft 365 Setup", description: "Deployment and configuration of M365 tenancy", priceType: "from" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Client Stories", sortOrder: 3 },
+      { type: "contact", title: "Talk to Us", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      ...BUSINESS_FIELDS,
+    ],
+  },
+  {
+    archetypeId: "legal-services",
+    name: "Legal Services",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["legal", "solicitor", "law", "advice"],
+    itemTemplates: [
+      { name: "Free Initial Consultation", description: "15-minute call to assess your legal matter", priceType: "free", bookingDurationMinutes: 15 },
+      { name: "Contract Review", description: "Professional review and advice on contracts", priceType: "from" },
+      { name: "Employment Law Advice", description: "Guidance on employment disputes and rights", priceType: "per-hour" },
+      { name: "Property Conveyancing", description: "Residential or commercial property transactions", priceType: "quote" },
+      { name: "Business Formation", description: "Company incorporation and legal structure advice", priceType: "from" },
+      { name: "Litigation Support", description: "Representation in disputes and proceedings", priceType: "quote" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "team", title: "Our Solicitors", sortOrder: 2 },
+      { type: "about", title: "About the Firm", sortOrder: 3 },
+      { type: "contact", title: "Get in Touch", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "matterType", label: "Type of legal matter", type: "select" as const, required: true, options: ["Employment", "Property", "Business", "Family", "Litigation", "Other"] },
+      { name: "currentSituation", label: "Brief description of your matter", type: "textarea" as const, required: false },
+    ],
+  },
+  {
+    archetypeId: "accounting",
+    name: "Accounting & Bookkeeping",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["accounting", "bookkeeping", "tax", "finance"],
+    itemTemplates: [
+      { name: "Bookkeeping", description: "Monthly bookkeeping and reconciliation", priceType: "from" },
+      { name: "Annual Accounts", description: "Year-end accounts preparation and filing", priceType: "from" },
+      { name: "Self Assessment Tax Return", description: "Personal tax return preparation and submission", priceType: "from" },
+      { name: "VAT Returns", description: "Quarterly VAT return preparation and filing", priceType: "from" },
+      { name: "Payroll", description: "Monthly payroll processing and RTI submissions", priceType: "from" },
+      { name: "Business Advisory", description: "Strategic financial advice and planning", priceType: "per-hour" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "about", title: "About the Practice", sortOrder: 2 },
+      { type: "testimonials", title: "Client Testimonials", sortOrder: 3 },
+      { type: "contact", title: "Get in Touch", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "companySize", label: "Business size", type: "select" as const, required: false, options: ["Sole trader", "Partnership", "Limited company (micro)", "Limited company (small)", "Limited company (medium+)"] },
+      { name: "currentSituation", label: "What do you need help with?", type: "textarea" as const, required: false },
+    ],
+  },
+  {
+    archetypeId: "marketing-agency",
+    name: "Marketing Agency",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["marketing", "digital", "agency", "branding"],
+    itemTemplates: [
+      { name: "Brand Strategy", description: "Positioning, messaging, and visual identity development", priceType: "quote" },
+      { name: "Website Design & Build", description: "Custom website design and development", priceType: "from" },
+      { name: "SEO & Content", description: "Organic search optimisation and content strategy", priceType: "from" },
+      { name: "Paid Advertising", description: "Google Ads and social media advertising management", priceType: "from" },
+      { name: "Social Media Management", description: "Full social media channel management", priceType: "from" },
+      { name: "Email Marketing", description: "Campaign creation and automation", priceType: "from" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "gallery", title: "Our Work", sortOrder: 2 },
+      { type: "about", title: "About Us", sortOrder: 3 },
+      { type: "testimonials", title: "Client Results", sortOrder: 4 },
+      { type: "contact", title: "Start a Project", sortOrder: 5 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      ...BUSINESS_FIELDS,
+    ],
+  },
+  {
+    archetypeId: "consulting",
+    name: "Consulting",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["consulting", "advisory", "strategy", "business"],
+    itemTemplates: [
+      { name: "Discovery Workshop", description: "Half-day facilitated problem discovery session", priceType: "fixed" },
+      { name: "Strategy Engagement", description: "Multi-week strategic analysis and roadmap", priceType: "quote" },
+      { name: "Interim Leadership", description: "Experienced interim executive or manager", priceType: "per-hour" },
+      { name: "Change Management", description: "Structured programme to manage organisational change", priceType: "quote" },
+      { name: "Process Improvement", description: "Analysis and optimisation of business processes", priceType: "from" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "team", title: "Our Consultants", sortOrder: 3 },
+      { type: "contact", title: "Let's Talk", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "companySize", label: "Organisation size", type: "select" as const, required: false, options: ["1–10", "11–50", "51–200", "201–500", "500+"] },
+      { name: "budgetRange", label: "Budget range", type: "select" as const, required: false, options: ["Under £10k", "£10k–£50k", "£50k–£150k", "£150k+", "Not sure"] },
+      { name: "currentSituation", label: "What challenge are you facing?", type: "textarea" as const, required: true },
+    ],
+  },
+];
