@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useAuthStore } from "@/src/features/auth/auth.store";
+import { useDeepLink } from "@/src/hooks/useDeepLink";
 
 function useProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -31,6 +32,7 @@ export default function RootLayout() {
   }, [initialize]);
 
   useProtectedRoute();
+  useDeepLink();
 
   if (isLoading) {
     return (
