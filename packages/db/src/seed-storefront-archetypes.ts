@@ -19,6 +19,8 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         isActive: true,
       },
       update: {
+        // isActive intentionally excluded: re-seeding must not reactivate
+        // an archetype that an operator has soft-deleted.
         name: archetype.name,
         category: archetype.category,
         ctaType: archetype.ctaType,
