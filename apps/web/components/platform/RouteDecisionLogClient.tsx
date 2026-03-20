@@ -1,0 +1,315 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
+import type { CandidateTrace } from "@/lib/routing/types";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtTime(d: Date): string {
+  return new Date(d).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function fmtScore(n: number): string {
+  return n.toFixed(1);
+}
+
+function sensitivityColor(s: string): string {
+  switch (s) {
+    case "restricted":   return "#ef4444";
+    case "confidential": return "#f97316";
+    case "internal":     return "#facc15";
+    default:             return "#4ade80";
+  }
+}
+
+function fitnessColor(score: number): string {
+  if (score >= 70) return "#4ade80";
+  if (score >= 40) return "#facc15";
+  return "#ef4444";
+}
+
+// ── Candidate table ───────────────────────────────────────────────────────────
+
+function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
+  if (!candidates.length) return <p style={{ color: "#8888a0", fontSize: 11 }}>No candidates recorded.</p>;
+
+  const dims = Object.keys(candidates[0]?.dimensionScores ?? {});
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #2a2a40" }}>
+            <th style={{ textAlign: "left", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Model</th>
+            <th style={{ textAlign: "right", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Fitness</th>
+            {dims.map((d) => (
+              <th key={d} style={{ textAlign: "right", padding: "4px 8px", color: "#8888a0", fontWeight: 500, textTransform: "capitalize" }}>
+                {d}
+              </th>
+            ))}
+            <th style={{ textAlign: "left", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Exclusion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {candidates.map((c) => (
+            <tr
+              key={`${c.endpointId}::${c.modelId}`}
+              style={{
+                borderBottom: "1px solid #1a1a2e",
+                opacity: c.excluded ? 0.5 : 1,
+              }}
+            >
+              <td style={{ padding: "4px 8px", color: c.excluded ? "#8888a0" : "#fff" }}>
+                <span style={{ fontFamily: "monospace" }}>{c.modelId || c.endpointId}</span>
+              </td>
+              <td style={{ padding: "4px 8px", textAlign: "right", color: fitnessColor(c.fitnessScore), fontFamily: "monospace" }}>
+                {fmtScore(c.fitnessScore)}
+              </td>
+              {dims.map((d) => (
+                <td key={d} style={{ padding: "4px 8px", textAlign: "right", color: "#aaa", fontFamily: "monospace" }}>
+                  {c.dimensionScores[d] ?? "—"}
+                </td>
+              ))}
+              <td style={{ padding: "4px 8px", color: "#ef4444", fontSize: 10 }}>
+                {c.excludedReason ?? ""}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Single decision row ───────────────────────────────────────────────────────
+
+function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const isNone = row.selectedEndpointId === "none";
+  const modelLabel = row.selectedModelId ?? row.selectedEndpointId;
+
+  return (
+    <div style={{ borderBottom: "1px solid #1a1a2e" }}>
+      {/* Summary line */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          width: "100%",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          display: "grid",
+          gridTemplateColumns: "130px 120px 80px 60px 1fr 80px",
+          gap: 8,
+          alignItems: "center",
+          padding: "10px 12px",
+          textAlign: "left",
+          color: "#fff",
+        }}
+      >
+        {/* Time */}
+        <span style={{ fontSize: 10, color: "#8888a0", fontFamily: "monospace" }}>
+          {fmtTime(row.createdAt)}
+        </span>
+
+        {/* Task type */}
+        <span style={{
+          fontSize: 10,
+          background: "#1e1e3a",
+          border: "1px solid #2a2a40",
+          borderRadius: 4,
+          padding: "2px 6px",
+          color: "#7c8cf8",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {row.taskType}
+        </span>
+
+        {/* Sensitivity */}
+        <span style={{
+          fontSize: 10,
+          color: sensitivityColor(row.sensitivity),
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+        }}>
+          {row.sensitivity}
+        </span>
+
+        {/* Fitness */}
+        <span style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: isNone ? "#ef4444" : fitnessColor(row.fitnessScore),
+          fontFamily: "monospace",
+        }}>
+          {isNone ? "—" : fmtScore(row.fitnessScore)}
+        </span>
+
+        {/* Selected model */}
+        <span style={{
+          fontSize: 11,
+          color: isNone ? "#ef4444" : "#e2e8f0",
+          fontFamily: "monospace",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {isNone ? "No route found" : modelLabel}
+        </span>
+
+        {/* Expand toggle */}
+        <span style={{ fontSize: 11, color: "#8888a0", textAlign: "right" }}>
+          {row.candidateTrace.length} candidate{row.candidateTrace.length !== 1 ? "s" : ""}
+          {" "}{expanded ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {/* Reason */}
+      <div style={{ padding: "0 12px 6px", fontSize: 11, color: "#8888a0" }}>
+        {row.reason}
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ padding: "0 12px 16px", borderTop: "1px solid #1e1e3a", marginTop: 4 }}>
+          {/* Metadata row */}
+          <div style={{ display: "flex", gap: 16, marginTop: 12, marginBottom: 12, fontSize: 11, color: "#8888a0" }}>
+            {row.agentMessageId && (
+              <span>Message: <span style={{ color: "#fff", fontFamily: "monospace" }}>{row.agentMessageId.slice(0, 12)}…</span></span>
+            )}
+            {row.fallbackChain.length > 0 && (
+              <span>Fallback chain: <span style={{ color: "#facc15", fontFamily: "monospace" }}>{row.fallbackChain.join(" → ")}</span></span>
+            )}
+            {row.policyRulesApplied.length > 0 && (
+              <span>Policies: <span style={{ color: "#f97316" }}>{row.policyRulesApplied.join(", ")}</span></span>
+            )}
+            {row.shadowMode && (
+              <span style={{ color: "#7c8cf8" }}>Shadow mode</span>
+            )}
+          </div>
+
+          {/* All candidates */}
+          <div style={{ marginBottom: 4, fontSize: 11, fontWeight: 600, color: "#e2e8f0" }}>
+            All candidates ({row.candidateTrace.length})
+          </div>
+          <CandidateTable candidates={row.candidateTrace} />
+
+          {/* Excluded only */}
+          {row.excludedTrace.length > 0 && (
+            <>
+              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 11, fontWeight: 600, color: "#ef4444" }}>
+                Excluded ({row.excludedTrace.length})
+              </div>
+              <CandidateTable candidates={row.excludedTrace} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main client component ─────────────────────────────────────────────────────
+
+interface Props {
+  rows: RouteDecisionLogRow[];
+}
+
+export function RouteDecisionLogClient({ rows }: Props) {
+  const [taskFilter, setTaskFilter] = useState<string>("all");
+
+  const taskTypes = useMemo(() => {
+    const types = Array.from(new Set(rows.map((r) => r.taskType))).sort();
+    return ["all", ...types];
+  }, [rows]);
+
+  const filtered = useMemo(
+    () => (taskFilter === "all" ? rows : rows.filter((r) => r.taskType === taskFilter)),
+    [rows, taskFilter],
+  );
+
+  if (rows.length === 0) {
+    return (
+      <div style={{
+        background: "#1a1a2e",
+        border: "1px solid #2a2a40",
+        borderRadius: 8,
+        padding: 32,
+        textAlign: "center",
+        color: "#8888a0",
+        fontSize: 13,
+      }}>
+        No routing decisions recorded yet. Decisions are logged each time the router selects an endpoint for an agent task.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {taskTypes.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTaskFilter(t)}
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              borderRadius: 4,
+              border: "1px solid",
+              cursor: "pointer",
+              borderColor: taskFilter === t ? "#7c8cf8" : "#2a2a40",
+              background: taskFilter === t ? "#1e1e3a" : "transparent",
+              color: taskFilter === t ? "#7c8cf8" : "#8888a0",
+            }}
+          >
+            {t === "all" ? `All (${rows.length})` : t}
+          </button>
+        ))}
+      </div>
+
+      {/* Column header */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "130px 120px 80px 60px 1fr 80px",
+        gap: 8,
+        padding: "6px 12px",
+        fontSize: 10,
+        color: "#8888a0",
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+        borderBottom: "1px solid #2a2a40",
+      }}>
+        <span>Time</span>
+        <span>Task</span>
+        <span>Sensitivity</span>
+        <span>Score</span>
+        <span>Selected Model</span>
+        <span style={{ textAlign: "right" }}>Detail</span>
+      </div>
+
+      {/* Rows */}
+      <div style={{ background: "#12121e", borderRadius: "0 0 8px 8px" }}>
+        {filtered.map((row) => (
+          <DecisionRow key={row.id} row={row} />
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ padding: 24, textAlign: "center", color: "#8888a0", fontSize: 12 }}>
+          No decisions for task type "{taskFilter}".
+        </div>
+      )}
+    </div>
+  );
+}
