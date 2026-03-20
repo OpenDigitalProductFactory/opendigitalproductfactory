@@ -125,9 +125,22 @@ WHERE bc.scope = 'organization';
 3. Run `pnpm migrate` again (or `pnpm db:push` in sandbox) to verify it applies cleanly
 4. Commit the migration file alongside the schema change
 
+### Migration files are immutable after commit
+
+**Never modify a migration file after it has been committed.** Prisma stores checksums of applied migrations and will detect any change, causing drift that blocks `migrate dev` on every other environment.
+
+- To correct a past migration: create a **new** migration that applies the fix
+- To add missing backfill SQL: create a new data-only migration
+- If drift has already occurred: run `npx prisma migrate resolve --applied <migration-name>` for each drifted file to re-sync checksums without data loss
+
+A pre-commit hook (`.githooks/pre-commit`) blocks commits that modify existing migration `.sql` files. This hook is active when `git config core.hooksPath .githooks` has been set (done automatically at repo setup). If you clone this repo fresh, run:
+```bash
+git config core.hooksPath .githooks
+```
+
 ### Local dev drift
 
-If the local dev DB has drifted (migration files modified after being applied), run `prisma migrate reset --force` to replay all migrations from scratch. This is safe for local dev — seed data is re-created by `pnpm seed`. Never run reset against a populated non-dev database without a backup.
+If the local dev DB has drifted despite the hook (e.g. SQL was applied directly without `migrate dev`), use `prisma migrate resolve --applied <name>` to re-sync each affected migration's checksum. This preserves all data. Only use `prisma migrate reset --force` on a truly empty dev DB — never on an environment with backlog, seed, or user data.
 
 ### When NOT to use this pattern
 
