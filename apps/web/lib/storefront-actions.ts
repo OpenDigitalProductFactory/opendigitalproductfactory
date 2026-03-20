@@ -45,7 +45,8 @@ export async function submitInquiry(
       customerName: data.customerName,
       customerPhone: data.customerPhone,
       message: data.message,
-      formData: data.formData,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formData: data.formData as any,
     },
     select: { inquiryRef: true },
   });

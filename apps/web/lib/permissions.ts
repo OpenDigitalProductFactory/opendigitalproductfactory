@@ -13,6 +13,7 @@ export type CapabilityKey =
   | "view_operations"
   | "view_platform"
   | "view_admin"
+  | "view_storefront"
   | "manage_branding"
   | "manage_taxonomy"
   | "manage_agents"
@@ -38,6 +39,7 @@ const PERMISSIONS: Record<CapabilityKey, Permission> = {
   view_operations:             { roles: ["HR-000", "HR-500"] },
   view_platform:               { roles: ["HR-000", "HR-200", "HR-300"] },
   view_admin:                  { roles: ["HR-000"] },
+  view_storefront:             { roles: ["HR-000", "HR-200", "HR-300"] },
   manage_branding:             { roles: ["HR-000"] },
   manage_taxonomy:             { roles: ["HR-000", "HR-300"] },
   manage_agents:               { roles: ["HR-000"] },
@@ -95,6 +97,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "platform",   label: "Platform",   route: "/platform",  capabilityKey: "view_platform",    accentColor: "#fb923c" },
   { key: "admin",      label: "Admin",      route: "/admin",     capabilityKey: "view_admin",       accentColor: "#8888a0" },
   { key: "compliance", label: "Compliance", route: "/compliance", capabilityKey: "view_compliance",  accentColor: "#ef4444" },
+  { key: "storefront", label: "Storefront", route: "/storefront", capabilityKey: "view_storefront",  accentColor: "#f59e0b" },
 ];
 
 /** Get all capabilities granted to a user's role. */

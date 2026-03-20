@@ -11,7 +11,7 @@ import { detectEmailType, EmailType } from "./storefront-auth";
 import { prisma } from "@dpf/db";
 
 describe("detectEmailType", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns customer when email found in CustomerContact", async () => {
     vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({ id: "c1" } as never);
