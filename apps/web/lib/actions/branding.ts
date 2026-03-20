@@ -99,19 +99,23 @@ export async function saveThemePreset(formData: FormData): Promise<void> {
   const companyName = readString(formData.get("companyName")) || "Custom";
   const logoUrl = readString(formData.get("logoUrl")) || null;
   const tokens = buildThemeTokens(formData);
+  const accent = readString(formData.get("palette_accent")) || "#7c8cf8";
+  const fontFamily = readString(formData.get("typography_fontFamily")) || undefined;
+  const { light } = deriveThemeTokens(accent, fontFamily ? { fontFamily } : undefined);
+  const dualTokens = { dark: tokens, light } as Prisma.InputJsonValue;
 
   await prisma.brandingConfig.upsert({
     where: { scope },
     update: {
       companyName,
       logoUrl,
-      tokens,
+      tokens: dualTokens,
     },
     create: {
       scope,
       companyName,
       logoUrl,
-      tokens,
+      tokens: dualTokens,
     },
   });
 
@@ -122,19 +126,23 @@ export async function saveActiveThemePreset(formData: FormData): Promise<void> {
   const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
   const logoUrl = readString(formData.get("logoUrl")) || null;
   const tokens = buildThemeTokens(formData);
+  const accent = readString(formData.get("palette_accent")) || "#7c8cf8";
+  const fontFamily = readString(formData.get("typography_fontFamily")) || undefined;
+  const { light } = deriveThemeTokens(accent, fontFamily ? { fontFamily } : undefined);
+  const dualTokens = { dark: tokens, light } as Prisma.InputJsonValue;
 
   await prisma.brandingConfig.upsert({
     where: { scope: "organization" },
     update: {
       companyName,
       logoUrl,
-      tokens,
+      tokens: dualTokens,
     },
     create: {
       scope: "organization",
       companyName,
       logoUrl,
-      tokens,
+      tokens: dualTokens,
     },
   });
 
