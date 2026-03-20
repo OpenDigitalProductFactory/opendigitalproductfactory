@@ -17,7 +17,7 @@ import { prisma } from "@dpf/db";
 const mockPublishedStorefront = { id: "sf-1" };
 
 describe("submitInquiry", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error when storefront is not published", async () => {
     // WHERE { isPublished: true } returns null when unpublished — simulate that here
@@ -51,7 +51,7 @@ describe("submitInquiry", () => {
 });
 
 describe("submitDonation", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error when storefront not found", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null as never);

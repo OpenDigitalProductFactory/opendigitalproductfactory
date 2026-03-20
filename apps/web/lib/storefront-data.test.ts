@@ -46,7 +46,7 @@ const mockStorefront = {
 };
 
 describe("getPublicStorefront", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns null when storefront is unpublished", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
