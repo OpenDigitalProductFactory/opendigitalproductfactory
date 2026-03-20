@@ -23,7 +23,9 @@ async function fetchRegistryPage(
   if (cursor) url.searchParams.set("cursor", cursor);
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`Registry API error: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (!Array.isArray(data?.servers)) throw new Error("Unexpected registry API response shape");
+  return data;
 }
 
 async function fetchGlamaEnrichment(
@@ -58,8 +60,8 @@ async function enrichBatch(
   return result;
 }
 
-function toSlug(name: string): string {
-  return name
+function toSlug(id: string): string {
+  return id
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
@@ -69,7 +71,6 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
   let totalFetched = 0;
   let totalUpserted = 0;
   let totalNew = 0;
-  const syncedRegistryIds: string[] = [];
 
   try {
     const existing = await prisma.mcpIntegration.findMany({
@@ -77,6 +78,8 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
       select: { registryId: true },
     });
     const existingIds = new Set(existing.map((e) => e.registryId));
+
+    const syncStartedAt = new Date();
 
     let cursor: string | undefined;
     do {
@@ -92,7 +95,9 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
         const isNew = !existingIds.has(entry.id);
         if (isNew) totalNew++;
 
+        const slug = toSlug(entry.id);
         const commonFields = {
+          slug,
           name: entry.name,
           shortDescription: entry.description?.slice(0, 160) ?? null,
           description: entry.description ?? null,
@@ -115,15 +120,10 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
 
         await prisma.mcpIntegration.upsert({
           where: { registryId: entry.id },
-          create: {
-            registryId: entry.id,
-            slug: toSlug(entry.name),
-            ...commonFields,
-          },
+          create: { registryId: entry.id, ...commonFields },
           update: commonFields,
         });
 
-        syncedRegistryIds.push(entry.id);
         totalUpserted++;
 
         agentEventBus.emit(syncId, {
@@ -138,7 +138,7 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
     } while (cursor);
 
     const { count: totalRemoved } = await prisma.mcpIntegration.updateMany({
-      where: { status: "active", registryId: { notIn: syncedRegistryIds } },
+      where: { status: "active", lastSyncedAt: { lt: syncStartedAt } },
       data: { status: "deprecated" },
     });
 
@@ -153,14 +153,17 @@ export async function runMcpCatalogSync(syncId: string): Promise<void> {
         totalRemoved,
       },
     });
-
-    agentEventBus.emit(syncId, { type: "done" });
   } catch (err) {
     const error = err instanceof Error ? err.message : "Unknown error";
-    await prisma.mcpCatalogSync.update({
-      where: { id: syncId },
-      data: { status: "failed", completedAt: new Date(), error },
-    });
+    try {
+      await prisma.mcpCatalogSync.update({
+        where: { id: syncId },
+        data: { status: "failed", completedAt: new Date(), error },
+      });
+    } catch {
+      // swallow — database may be unavailable
+    }
+  } finally {
     agentEventBus.emit(syncId, { type: "done" });
   }
 }

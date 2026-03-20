@@ -89,16 +89,14 @@ describe("runMcpCatalogSync", () => {
   });
 
   it("marks entries absent from sync as deprecated", async () => {
-    vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
-      { registryId: "old-mcp" } as never,
-    ]);
     await runMcpCatalogSync("sync-1");
-    expect(prisma.mcpIntegration.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ status: "active" }),
-        data: { status: "deprecated" },
-      })
-    );
+    expect(prisma.mcpIntegration.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: "active",
+        lastSyncedAt: { lt: expect.any(Date) },
+      },
+      data: { status: "deprecated" },
+    });
   });
 
   it("updates sync record to success on completion", async () => {
