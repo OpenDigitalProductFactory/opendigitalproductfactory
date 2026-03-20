@@ -72,11 +72,13 @@ export async function queryMcpIntegrations(params: {
       ...(category ? { category } : {}),
       ...(pricingModel ? { pricingModel } : {}),
       ...(archetypeId ? { archetypeIds: { has: archetypeId } } : {}),
+    ...(query.trim() ? {
       OR: [
         { name: { contains: query, mode: "insensitive" } },
         { shortDescription: { contains: query, mode: "insensitive" } },
         { tags: { has: query.toLowerCase() } },
       ],
+    } : {}),
     },
     select: {
       id: true, name: true, vendor: true, slug: true,
@@ -116,9 +118,12 @@ export async function runMcpCatalogSyncIfDue(): Promise<void> {
   const sync = await prisma.mcpCatalogSync.create({ data: { triggeredBy: "schedule" } });
   await prisma.scheduledJob.update({
     where: { jobId: "mcp-catalog-sync" },
-    data: { lastRunAt: new Date(), lastStatus: "running", nextRunAt: computeNextRunAt(job.schedule, new Date()) },
+    data: { lastRunAt: new Date(), lastStatus: "running" },
   });
-  void runMcpCatalogSync(sync.id).then(() =>
-    prisma.scheduledJob.update({ where: { jobId: "mcp-catalog-sync" }, data: { lastStatus: "completed" } }).catch(() => {})
-  ).catch(() => {});
+  void runMcpCatalogSync(sync.id).then(async () => {
+    await prisma.scheduledJob.update({
+      where: { jobId: "mcp-catalog-sync" },
+      data: { lastStatus: "completed", nextRunAt: computeNextRunAt(job.schedule, new Date()) },
+    }).catch(() => {});
+  }).catch(() => {});
 }

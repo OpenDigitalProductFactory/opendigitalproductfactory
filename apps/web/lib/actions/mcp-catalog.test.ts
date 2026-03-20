@@ -30,7 +30,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { runMcpCatalogSync } from "@/lib/mcp-catalog-sync";
-import { triggerMcpCatalogSync, queryMcpIntegrations, updateMcpCatalogSchedule } from "./mcp-catalog";
+import { triggerMcpCatalogSync, queryMcpIntegrations, updateMcpCatalogSchedule, runMcpCatalogSyncIfDue } from "./mcp-catalog";
 
 const mockAdminSession = {
   user: { id: "user-1", email: "admin@test.com", platformRole: "HR-000", isSuperuser: true },
@@ -114,6 +114,51 @@ describe("queryMcpIntegrations", () => {
       expect.objectContaining({
         where: expect.objectContaining({ status: "active" }),
       })
+    );
+  });
+});
+
+describe("runMcpCatalogSyncIfDue", () => {
+  it("skips when no job exists", async () => {
+    vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue(null);
+    await runMcpCatalogSyncIfDue();
+    expect(prisma.mcpCatalogSync.create).not.toHaveBeenCalled();
+  });
+
+  it("skips when job is disabled", async () => {
+    vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue({ schedule: "disabled", nextRunAt: null } as never);
+    await runMcpCatalogSyncIfDue();
+    expect(prisma.mcpCatalogSync.create).not.toHaveBeenCalled();
+  });
+
+  it("skips when nextRunAt is in the future", async () => {
+    vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue({
+      schedule: "weekly",
+      nextRunAt: new Date(Date.now() + 86400000),
+    } as never);
+    await runMcpCatalogSyncIfDue();
+    expect(prisma.mcpCatalogSync.create).not.toHaveBeenCalled();
+  });
+
+  it("skips when a sync is already running", async () => {
+    vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue({
+      schedule: "weekly",
+      nextRunAt: new Date(Date.now() - 1000),
+    } as never);
+    vi.mocked(prisma.mcpCatalogSync.findFirst).mockResolvedValue({ id: "running-1", status: "running" } as never);
+    await runMcpCatalogSyncIfDue();
+    expect(prisma.mcpCatalogSync.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a scheduled sync when due", async () => {
+    vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue({
+      jobId: "mcp-catalog-sync",
+      schedule: "weekly",
+      nextRunAt: new Date(Date.now() - 1000),
+    } as never);
+    await runMcpCatalogSyncIfDue();
+    expect(prisma.mcpCatalogSync.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ triggeredBy: "schedule" }) })
     );
   });
 });
