@@ -761,6 +761,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  {
+    name: "search_integrations",
+    description: "Search the MCP integrations catalog for services relevant to a feature or business need. Use when the user asks what they can connect, or when researching integrations for a new feature.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What you are looking for — e.g. 'payments', 'email marketing', 'booking calendar', 'source control'" },
+        category: { type: "string", description: "Optional category filter — e.g. 'finance', 'cms', 'cloud', 'crm'" },
+        archetypeId: { type: "string", description: "Optional archetype filter — returns integrations tagged as relevant to this archetype" },
+        pricingModel: { type: "string", enum: ["free", "paid", "freemium", "open-source"], description: "Optional pricing filter" },
+        limit: { type: "number", description: "Max results to return. Default 10." },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -1301,7 +1317,8 @@ export async function executeTool(
         (build.buildPlan ?? {}) as Record<string, unknown>,
         String(params.instruction ?? ""),
       );
-      await execInSandbox(build.sandboxId, `cat > /tmp/codegen-prompt.txt << 'PROMPT_EOF'\n${prompt}\nPROMPT_EOF`);
+      const encodedPrompt = Buffer.from(prompt).toString("base64");
+      await execInSandbox(build.sandboxId, `echo ${encodedPrompt} | base64 -d > /tmp/codegen-prompt.txt`);
       return { success: true, message: "Code generation instruction sent to sandbox.", data: { instruction: String(params.instruction ?? "") } };
     }
 
@@ -1311,8 +1328,10 @@ export async function executeTool(
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
       const { execInSandbox } = await import("@/lib/sandbox");
-      const output = await execInSandbox(build.sandboxId, String(params.instruction ?? "echo 'No instruction'"));
-      return { success: true, message: "Refinement applied.", data: { output: output.slice(0, 2000) } };
+      const instruction = String(params.instruction ?? "");
+      const encodedInstruction = Buffer.from(instruction).toString("base64");
+      await execInSandbox(build.sandboxId, `echo ${encodedInstruction} | base64 -d > /tmp/codegen-prompt.txt`);
+      return { success: true, message: "Refinement instruction sent to sandbox.", data: { instruction } };
     }
 
     case "run_sandbox_tests": {
@@ -1931,6 +1950,33 @@ export async function executeTool(
       }).join("\n\n");
 
       return { success: true, message: summary || "No endpoints to test.", data: { results } };
+    }
+
+    case "search_integrations": {
+      const query = String(params["query"] ?? "");
+      const results = await prisma.mcpIntegration.findMany({
+        where: {
+          status: "active",
+          ...(typeof params["category"] === "string" ? { category: params["category"] } : {}),
+          ...(typeof params["pricingModel"] === "string" ? { pricingModel: params["pricingModel"] } : {}),
+          ...(typeof params["archetypeId"] === "string" ? { archetypeIds: { has: params["archetypeId"] } } : {}),
+          ...(query.trim() ? {
+            OR: [
+              { name: { contains: query, mode: "insensitive" } },
+              { shortDescription: { contains: query, mode: "insensitive" } },
+              { tags: { has: query.toLowerCase() } },
+            ],
+          } : {}),
+        },
+        select: {
+          name: true, vendor: true, shortDescription: true, category: true,
+          pricingModel: true, rating: true, ratingCount: true, isVerified: true,
+          documentationUrl: true, logoUrl: true, archetypeIds: true,
+        },
+        orderBy: [{ isVerified: "desc" }, { installCount: "desc" }],
+        take: typeof params["limit"] === "number" ? params["limit"] : 10,
+      });
+      return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
     }
 
     default:
