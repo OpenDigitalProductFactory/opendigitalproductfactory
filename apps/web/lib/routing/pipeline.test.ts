@@ -11,6 +11,7 @@ import type {
   EndpointOverride,
 } from "./types";
 import { filterHard, filterByPolicy, routeEndpoint } from "./pipeline";
+import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,30 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
     profileSource: "seed",
     profileConfidence: "medium",
     retiredAt: null,
+    // EP-INF-003: ModelCard fields
+    modelClass: "chat",
+    modelFamily: null,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    capabilities: EMPTY_CAPABILITIES,
+    pricing: EMPTY_PRICING,
+    supportedParameters: [],
+    deprecationDate: null,
+    metadataSource: "inferred",
+    metadataConfidence: "low",
+    perRequestLimits: null,
+    ...overrides,
+  };
+}
+
+function makeRequirement(overrides: Partial<TaskRequirementContract> = {}): TaskRequirementContract {
+  return {
+    taskType: "default",
+    description: "Default test requirement",
+    selectionRationale: "General purpose",
+    requiredCapabilities: {},
+    preferredMinScores: {},
+    preferCheap: false,
     ...overrides,
   };
 }
@@ -303,5 +328,38 @@ describe("routeEndpoint", () => {
       []
     );
     expect(decision.policyRulesApplied).toContain("rule-block-anthropic");
+  });
+});
+
+// ── filterHard – EP-INF-003 modelClass filter ────────────────────────────────
+
+describe("filterHard – EP-INF-003 modelClass filter", () => {
+  it("excludes embedding models from chat routing", () => {
+    const embedding = makeEndpoint({
+      id: "embed-1", modelId: "text-embedding-3-small", modelClass: "embedding",
+    });
+    const chat = makeEndpoint({
+      id: "chat-1", modelId: "gpt-4o", modelClass: "chat",
+    });
+    const result = filterHard([embedding, chat], makeRequirement(), "internal");
+    expect(result.eligible).toHaveLength(1);
+    expect(result.eligible[0].modelId).toBe("gpt-4o");
+    expect(result.excluded[0].excludedReason).toContain("modelClass");
+  });
+
+  it("excludes image_gen models from chat routing", () => {
+    const imageGen = makeEndpoint({
+      id: "img-1", modelId: "dall-e-3", modelClass: "image_gen",
+    });
+    const result = filterHard([imageGen], makeRequirement(), "internal");
+    expect(result.eligible).toHaveLength(0);
+  });
+
+  it("allows reasoning models for chat routing", () => {
+    const reasoning = makeEndpoint({
+      id: "r-1", modelId: "o4-mini", modelClass: "reasoning",
+    });
+    const result = filterHard([reasoning], makeRequirement(), "internal");
+    expect(result.eligible).toHaveLength(1);
   });
 });

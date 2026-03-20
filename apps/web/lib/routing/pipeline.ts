@@ -117,6 +117,12 @@ export function getExclusionReason(
   req: TaskRequirementContract,
   sensitivity: SensitivityLevel
 ): string | null {
+  // EP-INF-003: Model class must be compatible with task
+  const modelClass = (ep as any).modelClass ?? "chat";
+  if (modelClass !== "chat" && modelClass !== "reasoning") {
+    return `modelClass "${modelClass}" is not eligible for chat/reasoning tasks`;
+  }
+
   // Status check — only active and degraded pass
   if (ep.status !== "active" && ep.status !== "degraded") {
     return `Status is '${ep.status}'`;
