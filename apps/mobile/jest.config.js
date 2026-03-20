@@ -11,5 +11,9 @@ module.exports = {
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",
     "!src/**/*.d.ts"
+  ],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "__tests__/utils/"
   ]
 };
