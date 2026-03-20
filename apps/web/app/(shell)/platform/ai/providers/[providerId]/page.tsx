@@ -6,7 +6,7 @@ import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
-import { getEndpointPerformance, getRoutingProfile, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
+import { getEndpointPerformance, getRoutingProfiles, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
 import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
 import RoutingProfilePanel from "@/components/platform/RoutingProfilePanel";
 import RouteDecisionLog from "@/components/platform/RouteDecisionLog";
@@ -17,13 +17,13 @@ type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders, perfData, routingProfile, routeDecisions] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
     getProviders(),
     getEndpointPerformance(providerId),
-    getRoutingProfile(providerId),
+    getRoutingProfiles(providerId),
     getRecentRouteDecisions(providerId),
   ]);
   if (!pw) notFound();
@@ -103,9 +103,7 @@ export default async function ProviderDetailPage({ params }: Props) {
             <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
           </div>
 
-          {routingProfile && (
-            <RoutingProfilePanel endpointId={providerId} {...routingProfile} />
-          )}
+          <RoutingProfilePanel endpointId={providerId} profiles={routingProfiles} />
         </>
       )}
 
