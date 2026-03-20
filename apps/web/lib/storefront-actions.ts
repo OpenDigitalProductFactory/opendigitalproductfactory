@@ -6,10 +6,9 @@ import { nanoid } from "nanoid";
 async function getPublishedStorefront(slug: string) {
   const config = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug }, isPublished: true },
-    select: { id: true, isPublished: true },
+    select: { id: true },
   });
-  if (!config || !config.isPublished) return null;
-  return config;
+  return config ?? null;
 }
 
 function makeRef(prefix: string) {
@@ -97,7 +96,7 @@ export async function submitOrder(
   data: {
     customerEmail: string;
     items: Array<{ itemId: string; name: string; qty: number; unitPrice: number }>;
-    totalAmount: number;
+    totalAmount: number | string;
     currency?: string;
   }
 ): Promise<ActionResult> {
@@ -127,7 +126,7 @@ export async function submitDonation(
   data: {
     donorEmail: string;
     donorName?: string;
-    amount: number;
+    amount: number | string;
     currency?: string;
     campaignId?: string;
     message?: string;

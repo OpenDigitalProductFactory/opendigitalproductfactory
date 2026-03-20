@@ -5,6 +5,9 @@ import { classifyRoute, RouteClass } from "@/lib/storefront-middleware";
 import { prisma } from "@dpf/db";
 import type { NextAuthRequest } from "next-auth";
 
+// Force Node.js runtime — middleware uses Prisma which requires Node.js TCP sockets.
+export const runtime = "nodejs";
+
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
@@ -34,9 +37,10 @@ export default auth(async function middleware(
     return NextResponse.redirect(new URL(target, req.url), 301);
   }
 
-  // Portal requires customer session
+  // Portal requires an authenticated customer session
   if (routeClass === RouteClass.Portal) {
-    if (!req.auth?.user) {
+    const user = req.auth?.user as { type?: string } | undefined;
+    if (!user || user.type !== "customer") {
       const slug = await getOrgSlug();
       return NextResponse.redirect(new URL(`/s/${slug}/sign-in`, req.url));
     }
