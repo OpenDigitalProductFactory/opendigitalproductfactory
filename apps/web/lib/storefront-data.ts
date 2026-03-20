@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type {
   PublicStorefrontConfig,
@@ -5,7 +6,7 @@ import type {
   PublicSection,
 } from "./storefront-types";
 
-export async function getPublicStorefront(
+export const getPublicStorefront = cache(async function getPublicStorefront(
   slug: string
 ): Promise<PublicStorefrontConfig | null> {
   const config = await prisma.storefrontConfig.findFirst({
@@ -77,7 +78,7 @@ export async function getPublicStorefront(
     contactEmail: config.contactEmail,
     contactPhone: config.contactPhone,
     socialLinks: config.socialLinks as PublicStorefrontConfig["socialLinks"],
-    archetypeId: config.archetype.archetypeId,
+    archetypeId: config.archetype?.archetypeId ?? "",
     orgName: org.name,
     orgSlug: org.slug,
     orgLogoUrl: org.logoUrl,
@@ -91,7 +92,7 @@ export async function getPublicStorefront(
       bookingConfig: item.bookingConfig as Record<string, unknown> | null,
     })),
   };
-}
+});
 
 export async function getPublicItem(
   slug: string,
