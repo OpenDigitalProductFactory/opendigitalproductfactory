@@ -2859,13 +2859,13 @@ model McpIntegration {
   documentationUrl String?
   category         String
   subcategory      String?
-  tags             String[]
+  tags             String[]  @default([])
   pricingModel     String?
   rating           Decimal?
   ratingCount      Int?
   installCount     Int?
   isVerified       Boolean  @default(false)
-  archetypeIds     String[]
+  archetypeIds     String[]  @default([])
   status           String   @default("active")
   rawMetadata      Json
   lastSyncedAt     DateTime
@@ -2876,6 +2876,7 @@ model McpIntegration {
   @@index([pricingModel])
   @@index([isVerified])
   @@index([status])
+  // Note: B-tree index — array containment (@>) queries need a raw GIN migration (follow-on)
   @@index([tags])
 }
 
@@ -2891,4 +2892,6 @@ model McpCatalogSync {
   totalNew          Int?
   totalRemoved      Int?
   error             String?   @db.Text
+
+  @@index([startedAt])
 }
