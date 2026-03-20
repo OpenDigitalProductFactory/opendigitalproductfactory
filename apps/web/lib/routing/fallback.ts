@@ -17,67 +17,6 @@ export interface FallbackResult {
   downgradeMessage: string | null;
 }
 
-// Skip non-chat models when resolving modelId from ModelProfile/DiscoveredModel
-const NON_CHAT_PATTERN =
-  /embed|whisper|tts|dall-e|moderation|babbage|davinci-00|text-search|text-similarity|audio|image/i;
-
-const TIER_RANK: Record<string, number> = {
-  "frontier": 5,
-  "deep-thinker": 4,
-  "strong": 3,
-  "capable": 2,
-  "fast": 1,
-  "specialist": 1,
-  "local": 0,
-};
-
-/**
- * Resolve the best modelId for a provider by checking ModelProfile first,
- * then DiscoveredModel. Mirrors buildBootstrapPriority's resolution logic.
- */
-async function resolveModelId(providerId: string): Promise<string> {
-  // Try ModelProfile first — has capabilityTier for better selection
-  const profiles = await prisma.modelProfile.findMany({
-    where: { providerId },
-    select: { modelId: true, capabilityTier: true, costTier: true },
-  });
-
-  const chatProfiles = profiles.filter(
-    (pr) => !NON_CHAT_PATTERN.test(pr.modelId),
-  );
-
-  if (chatProfiles.length > 0) {
-    chatProfiles.sort((a, b) => {
-      const tierDiff =
-        (TIER_RANK[b.capabilityTier] ?? 0) - (TIER_RANK[a.capabilityTier] ?? 0);
-      if (tierDiff !== 0) return tierDiff;
-      // Prefer non-dated aliases (e.g., "claude-sonnet-4-6" over "claude-sonnet-4-6-20250514")
-      const aIsDated = /\d{8}$/.test(a.modelId) ? 1 : 0;
-      const bIsDated = /\d{8}$/.test(b.modelId) ? 1 : 0;
-      if (aIsDated !== bIsDated) return aIsDated - bIsDated;
-      return (a.costTier ?? "").localeCompare(b.costTier ?? "");
-    });
-    return chatProfiles[0]!.modelId;
-  }
-
-  // Fall back to DiscoveredModel
-  const discovered = await prisma.discoveredModel.findFirst({
-    where: {
-      providerId,
-      NOT: { modelId: { contains: "embed" } },
-    },
-    orderBy: { modelId: "asc" },
-    select: { modelId: true },
-  });
-
-  if (discovered && !NON_CHAT_PATTERN.test(discovered.modelId)) {
-    return discovered.modelId;
-  }
-
-  // No model found — return empty string; callProvider will surface the error
-  return "";
-}
-
 /**
  * Execute an inference call using the RouteDecision's selected endpoint,
  * falling back through the chain on failure.
@@ -94,40 +33,46 @@ export async function callWithFallbackChain(
     );
   }
 
-  // Build ordered list: selected endpoint first, then fallbacks
-  const chain = [decision.selectedEndpoint, ...decision.fallbackChain];
+  // Build chain from RouteDecision — each entry carries both providerId and modelId
+  const selectedEntry = { providerId: decision.selectedEndpoint!, modelId: decision.selectedModelId! };
 
-  // Deduplicate while preserving order
+  // Get fallback entries from the candidates in the decision trace
+  const fallbackEntries = decision.fallbackChain.map(epId => {
+    const candidate = decision.candidates.find(c => c.endpointId === epId && !c.excluded);
+    return { providerId: epId, modelId: candidate?.modelId ?? "" };
+  });
+
+  const allEntries = [selectedEntry, ...fallbackEntries];
+
+  // Deduplicate using composite key (providerId + modelId)
   const seen = new Set<string>();
-  const uniqueChain = chain.filter((id) => {
-    if (seen.has(id)) return false;
-    seen.add(id);
+  const chain = allEntries.filter(e => {
+    const key = `${e.providerId}::${e.modelId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
 
-  for (let i = 0; i < uniqueChain.length; i++) {
-    const endpointId = uniqueChain[i]!;
+  for (let i = 0; i < chain.length; i++) {
+    const entry = chain[i]!;
 
     // Look up the provider row to get its display name for downgrade messages
     const provider = await prisma.modelProvider.findUnique({
-      where: { providerId: endpointId },
+      where: { providerId: entry.providerId },
       select: { providerId: true, name: true },
     });
 
     if (!provider) {
-      attempts.push({ endpointId, error: "provider not found in database" });
+      attempts.push({ endpointId: entry.providerId, error: "provider not found in database" });
       continue;
     }
 
-    // Resolve modelId via ModelProfile → DiscoveredModel chain
-    const modelId = await resolveModelId(endpointId);
-
     try {
       const result = await callProvider(
-        endpointId,
-        modelId,
+        entry.providerId,
+        entry.modelId,
         messages,
         systemPrompt,
         tools,
@@ -135,8 +80,8 @@ export async function callWithFallbackChain(
 
       const downgraded = i > 0;
       return {
-        providerId: endpointId,
-        modelId,
+        providerId: entry.providerId,
+        modelId: entry.modelId,
         content: result.content,
         toolCalls: result.toolCalls ?? [],
         tokenUsage:
@@ -150,8 +95,8 @@ export async function callWithFallbackChain(
       };
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      attempts.push({ endpointId, error: errMsg });
-      console.warn(`[callWithFallbackChain] ${endpointId} failed: ${errMsg}`);
+      attempts.push({ endpointId: entry.providerId, error: errMsg });
+      console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
 
       // Handle specific error types — update provider status accordingly
       if (e instanceof InferenceError) {
@@ -160,12 +105,12 @@ export async function callWithFallbackChain(
           // This differs from callWithFailover which fully disables on rate_limit.
           await prisma.modelProvider
             .update({
-              where: { providerId: endpointId },
+              where: { providerId: entry.providerId },
               data: { status: "degraded" },
             })
             .catch((err) =>
               console.error(
-                `[callWithFallbackChain] failed to mark ${endpointId} degraded:`,
+                `[callWithFallbackChain] failed to mark ${entry.providerId} degraded:`,
                 err,
               ),
             );
@@ -175,12 +120,12 @@ export async function callWithFallbackChain(
           // "auth" means credentials are invalid.
           await prisma.modelProvider
             .update({
-              where: { providerId: endpointId },
+              where: { providerId: entry.providerId },
               data: { status: "disabled" },
             })
             .catch((err) =>
               console.error(
-                `[callWithFallbackChain] failed to mark ${endpointId} disabled:`,
+                `[callWithFallbackChain] failed to mark ${entry.providerId} disabled:`,
                 err,
               ),
             );
