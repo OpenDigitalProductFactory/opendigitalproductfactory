@@ -28,7 +28,7 @@ export function IntegrationCatalogFilters() {
       <input
         type="search"
         placeholder="Search integrations…"
-        defaultValue={searchParams.get("q") ?? ""}
+        value={searchParams.get("q") ?? ""}
         onChange={(e) => update("q", e.target.value)}
         className="border rounded px-3 py-1.5 text-sm w-56"
       />
