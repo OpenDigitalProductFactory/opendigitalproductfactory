@@ -2845,3 +2845,50 @@ model StorefrontDonation {
   @@index([storefrontId, status])
   @@index([donorEmail])
 }
+
+model McpIntegration {
+  id               String   @id @default(cuid())
+  registryId       String   @unique
+  slug             String   @unique
+  name             String
+  shortDescription String?
+  description      String?  @db.Text
+  logoUrl          String?
+  vendor           String?
+  repositoryUrl    String?
+  documentationUrl String?
+  category         String
+  subcategory      String?
+  tags             String[]
+  pricingModel     String?
+  rating           Decimal?
+  ratingCount      Int?
+  installCount     Int?
+  isVerified       Boolean  @default(false)
+  archetypeIds     String[]
+  status           String   @default("active")
+  rawMetadata      Json
+  lastSyncedAt     DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([category])
+  @@index([pricingModel])
+  @@index([isVerified])
+  @@index([status])
+  @@index([tags])
+}
+
+model McpCatalogSync {
+  id                String    @id @default(cuid())
+  triggeredBy       String
+  triggeredByUserId String?
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  status            String    @default("running")
+  totalFetched      Int?
+  totalUpserted     Int?
+  totalNew          Int?
+  totalRemoved      Int?
+  error             String?   @db.Text
+}
