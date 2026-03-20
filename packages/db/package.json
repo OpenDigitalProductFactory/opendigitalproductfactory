@@ -21,6 +21,7 @@
     "neo4j:rebuild-ea": "tsx src/neo4j-rebuild-ea.ts"
   },
   "dependencies": {
+    "@dpf/storefront-templates": "workspace:*",
     "@prisma/client": "^7.5.0",
     "@prisma/adapter-pg": "^7.5.0",
     "dotenv": "^16.4.0",
