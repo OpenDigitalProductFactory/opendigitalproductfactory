@@ -16,6 +16,11 @@ export type ThemeTokens = {
   shadows: { panel: string; card: string; button: string };
 };
 
+export type DualThemeTokens = {
+  dark: ThemeTokens;
+  light: ThemeTokens;
+};
+
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -83,22 +88,59 @@ export function contrastRatio(color1: string, color2: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * Nudge a foreground color's HSL lightness until it meets the required
+ * contrast ratio against the given background. Darkens for light backgrounds,
+ * lightens for dark backgrounds. Max 30 iterations at 3% steps.
+ */
+function ensureContrast(fg: string, bg: string, minRatio: number): string {
+  const bgHsl = hexToHsl(bg);
+  const isLightBg = bgHsl.l > 50;
+  const fgHsl = hexToHsl(fg);
+  const originalL = fgHsl.l;
+  let { h, s, l } = fgHsl;
+
+  for (let i = 0; i < 30; i++) {
+    const candidate = hslToHex(h, s, l);
+    if (contrastRatio(candidate, bg) >= minRatio) {
+      if (
+        typeof process !== "undefined" &&
+        process.env?.NODE_ENV === "development" &&
+        Math.abs(l - originalL) > 10
+      ) {
+        console.warn(
+          `ensureContrast: nudged lightness by ${Math.abs(l - originalL).toFixed(1)}% ` +
+          `(${originalL.toFixed(1)} → ${l.toFixed(1)}) for ${fg} against ${bg}`
+        );
+      }
+      return candidate;
+    }
+    // Darken for light backgrounds, lighten for dark backgrounds
+    l += isLightBg ? -3 : 3;
+    l = Math.max(0, Math.min(100, l));
+  }
+
+  // Return best effort after max iterations
+  return hslToHex(h, s, l);
+}
+
 type DeriveOptions = { fontFamily?: string; headingFontFamily?: string };
 
-export function deriveThemeTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
+function deriveDarkTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
   const darkBase = "#0a0a1a";
   const bg = mixWithDark(accent, darkBase, 0.03);
   const surface1 = mixWithDark(accent, darkBase, 0.07);
   const surface2 = mixWithDark(accent, darkBase, 0.05);
-  const muted = lighten(accent, 0.4);
+  const muted = ensureContrast(lighten(accent, 0.4), bg, 4.5);
   const border = mixWithDark(accent, "#1a1a2e", 0.2);
+  const text = ensureContrast("#e2e2f0", bg, 4.5);
 
   const font = opts?.fontFamily ?? "Inter, system-ui, sans-serif";
   const headingFont = opts?.headingFontFamily ?? font;
 
   return {
     version: "1.0.0",
-    palette: { bg, surface1, surface2, accent, muted, border, text: "#e2e2f0" },
+    palette: { bg, surface1, surface2, accent, muted, border, text },
     typography: { fontFamily: font, headingFontFamily: headingFont },
     spacing: { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px" },
     radius: { sm: "6px", md: "10px", lg: "14px", xl: "18px" },
@@ -116,8 +158,47 @@ export function deriveThemeTokens(accent: string, opts?: DeriveOptions): ThemeTo
   };
 }
 
+export function deriveLightTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
+  const bg = "#fafafa";
+  const surface1 = "#ffffff";
+  const surface2 = "#f4f4f6";
+  const text = "#1a1a2e";
+  const border = "#d4d4dc";
+  const muted = ensureContrast("#6b7280", bg, 4.5);
+  const accentAdj = ensureContrast(accent, bg, 4.5);
+
+  const font = opts?.fontFamily ?? "Inter, system-ui, sans-serif";
+  const headingFont = opts?.headingFontFamily ?? font;
+
+  return {
+    version: "1.0.0",
+    palette: { bg, surface1, surface2, accent: accentAdj, muted, border, text },
+    typography: { fontFamily: font, headingFontFamily: headingFont },
+    spacing: { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px" },
+    radius: { sm: "6px", md: "10px", lg: "14px", xl: "18px" },
+    surfaces: { page: bg, panel: surface1, card: surface2, sidebar: surface1, modal: surface2 },
+    states: {
+      idle: accentAdj, hover: darken(accentAdj, 0.10), active: darken(accentAdj, 0.20),
+      focus: lighten(accentAdj, 0.15), success: "#16a34a", warning: "#d97706",
+      error: "#dc2626", info: "#2563eb",
+    },
+    shadows: {
+      panel: "0 18px 48px rgba(0, 0, 0, 0.10)",
+      card: "0 12px 24px rgba(0, 0, 0, 0.08)",
+      button: "0 6px 12px rgba(0, 0, 0, 0.06)",
+    },
+  };
+}
+
+export function deriveThemeTokens(accent: string, opts?: DeriveOptions): DualThemeTokens {
+  return {
+    dark: deriveDarkTokens(accent, opts),
+    light: deriveLightTokens(accent, opts),
+  };
+}
+
 type PresetRow = {
-  id: string; scope: string; companyName: string; logoUrl: string; tokens: ThemeTokens;
+  id: string; scope: string; companyName: string; logoUrl: string; tokens: DualThemeTokens;
 };
 
 const DPF_LOGO = "/logos/open-digital-product-factory-logo.svg";

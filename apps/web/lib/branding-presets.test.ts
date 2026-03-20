@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveThemeTokens,
+  deriveLightTokens,
   OOTB_PRESETS,
   contrastRatio,
   hexToHsl,
@@ -8,33 +9,30 @@ import {
 } from "./branding-presets";
 
 describe("deriveThemeTokens", () => {
-  it("generates a full token set from an accent color", () => {
+  it("generates dual token sets from an accent color", () => {
     const tokens = deriveThemeTokens("#2563eb");
-    expect(tokens.version).toBe("1.0.0");
-    expect(tokens.palette.accent).toBe("#2563eb");
-    expect(tokens.palette.bg).toBeTruthy();
-    expect(tokens.palette.surface1).toBeTruthy();
-    expect(tokens.palette.surface2).toBeTruthy();
-    expect(tokens.palette.muted).toBeTruthy();
-    expect(tokens.palette.border).toBeTruthy();
-    expect(tokens.typography.fontFamily).toBeTruthy();
-    expect(tokens.typography.headingFontFamily).toBeTruthy();
+    expect(tokens.dark.version).toBe("1.0.0");
+    expect(tokens.dark.palette.accent).toBe("#2563eb");
+    expect(tokens.dark.palette.bg).toBeTruthy();
+    expect(tokens.light.palette.bg).toBe("#fafafa");
   });
 
   it("accepts optional font override", () => {
     const tokens = deriveThemeTokens("#2563eb", { fontFamily: "Roboto" });
-    expect(tokens.typography.fontFamily).toBe("Roboto");
+    expect(tokens.dark.typography.fontFamily).toBe("Roboto");
+    expect(tokens.light.typography.fontFamily).toBe("Roboto");
   });
 
-  it("produces valid hex colors for all palette entries", () => {
-    const tokens = deriveThemeTokens("#d97706");
+  it("produces valid hex colors for all dark palette entries", () => {
+    const { dark } = deriveThemeTokens("#d97706");
     const hexRe = /^#[0-9a-fA-F]{6}$/;
-    expect(tokens.palette.bg).toMatch(hexRe);
-    expect(tokens.palette.surface1).toMatch(hexRe);
-    expect(tokens.palette.surface2).toMatch(hexRe);
-    expect(tokens.palette.accent).toMatch(hexRe);
-    expect(tokens.palette.muted).toMatch(hexRe);
-    expect(tokens.palette.border).toMatch(hexRe);
+    expect(dark.palette.bg).toMatch(hexRe);
+    expect(dark.palette.surface1).toMatch(hexRe);
+    expect(dark.palette.surface2).toMatch(hexRe);
+    expect(dark.palette.accent).toMatch(hexRe);
+    expect(dark.palette.muted).toMatch(hexRe);
+    expect(dark.palette.border).toMatch(hexRe);
+    expect(dark.palette.text).toMatch(hexRe);
   });
 });
 
@@ -43,13 +41,99 @@ describe("OOTB_PRESETS", () => {
     expect(OOTB_PRESETS).toHaveLength(6);
   });
 
-  it("each preset has required fields", () => {
+  it("each preset has required fields with dual tokens", () => {
     for (const preset of OOTB_PRESETS) {
       expect(preset.scope).toMatch(/^theme-preset:/);
       expect(preset.companyName).toBeTruthy();
       expect(preset.logoUrl).toBe("/logos/open-digital-product-factory-logo.svg");
-      expect(preset.tokens.palette.accent).toBeTruthy();
+      expect(preset.tokens.dark.palette.accent).toBeTruthy();
+      expect(preset.tokens.light.palette.accent).toBeTruthy();
     }
+  });
+});
+
+describe("deriveThemeTokens (dual)", () => {
+  it("returns an object with dark and light keys", () => {
+    const tokens = deriveThemeTokens("#2563eb");
+    expect(tokens).toHaveProperty("dark");
+    expect(tokens).toHaveProperty("light");
+  });
+
+  it("dark palette has dark background, light text", () => {
+    const { dark } = deriveThemeTokens("#2563eb");
+    const bgHsl = hexToHsl(dark.palette.bg);
+    expect(bgHsl.l).toBeLessThan(20);
+    expect(dark.palette.text).toBe("#e2e2f0");
+  });
+
+  it("light palette has light background, dark text", () => {
+    const { light } = deriveThemeTokens("#2563eb");
+    expect(light.palette.bg).toBe("#fafafa");
+    expect(light.palette.surface1).toBe("#ffffff");
+    expect(light.palette.text).toBe("#1a1a2e");
+  });
+
+  it("light palette shadows have lower opacity than dark", () => {
+    const { dark, light } = deriveThemeTokens("#2563eb");
+    const getOpacity = (s: string) => parseFloat(s.match(/[\d.]+\)$/)?.[0] ?? "0");
+    expect(getOpacity(light.shadows.panel)).toBeLessThan(getOpacity(dark.shadows.panel));
+  });
+
+  it("preserves accent hue between modes", () => {
+    const { dark, light } = deriveThemeTokens("#2563eb");
+    const darkHsl = hexToHsl(dark.palette.accent);
+    const lightHsl = hexToHsl(light.palette.accent);
+    expect(Math.abs(darkHsl.h - lightHsl.h)).toBeLessThan(5);
+  });
+
+  it("all 6 OOTB presets produce valid dual tokens", () => {
+    for (const preset of OOTB_PRESETS) {
+      expect(preset.tokens).toHaveProperty("dark");
+      expect(preset.tokens).toHaveProperty("light");
+      const { dark, light } = preset.tokens;
+      expect(dark.palette.bg).toBeTruthy();
+      expect(light.palette.bg).toBe("#fafafa");
+    }
+  });
+});
+
+describe("deriveLightTokens", () => {
+  it("is exported and callable", () => {
+    const light = deriveLightTokens("#2563eb");
+    expect(light.version).toBe("1.0.0");
+    expect(light.palette.bg).toBe("#fafafa");
+  });
+
+  it("produces valid hex colors for all palette entries", () => {
+    const light = deriveLightTokens("#d97706");
+    const hexRe = /^#[0-9a-fA-F]{6}$/;
+    expect(light.palette.bg).toMatch(hexRe);
+    expect(light.palette.surface1).toMatch(hexRe);
+    expect(light.palette.surface2).toMatch(hexRe);
+    expect(light.palette.accent).toMatch(hexRe);
+    expect(light.palette.muted).toMatch(hexRe);
+    expect(light.palette.border).toMatch(hexRe);
+    expect(light.palette.text).toMatch(hexRe);
+  });
+
+  it("uses darker state colors suitable for light backgrounds", () => {
+    const light = deriveLightTokens("#2563eb");
+    expect(light.states.success).toBe("#16a34a");
+    expect(light.states.warning).toBe("#d97706");
+    expect(light.states.error).toBe("#dc2626");
+    expect(light.states.info).toBe("#2563eb");
+  });
+
+  it("accent meets 4.5:1 contrast against light background", () => {
+    const light = deriveLightTokens("#2563eb");
+    const ratio = contrastRatio(light.palette.accent, light.palette.bg);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("muted meets 4.5:1 contrast against light background", () => {
+    const light = deriveLightTokens("#2563eb");
+    const ratio = contrastRatio(light.palette.muted, light.palette.bg);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 });
 
