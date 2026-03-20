@@ -273,6 +273,17 @@ export async function profileModelsInternal(
     const price = card.pricing.outputPerMToken;
     const costTier = price == null ? "$" : price < 5 ? "$" : price < 15 ? "$$" : "$$$";
 
+    // EP-INF-003: Drift detection — check if provider metadata changed
+    const existingProfile = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      select: { rawMetadataHash: true },
+    });
+    if (existingProfile?.rawMetadataHash && existingProfile.rawMetadataHash !== card.rawMetadataHash) {
+      console.log(
+        `[drift] Provider metadata changed for ${providerId}/${m.modelId} — hash ${existingProfile.rawMetadataHash.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
+      );
+    }
+
     // EP-INF-003: ModelCard fields for upsert
     const cardFields = {
       modelFamily: card.modelFamily,
@@ -345,4 +356,38 @@ export async function profileModelsInternal(
   }
 
   return { profiled, failed: 0 };
+}
+
+
+/**
+ * EP-INF-003: Backfill ModelCard fields for all existing ModelProfiles.
+ * Reads all DiscoveredModel records and re-extracts ModelCard data using
+ * the adapter registry, then writes the card fields to the corresponding
+ * ModelProfile rows. Safe to run repeatedly — uses updateMany.
+ */
+export async function backfillModelCards(): Promise<number> {
+  const discovered = await prisma.discoveredModel.findMany();
+  let updated = 0;
+  for (const dm of discovered) {
+    const card = extractModelCardWithFallback(dm.providerId, dm.modelId, dm.rawMetadata as Record<string, unknown>);
+    await prisma.modelProfile.updateMany({
+      where: { providerId: dm.providerId, modelId: dm.modelId },
+      data: {
+        modelFamily: card.modelFamily,
+        modelClass: card.modelClass,
+        maxInputTokens: card.maxInputTokens,
+        inputModalities: card.inputModalities as any,
+        outputModalities: card.outputModalities as any,
+        capabilities: card.capabilities as any,
+        pricing: card.pricing as any,
+        supportedParameters: card.supportedParameters as any,
+        metadataSource: card.metadataSource,
+        metadataConfidence: card.metadataConfidence,
+        lastMetadataRefresh: new Date(),
+        rawMetadataHash: card.rawMetadataHash,
+      },
+    });
+    updated++;
+  }
+  return updated;
 }
