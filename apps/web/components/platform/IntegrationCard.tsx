@@ -3,6 +3,7 @@
 import { Decimal } from "@prisma/client/runtime/library";
 
 type Integration = {
+  id: string;
   name: string;
   vendor: string | null;
   shortDescription: string | null;
@@ -13,6 +14,7 @@ type Integration = {
   isVerified: boolean;
   documentationUrl: string | null;
   logoUrl: string | null;
+  activeServerId?: string | null;
 };
 
 const PRICING_BADGES: Record<string, string> = {
@@ -45,6 +47,14 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
             <span className="font-semibold truncate">{integration.name}</span>
             {integration.isVerified && (
               <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">✓ Verified</span>
+            )}
+            {integration.activeServerId && (
+              <a
+                href={`/platform/services/${integration.activeServerId}`}
+                className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded hover:underline"
+              >
+                Active
+              </a>
             )}
             {integration.pricingModel && (
               <span className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
@@ -80,6 +90,14 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
               className="text-xs text-primary hover:underline"
             >
               Docs →
+            </a>
+          )}
+          {!integration.activeServerId && (
+            <a
+              href={`/platform/services/activate?integrationId=${integration.id}`}
+              className="text-xs text-primary hover:underline"
+            >
+              Activate &rarr;
             </a>
           )}
         </div>
