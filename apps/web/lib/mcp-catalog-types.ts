@@ -18,6 +18,7 @@ export interface RegistryServerEntry {
 /** Minimal shape returned by glama.ai/api/mcp/v1/servers/{id} */
 export interface GlamaServerEntry {
   id: string;
+  shortDescription?: string;
   logoUrl?: string;
   pricing?: { model: string };
   stats?: { rating: number; ratingCount: number; installCount: number };
@@ -32,8 +33,8 @@ export interface GlamaServerEntry {
  */
 export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   // Payments / commerce
-  payments:     ["retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-grooming", "pet-care"],
-  ecommerce:    ["retail-goods", "artisan-goods", "florist"],
+  payments:     ["retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-grooming", "pet-care", "professional-services"],
+  ecommerce:    ["retail-goods", "artisan-goods", "florist", "food-hospitality"],
   commerce:     ["retail-goods", "artisan-goods", "restaurant", "catering", "bakery"],
   pos:          ["retail-goods", "food-hospitality"],
   // Booking / scheduling
