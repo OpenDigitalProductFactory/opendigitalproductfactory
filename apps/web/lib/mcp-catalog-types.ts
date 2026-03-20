@@ -8,8 +8,7 @@ export interface RegistryServerEntry {
   name: string;
   description?: string;
   vendor?: string;
-  repositoryUrl?: string;
-  documentationUrl?: string;
+  repository?: { url: string };
   category?: string;
   subcategory?: string;
   tags?: string[];
@@ -20,10 +19,8 @@ export interface RegistryServerEntry {
 export interface GlamaServerEntry {
   id: string;
   logoUrl?: string;
-  rating?: number;
-  ratingCount?: number;
-  installCount?: number;
-  pricingModel?: string;
+  pricing?: { model: string };
+  stats?: { rating: number; ratingCount: number; installCount: number };
 }
 
 // ─── Tag → Archetype ruleset ──────────────────────────────────────────────────
@@ -48,7 +45,7 @@ export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   marketing:    ["retail-goods", "food-hospitality", "fitness-recreation", "professional-services"],
   crm:          ["it-managed-services", "legal-services", "accounting", "marketing-agency", "consulting", "facilities-maintenance"],
   // Website / content
-  cms:          ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
+  cms:          ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community", "media-content"],
   wordpress:    ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
   // Cloud / infrastructure
   cloud:        ["it-managed-services", "consulting", "marketing-agency"],
@@ -64,6 +61,20 @@ export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   // Finance / accounting
   accounting:   ["accounting", "legal-services", "it-managed-services"],
   invoicing:    ["accounting", "it-managed-services", "consulting", "facilities-maintenance", "plumber", "electrician"],
+  // Analytics (cross-cutting — applies to all archetypes)
+  analytics:    [
+    "retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-grooming", "pet-care",
+    "artisan-goods", "florist", "restaurant", "catering", "bakery",
+    "veterinary-clinic", "dental-practice", "physiotherapy", "counselling", "optician",
+    "hair-salon", "barber-shop", "nail-salon", "beauty-spa", "personal-trainer", "gym", "yoga-studio", "dance-studio",
+    "corporate-training", "tutoring",
+    "nonprofit-community", "charity", "sports-club",
+    "professional-services",
+    "it-managed-services", "legal-services", "accounting", "marketing-agency", "consulting", "facilities-maintenance",
+    "media-content",
+    "pet-rescue", "animal-shelter", "community-shelter",
+    "plumber", "electrician",
+  ],
 };
 
 /**
