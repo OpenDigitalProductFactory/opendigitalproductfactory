@@ -39,6 +39,8 @@ model User {
   teamMemberships              TeamMembership[]
   groups                       UserGroup[]
   userSkills                   UserSkill[]              @relation("UserSkillCreator")
+  invoicesCreated              Invoice[]                @relation("InvoiceCreations")
+  paymentsCreated              Payment[]                @relation("PaymentCreations")
 }
 
 model UserGroup {
@@ -52,15 +54,29 @@ model UserGroup {
 }
 
 model CustomerContact {
-  id               String           @id @default(cuid())
-  email            String           @unique
+  id               String               @id @default(cuid())
+  email            String               @unique
   passwordHash     String?
   accountId        String
-  isActive         Boolean          @default(true)
-  createdAt        DateTime         @default(now())
-  name             String?
-  account          CustomerAccount  @relation(fields: [accountId], references: [id])
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  name             String?              // Legacy — use firstName+lastName for new code
+  firstName        String?
+  lastName         String?
+  phone            String?
+  jobTitle         String?
+  linkedinUrl      String?
+  source           String?              // web | referral | import | manual
+  doNotContact     Boolean              @default(false)
+  avatarUrl        String?
+  updatedAt        DateTime             @default(now()) @updatedAt
+  account          CustomerAccount      @relation(fields: [accountId], references: [id])
   socialIdentities SocialIdentity[]
+  accountRoles     ContactAccountRole[]
+  invoices         Invoice[]
+
+  @@index([lastName])
+  @@index([phone])
 }
 
 model SocialIdentity {
@@ -647,9 +663,8 @@ model ImprovementProposal {
 model BrandingConfig {
   id             String        @id @default(cuid())
   scope          String        @unique
-  companyName    String
+  label          String        @default("")
   tokens         Json
-  logoUrl        String?
   updatedAt      DateTime      @updatedAt
   logoUrlLight   String?
   organizationId String?       @unique
@@ -1038,14 +1053,49 @@ model AuthorizationDecisionLog {
 }
 
 model CustomerAccount {
-  id        String            @id @default(cuid())
-  accountId String            @unique
-  name      String
-  status    String            @default("prospect")
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  invites   AccountInvite[]
-  contacts  CustomerContact[]
+  id              String               @id @default(cuid())
+  accountId       String               @unique
+  name            String
+  status          String               @default("prospect")
+  // prospect | qualified | onboarding | active | at_risk | suspended | closed
+  website         String?
+  industry        String?
+  employeeCount   Int?
+  annualRevenue   Decimal?
+  currency        String               @default("GBP")
+  notes           String?
+  sourceSystem    String?
+  sourceId        String?
+  parentAccountId String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  invites         AccountInvite[]
+  contacts        CustomerContact[]
+  contactRoles    ContactAccountRole[]
+  parentAccount   CustomerAccount?     @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  childAccounts   CustomerAccount[]    @relation("AccountHierarchy")
+  invoices        Invoice[]
+
+  @@index([status])
+  @@index([parentAccountId])
+}
+
+model ContactAccountRole {
+  id        String           @id @default(cuid())
+  contactId String
+  accountId String
+  roleTitle String?          // e.g. "CEO", "Developer", "Consultant"
+  isPrimary Boolean          @default(false)
+  startedAt DateTime         @default(now())
+  endedAt   DateTime?
+  createdAt DateTime         @default(now())
+  contact   CustomerContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  account   CustomerAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, accountId, startedAt])
+  @@index([contactId])
+  @@index([accountId])
+  @@index([isPrimary])
 }
 
 model Organization {
@@ -2913,4 +2963,117 @@ model McpCatalogSync {
   error             String?   @db.Text
 
   @@index([startedAt])
+}
+
+// ─── Finance: Invoicing & Payments ─────────────────────────────────
+
+model Invoice {
+  id              String              @id @default(cuid())
+  invoiceRef      String              @unique
+  type            String              @default("standard")
+  status          String              @default("draft")
+  accountId       String
+  contactId       String?
+  sourceType      String?
+  sourceId        String?
+  issueDate       DateTime            @default(now())
+  dueDate         DateTime
+  currency        String              @default("GBP")
+  subtotal        Decimal
+  taxAmount       Decimal             @default(0)
+  discountAmount  Decimal             @default(0)
+  totalAmount     Decimal
+  amountPaid      Decimal             @default(0)
+  amountDue       Decimal
+  paymentTerms    String?
+  notes           String?
+  internalNotes   String?
+  sentAt          DateTime?
+  viewedAt        DateTime?
+  paidAt          DateTime?
+  voidedAt        DateTime?
+  reminderCount   Int                 @default(0)
+  lastReminderAt  DateTime?
+  erpSyncStatus   String?             @default("pending")
+  erpRefId        String?
+  createdById     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  account         CustomerAccount     @relation(fields: [accountId], references: [id])
+  contact         CustomerContact?    @relation(fields: [contactId], references: [id])
+  createdBy       User?               @relation("InvoiceCreations", fields: [createdById], references: [id])
+  lineItems       InvoiceLineItem[]
+  allocations     PaymentAllocation[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([sourceType, sourceId])
+}
+
+model InvoiceLineItem {
+  id              String              @id @default(cuid())
+  invoiceId       String
+  description     String
+  quantity        Decimal             @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal             @default(0)
+  taxAmount       Decimal             @default(0)
+  discountPercent Decimal             @default(0)
+  lineTotal       Decimal
+  accountCode     String?
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  invoice         Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id                 String              @id @default(cuid())
+  paymentRef         String              @unique
+  direction          String
+  method             String
+  status             String              @default("pending")
+  amount             Decimal
+  currency           String              @default("GBP")
+  exchangeRate       Decimal             @default(1)
+  baseCurrencyAmount Decimal?
+  reference          String?
+  stripePaymentId    String?
+  counterpartyId     String?
+  counterpartyType   String?
+  receivedAt         DateTime?
+  processedAt        DateTime?
+  reconciled         Boolean             @default(false)
+  reconciledAt       DateTime?
+  erpSyncStatus      String?             @default("pending")
+  erpRefId           String?
+  notes              String?
+  createdById        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  createdBy          User?               @relation("PaymentCreations", fields: [createdById], references: [id])
+  allocations        PaymentAllocation[]
+
+  @@index([direction])
+  @@index([status])
+  @@index([counterpartyId, counterpartyType])
+}
+
+model PaymentAllocation {
+  id              String              @id @default(cuid())
+  paymentId       String
+  invoiceId       String?
+  amount          Decimal
+  createdAt       DateTime            @default(now())
+
+  payment         Payment             @relation(fields: [paymentId], references: [id])
+  invoice         Invoice?            @relation(fields: [invoiceId], references: [id])
+
+  @@index([paymentId])
+  @@index([invoiceId])
 }
