@@ -84,6 +84,7 @@ In `packages/db/prisma/schema.prisma`, find the `ModelProfile` model (around lin
   modelStatus              String     @default("active")
   retiredAt                DateTime?
   retiredReason            String?
+  lastSeenAt               DateTime?
 ```
 
 Note: Field is named `modelStatus` not `status` to avoid collision with any Prisma reserved patterns. The existing `capabilityTier`, `codingCapability`, `instructionFollowing` (string fields) stay — they're used by legacy code and removed in Phase 7.
@@ -604,7 +605,7 @@ export async function persistRouteDecision(
 cd apps/web && npx vitest run lib/routing/
 ```
 
-Note: Some pipeline tests may need fixture updates to include `modelId`. Fix any failures.
+IMPORTANT: The pipeline test fixtures in `pipeline.test.ts` need `modelId` added to the `makeEndpoint` helper since `EndpointManifest.modelId` is now a required field. Add `modelId: "test-model"` to the default object in `makeEndpoint`, and update the specific fixtures: `sonnet` gets `modelId: "claude-sonnet-4-5"`, `llama` gets `modelId: "llama3.1"`, etc. Similarly update `scoring.test.ts` fixtures. Do this BEFORE running tests.
 
 - [ ] **Step 7: Commit**
 
@@ -662,7 +663,16 @@ const fallbackEntries = decision.fallbackChain.map(epId => {
   const candidate = decision.candidates.find(c => c.endpointId === epId && !c.excluded);
   return { providerId: epId, modelId: candidate?.modelId ?? "" };
 });
-const chain = [selectedEntry, ...fallbackEntries];
+const allEntries = [selectedEntry, ...fallbackEntries];
+
+// Deduplicate using composite key (old code used string Set on providerId alone)
+const seen = new Set<string>();
+const chain = allEntries.filter(e => {
+  const key = `${e.providerId}::${e.modelId}`;
+  if (seen.has(key)) return false;
+  seen.add(key);
+  return true;
+});
 ```
 
 Then iterate using `entry.providerId` and `entry.modelId` directly instead of calling `resolveModelId`.
@@ -784,11 +794,16 @@ if (!isLocalProvider) {
 
   for (const known of allKnown) {
     if (freshIds.has(known.modelId)) {
-      // Model still exists — reset counter
+      // Model still exists — reset counter and reactivate if retired
       if (known.missedDiscoveryCount > 0) {
         await prisma.discoveredModel.update({
           where: { id: known.id },
           data: { missedDiscoveryCount: 0 },
+        });
+        // Re-appearance: reactivate retired models
+        await prisma.modelProfile.updateMany({
+          where: { providerId, modelId: known.modelId, modelStatus: "retired" },
+          data: { modelStatus: "active", retiredAt: null, retiredReason: null },
         });
       }
     } else {

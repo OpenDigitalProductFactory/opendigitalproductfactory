@@ -174,7 +174,7 @@ SELECT mp.providerId, mp.modelId, mp.reasoning, mp.codegen, ...
 FROM ModelProfile mp
 JOIN ModelProvider prov ON mp.providerId = prov.providerId
 WHERE prov.status IN ('active', 'degraded')
-  AND mp.status = 'active'
+  AND mp.modelStatus = 'active'
   AND mp.retiredAt IS NULL
 ```
 
@@ -188,12 +188,13 @@ The router now returns a `RouteDecision` with both `providerId` and `modelId`. T
 
 ```typescript
 interface RouteDecision {
-  selectedEndpoint: string | null;  // "${providerId}::${modelId}"
-  selectedProviderId: string | null;
-  selectedModelId: string | null;
+  selectedEndpoint: string | null;  // providerId (backward compatible)
+  selectedModelId: string | null;   // modelId from ModelProfile
   // ... rest unchanged
 }
 ```
+
+Note: `selectedEndpoint` stays as plain `providerId` for backward compatibility with existing `EndpointTaskPerformance` and `RouteDecisionLog` records. The compound key format (`"${providerId}::${modelId}"`) was considered but rejected to avoid orphaning historical data.
 
 The `RouteDecisionLog` table gains a `selectedModelId` column.
 
@@ -375,7 +376,7 @@ The orchestrator-evaluator already knows the `modelId` (it's in the `FailoverRes
 
 ```typescript
 const models = await prisma.modelProfile.findMany({
-  where: { status: "active", retiredAt: null },
+  where: { modelStatus: "active", retiredAt: null },
   include: { provider: { select: { status: true } } },
 });
 // Filter to providers that are active
