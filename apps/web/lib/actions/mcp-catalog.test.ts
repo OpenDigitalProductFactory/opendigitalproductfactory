@@ -1,0 +1,136 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/mcp-catalog-sync", () => ({ runMcpCatalogSync: vi.fn() }));
+vi.mock("@/lib/ai-provider-types", () => ({
+  computeNextRunAt: vi.fn().mockReturnValue(new Date("2026-04-01")),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    mcpCatalogSync: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    scheduledJob: {
+      upsert: vi.fn(),
+      update: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    mcpIntegration: {
+      findMany: vi.fn(),
+      count: vi.fn(),
+    },
+  },
+}));
+
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
+import { prisma } from "@dpf/db";
+import { runMcpCatalogSync } from "@/lib/mcp-catalog-sync";
+import { triggerMcpCatalogSync, queryMcpIntegrations, updateMcpCatalogSchedule } from "./mcp-catalog";
+
+const mockAdminSession = {
+  user: { id: "user-1", email: "admin@test.com", platformRole: "HR-000", isSuperuser: true },
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(auth).mockResolvedValue(mockAdminSession as never);
+  vi.mocked(can).mockReturnValue(true);
+  vi.mocked(prisma.mcpCatalogSync.findFirst).mockResolvedValue(null);
+  vi.mocked(prisma.mcpCatalogSync.create).mockResolvedValue({ id: "sync-1" } as never);
+  vi.mocked(prisma.scheduledJob.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.scheduledJob.update).mockResolvedValue({} as never);
+  vi.mocked(prisma.scheduledJob.findUnique).mockResolvedValue({ schedule: "weekly" } as never);
+  vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.mcpIntegration.count).mockResolvedValue(0);
+  vi.mocked(runMcpCatalogSync).mockResolvedValue(undefined);
+});
+
+describe("triggerMcpCatalogSync", () => {
+  it("rejects unauthenticated callers", async () => {
+    vi.mocked(auth).mockResolvedValue(null as never);
+    const result = await triggerMcpCatalogSync();
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects callers without manage_provider_connections", async () => {
+    vi.mocked(can).mockReturnValue(false);
+    const result = await triggerMcpCatalogSync();
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects when sync already running", async () => {
+    vi.mocked(prisma.mcpCatalogSync.findFirst).mockResolvedValue({ id: "running-1", status: "running" } as never);
+    const result = await triggerMcpCatalogSync();
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("already in progress");
+  });
+
+  it("creates a sync record and returns syncId", async () => {
+    const result = await triggerMcpCatalogSync();
+    expect(prisma.mcpCatalogSync.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ triggeredBy: "manual", triggeredByUserId: "user-1" }) })
+    );
+    expect(result.ok).toBe(true);
+    expect(result.syncId).toBe("sync-1");
+  });
+});
+
+describe("queryMcpIntegrations", () => {
+  it("returns integrations matching query", async () => {
+    vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
+      { id: "1", name: "Stripe", category: "finance", status: "active" } as never,
+    ]);
+    const result = await queryMcpIntegrations({ query: "stripe" });
+    expect(result.length).toBe(1);
+    expect(result[0].name).toBe("Stripe");
+  });
+
+  it("filters by category", async () => {
+    await queryMcpIntegrations({ query: "payment", category: "finance" });
+    expect(prisma.mcpIntegration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ category: "finance" }),
+      })
+    );
+  });
+
+  it("filters by pricingModel", async () => {
+    await queryMcpIntegrations({ query: "anything", pricingModel: "free" });
+    expect(prisma.mcpIntegration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ pricingModel: "free" }),
+      })
+    );
+  });
+
+  it("only returns active status entries", async () => {
+    await queryMcpIntegrations({ query: "stripe" });
+    expect(prisma.mcpIntegration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "active" }),
+      })
+    );
+  });
+});
+
+describe("updateMcpCatalogSchedule", () => {
+  it("rejects callers without manage_provider_connections", async () => {
+    vi.mocked(can).mockReturnValue(false);
+    await expect(updateMcpCatalogSchedule("weekly")).rejects.toThrow("Unauthorized");
+  });
+
+  it("upserts the ScheduledJob with new schedule and nextRunAt", async () => {
+    await updateMcpCatalogSchedule("monthly");
+    expect(prisma.scheduledJob.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { jobId: "mcp-catalog-sync" },
+        update: expect.objectContaining({ schedule: "monthly" }),
+      })
+    );
+  });
+});
