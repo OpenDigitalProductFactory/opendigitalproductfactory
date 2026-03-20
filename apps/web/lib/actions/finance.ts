@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
+import { nanoid } from "nanoid";
 import type { CreateInvoiceInput, RecordPaymentInput } from "@/lib/finance-validation";
 import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 
@@ -270,5 +271,139 @@ export async function listInvoices(filters?: ListInvoicesFilters) {
       contact: { select: { id: true, email: true, firstName: true, lastName: true } },
     },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+// ─── generateInvoiceFromSalesOrder ────────────────────────────────────────────
+
+export async function generateInvoiceFromSalesOrder(salesOrderId: string) {
+  // Check idempotency: skip if invoice already exists for this source
+  const existing = await prisma.invoice.findFirst({
+    where: { sourceType: "sales_order", sourceId: salesOrderId },
+  });
+  if (existing) return existing;
+
+  const order = await prisma.salesOrder.findUnique({
+    where: { id: salesOrderId },
+    include: { quote: { include: { lineItems: true } }, account: true },
+  });
+  if (!order) throw new Error("Sales order not found");
+
+  // Map quote line items to invoice line items
+  const lineItems = order.quote.lineItems.map((li: {
+    description: string;
+    quantity: unknown;
+    unitPrice: unknown;
+    taxPercent: unknown;
+    discountPercent: unknown;
+  }) => ({
+    description: li.description,
+    quantity: Number(li.quantity),
+    unitPrice: Number(li.unitPrice),
+    taxRate: Number(li.taxPercent),
+    discountPercent: Number(li.discountPercent),
+  }));
+
+  return createInvoice({
+    accountId: order.accountId,
+    dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]!,
+    currency: order.currency,
+    sourceType: "sales_order",
+    sourceId: salesOrderId,
+    lineItems,
+  });
+}
+
+// ─── generateInvoiceFromStorefrontOrder ───────────────────────────────────────
+
+export async function generateInvoiceFromStorefrontOrder(orderId: string) {
+  const existing = await prisma.invoice.findFirst({
+    where: { sourceType: "storefront_order", sourceId: orderId },
+  });
+  if (existing) return existing;
+
+  const order = await prisma.storefrontOrder.findUnique({ where: { id: orderId } });
+  if (!order) throw new Error("Storefront order not found");
+
+  // StorefrontOrder has no accountId — find or create CustomerAccount from customerEmail
+  let contact = await prisma.customerContact.findUnique({
+    where: { email: order.customerEmail },
+    include: { account: true },
+  });
+  if (!contact) {
+    const account = await prisma.customerAccount.create({
+      data: {
+        accountId: `CA-${nanoid(8)}`,
+        name: order.customerEmail.split("@")[0] ?? "Customer",
+        status: "prospect",
+      },
+    });
+    contact = await prisma.customerContact.create({
+      data: { email: order.customerEmail, accountId: account.id },
+      include: { account: true },
+    });
+  }
+
+  // Map JSON items to invoice line items
+  const items = order.items as Array<{ name: string; qty: number; unitPrice: number }>;
+  const lineItems = items.map((item) => ({
+    description: item.name,
+    quantity: item.qty,
+    unitPrice: item.unitPrice,
+    taxRate: 0,
+  }));
+
+  return createInvoice({
+    accountId: contact.account.id,
+    contactId: contact.id,
+    dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]!,
+    currency: order.currency,
+    sourceType: "storefront_order",
+    sourceId: orderId,
+    lineItems,
+  });
+}
+
+// ─── sendInvoice ──────────────────────────────────────────────────────────────
+
+export async function sendInvoice(invoiceId: string): Promise<{ payToken: string }> {
+  await requireManageFinance();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, payToken: true, status: true },
+  });
+  if (!invoice) throw new Error("Invoice not found");
+
+  const payToken = invoice.payToken ?? nanoid(32);
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { payToken, status: "sent", sentAt: new Date() },
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/invoices");
+  return { payToken };
+}
+
+// ─── getInvoiceByPayToken ─────────────────────────────────────────────────────
+
+export async function getInvoiceByPayToken(token: string) {
+  return prisma.invoice.findUnique({
+    where: { payToken: token },
+    include: {
+      lineItems: { orderBy: { sortOrder: "asc" } },
+      account: { select: { name: true } },
+    },
+  });
+}
+
+// ─── markInvoiceViewed ────────────────────────────────────────────────────────
+
+export async function markInvoiceViewed(invoiceId: string): Promise<void> {
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { viewedAt: new Date(), status: "viewed" },
   });
 }

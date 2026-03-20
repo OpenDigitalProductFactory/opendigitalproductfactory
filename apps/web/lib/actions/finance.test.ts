@@ -4,9 +4,13 @@ vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
-    invoice: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    invoice: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
     payment: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
     paymentAllocation: { create: vi.fn() },
+    salesOrder: { findUnique: vi.fn() },
+    storefrontOrder: { findUnique: vi.fn() },
+    customerContact: { findUnique: vi.fn(), create: vi.fn() },
+    customerAccount: { create: vi.fn() },
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -14,7 +18,16 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { createInvoice, recordPayment, getInvoice, listInvoices, updateInvoiceStatus } from "./finance";
+import {
+  createInvoice,
+  recordPayment,
+  getInvoice,
+  listInvoices,
+  updateInvoiceStatus,
+  generateInvoiceFromSalesOrder,
+  sendInvoice,
+  getInvoiceByPayToken,
+} from "./finance";
 
 const mockAuth = vi.mocked(auth);
 const mockCan = vi.mocked(can);
@@ -309,5 +322,86 @@ describe("updateInvoiceStatus", () => {
     const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
     expect(updateCall.data.status).toBe("paid");
     expect(updateCall.data.paidAt).toBeInstanceOf(Date);
+  });
+});
+
+// ─── generateInvoiceFromSalesOrder ────────────────────────────────────────────
+
+describe("generateInvoiceFromSalesOrder", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({
+      user: { id: "user1", platformRole: "HR-000", isSuperuser: true },
+      expires: "",
+    } as never);
+    mockCan.mockReturnValue(true);
+  });
+
+  it("skips if invoice already exists for this source (idempotent)", async () => {
+    mockPrisma.invoice.findFirst.mockResolvedValue({ id: "existing" } as never);
+
+    const result = await generateInvoiceFromSalesOrder("so-1");
+    expect(result).toEqual({ id: "existing" });
+    expect(mockPrisma.salesOrder.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("throws if sales order not found", async () => {
+    mockPrisma.invoice.findFirst.mockResolvedValue(null);
+    mockPrisma.salesOrder.findUnique.mockResolvedValue(null);
+
+    await expect(generateInvoiceFromSalesOrder("so-404")).rejects.toThrow("Sales order not found");
+  });
+});
+
+// ─── sendInvoice ──────────────────────────────────────────────────────────────
+
+describe("sendInvoice", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({
+      user: { id: "user1", platformRole: "HR-000", isSuperuser: true },
+      expires: "",
+    } as never);
+    mockCan.mockReturnValue(true);
+  });
+
+  it("generates payToken and updates status to sent", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv1", payToken: null, status: "draft" } as never);
+    mockPrisma.invoice.update.mockResolvedValue({} as never);
+
+    const result = await sendInvoice("inv1");
+    expect(result.payToken).toBeTruthy();
+    expect(result.payToken.length).toBe(32);
+    expect(mockPrisma.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "sent" }),
+      }),
+    );
+  });
+
+  it("reuses existing payToken", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv1", payToken: "existing-token", status: "draft" } as never);
+    mockPrisma.invoice.update.mockResolvedValue({} as never);
+
+    const result = await sendInvoice("inv1");
+    expect(result.payToken).toBe("existing-token");
+  });
+});
+
+// ─── getInvoiceByPayToken ─────────────────────────────────────────────────────
+
+describe("getInvoiceByPayToken", () => {
+  it("returns invoice for valid token", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv1", invoiceRef: "INV-2026-0001" } as never);
+
+    const result = await getInvoiceByPayToken("valid-token");
+    expect(result?.id).toBe("inv1");
+  });
+
+  it("returns null for invalid token", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue(null);
+
+    const result = await getInvoiceByPayToken("bad-token");
+    expect(result).toBeNull();
   });
 });
