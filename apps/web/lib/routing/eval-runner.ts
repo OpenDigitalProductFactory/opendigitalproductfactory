@@ -116,13 +116,15 @@ async function runGoldenTest(
       response: result.content.slice(0, 500),
     };
   } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error(`[eval-runner] test ${test.id} failed on ${endpointId}/${modelId}: ${errorMessage}`);
     return {
       testId: test.id,
       version: test.version,
       scoring: test.scoring,
       score: 0,
       response: "",
-      error: e instanceof Error ? e.message : String(e),
+      error: errorMessage || "unknown error",
     };
   }
 }
@@ -212,6 +214,8 @@ export interface EvalRunResult {
   testRunId: string;
   hasDrift: boolean;
   hasSevereDrift: boolean;
+  /** First error message encountered across all tests, if any. Null when all tests succeeded. */
+  firstError: string | null;
 }
 
 /**
@@ -304,6 +308,11 @@ export async function runDimensionEval(
     },
   });
 
+  // Collect first error for top-level surfacing (avoids deep-nesting serialization issues)
+  const firstError = dimensions
+    .flatMap((d) => d.testResults)
+    .find((t) => t.error)?.error ?? null;
+
   return {
     endpointId: providerId,
     modelId,
@@ -311,6 +320,7 @@ export async function runDimensionEval(
     testRunId: runId,
     hasDrift,
     hasSevereDrift,
+    firstError,
   };
 }
 
