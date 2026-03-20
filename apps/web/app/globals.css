@@ -2,20 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light mode defaults (fallback when no BrandingConfig exists) */
 :root {
-  --dpf-bg: #0f0f1a;
-  --dpf-surface-1: #1a1a2e;
-  --dpf-surface-2: #161625;
-  --dpf-accent: #7c8cf8;
-  --dpf-border: #2a2a40;
-  --dpf-muted: #8888a0;
+  --dpf-bg: #fafafa;
+  --dpf-surface-1: #ffffff;
+  --dpf-surface-2: #f4f4f6;
+  --dpf-text: #1a1a2e;
+  --dpf-accent: #2563eb;
+  --dpf-border: #d4d4dc;
+  --dpf-muted: #6b7280;
   --dpf-font-body: Inter, system-ui, sans-serif;
   --dpf-font-heading: Inter, system-ui, sans-serif;
 }
 
+/* Dark mode defaults */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dpf-bg: #0f0f1a;
+    --dpf-surface-1: #1a1a2e;
+    --dpf-surface-2: #161625;
+    --dpf-text: #e2e2f0;
+    --dpf-accent: #7c8cf8;
+    --dpf-border: #2a2a40;
+    --dpf-muted: #8888a0;
+  }
+}
+
+/* Logo visibility toggles */
+.logo-light { display: block; }
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .logo-light { display: none; }
+  .logo-dark { display: block; }
+}
+
 body {
   background: var(--dpf-bg);
-  color: #e2e2f0;
+  color: var(--dpf-text);
   font-family: var(--dpf-font-body);
   -webkit-font-smoothing: antialiased;
 }
