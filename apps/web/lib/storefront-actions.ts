@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { nanoid } from "nanoid";
+import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
 
 async function getPublishedStorefront(slug: string) {
   const config = await prisma.storefrontConfig.findFirst({
@@ -152,8 +153,15 @@ export async function submitOrder(
       totalAmount: computedTotal,
       currency: data.currency ?? "GBP",
     },
-    select: { orderRef: true },
+    select: { id: true, orderRef: true },
   });
+
+  // Auto-generate invoice from storefront order
+  try {
+    await generateInvoiceFromStorefrontOrder(created.id);
+  } catch (err) {
+    console.error("Auto-invoice generation failed for StorefrontOrder", created.orderRef, err);
+  }
 
   return { success: true, ref: created.orderRef, type: "order" };
 }
