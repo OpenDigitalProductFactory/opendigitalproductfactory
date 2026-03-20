@@ -104,11 +104,32 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
     setMessage(null);
     startTransition(async () => {
       try {
-        await triggerDimensionEval(endpointId, profile.modelId);
-        setMessage("Evaluation triggered.");
+        const result = await triggerDimensionEval(endpointId, profile.modelId) as {
+          dimensions: Array<{ inconclusive: boolean; newScore: number }>;
+          hasDrift: boolean;
+          hasSevereDrift: boolean;
+          firstError?: string | null;
+        };
+        const updated = result.dimensions.filter((d) => !d.inconclusive).length;
+        const total = result.dimensions.length;
+        if (updated === 0) {
+          setMessage(result.firstError
+            ? `Inconclusive — ${result.firstError}`
+            : "Inconclusive — all tests failed. Check provider connectivity or API key.");
+        } else {
+          const avg = Math.round(
+            result.dimensions.filter((d) => !d.inconclusive).reduce((s, d) => s + d.newScore, 0) / updated,
+          );
+          const drift = result.hasSevereDrift
+            ? " — severe drift detected"
+            : result.hasDrift
+            ? " — drift detected"
+            : "";
+          setMessage(`${updated}/${total} dimensions updated, avg score ${avg}${drift}`);
+        }
         router.refresh();
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : "Failed to trigger evaluation.");
+        setMessage(err instanceof Error ? err.message : "Failed to run evaluation.");
       }
     });
   }
