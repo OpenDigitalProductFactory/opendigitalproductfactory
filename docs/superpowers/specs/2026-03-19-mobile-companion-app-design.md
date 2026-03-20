@@ -188,7 +188,7 @@ HTTP status codes: 400 (validation), 401 (unauthenticated), 403 (insufficient ca
 
 1. `POST /api/v1/auth/login` with email + password → returns `{ accessToken, refreshToken, expiresIn }`
 2. Access token: JWT, 15-minute TTL, signed with the same `AUTH_SECRET` NextAuth uses
-3. Refresh token: stored as an `ApiToken` record in the database (reuses existing model), 30-day TTL, rotated on each refresh
+3. Refresh token: stored as an `ApiToken` record in the database (reuses existing model), 30-day TTL, 64 bytes / 128-char hex, rotated on each refresh
 4. `POST /api/v1/auth/refresh` with refresh token → issues new access + refresh pair, invalidates old refresh token
 5. `POST /api/v1/auth/logout` invalidates the refresh token (deletes `ApiToken` record)
 
