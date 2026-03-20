@@ -15,6 +15,7 @@ import type {
   SensitivityLevel,
 } from "./types";
 import { computeFitness } from "./scoring";
+import { checkModelCapacity } from "./rate-tracker";
 
 // ── Stage 0: Policy filter ────────────────────────────────────────────────────
 
@@ -121,6 +122,12 @@ export function getExclusionReason(
   const modelClass = (ep as any).modelClass ?? "chat";
   if (modelClass !== "chat" && modelClass !== "reasoning") {
     return `modelClass "${modelClass}" is not eligible for chat/reasoning tasks`;
+  }
+
+  // EP-INF-004: Rate limit pre-flight check
+  const capacity = checkModelCapacity(ep.providerId, ep.modelId);
+  if (!capacity.available) {
+    return `rate limit reached: ${capacity.reason}`;
   }
 
   // Status check — only active and degraded pass
@@ -363,6 +370,15 @@ export function routeEndpoint(
     const { fitness, dimensionScores } = computeFitness(ep, requirement, working);
     return { ep, fitness, dimensionScores };
   });
+
+  // EP-INF-004: Apply capacity penalty after scoring, before ranking
+  for (const entry of scored) {
+    const cap = checkModelCapacity(entry.ep.providerId, entry.ep.modelId);
+    if (cap.utilizationPercent > 80) {
+      const capacityFactor = 1.0 - ((cap.utilizationPercent - 80) / 100);
+      entry.fitness *= capacityFactor;
+    }
+  }
 
   // Sort by fitness desc; tiebreakers: lower cost wins, lower failure rate wins,
   // lower latency wins

@@ -331,6 +331,36 @@ describe("routeEndpoint", () => {
   });
 });
 
+// ── filterHard – EP-INF-004 capacity filter ───────────────────────────────────
+
+describe("filterHard – EP-INF-004 capacity filter", () => {
+  it("excludes models at 100% capacity", async () => {
+    const { setModelLimits, recordRequest, _resetAllTracking } = await import("./rate-tracker");
+    _resetAllTracking();
+    setModelLimits("test", "test-model", { rpm: 2, tpm: null, rpd: null });
+    recordRequest("test", "test-model");
+    recordRequest("test", "test-model");
+
+    const ep = makeEndpoint({ providerId: "test", modelId: "test-model" });
+    const result = filterHard([ep], makeRequirement(), "internal");
+    expect(result.eligible).toHaveLength(0);
+    expect(result.excluded[0]!.excludedReason).toContain("rate limit");
+
+    _resetAllTracking();
+  });
+
+  it("allows models with no rate limits set", async () => {
+    const { _resetAllTracking } = await import("./rate-tracker");
+    _resetAllTracking();
+
+    const ep = makeEndpoint({ providerId: "test", modelId: "test-model" });
+    const result = filterHard([ep], makeRequirement(), "internal");
+    expect(result.eligible).toHaveLength(1);
+
+    _resetAllTracking();
+  });
+});
+
 // ── filterHard – EP-INF-003 modelClass filter ────────────────────────────────
 
 describe("filterHard – EP-INF-003 modelClass filter", () => {
