@@ -1,0 +1,11 @@
+{
+  "data": [
+    { "id": "gpt-4o", "object": "model", "created": 1715367049, "owned_by": "system" },
+    { "id": "o4-mini", "object": "model", "created": 1738454400, "owned_by": "system" },
+    { "id": "text-embedding-3-small", "object": "model", "created": 1706140800, "owned_by": "system" },
+    { "id": "dall-e-3", "object": "model", "created": 1698796800, "owned_by": "system" },
+    { "id": "tts-1", "object": "model", "created": 1698278400, "owned_by": "openai-internal" },
+    { "id": "whisper-1", "object": "model", "created": 1677532800, "owned_by": "openai-internal" },
+    { "id": "omni-moderation-latest", "object": "model", "created": 1731024000, "owned_by": "system" }
+  ]
+}

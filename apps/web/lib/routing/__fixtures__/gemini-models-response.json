@@ -1,0 +1,26 @@
+{
+  "models": [
+    {
+      "name": "models/gemini-2.0-flash",
+      "version": "2.0",
+      "displayName": "Gemini 2.0 Flash",
+      "description": "Fast and versatile multimodal model",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 8192,
+      "supportedGenerationMethods": ["generateContent", "countTokens"],
+      "temperature": 1.0,
+      "maxTemperature": 2.0,
+      "topP": 0.95,
+      "topK": 40
+    },
+    {
+      "name": "models/text-embedding-004",
+      "version": "004",
+      "displayName": "Text Embedding 004",
+      "description": "Text embedding model",
+      "inputTokenLimit": 2048,
+      "outputTokenLimit": 768,
+      "supportedGenerationMethods": ["embedContent"]
+    }
+  ]
+}

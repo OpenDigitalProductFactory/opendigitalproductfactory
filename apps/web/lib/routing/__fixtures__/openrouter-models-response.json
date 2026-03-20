@@ -1,0 +1,150 @@
+{
+  "data": [
+    {
+      "id": "anthropic/claude-sonnet-4-6",
+      "canonical_slug": "anthropic/claude-sonnet-4-6",
+      "hugging_face_id": null,
+      "name": "Claude Sonnet 4.6",
+      "created": 1737849600,
+      "description": "Fast and intelligent model for coding and analysis",
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000015",
+        "request": "0",
+        "image": "0",
+        "image_token": "0.0000048",
+        "image_output": "0",
+        "audio": "0",
+        "audio_output": "0",
+        "input_audio_cache": "0",
+        "web_search": "0",
+        "internal_reasoning": "0",
+        "input_cache_read": "0.0000003",
+        "input_cache_write": "0.00000375",
+        "discount": 0
+      },
+      "context_length": 1000000,
+      "architecture": {
+        "tokenizer": "Claude",
+        "instruct_type": "claude",
+        "modality": "text+image->text",
+        "input_modalities": ["text", "image", "file"],
+        "output_modalities": ["text"]
+      },
+      "top_provider": {
+        "context_length": 1000000,
+        "max_completion_tokens": 64000,
+        "is_moderated": false
+      },
+      "per_request_limits": {
+        "prompt_tokens": 1000000,
+        "completion_tokens": 64000
+      },
+      "supported_parameters": ["temperature", "top_p", "top_k", "stream", "stop", "max_tokens", "tools", "tool_choice", "structured_outputs", "frequency_penalty", "presence_penalty"],
+      "default_parameters": {
+        "temperature": 1.0,
+        "top_p": null,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      },
+      "expiration_date": null
+    },
+    {
+      "id": "openai/o4-mini",
+      "canonical_slug": "openai/o4-mini",
+      "hugging_face_id": null,
+      "name": "OpenAI o4-mini",
+      "created": 1738454400,
+      "description": "Fast reasoning model",
+      "pricing": {
+        "prompt": "0.0000011",
+        "completion": "0.0000044",
+        "request": "0",
+        "image": "0",
+        "image_token": "0",
+        "image_output": "0",
+        "audio": "0",
+        "audio_output": "0",
+        "input_audio_cache": "0",
+        "web_search": "0",
+        "internal_reasoning": "0.0000044",
+        "input_cache_read": "0.00000055",
+        "input_cache_write": "0",
+        "discount": 0
+      },
+      "context_length": 200000,
+      "architecture": {
+        "tokenizer": "GPT",
+        "instruct_type": "chatml",
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"]
+      },
+      "top_provider": {
+        "context_length": 200000,
+        "max_completion_tokens": 100000,
+        "is_moderated": true
+      },
+      "per_request_limits": {
+        "prompt_tokens": 200000,
+        "completion_tokens": 100000
+      },
+      "supported_parameters": ["temperature", "top_p", "stream", "stop", "max_tokens", "tools", "tool_choice", "structured_outputs", "reasoning_effort"],
+      "default_parameters": {
+        "temperature": 1.0,
+        "top_p": null,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      },
+      "expiration_date": null
+    },
+    {
+      "id": "openai/text-embedding-3-small",
+      "canonical_slug": "openai/text-embedding-3-small",
+      "hugging_face_id": null,
+      "name": "OpenAI Text Embedding 3 Small",
+      "created": 1706140800,
+      "description": "Small embedding model",
+      "pricing": {
+        "prompt": "0.00000002",
+        "completion": "0",
+        "request": "0",
+        "image": "0",
+        "image_token": "0",
+        "image_output": "0",
+        "audio": "0",
+        "audio_output": "0",
+        "input_audio_cache": "0",
+        "web_search": "0",
+        "internal_reasoning": "0",
+        "input_cache_read": "0",
+        "input_cache_write": "0",
+        "discount": 0
+      },
+      "context_length": 8191,
+      "architecture": {
+        "tokenizer": "GPT",
+        "instruct_type": null,
+        "modality": "text->embeddings",
+        "input_modalities": ["text"],
+        "output_modalities": ["embeddings"]
+      },
+      "top_provider": {
+        "context_length": 8191,
+        "max_completion_tokens": null,
+        "is_moderated": false
+      },
+      "per_request_limits": {
+        "prompt_tokens": 8191,
+        "completion_tokens": 0
+      },
+      "supported_parameters": [],
+      "default_parameters": {},
+      "expiration_date": null
+    }
+  ]
+}
