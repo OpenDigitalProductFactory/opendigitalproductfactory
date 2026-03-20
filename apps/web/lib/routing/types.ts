@@ -48,6 +48,19 @@ export interface EndpointManifest {
 
   // Lifecycle
   retiredAt: Date | null;
+
+  // EP-INF-003: ModelCard fields
+  modelClass: string;
+  modelFamily: string | null;
+  inputModalities: string[];
+  outputModalities: string[];
+  capabilities: import("./model-card-types").ModelCardCapabilities;
+  pricing: import("./model-card-types").ModelCardPricing;
+  supportedParameters: string[];
+  deprecationDate: Date | null;
+  metadataSource: string;
+  metadataConfidence: string;
+  perRequestLimits: { promptTokens: number | null; completionTokens: number | null } | null;
 }
 
 // ── Task Requirement (loaded from TaskRequirement table) ──
