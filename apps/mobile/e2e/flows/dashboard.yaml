@@ -1,0 +1,4 @@
+appId: com.dpf.mobile
+---
+- launchApp
+- assertVisible: "Home"
