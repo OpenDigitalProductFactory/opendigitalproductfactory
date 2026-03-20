@@ -17,7 +17,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding] = await Promise.all([
+  const [latestDiscoveryRun, activeBranding, organization] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
       select: { id: true },
@@ -29,6 +29,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         logoUrl: true,
         tokens: true,
       },
+    }),
+    prisma.organization.findFirst({
+      select: { name: true, logoUrl: true },
     }),
   ]);
 
@@ -90,10 +93,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <Header
           platformRole={user.platformRole}
           isSuperuser={user.isSuperuser}
-          brandName={activeBranding?.companyName ?? "Open Digital Product Factory"}
+          brandName={organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory"}
           brandLogoUrl={resolveBrandingLogoUrl(
-            activeBranding?.logoUrl ?? null,
-            activeBranding?.companyName ?? "Open Digital Product Factory",
+            organization?.logoUrl ?? activeBranding?.logoUrl ?? null,
+            organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory",
           )}
           userId={user.id}
         />
