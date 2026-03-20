@@ -368,7 +368,7 @@ export async function sendMessage(input: {
   }
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
-  const allPlatformTools = getAvailableTools({
+  const allPlatformTools = await getAvailableTools({
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, {

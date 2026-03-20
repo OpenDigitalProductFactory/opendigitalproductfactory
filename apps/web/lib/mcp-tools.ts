@@ -781,16 +781,29 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
 
-export function getAvailableTools(
+export async function getAvailableTools(
   userContext: UserContext,
   options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean },
-): ToolDefinition[] {
-  return PLATFORM_TOOLS.filter(
+): Promise<ToolDefinition[]> {
+  const platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
       (options?.unifiedMode || !tool.requiresExternalAccess || options?.externalAccessEnabled === true)
       && (tool.requiredCapability === null || can(userContext, tool.requiredCapability))
       && (options?.mode !== "advise" || !tool.sideEffect),
   );
+
+  if (options?.externalAccessEnabled) {
+    try {
+      const { getMcpServerTools } = await import("./mcp-server-tools");
+      const mcpTools = await getMcpServerTools();
+      const filtered = options?.mode === "advise" ? [] : mcpTools;
+      return [...platformTools, ...filtered];
+    } catch {
+      // MCP server tools unavailable — return platform tools only
+    }
+  }
+
+  return platformTools;
 }
 
 // ─── Tool Execution ──────────────────────────────────────────────────────────
@@ -1979,8 +1992,14 @@ export async function executeTool(
       return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
     }
 
-    default:
+    default: {
+      const { parseNamespacedTool, executeMcpServerTool } = await import("./mcp-server-tools");
+      const parsed = parseNamespacedTool(toolName);
+      if (parsed) {
+        return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params);
+      }
       return { success: false, error: "Unknown tool", message: `Tool ${toolName} not found` };
+    }
   }
 }
 

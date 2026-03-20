@@ -7,7 +7,7 @@ export async function POST() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tools = getAvailableTools({
+  const tools = await getAvailableTools({
     platformRole: session.user.platformRole,
     isSuperuser: session.user.isSuperuser,
   });
