@@ -1,0 +1,6 @@
+appId: com.dpf.mobile
+---
+- launchApp
+- assertVisible: "Home"
+- tapOn: "More"
+- assertVisible: "Approvals"

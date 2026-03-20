@@ -36,6 +36,21 @@ export default function MoreScreen() {
         icon="checkmark-circle-outline"
         onPress={() => router.push("/more/approvals")}
       />
+      <MenuItem
+        title="Compliance"
+        icon="shield-checkmark-outline"
+        onPress={() => router.push("/more/compliance")}
+      />
+      <MenuItem
+        title="Notifications"
+        icon="notifications-outline"
+        onPress={() => router.push("/more/notifications")}
+      />
+      <MenuItem
+        title="Profile"
+        icon="person-outline"
+        onPress={() => router.push("/more/profile")}
+      />
     </View>
   );
 }
