@@ -21,7 +21,7 @@ import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
-      modelStatus: "active",
+      modelStatus: { in: ["active", "degraded"] },
       retiredAt: null,
       provider: {
         status: { in: ["active", "degraded"] },
@@ -39,7 +39,10 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
     modelId: mp.modelId,
     name: mp.friendlyName || mp.modelId,
     endpointType: mp.provider.endpointType,
-    status: mp.provider.status as EndpointManifest["status"],
+    // EP-INF-004: Derive status from worse of provider and model status
+    status: (mp.modelStatus === "degraded" || mp.provider.status === "degraded"
+      ? "degraded"
+      : mp.provider.status) as EndpointManifest["status"],
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
     supportsToolUse: (mp.capabilities as any)?.toolUse ?? mp.supportsToolUse ?? mp.provider.supportsToolUse,
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
