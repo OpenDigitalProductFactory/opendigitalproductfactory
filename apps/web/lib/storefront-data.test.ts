@@ -62,12 +62,12 @@ describe("getPublicStorefront", () => {
     expect(result?.archetypeId).toBe("veterinary-clinic");
   });
 
-  it("filters out inactive items", async () => {
+  it("returns only the items provided by the DB query (isActive filtered at DB level)", async () => {
+    // The query uses where: { isActive: true } — mock simulates the DB returning only active items.
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
       ...mockStorefront,
       items: [
-        { id: "1", isActive: true, itemId: "itm-1", name: "Active", ctaType: "booking", sortOrder: 0, description: null, category: null, priceAmount: null, priceCurrency: "GBP", priceType: null, imageUrl: null, ctaLabel: null, bookingConfig: null },
-        { id: "2", isActive: false, itemId: "itm-2", name: "Inactive", ctaType: "booking", sortOrder: 1, description: null, category: null, priceAmount: null, priceCurrency: "GBP", priceType: null, imageUrl: null, ctaLabel: null, bookingConfig: null },
+        { id: "1", itemId: "itm-1", name: "Active", ctaType: "booking", sortOrder: 0, description: null, category: null, priceAmount: null, priceCurrency: "GBP", priceType: null, imageUrl: null, ctaLabel: null, bookingConfig: null },
       ],
     } as never);
 

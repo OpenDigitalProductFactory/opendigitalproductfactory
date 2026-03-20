@@ -45,6 +45,7 @@ export async function getPublicStorefront(
         },
       },
       items: {
+        where: { isActive: true },
         orderBy: { sortOrder: "asc" },
         select: {
           id: true,
@@ -60,7 +61,6 @@ export async function getPublicStorefront(
           ctaLabel: true,
           bookingConfig: true,
           sortOrder: true,
-          isActive: true,
         },
       },
     },
@@ -85,13 +85,11 @@ export async function getPublicStorefront(
     brandingTokens:
       (org.brandingConfig?.tokens as Record<string, unknown>) ?? null,
     sections: config.sections as PublicSection[],
-    items: config.items
-      .filter((item) => item.isActive)
-      .map((item) => ({
-        ...item,
-        priceAmount: item.priceAmount?.toString() ?? null,
-        bookingConfig: item.bookingConfig as Record<string, unknown> | null,
-      })),
+    items: config.items.map((item) => ({
+      ...item,
+      priceAmount: item.priceAmount?.toString() ?? null,
+      bookingConfig: item.bookingConfig as Record<string, unknown> | null,
+    })),
   };
 }
 
