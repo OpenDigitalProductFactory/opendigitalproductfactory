@@ -176,3 +176,45 @@ describe("hexToHsl / hslToHex", () => {
     expect(Math.abs(b1 - b2)).toBeLessThanOrEqual(1);
   });
 });
+
+describe("WCAG AA contrast compliance", () => {
+  const presetAccents = ["#2563eb", "#d97706", "#8b5cf6", "#6b7280", "#0d9488", "#16a34a"];
+
+  for (const accent of presetAccents) {
+    describe(`accent ${accent}`, () => {
+      const { dark, light } = deriveThemeTokens(accent);
+
+      it("dark mode: text on bg >= 4.5:1", () => {
+        expect(contrastRatio(dark.palette.text, dark.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("dark mode: text on surface1 >= 4.5:1", () => {
+        expect(contrastRatio(dark.palette.text, dark.palette.surface1)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("light mode: text on bg >= 4.5:1", () => {
+        expect(contrastRatio(light.palette.text, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("light mode: text on surface1 >= 4.5:1", () => {
+        expect(contrastRatio(light.palette.text, light.palette.surface1)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("light mode: muted on bg >= 4.5:1", () => {
+        expect(contrastRatio(light.palette.muted, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("light mode: accent on bg >= 4.5:1", () => {
+        expect(contrastRatio(light.palette.accent, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("light mode: accent on surface1 >= 3:1", () => {
+        expect(contrastRatio(light.palette.accent, light.palette.surface1)).toBeGreaterThanOrEqual(3);
+      });
+
+      it("light mode: border on bg >= 3:1", () => {
+        expect(contrastRatio(light.palette.border, light.palette.bg)).toBeGreaterThanOrEqual(3);
+      });
+    });
+  }
+});
