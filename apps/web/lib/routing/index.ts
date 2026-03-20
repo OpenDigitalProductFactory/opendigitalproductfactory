@@ -31,3 +31,11 @@ export { getBaselineForModel } from "./family-baselines";
 export type { FamilyBaseline } from "./family-baselines";
 export { extractModelMetadata } from "./metadata-extractor";
 export type { ExtractedMetadata } from "./metadata-extractor";
+
+// EP-INF-003: ModelCard types and adapter registry
+export type { ModelCard, ModelCardCapabilities, ModelCardPricing, ModelClass, ModelCardDimensionScores } from "./model-card-types";
+export { EMPTY_CAPABILITIES, EMPTY_PRICING, DEFAULT_DIMENSION_SCORES } from "./model-card-types";
+export type { ProviderAdapter, DiscoveredModelEntry } from "./adapter-interface";
+export { getAdapter, extractModelCardWithFallback } from "./adapter-registry";
+export { classifyModel } from "./model-classifier";
+export { computeMetadataHash } from "./metadata-hash";
