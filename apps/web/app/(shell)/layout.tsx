@@ -27,6 +27,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       select: {
         companyName: true,
         logoUrl: true,
+        logoUrlLight: true,
         tokens: true,
       },
     }),
@@ -96,6 +97,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           brandName={organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory"}
           brandLogoUrl={resolveBrandingLogoUrl(
             organization?.logoUrl ?? activeBranding?.logoUrl ?? null,
+            organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory",
+          )}
+          brandLogoUrlLight={resolveBrandingLogoUrl(
+            activeBranding?.logoUrlLight ?? null,
             organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory",
           )}
           userId={user.id}
