@@ -103,7 +103,7 @@ export function CalendarSyncPanel() {
           <div>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              <span className="text-xs text-white">{syncStatus.name ?? "iCal Feed"}</span>
+              <span className="text-xs text-[var(--dpf-text)]">{syncStatus.name ?? "iCal Feed"}</span>
               <span className="text-[10px] text-[var(--dpf-muted)]">{syncStatus.eventCount} events</span>
             </div>
             {syncStatus.lastSyncAt && (
@@ -117,7 +117,7 @@ export function CalendarSyncPanel() {
               type="button"
               disabled={isPending}
               onClick={handleRefresh}
-              className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white disabled:opacity-50"
+              className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-50"
             >
               Refresh
             </button>
@@ -141,7 +141,7 @@ export function CalendarSyncPanel() {
             placeholder="iCal feed URL (e.g. https://calendar.google.com/...basic.ics)"
             value={feedUrl}
             onChange={(e) => setFeedUrl(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white placeholder:text-[var(--dpf-muted)]"
+            className="w-full px-2 py-1.5 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
           />
           <div className="flex gap-2">
             <input
@@ -149,7 +149,7 @@ export function CalendarSyncPanel() {
               placeholder="Name (optional)"
               value={feedName}
               onChange={(e) => setFeedName(e.target.value)}
-              className="flex-1 px-2 py-1.5 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white placeholder:text-[var(--dpf-muted)]"
+              className="flex-1 px-2 py-1.5 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
             />
             <button
               type="button"
