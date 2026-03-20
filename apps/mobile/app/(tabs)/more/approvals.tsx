@@ -8,28 +8,38 @@ import {
   View,
 } from "react-native";
 import { colors, spacing } from "@/src/lib/theme";
-import { PortfolioNode } from "@/src/components/PortfolioNode";
-import { usePortfolioStore } from "@/src/features/portfolio/portfolio.store";
-import type { Portfolio } from "@dpf/types";
+import { ApprovalCard } from "@/src/components/ApprovalCard";
+import { useGovernanceStore } from "@/src/features/governance/governance.store";
+import type { AgentActionProposal } from "@dpf/types";
 
-export default function PortfolioScreen() {
-  const { portfolios, isLoading, error, fetchTree } = usePortfolioStore();
+export default function ApprovalsScreen() {
+  const { approvals, isLoading, error, fetchApprovals, decide } =
+    useGovernanceStore();
 
   const refresh = useCallback(() => {
-    return fetchTree();
-  }, [fetchTree]);
+    return fetchApprovals();
+  }, [fetchApprovals]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  const handleDecide = useCallback(
+    (id: string, decision: "approve" | "reject", rationale?: string) => {
+      decide(id, decision, rationale);
+    },
+    [decide],
+  );
+
   return (
-    <FlatList<Portfolio>
+    <FlatList<AgentActionProposal>
       style={styles.screen}
       contentContainerStyle={styles.content}
-      data={portfolios}
+      data={approvals}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <PortfolioNode portfolio={item} />}
+      renderItem={({ item }) => (
+        <ApprovalCard approval={item} onDecide={handleDecide} />
+      )}
       refreshControl={
         <RefreshControl
           refreshing={isLoading}
@@ -40,7 +50,7 @@ export default function PortfolioScreen() {
       }
       ListHeaderComponent={
         <View>
-          <Text style={styles.heading}>Portfolios</Text>
+          <Text style={styles.heading}>Approvals</Text>
           {error ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
@@ -50,7 +60,9 @@ export default function PortfolioScreen() {
       }
       ListEmptyComponent={
         !isLoading ? (
-          <Text style={styles.emptyText}>No portfolios found</Text>
+          <Text style={styles.emptyText}>
+            No pending approvals. All caught up!
+          </Text>
         ) : (
           <ActivityIndicator
             size="large"

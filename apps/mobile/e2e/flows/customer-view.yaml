@@ -1,0 +1,5 @@
+appId: com.dpf.mobile
+---
+- launchApp
+- tapOn: "Customers"
+- assertVisible: "Customers"
