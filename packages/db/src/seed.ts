@@ -1160,6 +1160,34 @@ async function seedPlatformConfig(): Promise<void> {
   console.log("Seeded platform config flags");
 }
 
+async function seedMobileAppReminder(): Promise<void> {
+  const admin = await prisma.user.findFirst({ where: { isSuperuser: true } });
+  if (!admin) return;
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId: admin.id }, select: { id: true } });
+  if (!profile) {
+    console.log("No employee profile for admin — skipping mobile app reminder");
+    return;
+  }
+  await prisma.calendarEvent.upsert({
+    where: { eventId: "CE-MOB-REMIND" },
+    update: {},
+    create: {
+      eventId: "CE-MOB-REMIND",
+      title: "Mobile Companion App — Review Next Steps",
+      description: "Review mobile app implementation. Next: apply DB migration, seed epics, test on device, set up Apple/Google developer accounts, Firebase for push notifications, first EAS build. See docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md",
+      startAt: new Date("2026-04-02T09:00:00"),
+      endAt: new Date("2026-04-02T10:00:00"),
+      allDay: false,
+      eventType: "reminder",
+      category: "project",
+      ownerEmployeeId: profile.id,
+      visibility: "private",
+      color: "#818cf8",
+    },
+  });
+  console.log("Seeded calendar reminder: Mobile Companion App review on 2026-04-02");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedRoles();
@@ -1183,6 +1211,7 @@ async function main(): Promise<void> {
   await seedMvpEpics();
   await seedMobileCompanionEpics();
   await seedDefaultAdminUser();
+  await seedMobileAppReminder();
   await seedScheduledJobs();
   await seedMcpServers();
   await seedPlatformConfig();
