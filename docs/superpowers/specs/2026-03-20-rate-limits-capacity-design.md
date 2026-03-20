@@ -75,9 +75,33 @@ await prisma.modelProfile.updateMany({
 });
 ```
 
-The `modelStatus` field already exists on `ModelProfile` (default "active"). The routing pipeline already respects it — `loadEndpointManifests()` filters on `modelStatus`, and `scoring.ts` applies a 0.7 multiplier for degraded status.
+The `modelStatus` field already exists on `ModelProfile` (default "active").
 
-**Auth and model_not_found errors remain at provider level.** Invalid credentials or removed models correctly affect the entire provider — those errors are not model-specific.
+**Required loader change:** `loadEndpointManifests()` currently filters `modelStatus: "active"` only — degraded models are completely excluded, not scored at reduced priority. Change the query to `modelStatus: { in: ["active", "degraded"] }` so degraded models remain in the candidate pool at reduced priority.
+
+**Required status mapping:** The `EndpointManifest.status` field is currently populated from `ModelProvider.status` (provider-level), not `ModelProfile.modelStatus`. Update `loadEndpointManifests()` to derive the manifest `status` from the worse of provider status and model status:
+
+```typescript
+// Take the worse of provider status and model status
+status: mp.modelStatus === "degraded" || mp.provider.status === "degraded"
+  ? "degraded"
+  : mp.provider.status as EndpointManifest["status"],
+```
+
+This ensures `scoring.ts`'s existing 0.7 multiplier for `status === "degraded"` applies to rate-limited models, not just degraded providers.
+
+**Auth errors remain at provider level** — invalid credentials affect the entire provider.
+
+**`model_not_found` errors become model-level.** If one model is removed from a provider while 99 others remain, disabling the entire provider is overly aggressive. Instead, retire the specific model:
+
+```typescript
+await prisma.modelProfile.updateMany({
+  where: { providerId: entry.providerId, modelId: entry.modelId },
+  data: { modelStatus: "retired", retiredAt: new Date(), retiredReason: "model_not_found from provider" },
+});
+```
+
+This aligns with the existing disappearance detection in EP-INF-002 (which retires models after 2 missed discoveries).
 
 ### 1.2 Auto-Recovery
 
@@ -164,7 +188,7 @@ After every `callProvider()` attempt (success or failure), record:
 function recordRequest(providerId: string, modelId: string, tokenCount?: number): void
 ```
 
-Pushes timestamp into the sliding window. If `tokenCount` is provided, records it for TPM tracking.
+Prunes old entries from the window (older than 60s), then pushes the new timestamp. If `tokenCount` is provided, records it for TPM tracking. Pruning on every record prevents unbounded array growth for high-throughput models.
 
 ### 2.4 Checking Capacity
 
@@ -210,18 +234,48 @@ Extracts common rate limit headers:
 
 If no headers available (e.g., `InferenceError` doesn't carry them), the function is a no-op — the 429 still triggers degradation and auto-recovery.
 
-### 2.6 Module
+### 2.6 Extract Retry-After Utility
+
+A helper to parse recovery delay from error headers:
+
+```typescript
+export function extractRetryAfterMs(headers?: Record<string, string>): number | undefined
+```
+
+Lives in `rate-tracker.ts`. Parsing logic:
+- `retry-after` header: if numeric string → seconds × 1000; if HTTP-date → compute ms until that time
+- `x-ratelimit-reset-requests` → parse as seconds × 1000 (OpenAI format)
+- `anthropic-ratelimit-requests-reset` → parse as ISO timestamp, compute ms delta
+- Returns `undefined` when no parseable header found
+
+### 2.7 Header Normalization
+
+Provider-specific header names mapped to a common scheme:
+
+| Provider | Limit Header | Remaining Header | Reset Header |
+|---|---|---|---|
+| OpenAI | `x-ratelimit-limit-requests` | `x-ratelimit-remaining-requests` | `x-ratelimit-reset-requests` |
+| Anthropic | `anthropic-ratelimit-requests-limit` | `anthropic-ratelimit-requests-remaining` | `anthropic-ratelimit-requests-reset` |
+| Others | `retry-after` (standard HTTP) | — | — |
+
+`learnFromRateLimitResponse` checks all known header schemes. Only the first match is used (OpenAI-style first, then Anthropic-style, then standard HTTP).
+
+### 2.8 `seedLimitsFromProfile` Clarification
+
+The `perRequestLimits` from OpenRouter are **per-request token caps** (max input/output tokens per single request), NOT rate limits (RPM/TPM/RPD). They are fundamentally different measures. `seedLimitsFromProfile` does NOT populate RPM/TPM/RPD — it stores per-request token maximums as a separate validation check. This is informational only in this epic; per-request token validation is deferred to EP-INF-005's request contract system. Remove `seedLimitsFromProfile` from the rate tracker's public API — per-request limits are not rate limits.
+
+### 2.9 Module
 
 File: `apps/web/lib/routing/rate-tracker.ts`
 
-In-memory singleton, same pattern as `api/rate-limit.ts`.
+In-memory singleton, same pattern as `api/rate-limit.ts`. Assumes single-process Node.js deployment. If the platform moves to clustered deployment, this module would need replacement with shared state (Redis or similar).
 
 ```typescript
 export function recordRequest(providerId: string, modelId: string, tokenCount?: number): void;
 export function checkModelCapacity(providerId: string, modelId: string): CapacityStatus;
 export function setModelLimits(providerId: string, modelId: string, limits: Partial<ModelRateLimits>): void;
 export function learnFromRateLimitResponse(providerId: string, modelId: string, headers?: Record<string, string>): void;
-export function seedLimitsFromProfile(providerId: string, modelId: string, perRequestLimits: { promptTokens: number | null; completionTokens: number | null } | null): void;
+export function extractRetryAfterMs(headers?: Record<string, string>): number | undefined;
 export function _resetAllTracking(): void;  // for tests
 ```
 
@@ -242,19 +296,22 @@ if (!capacity.available) {
 
 Models at 100% capacity are excluded from the candidate pool. This prevents dispatching requests that will 429.
 
-### 3.2 Fitness Penalty in `scoring.ts`
+### 3.2 Capacity Penalty in `pipeline.ts` (Post-Scoring)
 
-In `computeFitness()`, add a capacity factor:
+Apply the capacity penalty in `routeEndpoint()` after scoring but before ranking, NOT inside `computeFitness()`. This preserves `scoring.ts` as a pure function with no side effects or external state dependencies.
 
 ```typescript
-const capacity = checkModelCapacity(ep.providerId, ep.modelId);
-const capacityFactor = capacity.utilizationPercent > 80
-  ? 1.0 - ((capacity.utilizationPercent - 80) / 100)
-  : 1.0;
-finalScore *= capacityFactor;
+// After computing fitness scores, apply capacity penalty
+for (const candidate of scoredCandidates) {
+  const capacity = checkModelCapacity(candidate.providerId, candidate.modelId);
+  if (capacity.utilizationPercent > 80) {
+    const capacityFactor = 1.0 - ((capacity.utilizationPercent - 80) / 100);
+    candidate.fitnessScore *= capacityFactor;
+  }
+}
 ```
 
-Scale: 80% → 1.0 (no penalty), 90% → 0.9, 95% → 0.85, 100% → excluded by hard filter before scoring. This makes alternatives more attractive as capacity fills — traffic naturally spreads before hitting the wall.
+Scale: 80% → 1.0 (no penalty), 90% → 0.9, 95% → 0.85, 100% → excluded by hard filter before scoring. This makes alternatives more attractive as capacity fills.
 
 ### 3.3 Request Recording in `fallback.ts`
 
@@ -280,21 +337,15 @@ scheduleRecovery(entry.providerId, entry.modelId,
   extractRetryAfterMs(e) ?? 60_000);
 ```
 
-### 3.4 Seed Limits on Manifest Load
+### 3.4 InferenceError Headers
 
-In `loadEndpointManifests()` (or at the call site), seed the tracker:
+The existing `InferenceError` class in `ai-inference.ts` needs an optional `headers?: Record<string, string>` field. At `ai-inference.ts` lines 377-379, the `res.headers` object is available when `classifyHttpError` is called. Pass rate-limit-relevant headers through to `InferenceError`. Without this, goal 5 (learn from 429 headers) is dead code on day one. The change is small:
 
-```typescript
-for (const manifest of manifests) {
-  if (manifest.perRequestLimits) {
-    seedLimitsFromProfile(manifest.providerId, manifest.modelId, manifest.perRequestLimits);
-  }
-}
-```
+1. Add `headers?: Record<string, string>` to `InferenceError` constructor
+2. In the error path, extract rate-limit headers: `Object.fromEntries([...res.headers.entries()].filter(([k]) => k.startsWith("x-ratelimit") || k.startsWith("anthropic-ratelimit") || k === "retry-after"))`
+3. Pass to `InferenceError`
 
-### 3.5 InferenceError Headers
-
-The existing `InferenceError` class in `ai-inference.ts` needs to optionally carry response headers. Add an optional `headers?: Record<string, string>` field. When catching HTTP errors from provider SDKs, populate this field with the rate-limit-relevant headers if available. If this change is too invasive for this epic, defer it — `learnFromRateLimitResponse()` handles missing headers gracefully (no-op).
+This is not optional — it's required for this epic.
 
 ---
 
@@ -333,6 +384,16 @@ The existing `InferenceError` class in `ai-inference.ts` needs to optionally car
 - Model at 90% utilization gets 0.9 fitness multiplier
 - Model at 0% utilization gets 1.0 fitness multiplier (no penalty)
 
+### `fallback.test.ts` — New file, tests for the error handling changes
+
+- 429 triggers model-level degradation (modelProfile.modelStatus, not modelProvider.status)
+- 429 triggers `scheduleRecovery` call
+- 429 triggers `recordRequest` and `learnFromRateLimitResponse`
+- Success triggers `recordRequest` with token counts
+- `model_not_found` retires the specific model (modelProfile.modelStatus → "retired")
+- `auth` error disables the entire provider (modelProvider.status → "disabled")
+- Provider status is NOT changed on rate_limit (only model status)
+
 ### Backward compatibility
 
 - All existing pipeline, scoring, and fallback tests still pass
@@ -356,9 +417,8 @@ The existing `InferenceError` class in `ai-inference.ts` needs to optionally car
 | File | Change |
 |---|---|
 | `apps/web/lib/routing/fallback.ts` | Model-level degradation, record requests, learn from headers, schedule recovery |
-| `apps/web/lib/routing/pipeline.ts` | Pre-flight capacity check in `getExclusionReason()` |
-| `apps/web/lib/routing/scoring.ts` | Capacity fitness penalty |
-| `apps/web/lib/routing/loader.ts` | Seed limits from `perRequestLimits` |
+| `apps/web/lib/routing/pipeline.ts` | Pre-flight capacity check + post-scoring capacity penalty |
+| `apps/web/lib/routing/loader.ts` | Include degraded models, derive manifest status from model+provider |
 | `apps/web/lib/routing/index.ts` | Export new modules |
 | `apps/web/lib/ai-inference.ts` | Optional: add `headers` field to `InferenceError` |
 
@@ -368,6 +428,7 @@ The existing `InferenceError` class in `ai-inference.ts` needs to optionally car
 |---|---|
 | `apps/web/lib/routing/types.ts` | No type changes needed — capacity is runtime state |
 | `apps/web/lib/routing/model-card-types.ts` | No changes |
+| `apps/web/lib/routing/scoring.ts` | Purity preserved — capacity penalty moved to pipeline.ts |
 | `apps/web/lib/routing/adapter-*.ts` | Adapters unaffected |
 | `apps/web/lib/api/rate-limit.ts` | User-facing rate limit — separate concern |
 
