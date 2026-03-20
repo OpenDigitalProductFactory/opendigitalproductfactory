@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveArchetypeIds } from "./mcp-catalog-types";
+import { deriveArchetypeIds, ARCHETYPE_TAG_RULESET } from "./mcp-catalog-types";
 
 describe("deriveArchetypeIds", () => {
   it("returns matching archetype IDs for known tags", () => {
@@ -26,5 +26,14 @@ describe("deriveArchetypeIds", () => {
 
   it("handles empty tags array", () => {
     expect(deriveArchetypeIds([])).toEqual([]);
+  });
+
+  it("analytics tag returns all archetypes defined in ARCHETYPE_TAG_RULESET", () => {
+    // "analytics" must map to every archetype that appears anywhere in the ruleset
+    const allArchetypes = new Set(Object.values(ARCHETYPE_TAG_RULESET).flat());
+    const result = deriveArchetypeIds(["analytics"]);
+    for (const archetype of allArchetypes) {
+      expect(result).toContain(archetype);
+    }
   });
 });
