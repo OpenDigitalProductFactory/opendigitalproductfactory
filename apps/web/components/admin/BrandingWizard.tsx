@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { saveSimpleBrand, importBrandFromUrl } from "@/lib/actions/branding";
 import { OOTB_PRESETS, deriveThemeTokens } from "@/lib/branding-presets";
+import type { Correction } from "@/lib/branding-presets";
 import { BrandingDualPreview } from "./BrandingPreview";
 
 const FONT_OPTIONS = [
@@ -39,6 +40,7 @@ export function BrandingWizard({
   const [accent, setAccent] = useState(existingAccent ?? "#7c8cf8");
   const [font, setFont] = useState(existingFont ?? "Inter, system-ui, sans-serif");
   const [saving, setSaving] = useState(false);
+  const [corrections, setCorrections] = useState<Correction[]>([]);
   const [urlInput, setUrlInput] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -61,9 +63,9 @@ export function BrandingWizard({
   };
 
   const applyPreset = (preset: (typeof OOTB_PRESETS)[number]) => {
-    setAccent(preset.tokens.palette.accent);
-    setFont(preset.tokens.typography.fontFamily);
-    if (!name) setName(preset.companyName);
+    setAccent(preset.tokens.dark.palette.accent);
+    setFont(preset.tokens.dark.typography.fontFamily);
+    if (!name) setName(preset.label);
     setStep("preview");
   };
 
@@ -75,7 +77,8 @@ export function BrandingWizard({
     fd.set("logoUrlLight", logoUrlLight);
     fd.set("accent", accent);
     fd.set("fontFamily", font);
-    await saveSimpleBrand(fd);
+    const { corrections: newCorrections } = await saveSimpleBrand(fd);
+    setCorrections(newCorrections);
     setSaving(false);
   };
 
@@ -87,7 +90,7 @@ export function BrandingWizard({
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-white mb-0.5">Set up your brand</h2>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-0.5">Set up your brand</h2>
             <p className="text-xs text-[var(--dpf-muted)]">
               Import from a URL, upload a brand document, or pick a preset to get started quickly.
             </p>
@@ -96,7 +99,7 @@ export function BrandingWizard({
             <button
               type="button"
               onClick={onCancel}
-              className="text-xs text-[var(--dpf-muted)] hover:text-white underline underline-offset-2 flex-shrink-0"
+              className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] underline underline-offset-2 flex-shrink-0"
             >
               Cancel
             </button>
@@ -105,7 +108,7 @@ export function BrandingWizard({
 
         {/* Import from URL */}
         <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-3">
-          <p className="text-xs font-semibold text-white uppercase tracking-widest">Import from URL</p>
+          <p className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Import from URL</p>
           <p className="text-[11px] text-[var(--dpf-muted)]">
             Paste your company website and we&apos;ll extract your logo, colors, and name.
           </p>
@@ -117,13 +120,13 @@ export function BrandingWizard({
               placeholder="https://yourcompany.com"
               disabled={analyzing}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAnalyzeUrl(); } }}
-              className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] disabled:opacity-60"
+              className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] disabled:opacity-60"
             />
             <button
               type="button"
               onClick={handleAnalyzeUrl}
               disabled={analyzing || !urlInput.trim()}
-              className="px-3 py-2 rounded bg-[var(--dpf-accent)] text-xs text-white font-semibold disabled:opacity-50"
+              className="px-3 py-2 rounded bg-[var(--dpf-accent)] text-xs text-[var(--dpf-text)] font-semibold disabled:opacity-50"
             >
               {analyzing ? "Analyzing…" : "Analyze"}
             </button>
@@ -135,12 +138,12 @@ export function BrandingWizard({
 
         {/* Upload brand document */}
         <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-3">
-          <p className="text-xs font-semibold text-white uppercase tracking-widest">Upload brand document</p>
+          <p className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Upload brand document</p>
           <input
             type="file"
             accept=".pdf,.png,.jpg,.jpeg,.svg"
             disabled
-            className="w-full bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-white opacity-60 cursor-not-allowed file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-surface-1)] file:text-[var(--dpf-muted)] file:px-2 file:py-1 file:text-xs"
+            className="w-full bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-[var(--dpf-text)] opacity-60 cursor-not-allowed file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-surface-1)] file:text-[var(--dpf-muted)] file:px-2 file:py-1 file:text-xs"
           />
           <p className="text-[11px] text-[var(--dpf-muted)]">
             Accepts PDF, PNG, JPG, JPEG, SVG.
@@ -149,7 +152,7 @@ export function BrandingWizard({
 
         {/* Preset grid */}
         <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-3">
-          <p className="text-xs font-semibold text-white uppercase tracking-widest">Or pick a preset</p>
+          <p className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Or pick a preset</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {OOTB_PRESETS.map((preset) => (
               <button
@@ -160,14 +163,14 @@ export function BrandingWizard({
               >
                 {/* Accent color bar */}
                 <div
-                  style={{ background: preset.tokens.palette.accent }}
+                  style={{ background: preset.tokens.dark.palette.accent }}
                   className="h-2 w-full rounded-full mb-2"
                 />
-                <p className="text-xs font-semibold text-white group-hover:text-[var(--dpf-accent)] transition-colors">
-                  {preset.companyName}
+                <p className="text-xs font-semibold text-[var(--dpf-text)] group-hover:text-[var(--dpf-accent)] transition-colors">
+                  {preset.label}
                 </p>
                 <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 truncate">
-                  {preset.tokens.typography.fontFamily.split(",")[0]}
+                  {preset.tokens.dark.typography.fontFamily.split(",")[0]}
                 </p>
               </button>
             ))}
@@ -184,11 +187,43 @@ export function BrandingWizard({
     return (
       <div className="space-y-5">
         <div>
-          <h2 className="text-sm font-semibold text-white mb-0.5">Preview your brand</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-0.5">Preview your brand</h2>
           <p className="text-xs text-[var(--dpf-muted)]">
             Adjust your company name and accent color, then apply when ready.
           </p>
         </div>
+
+        {corrections.length > 0 && (
+          <div
+            className="rounded-lg p-3 mb-4 text-sm"
+            style={{
+              background: "color-mix(in srgb, var(--dpf-accent) 10%, var(--dpf-surface-1))",
+              border: "1px solid var(--dpf-border)",
+              color: "var(--dpf-text)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-medium">Accessibility adjustments applied</span>
+              <button
+                onClick={() => setCorrections([])}
+                className="text-xs cursor-pointer"
+                style={{ color: "var(--dpf-muted)", background: "none", border: "none" }}
+              >
+                Dismiss
+              </button>
+            </div>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {corrections.map((c, i) => (
+                <li key={i} className="text-xs" style={{ color: "var(--dpf-muted)" }}>
+                  {c.mode} mode: {c.foreground} adjusted from{" "}
+                  <code className="font-mono">{c.original}</code> to{" "}
+                  <code className="font-mono">{c.corrected}</code>{" "}
+                  (was {c.originalRatio}:1, now {c.correctedRatio}:1)
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Left: editable fields */}
@@ -200,7 +235,7 @@ export function BrandingWizard({
                 value={name}
                 onChange={(e) => setName(e.currentTarget.value)}
                 placeholder="Your Company"
-                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
               />
             </label>
 
@@ -217,7 +252,7 @@ export function BrandingWizard({
                   type="text"
                   value={accent}
                   onChange={(e) => setAccent(e.currentTarget.value)}
-                  className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+                  className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
                 />
               </div>
             </label>
@@ -227,21 +262,21 @@ export function BrandingWizard({
                 type="button"
                 disabled={saving}
                 onClick={handleSave}
-                className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-white text-xs font-semibold disabled:opacity-60"
+                className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-[var(--dpf-text)] text-xs font-semibold disabled:opacity-60"
               >
                 {saving ? "Applying…" : "Looks good — apply"}
               </button>
               <button
                 type="button"
                 onClick={() => setStep("finetune")}
-                className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+                className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 Let me adjust
               </button>
               <button
                 type="button"
                 onClick={() => setStep("choose")}
-                className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+                className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 Back
               </button>
@@ -273,11 +308,43 @@ export function BrandingWizard({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-sm font-semibold text-white mb-0.5">Fine-tune your brand</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-0.5">Fine-tune your brand</h2>
         <p className="text-xs text-[var(--dpf-muted)]">
           For advanced changes, use the AI coworker in the panel.
         </p>
       </div>
+
+      {corrections.length > 0 && (
+        <div
+          className="rounded-lg p-3 mb-4 text-sm"
+          style={{
+            background: "color-mix(in srgb, var(--dpf-accent) 10%, var(--dpf-surface-1))",
+            border: "1px solid var(--dpf-border)",
+            color: "var(--dpf-text)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-medium">Accessibility adjustments applied</span>
+            <button
+              onClick={() => setCorrections([])}
+              className="text-xs cursor-pointer"
+              style={{ color: "var(--dpf-muted)", background: "none", border: "none" }}
+            >
+              Dismiss
+            </button>
+          </div>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {corrections.map((c, i) => (
+              <li key={i} className="text-xs" style={{ color: "var(--dpf-muted)" }}>
+                {c.mode} mode: {c.foreground} adjusted from{" "}
+                <code className="font-mono">{c.original}</code> to{" "}
+                <code className="font-mono">{c.corrected}</code>{" "}
+                (was {c.originalRatio}:1, now {c.correctedRatio}:1)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Full form */}
@@ -289,7 +356,7 @@ export function BrandingWizard({
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               placeholder="Your Company"
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
 
@@ -300,7 +367,7 @@ export function BrandingWizard({
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.currentTarget.value)}
               placeholder="https://example.com/logo.png"
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
 
@@ -317,7 +384,7 @@ export function BrandingWizard({
                 type="text"
                 value={accent}
                 onChange={(e) => setAccent(e.currentTarget.value)}
-                className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+                className="flex-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
               />
             </div>
           </label>
@@ -327,10 +394,10 @@ export function BrandingWizard({
             <select
               value={font}
               onChange={(e) => setFont(e.currentTarget.value)}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
               {FONT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <option key={opt.value} value={opt.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
                   {opt.label}
                 </option>
               ))}
@@ -342,14 +409,14 @@ export function BrandingWizard({
               type="button"
               disabled={saving}
               onClick={handleSave}
-              className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-white text-xs font-semibold disabled:opacity-60"
+              className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-[var(--dpf-text)] text-xs font-semibold disabled:opacity-60"
             >
               {saving ? "Applying…" : "Apply brand"}
             </button>
             <button
               type="button"
               onClick={() => setStep("preview")}
-              className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+              className="px-4 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
             >
               Back
             </button>
