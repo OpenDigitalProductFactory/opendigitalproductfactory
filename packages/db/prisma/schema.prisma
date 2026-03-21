@@ -751,6 +751,15 @@ model CredentialEntry {
   scope          String?
   cachedToken    String?
   tokenExpiresAt DateTime?
+  refreshToken   String?
+}
+
+model OAuthPendingFlow {
+  id            String   @id @default(cuid())
+  state         String   @unique
+  codeVerifier  String
+  providerId    String
+  createdAt     DateTime @default(now())
 }
 
 model ModelProvider {
@@ -775,6 +784,9 @@ model ModelProvider {
   consoleUrl               String?
   docsUrl                  String?
   billingLabel             String?
+  authorizeUrl             String?
+  tokenUrl                 String?
+  oauthClientId            String?
   costPerformanceNotes     String?
   endpointType             String         @default("llm")
   sensitivityClearance     String[]       @default([])
