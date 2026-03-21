@@ -42,7 +42,21 @@ An ITIL-style change management process with business-aware deployment windows:
 
 ---
 
+**Research basis:** Patterns informed by ServiceNow Change Management, Octopus Deploy Lifecycles, Spinnaker/Kayenta canary analysis, Harness Continuous Verification, LaunchDarkly kill switches, and GitLab self-managed deployment safety. See research notes in implementation plan.
+
 **Schema convention note:** Model pseudocode below uses simplified types for readability. Implementation must follow the project's schema conventions: `String @id @default(cuid())` for all IDs, `String` for all foreign keys, `@relation` annotations on all FK fields, and `@@index` directives for query performance. Multiple FK fields referencing the same model require named relations.
+
+### Research-Driven Additions (2026-03-21)
+
+The following patterns were identified from best-in-class research and incorporated:
+
+1. **Scheduling conflict detection** (ServiceNow Schedule Assist) — when scheduling an RFC, check for other active RFCs targeting overlapping inventory entities in the same time window. Prevents conflicting concurrent changes.
+2. **Ordered execution with health gates** (Octopus Deploy, ArgoCD Sync Waves) — `ChangeItem.executionOrder` drives sequential execution with health verification between each item. If item N fails, items N+1..M are skipped and rollback begins from item N-1 backward.
+3. **Automated rollback triggers** (Harness CV, Kubernetes readiness probes) — post-deploy health loop polls affected services. Three consecutive health failures within the verification window trigger automatic rollback.
+4. **Rollback strategy per item type** (Harness Database DevOps, Docker rollout) — `code_deployment`: revert Docker image tag to previous `ProductVersion.gitTag`. `infrastructure`: restore from `PromotionBackup`. `configuration`: revert to previous env var snapshot. `external`: execute manual rollback plan.
+5. **One-click rollback** (GitLab deployment safety) — RFC detail view exposes "Roll Back" button. System handles image revert, database restore, and service restart. No technical knowledge required.
+6. **Self-development auto-RFC** (GitLab dogfooding) — when the platform ships a build (`shipBuild()`), an RFC is auto-created wrapping the `ChangePromotion`. Human approval gate cannot be bypassed for self-development changes.
+7. **Expand-contract for database migrations** (Harness, Liquibase) — breaking schema changes use two releases: first adds new schema alongside old (expand), second removes old schema (contract). Each release is independently rollback-safe.
 
 ## Section 1: Change Request Model
 
