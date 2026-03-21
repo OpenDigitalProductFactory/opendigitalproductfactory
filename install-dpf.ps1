@@ -227,30 +227,56 @@ if (-not (Is-StepDone "docker")) {
 
 # --- Step 4: Download DPF -----------------------------------------------------
 
-Write-Step 4 9 "Downloading Digital Product Factory..."
+Write-Step 4 9 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
-    Write-Action "Downloading latest release..."
-    $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
-    $zipPath = "$env:TEMP\dpf-latest.zip"
-    Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
+    # Determine source: the directory where this script lives
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
-    Write-Action "Extracting..."
-    Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
-    # Move contents from the nested directory
-    $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
-    if (Test-Path "$DPF_DIR\docker-compose.yml") {
-        # Preserve .env if it exists
-        $envBackup = $null
-        if (Test-Path "$DPF_DIR\.env") {
-            $envBackup = Get-Content "$DPF_DIR\.env" -Raw
+    # If running from a different location than DPF_DIR, copy files over
+    if ($scriptDir -ne $DPF_DIR) {
+        # Check if this is already a full repo checkout (has docker-compose.yml)
+        if (Test-Path "$scriptDir\docker-compose.yml") {
+            Write-Action "Copying project files from $scriptDir..."
+            # Preserve .env if it exists at the destination
+            $envBackup = $null
+            if (Test-Path "$DPF_DIR\.env") {
+                $envBackup = Get-Content "$DPF_DIR\.env" -Raw
+            }
+            Copy-Item -Path "$scriptDir\*" -Destination $DPF_DIR -Recurse -Force
+            if ($envBackup) {
+                $envBackup | Set-Content "$DPF_DIR\.env"
+            }
+        } else {
+            # Try downloading from GitHub
+            Write-Action "Downloading latest release..."
+            $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
+            $zipPath = "$env:TEMP\dpf-latest.zip"
+            try {
+                Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
+            } catch {
+                Write-Warn "Could not download from GitHub: $($_.Exception.Message)"
+                Write-Warn "Make sure you have the full project files in $scriptDir or $DPF_DIR"
+                Write-Warn "Clone the repo: git clone https://github.com/markdbodman/opendigitalproductfactory.git"
+                exit 1
+            }
+
+            Write-Action "Extracting..."
+            Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
+            $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
+            Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
+            Remove-Item $zipPath -ErrorAction SilentlyContinue
+            Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
         }
+    } else {
+        # Already running from DPF_DIR -- nothing to copy
+        if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
+            Write-Warn "docker-compose.yml not found in $DPF_DIR"
+            Write-Warn "Make sure you have the full project files. Clone the repo first:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
+            exit 1
+        }
+        Write-OK "Project files already in place"
     }
-    Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
-    if ($envBackup) {
-        $envBackup | Set-Content "$DPF_DIR\.env"
-    }
-    Remove-Item $zipPath -ErrorAction SilentlyContinue
-    Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
 
     # Write version file
     "main" | Set-Content "$DPF_DIR\.version"
@@ -268,10 +294,10 @@ if (-not (Is-StepDone "download")) {
         $env:Path += ";$DPF_DIR"
     }
 
-    Write-OK "Extracted to $DPF_DIR"
+    Write-OK "Set up in $DPF_DIR"
     Save-Progress "download"
 } else {
-    Write-OK "Already downloaded"
+    Write-OK "Already set up"
 }
 
 # --- Step 5: Hardware Detection ------------------------------------------------
