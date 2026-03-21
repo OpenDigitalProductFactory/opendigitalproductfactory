@@ -320,6 +320,18 @@ export async function listBankRules() {
   });
 }
 
+// ─── deleteBankRule ───────────────────────────────────────────────────────────
+
+export async function deleteBankRule(id: string): Promise<void> {
+  await requireManageFinance();
+
+  await prisma.bankRule.delete({
+    where: { id },
+  });
+
+  revalidatePath("/finance/banking/rules");
+}
+
 // ─── getReconciliationSummary ─────────────────────────────────────────────────
 
 export async function getReconciliationSummary(bankAccountId: string) {
