@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { getSetupProgress, type StepStatus } from "@/lib/actions/setup-progress";
+import { type StepStatus } from "@/lib/actions/setup-constants";
+import { getSetupProgress } from "@/lib/actions/setup-progress";
 import { checkBootstrapNeeded, executeFirstRunBootstrap } from "@/lib/bootstrap-first-run";
 import { SetupOrchestrator } from "./SetupOrchestrator";
 
@@ -14,15 +15,16 @@ export default async function SetupPage() {
   if (needsBootstrap && !progress) {
     const result = await executeFirstRunBootstrap();
     if ("error" in result) {
+      // Bootstrap itself failed (not just Ollama) — show error with retry
       return (
         <div className="flex items-center justify-center min-h-screen">
           <div className="max-w-md text-center space-y-4">
             <h1 className="text-2xl font-bold">Welcome</h1>
             <p className="text-gray-600">
-              We couldn&apos;t start the AI assistant automatically: {result.error}
+              Something went wrong during setup initialization: {result.error}
             </p>
             <p className="text-sm text-gray-500">
-              Please ensure Ollama is running and try refreshing this page.
+              Try refreshing this page. If the problem persists, check the server logs.
             </p>
           </div>
         </div>
