@@ -83,3 +83,41 @@ describe("classifyTask", () => {
     expect(result.confidence).toBeLessThanOrEqual(0.5);
   });
 });
+
+describe("classifyTask – capability hints", () => {
+  it("detects requiresCodeExecution for 'run this code'", () => {
+    const result = classifyTask("run this code and show me the output", []);
+    expect(result.requiresCodeExecution).toBe(true);
+  });
+
+  it("detects requiresCodeExecution for 'execute the python script'", () => {
+    const result = classifyTask("execute the python script", []);
+    expect(result.requiresCodeExecution).toBe(true);
+  });
+
+  it("does NOT detect requiresCodeExecution for 'write a sort function'", () => {
+    const result = classifyTask("write a function to sort a list", []);
+    expect(result.requiresCodeExecution).toBeUndefined();
+  });
+
+  it("detects requiresComputerUse for 'click the submit button'", () => {
+    const result = classifyTask("click the submit button on the form", []);
+    expect(result.requiresComputerUse).toBe(true);
+  });
+
+  it("detects requiresComputerUse for 'fill out the registration form'", () => {
+    const result = classifyTask("fill out the registration form on the website", []);
+    expect(result.requiresComputerUse).toBe(true);
+  });
+
+  it("does NOT detect capability hints for 'hello'", () => {
+    const result = classifyTask("hello", []);
+    expect(result.requiresCodeExecution).toBeUndefined();
+    expect(result.requiresComputerUse).toBeUndefined();
+  });
+
+  it("sets requiresWebSearch via task type hint for web-search messages", () => {
+    const result = classifyTask("search the web for recent AI news", []);
+    expect(result.requiresWebSearch).toBe(true);
+  });
+});

@@ -493,6 +493,18 @@ export async function sendMessage(input: {
             {
               sensitivity: routeCtx.sensitivity,
               interactionMode: "sync",
+              requiresCodeExecution:
+                modelReqs?.requiredCapabilities?.includes("codeExecution")
+                || classification.requiresCodeExecution
+                || undefined,
+              requiresWebSearch:
+                modelReqs?.requiredCapabilities?.includes("webSearch")
+                || classification.requiresWebSearch
+                || undefined,
+              requiresComputerUse:
+                modelReqs?.requiredCapabilities?.includes("computerUse")
+                || classification.requiresComputerUse
+                || undefined,
             },
           );
           manifestDecision = await routeEndpointV2(manifests, contract, policies, epOverrides);
