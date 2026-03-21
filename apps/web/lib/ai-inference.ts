@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import { decryptSecret } from "@/lib/credential-crypto";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
+import type { RoutedExecutionPlan } from "./routing/recipe-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -302,6 +303,7 @@ export async function callProvider(
   messages: ChatMessage[],
   systemPrompt: string,
   tools?: Array<Record<string, unknown>>,
+  plan?: RoutedExecutionPlan,
 ): Promise<InferenceResult> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
@@ -321,12 +323,19 @@ export async function callProvider(
     chatUrl = `${baseUrl}/messages`;
     body = {
       model: modelId,
-      max_tokens: 4096,
+      max_tokens: plan?.maxTokens ?? 4096,
       system: systemPrompt,
       messages: messages
         .filter((m) => m.role !== "system")
         .map((m) => formatMessageForAnthropic(m)),
     };
+    // EP-INF-005b: Apply execution plan provider settings
+    if (plan?.providerSettings?.thinking) {
+      (body as any).thinking = plan.providerSettings.thinking;
+    }
+    if (plan?.temperature !== undefined) {
+      (body as any).temperature = plan.temperature;
+    }
     // Anthropic tools use { name, description, input_schema } format (not OpenAI's { type: "function", function: {...} })
     if (tools && tools.length > 0) {
       body.tools = tools.map((t) => {
@@ -353,6 +362,13 @@ export async function callProvider(
       contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: textContent }] });
     }
     body = { contents };
+    // EP-INF-005b: Apply execution plan parameters for Gemini
+    if (plan?.maxTokens) {
+      (body as any).generationConfig = { ...(body as any).generationConfig, maxOutputTokens: plan.maxTokens };
+    }
+    if (plan?.temperature !== undefined) {
+      (body as any).generationConfig = { ...(body as any).generationConfig, temperature: plan.temperature };
+    }
     extractText = (d) => {
       const candidates = d.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined;
       return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -366,7 +382,13 @@ export async function callProvider(
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => formatMessageForOpenAI(m)),
     ];
-    body = { model: modelId, messages: allMessages, max_tokens: 4096, keep_alive: -1 };
+    body = { model: modelId, messages: allMessages, max_tokens: plan?.maxTokens ?? 4096, keep_alive: -1 };
+    // EP-INF-005b: Apply execution plan parameters for OpenAI-compatible
+    if (plan?.temperature !== undefined) (body as any).temperature = plan.temperature;
+    if (plan?.providerSettings?.reasoning_effort) (body as any).reasoning_effort = plan.providerSettings.reasoning_effort;
+    if (plan?.toolPolicy?.toolChoice && tools && tools.length > 0) {
+      (body as any).tool_choice = plan.toolPolicy.toolChoice;
+    }
     if (tools && tools.length > 0) {
       body.tools = tools;
     }
