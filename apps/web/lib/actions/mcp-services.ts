@@ -7,10 +7,15 @@ import { checkMcpServerHealth } from "@/lib/mcp-server-health";
 import { discoverMcpServerTools } from "@/lib/mcp-server-tools";
 import { validateConnectionConfig, redactConfig, type McpConnectionConfig } from "@/lib/mcp-server-types";
 
-async function requireManageProviders(): Promise<string> {
+async function requireAuthenticated() {
   const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
+  if (!session?.user) throw new Error("Unauthorized");
+  return session.user;
+}
+
+async function requireManageProviders(): Promise<string> {
+  const user = await requireAuthenticated();
+  if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
     throw new Error("Unauthorized");
   }
   return user.id;
@@ -77,24 +82,31 @@ export async function registerMcpServer(
     return { ok: false, message: `Health check failed: ${health.error ?? "unknown error"}` };
   }
 
-  const server = await prisma.mcpServer.create({
-    data: {
-      serverId,
-      name,
-      config: connectionConfig as object,
-      status: "active",
-      transport: connectionConfig.transport,
-      category: category ?? null,
-      healthStatus: "healthy",
-      lastHealthCheck: new Date(),
-      activatedBy: userId,
-      activatedAt: new Date(),
-    },
-  });
+  try {
+    const server = await prisma.mcpServer.create({
+      data: {
+        serverId,
+        name,
+        config: connectionConfig as object,
+        status: "active",
+        transport: connectionConfig.transport,
+        category: category ?? null,
+        healthStatus: "healthy",
+        lastHealthCheck: new Date(),
+        activatedBy: userId,
+        activatedAt: new Date(),
+      },
+    });
 
-  void discoverMcpServerTools(server.id).catch(() => {});
+    void discoverMcpServerTools(server.id).catch(() => {});
 
-  return { ok: true, message: "Service registered", id: server.id };
+    return { ok: true, message: "Service registered", id: server.id };
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Unique constraint")) {
+      return { ok: false, message: `A server with ID "${serverId}" already exists` };
+    }
+    throw err;
+  }
 }
 
 export async function deactivateMcpServer(
@@ -162,6 +174,7 @@ export async function queryMcpServers(options?: {
   status?: string;
   category?: string;
 }) {
+  await requireAuthenticated();
   return prisma.mcpServer.findMany({
     where: {
       ...(options?.status ? { status: options.status } : { status: { not: "deactivated" } }),
@@ -176,6 +189,7 @@ export async function queryMcpServers(options?: {
 }
 
 export async function getMcpServerDetail(serverId: string) {
+  await requireAuthenticated();
   const server = await prisma.mcpServer.findUnique({
     where: { id: serverId },
     include: {

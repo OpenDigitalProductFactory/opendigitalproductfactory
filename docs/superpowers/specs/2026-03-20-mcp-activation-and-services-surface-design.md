@@ -115,7 +115,7 @@ Function: `checkMcpServerHealth(config: McpConnectionConfig): Promise<HealthChec
 All transports use the MCP `initialize` handshake — the only transport-agnostic way to verify a server speaks MCP:
 
 - For **http**: Send MCP `initialize` JSON-RPC request via HTTP POST. Expect `initialized` response. Timeout: 5 seconds.
-- For **sse**: Open SSE connection, send MCP `initialize` request, expect `initialized` event. Close after receipt. Timeout: 5 seconds.
+- For **sse**: Send MCP `initialize` JSON-RPC request via HTTP POST (same as http transport — the SSE stream is for ongoing communication, not the handshake). Timeout: 5 seconds.
 - For **stdio**: Spawn process, send MCP `initialize` request via stdin, expect `initialized` on stdout. Timeout: 10 seconds.
 
 A plain HTTP GET is not a valid MCP health check — servers may not expose a `/health` endpoint.
