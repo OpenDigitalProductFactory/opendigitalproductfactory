@@ -23,6 +23,15 @@ export function generatePKCE(): { codeVerifier: string; codeChallenge: string } 
 
 const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/** Determine the OAuth redirect URI for a provider.
+ *  Uses oauthRedirectUri from the provider record if set (e.g. shared Codex client requires localhost:1455),
+ *  otherwise falls back to our app's callback route. */
+function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null }): string {
+  if (provider.oauthRedirectUri) return provider.oauthRedirectUri;
+  const appUrl = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000";
+  return `${appUrl}/api/v1/auth/provider-oauth/callback`;
+}
+
 export async function createOAuthFlow(providerId: string): Promise<{ authorizeUrl: string } | { error: string }> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
@@ -42,8 +51,7 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     data: { state, codeVerifier, providerId },
   });
 
-  const appUrl = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000";
-  const redirectUri = `${appUrl}/api/v1/auth/provider-oauth/callback`;
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null });
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -52,9 +60,15 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
     state,
+    scope: "openid profile email offline_access",
   });
 
-  // Add scope from credential entry if configured
+  // Provider-specific params (e.g. OpenAI's codex_cli_simplified_flow)
+  if (provider.authorizeUrl.includes("auth.openai.com")) {
+    params.set("codex_cli_simplified_flow", "true");
+  }
+
+  // Override scope from credential entry if configured
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
   if (cred?.scope) params.set("scope", cred.scope);
 
@@ -81,8 +95,7 @@ export async function exchangeOAuthCode(
     return { error: "provider_misconfigured" };
   }
 
-  const appUrl = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000";
-  const redirectUri = `${appUrl}/api/v1/auth/provider-oauth/callback`;
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null });
 
   const params = new URLSearchParams({
     grant_type: "authorization_code",
@@ -131,6 +144,13 @@ export async function exchangeOAuthCode(
       tokenExpiresAt: expiresAt,
       status: "ok",
     },
+  });
+
+  // Switch the provider's active auth method — the admin initiated OAuth sign-in,
+  // so this is now the active credential method (not api_key).
+  await prisma.modelProvider.update({
+    where: { providerId: flow.providerId },
+    data: { authMethod: "oauth2_authorization_code" },
   });
 
   await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
