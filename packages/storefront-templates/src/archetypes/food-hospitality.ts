@@ -1,4 +1,14 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+const FOOD_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "next-available",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "11:00", end: "22:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 15,
+  minimumNoticeHours: 1,
+  maxAdvanceDays: 30,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -35,6 +45,7 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
       { name: "time", label: "Preferred time", type: "select" as const, required: true, options: ["12:00", "12:30", "13:00", "13:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"] },
       { name: "dietaryRequirements", label: "Dietary requirements", type: "textarea" as const, required: false },
     ],
+    schedulingDefaults: FOOD_SCHEDULING,
   },
   {
     archetypeId: "catering",

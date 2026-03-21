@@ -1,4 +1,14 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+const HEALTHCARE_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [1, 2, 3, 4, 5].map((day) => ({ day, start: "08:00", end: "17:00" })),
+  defaultBeforeBuffer: 5,
+  defaultAfterBuffer: 10,
+  minimumNoticeHours: 24,
+  maxAdvanceDays: 90,
+};
 
 const BOOKING_CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -36,6 +46,7 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       { name: "species", label: "Species", type: "select" as const, required: true, options: ["Dog", "Cat", "Rabbit", "Bird", "Reptile", "Other"] },
       { name: "breed", label: "Breed (optional)", type: "text" as const, required: false },
     ],
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
   },
   {
     archetypeId: "dental-practice",
@@ -63,6 +74,7 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       ...BOOKING_CONTACT_FIELDS,
       { name: "patientType", label: "Patient type", type: "select" as const, required: true, options: ["New patient", "Existing patient"] },
     ],
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
   },
   {
     archetypeId: "physiotherapy",
@@ -89,6 +101,7 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       { name: "condition", label: "Area of concern", type: "text" as const, required: false, placeholder: "e.g. lower back pain" },
       { name: "referral", label: "Referred by", type: "select" as const, required: false, options: ["GP", "Specialist", "Self-referred", "Employer", "Insurance"] },
     ],
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
   },
   {
     archetypeId: "counselling",
@@ -114,6 +127,7 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       { name: "sessionType", label: "Session type", type: "select" as const, required: true, options: ["Individual", "Couples", "Group"] },
       { name: "preferredContact", label: "Preferred contact method", type: "select" as const, required: false, options: ["Email", "Phone", "Either"] },
     ],
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
   },
   {
     archetypeId: "optician",
@@ -136,5 +150,6 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       { type: "contact", title: "Visit Us", sortOrder: 4 },
     ],
     formSchema: BOOKING_CONTACT_FIELDS,
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
   },
 ];
