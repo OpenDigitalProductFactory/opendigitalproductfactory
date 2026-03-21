@@ -73,6 +73,87 @@ async function enrichOllamaInfraCI(baseUrl: string, status: string): Promise<voi
   }
 }
 
+// ─── Single-model activation ─────────────────────────────────────────────────
+
+/**
+ * For Ollama, only ONE model should be active at a time.
+ * Switching between models requires VRAM unload + reload (~30s+).
+ *
+ * Strategy: pick the largest chat model that fits within VRAM
+ * (with 30%+ headroom), activate it, deactivate everything else.
+ */
+async function activateBestOllamaModelOnly(baseUrl: string): Promise<void> {
+  const hwInfo = await getOllamaHardwareInfo(baseUrl).catch(() => null);
+  const vramGb = hwInfo?.vramGb;
+
+  // Get all Ollama chat model profiles
+  const profiles = await prisma.modelProfile.findMany({
+    where: { providerId: "ollama", modelClass: "chat" },
+    select: { id: true, modelId: true, modelStatus: true, maxContextTokens: true, reasoning: true, conversational: true },
+  });
+
+  if (profiles.length === 0) return;
+
+  // Get pulled model sizes from Ollama
+  let modelSizes: Record<string, number> = {};
+  try {
+    const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json() as { models?: Array<{ name: string; size: number }> };
+    for (const m of data.models ?? []) {
+      modelSizes[m.name] = m.size / 1e9; // Convert to GB
+    }
+  } catch { /* use empty — all models treated equally */ }
+
+  // Pick best: largest model that fits in 70% of VRAM, scored by capability
+  let bestId: string | null = null;
+  let bestScore = -1;
+
+  for (const p of profiles) {
+    const sizeGb = modelSizes[p.modelId] ?? 0;
+
+    // If we know VRAM, skip models too large (must leave 30% headroom)
+    if (vramGb != null && sizeGb > 0 && sizeGb > vramGb * 0.7) {
+      continue;
+    }
+
+    // Score: average of reasoning + conversational (the two most important for onboarding/general use)
+    const score = (p.reasoning + p.conversational) / 2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = p.id;
+    }
+  }
+
+  // If nothing fits in VRAM, just pick the smallest
+  if (!bestId && profiles.length > 0) {
+    const smallest = profiles.reduce((a, b) => {
+      const aSize = modelSizes[a.modelId] ?? Infinity;
+      const bSize = modelSizes[b.modelId] ?? Infinity;
+      return aSize < bSize ? a : b;
+    });
+    bestId = smallest.id;
+  }
+
+  if (!bestId) return;
+
+  // Activate best, deactivate rest
+  const bestProfile = profiles.find((p) => p.id === bestId)!;
+  console.log(`[ollama] Activating best model: ${bestProfile.modelId} (score: ${bestScore.toFixed(0)})`);
+
+  for (const p of profiles) {
+    if (p.id === bestId) {
+      if (p.modelStatus !== "active") {
+        await prisma.modelProfile.update({ where: { id: p.id }, data: { modelStatus: "active" } });
+      }
+    } else {
+      if (p.modelStatus === "active") {
+        await prisma.modelProfile.update({ where: { id: p.id }, data: { modelStatus: "inactive" } });
+        console.log(`[ollama] Deactivated ${p.modelId} (only one model active to avoid VRAM swaps)`);
+      }
+    }
+  }
+}
+
 // ─── Bundled provider health check ───────────────────────────────────────────
 
 /**
@@ -110,20 +191,21 @@ export async function checkBundledProviders(): Promise<void> {
 
     const result = await discoverModelsInternal("ollama");
 
-    // Auto-profile if reasonable model count
-    if (result.discovered < 20) {
-      await profileModelsInternal("ollama");
-    }
+    // Do NOT auto-profile Ollama models — profiling loads each model into VRAM,
+    // causing expensive swaps (30s+ per model). Use seed scores instead.
+    // Profiling can be triggered manually from the provider detail page.
+
+    // Only keep the best model active — Ollama swaps are expensive (30s+ VRAM reload)
+    await activateBestOllamaModelOnly(baseUrl);
 
     await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
     // Already active — check if models need discovery (e.g., first run after manual activation)
     const profileCount = await prisma.modelProfile.count({ where: { providerId: "ollama" } });
     if (profileCount === 0) {
-      const result = await discoverModelsInternal("ollama");
-      if (result.discovered < 20) {
-        await profileModelsInternal("ollama");
-      }
+      await discoverModelsInternal("ollama");
+      // Skip profiling — see note above about VRAM swaps
+      await activateBestOllamaModelOnly(baseUrl);
     }
     await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {
