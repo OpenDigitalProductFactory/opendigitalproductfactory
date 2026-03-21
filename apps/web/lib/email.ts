@@ -133,6 +133,93 @@ export function composeApprovalEmail(params: ApprovalEmailParams) {
   return { to, subject, text, html };
 }
 
+// ─── composeDunningEmail ──────────────────────────────────────────────────────
+
+type DunningEmailParams = {
+  to: string;
+  invoiceRef: string;
+  accountName: string;
+  amountDue: string;
+  currency: string;
+  daysPastDue: number;
+  severity: "friendly" | "firm" | "final" | "escalation";
+  payUrl?: string;
+};
+
+export function composeDunningEmail(params: DunningEmailParams) {
+  const { to, invoiceRef, accountName, amountDue, currency, daysPastDue, severity, payUrl } =
+    params;
+
+  const subjectMap: Record<string, string> = {
+    friendly: `Friendly reminder — invoice ${invoiceRef} payment due`,
+    firm: `Payment reminder — invoice ${invoiceRef} overdue`,
+    final: `Final notice — invoice ${invoiceRef} immediate payment required`,
+    escalation: `Account escalation notice — invoice ${invoiceRef}`,
+  };
+
+  const subject = subjectMap[severity] ?? subjectMap["friendly"]!;
+
+  const dueLine =
+    daysPastDue < 0
+      ? `due in ${Math.abs(daysPastDue)} day(s)`
+      : daysPastDue === 0
+        ? `due today`
+        : `${daysPastDue} day(s) overdue`;
+
+  const payNowHtml = payUrl
+    ? `<div style="text-align:center;margin-bottom:24px;"><a href="${payUrl}" style="display:inline-block;background:#22c55e;color:white;font-size:18px;font-weight:600;padding:16px 48px;border-radius:8px;text-decoration:none;">Pay Now</a></div>`
+    : "";
+
+  const payNowText = payUrl ? `\nPay online: ${payUrl}\n` : "";
+
+  const text = [
+    subject,
+    ``,
+    `Dear ${accountName},`,
+    ``,
+    `Invoice: ${invoiceRef}`,
+    `Amount Due: ${currency} ${amountDue}`,
+    `Status: ${dueLine}`,
+    payNowText,
+    `Please contact us if you have any questions.`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;">
+  <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+    <div style="background:white;border-radius:8px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#111;">${subject}</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;">Dear ${accountName},</p>
+
+      <div style="background:#f3f4f6;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Invoice</span>
+          <span style="font-size:16px;font-weight:600;color:#111;">${invoiceRef}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Amount Due</span>
+          <span style="font-size:20px;font-weight:700;color:#111;">${currency} ${amountDue}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#6b7280;font-size:14px;">Status</span>
+          <span style="font-size:14px;color:#ef4444;">${dueLine}</span>
+        </div>
+      </div>
+
+      ${payNowHtml}
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        Please contact us if you have any questions about this invoice.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { to, subject, text, html };
+}
+
 export async function sendEmail(options: EmailOptions): Promise<{ messageId: string }> {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || "587", 10);
