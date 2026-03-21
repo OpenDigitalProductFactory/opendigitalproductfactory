@@ -44,10 +44,17 @@ export function getExclusionReasonV2(
     return `Status is '${ep.status}'`;
   }
 
-  // Model class must be compatible with chat/reasoning tasks
+  // EP-INF-009c: Model class filter — exact match when requiredModelClass is set,
+  // otherwise default to chat/reasoning only (preserves pre-009c behavior).
   const modelClass = (ep as Record<string, unknown>).modelClass ?? "chat";
-  if (modelClass !== "chat" && modelClass !== "reasoning") {
-    return `modelClass "${modelClass}" is not eligible for chat/reasoning tasks`;
+  if (contract.requiredModelClass) {
+    if (modelClass !== contract.requiredModelClass) {
+      return `modelClass "${modelClass}" does not match required "${contract.requiredModelClass}"`;
+    }
+  } else {
+    if (modelClass !== "chat" && modelClass !== "reasoning") {
+      return `modelClass "${modelClass}" is not eligible for chat/reasoning tasks`;
+    }
   }
 
   // Sensitivity clearance
@@ -144,6 +151,7 @@ function filterHardV2(
     } else {
       excluded.push({
         endpointId: ep.id,
+        providerId: ep.providerId,
         modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
@@ -211,6 +219,7 @@ export async function routeEndpointV2(
         const result = computeFitness(ep, dummyReq, endpoints);
         allCandidates.push({
           endpointId: ep.id,
+          providerId: ep.providerId,
           modelId: ep.modelId,
           endpointName: ep.name,
           fitnessScore: result.fitness,
@@ -230,6 +239,7 @@ export async function routeEndpointV2(
         candidates: [
           {
             endpointId: pinnedEp.id,
+            providerId: pinnedEp.providerId,
             modelId: pinnedEp.modelId,
             endpointName: pinnedEp.name,
             fitnessScore: fitness,
@@ -260,6 +270,7 @@ export async function routeEndpointV2(
     if (blockedIds.has(ep.id)) {
       allCandidates.push({
         endpointId: ep.id,
+        providerId: ep.providerId,
         modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
@@ -298,6 +309,11 @@ export async function routeEndpointV2(
 
   // ── No eligible endpoints ──────────────────────────────────────────────
   if (working.length === 0) {
+    console.error(
+      `[routing] No eligible endpoints for '${contract.taskType}' (sensitivity: ${sensitivity}).`,
+      `Exclusions:`, allExcludedReasons,
+      `Contract: requiresStreaming=${contract.requiresStreaming}, requiresTools=${contract.requiresTools}`,
+    );
     return {
       selectedEndpoint: null,
       selectedModelId: null,
@@ -350,6 +366,7 @@ export async function routeEndpointV2(
   const eligibleTraces: CandidateTrace[] = ranked.map(
     ({ endpoint: ep, rankScore, estimatedCost }) => ({
       endpointId: ep.id,
+      providerId: ep.providerId,
       modelId: ep.modelId,
       endpointName: ep.name,
       fitnessScore: rankScore,
