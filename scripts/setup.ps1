@@ -1,4 +1,4 @@
-# Open Digital Product Factory — first-time setup script (Windows PowerShell)
+﻿# Open Digital Product Factory  first-time setup script (Windows PowerShell)
 # Run from the project root: .\scripts\setup.ps1
 
 $ErrorActionPreference = "Stop"
@@ -62,12 +62,12 @@ if (-not (Test-Path "apps\web\.env.local")) {
             Set-Content "apps\web\.env.local"
         Write-Ok "Created apps\web\.env.local with generated AUTH_SECRET"
     } else {
-        Write-Warn "Created apps\web\.env.local — please set AUTH_SECRET manually"
+        Write-Warn "Created apps\web\.env.local  please set AUTH_SECRET manually"
     }
     # Enable Docker internal URL for Ollama
     Add-Content -Path "apps\web\.env.local" -Value "OLLAMA_INTERNAL_URL=http://ollama:11434"
 } else {
-    Write-Ok "apps\web\.env.local already exists — skipping"
+    Write-Ok "apps\web\.env.local already exists  skipping"
 }
 
 if (-not (Test-Path "packages\db\.env")) {
