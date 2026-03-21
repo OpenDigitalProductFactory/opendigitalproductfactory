@@ -391,3 +391,78 @@ export async function backfillModelCards(): Promise<number> {
   }
   return updated;
 }
+
+
+/**
+ * EP-INF-007: Seed execution recipes for all active/degraded model profiles.
+ * Creates champion seed recipes for each contract family, skipping any that
+ * already exist. Safe to run repeatedly — idempotent.
+ */
+export async function seedAllRecipes(): Promise<number> {
+  const { buildSeedRecipe } = await import("./routing/recipe-seeder");
+  const { inferContract } = await import("./routing/request-contract");
+
+  const profiles = await prisma.modelProfile.findMany({
+    where: { modelStatus: { in: ["active", "degraded"] } },
+    include: { provider: true },
+  });
+
+  const contractFamilies = [
+    "sync.greeting", "sync.status-query", "sync.summarization",
+    "sync.reasoning", "sync.data-extraction", "sync.code-gen",
+    "sync.web-search", "sync.creative", "sync.tool-action",
+  ];
+
+  let seeded = 0;
+  for (const profile of profiles) {
+    for (const family of contractFamilies) {
+      // Check if recipe already exists
+      const existing = await prisma.executionRecipe.findFirst({
+        where: {
+          providerId: profile.providerId,
+          modelId: profile.modelId,
+          contractFamily: family,
+          status: "champion",
+        },
+      });
+      if (existing) continue;
+
+      // Create a minimal contract for seeding
+      const taskType = family.split(".")[1] ?? "reasoning";
+      const contract = await inferContract(
+        taskType,
+        [{ role: "user", content: "seed" }],
+      );
+
+      const modelCard = {
+        capabilities: (profile.capabilities as import("./routing/model-card-types").ModelCardCapabilities) ?? {},
+        maxOutputTokens: profile.maxOutputTokens,
+        modelClass: (profile.modelClass as string) ?? "chat",
+      };
+
+      const recipe = buildSeedRecipe(
+        profile.providerId,
+        profile.modelId,
+        family,
+        modelCard,
+        contract,
+      );
+
+      await prisma.executionRecipe.create({
+        data: {
+          providerId: profile.providerId,
+          modelId: profile.modelId,
+          contractFamily: family,
+          version: 1,
+          status: "champion",
+          origin: "seed",
+          providerSettings: recipe.providerSettings,
+          toolPolicy: recipe.toolPolicy,
+          responsePolicy: recipe.responsePolicy,
+        },
+      });
+      seeded++;
+    }
+  }
+  return seeded;
+}
