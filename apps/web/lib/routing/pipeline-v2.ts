@@ -309,11 +309,6 @@ export async function routeEndpointV2(
 
   // ── No eligible endpoints ──────────────────────────────────────────────
   if (working.length === 0) {
-    console.error(
-      `[routing] No eligible endpoints for '${contract.taskType}' (sensitivity: ${sensitivity}).`,
-      `Exclusions:`, allExcludedReasons,
-      `Contract: requiresStreaming=${contract.requiresStreaming}, requiresTools=${contract.requiresTools}`,
-    );
     return {
       selectedEndpoint: null,
       selectedModelId: null,

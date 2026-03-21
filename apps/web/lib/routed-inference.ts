@@ -187,10 +187,7 @@ export async function routeAndCall(
       messages = [lastUserMsg];
     }
 
-    console.log(
-      `[routing] Tools stripped: prompt replaced, history trimmed to 1 message,`,
-      `tools=${options?.tools?.length ?? 0}→0`,
-    );
+    // Tools stripped — prompt replaced, history trimmed, no nudging
   }
 
   // 3b. If a preferred provider was requested, check if the decision matches.
