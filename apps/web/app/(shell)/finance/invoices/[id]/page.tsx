@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/invoices/[id]/page.tsx
 import { getInvoice } from "@/lib/actions/finance";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
@@ -30,6 +32,9 @@ export default async function InvoiceDetailPage({ params }: Props) {
   if (!invoice) {
     notFound();
   }
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const colour = STATUS_COLOURS[invoice.status] ?? "#6b7280";
   const totalAmount = Number(invoice.totalAmount);
@@ -96,11 +101,11 @@ export default async function InvoiceDetailPage({ params }: Props) {
         </div>
         <div className="text-right">
           <p className="text-2xl font-bold text-[var(--dpf-text)]">
-            £{formatMoney(totalAmount)}
+            {sym}{formatMoney(totalAmount)}
           </p>
           {amountDue !== totalAmount && (
             <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
-              Due: £{formatMoney(amountDue)}
+              Due: {sym}{formatMoney(amountDue)}
             </p>
           )}
         </div>
@@ -171,13 +176,13 @@ export default async function InvoiceDetailPage({ params }: Props) {
                     {Number(item.quantity)}
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                    £{formatMoney(Number(item.unitPrice))}
+                    {sym}{formatMoney(Number(item.unitPrice))}
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(item.taxRate)}%
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(Number(item.lineTotal))}
+                    {sym}{formatMoney(Number(item.lineTotal))}
                   </td>
                 </tr>
               ))}
@@ -191,7 +196,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                   Subtotal
                 </td>
                 <td className="px-4 py-2 text-right text-[var(--dpf-text)]">
-                  £{formatMoney(subtotal)}
+                  {sym}{formatMoney(subtotal)}
                 </td>
               </tr>
               {taxAmount > 0 && (
@@ -203,7 +208,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                     Tax
                   </td>
                   <td className="px-4 py-2 text-right text-[var(--dpf-muted)]">
-                    £{formatMoney(taxAmount)}
+                    {sym}{formatMoney(taxAmount)}
                   </td>
                 </tr>
               )}
@@ -215,7 +220,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                   Total
                 </td>
                 <td className="px-4 py-2 text-right text-[var(--dpf-text)] font-bold">
-                  £{formatMoney(totalAmount)}
+                  {sym}{formatMoney(totalAmount)}
                 </td>
               </tr>
             </tfoot>
@@ -269,7 +274,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right font-semibold text-[#4ade80]">
-                      £{formatMoney(Number(alloc.amount))}
+                      {sym}{formatMoney(Number(alloc.amount))}
                     </td>
                   </tr>
                 ))}

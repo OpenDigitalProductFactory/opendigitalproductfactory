@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/invoices/page.tsx
 import { prisma } from "@dpf/db";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -27,7 +29,7 @@ type Props = { searchParams: Promise<{ status?: string }> };
 export default async function InvoicesPage({ searchParams }: Props) {
   const { status } = await searchParams;
 
-  const [invoices, statusCounts] = await Promise.all([
+  const [invoices, statusCounts, orgSettings] = await Promise.all([
     prisma.invoice.findMany({
       where: status ? { status } : undefined,
       orderBy: { createdAt: "desc" },
@@ -44,7 +46,9 @@ export default async function InvoicesPage({ searchParams }: Props) {
       by: ["status"],
       _count: true,
     }),
+    getOrgSettings(),
   ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const countByStatus = Object.fromEntries(
     statusCounts.map((s) => [s.status, s._count])
@@ -178,7 +182,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
                       {new Date(inv.dueDate).toLocaleDateString("en-GB")}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(Number(inv.totalAmount))}
+                      {sym}{formatMoney(Number(inv.totalAmount))}
                     </td>
                   </tr>
                 );

@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/purchase-orders/page.tsx
 import { listPurchaseOrders } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -17,10 +19,14 @@ type Props = { searchParams: Promise<{ status?: string; supplierId?: string }> }
 export default async function PurchaseOrdersPage({ searchParams }: Props) {
   const { status, supplierId } = await searchParams;
 
-  const orders = await listPurchaseOrders({
-    status: status ?? undefined,
-    supplierId: supplierId ?? undefined,
-  });
+  const [orders, orgSettings] = await Promise.all([
+    listPurchaseOrders({
+      status: status ?? undefined,
+      supplierId: supplierId ?? undefined,
+    }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -143,7 +149,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(po.totalAmount)}
+                      {sym}{formatMoney(po.totalAmount)}
                     </td>
                   </tr>
                 );

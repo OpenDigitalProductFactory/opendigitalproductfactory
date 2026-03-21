@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/assets/[id]/page.tsx
 import { getAsset, calculateDepreciation } from "@/lib/actions/assets";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AssetDisposalForm } from "@/components/finance/AssetDisposalForm";
@@ -43,6 +45,9 @@ export default async function AssetDetailPage({ params }: Props) {
   const asset = await getAsset(id);
 
   if (!asset) notFound();
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const purchaseCost = Number(asset.purchaseCost);
   const currentBookValue = Number(asset.currentBookValue);
@@ -160,13 +165,13 @@ export default async function AssetDetailPage({ params }: Props) {
           <div>
             <p className="text-[10px] text-[var(--dpf-muted)] mb-1">Book Value</p>
             <p className="text-lg font-bold text-[var(--dpf-text)]">
-              £{formatMoney(currentBookValue)}
+              {sym}{formatMoney(currentBookValue)}
             </p>
           </div>
           <div>
             <p className="text-[10px] text-[var(--dpf-muted)] mb-1">Accumulated Depreciation</p>
             <p className="text-lg font-bold" style={{ color: "#fb923c" }}>
-              £{formatMoney(accumulatedDepreciation)}
+              {sym}{formatMoney(accumulatedDepreciation)}
             </p>
           </div>
           <div>
@@ -213,13 +218,13 @@ export default async function AssetDetailPage({ params }: Props) {
                 >
                   <td className="px-4 py-2 text-[var(--dpf-muted)]">Month {entry.month}</td>
                   <td className="px-4 py-2 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(entry.openingValue)}
+                    {sym}{formatMoney(entry.openingValue)}
                   </td>
                   <td className="px-4 py-2 text-right" style={{ color: "#fb923c" }}>
-                    £{formatMoney(entry.depreciation)}
+                    {sym}{formatMoney(entry.depreciation)}
                   </td>
                   <td className="px-4 py-2 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(entry.closingValue)}
+                    {sym}{formatMoney(entry.closingValue)}
                   </td>
                 </tr>
               ))}
@@ -243,13 +248,13 @@ export default async function AssetDetailPage({ params }: Props) {
             <div>
               <p className="text-[10px] text-[var(--dpf-muted)] mb-1">Total Depreciation</p>
               <p className="text-sm font-semibold" style={{ color: "#fb923c" }}>
-                £{formatMoney(fullSchedule.totalDepreciation)}
+                {sym}{formatMoney(fullSchedule.totalDepreciation)}
               </p>
             </div>
             <div>
               <p className="text-[10px] text-[var(--dpf-muted)] mb-1">Final Book Value</p>
               <p className="text-sm font-semibold text-[var(--dpf-text)]">
-                £{formatMoney(residualValue)}
+                {sym}{formatMoney(residualValue)}
               </p>
             </div>
           </div>

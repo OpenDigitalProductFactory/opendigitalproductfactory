@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/bills/[id]/page.tsx
 import { getBill } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SubmitBillButton } from "@/components/finance/SubmitBillButton";
@@ -25,6 +27,9 @@ export default async function BillDetailPage({ params }: Props) {
   const { id } = await params;
   const bill = await getBill(id);
   if (!bill) notFound();
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const statusColour = STATUS_COLOURS[bill.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
@@ -102,13 +107,13 @@ export default async function BillDetailPage({ params }: Props) {
                   <td className="px-4 py-2.5 text-[var(--dpf-text)]">{li.description}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">{Number(li.quantity)}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                    £{formatMoney(li.unitPrice)}
+                    {sym}{formatMoney(li.unitPrice)}
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(li.taxRate)}%
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(li.lineTotal)}
+                    {sym}{formatMoney(li.lineTotal)}
                   </td>
                 </tr>
               ))}
@@ -118,14 +123,14 @@ export default async function BillDetailPage({ params }: Props) {
                 <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
                   Subtotal
                 </td>
-                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">£{formatMoney(bill.subtotal)}</td>
+                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.subtotal)}</td>
               </tr>
               {Number(bill.taxAmount) > 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
                     Tax
                   </td>
-                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">£{formatMoney(bill.taxAmount)}</td>
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.taxAmount)}</td>
                 </tr>
               )}
               <tr className="border-t border-[var(--dpf-border)]">
@@ -133,7 +138,7 @@ export default async function BillDetailPage({ params }: Props) {
                   Total
                 </td>
                 <td className="px-4 py-2.5 text-right text-[var(--dpf-text)] font-bold">
-                  £{formatMoney(bill.totalAmount)}
+                  {sym}{formatMoney(bill.totalAmount)}
                 </td>
               </tr>
             </tfoot>
@@ -204,7 +209,7 @@ export default async function BillDetailPage({ params }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(alloc.amount)}
+                      {sym}{formatMoney(alloc.amount)}
                     </td>
                   </tr>
                 ))}
