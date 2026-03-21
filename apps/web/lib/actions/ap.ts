@@ -5,7 +5,8 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import type { CreateSupplierInput } from "@/lib/ap-validation";
+import { sendEmail, composeApprovalEmail } from "@/lib/email";
+import type { CreateSupplierInput, CreateBillInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -80,4 +81,261 @@ export async function listSuppliers() {
     },
     orderBy: { name: "asc" },
   });
+}
+
+// ─── Total calculation helpers ────────────────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+interface LineItemCalc {
+  subtotal: number;
+  taxAmount: number;
+  lineTotal: number;
+}
+
+function calcLineItem(quantity: number, unitPrice: number, taxRate: number): LineItemCalc {
+  const subtotal = round2(quantity * unitPrice);
+  const taxAmount = round2(subtotal * (taxRate / 100));
+  const lineTotal = round2(subtotal + taxAmount);
+  return { subtotal, taxAmount, lineTotal };
+}
+
+// ─── Bill ref generator ───────────────────────────────────────────────────────
+
+async function generateBillRef(): Promise<string> {
+  const year = new Date().getFullYear();
+  const count = await prisma.bill.count();
+  const seq = String(count + 1).padStart(4, "0");
+  return `BILL-${year}-${seq}`;
+}
+
+// ─── createBill ───────────────────────────────────────────────────────────────
+
+export async function createBill(input: CreateBillInput) {
+  const userId = await requireManageFinance();
+
+  const billRef = await generateBillRef();
+
+  let subtotal = 0;
+  let taxAmount = 0;
+  let totalAmount = 0;
+
+  const lineItemsData = input.lineItems.map((item, idx) => {
+    const calc = calcLineItem(item.quantity, item.unitPrice, item.taxRate ?? 0);
+    subtotal = round2(subtotal + calc.subtotal);
+    taxAmount = round2(taxAmount + calc.taxAmount);
+    totalAmount = round2(totalAmount + calc.lineTotal);
+
+    return {
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate ?? 0,
+      taxAmount: calc.taxAmount,
+      lineTotal: calc.lineTotal,
+      accountCode: item.accountCode ?? null,
+      sortOrder: idx,
+    };
+  });
+
+  const bill = await prisma.bill.create({
+    data: {
+      billRef,
+      supplierId: input.supplierId,
+      invoiceRef: input.invoiceRef ?? null,
+      issueDate: new Date(input.issueDate),
+      dueDate: new Date(input.dueDate),
+      currency: input.currency ?? "GBP",
+      purchaseOrderId: input.purchaseOrderId ?? null,
+      notes: input.notes ?? null,
+      status: "draft",
+      subtotal,
+      taxAmount,
+      totalAmount,
+      amountPaid: 0,
+      amountDue: totalAmount,
+      createdById: userId,
+      lineItems: {
+        create: lineItemsData,
+      },
+    },
+    select: { id: true, billRef: true, totalAmount: true },
+  });
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/bills");
+
+  return bill;
+}
+
+// ─── getBill ──────────────────────────────────────────────────────────────────
+
+export async function getBill(id: string) {
+  await requireManageFinance();
+
+  return prisma.bill.findUnique({
+    where: { id },
+    include: {
+      lineItems: { orderBy: { sortOrder: "asc" } },
+      supplier: { select: { id: true, supplierId: true, name: true } },
+      approvals: {
+        include: {
+          approver: { select: { id: true, email: true } },
+        },
+      },
+      allocations: {
+        include: {
+          payment: { select: { id: true, paymentRef: true, amount: true } },
+        },
+      },
+    },
+  });
+}
+
+// ─── listBills ────────────────────────────────────────────────────────────────
+
+interface ListBillsFilters {
+  status?: string;
+  supplierId?: string;
+}
+
+export async function listBills(filters?: ListBillsFilters) {
+  await requireManageFinance();
+
+  const where: Record<string, unknown> = {};
+  if (filters?.status) where.status = filters.status;
+  if (filters?.supplierId) where.supplierId = filters.supplierId;
+
+  return prisma.bill.findMany({
+    where,
+    include: {
+      supplier: { select: { id: true, supplierId: true, name: true } },
+      lineItems: { orderBy: { sortOrder: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+// ─── submitBillForApproval ────────────────────────────────────────────────────
+
+export async function submitBillForApproval(billId: string): Promise<void> {
+  await requireManageFinance();
+
+  const bill = await prisma.bill.findUnique({
+    where: { id: billId },
+    include: {
+      supplier: { select: { name: true, email: true } },
+    },
+  });
+  if (!bill) throw new Error("Bill not found");
+
+  // Find matching approval rules by amount
+  const totalAmount = Number(bill.totalAmount);
+  const rules = await prisma.approvalRule.findMany({
+    where: {
+      isActive: true,
+      minAmount: { lte: totalAmount },
+      OR: [{ maxAmount: null }, { maxAmount: { gte: totalAmount } }],
+    },
+    include: {
+      approver: { select: { id: true, email: true } },
+    },
+  });
+
+  // Create a BillApproval record per matching rule
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  for (const rule of rules) {
+    const token = nanoid(32);
+    await prisma.billApproval.create({
+      data: {
+        billId,
+        approverId: rule.approverId,
+        token,
+        status: "pending",
+      },
+    });
+
+    // Send approval email
+    const approveUrl = `${baseUrl}/finance/ap/approvals/${token}`;
+    const emailPayload = composeApprovalEmail({
+      to: rule.approver.email,
+      billRef: bill.billRef,
+      supplierName: bill.supplier.name,
+      totalAmount: totalAmount.toFixed(2),
+      currency: bill.currency,
+      approveUrl,
+    });
+    await sendEmail(emailPayload);
+  }
+
+  await prisma.bill.update({
+    where: { id: billId },
+    data: { status: "awaiting_approval" },
+  });
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/bills");
+}
+
+// ─── respondToBillApproval ────────────────────────────────────────────────────
+
+export async function respondToBillApproval(
+  token: string,
+  approved: boolean,
+  comments?: string,
+): Promise<void> {
+  // Token-based — no session auth required
+  const approval = await prisma.billApproval.findUnique({ where: { token } });
+  if (!approval) throw new Error("Approval not found");
+
+  const newStatus = approved ? "approved" : "rejected";
+
+  await prisma.billApproval.update({
+    where: { token },
+    data: {
+      status: newStatus,
+      respondedAt: new Date(),
+      comments: comments ?? null,
+    },
+  });
+
+  // Check if all approvals for this bill have been resolved
+  const allApprovals = await prisma.billApproval.findMany({
+    where: { billId: approval.billId },
+  });
+
+  const anyRejected = allApprovals.some((a) => a.status === "rejected");
+  const allApproved = allApprovals.every((a) => a.status === "approved");
+
+  if (anyRejected) {
+    await prisma.bill.update({
+      where: { id: approval.billId },
+      data: { status: "draft" },
+    });
+  } else if (allApproved) {
+    await prisma.bill.update({
+      where: { id: approval.billId },
+      data: { status: "approved" },
+    });
+  }
+}
+
+// ─── getBillByApprovalToken ───────────────────────────────────────────────────
+
+export async function getBillByApprovalToken(token: string) {
+  const approval = await prisma.billApproval.findUnique({
+    where: { token },
+    include: {
+      bill: {
+        include: {
+          lineItems: { orderBy: { sortOrder: "asc" } },
+          supplier: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  return approval;
 }
