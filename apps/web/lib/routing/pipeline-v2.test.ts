@@ -239,6 +239,46 @@ describe("getExclusionReasonV2", () => {
   });
 });
 
+// ── getExclusionReasonV2 – capability-based exclusion (EP-INF-008b) ──────────
+
+describe("getExclusionReasonV2 – capability-based exclusion (EP-INF-008b)", () => {
+  it("excludes model without codeExecution when contract requires it", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, codeExecution: false } as any });
+    const contract = makeContract({ requiresCodeExecution: true });
+    expect(getExclusionReasonV2(ep, contract)).toMatch(/codeExecution/);
+  });
+
+  it("includes model with codeExecution when contract requires it", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, codeExecution: true } as any });
+    const contract = makeContract({ requiresCodeExecution: true });
+    expect(getExclusionReasonV2(ep, contract)).toBeNull();
+  });
+
+  it("excludes model without webSearch when contract requires it", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, webSearch: false } as any });
+    const contract = makeContract({ requiresWebSearch: true });
+    expect(getExclusionReasonV2(ep, contract)).toMatch(/webSearch/);
+  });
+
+  it("includes model with webSearch when contract requires it", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, webSearch: true } as any });
+    const contract = makeContract({ requiresWebSearch: true });
+    expect(getExclusionReasonV2(ep, contract)).toBeNull();
+  });
+
+  it("excludes model without computerUse when contract requires it", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, computerUse: false } as any });
+    const contract = makeContract({ requiresComputerUse: true });
+    expect(getExclusionReasonV2(ep, contract)).toMatch(/computerUse/);
+  });
+
+  it("does not check capabilities when contract does not require them", () => {
+    const ep = makeEndpoint({ capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true, codeExecution: false, webSearch: false, computerUse: false } as any });
+    const contract = makeContract(); // no requiresCodeExecution/webSearch/computerUse
+    expect(getExclusionReasonV2(ep, contract)).toBeNull();
+  });
+});
+
 // ── routeEndpointV2 ─────────────────────────────────────────────────────────
 
 describe("routeEndpointV2", () => {

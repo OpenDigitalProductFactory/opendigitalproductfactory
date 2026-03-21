@@ -96,6 +96,19 @@ export function getExclusionReasonV2(
     return "Missing required capability: file/pdf input (pdfInput)";
   }
 
+  // EP-INF-008b: Specialized capability requirements
+  if (contract.requiresCodeExecution && ep.capabilities.codeExecution !== true) {
+    return "Missing required capability: codeExecution";
+  }
+
+  if (contract.requiresWebSearch && ep.capabilities.webSearch !== true) {
+    return "Missing required capability: webSearch";
+  }
+
+  if (contract.requiresComputerUse && ep.capabilities.computerUse !== true) {
+    return "Missing required capability: computerUse";
+  }
+
   // Residency policy
   if (contract.residencyPolicy === "local_only" && ep.providerId !== "ollama") {
     return "Residency policy 'local_only' requires ollama provider";
