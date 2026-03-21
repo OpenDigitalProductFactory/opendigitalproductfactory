@@ -42,6 +42,15 @@ function stripModelsPrefix(name: string): string {
  * Determine if this is an embedding-only model based on supported generation methods.
  * Embedding models only support "embedContent", not "generateContent".
  */
+/** Detect if a Gemini model is deprecated from its metadata. */
+function detectGeminiDeprecation(raw: GeminiModel): boolean {
+  const desc = (raw.description ?? "").toLowerCase();
+  if (desc.includes("deprecated") || desc.includes("no longer available")) return true;
+  // Models with no supported generation methods are effectively unusable
+  if (raw.supportedGenerationMethods && raw.supportedGenerationMethods.length === 0) return true;
+  return false;
+}
+
 function isEmbeddingOnly(methods: string[]): boolean {
   return methods.includes("embedContent") && !methods.includes("generateContent");
 }
@@ -123,7 +132,7 @@ export const geminiAdapter: ProviderAdapter = {
       trainingDataCutoff: null,
       reliableKnowledgeCutoff: null,
 
-      status: "active",
+      status: detectGeminiDeprecation(raw) ? "deprecated" : "active",
       deprecationDate: null,
       retiredAt: null,
 
