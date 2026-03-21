@@ -41,9 +41,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
 
   if (done) {
     return (
-      <div style={{ color: "var(--dpf-text, #111827)" }}>
+      <div style={{ color: "var(--dpf-text)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Finances configured</h2>
-        <p style={{ fontSize: 14, color: "var(--dpf-muted, #6b7280)", marginBottom: 16, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 14, color: "var(--dpf-muted)", marginBottom: 16, lineHeight: 1.6 }}>
           Your finances are set up! Based on your business type, we&#39;ve configured payment terms,
           tax settings, and expense categories. You can customise these anytime in Finance Settings.
         </p>
@@ -53,9 +53,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
             style={{
               padding: "8px 16px",
               borderRadius: 6,
-              border: "1px solid var(--dpf-border, #d1d5db)",
-              background: "var(--dpf-surface, #fff)",
-              color: "var(--dpf-text, #111827)",
+              border: "1px solid var(--dpf-border)",
+              background: "var(--dpf-surface-1)",
+              color: "var(--dpf-text)",
               fontSize: 13,
               textDecoration: "none",
             }}
@@ -68,7 +68,7 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
               padding: "8px 20px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent, #4f46e5)",
+              background: "var(--dpf-accent)",
               color: "#fff",
               cursor: "pointer",
               fontSize: 13,
@@ -85,7 +85,7 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
   // ─── Setup form ───────────────────────────────────────────────────────────
 
   return (
-    <div style={{ maxWidth: 480, color: "var(--dpf-text, #111827)" }}>
+    <div style={{ maxWidth: 480, color: "var(--dpf-text)" }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Financial setup</h2>
 
       {/* Question 1: Business type confirmation (read-only) */}
@@ -93,14 +93,14 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
         style={{
           padding: "12px 16px",
           borderRadius: 8,
-          background: "var(--dpf-surface-alt, #f9fafb)",
-          border: "1px solid var(--dpf-border, #e5e7eb)",
+          background: "var(--dpf-surface-2)",
+          border: "1px solid var(--dpf-border)",
           marginBottom: 16,
           fontSize: 13,
-          color: "var(--dpf-muted, #6b7280)",
+          color: "var(--dpf-muted)",
         }}
       >
-        <span style={{ fontWeight: 600, color: "var(--dpf-text, #111827)" }}>Your business type: </span>
+        <span style={{ fontWeight: 600, color: "var(--dpf-text)" }}>Your business type: </span>
         {archetypeName}. We&#39;ll configure your finances to match.
       </div>
 
@@ -114,9 +114,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
               style={{
                 padding: "8px 20px",
                 borderRadius: 6,
-                border: `1px solid ${vatRegistered ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-border, #d1d5db)"}`,
-                background: vatRegistered ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-surface, #fff)",
-                color: vatRegistered ? "#fff" : "var(--dpf-text, #111827)",
+                border: `1px solid ${vatRegistered ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+                background: vatRegistered ? "var(--dpf-accent)" : "var(--dpf-surface-1)",
+                color: vatRegistered ? "#fff" : "var(--dpf-text)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: vatRegistered ? 600 : 400,
@@ -129,9 +129,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
               style={{
                 padding: "8px 20px",
                 borderRadius: 6,
-                border: `1px solid ${!vatRegistered ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-border, #d1d5db)"}`,
-                background: !vatRegistered ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-surface, #fff)",
-                color: !vatRegistered ? "#fff" : "var(--dpf-text, #111827)",
+                border: `1px solid ${!vatRegistered ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+                background: !vatRegistered ? "var(--dpf-accent)" : "var(--dpf-surface-1)",
+                color: !vatRegistered ? "#fff" : "var(--dpf-text)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: !vatRegistered ? 600 : 400,
@@ -151,10 +151,10 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
             style={{
               padding: "8px 12px",
               borderRadius: 6,
-              border: "1px solid var(--dpf-border, #d1d5db)",
+              border: "1px solid var(--dpf-border)",
               fontSize: 14,
-              color: "var(--dpf-text, #111827)",
-              background: "var(--dpf-surface, #fff)",
+              color: "var(--dpf-text)",
+              background: "var(--dpf-surface-1)",
               minWidth: 160,
             }}
           >
@@ -176,7 +176,7 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
               padding: "8px 20px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent, #4f46e5)",
+              background: "var(--dpf-accent)",
               color: "#fff",
               cursor: submitting ? "wait" : "pointer",
               fontSize: 13,

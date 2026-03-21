@@ -76,27 +76,27 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
 
   if (step === 1) {
     return (
-      <div style={{ color: "var(--dpf-text, #111827)" }}>
+      <div style={{ color: "var(--dpf-text)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Choose your business type</h2>
         <input
           type="search"
           placeholder="Search archetypes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", fontSize: 14, marginBottom: 16, color: "var(--dpf-text, #111827)", background: "var(--dpf-surface, #fff)" }}
+          style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, marginBottom: 16, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }}
         />
         {categories.map((cat) => {
           const items = filtered.filter((a) => a.category === cat);
           if (!items.length) return null;
           return (
             <div key={cat} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted, #6b7280)", marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", marginBottom: 8 }}>
                 {cat.replace(/-/g, " ")}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
                 {items.map((a) => (
                   <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
-                    style={{ padding: "12px 16px", textAlign: "left", borderRadius: 8, border: "1px solid var(--dpf-border, #d1d5db)", background: "var(--dpf-surface, #fff)", cursor: "pointer", fontSize: 13, color: "var(--dpf-text, #111827)" }}>
+                    style={{ padding: "12px 16px", textAlign: "left", borderRadius: 8, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", cursor: "pointer", fontSize: 13, color: "var(--dpf-text)" }}>
                     <div style={{ fontWeight: 600 }}>{a.name}</div>
                   </button>
                 ))}
@@ -112,22 +112,22 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
     const items = Array.isArray(selected?.itemTemplates) ? selected!.itemTemplates as Array<{ name: string }> : [];
     const sections = Array.isArray(selected?.sectionTemplates) ? selected!.sectionTemplates as Array<{ title: string; type: string }> : [];
     return (
-      <div style={{ color: "var(--dpf-text, #111827)" }}>
+      <div style={{ color: "var(--dpf-text)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Preview: {selected?.name}</h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted, #6b7280)", marginBottom: 16 }}>These sections and items will be created. You can edit them later.</p>
+        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>These sections and items will be created. You can edit them later.</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>
-            {sections.map((s, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border, #e5e7eb)" }}>{s.title}</div>)}
+            {sections.map((s, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border)" }}>{s.title}</div>)}
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Items / Services</div>
-            {items.map((item, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border, #e5e7eb)" }}>{item.name}</div>)}
+            {items.map((item, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border)" }}>{item.name}</div>)}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", background: "var(--dpf-surface, #fff)", color: "var(--dpf-text, #111827)", cursor: "pointer", fontSize: 13 }}>Back</button>
-          <button onClick={() => setStep(3)} style={{ padding: "8px 16px", borderRadius: 6, border: "none", background: "var(--dpf-accent, #4f46e5)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Continue</button>
+          <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
+          <button onClick={() => setStep(3)} style={{ padding: "8px 16px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Continue</button>
         </div>
       </div>
     );
@@ -146,37 +146,37 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
 
   // Step 3: identity
   return (
-    <div style={{ maxWidth: 480, color: "var(--dpf-text, #111827)" }}>
+    <div style={{ maxWidth: 480, color: "var(--dpf-text)" }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Your business identity</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Business name *</div>
           <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)}
-            required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", fontSize: 14, color: "var(--dpf-text, #111827)", background: "var(--dpf-surface, #fff)" }} />
+            required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
         </label>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>URL slug *</div>
           <input type="text" value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)}
-            required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text, #111827)", background: "var(--dpf-surface, #fff)" }} />
-          <div style={{ fontSize: 11, color: "var(--dpf-muted, #6b7280)", marginTop: 4 }}>
+            required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+          <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
             Permanent URL — choose carefully, this cannot easily be changed later. Your storefront will be at /s/{orgSlug || "your-slug"}
           </div>
         </label>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Tagline</div>
           <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)}
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", fontSize: 14, color: "var(--dpf-text, #111827)", background: "var(--dpf-surface, #fff)" }} />
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
         </label>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Hero image URL</div>
           <input type="url" value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)}
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", fontSize: 14, color: "var(--dpf-text, #111827)", background: "var(--dpf-surface, #fff)" }} />
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
         </label>
         {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border, #d1d5db)", background: "var(--dpf-surface, #fff)", color: "var(--dpf-text, #111827)", cursor: "pointer", fontSize: 13 }}>Back</button>
+          <button onClick={() => setStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
           <button onClick={handleComplete} disabled={submitting || !orgName || !orgSlug}
-            style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent, #4f46e5)", color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
+            style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
             {submitting ? "Creating..." : "Create Storefront"}
           </button>
         </div>

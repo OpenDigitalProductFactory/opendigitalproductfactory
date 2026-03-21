@@ -34,7 +34,7 @@ export function ComplianceModal({ open, onClose, title, children }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
-      <div className="w-full max-w-lg mx-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface,#1a1a2e)] p-6 shadow-xl">
+      <div className="w-full max-w-lg mx-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[var(--dpf-text)]">{title}</h2>
           <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-sm">
