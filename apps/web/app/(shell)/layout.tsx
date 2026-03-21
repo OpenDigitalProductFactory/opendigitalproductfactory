@@ -11,6 +11,12 @@ import { StatusBanner } from "@/components/shell/StatusBanner";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
+  // First-run check — redirect to setup if no org exists
+  const { isFirstRun } = await import("@/lib/actions/setup-progress");
+  if (await isFirstRun()) {
+    redirect("/setup");
+  }
+
   const session = await auth();
   if (!session?.user) redirect("/welcome");
   if (session.user.type === "customer") redirect("/portal");
