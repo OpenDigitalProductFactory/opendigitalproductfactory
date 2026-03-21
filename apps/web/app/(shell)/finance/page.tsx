@@ -16,62 +16,96 @@ const STATUS_COLOURS: Record<string, string> = {
 export default async function FinancePage() {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const in30Days = new Date(now);
+  in30Days.setDate(in30Days.getDate() + 30);
 
-  const [totalOutstanding, overdueInvoices, paidThisMonth, recentInvoices, moneyYouOwe] =
-    await Promise.all([
-      // Money owed to you — sum amountDue for active receivable statuses
-      prisma.invoice.aggregate({
-        where: {
-          status: { in: ["sent", "viewed", "partially_paid", "overdue"] },
-        },
-        _sum: { amountDue: true },
-        _count: true,
-      }),
+  const [
+    totalOutstanding,
+    overdueInvoices,
+    paidThisMonth,
+    recentInvoices,
+    moneyYouOwe,
+    bankAccounts,
+    expectedInflows,
+    expectedOutflows,
+  ] = await Promise.all([
+    // Money owed to you — sum amountDue for active receivable statuses
+    prisma.invoice.aggregate({
+      where: {
+        status: { in: ["sent", "viewed", "partially_paid", "overdue"] },
+      },
+      _sum: { amountDue: true },
+      _count: true,
+    }),
 
-      // Overdue invoices — full list for count + oldest offender
-      prisma.invoice.findMany({
-        where: { status: "overdue" },
-        orderBy: { dueDate: "asc" },
-        select: {
-          id: true,
-          invoiceRef: true,
-          dueDate: true,
-          account: { select: { name: true } },
-        },
-      }),
+    // Overdue invoices — full list for count + oldest offender
+    prisma.invoice.findMany({
+      where: { status: "overdue" },
+      orderBy: { dueDate: "asc" },
+      select: {
+        id: true,
+        invoiceRef: true,
+        dueDate: true,
+        account: { select: { name: true } },
+      },
+    }),
 
-      // Money in this month — paid invoices with paidAt >= first day of month
-      prisma.invoice.aggregate({
-        where: {
-          status: "paid",
-          paidAt: { gte: firstDayOfMonth },
-        },
-        _sum: { totalAmount: true },
-        _count: true,
-      }),
+    // Money in this month — paid invoices with paidAt >= first day of month
+    prisma.invoice.aggregate({
+      where: {
+        status: "paid",
+        paidAt: { gte: firstDayOfMonth },
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    }),
 
-      // Recent invoices — last 10
-      prisma.invoice.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        select: {
-          id: true,
-          invoiceRef: true,
-          status: true,
-          totalAmount: true,
-          account: { select: { name: true } },
-        },
-      }),
+    // Recent invoices — last 10
+    prisma.invoice.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        invoiceRef: true,
+        status: true,
+        totalAmount: true,
+        account: { select: { name: true } },
+      },
+    }),
 
-      // Money you owe — sum amountDue for approved/partially_paid bills (AP)
-      prisma.bill.aggregate({
-        where: {
-          status: { in: ["approved", "partially_paid"] },
-        },
-        _sum: { amountDue: true },
-        _count: true,
-      }),
-    ]);
+    // Money you owe — sum amountDue for approved/partially_paid bills (AP)
+    prisma.bill.aggregate({
+      where: {
+        status: { in: ["approved", "partially_paid"] },
+      },
+      _sum: { amountDue: true },
+      _count: true,
+    }),
+
+    // Cash position — active bank accounts
+    prisma.bankAccount.findMany({
+      where: { status: "active" },
+      select: { name: true, currentBalance: true, currency: true },
+    }),
+
+    // 30-day cash flow forecast — expected inflows (invoices due in next 30 days)
+    prisma.invoice.aggregate({
+      where: {
+        status: { in: ["sent", "viewed", "partially_paid", "overdue"] },
+        dueDate: { gte: now, lte: in30Days },
+      },
+      _sum: { amountDue: true },
+    }),
+
+    // 30-day cash flow forecast — expected outflows (bills due in next 30 days)
+    prisma.bill.aggregate({
+      where: {
+        status: { in: ["approved", "partially_paid"] },
+        dueDate: { gte: now, lte: in30Days },
+      },
+      _sum: { amountDue: true },
+    }),
+  ]);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
   const owedCount = totalOutstanding._count;
@@ -81,6 +115,15 @@ export default async function FinancePage() {
   const oldestOverdue = overdueInvoices[0];
   const moneyOweAmount = Number(moneyYouOwe._sum.amountDue ?? 0);
   const moneyOweCount = moneyYouOwe._count;
+
+  // Cash position
+  const totalCash = bankAccounts.reduce(
+    (sum, a) => sum + Number(a.currentBalance),
+    0,
+  );
+  const inflowsIn30 = Number(expectedInflows._sum.amountDue ?? 0);
+  const outflowsIn30 = Number(expectedOutflows._sum.amountDue ?? 0);
+  const forecastBalance = totalCash + inflowsIn30 - outflowsIn30;
 
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -103,9 +146,55 @@ export default async function FinancePage() {
         </Link>
       </div>
 
-      {/* 4 Widgets */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Money Owed To You */}
+      {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        {/* Widget 1: Cash Position */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Cash Position
+          </p>
+          {bankAccounts.length === 0 ? (
+            <div>
+              <p className="text-xs text-[var(--dpf-muted)] mb-2">No bank accounts</p>
+              <Link
+                href="/finance/banking"
+                className="text-[10px] text-[var(--dpf-accent)] hover:underline"
+              >
+                Add one →
+              </Link>
+            </div>
+          ) : (
+            <>
+              <p
+                className="text-2xl font-bold"
+                style={{ color: totalCash >= 0 ? "#4ade80" : "#ef4444" }}
+              >
+                £{formatMoney(totalCash)}
+              </p>
+              <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+                across {bankAccounts.length} account{bankAccounts.length !== 1 ? "s" : ""}
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Widget 2: 30-Day Cash Flow Forecast */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            30-Day Forecast
+          </p>
+          <p
+            className="text-2xl font-bold"
+            style={{ color: forecastBalance >= totalCash ? "#4ade80" : "#ef4444" }}
+          >
+            £{formatMoney(forecastBalance)}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            +£{formatMoney(inflowsIn30)} in · -£{formatMoney(outflowsIn30)} out
+          </p>
+        </div>
+
+        {/* Widget 3: Outstanding Invoices */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
             Money Owed To You
@@ -118,7 +207,7 @@ export default async function FinancePage() {
           </p>
         </div>
 
-        {/* Overdue */}
+        {/* Widget 4: Overdue */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
             Overdue
@@ -140,7 +229,10 @@ export default async function FinancePage() {
             </p>
           )}
         </div>
+      </div>
 
+      {/* Row 2: Money In + Money You Owe */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Money In This Month */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
@@ -172,7 +264,7 @@ export default async function FinancePage() {
       </div>
 
       {/* Navigation links */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* AR links */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
@@ -203,7 +295,7 @@ export default async function FinancePage() {
           </div>
         </div>
 
-        {/* AP continued */}
+        {/* Procurement */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Procurement
@@ -214,6 +306,21 @@ export default async function FinancePage() {
             </Link>
             <Link href="/finance/payment-runs" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Payment Runs →
+            </Link>
+          </div>
+        </div>
+
+        {/* Banking */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Banking
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/banking" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Bank Accounts →
+            </Link>
+            <Link href="/finance/banking/rules" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Bank Rules →
             </Link>
           </div>
         </div>
