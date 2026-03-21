@@ -23,7 +23,7 @@ export function generateAssessmentId(): string  { return makeId("RA"); }
 
 export const REGULATION_STATUSES = ["active", "inactive", "superseded"] as const;
 
-export const REGULATION_SOURCE_TYPES = ["external", "internal"] as const;
+export const REGULATION_SOURCE_TYPES = ["external", "standard", "framework", "internal"] as const;
 
 export const OBLIGATION_CATEGORIES = [
   "data-protection",

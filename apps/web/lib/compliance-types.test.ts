@@ -90,8 +90,10 @@ describe("REGULATION_STATUSES", () => {
 describe("REGULATION_SOURCE_TYPES", () => {
   it("contains expected values", () => {
     expect(REGULATION_SOURCE_TYPES).toContain("external");
+    expect(REGULATION_SOURCE_TYPES).toContain("standard");
+    expect(REGULATION_SOURCE_TYPES).toContain("framework");
     expect(REGULATION_SOURCE_TYPES).toContain("internal");
-    expect(REGULATION_SOURCE_TYPES).toHaveLength(2);
+    expect(REGULATION_SOURCE_TYPES).toHaveLength(4);
   });
 });
 
