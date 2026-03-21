@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
-import type { CreateSupplierInput, CreateBillInput, CreatePOInput } from "@/lib/ap-validation";
+import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -510,4 +510,140 @@ export async function convertPOToBill(poId: string) {
   revalidatePath("/finance/ap/bills");
 
   return bill;
+}
+
+// ─── Payment ref generator ────────────────────────────────────────────────────
+
+async function generatePaymentRef(): Promise<string> {
+  const year = new Date().getFullYear();
+  const count = await prisma.payment.count();
+  const seq = String(count + 1).padStart(4, "0");
+  return `PAY-${year}-${seq}`;
+}
+
+// ─── createPaymentRun ─────────────────────────────────────────────────────────
+
+export async function createPaymentRun(input: CreatePaymentRunInput) {
+  const userId = await requireManageFinance();
+
+  // Load all specified bills
+  const bills = await prisma.bill.findMany({
+    where: { id: { in: input.billIds } },
+  });
+
+  // Verify all bills are approved
+  const nonApproved = bills.filter((b) => b.status !== "approved");
+  if (nonApproved.length > 0) {
+    throw new Error(
+      `All bills must be approved before payment. Non-approved bills: ${nonApproved.map((b) => b.billRef ?? b.id).join(", ")}`,
+    );
+  }
+
+  if (input.consolidatePerSupplier) {
+    // Group bills by supplier
+    const groups = new Map<string, typeof bills>();
+    for (const bill of bills) {
+      const group = groups.get(bill.supplierId) ?? [];
+      group.push(bill);
+      groups.set(bill.supplierId, group);
+    }
+
+    for (const [, groupBills] of groups) {
+      const groupTotal = round2(
+        groupBills.reduce((sum, b) => sum + Number(b.amountDue), 0),
+      );
+      const currency = groupBills[0]!.currency;
+      const paymentRef = await generatePaymentRef();
+
+      const payment = await prisma.payment.create({
+        data: {
+          paymentRef,
+          direction: "outbound",
+          method: "bank_transfer",
+          status: "completed",
+          amount: groupTotal,
+          currency,
+          createdById: userId,
+          receivedAt: new Date(),
+        },
+        select: { id: true, paymentRef: true },
+      });
+
+      for (const bill of groupBills) {
+        await prisma.paymentAllocation.create({
+          data: {
+            paymentId: payment.id,
+            billId: bill.id,
+            amount: Number(bill.amountDue),
+          },
+        });
+
+        await prisma.bill.update({
+          where: { id: bill.id },
+          data: {
+            amountPaid: Number(bill.totalAmount),
+            amountDue: 0,
+            status: "paid",
+          },
+        });
+      }
+    }
+  } else {
+    // Create a separate payment per bill
+    for (const bill of bills) {
+      const paymentRef = await generatePaymentRef();
+
+      const payment = await prisma.payment.create({
+        data: {
+          paymentRef,
+          direction: "outbound",
+          method: "bank_transfer",
+          status: "completed",
+          amount: Number(bill.amountDue),
+          currency: bill.currency,
+          createdById: userId,
+          receivedAt: new Date(),
+        },
+        select: { id: true, paymentRef: true },
+      });
+
+      await prisma.paymentAllocation.create({
+        data: {
+          paymentId: payment.id,
+          billId: bill.id,
+          amount: Number(bill.amountDue),
+        },
+      });
+
+      await prisma.bill.update({
+        where: { id: bill.id },
+        data: {
+          amountPaid: Number(bill.totalAmount),
+          amountDue: 0,
+          status: "paid",
+        },
+      });
+    }
+  }
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/payment-runs");
+}
+
+// ─── listPaymentRuns ──────────────────────────────────────────────────────────
+
+export async function listPaymentRuns() {
+  await requireManageFinance();
+
+  return prisma.payment.findMany({
+    where: { direction: "outbound" },
+    include: {
+      allocations: {
+        include: {
+          bill: { select: { id: true, billRef: true, supplierId: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 }

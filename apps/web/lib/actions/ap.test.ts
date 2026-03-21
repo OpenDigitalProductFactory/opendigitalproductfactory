@@ -64,6 +64,8 @@ import {
   respondToBillApproval,
   createPurchaseOrder,
   convertPOToBill,
+  createPaymentRun,
+  listPaymentRuns,
 } from "./ap";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -377,5 +379,81 @@ describe("convertPOToBill", () => {
     expect(callArgs.data.purchaseOrderId).toBe("po-001");
     expect(callArgs.data.supplierId).toBe("sup-001");
     expect(result).toMatchObject({ id: "bill-new", purchaseOrderId: "po-001" });
+  });
+});
+
+// ─── Payment Run ──────────────────────────────────────────────────────────────
+
+describe("createPaymentRun", () => {
+  it("throws if any bill is not approved", async () => {
+    authorizedUser();
+    mockPrisma.bill.findMany.mockResolvedValue([
+      { id: "bill-001", status: "awaiting_approval", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
+    ]);
+
+    await expect(
+      createPaymentRun({ billIds: ["bill-001"], consolidatePerSupplier: true }),
+    ).rejects.toThrow(/approved/i);
+  });
+
+  it("creates payments grouped by supplier when consolidating", async () => {
+    authorizedUser();
+
+    const approvedBills = [
+      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
+      { id: "bill-002", status: "approved", supplierId: "sup-001", totalAmount: 300, amountDue: 300, currency: "GBP", billRef: "BILL-2026-0002" },
+    ];
+    mockPrisma.bill.findMany.mockResolvedValue(approvedBills);
+    mockPrisma.payment.count.mockResolvedValue(0);
+    mockPrisma.payment.create.mockResolvedValue({ id: "pay-001", paymentRef: "PAY-2026-0001" });
+    mockPrisma.paymentAllocation.create.mockResolvedValue({ id: "alloc-001" });
+    mockPrisma.bill.update.mockResolvedValue({});
+
+    await createPaymentRun({ billIds: ["bill-001", "bill-002"], consolidatePerSupplier: true });
+
+    // Both bills share the same supplier — should create 1 payment for combined amount
+    expect(mockPrisma.payment.create).toHaveBeenCalledTimes(1);
+    const payCallArgs = mockPrisma.payment.create.mock.calls[0][0];
+    expect(Number(payCallArgs.data.amount)).toBe(800);
+    // 2 allocations, 1 per bill
+    expect(mockPrisma.paymentAllocation.create).toHaveBeenCalledTimes(2);
+    // Both bills should be marked paid
+    expect(mockPrisma.bill.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates separate payments when not consolidating", async () => {
+    authorizedUser();
+
+    const approvedBills = [
+      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
+      { id: "bill-002", status: "approved", supplierId: "sup-002", totalAmount: 300, amountDue: 300, currency: "GBP", billRef: "BILL-2026-0002" },
+    ];
+    mockPrisma.bill.findMany.mockResolvedValue(approvedBills);
+    mockPrisma.payment.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    mockPrisma.payment.create
+      .mockResolvedValueOnce({ id: "pay-001", paymentRef: "PAY-2026-0001" })
+      .mockResolvedValueOnce({ id: "pay-002", paymentRef: "PAY-2026-0002" });
+    mockPrisma.paymentAllocation.create.mockResolvedValue({ id: "alloc-001" });
+    mockPrisma.bill.update.mockResolvedValue({});
+
+    await createPaymentRun({ billIds: ["bill-001", "bill-002"], consolidatePerSupplier: false });
+
+    // 2 separate payments
+    expect(mockPrisma.payment.create).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("listPaymentRuns", () => {
+  it("returns outbound payments", async () => {
+    authorizedUser();
+    const fakePayments = [
+      { id: "pay-001", paymentRef: "PAY-2026-0001", direction: "outbound", amount: 800 },
+    ];
+    mockPrisma.payment.findMany.mockResolvedValue(fakePayments);
+
+    const result = await listPaymentRuns();
+    expect(result).toEqual(fakePayments);
+    const callArgs = mockPrisma.payment.findMany.mock.calls[0][0];
+    expect(callArgs.where.direction).toBe("outbound");
   });
 });
