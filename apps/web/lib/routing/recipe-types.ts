@@ -15,6 +15,7 @@ export interface RoutedExecutionPlan {
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
+  executionAdapter: string;
   maxTokens: number;
   temperature?: number;
   providerSettings: Record<string, unknown>;
@@ -38,6 +39,7 @@ export interface RecipeRow {
   version: number;
   status: string;
   origin: string;
+  executionAdapter: string;
   providerSettings: unknown;
   toolPolicy: unknown;
   responsePolicy: unknown;

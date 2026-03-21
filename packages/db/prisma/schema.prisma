@@ -3517,6 +3517,7 @@ model ExecutionRecipe {
   version               Int       @default(1)
   status                String    @default("champion")
   origin                String    @default("seed")
+  executionAdapter      String    @default("chat")
   providerSettings      Json
   toolPolicy            Json      @default("{}")
   responsePolicy        Json      @default("{}")
