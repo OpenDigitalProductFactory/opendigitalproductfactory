@@ -1,9 +1,28 @@
 ﻿#Requires -Version 5.1
 param(
-    [string]$InstallDir = "C:\DPF"
+    [string]$InstallDir
 )
 $ErrorActionPreference = "Stop"
 
+# Determine a sensible default: if the script already sits in a project
+# directory (has docker-compose.yml), default to that path.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if (-not $InstallDir) {
+    if (Test-Path "$scriptDir\docker-compose.yml") {
+        $defaultDir = $scriptDir
+    } else {
+        $defaultDir = "C:\DPF"
+    }
+
+    Write-Host ""
+    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
+    $answer = Read-Host "  Install directory [$defaultDir]"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $InstallDir = $defaultDir
+    } else {
+        $InstallDir = $answer.Trim()
+    }
+}
 $DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
 $PROGRESS_FILE = "$DPF_DIR\.install-progress"
 $AUTOSTART_TASK_NAME = "DPF-AutoStart"
@@ -225,32 +244,18 @@ if (-not (Is-StepDone "docker")) {
     Write-OK "Already installed"
 }
 
-# --- Step 4: Download DPF -----------------------------------------------------
+# --- Step 4: Verify project files ---------------------------------------------
 
-Write-Step 4 9 "Downloading Digital Product Factory..."
+Write-Step 4 9 "Verifying project files..."
 if (-not (Is-StepDone "download")) {
-    Write-Action "Downloading latest release..."
-    $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
-    $zipPath = "$env:TEMP\dpf-latest.zip"
-    Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
-
-    Write-Action "Extracting..."
-    Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
-    # Move contents from the nested directory
-    $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
-    if (Test-Path "$DPF_DIR\docker-compose.yml") {
-        # Preserve .env if it exists
-        $envBackup = $null
-        if (Test-Path "$DPF_DIR\.env") {
-            $envBackup = Get-Content "$DPF_DIR\.env" -Raw
-        }
+    # Verify docker-compose.yml exists -- it should, since the user cloned/downloaded the repo
+    if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
+        Write-Warn "docker-compose.yml not found in $DPF_DIR"
+        Write-Warn "Please clone or download the full project into this directory first:"
+        Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
+        exit 1
     }
-    Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
-    if ($envBackup) {
-        $envBackup | Set-Content "$DPF_DIR\.env"
-    }
-    Remove-Item $zipPath -ErrorAction SilentlyContinue
-    Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
+    Write-OK "Project files found in $DPF_DIR"
 
     # Write version file
     "main" | Set-Content "$DPF_DIR\.version"
@@ -268,10 +273,10 @@ if (-not (Is-StepDone "download")) {
         $env:Path += ";$DPF_DIR"
     }
 
-    Write-OK "Extracted to $DPF_DIR"
+    Write-OK "Set up in $DPF_DIR"
     Save-Progress "download"
 } else {
-    Write-OK "Already downloaded"
+    Write-OK "Already set up"
 }
 
 # --- Step 5: Hardware Detection ------------------------------------------------
