@@ -34,6 +34,9 @@ export interface RequestContract {
   requiresTools: boolean;
   requiresStrictSchema: boolean;
   requiresStreaming: boolean;
+  requiresCodeExecution?: boolean;
+  requiresWebSearch?: boolean;
+  requiresComputerUse?: boolean;
 
   // ── Token Estimates ────────────────────────────────────────────
   estimatedInputTokens: number;
@@ -82,6 +85,9 @@ export async function inferContract(
     budgetClass?: string;
     residencyPolicy?: string;
     allowedProviders?: string[];
+    requiresCodeExecution?: boolean;
+    requiresWebSearch?: boolean;
+    requiresComputerUse?: boolean;
   },
 ): Promise<RequestContract> {
   // ── Deterministic flags ─────────────────────────────────────────────────
@@ -94,6 +100,11 @@ export async function inferContract(
 
   // ── Streaming: default true for sync, false otherwise ─────────────────
   const requiresStreaming = interactionMode === "sync";
+
+  // ── Capability requirements ────────────────────────────────────────────
+  const requiresCodeExecution = routeContext?.requiresCodeExecution === true;
+  const requiresWebSearch = taskType === "web-search" || routeContext?.requiresWebSearch === true;
+  const requiresComputerUse = routeContext?.requiresComputerUse === true;
 
   // ── Input modality detection ──────────────────────────────────────────
   const inputModalities = new Set<"text" | "image" | "audio" | "file" | "video">(["text"]);
@@ -169,6 +180,9 @@ export async function inferContract(
     requiresTools,
     requiresStrictSchema,
     requiresStreaming,
+    ...(requiresCodeExecution && { requiresCodeExecution }),
+    ...(requiresWebSearch && { requiresWebSearch }),
+    ...(requiresComputerUse && { requiresComputerUse }),
 
     estimatedInputTokens,
     estimatedOutputTokens,

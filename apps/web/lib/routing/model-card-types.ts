@@ -24,6 +24,8 @@ export interface ModelCardCapabilities {
   batch: boolean | null;
   citations: boolean | null;
   codeExecution: boolean | null;
+  webSearch: boolean | null;
+  computerUse: boolean | null;
   imageInput: boolean | null;
   pdfInput: boolean | null;
   thinking: boolean | null;
@@ -112,6 +114,8 @@ export const EMPTY_CAPABILITIES: ModelCardCapabilities = {
   batch: null,
   citations: null,
   codeExecution: null,
+  webSearch: null,
+  computerUse: null,
   imageInput: null,
   pdfInput: null,
   thinking: null,
