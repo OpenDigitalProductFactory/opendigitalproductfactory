@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/page.tsx
 import { prisma } from "@dpf/db";
 import Link from "next/link";
+import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -35,6 +36,7 @@ export default async function FinancePage() {
     overdueGt30,
     pendingExpenseCount,
     activeAssets,
+    setupStatus,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -137,6 +139,9 @@ export default async function FinancePage() {
       where: { status: "active" },
       select: { currentBookValue: true, category: true },
     }),
+
+    // Financial setup status — for setup prompt banner
+    getFinancialSetupStatus(),
   ]);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
@@ -170,6 +175,26 @@ export default async function FinancePage() {
 
   return (
     <div>
+      {/* Setup prompt banner */}
+      {!setupStatus.isConfigured && (
+        <div className="mb-6 p-4 rounded-lg border border-[#fbbf24] bg-[#fbbf2410]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-[#fbbf24]">Complete your financial setup</p>
+              <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+                Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
+              </p>
+            </div>
+            <Link
+              href="/finance/settings"
+              className="px-3 py-1.5 text-xs font-medium rounded bg-[#fbbf24] text-black hover:bg-[#f59e0b] transition-colors shrink-0"
+            >
+              Set Up Now
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
@@ -514,6 +539,12 @@ export default async function FinancePage() {
             Settings
           </p>
           <div className="flex flex-col gap-2">
+            <Link href="/finance/settings" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Financial Settings →
+            </Link>
+            <Link href="/finance/settings/currency" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Currency Settings →
+            </Link>
             <Link href="/finance/settings/dunning" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Dunning Settings →
             </Link>
