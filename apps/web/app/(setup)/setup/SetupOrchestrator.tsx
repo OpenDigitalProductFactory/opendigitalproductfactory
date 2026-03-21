@@ -7,6 +7,12 @@ import { type SetupStep, type StepStatus } from "@/lib/actions/setup-constants";
 import { advanceStep, skipStep, pauseSetup } from "@/lib/actions/setup-progress";
 import { BusinessIdentityStep } from "./steps/business-identity";
 import { OwnerAccountStep } from "./steps/owner-account";
+import { AiCapabilitiesStep } from "./steps/ai-capabilities";
+import { BrandingStep } from "./steps/branding";
+import { FinancialBasicsStep } from "./steps/financial-basics";
+import { FirstWorkspaceStep } from "./steps/first-workspace";
+import { ExtensibilityPreviewStep } from "./steps/extensibility-preview";
+import { WhatsNextStep } from "./steps/whats-next";
 
 type Props = {
   progress: {
@@ -81,6 +87,59 @@ export function SetupOrchestrator({ progress: initialProgress }: Props) {
             onContinue={handleContinue}
             onSkip={handleSkip}
             onPause={handlePause}
+          />
+        );
+      case "ai-capabilities":
+        return (
+          <AiCapabilitiesStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+            context={progress.context}
+          />
+        );
+      case "branding":
+        return (
+          <BrandingStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+          />
+        );
+      case "financial-basics":
+        return (
+          <FinancialBasicsStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+            context={progress.context}
+          />
+        );
+      case "first-workspace":
+        return (
+          <FirstWorkspaceStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+            context={progress.context}
+          />
+        );
+      case "extensibility-preview":
+        return (
+          <ExtensibilityPreviewStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+          />
+        );
+      case "whats-next":
+        return (
+          <WhatsNextStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+            context={progress.context}
+            steps={progress.steps}
           />
         );
       default:
