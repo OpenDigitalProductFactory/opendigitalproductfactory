@@ -17,6 +17,7 @@ const TABS = [
   { label: "Gaps", href: "/compliance/gaps" },
   { label: "Posture", href: "/compliance/posture" },
   { label: "Submissions", href: "/compliance/submissions" },
+  { label: "Onboard", href: "/compliance/onboard" },
 ];
 
 export function ComplianceTabNav() {

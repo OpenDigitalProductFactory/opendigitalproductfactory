@@ -2,8 +2,15 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { CreateRegulationForm } from "@/components/compliance/CreateRegulationForm";
 
-export default async function RegulationsPage() {
+type Props = { searchParams: Promise<{ type?: string }> };
+
+export default async function RegulationsPage({ searchParams }: Props) {
+  const { type } = await searchParams;
+  const where: Record<string, unknown> = {};
+  if (type && type !== "all") where.sourceType = type;
+
   const regulations = await prisma.regulation.findMany({
+    where,
     orderBy: { shortName: "asc" },
     include: { _count: { select: { obligations: true } } },
   });
@@ -21,6 +28,16 @@ export default async function RegulationsPage() {
           </Link>
           <CreateRegulationForm />
         </div>
+      </div>
+
+      {/* Source type filter bar */}
+      <div className="flex gap-2 mb-4">
+        {["all", "external", "standard", "framework", "internal"].map((t) => (
+          <a key={t} href={`/compliance/regulations${t === "all" ? "" : `?type=${t}`}`}
+            className={`px-3 py-1 text-xs rounded-full border ${(!type && t === "all") || type === t ? "bg-[var(--dpf-accent)] text-white border-[var(--dpf-accent)]" : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"}`}>
+            {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+          </a>
+        ))}
       </div>
 
       {regulations.length === 0 ? (
