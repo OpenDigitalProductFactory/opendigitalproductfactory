@@ -415,18 +415,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           </div>
         )}
 
-        {/* Sync metadata button — refreshes capabilities/pricing from provider API, preserves eval scores */}
-        {canWrite && (
-          <div>
-            <ActionButton
-              label="Sync Metadata"
-              onClick={() => onProfile(model.modelId)}
-              disabled={!hasActiveProvider}
-              title="Refresh model capabilities and pricing from provider API. Does not reset evaluated scores."
-              {...(!hasActiveProvider && { title: "No active provider — cannot sync" })}
-            />
-          </div>
-        )}
+        {/* Metadata sync happens automatically during discovery — no manual button needed */}
       </div>
     );
   }
@@ -454,10 +443,11 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
         {canWrite && (
           <div>
             <ActionButton
-              label="Re-profile"
+              label="Retry"
               onClick={() => onProfile(model.modelId)}
               disabled={!hasActiveProvider}
-              {...(!hasActiveProvider && { title: "No active provider — cannot profile" })}
+              title="Retry metadata extraction from provider API"
+              {...(!hasActiveProvider && { title: "No active provider" })}
               primary
             />
           </div>
@@ -475,7 +465,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
             {model.modelId}
           </div>
           <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginTop: 4 }}>
-            Not yet profiled
+            Awaiting discovery
           </div>
         </div>
         {isStale && (
@@ -484,18 +474,6 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           </span>
         )}
       </div>
-
-      {canWrite && (
-        <div>
-          <ActionButton
-            label="Profile Now"
-            onClick={() => onProfile(model.modelId)}
-            disabled={!hasActiveProvider}
-            {...(!hasActiveProvider && { title: "No active provider — cannot profile" })}
-            primary
-          />
-        </div>
-      )}
     </div>
   );
 }
