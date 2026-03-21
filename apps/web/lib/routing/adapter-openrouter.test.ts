@@ -208,6 +208,25 @@ describe("openRouterAdapter", () => {
       it("sets pdfInput true when file in input_modalities", () => {
         expect(card.capabilities.pdfInput).toBe(true);
       });
+
+      it("sets webSearch null when web_search pricing is zero", () => {
+        expect(card.capabilities.webSearch).toBeNull();
+      });
+    });
+
+    describe("webSearch capability from pricing", () => {
+      it("sets webSearch true when web_search pricing is non-zero", () => {
+        const webSearchModel = {
+          id: "perplexity/sonar-pro",
+          name: "Sonar Pro",
+          pricing: { prompt: "0.000003", completion: "0.000015", web_search: "0.005" },
+          context_length: 128000,
+          architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+          supported_parameters: ["temperature", "tools", "stream"],
+        };
+        const card = openRouterAdapter.extractModelCard("perplexity/sonar-pro", webSearchModel);
+        expect(card.capabilities.webSearch).toBe(true);
+      });
     });
 
     describe("empty supported_parameters yields all capabilities null", () => {
