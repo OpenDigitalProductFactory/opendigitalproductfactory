@@ -28,6 +28,25 @@
 - When completing backlog items, update their status in the DB to keep the backlog trustworthy.
 - When suggesting what to work on next, consider: items with existing designs first, then dependencies between items, then impact.
 
+### Epic Lifecycle Stewardship
+
+Epics must be actively managed — not just created and forgotten.
+
+**Before creating a new epic:**
+1. Query existing epics: `SELECT "epicId", title, status FROM "Epic" ORDER BY "createdAt" DESC;`
+2. Look for epics with overlapping scope — same domain, similar goals, or superseding intent.
+3. If a related epic exists, prefer adding items to it or updating its scope over creating a new one.
+4. If the new epic genuinely supersedes an older one, mark the old one as done or delete it (if empty) in the same operation.
+
+**When completing backlog items:**
+- The system auto-closes epics when all items reach done/deferred status. However, if you complete the last item in an epic via a direct DB operation (SQL seed script, not the server action), you must manually flip the epic to done.
+- After finishing work on a backlog item, always update its status immediately — stale open items cause the epic to appear incomplete.
+
+**Periodic hygiene (apply when reviewing the backlog):**
+- Epics with 0 items and status "open" are noise — either add items or delete them.
+- Epics where all items are done but status is still "open" must be flipped to done.
+- Epics that have been superseded by newer, more specific epics should be closed or deleted.
+
 ## Branching & Workflow
 
 ### Core Rule
@@ -175,7 +194,32 @@ These principles apply to all new UI development on the platform.
 - Single canonical greeting per agent (no random rotation)
 - Restricted variant remains for permission-limited users
 
+### Theme-Aware Styling (mandatory)
+
+**Never use hardcoded colors for text, backgrounds, or borders.** All UI must use the platform's CSS custom properties so that light mode, dark mode, and user-configured branding all work automatically.
+
+| Role | Use | Never use |
+|------|-----|-----------|
+| Body/heading text | `text-[var(--dpf-text)]` | `text-white`, `text-black`, `text-gray-*`, `#xxx` |
+| Secondary/muted text | `text-[var(--dpf-muted)]` | `text-gray-400`, `#8888a0`, etc. |
+| Backgrounds | `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]` | `bg-white`, `bg-[#1a1a2e]`, etc. |
+| Borders | `border-[var(--dpf-border)]` | `border-gray-*`, `#2a2a40`, etc. |
+| Accent/interactive | `text-[var(--dpf-accent)]`, `bg-[var(--dpf-accent)]` | Hardcoded hex accent values |
+| Page background | `bg-[var(--dpf-bg)]` | `bg-[#0d0d18]`, `bg-white` |
+
+**The only exception** is `text-white` on `bg-[var(--dpf-accent)]` buttons, where white text on a colored background is intentional and always readable.
+
+Inline `style={{ color: "#xxx" }}` objects are equally prohibited — use CSS variable references: `style={{ color: "var(--dpf-text)" }}`.
+
+`<option>` elements in `<select>` dropdowns must have explicit `className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"` for cross-browser consistency.
+
+These variables are defined in `globals.css` (base theme) and overridden at runtime by branding configuration tokens. Using them ensures every surface respects the user's chosen brand.
+
 ### Consistency
 - Before creating new patterns, check existing components: TabNav variants, page layouts, route structure
 - Follow established naming conventions: `{Area}TabNav`, `{Area}PageClient` for client wrapper components
 - Server components fetch data and pass to client components for interactivity
+
+## Usability Standards
+
+All UI development must follow `docs/platform-usability-standards.md`. This document defines the CSS variable system, contrast requirements, form element standards, and prohibited color patterns. AI agents generating or reviewing UI code MUST consult this document.
