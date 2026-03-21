@@ -113,6 +113,7 @@ import {
   createEvidence,
   supersedeEvidence,
   verifyCorrectiveAction,
+  onboardRegulation,
 } from "./compliance";
 
 const mockSession = {
@@ -298,5 +299,74 @@ describe("verifyCorrectiveAction", () => {
         status: "verified",
       }),
     });
+  });
+});
+
+describe("onboardRegulation", () => {
+  it("creates regulation with obligations in a single transaction", async () => {
+    const mockTx = {
+      regulation: {
+        create: vi.fn().mockResolvedValue({ id: "reg-1", regulationId: "REG-001" }),
+      },
+      obligation: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: "obl-1" })
+          .mockResolvedValueOnce({ id: "obl-2" }),
+      },
+      control: { create: vi.fn() },
+      controlObligationLink: { create: vi.fn() },
+    };
+    vi.mocked(prisma.$transaction).mockImplementation(
+      async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+    );
+
+    const result = await onboardRegulation({
+      regulation: { name: "Test Standard", shortName: "TST", jurisdiction: "Global", sourceType: "standard" },
+      obligations: [
+        { title: "Obligation A", reference: "1.1", category: "operational" },
+        { title: "Obligation B", reference: "1.2", category: "cybersecurity" },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("2 obligations");
+  });
+
+  it("rejects empty regulation name", async () => {
+    const result = await onboardRegulation({
+      regulation: { name: "", shortName: "FAIL", jurisdiction: "Global" },
+      obligations: [{ title: "Should not exist" }],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("creates controls with obligation links when provided", async () => {
+    const mockTx = {
+      regulation: {
+        create: vi.fn().mockResolvedValue({ id: "reg-2", regulationId: "REG-002" }),
+      },
+      obligation: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: "obl-3" })
+          .mockResolvedValueOnce({ id: "obl-4" }),
+      },
+      control: {
+        create: vi.fn().mockResolvedValue({ id: "ctl-1" }),
+      },
+      controlObligationLink: {
+        create: vi.fn().mockResolvedValue({}),
+      },
+    };
+    vi.mocked(prisma.$transaction).mockImplementation(
+      async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+    );
+
+    const result = await onboardRegulation({
+      regulation: { name: "Control Test", shortName: "CTL", jurisdiction: "EU" },
+      obligations: [{ title: "Obl 1" }, { title: "Obl 2" }],
+      controls: [{ title: "Control A", controlType: "preventive", linkedObligationIndices: [0, 1] }],
+    });
+    expect(result.ok).toBe(true);
   });
 });
