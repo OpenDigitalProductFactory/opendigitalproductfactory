@@ -1,7 +1,7 @@
 # Finance Hub And Identity Architecture Design
 
 **Date:** 2026-03-15
-**Status:** Draft
+**Status:** Superseded by EP-FINMGMT-001 (native financial management suite, 2026-03-20)
 **Scope:** Define the target architecture for DPF as the employee-facing platform hub, with finance as a back-office subsystem, a separate identity provider runtime, and a future path toward DPF-native identity capabilities.
 
 ## Execution Status
