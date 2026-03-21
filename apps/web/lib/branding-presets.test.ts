@@ -179,44 +179,82 @@ describe("hexToHsl / hslToHex", () => {
   });
 });
 
-describe("WCAG AA contrast compliance", () => {
+describe("WCAG AA contrast compliance — expanded", () => {
   const presetAccents = ["#2563eb", "#d97706", "#8b5cf6", "#6b7280", "#0d9488", "#16a34a"];
 
   for (const accent of presetAccents) {
     describe(`accent ${accent}`, () => {
       const { dark, light } = deriveThemeTokens(accent);
 
-      it("dark mode: text on bg >= 4.5:1", () => {
-        expect(contrastRatio(dark.palette.text, dark.palette.bg)).toBeGreaterThanOrEqual(4.5);
-      });
+      for (const [label, tokens] of [["dark", dark], ["light", light]] as const) {
+        describe(`${label} mode`, () => {
+          it("text on bg >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.palette.bg)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surface1 >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.palette.surface1)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surface2 >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.palette.surface2)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surfaces.panel >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.surfaces.panel)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surfaces.card >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.surfaces.card)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surfaces.sidebar >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.surfaces.sidebar)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("text on surfaces.modal >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.text, tokens.surfaces.modal)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("muted on bg >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.muted, tokens.palette.bg)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("muted on surface1 >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.muted, tokens.palette.surface1)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("accent on bg >= 4.5:1", () => {
+            expect(contrastRatio(tokens.palette.accent, tokens.palette.bg)).toBeGreaterThanOrEqual(4.5);
+          });
+          it("accent on surface1 >= 3:1", () => {
+            expect(contrastRatio(tokens.palette.accent, tokens.palette.surface1)).toBeGreaterThanOrEqual(3);
+          });
+          it("border on bg >= 3:1", () => {
+            expect(contrastRatio(tokens.palette.border, tokens.palette.bg)).toBeGreaterThanOrEqual(3);
+          });
+          it("focus on bg >= 3:1", () => {
+            expect(contrastRatio(tokens.states.focus, tokens.palette.bg)).toBeGreaterThanOrEqual(3);
+          });
+          for (const key of ["success", "warning", "error", "info"] as const) {
+            it(`${key} on bg >= 3:1`, () => {
+              expect(contrastRatio(tokens.states[key], tokens.palette.bg)).toBeGreaterThanOrEqual(3);
+            });
+          }
+        });
+      }
+    });
+  }
+});
 
-      it("dark mode: text on surface1 >= 4.5:1", () => {
-        expect(contrastRatio(dark.palette.text, dark.palette.surface1)).toBeGreaterThanOrEqual(4.5);
-      });
+describe("WCAG AA — edge-case accents", () => {
+  const edgeCases = [
+    { accent: "#FFE74C", label: "very light yellow" },
+    { accent: "#0a0a3a", label: "very dark blue" },
+    { accent: "#ffffff", label: "pure white" },
+    { accent: "#000000", label: "pure black" },
+  ];
 
-      it("light mode: text on bg >= 4.5:1", () => {
-        expect(contrastRatio(light.palette.text, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
-      });
-
-      it("light mode: text on surface1 >= 4.5:1", () => {
-        expect(contrastRatio(light.palette.text, light.palette.surface1)).toBeGreaterThanOrEqual(4.5);
-      });
-
-      it("light mode: muted on bg >= 4.5:1", () => {
-        expect(contrastRatio(light.palette.muted, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
-      });
-
-      it("light mode: accent on bg >= 4.5:1", () => {
-        expect(contrastRatio(light.palette.accent, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
-      });
-
-      it("light mode: accent on surface1 >= 3:1", () => {
-        expect(contrastRatio(light.palette.accent, light.palette.surface1)).toBeGreaterThanOrEqual(3);
-      });
-
-      it("light mode: border on bg >= 3:1", () => {
-        expect(contrastRatio(light.palette.border, light.palette.bg)).toBeGreaterThanOrEqual(3);
-      });
+  for (const { accent, label } of edgeCases) {
+    it(`${label} (${accent}) produces compliant tokens`, () => {
+      const { dark, light } = deriveThemeTokens(accent);
+      expect(contrastRatio(dark.palette.text, dark.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(light.palette.text, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(dark.palette.accent, dark.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(light.palette.accent, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(dark.palette.muted, dark.palette.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(light.palette.muted, light.palette.bg)).toBeGreaterThanOrEqual(4.5);
     });
   }
 });
