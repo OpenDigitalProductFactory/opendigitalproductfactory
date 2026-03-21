@@ -1,7 +1,7 @@
 # Change & Deployment Management
 
 **Date:** 2026-03-21
-**Status:** Draft
+**Status:** In Progress
 **Epic:** EP-CHG-MGMT
 **Author:** Mark Bodman (CEO) + Claude (design partner)
 **Depends on:**
@@ -473,12 +473,15 @@ model StandardChangeCatalog {
 
 ## Implementation Sequence
 
-| Phase | Scope | Deliverables |
-|-------|-------|-------------|
-| 1 | Schema | `ChangeRequest`, `ChangeItem`, `BusinessProfile`, `DeploymentWindow`, `BlackoutPeriod`, `StandardChangeCatalog` models. Migration. |
-| 2 | RFC lifecycle | Create/submit/assess/approve/schedule/execute/complete/rollback workflow. Status transitions with validation. |
-| 3 | Impact integration | Auto-assessment on submission using EP-FOUND-OPS impact API. Risk level calculation. Impact report generation. |
-| 4 | Deployment windows | Business profile editor. Window calculation. Blackout enforcement. Storefront booking awareness. |
-| 5 | Calendar & maintenance | CalendarEvent creation on approval. Booking blocks during maintenance. Status banner API. Post-change health verification. |
-| 6 | UI | `/ops/changes` route. Active/Calendar/History/Catalog/Windows tabs. RFC detail view. |
-| 7 | Standard changes | Catalog model and UI. Template-based RFC creation. Auto-scheduling. Catalog governance. |
+| Phase | Scope | Status | Deliverables |
+|-------|-------|--------|-------------|
+| 1 | Schema | **Done** | `ChangeRequest`, `ChangeItem`, `BusinessProfile`, `DeploymentWindow`, `BlackoutPeriod`, `StandardChangeCatalog` models. Migration applied. |
+| 2 | RFC lifecycle | **Done** | Create/submit/assess/approve/schedule/execute/complete/rollback workflow. 28 tests. Self-dev auto-RFC on shipBuild(). |
+| 3 | Impact integration | Deferred | Auto-assessment on submission using EP-FOUND-OPS impact API. Blocked on EP-FOUND-OPS delivery. |
+| 4 | Deployment windows | **Done** | Window calculation. Blackout enforcement. Scheduling conflict detection. Default profile seeded. 20 tests. |
+| 5 | Calendar & maintenance | Deferred | CalendarEvent creation on approval. Booking blocks during maintenance. Status banner API. Requires CalendarEvent system-ownership resolution. |
+| 6 | UI | **Done** | `/ops/changes` route. Active/Completed/History filters. RFC detail panel with one-click rollback, approve/reject, cancel. |
+| 7 | Standard changes | Deferred | Catalog model exists in schema. Template-based RFC creation. Auto-scheduling. Catalog governance. |
+| — | Execution engine | **Done** | Ordered execution with health gates. Per-type rollback (code/infra/config/external). One-click RFC rollback. 27 tests. |
+| — | API routes | **Done** | 6 REST endpoints for RFC lifecycle, execution, rollback, windows, business profile. |
+| — | Integration tests | **Done** | 7 end-to-end tests: self-dev flow, auto-rollback, one-click rollback, invalid transitions. |
