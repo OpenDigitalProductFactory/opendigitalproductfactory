@@ -199,6 +199,10 @@ describe("anthropicAdapter", () => {
       it("sets promptCaching true (curated)", () => {
         expect(card.capabilities.promptCaching).toBe(true);
       });
+
+      it("sets computerUse true for opus-4 family", () => {
+        expect(card.capabilities.computerUse).toBe(true);
+      });
     });
 
     // ── Effort levels ────────────────────────────────────────────────
@@ -276,6 +280,11 @@ describe("anthropicAdapter", () => {
 
       it("extracts modelFamily for haiku", () => {
         expect(card.modelFamily).toBe("claude-haiku-4");
+      });
+
+      it("sets computerUse null for haiku (not supported)", () => {
+        const haikuCard = anthropicAdapter.extractModelCard("claude-haiku-4-5-20251001", haikuRaw);
+        expect(haikuCard.capabilities.computerUse).toBeNull();
       });
     });
 
