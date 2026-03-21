@@ -33,6 +33,7 @@ export default async function FinancePage() {
     expectedOutflows,
     activeRecurringCount,
     overdueGt30,
+    pendingExpenseCount,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -123,6 +124,11 @@ export default async function FinancePage() {
         dueDate: { lt: thirtyDaysAgo },
       },
       _sum: { amountDue: true },
+    }),
+
+    // Pending expense claims
+    prisma.expenseClaim.count({
+      where: { status: "submitted" },
     }),
   ]);
 
@@ -319,6 +325,27 @@ export default async function FinancePage() {
         </div>
       </div>
 
+      {/* Row 3: People widgets */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Pending Expenses */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Pending Expenses
+          </p>
+          <p
+            className="text-2xl font-bold"
+            style={{ color: pendingExpenseCount > 0 ? "#a78bfa" : "#4ade80" }}
+          >
+            {pendingExpenseCount}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            <Link href="/finance/expense-claims?status=submitted" className="hover:underline">
+              claim{pendingExpenseCount !== 1 ? "s" : ""} awaiting approval →
+            </Link>
+          </p>
+        </div>
+      </div>
+
       {/* Navigation links */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* AR links */}
@@ -395,6 +422,21 @@ export default async function FinancePage() {
             </Link>
             <Link href="/finance/reports/aged-creditors" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Aged Creditors →
+            </Link>
+          </div>
+        </div>
+
+        {/* People */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            People
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/expense-claims" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Expense Claims →
+            </Link>
+            <Link href="/portal/expenses" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              My Expenses →
             </Link>
           </div>
         </div>
