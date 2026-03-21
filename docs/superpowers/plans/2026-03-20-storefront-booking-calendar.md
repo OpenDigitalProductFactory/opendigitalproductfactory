@@ -6,7 +6,11 @@
 
 **Architecture:** Slot computation engine as pure functions in `lib/slot-engine/`, three new public API routes for dates/slots/holds, enhanced `submitBooking` server action with hold validation and provider assignment, admin team management tab, and archetype-seeded defaults so booking works on day one.
 
-**Tech Stack:** Prisma (schema + migrations), Vitest (TDD), Next.js 16 App Router (API routes + server actions), React client components with CSS variables (`var(--dpf-*)`), date-fns-tz for timezone handling.
+**Tech Stack:** Prisma (schema + migrations), Vitest (TDD), Next.js 16 App Router (API routes + server actions), React client components with CSS variables (`var(--dpf-*)`).
+
+**Timezone handling:** All `ProviderAvailability` times are local to the storefront's IANA timezone. `StorefrontBooking.scheduledAt` and `BookingHold` times are stored in UTC. The slot engine uses `Intl.DateTimeFormat` with the storefront's IANA timezone to convert between UTC and local — no external timezone library needed (Node.js has native IANA support). Avoid `Date.getDay()` on UTC dates; instead resolve day-of-week in the storefront timezone via `new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' })`.
+
+**Dynamic form fields:** v1 uses hardcoded contact fields (name, email, phone, notes) matching the existing `BookingForm`. Archetype `formSchema`-driven dynamic fields are a follow-on enhancement — not in scope for this epic.
 
 **Spec:** `docs/superpowers/specs/2026-03-20-storefront-booking-calendar-design.md`
 
@@ -132,6 +136,7 @@ model BookingHold {
   slotStart    DateTime
   slotEnd      DateTime
   holderToken  String
+  holderIp     String?
   expiresAt    DateTime
   createdAt    DateTime         @default(now())
 
@@ -264,7 +269,63 @@ Add to `packages/validators/src/index.ts`:
 export * from "./storefront";
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Write and run Zod schema tests**
+
+Create `packages/validators/src/storefront.test.ts`:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { bookingConfigSchema } from "./storefront";
+
+describe("bookingConfigSchema", () => {
+  it("accepts valid slot config", () => {
+    const result = bookingConfigSchema.safeParse({
+      durationMinutes: 45,
+      schedulingPattern: "slot",
+      assignmentMode: "next-available",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects durationMinutes < 5", () => {
+    const result = bookingConfigSchema.safeParse({
+      durationMinutes: 3,
+      schedulingPattern: "slot",
+      assignmentMode: "next-available",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects invalid schedulingPattern", () => {
+    const result = bookingConfigSchema.safeParse({
+      durationMinutes: 30,
+      schedulingPattern: "invalid",
+      assignmentMode: "next-available",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts full config with all optional fields", () => {
+    const result = bookingConfigSchema.safeParse({
+      durationMinutes: 60,
+      beforeBufferMinutes: 10,
+      afterBufferMinutes: 15,
+      minimumNoticeHours: 24,
+      maxAdvanceDays: 90,
+      slotIntervalMinutes: 30,
+      schedulingPattern: "class",
+      assignmentMode: "customer-choice",
+      capacity: 20,
+      bookingLimits: { day: 8, week: 30 },
+    });
+    expect(result.success).toBe(true);
+  });
+});
+```
+
+Run: `cd /h/OpenDigitalProductFactory && npx vitest run packages/validators/src/storefront.test.ts`
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add packages/types/src/entities.ts packages/validators/src/storefront.ts packages/validators/src/index.ts
@@ -330,18 +391,23 @@ export interface ResolvedBookingConfig {
 }
 
 export function resolveBookingConfig(raw: Record<string, unknown>): ResolvedBookingConfig {
-  const dur = typeof raw.durationMinutes === "number" ? raw.durationMinutes : 60;
+  // Validate with Zod schema — import { bookingConfigSchema } from "@dpf/validators"
+  // Use safeParse to handle legacy items with partial/missing config gracefully
+  const { bookingConfigSchema } = require("@dpf/validators");
+  const parsed = bookingConfigSchema.safeParse(raw);
+  const cfg = parsed.success ? parsed.data : raw;
+  const dur = typeof cfg.durationMinutes === "number" ? cfg.durationMinutes : 60;
   return {
     durationMinutes: dur,
-    beforeBufferMinutes: (raw.beforeBufferMinutes as number) ?? 0,
-    afterBufferMinutes: (raw.afterBufferMinutes as number) ?? 0,
-    minimumNoticeHours: (raw.minimumNoticeHours as number) ?? 1,
-    maxAdvanceDays: (raw.maxAdvanceDays as number) ?? 60,
-    slotIntervalMinutes: (raw.slotIntervalMinutes as number) ?? dur,
-    schedulingPattern: (raw.schedulingPattern as "slot" | "class" | "recurring") ?? "slot",
-    assignmentMode: (raw.assignmentMode as "next-available" | "customer-choice") ?? "next-available",
-    capacity: (raw.capacity as number) ?? 1,
-    bookingLimits: (raw.bookingLimits as { day?: number; week?: number; month?: number }) ?? {},
+    beforeBufferMinutes: cfg.beforeBufferMinutes ?? 0,
+    afterBufferMinutes: cfg.afterBufferMinutes ?? 0,
+    minimumNoticeHours: cfg.minimumNoticeHours ?? 1,
+    maxAdvanceDays: cfg.maxAdvanceDays ?? 60,
+    slotIntervalMinutes: cfg.slotIntervalMinutes ?? dur,
+    schedulingPattern: cfg.schedulingPattern ?? "slot",
+    assignmentMode: cfg.assignmentMode ?? "next-available",
+    capacity: cfg.capacity ?? 1,
+    bookingLimits: cfg.bookingLimits ?? {},
   };
 }
 ```
@@ -648,7 +714,7 @@ describe("generateSlotCandidates", () => {
     expect(slots[3]).toEqual({ startMinutes: 675, endMinutes: 720 });
   });
 
-  it("respects buffer time in slot footprint", () => {
+  it("respects buffer time in slot footprint (buffers affect busy overlap, not window fit)", () => {
     const windows: TimeWindow[] = [{ startMinutes: 540, endMinutes: 720 }]; // 9-12
     const busy: BusyPeriod[] = [{ startMinutes: 600, endMinutes: 645 }]; // 10:00-10:45 booking
     const slots = generateSlotCandidates(windows, busy, {
@@ -657,12 +723,11 @@ describe("generateSlotCandidates", () => {
       beforeBuffer: 10,
       afterBuffer: 10,
     });
-    // 9:00 slot footprint = [8:50, 9:55] — ok (no conflict)
-    // 9:45 slot footprint = [9:35, 10:40] — overlaps busy 10:00 → excluded
-    // 10:30 slot footprint = [10:20, 11:25] — overlaps busy end 10:45 → excluded
-    // 10:55 would be next but with 45min interval from 9:00 → 9:45, 10:30, 11:15
-    // 11:15 footprint = [11:05, 12:10] — exceeds window end 12:00 → excluded
-    expect(slots.map((s) => s.startMinutes)).toEqual([540]);
+    // 9:00 footprint [8:50, 9:55] — no overlap with busy → included
+    // 9:45 footprint [9:35, 10:40] — overlaps busy 10:00 → excluded
+    // 10:30 footprint [10:20, 11:25] — overlaps busy end 10:45 → excluded
+    // 11:15 footprint [11:05, 12:10] — no overlap with busy → included (slot 11:15-12:00 fits in window)
+    expect(slots.map((s) => s.startMinutes)).toEqual([540, 675]);
   });
 
   it("returns empty when window too small for duration", () => {
@@ -723,16 +788,12 @@ export function generateSlotCandidates(
   for (const window of windows) {
     let cursor = window.startMinutes;
     while (cursor + durationMinutes <= window.endMinutes) {
+      // Slot itself must fit within window; buffers extend the footprint for busy-period overlap checks only
       const footprintStart = cursor - beforeBuffer;
       const footprintEnd = cursor + durationMinutes + afterBuffer;
-
-      // Footprint must fit within window bounds
-      if (footprintStart >= window.startMinutes && footprintEnd <= window.endMinutes) {
-        // Check no overlap with busy periods
-        const conflict = busy.some((b) => overlaps(footprintStart, footprintEnd, b.startMinutes, b.endMinutes));
-        if (!conflict) {
-          slots.push({ startMinutes: cursor, endMinutes: cursor + durationMinutes });
-        }
+      const conflict = busy.some((b) => overlaps(footprintStart, footprintEnd, b.startMinutes, b.endMinutes));
+      if (!conflict) {
+        slots.push({ startMinutes: cursor, endMinutes: cursor + durationMinutes });
       }
 
       cursor += intervalMinutes;
@@ -925,6 +986,8 @@ describe("computeAvailableSlots", () => {
     vi.mocked(prisma.providerAvailability.findMany).mockResolvedValue([
       { days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "17:00", date: null, isBlocked: false },
     ] as never);
+    // Note: storefrontBooking.findMany is called twice — once for busy periods on the target date,
+    // once for weekly booking counts (round-robin). Mock both calls returning empty.
     vi.mocked(prisma.storefrontBooking.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.bookingHold.findMany).mockResolvedValue([] as never);
 
@@ -1088,17 +1151,35 @@ Create `apps/web/app/api/storefront/[slug]/dates/route.ts`:
 ```typescript
 import { NextRequest, NextResponse } from "next/server";
 import { getAvailableDates } from "@/lib/slot-engine";
+import { prisma } from "@dpf/db";
+
+async function validateItemOwnership(slug: string, itemId: string): Promise<boolean> {
+  const item = await prisma.storefrontItem.findFirst({
+    where: {
+      itemId,
+      isActive: true,
+      storefront: { organization: { slug }, isPublished: true },
+    },
+    select: { id: true },
+  });
+  return item !== null;
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { slug } = await params;
   const { searchParams } = req.nextUrl;
   const itemId = searchParams.get("itemId");
   const month = searchParams.get("month"); // "YYYY-MM"
 
   if (!itemId || !month) {
     return NextResponse.json({ error: "itemId and month are required" }, { status: 400 });
+  }
+
+  if (!(await validateItemOwnership(slug, itemId))) {
+    return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
   try {
@@ -1110,6 +1191,8 @@ export async function GET(
   }
 }
 ```
+
+> **Note:** The `validateItemOwnership` helper should be extracted to a shared utility (`apps/web/lib/slot-engine/validate-item.ts`) and reused in the slots and hold routes too. Each route must verify the item belongs to the storefront identified by `slug`.
 
 - [ ] **Step 4: Implement GET slots route**
 
@@ -1190,24 +1273,61 @@ git commit -m "feat(api): add storefront dates, slots, and hold API routes"
 Add to `apps/web/lib/storefront-actions.test.ts`:
 
 ```typescript
+// Add to existing vi.mock("@dpf/db") block:
+// prisma.bookingHold: { findFirst: vi.fn(), delete: vi.fn() },
+
 describe("submitBooking (enhanced)", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
   it("validates hold token before creating booking", async () => {
-    // Mock storefront found, hold found with matching token
-    // Expect: booking created, hold deleted
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue({
+      id: "hold-1", holderToken: "tok-abc", providerId: "prov-1",
+      slotStart: new Date("2026-03-23T09:00:00Z"), slotEnd: new Date("2026-03-23T09:45:00Z"),
+      expiresAt: new Date(Date.now() + 600_000),
+    } as never);
+    vi.mocked(prisma.bookingHold.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({ bookingRef: "BK-TESTREF" } as never);
+
+    const result = await submitBooking("acme", {
+      itemId: "itm-1", customerEmail: "a@b.com", customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
+      holderToken: "tok-abc",
+    });
+    expect(result.success).toBe(true);
+    expect(prisma.bookingHold.delete).toHaveBeenCalledWith({ where: { id: "hold-1" } });
   });
 
   it("rejects booking when hold token is invalid", async () => {
-    // Mock storefront found, hold NOT found for token
-    // Expect: { success: false, error: "Invalid or expired hold" }
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue(null as never);
+
+    const result = await submitBooking("acme", {
+      itemId: "itm-1", customerEmail: "a@b.com", customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
+      holderToken: "invalid-token",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/invalid|expired/i);
   });
 
   it("rejects duplicate submission via idempotency key", async () => {
-    // Mock Prisma unique constraint error on idempotencyKey
-    // Expect: { success: false, error: "Duplicate submission" }
-  });
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue({
+      id: "hold-2", holderToken: "tok-def", expiresAt: new Date(Date.now() + 600_000),
+    } as never);
+    vi.mocked(prisma.bookingHold.delete).mockResolvedValue({} as never);
+    const prismaError = new Error("Unique constraint") as Error & { code: string };
+    prismaError.code = "P2002";
+    vi.mocked(prisma.storefrontBooking.create).mockRejectedValue(prismaError);
 
-  it("assigns provider from hold when providerId is present", async () => {
-    // Expect: booking.providerId matches hold.providerId
+    const result = await submitBooking("acme", {
+      itemId: "itm-1", customerEmail: "a@b.com", customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
+      holderToken: "tok-def", idempotencyKey: "dup-key",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/duplicate/i);
   });
 });
 ```
@@ -1280,11 +1400,16 @@ function projectRecurrenceDates(
 
   if (rule === "monthly") {
     const dayOfMonth = cursor.getDate();
-    cursor.setMonth(cursor.getMonth() + 1);
-    while (cursor <= endDate) {
-      cursor.setDate(dayOfMonth);
-      dates.push(new Date(cursor));
-      cursor.setMonth(cursor.getMonth() + 1);
+    let month = cursor.getMonth() + 1;
+    let year = cursor.getFullYear();
+    while (true) {
+      if (month > 11) { month = 0; year++; }
+      // Clamp day to last day of target month to avoid overflow (e.g. Jan 31 → Feb 28)
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const d = new Date(year, month, Math.min(dayOfMonth, lastDay));
+      if (d > endDate) break;
+      dates.push(d);
+      month++;
     }
   } else {
     cursor = new Date(cursor.getTime() + interval * msPerDay);
@@ -1367,7 +1492,7 @@ import { SlotBookingFlow } from "@/components/storefront/SlotBookingFlow";
 
 // In the component:
 return (
-  <div style={{ paddingTop: 40, maxWidth: 600 }}>
+  <div style={{ paddingTop: 40, maxWidth: 520 }}>
     <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Book: {item.name}</h1>
     <SlotBookingFlow
       orgSlug={slug}
@@ -1584,20 +1709,19 @@ if (archetype.schedulingDefaults) {
     },
   });
 
-  // Create availability rows
-  const hoursByDay = new Map<number, { start: string; end: string }>();
+  // Create availability rows — group days by identical hours
+  const grouped = new Map<string, number[]>();
   for (const h of defaults.defaultOperatingHours) {
-    hoursByDay.set(h.day, { start: h.start, end: h.end });
+    const key = `${h.start}-${h.end}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(h.day);
   }
-  // Group consecutive days with same hours into one row
-  await prisma.providerAvailability.create({
-    data: {
-      providerId: provider.id,
-      days: defaults.defaultOperatingHours.map((h) => h.day),
-      startTime: defaults.defaultOperatingHours[0].start,
-      endTime: defaults.defaultOperatingHours[0].end,
-    },
-  });
+  for (const [key, days] of grouped) {
+    const [startTime, endTime] = key.split("-");
+    await prisma.providerAvailability.create({
+      data: { providerId: provider.id, days, startTime, endTime },
+    });
+  }
 
   // Link provider to all booking items
   const bookingItems = await prisma.storefrontItem.findMany({
