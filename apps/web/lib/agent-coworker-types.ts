@@ -53,6 +53,7 @@ export type AgentModelRequirements = {
   instructionFollowing?: "excellent" | "adequate";
   codingCapability?: "excellent" | "adequate";
   preferredProviderId?: string;
+  requiredCapabilities?: Array<"codeExecution" | "webSearch" | "computerUse">;
 };
 
 /** Entry in the route-to-agent map. */

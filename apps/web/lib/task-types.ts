@@ -10,6 +10,11 @@ export type TaskTypeDefinition = {
   minCapabilityTier: CapabilityTier;
   defaultInstructions: string;
   evaluationTokenLimit: number;
+  capabilityHints?: {
+    requiresCodeExecution?: boolean;
+    requiresWebSearch?: boolean;
+    requiresComputerUse?: boolean;
+  };
 };
 
 export const TASK_TYPES: TaskTypeDefinition[] = [
@@ -97,6 +102,7 @@ export const TASK_TYPES: TaskTypeDefinition[] = [
     defaultInstructions:
       "Search for the requested information. Present results with sources. Distinguish facts from opinions.",
     evaluationTokenLimit: 500,
+    capabilityHints: { requiresWebSearch: true },
   },
   {
     id: "creative",
