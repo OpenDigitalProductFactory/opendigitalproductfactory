@@ -1,9 +1,9 @@
 // POST /api/v1/finance/invoices/:id/send — send invoice via email with PDF attachment
 
 import { NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 import { getInvoice, sendInvoice } from "@/lib/actions/finance";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { sendEmail, composeInvoiceEmail } from "@/lib/email";

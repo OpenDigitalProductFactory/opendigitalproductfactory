@@ -5,9 +5,9 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { revokeRefreshToken } from "@/lib/api/jwt.js";
-import { ApiError } from "@/lib/api/error.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { revokeRefreshToken } from "@/lib/api/jwt";
+import { ApiError } from "@/lib/api/error";
 
 export async function POST(request: Request) {
   try {

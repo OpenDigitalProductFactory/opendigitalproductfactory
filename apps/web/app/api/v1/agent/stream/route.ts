@@ -3,8 +3,8 @@
 // For now this sends a single "connected" event then closes.
 // The real implementation will subscribe to the agent event bus.
 
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
 

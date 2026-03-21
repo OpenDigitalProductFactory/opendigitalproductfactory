@@ -1,8 +1,8 @@
 // GET /api/v1/dynamic/forms/:id — get form schema (stub — not yet implemented)
 
 import { NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
 
 export async function GET(
   request: Request,

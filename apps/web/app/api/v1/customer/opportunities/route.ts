@@ -4,11 +4,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { createOpportunitySchema } from "@dpf/validators";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
-import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination.js";
-import { createOpportunity } from "@/lib/actions/crm.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
+import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination";
+import { createOpportunity } from "@/lib/actions/crm";
 
 const opportunityInclude = () => ({
   account: { select: { id: true, accountId: true, name: true } },

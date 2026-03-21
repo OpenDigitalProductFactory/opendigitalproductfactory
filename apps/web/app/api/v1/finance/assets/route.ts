@@ -4,10 +4,10 @@
 import { NextResponse } from "next/server";
 import { createAssetSchema } from "@/lib/asset-validation";
 import { createAsset, listAssets } from "@/lib/actions/assets";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
-import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
+import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination";
 
 export async function GET(request: Request) {
   try {

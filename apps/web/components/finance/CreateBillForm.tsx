@@ -38,6 +38,7 @@ interface Props {
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
   defaultSupplierId?: string;
+  defaultCurrency?: string;
 }
 
 function round2(n: number): number {
@@ -54,7 +55,7 @@ function getDefaultDueDate(): string {
   return d.toISOString().split("T")[0]!;
 }
 
-export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId }: Props) {
+export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, defaultCurrency }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId }:
   const [invoiceRef, setInvoiceRef] = useState("");
   const [issueDate, setIssueDate] = useState(getToday());
   const [dueDate, setDueDate] = useState(getDefaultDueDate());
-  const [currency, setCurrency] = useState("GBP");
+  const [currency, setCurrency] = useState(defaultCurrency ?? "GBP");
   const [selectedPoId, setSelectedPoId] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -195,6 +196,14 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId }:
               </option>
             ))}
           </select>
+          <a
+            href="/finance/suppliers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-[var(--dpf-accent)] hover:underline mt-1 inline-block"
+          >
+            + Create new supplier
+          </a>
         </div>
         <div>
           <label className={labelClasses}>Link to Purchase Order (optional)</label>

@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/bills/new/page.tsx
 import { listSuppliers, listPurchaseOrders } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
 import { CreateBillForm } from "@/components/finance/CreateBillForm";
 import Link from "next/link";
 
@@ -8,9 +9,10 @@ type Props = { searchParams: Promise<{ supplierId?: string }> };
 export default async function NewBillPage({ searchParams }: Props) {
   const { supplierId } = await searchParams;
 
-  const [suppliers, purchaseOrders] = await Promise.all([
+  const [suppliers, purchaseOrders, orgSettings] = await Promise.all([
     listSuppliers(),
     listPurchaseOrders(),
+    getOrgSettings(),
   ]);
 
   return (
@@ -45,6 +47,7 @@ export default async function NewBillPage({ searchParams }: Props) {
             lineItems: po.lineItems,
           }))}
           defaultSupplierId={supplierId}
+          defaultCurrency={orgSettings.baseCurrency}
         />
       </div>
     </div>

@@ -7,9 +7,9 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@dpf/db";
 import { loginSchema } from "@dpf/validators";
-import { signAccessToken, createRefreshToken } from "@/lib/api/jwt.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { signAccessToken, createRefreshToken } from "@/lib/api/jwt";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 export async function POST(request: Request) {
   try {

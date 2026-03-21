@@ -10,11 +10,11 @@
 //   requireCapability(capabilities, "view_portfolio");
 
 import { prisma } from "@dpf/db";
-import type { DpfSession } from "../auth.js";
-import { auth } from "../auth.js";
-import { getGrantedCapabilities } from "../permissions.js";
-import { verifyAccessToken } from "./jwt.js";
-import { apiError } from "./error.js";
+import type { DpfSession } from "../auth";
+import { auth } from "../auth";
+import { getGrantedCapabilities } from "../permissions";
+import { verifyAccessToken } from "./jwt";
+import { apiError } from "./error";
 
 export type AuthResult = {
   user: DpfSession["user"];

@@ -4,10 +4,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { updateEngagementSchema } from "@dpf/validators";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
-import { qualifyEngagement } from "@/lib/actions/crm.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
+import { qualifyEngagement } from "@/lib/actions/crm";
 
 const engagementInclude = () => ({
   contact: true,

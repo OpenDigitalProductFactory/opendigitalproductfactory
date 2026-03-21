@@ -53,7 +53,7 @@ export async function getExchangeRate(from: string, to: string): Promise<number>
 
 // ─── convertAmountSync ────────────────────────────────────────────────────────
 
-export function convertAmountSync(amount: number, rate: number): number {
+export async function convertAmountSync(amount: number, rate: number): Promise<number> {
   return amount * rate;
 }
 
@@ -71,7 +71,7 @@ export async function convertAmount(
 
 // ─── calculateFxGainLoss ──────────────────────────────────────────────────────
 
-export function calculateFxGainLoss(invoiceAmountBase: number, paymentAmountBase: number): number {
+export async function calculateFxGainLoss(invoiceAmountBase: number, paymentAmountBase: number): Promise<number> {
   return paymentAmountBase - invoiceAmountBase;
 }
 

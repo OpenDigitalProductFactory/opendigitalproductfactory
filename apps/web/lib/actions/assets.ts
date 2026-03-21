@@ -31,13 +31,13 @@ export type DepreciationSchedule = {
   totalDepreciation: number;
 };
 
-export function calculateDepreciation(
+export async function calculateDepreciation(
   purchaseCost: number,
   residualValue: number,
   usefulLifeMonths: number,
   method: string,
   monthsElapsed?: number,
-): DepreciationSchedule {
+): Promise<DepreciationSchedule> {
   const months = monthsElapsed ?? usefulLifeMonths;
   const schedule: DepreciationEntry[] = [];
 

@@ -2,9 +2,9 @@
 
 import * as crypto from "crypto";
 import { NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME_TYPES = new Set([
