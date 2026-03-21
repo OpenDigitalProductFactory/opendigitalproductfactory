@@ -23,5 +23,5 @@ export function selectProviderRoundRobin(
     return a.priority - b.priority;
   });
 
-  return scored[0];
+  return scored[0] ?? null;
 }
