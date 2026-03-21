@@ -18,6 +18,7 @@ function makeRecipe(overrides: Partial<RecipeRow> = {}): RecipeRow {
     providerId: "anthropic",
     modelId: "claude-3-5-sonnet-20241022",
     contractFamily: "sync.tool_action",
+    executionAdapter: "chat",
     version: 1,
     status: "active",
     origin: "seed",
@@ -184,6 +185,18 @@ describe("buildPlanFromRecipe", () => {
     const plan = buildPlanFromRecipe(recipe, makeContract());
     expect(plan.temperature).toBeUndefined();
   });
+
+  it("includes executionAdapter from recipe", () => {
+    const recipe = makeRecipe({ executionAdapter: "chat" });
+    const plan = buildPlanFromRecipe(recipe, makeContract());
+    expect(plan.executionAdapter).toBe("chat");
+  });
+
+  it("passes through non-chat executionAdapter", () => {
+    const recipe = makeRecipe({ executionAdapter: "image_gen" });
+    const plan = buildPlanFromRecipe(recipe, makeContract());
+    expect(plan.executionAdapter).toBe("image_gen");
+  });
 });
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────
@@ -249,5 +262,10 @@ describe("buildDefaultPlan", () => {
     const contract = makeContract({ contractFamily: "background.data-extraction" });
     const plan = buildDefaultPlan(makeEndpoint(), contract);
     expect(plan.contractFamily).toBe("background.data-extraction");
+  });
+
+  it("defaults executionAdapter to 'chat'", () => {
+    const plan = buildDefaultPlan(makeEndpoint(), makeContract());
+    expect(plan.executionAdapter).toBe("chat");
   });
 });
