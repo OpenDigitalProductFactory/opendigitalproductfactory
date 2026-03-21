@@ -243,6 +243,7 @@ model EmployeeProfile {
   timesheetApprovals        TimesheetPeriod[]       @relation("TimesheetApprovals")
   timesheets                TimesheetPeriod[]
   expenseClaims             ExpenseClaim[]          @relation("ExpenseClaims")
+  serviceProviders          ServiceProvider[]
 
   @@index([status])
   @@index([departmentId])
@@ -3059,6 +3060,7 @@ model StorefrontConfig {
   socialLinks    Json?
   isPublished    Boolean              @default(false)
   customDomain   String?
+  timezone       String               @default("Europe/London")
   portfolioId    String?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
@@ -3070,6 +3072,8 @@ model StorefrontConfig {
   items          StorefrontItem[]
   orders         StorefrontOrder[]
   sections       StorefrontSection[]
+  providers      ServiceProvider[]
+  bookingHolds   BookingHold[]
 }
 
 model StorefrontSection {
@@ -3105,7 +3109,9 @@ model StorefrontItem {
   sortOrder     Int              @default(0)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  storefront    StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  storefront       StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  providerServices ProviderService[]
+  bookingHolds     BookingHold[]
 
   @@index([storefrontId, isActive, sortOrder])
 }
@@ -3122,14 +3128,101 @@ model StorefrontBooking {
   scheduledAt       DateTime
   durationMinutes   Int
   notes             String?
-  status            String           @default("pending")
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  storefront        StorefrontConfig @relation(fields: [storefrontId], references: [id])
+  status            String            @default("pending")
+  providerId        String?
+  assignmentMode    String?
+  recurrenceRule    String?
+  recurrenceEndDate DateTime?
+  parentBookingId   String?
+  fromReschedule    String?
+  cancellationReason String?
+  cancelledAt       DateTime?
+  idempotencyKey    String?           @unique
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  storefront        StorefrontConfig  @relation(fields: [storefrontId], references: [id])
+  provider          ServiceProvider?  @relation(fields: [providerId], references: [id])
+  parentBooking     StorefrontBooking? @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
+  childBookings     StorefrontBooking[] @relation("BookingRecurrence")
 
   @@index([storefrontId, status])
   @@index([customerEmail])
   @@index([scheduledAt])
+}
+
+model ServiceProvider {
+  id           String   @id @default(cuid())
+  providerId   String   @unique
+  storefrontId String
+  name         String
+  email        String?
+  phone        String?
+  avatarUrl    String?
+  employeeId   String?
+  isActive     Boolean  @default(true)
+  priority     Int      @default(0)
+  weight       Int      @default(100)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  storefront   StorefrontConfig       @relation(fields: [storefrontId], references: [id])
+  employee     EmployeeProfile?       @relation(fields: [employeeId], references: [id])
+  services     ProviderService[]
+  availability ProviderAvailability[]
+  bookings     StorefrontBooking[]
+  bookingHolds BookingHold[]
+
+  @@index([storefrontId])
+}
+
+model ProviderService {
+  id         String @id @default(cuid())
+  providerId String
+  itemId     String
+
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  item       StorefrontItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, itemId])
+}
+
+model ProviderAvailability {
+  id         String    @id @default(cuid())
+  providerId String
+  days       Int[]     @default([])
+  startTime  String
+  endTime    String
+  date       DateTime?
+  isBlocked  Boolean   @default(false)
+  reason     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([providerId, date])
+}
+
+model BookingHold {
+  id           String           @id @default(cuid())
+  storefrontId String
+  itemId       String
+  providerId   String?
+  slotStart    DateTime
+  slotEnd      DateTime
+  holderToken  String
+  holderIp     String?
+  expiresAt    DateTime
+  createdAt    DateTime         @default(now())
+
+  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item         StorefrontItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  provider     ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([storefrontId, slotStart, slotEnd])
+  @@index([expiresAt])
 }
 
 model StorefrontOrder {
