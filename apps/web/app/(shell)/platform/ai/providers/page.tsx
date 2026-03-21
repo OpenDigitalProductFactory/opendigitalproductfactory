@@ -2,7 +2,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers } from "@/lib/ai-provider-data";
+import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers, getProviderModelSummaries } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
@@ -43,13 +43,14 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers, modelSummaries] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
     detectMcpServers(),
     getActivatedMcpServers(),
+    getProviderModelSummaries(),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -88,7 +89,7 @@ export default async function ProvidersPage() {
               providers={group.providers}
             >
               {group.providers.map((pw) => (
-                <ServiceRow key={pw.provider.providerId} pw={pw} />
+                <ServiceRow key={pw.provider.providerId} pw={pw} modelSummary={modelSummaries.get(pw.provider.providerId)} />
               ))}
             </ServiceSection>
           ))
