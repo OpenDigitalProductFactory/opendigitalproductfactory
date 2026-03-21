@@ -249,6 +249,16 @@ export async function profileModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { profiled: 0, failed: 0, error: "Provider not found" };
 
+  // Check model restrictions — if provider has an allowlist, skip models that don't match
+  const restrictions = (provider.modelRestrictions ?? []) as string[];
+  function modelMatchesRestrictions(modelId: string): boolean {
+    if (restrictions.length === 0) return true; // no restrictions = all allowed
+    return restrictions.some(pattern => {
+      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+      return regex.test(modelId);
+    });
+  }
+
   const whereClause = modelIds
     ? { providerId, modelId: { in: modelIds } }
     : { providerId };
@@ -257,6 +267,62 @@ export async function profileModelsInternal(
 
   let profiled = 0;
   for (const m of models) {
+    // If the model doesn't match provider restrictions, retire it
+    if (!modelMatchesRestrictions(m.modelId)) {
+      const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
+      const metadataFields = {
+        modelFamily: card.modelFamily,
+        modelClass: card.modelClass,
+        maxInputTokens: card.maxInputTokens,
+        inputModalities: card.inputModalities,
+        outputModalities: card.outputModalities,
+        capabilities: card.capabilities as any,
+        pricing: card.pricing as any,
+        supportedParameters: card.supportedParameters,
+        defaultParameters: card.defaultParameters as any,
+        instructType: card.instructType,
+        trainingDataCutoff: card.trainingDataCutoff,
+        reliableKnowledgeCutoff: card.reliableKnowledgeCutoff,
+        deprecationDate: card.deprecationDate,
+        perRequestLimits: card.perRequestLimits as any,
+        metadataSource: card.metadataSource,
+        metadataConfidence: card.metadataConfidence,
+        lastMetadataRefresh: new Date(),
+        rawMetadataHash: card.rawMetadataHash,
+        maxContextTokens: card.maxInputTokens,
+        inputPricePerMToken: card.pricing.inputPerMToken,
+        outputPricePerMToken: card.pricing.outputPerMToken,
+        supportsToolUse: card.capabilities.toolUse ?? false,
+      };
+      await prisma.modelProfile.upsert({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        create: {
+          providerId,
+          modelId: m.modelId,
+          friendlyName: m.modelId,
+          summary: "Not accessible with current provider credentials",
+          capabilityTier: "restricted",
+          costTier: "$",
+          bestFor: [],
+          avoidFor: [],
+          modelStatus: "retired",
+          retiredReason: "Model not accessible with provider credential type",
+          generatedBy: "system:metadata-sync",
+          ...metadataFields,
+          reasoning: 50, codegen: 50, toolFidelity: 50,
+          instructionFollowingScore: 50, structuredOutputScore: 50,
+          conversational: 50, contextRetention: 50,
+          profileSource: "seed",
+          profileConfidence: "low",
+        },
+        update: {
+          modelStatus: "retired",
+          retiredReason: "Model not accessible with provider credential type",
+        },
+      });
+      console.log(`[profiling] Retired restricted model ${m.modelId} from ${providerId}`);
+      continue; // skip normal profiling for this model
+    }
     const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
 
     // Derive legacy display fields from available data (no LLM needed)

@@ -26,6 +26,7 @@ interface RegistryEntry {
   consoleUrl?: string | null;
   billingLabel?: string | null;
   costPerformanceNotes?: string | null;
+  modelRestrictions?: string[];
   catalogVisibility?: string;
 }
 
@@ -62,6 +63,7 @@ async function main() {
           consoleUrl: entry.consoleUrl ?? null,
           ...(entry.billingLabel !== undefined && { billingLabel: entry.billingLabel }),
           ...(entry.costPerformanceNotes !== undefined && { costPerformanceNotes: entry.costPerformanceNotes }),
+          ...(entry.modelRestrictions !== undefined && { modelRestrictions: entry.modelRestrictions }),
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
         },
       });
@@ -88,6 +90,7 @@ async function main() {
           consoleUrl: entry.consoleUrl ?? null,
           billingLabel: entry.billingLabel ?? null,
           costPerformanceNotes: entry.costPerformanceNotes ?? null,
+          modelRestrictions: entry.modelRestrictions ?? [],
           catalogVisibility: entry.catalogVisibility ?? "visible",
         },
       });
