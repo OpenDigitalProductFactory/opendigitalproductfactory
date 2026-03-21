@@ -8,7 +8,6 @@ import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
 import { getEndpointPerformance, getRoutingProfiles, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
 import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
-import RoutingProfilePanel from "@/components/platform/RoutingProfilePanel";
 import RouteDecisionLog from "@/components/platform/RouteDecisionLog";
 import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
@@ -98,13 +97,9 @@ export default async function ProviderDetailPage({ params }: Props) {
       {pw.provider.endpointType === "service" ? (
         <McpServiceDetail provider={pw.provider} />
       ) : (
-        <>
-          <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
-            <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
-          </div>
-
-          <RoutingProfilePanel endpointId={providerId} profiles={routingProfiles} />
-        </>
+        <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
+          <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
+        </div>
       )}
 
       <EndpointPerformancePanel

@@ -8,6 +8,27 @@ import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-type
 
 const PAGE_SIZE = 20;
 
+// EP-INF-006: Routing profile shape from getRoutingProfiles()
+type RoutingProfile = {
+  modelId: string;
+  friendlyName: string;
+  reasoning: number;
+  codegen: number;
+  toolFidelity: number;
+  instructionFollowingScore: number;
+  structuredOutputScore: number;
+  conversational: number;
+  contextRetention: number;
+  profileSource: string;
+  profileConfidence: string;
+  evalCount: number;
+  lastEvalAt: string | null;
+  maxContextTokens: number | null;
+  supportsToolUse: boolean;
+  modelStatus: string;
+  retiredAt: string | null;
+};
+
 type Props = {
   providerId: string;
   models: DiscoveredModelRow[];
@@ -15,6 +36,9 @@ type Props = {
   canWrite: boolean;
   hasActiveProvider: boolean;
   latestDiscovery: Date | null;
+  // EP-INF-006: Routing profiles merged into model cards
+  routingProfiles?: RoutingProfile[];
+  endpointId?: string;
 };
 
 export function ModelSection({
@@ -24,6 +48,8 @@ export function ModelSection({
   canWrite,
   hasActiveProvider,
   latestDiscovery,
+  routingProfiles,
+  endpointId,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -40,6 +66,11 @@ export function ModelSection({
   // Build a lookup map from modelId to profile
   const profileMap = new Map<string, ModelProfileRow>(
     profiles.map((p) => [p.modelId, p])
+  );
+
+  // EP-INF-006: Build a lookup map from modelId to routing profile
+  const routingMap = new Map<string, RoutingProfile>(
+    (routingProfiles ?? []).map((rp) => [rp.modelId, rp])
   );
 
   // Stale detection: models not seen in the most recent discovery run.
@@ -182,6 +213,8 @@ export function ModelSection({
               canWrite={canWrite}
               hasActiveProvider={hasActiveProvider}
               onProfile={handleProfileSingle}
+              routingProfile={routingMap.get(model.modelId) ?? null}
+              endpointId={endpointId}
             />
           ))}
         </div>

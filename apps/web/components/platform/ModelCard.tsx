@@ -1,6 +1,25 @@
 "use client";
 
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { triggerDimensionEval } from "@/lib/actions/endpoint-performance";
 import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
+
+// EP-INF-006: Routing profile data merged into ModelCard
+type RoutingProfileData = {
+  reasoning: number;
+  codegen: number;
+  toolFidelity: number;
+  instructionFollowingScore: number;
+  structuredOutputScore: number;
+  conversational: number;
+  contextRetention: number;
+  profileSource: string;
+  profileConfidence: string;
+  evalCount: number;
+  lastEvalAt: string | null;
+  modelStatus: string;
+};
 
 type Props = {
   model: DiscoveredModelRow;
@@ -10,6 +29,10 @@ type Props = {
   canWrite: boolean;
   hasActiveProvider: boolean;
   onProfile: (modelId: string) => void;
+  // EP-INF-006: Merged routing profile data
+  routingProfile?: RoutingProfileData | null;
+  endpointId?: string;
+  onRunEval?: (modelId: string) => void;
 };
 
 // ── Model class colours ──────────────────────────────────────────────────────
@@ -96,6 +119,57 @@ function Badge({ label, colour }: { label: string; colour: string }) {
   );
 }
 
+// ── Routing dimension bars ──────────────────────────────────────────────────
+
+const DIMENSIONS: Array<{ key: keyof RoutingProfileData; label: string }> = [
+  { key: "reasoning",                 label: "Reasoning" },
+  { key: "codegen",                   label: "Code Gen" },
+  { key: "toolFidelity",              label: "Tool Fidelity" },
+  { key: "instructionFollowingScore", label: "Instruction Following" },
+  { key: "structuredOutputScore",     label: "Structured Output" },
+  { key: "conversational",            label: "Conversational" },
+  { key: "contextRetention",          label: "Context Retention" },
+];
+
+const SOURCE_LABELS: Record<string, string> = {
+  seed:       "Seed data",
+  evaluated:  "Evaluated",
+  production: "Production observations",
+};
+
+function scoreColor(score: number): string {
+  if (score >= 80) return "#4ade80";
+  if (score >= 50) return "#fbbf24";
+  return "#ef4444";
+}
+
+function DimensionBar({ label, score }: { label: string; score: number }) {
+  const color = scoreColor(score);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+      <div style={{ width: 130, fontSize: 11, color: "var(--dpf-muted)", flexShrink: 0 }}>{label}</div>
+      <div style={{
+        flex: 1,
+        height: 6,
+        borderRadius: 3,
+        background: "var(--dpf-bg)",
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%",
+          borderRadius: 3,
+          background: color,
+          width: `${score}%`,
+          transition: "width 0.3s ease",
+        }} />
+      </div>
+      <div style={{ width: 28, fontSize: 11, fontFamily: "monospace", color, textAlign: "right", flexShrink: 0 }}>
+        {score}
+      </div>
+    </div>
+  );
+}
+
 function ActionButton({
   label,
   onClick,
@@ -130,7 +204,12 @@ function ActionButton({
   );
 }
 
-export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, hasActiveProvider, onProfile }: Props) {
+export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, hasActiveProvider, onProfile, routingProfile, endpointId, onRunEval }: Props) {
+  const router = useRouter();
+  const [showScores, setShowScores] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [evalMessage, setEvalMessage] = useState<string | null>(null);
+
   const cardStyle: React.CSSProperties = {
     background: "var(--dpf-surface-1)",
     border: "1px solid var(--dpf-border)",
@@ -142,6 +221,41 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     gap: 8,
   };
 
+  function handleRunEval() {
+    if (!endpointId) return;
+    setEvalMessage(null);
+    startTransition(async () => {
+      try {
+        const result = await triggerDimensionEval(endpointId, model.modelId) as {
+          dimensions: Array<{ inconclusive: boolean; newScore: number }>;
+          hasDrift: boolean;
+          hasSevereDrift: boolean;
+          firstError?: string | null;
+        };
+        const updated = result.dimensions.filter((d) => !d.inconclusive).length;
+        const total = result.dimensions.length;
+        if (updated === 0) {
+          setEvalMessage(result.firstError
+            ? `Inconclusive — ${result.firstError}`
+            : "Inconclusive — all tests failed. Check provider connectivity or API key.");
+        } else {
+          const avg = Math.round(
+            result.dimensions.filter((d) => !d.inconclusive).reduce((s, d) => s + d.newScore, 0) / updated,
+          );
+          const drift = result.hasSevereDrift
+            ? " — severe drift detected"
+            : result.hasDrift
+            ? " — drift detected"
+            : "";
+          setEvalMessage(`${updated}/${total} dimensions updated, avg score ${avg}${drift}`);
+        }
+        router.refresh();
+      } catch (err) {
+        setEvalMessage(err instanceof Error ? err.message : "Failed to run evaluation.");
+      }
+    });
+  }
+
   // ── Profiled ──────────────────────────────────────────────────────────────
   if (profile !== null) {
     const caps = profile.capabilities as Record<string, unknown> | undefined;
@@ -151,6 +265,9 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     const pricingStr = formatPricing(pricingData);
     const capBadges = getCapabilityBadges(caps);
     const confidenceColour = CONFIDENCE_COLOURS[profile.metadataConfidence ?? "low"] ?? "#f87171";
+    const hasRouting = routingProfile != null;
+    const sourceLabel = hasRouting ? (SOURCE_LABELS[routingProfile.profileSource] ?? routingProfile.profileSource) : null;
+    const isRetired = hasRouting && routingProfile.modelStatus === "retired";
 
     return (
       <div style={cardStyle}>
@@ -206,6 +323,95 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
             {capBadges.map((b) => (
               <Badge key={b.key} label={b.label} colour="var(--dpf-muted)" />
             ))}
+          </div>
+        )}
+
+        {/* EP-INF-006: Collapsible routing scores section */}
+        {hasRouting && (
+          <div style={{ marginTop: 4 }}>
+            <button
+              onClick={() => setShowScores(!showScores)}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "var(--dpf-muted)",
+                fontSize: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              {showScores ? "Routing Scores \u25BE" : "Routing Scores \u25B8"}
+            </button>
+
+            {showScores && (
+              <div style={{ marginTop: 8 }}>
+                {/* Dimension bars */}
+                {DIMENSIONS.map((d) => (
+                  <DimensionBar
+                    key={d.key}
+                    label={d.label}
+                    score={routingProfile[d.key] as number}
+                  />
+                ))}
+
+                {/* Meta row */}
+                <div style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  paddingTop: 8,
+                  borderTop: "1px solid var(--dpf-border)",
+                  fontSize: 10,
+                  color: "var(--dpf-muted)",
+                  marginTop: 4,
+                }}>
+                  <span>Source: {sourceLabel}</span>
+                  <span>Evals: {routingProfile.evalCount}</span>
+                  {routingProfile.lastEvalAt && (
+                    <span>Last eval: {new Date(routingProfile.lastEvalAt).toLocaleDateString()}</span>
+                  )}
+                </div>
+
+                {/* Run Eval button */}
+                {endpointId && !isRetired && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      onClick={handleRunEval}
+                      disabled={isPending}
+                      style={{
+                        padding: "3px 10px",
+                        fontSize: 11,
+                        borderRadius: 4,
+                        border: "1px solid #7c8cf8",
+                        background: isPending ? "#2a2a40" : "rgba(124,140,248,0.12)",
+                        color: isPending ? "#8888a0" : "#7c8cf8",
+                        cursor: isPending ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {isPending ? "Running..." : "Run Eval"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Eval feedback message */}
+                {evalMessage && (
+                  <div style={{
+                    marginTop: 6,
+                    fontSize: 10,
+                    color: evalMessage.startsWith("Failed") || evalMessage.startsWith("Inconclusive")
+                      ? "#ef4444" : "#4ade80",
+                    padding: "4px 8px",
+                    background: "var(--dpf-bg)",
+                    borderRadius: 4,
+                  }}>
+                    {evalMessage}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
