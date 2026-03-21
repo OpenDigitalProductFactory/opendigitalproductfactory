@@ -43,6 +43,13 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
     taskType: "code_generation",
     prompt: "I want to add a new skill to this page's agent. A skill is a quick-action button that triggers a specific prompt. Ask me what the skill should do, then use propose_file_change to add it to the skills array in route-context-map.ts for this route.",
   },
+  {
+    label: "Evaluate this page",
+    description: "Check this page for usability issues — accessibility, contrast, layout, and UX patterns",
+    capability: null,
+    taskType: "analysis",
+    prompt: "Evaluate the UX of this page. First, use read_project_file and search_project_files to find and read the component code for the current route. Then use evaluate_page to run a live accessibility audit. Synthesize both code analysis and live findings into a plain-language assessment. For each issue found: create a backlog item grouped by category (one item per category, not per finding). After presenting findings, ask the user if they want to build fixes now — if yes, assemble a FeatureBrief and launch Build Studio.",
+  },
 ];
 
 export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
