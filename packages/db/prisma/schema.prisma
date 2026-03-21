@@ -49,6 +49,7 @@ model User {
   posCreated                   PurchaseOrder[]          @relation("PurchaseOrderCreations")
   approvalRules                ApprovalRule[]           @relation("ApprovalRuleApprover")
   billApprovals                BillApproval[]           @relation("BillApprovalResponses")
+  recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
 }
 
 model UserGroup {
@@ -1119,12 +1120,13 @@ model CustomerAccount {
   contactRoles    ContactAccountRole[]
   parentAccount   CustomerAccount?     @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
   childAccounts   CustomerAccount[]    @relation("AccountHierarchy")
-  invoices        Invoice[]
-  engagements     Engagement[]
-  opportunities   Opportunity[]
-  activities      Activity[]
-  quotes          Quote[]
-  salesOrders     SalesOrder[]
+  invoices             Invoice[]
+  engagements          Engagement[]
+  opportunities        Opportunity[]
+  activities           Activity[]
+  quotes               Quote[]
+  salesOrders          SalesOrder[]
+  recurringSchedules   RecurringSchedule[]
 
   @@index([status])
   @@index([parentAccountId])
@@ -3279,6 +3281,7 @@ model Invoice {
   createdBy       User?               @relation("InvoiceCreations", fields: [createdById], references: [id])
   lineItems       InvoiceLineItem[]
   allocations     PaymentAllocation[]
+  dunningLogs     DunningLog[]
 
   @@index([accountId])
   @@index([status])
@@ -3588,4 +3591,92 @@ model BankRule {
   hitCount        Int                 @default(0)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
+}
+
+// ─── Finance: Recurring Billing ────────────────────────────────────
+
+model RecurringSchedule {
+  id              String              @id @default(cuid())
+  scheduleId      String              @unique
+  accountId       String
+  name            String
+  frequency       String
+  amount          Decimal
+  currency        String              @default("GBP")
+  startDate       DateTime
+  endDate         DateTime?
+  nextInvoiceDate DateTime
+  lastInvoicedAt  DateTime?
+  status          String              @default("active")
+  autoSend        Boolean             @default(true)
+  templateNotes   String?
+  createdById     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  account         CustomerAccount     @relation(fields: [accountId], references: [id])
+  createdBy       User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
+  lineItems       RecurringLineItem[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([nextInvoiceDate])
+}
+
+model RecurringLineItem {
+  id              String              @id @default(cuid())
+  scheduleId      String
+  description     String
+  quantity        Decimal             @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal             @default(0)
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  schedule        RecurringSchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+}
+
+// ─── Finance: Credit Control ───────────────────────────────────────
+
+model DunningSequence {
+  id              String              @id @default(cuid())
+  name            String
+  isDefault       Boolean             @default(false)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  steps           DunningStep[]
+}
+
+model DunningStep {
+  id              String              @id @default(cuid())
+  sequenceId      String
+  dayOffset       Int
+  subject         String
+  emailTemplate   String
+  severity        String              @default("friendly")
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  sequence        DunningSequence     @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@index([sequenceId])
+}
+
+model DunningLog {
+  id              String              @id @default(cuid())
+  invoiceId       String
+  stepId          String?
+  action          String
+  sentAt          DateTime            @default(now())
+  emailTo         String?
+  notes           String?
+
+  invoice         Invoice             @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([sentAt])
 }
