@@ -1,7 +1,7 @@
 [
   {
     "providerId": "anthropic",
-    "name": "Anthropic (API Key)",
+    "name": "Claude / Anthropic (API Key)",
     "category": "direct",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
@@ -19,7 +19,7 @@
   },
   {
     "providerId": "anthropic-sub",
-    "name": "Anthropic (Claude Code)",
+    "name": "Claude / Anthropic (OAuth Subscription)",
     "category": "direct",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
