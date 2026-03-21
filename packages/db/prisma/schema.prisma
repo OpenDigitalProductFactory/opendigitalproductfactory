@@ -3460,3 +3460,25 @@ model BillApproval {
   @@index([billId])
   @@index([token])
 }
+
+model ExecutionRecipe {
+  id                    String    @id @default(cuid())
+  providerId            String
+  modelId               String
+  contractFamily        String
+  version               Int       @default(1)
+  status                String    @default("champion")
+  origin                String    @default("seed")
+  providerSettings      Json
+  toolPolicy            Json      @default("{}")
+  responsePolicy        Json      @default("{}")
+  parentRecipeId        String?
+  mutationSummary       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  promotedAt            DateTime?
+  retiredAt             DateTime?
+
+  @@unique([providerId, modelId, contractFamily, version])
+  @@index([contractFamily, status])
+}

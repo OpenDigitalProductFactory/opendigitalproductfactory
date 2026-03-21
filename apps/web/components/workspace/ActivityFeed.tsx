@@ -6,7 +6,7 @@ import type { FeedItem } from "@/lib/activity-feed-data";
 const SECTION_CONFIG = {
   action: { label: "Action Required", color: "#fbbf24", defaultOpen: true },
   awareness: { label: "Awareness", color: "#38bdf8", defaultOpen: true },
-  history: { label: "Recent History", color: "#8888a0", defaultOpen: false },
+  history: { label: "Recent History", color: "var(--dpf-muted)", defaultOpen: false },
 } as const;
 
 type Props = {
@@ -76,7 +76,7 @@ export function ActivityFeed({ items }: Props) {
                   >
                     <span className="text-sm shrink-0">{item.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white truncate">{item.title}</p>
+                      <p className="text-xs text-[var(--dpf-text)] truncate">{item.title}</p>
                       <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5">
                         {item.person ? `${item.person} · ` : ""}{new Date(item.date).toLocaleDateString()}
                       </p>
