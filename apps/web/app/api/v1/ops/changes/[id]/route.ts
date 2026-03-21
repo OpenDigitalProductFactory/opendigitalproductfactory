@@ -12,6 +12,7 @@ import {
   approveRFC,
   scheduleRFC,
   cancelRFC,
+  transitionRFC,
 } from "@/lib/actions/change-management";
 
 export async function GET(
@@ -103,11 +104,15 @@ export async function PATCH(
         await cancelRFC(rfcId, body.reason);
         break;
 
+      case "reject":
+        await transitionRFC(rfcId, "rejected", body.reason ? { outcomeNotes: body.reason } : undefined);
+        break;
+
       default:
         return NextResponse.json(
           {
             code: "VALIDATION_ERROR",
-            message: `Unknown action: "${body.action}". Valid actions: submit, assess, approve, schedule, cancel`,
+            message: `Unknown action: "${body.action}". Valid actions: submit, assess, approve, schedule, cancel, reject`,
           },
           { status: 422 },
         );
