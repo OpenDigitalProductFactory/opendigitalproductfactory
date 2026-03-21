@@ -50,34 +50,36 @@ export async function executeFirstRunBootstrap(
   try {
     onStatus?.({ phase: "checking" });
 
-    // 1. Activate Ollama via existing health check
-    await checkBundledProviders();
-
-    // 2. Check if Ollama is now active with models
-    const ollamaProvider = await prisma.modelProvider.findFirst({
-      where: { providerId: "ollama" },
-    });
-
-    if (!ollamaProvider || ollamaProvider.status !== "active") {
-      return { error: "Ollama is not reachable. Please ensure it is running." };
+    // 1. Try to activate Ollama — but don't block setup if it's unavailable
+    let ollamaAvailable = false;
+    try {
+      await checkBundledProviders();
+      const ollamaProvider = await prisma.modelProvider.findFirst({
+        where: { providerId: "ollama" },
+      });
+      if (ollamaProvider?.status === "active") {
+        ollamaAvailable = true;
+        // Set sensitivity clearance for local provider
+        await prisma.modelProvider.update({
+          where: { providerId: "ollama" },
+          data: {
+            sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+          },
+        });
+      }
+    } catch {
+      // Ollama not available — that's fine, user can configure providers at Step 3
+      console.warn("[bootstrap] Ollama not reachable — proceeding without local AI");
     }
 
-    // 3. Set sensitivity clearance
-    await prisma.modelProvider.update({
-      where: { providerId: "ollama" },
-      data: {
-        sensitivityClearance: ["public", "internal", "confidential", "restricted"],
-      },
-    });
-
-    // 4. Seed onboarding agent
+    // 2. Seed onboarding agent (always — even without Ollama)
     await seedOnboardingAgent();
 
-    // 5. Create setup progress
+    // 3. Create setup progress (always — this is what lets the user proceed)
     const progress = await createSetupProgress();
 
     onStatus?.({ phase: "ready" });
-    return { setupId: progress.id };
+    return { setupId: progress.id, ollamaAvailable };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     onStatus?.({ phase: "failed", error: msg });
