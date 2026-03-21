@@ -1,8 +1,10 @@
 // apps/web/app/(portal)/layout.tsx
-// Customer portal shell — separate from admin (shell) layout.
+// Customer portal shell — uses same branding pipeline as admin shell.
+import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { buildBrandingStyleTag } from "@/lib/branding";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/portal" },
@@ -18,75 +20,78 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const user = session.user;
 
+  const activeBranding = await prisma.brandingConfig.findUnique({
+    where: { scope: "organization" },
+    select: { logoUrlLight: true, tokens: true },
+  });
+
+  const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
+
   return (
-    <div style={{ minHeight: "100vh", background: "#0d0d18", color: "#e0e0ff" }}>
-      {/* Portal header */}
-      <header style={{
-        background: "#1a1a2e",
-        borderBottom: "1px solid #2a2a40",
-        padding: "0 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        height: 56,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <Link href="/portal" style={{ color: "#7c8cf8", fontWeight: 700, fontSize: 16, textDecoration: "none" }}>
-            Portal
-          </Link>
-          <nav style={{ display: "flex", gap: 4 }}>
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
+    <>
+      {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
+      <div className="min-h-screen" style={{ background: "var(--dpf-bg)", color: "var(--dpf-text)" }}>
+        {/* Portal header */}
+        <header
+          className="flex items-center justify-between px-6"
+          style={{
+            background: "var(--dpf-surface-1)",
+            borderBottom: "1px solid var(--dpf-border)",
+            height: 56,
+          }}
+        >
+          <div className="flex items-center gap-6">
+            <Link
+              href="/portal"
+              className="font-bold text-base no-underline"
+              style={{ color: "var(--dpf-accent)" }}
+            >
+              Portal
+            </Link>
+            <nav className="flex gap-1">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="px-3 py-1.5 text-[13px] no-underline rounded"
+                  style={{ color: "var(--dpf-muted)" }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-xs" style={{ color: "var(--dpf-text)" }}>{user.accountName}</div>
+              <div className="text-[10px]" style={{ color: "var(--dpf-muted)" }}>{user.email}</div>
+            </div>
+            <form action={async () => {
+              "use server";
+              const { signOut } = await import("@/lib/auth");
+              await signOut({ redirectTo: "/portal/sign-in" });
+            }}>
+              <button
+                type="submit"
+                className="text-[11px] px-2.5 py-1 rounded cursor-pointer"
                 style={{
-                  padding: "6px 12px",
-                  fontSize: 13,
-                  color: "#b0b0c8",
-                  textDecoration: "none",
-                  borderRadius: 4,
+                  border: "1px solid var(--dpf-border)",
+                  background: "transparent",
+                  color: "var(--dpf-muted)",
                 }}
               >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: "#e0e0ff" }}>{user.accountName}</div>
-            <div style={{ fontSize: 10, color: "#8888a0" }}>{user.email}</div>
+                Sign out
+              </button>
+            </form>
           </div>
-          <form action={async () => {
-            "use server";
-            const { signOut } = await import("@/lib/auth");
-            const { resolveOrgSlug } = await import("@/lib/storefront-data");
-            const slug = await resolveOrgSlug();
-            await signOut({ redirectTo: `/s/${slug ?? "store"}/sign-in` });
-          }}>
-            <button
-              type="submit"
-              style={{
-                fontSize: 11,
-                padding: "4px 10px",
-                borderRadius: 4,
-                border: "1px solid #2a2a40",
-                background: "transparent",
-                color: "#8888a0",
-                cursor: "pointer",
-              }}
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
+        </header>
 
-      {/* Portal content */}
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 24px" }}>
-        {children}
-      </main>
-    </div>
+        {/* Portal content */}
+        <main className="max-w-[1200px] mx-auto px-6 py-6">
+          {children}
+        </main>
+      </div>
+    </>
   );
 }
