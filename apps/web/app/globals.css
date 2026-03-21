@@ -42,3 +42,44 @@ body {
   font-family: var(--dpf-font-body);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Form element usability standards — WCAG 2.2 AA baseline.
+   Sits in Tailwind's components layer: above base, below utilities.
+   Intentional overrides via utility classes still work. */
+@layer components {
+  input, textarea, select {
+    color: var(--dpf-text);
+    background-color: var(--dpf-surface-1);
+    border-color: var(--dpf-border);
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: inherit;
+    font-family: inherit;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: 2px solid var(--dpf-accent);
+    outline-offset: 2px;
+    border-color: var(--dpf-accent);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--dpf-muted);
+  }
+
+  input:disabled, textarea:disabled, select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  option {
+    background: var(--dpf-surface-1);
+    color: var(--dpf-text);
+  }
+
+  option:checked {
+    background: color-mix(in srgb, var(--dpf-accent) 15%, var(--dpf-surface-1));
+  }
+}
