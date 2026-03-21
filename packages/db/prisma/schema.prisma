@@ -3730,3 +3730,55 @@ model ExpenseItem {
 
   @@index([claimId])
 }
+
+// ─── Finance: Asset Management ─────────────────────────────────────
+
+model FixedAsset {
+  id                      String    @id @default(cuid())
+  assetId                 String    @unique
+  name                    String
+  category                String
+  purchaseDate            DateTime
+  purchaseCost            Decimal
+  currency                String    @default("GBP")
+  depreciationMethod      String    @default("straight_line")
+  usefulLifeMonths        Int
+  residualValue           Decimal   @default(0)
+  currentBookValue        Decimal
+  accumulatedDepreciation Decimal   @default(0)
+  status                  String    @default("active")
+  disposedAt              DateTime?
+  disposalAmount          Decimal?
+  location                String?
+  assignedToId            String?
+  serialNumber            String?
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([status])
+  @@index([category])
+}
+
+// ─── Finance: Multi-Currency ───────────────────────────────────────
+
+model ExchangeRate {
+  id             String    @id @default(cuid())
+  baseCurrency   String
+  targetCurrency String
+  rate           Decimal
+  source         String    @default("ecb")
+  fetchedAt      DateTime  @default(now())
+
+  @@unique([baseCurrency, targetCurrency, fetchedAt])
+  @@index([baseCurrency, targetCurrency])
+}
+
+model OrgSettings {
+  id              String    @id @default(cuid())
+  baseCurrency    String    @default("GBP")
+  autoFetchRates  Boolean   @default(true)
+  lastRateFetchAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
