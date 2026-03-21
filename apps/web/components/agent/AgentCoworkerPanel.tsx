@@ -396,12 +396,12 @@ export function AgentCoworkerPanel({
                 width: 28,
                 height: 28,
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, rgba(124,140,248,0.3), rgba(124,140,248,0.1))",
+                background: "linear-gradient(135deg, color-mix(in srgb, var(--dpf-accent) 30%, transparent), color-mix(in srgb, var(--dpf-accent) 10%, transparent))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 12,
-                color: "#7c8cf8",
+                color: "var(--dpf-accent)",
                 flexShrink: 0,
                 animation: "dpf-pulse 2s ease-in-out infinite",
               }}
@@ -413,7 +413,7 @@ export function AgentCoworkerPanel({
                 padding: "8px 14px",
                 borderRadius: "12px 12px 12px 2px",
                 fontSize: 12,
-                background: "rgba(22, 22, 37, 0.8)",
+                background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
                 color: "var(--dpf-muted)",
                 display: "flex",
                 alignItems: "center",
@@ -440,7 +440,7 @@ export function AgentCoworkerPanel({
                       width: 4,
                       height: 4,
                       borderRadius: "50%",
-                      background: "#7c8cf8",
+                      background: "var(--dpf-accent)",
                       animation: `dpf-bounce 1.4s ease-in-out ${i * 0.16}s infinite`,
                     }}
                   />
