@@ -50,6 +50,7 @@ model User {
   approvalRules                ApprovalRule[]           @relation("ApprovalRuleApprover")
   billApprovals                BillApproval[]           @relation("BillApprovalResponses")
   recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
+  expenseApprovals             ExpenseClaim[]           @relation("ExpenseApprovals")
 }
 
 model UserGroup {
@@ -241,6 +242,7 @@ model EmployeeProfile {
   terminationRecord         TerminationRecord?
   timesheetApprovals        TimesheetPeriod[]       @relation("TimesheetApprovals")
   timesheets                TimesheetPeriod[]
+  expenseClaims             ExpenseClaim[]          @relation("ExpenseClaims")
 
   @@index([status])
   @@index([departmentId])
@@ -3679,4 +3681,52 @@ model DunningLog {
 
   @@index([invoiceId])
   @@index([sentAt])
+}
+
+// ─── Finance: Expense Management ───────────────────────────────────
+
+model ExpenseClaim {
+  id              String              @id @default(cuid())
+  claimId         String              @unique
+  employeeId      String
+  status          String              @default("draft")
+  title           String
+  totalAmount     Decimal
+  currency        String              @default("GBP")
+  submittedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedReason  String?
+  paidAt          DateTime?
+  approvalToken   String?             @unique
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  employee        EmployeeProfile     @relation("ExpenseClaims", fields: [employeeId], references: [id])
+  approvedBy      User?               @relation("ExpenseApprovals", fields: [approvedById], references: [id])
+  items           ExpenseItem[]
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model ExpenseItem {
+  id              String              @id @default(cuid())
+  claimId         String
+  date            DateTime
+  category        String
+  description     String
+  amount          Decimal
+  currency        String              @default("GBP")
+  receiptUrl      String?
+  taxReclaimable  Boolean             @default(false)
+  taxAmount       Decimal             @default(0)
+  accountCode     String?
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  claim           ExpenseClaim        @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
 }
