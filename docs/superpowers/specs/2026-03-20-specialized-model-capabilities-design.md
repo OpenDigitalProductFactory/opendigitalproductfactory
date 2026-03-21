@@ -146,3 +146,16 @@ EP-INF-008b should ship first after the framework — it unlocks Code Execution,
 - **Champion/Challenger** (EP-INF-006) works per-recipe — specialized recipes can have their own evolution
 
 The routing redesign was designed for this. EP-INF-008 activates what the infrastructure was built to support.
+
+---
+
+## Next: EP-INF-009 (Routing Hardening & Activation)
+
+Identified during EP-INF-008a/008b implementation (2026-03-20):
+
+- **EP-OAUTH-002: Migrate anthropic-sub to Authorization Code Flow** — Replace the manual `claude setup-token` / `sk-ant-oat` hack with the generic OAuth authorization code + PKCE flow from EP-OAUTH-001. Admin clicks "Sign in with Anthropic" instead of pasting CLI tokens. May simplify EP-INF-009a if OAuth scopes carry model entitlement info. Depends on EP-OAUTH-001. See `docs/superpowers/specs/2026-03-21-provider-oauth-authorization-code-design.md`.
+- **EP-INF-009a: Subscription-Aware Discovery** — OAuth subscription providers (e.g. anthropic-sub) discover all models but can only call a subset. Probe during discovery to validate access. EP-OAUTH-002 may provide a cleaner solution via scope/entitlement data from the OAuth token.
+- **EP-INF-009b: Legacy Failover Retirement** — `callWithFailover` bypasses V2 pipeline. Make V2 reliable enough to retire legacy path.
+- **EP-INF-009c: Alternate Endpoint Models** (was EP-INF-008c) — Image/audio/embedding adapters.
+- **EP-INF-009d: Async/Long-Running Models** (was EP-INF-008d) — Deep Research, Interactions API, polling.
+- **EP-INF-010: Platform Services UX** — Refactor provider management UI to handle LLM providers, MCP servers, OAuth connections, and future external services coherently. Depends on 009 settling the service taxonomy first.
