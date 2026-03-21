@@ -395,6 +395,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "evaluate_page",
+    description: "Evaluate a live page for UX and accessibility issues using axe-core + Playwright. Returns structured findings with WCAG references, severity, and recommendations. Works on production pages (default) or sandbox pages (if URL provided).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to evaluate. Defaults to the current route if not specified." },
+      },
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "generate_ux_test",
     description: "Generate a Playwright test script from acceptance criteria for the sandbox.",
     inputSchema: { type: "object", properties: {} },
@@ -1386,6 +1399,58 @@ export async function executeTool(
       const diff = await extractDiff(build.sandboxId);
       await prisma.featureBuild.update({ where: { buildId }, data: { diffPatch: diff, diffSummary: diff.slice(0, 500) } });
       return { success: true, message: "Diff extracted. Ready for approval.", data: { diffLength: diff.length, summary: diff.slice(0, 500) } };
+    }
+
+    case "evaluate_page": {
+      const url = typeof params["url"] === "string" ? params["url"] : null;
+      const targetUrl = url || (context?.routeContext ? `http://localhost:3000${context.routeContext}` : null);
+      if (!targetUrl) return { success: false, error: "No URL to evaluate.", message: "Provide a URL or navigate to a page first." };
+
+      try {
+        const { categorizeAxeViolation, groupFindingsByCategory } = await import("@/lib/page-evaluator");
+        const { exec: execCb } = await import("child_process");
+        const { promisify } = await import("util");
+        const exec = promisify(execCb);
+
+        // Run axe-core via Playwright in the existing playwright-mcp container.
+        // Uses heredoc syntax to avoid shell escaping issues (same pattern as generate_ux_test).
+        const axeScript = [
+          "const { chromium } = require('playwright');",
+          "const { AxeBuilder } = require('@axe-core/playwright');",
+          "(async () => {",
+          "  const browser = await chromium.launch();",
+          "  const page = await browser.newPage();",
+          `  await page.goto(${JSON.stringify(targetUrl)}, { timeout: 30000 });`,
+          "  await page.waitForLoadState('networkidle');",
+          "  const results = await new AxeBuilder({ page }).analyze();",
+          "  console.log(JSON.stringify(results.violations));",
+          "  await browser.close();",
+          "})();",
+        ].join("\n");
+
+        const scriptId = `axe-${Date.now()}`;
+        const { stdout } = await exec(
+          `docker exec playwright sh -c 'cat > /tmp/${scriptId}.js << SCRIPT_EOF\n${axeScript}\nSCRIPT_EOF\nnode /tmp/${scriptId}.js'`,
+          { timeout: 60000 },
+        );
+
+        const violations = JSON.parse(stdout) as Array<Record<string, unknown>>;
+        const findings = violations.map((v) => categorizeAxeViolation(v as any));
+        const grouped = groupFindingsByCategory(findings);
+
+        return {
+          success: true,
+          message: `Found ${findings.length} accessibility issues across ${Object.keys(grouped).length} categories.`,
+          data: { url: targetUrl, screenshot: null, axeViolationCount: violations.length, findings },
+        };
+      } catch (e) {
+        // Fallback: return error, agent can still do code-only analysis
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : String(e),
+          message: "Could not launch browser for live page evaluation. Try code-only analysis using read_project_file instead.",
+        };
+      }
     }
 
     case "generate_ux_test": {
