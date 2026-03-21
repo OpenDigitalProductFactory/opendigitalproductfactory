@@ -17,7 +17,7 @@ export default async function FinancePage() {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [totalOutstanding, overdueInvoices, paidThisMonth, recentInvoices] =
+  const [totalOutstanding, overdueInvoices, paidThisMonth, recentInvoices, moneyYouOwe] =
     await Promise.all([
       // Money owed to you — sum amountDue for active receivable statuses
       prisma.invoice.aggregate({
@@ -62,6 +62,15 @@ export default async function FinancePage() {
           account: { select: { name: true } },
         },
       }),
+
+      // Money you owe — sum amountDue for approved/partially_paid bills (AP)
+      prisma.bill.aggregate({
+        where: {
+          status: { in: ["approved", "partially_paid"] },
+        },
+        _sum: { amountDue: true },
+        _count: true,
+      }),
     ]);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
@@ -70,6 +79,8 @@ export default async function FinancePage() {
   const paidCount = paidThisMonth._count;
   const overdueCount = overdueInvoices.length;
   const oldestOverdue = overdueInvoices[0];
+  const moneyOweAmount = Number(moneyYouOwe._sum.amountDue ?? 0);
+  const moneyOweCount = moneyYouOwe._count;
 
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -79,7 +90,7 @@ export default async function FinancePage() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Finance</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Finance</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
             Invoicing &amp; payments
           </p>
@@ -99,7 +110,7 @@ export default async function FinancePage() {
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
             Money Owed To You
           </p>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-2xl font-bold text-[var(--dpf-text)]">
             £{formatMoney(owedAmount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
@@ -121,7 +132,7 @@ export default async function FinancePage() {
           {overdueCount > 0 && oldestOverdue ? (
             <p className="text-[10px] text-[var(--dpf-muted)] mt-1 truncate">
               Oldest:{" "}
-              <span className="text-white">{oldestOverdue.account.name}</span>
+              <span className="text-[var(--dpf-text)]">{oldestOverdue.account.name}</span>
             </p>
           ) : (
             <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
@@ -135,7 +146,7 @@ export default async function FinancePage() {
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
             Money In This Month
           </p>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-2xl font-bold text-[var(--dpf-text)]">
             £{formatMoney(paidAmount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
@@ -143,23 +154,66 @@ export default async function FinancePage() {
           </p>
         </div>
 
-        {/* Quick Actions */}
+        {/* Money You Owe */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Quick Actions
+            Money You Owe
           </p>
-          <div className="flex flex-col gap-2 mt-1">
-            <Link
-              href="/finance/invoices"
-              className="text-xs text-[var(--dpf-accent)] hover:underline"
-            >
-              All Invoices →
+          <p
+            className="text-2xl font-bold"
+            style={{ color: moneyOweAmount > 0 ? "#ef4444" : "#4ade80" }}
+          >
+            £{formatMoney(moneyOweAmount)}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            {moneyOweCount} bill{moneyOweCount !== 1 ? "s" : ""} awaiting payment
+          </p>
+        </div>
+      </div>
+
+      {/* Navigation links */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {/* AR links */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Accounts Receivable
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/invoices" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Invoices →
             </Link>
-            <Link
-              href="/finance/payments"
-              className="text-xs text-[var(--dpf-accent)] hover:underline"
-            >
+            <Link href="/finance/payments" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Payments →
+            </Link>
+          </div>
+        </div>
+
+        {/* AP links */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Accounts Payable
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/suppliers" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Suppliers →
+            </Link>
+            <Link href="/finance/bills" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Bills →
+            </Link>
+          </div>
+        </div>
+
+        {/* AP continued */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Procurement
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/purchase-orders" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Purchase Orders →
+            </Link>
+            <Link href="/finance/payment-runs" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Payment Runs →
             </Link>
           </div>
         </div>
@@ -205,7 +259,7 @@ export default async function FinancePage() {
                       <td className="px-4 py-2.5">
                         <Link
                           href={`/finance/invoices/${inv.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white transition-colors"
+                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                         >
                           {inv.invoiceRef}
                         </Link>
@@ -213,7 +267,7 @@ export default async function FinancePage() {
                       <td className="px-4 py-2.5">
                         <Link
                           href={`/finance/invoices/${inv.id}`}
-                          className="text-white hover:underline"
+                          className="text-[var(--dpf-text)] hover:underline"
                         >
                           {inv.account.name}
                         </Link>
@@ -229,7 +283,7 @@ export default async function FinancePage() {
                           {inv.status.replace("_", " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-white">
+                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         £{formatMoney(Number(inv.totalAmount))}
                       </td>
                     </tr>
