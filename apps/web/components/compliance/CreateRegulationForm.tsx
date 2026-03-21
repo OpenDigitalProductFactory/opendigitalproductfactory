@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ComplianceModal } from "./ComplianceModal";
 import { createRegulation } from "@/lib/actions/compliance";
+import { REGULATION_SOURCE_TYPES } from "@/lib/compliance-types";
 
 const inputClasses = "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
@@ -24,6 +25,8 @@ export function CreateRegulationForm() {
       shortName: form.get("shortName") as string,
       jurisdiction: form.get("jurisdiction") as string,
       industry: (form.get("industry") as string) || null,
+      sourceType: (form.get("sourceType") as string) || "external",
+      effectiveDate: form.get("effectiveDate") ? new Date(form.get("effectiveDate") as string) : null,
       sourceUrl: (form.get("sourceUrl") as string) || null,
       notes: (form.get("notes") as string) || null,
     });
@@ -61,6 +64,16 @@ export function CreateRegulationForm() {
           <div>
             <label className={labelClasses}>Industry</label>
             <input name="industry" className={inputClasses} placeholder="cross-industry" />
+          </div>
+          <div>
+            <label className={labelClasses}>Source Type *</label>
+            <select name="sourceType" required className={inputClasses}>
+              {REGULATION_SOURCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelClasses}>Effective Date</label>
+            <input name="effectiveDate" type="date" className={inputClasses} />
           </div>
           <div>
             <label className={labelClasses}>Source URL</label>
