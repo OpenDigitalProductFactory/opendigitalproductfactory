@@ -81,6 +81,7 @@ export type ProviderRow = {
   authorizeUrl: string | null;
   tokenUrl: string | null;
   oauthClientId: string | null;
+  oauthRedirectUri: string | null;
 };
 
 /** Client-safe credential info — secrets are never sent to the browser. */
@@ -196,6 +197,7 @@ export type RegistryProviderEntry = {
   authorizeUrl?: string | null;
   tokenUrl?: string | null;
   oauthClientId?: string | null;
+  oauthRedirectUri?: string | null;
 };
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
@@ -273,3 +275,69 @@ export function getTestUrl(provider: Pick<ProviderRow, "providerId" | "baseUrl" 
   if (provider.providerId === "ollama") return `${base}/api/tags`;
   return `${base}/models`;
 }
+
+// ── EP-INF-010: Platform Services UX types ──────────────────────────────────
+
+/** Aggregated model summary for provider grid display. */
+export type ProviderModelSummary = {
+  totalModels: number;
+  activeModels: number;
+  nonChatClasses: string[];
+};
+
+/** Row shape for activated MCP servers on the providers grid. */
+export type McpServerGridRow = {
+  id: string;
+  serverId: string;
+  name: string;
+  status: string;
+  transport: string | null;
+  healthStatus: string;
+  lastHealthCheck: string | null;   // ISO string
+  category: string | null;
+  tags: string[];
+  activatedBy: string | null;
+  activatedAt: string | null;       // ISO string
+  integrationName: string | null;
+  integrationLogoUrl: string | null;
+  integrationCategory: string | null;
+  toolCount: number;
+  enabledToolCount: number;
+};
+
+/** Row shape for execution recipes on the provider detail page. */
+export type RecipeGridRow = {
+  id: string;
+  contractFamily: string;
+  modelId: string;
+  executionAdapter: string;
+  status: string;
+  version: number;
+  origin: string;
+};
+
+/** Row shape for async inference operations. */
+export type AsyncOpRow = {
+  id: string;
+  providerId: string;
+  modelId: string;
+  contractFamily: string;
+  status: string;
+  progressPct: number | null;
+  progressMessage: string | null;
+  errorMessage: string | null;
+  createdAt: string;          // ISO string
+  startedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string;
+};
+
+/** Single item in the combined tool inventory. */
+export type ToolInventoryItem = {
+  name: string;
+  source: string;
+  type: "platform" | "mcp";
+  enabled: boolean;
+  gating: string | null;
+  originalName?: string;      // For MCP tools: un-namespaced name
+};
