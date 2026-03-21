@@ -417,6 +417,21 @@ export default async function FinancePage() {
             Reports
           </p>
           <div className="flex flex-col gap-2">
+            <Link href="/finance/reports" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              All Reports →
+            </Link>
+            <Link href="/finance/reports/profit-loss" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Profit &amp; Loss →
+            </Link>
+            <Link href="/finance/reports/cash-flow" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Cash Flow →
+            </Link>
+            <Link href="/finance/reports/vat-summary" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              VAT Summary →
+            </Link>
+            <Link href="/finance/reports/outstanding" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Outstanding Invoices →
+            </Link>
             <Link href="/finance/reports/aged-debtors" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Aged Debtors →
             </Link>
