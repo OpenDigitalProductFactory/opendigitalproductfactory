@@ -268,4 +268,43 @@ describe("buildDefaultPlan", () => {
     const plan = buildDefaultPlan(makeEndpoint(), makeContract());
     expect(plan.executionAdapter).toBe("chat");
   });
+
+  // ── EP-INF-009c: adapter selection based on requiredModelClass ──────────
+
+  it("selects image_gen adapter when requiredModelClass is image_gen", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint(),
+      makeContract({ requiredModelClass: "image_gen" as any }),
+    );
+    expect(plan.executionAdapter).toBe("image_gen");
+  });
+
+  it("selects embedding adapter when requiredModelClass is embedding", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint(),
+      makeContract({ requiredModelClass: "embedding" as any }),
+    );
+    expect(plan.executionAdapter).toBe("embedding");
+  });
+
+  it("selects transcription adapter when requiredModelClass is audio", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint(),
+      makeContract({ requiredModelClass: "audio" as any }),
+    );
+    expect(plan.executionAdapter).toBe("transcription");
+  });
+
+  it("selects chat adapter for reasoning modelClass", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint(),
+      makeContract({ requiredModelClass: "reasoning" as any }),
+    );
+    expect(plan.executionAdapter).toBe("chat");
+  });
+
+  it("defaults to chat adapter when requiredModelClass is absent", () => {
+    const plan = buildDefaultPlan(makeEndpoint(), makeContract());
+    expect(plan.executionAdapter).toBe("chat");
+  });
 });

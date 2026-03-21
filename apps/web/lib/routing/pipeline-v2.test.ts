@@ -239,6 +239,48 @@ describe("getExclusionReasonV2", () => {
   });
 });
 
+// ── getExclusionReasonV2 – EP-INF-009c: requiredModelClass ───────────────────
+
+describe("getExclusionReasonV2 – requiredModelClass (EP-INF-009c)", () => {
+  it("allows matching modelClass when requiredModelClass is set", () => {
+    const embedding = makeEndpoint({ modelClass: "embedding" });
+    const contract = makeContract({ requiredModelClass: "embedding" as any });
+    expect(getExclusionReasonV2(embedding, contract)).toBeNull();
+  });
+
+  it("excludes non-matching modelClass when requiredModelClass is set", () => {
+    const chat = makeEndpoint({ modelClass: "chat" });
+    const contract = makeContract({ requiredModelClass: "image_gen" as any });
+    expect(getExclusionReasonV2(chat, contract)).toContain("does not match");
+  });
+
+  it("allows image_gen models when requiredModelClass is image_gen", () => {
+    const imageGen = makeEndpoint({ modelClass: "image_gen" });
+    const contract = makeContract({ requiredModelClass: "image_gen" as any });
+    expect(getExclusionReasonV2(imageGen, contract)).toBeNull();
+  });
+
+  it("excludes embedding models from default chat routing (no requiredModelClass)", () => {
+    const embedding = makeEndpoint({ modelClass: "embedding" });
+    const contract = makeContract(); // no requiredModelClass
+    expect(getExclusionReasonV2(embedding, contract)).toContain("modelClass");
+  });
+
+  it("still allows chat and reasoning when no requiredModelClass (backward compat)", () => {
+    const chat = makeEndpoint({ modelClass: "chat" });
+    const reasoning = makeEndpoint({ modelClass: "reasoning" });
+    const contract = makeContract();
+    expect(getExclusionReasonV2(chat, contract)).toBeNull();
+    expect(getExclusionReasonV2(reasoning, contract)).toBeNull();
+  });
+
+  it("allows audio models when requiredModelClass is audio", () => {
+    const audio = makeEndpoint({ modelClass: "audio" });
+    const contract = makeContract({ requiredModelClass: "audio" as any });
+    expect(getExclusionReasonV2(audio, contract)).toBeNull();
+  });
+});
+
 // ── getExclusionReasonV2 – capability-based exclusion (EP-INF-008b) ──────────
 
 describe("getExclusionReasonV2 – capability-based exclusion (EP-INF-008b)", () => {

@@ -89,6 +89,7 @@ export function filterByPolicy(
       for (const ep of removedByRule) {
         excluded.push({
           endpointId: ep.id,
+          providerId: ep.providerId,
           modelId: ep.modelId,
           endpointName: ep.name,
           fitnessScore: 0,
@@ -204,6 +205,7 @@ export function filterHard(
     } else {
       excluded.push({
         endpointId: ep.id,
+        providerId: ep.providerId,
         modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
@@ -262,6 +264,7 @@ export function routeEndpoint(
         const result = computeFitness(ep, requirement, endpoints);
         allCandidates.push({
           endpointId: ep.id,
+          providerId: ep.providerId,
           modelId: ep.modelId,
           endpointName: ep.name,
           fitnessScore: result.fitness,
@@ -281,6 +284,7 @@ export function routeEndpoint(
         candidates: [
           {
             endpointId: pinnedEp.id,
+            providerId: pinnedEp.providerId,
             modelId: pinnedEp.modelId,
             endpointName: pinnedEp.name,
             fitnessScore: fitness,
@@ -311,6 +315,7 @@ export function routeEndpoint(
     if (blockedIds.has(ep.id)) {
       allCandidates.push({
         endpointId: ep.id,
+        providerId: ep.providerId,
         modelId: ep.modelId,
         endpointName: ep.name,
         fitnessScore: 0,
@@ -408,6 +413,7 @@ export function routeEndpoint(
   // Build full candidate trace (eligible endpoints only, scored)
   const eligibleTraces: CandidateTrace[] = scored.map(({ ep, fitness, dimensionScores }) => ({
     endpointId: ep.id,
+    providerId: ep.providerId,
     modelId: ep.modelId,
     endpointName: ep.name,
     fitnessScore: fitness,
