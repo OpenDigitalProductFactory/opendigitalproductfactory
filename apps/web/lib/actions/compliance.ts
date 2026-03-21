@@ -16,6 +16,7 @@ import {
   type RegulationInput, type ObligationInput, type ControlInput,
   type RiskAssessmentInput, type IncidentInput, type CorrectiveActionInput,
   type AuditInput, type FindingInput, type EvidenceInput, type SubmissionInput,
+  type OnboardingInput,
 } from "@/lib/compliance-types";
 
 // ─── Regulation ─────────────────────────────────────────────────────────────
@@ -904,4 +905,83 @@ export async function getComplianceDashboard() {
       obligationCount: r._count.obligations,
     })),
   };
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+export async function onboardRegulation(input: OnboardingInput): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const error = validateRegulationInput(input.regulation);
+  if (error) return { ok: false, message: error };
+
+  const employeeId = await getSessionEmployeeId();
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const regulation = await tx.regulation.create({
+        data: {
+          regulationId: generateRegulationId(),
+          name: input.regulation.name.trim(),
+          shortName: input.regulation.shortName.trim(),
+          jurisdiction: input.regulation.jurisdiction.trim(),
+          industry: input.regulation.industry ?? null,
+          sourceType: input.regulation.sourceType ?? "external",
+          effectiveDate: input.regulation.effectiveDate ?? null,
+          reviewDate: input.regulation.reviewDate ?? null,
+          sourceUrl: input.regulation.sourceUrl ?? null,
+          notes: input.regulation.notes ?? null,
+        },
+      });
+
+      const obligations = [];
+      for (const obl of input.obligations) {
+        const record = await tx.obligation.create({
+          data: {
+            obligationId: generateObligationId(),
+            regulationId: regulation.id,
+            title: obl.title.trim(),
+            description: obl.description ?? null,
+            reference: obl.reference ?? null,
+            category: obl.category ?? "other",
+            frequency: obl.frequency ?? null,
+            applicability: obl.applicability ?? null,
+          },
+        });
+        obligations.push(record);
+      }
+
+      if (input.controls?.length) {
+        for (const ctrl of input.controls) {
+          const control = await tx.control.create({
+            data: {
+              controlId: generateControlId(),
+              title: ctrl.title.trim(),
+              controlType: ctrl.controlType,
+              implementationStatus: "planned",
+            },
+          });
+          for (const idx of ctrl.linkedObligationIndices) {
+            const obl = obligations[idx];
+            if (obl) {
+              await tx.controlObligationLink.create({
+                data: { controlId: control.id, obligationId: obl.id },
+              });
+            }
+          }
+        }
+      }
+
+      return { regulationId: regulation.regulationId, id: regulation.id, obligationCount: obligations.length };
+    });
+
+    await logComplianceAction("regulation", result.id, "onboarded", employeeId, null);
+    revalidatePath("/compliance");
+    return {
+      ok: true,
+      message: `Onboarded ${input.regulation.shortName} with ${result.obligationCount} obligations.`,
+      id: result.id,
+    };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Onboarding failed." };
+  }
 }
