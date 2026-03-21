@@ -41,7 +41,7 @@ An AI Coworker-led onboarding experience where the platform's COO persona guides
 
 When the platform starts for the first time (Docker Compose), the Ollama container is already running as a bundled service.
 
-**Integration with existing infrastructure:** The bootstrap extends the existing `checkBundledProviders()` function in `apps/web/lib/ollama.ts` rather than creating a parallel first-run path. The existing function already pings Ollama, detects models, and sets provider status. The bootstrap adds first-run detection and model auto-pull to this existing flow.
+**Integration with existing infrastructure:** The bootstrap is a new wrapper function — `bootstrapFirstRun()` — that calls the existing `checkBundledProviders()` as one step. The existing function remains a focused health check (ping, activate/deactivate, discover models, enrich InfraCI). The wrapper adds first-run detection, model auto-pull with progress, agent seeding, setup record creation, and redirect. This keeps `checkBundledProviders()` clean and reusable for ongoing health checks after onboarding.
 
 On first page load:
 
@@ -167,21 +167,40 @@ A dedicated agent — `onboarding-coo` — with a system prompt tuned for the se
 
 **Agent schema mapping:** Uses the existing `Agent` table. The `type` field is set to `"onboarding"` (a new agent archetype alongside existing types like `"specialist"`). No schema migration needed — `type` is a free-text string.
 
-**Route resolution:** Add `/setup` to `ROUTE_AGENT_MAP` in `agent-routing.ts`, mapping to `agentId: "onboarding-coo"`. Also add `/setup` to `ROUTE_SENSITIVITY` in `agent-sensitivity.ts` with sensitivity `"internal"` to make the intent explicit rather than relying on the default fallthrough.
+**Route resolution:** Add `/setup` to both routing systems:
 
-**Task type registration:** Add `"onboarding"` to the `TASK_TYPES` list in `task-classifier.ts` so the routing pipeline recognizes it. Default reasoning depth: `"minimal"` (matching `"greeting"` — this is guided conversation, not complex reasoning).
+- `ROUTE_AGENT_MAP` in `agent-routing.ts`: `{ agentId: "onboarding-coo", sensitivity: "internal", capability: null }`. The `capability: null` means onboarding is accessible to any authenticated user regardless of role assignment — the owner just created their account and may not have full permissions configured yet.
+- `ROUTE_CONTEXT_MAP` in `route-context-map.ts`: entry with `domainTools: []` (no tools), appropriate `domainDescription` for onboarding context. This covers the unified coworker path if `isUnifiedCoworkerEnabled()` is true.
+- `ROUTE_SENSITIVITY` in `agent-sensitivity.ts`: `{ prefix: "/setup", sensitivity: "internal" }` to make the intent explicit.
 
-**Tool suppression:** The `onboarding-coo` agent runs with **no tools injected**. The `sendMessage` function in `agent-coworker.ts` calls `getAvailableTools()` and `getActionsForRoute()` — for the onboarding agent, both must return empty arrays. This is critical because `llama3.1:8b` cannot reliably orchestrate tool calls (per existing feedback: "Haiku can't orchestrate multi-step tools. System drives execution, Haiku handles conversation only." — the same applies to local models). The COO's job is conversation only; all setup actions (creating org, saving branding, testing providers) are triggered by the user clicking UI buttons, not by the COO calling tools.
+**Task type registration:** Add `"onboarding"` to the task type definitions in `task-types.ts` (imported by the classifier). Full definition:
 
-**Configuration:**
+```typescript
+{
+  id: "onboarding",
+  description: "Platform onboarding guided conversation",
+  heuristicPatterns: [/setup/i, /onboarding/i, /getting started/i],
+  minCapabilityTier: "basic",
+  defaultInstructions: "Guide the user through platform setup.",
+  evaluationTokenLimit: 500,
+}
+```
 
-| Field | Value |
-|-------|-------|
-| `agentId` | `onboarding-coo` |
-| `type` | `onboarding` |
-| `sensitivity` | `internal` |
-| `preferredProviderId` | `ollama` (guaranteed available) |
-| `persona` | COO — professional, understanding, transparent |
+Note: task classification still runs in `sendMessage` but its output is advisory — the `onboarding-coo` agent always routes to Ollama via `preferredProviderId`. Also add `"onboarding"` to `DEFAULT_REASONING_DEPTH` in `request-contract.ts` with value `"minimal"`.
+
+**Tool suppression:** The `onboarding-coo` agent runs with **no tools injected**. In the legacy path, `getAvailableTools()` and `getActionsForRoute()` must return empty arrays for the onboarding agent. In the unified coworker path, `domainTools: []` in `ROUTE_CONTEXT_MAP` achieves the same. This is critical because `llama3.1:8b` cannot reliably orchestrate tool calls (per existing feedback: "Haiku can't orchestrate multi-step tools. System drives execution, Haiku handles conversation only." — the same applies to local models). The COO's job is conversation only; all setup actions (creating org, saving branding, testing providers) are triggered by the user clicking UI buttons, not by the COO calling tools.
+
+**Configuration (Agent table record):**
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| `agentId` | `onboarding-coo` | |
+| `name` | `Onboarding COO` | Required field on Agent |
+| `type` | `onboarding` | New archetype |
+| `tier` | `1` | Required field on Agent |
+| `preferredProviderId` | `ollama` | Guaranteed available |
+
+Note: `sensitivity` is NOT a column on the `Agent` table. It is resolved from the route via `ROUTE_AGENT_MAP` and `ROUTE_SENSITIVITY`. The value `"internal"` listed above applies to the route entry, not the agent record.
 
 **System prompt structure:**
 
@@ -418,6 +437,8 @@ model PlatformSetupProgress {
 }
 ```
 
+**Reverse relations required by Prisma:** The `User` model needs `platformSetupProgress PlatformSetupProgress?` added, and `Organization` needs `platformSetupProgress PlatformSetupProgress?` added. Both are optional one-to-one relations (at most one setup progress record per org/user).
+
 Note: COO conversation thread uses the existing `AgentThread` system with `contextKey: "setup/onboarding"` rather than a separate FK on this table.
 
 ### Extended: `providers-registry.json` — `userFacing` Block
@@ -443,7 +464,7 @@ Each provider entry in the existing registry gains a `userFacing` block. This da
 
 **Platform-local entry:** The `userFacing` block is added to the existing `ollama` provider entry — NOT as a separate `platform-local` provider. The existing `providerId: "ollama"` already represents the local deployment (`costModel: "compute"`, `authMethod: "none"`, checked by `isLocalProvider()` throughout the codebase). Creating a second entry would cause routing confusion. The `userFacing` data on the `ollama` entry frames it as "This Platform (Local AI)" in the onboarding UI.
 
-**Cost explanation accuracy:** The COO's cost explanations during onboarding use the actual pricing data from the `ModelProvider` table (`inputPricePerMToken`, `outputPricePerMToken`) at runtime, not hardcoded estimates. The system prompt includes a brief cost summary generated from live data: "Based on current pricing, a typical conversation costs approximately $X."
+**Cost explanation accuracy:** The COO's cost explanations during onboarding use pricing data from the `ModelProvider` table (`inputPricePerMToken`, `outputPricePerMToken`) at runtime, not hardcoded estimates. During onboarding, if no cloud provider is connected yet, the COO quotes typical pricing from the seed data (framed as "typical pricing" not "your pricing"). Once a provider is connected, the system prompt includes a cost summary from the user's actual provider record.
 
 ### New: `ModelProvider` Column
 
