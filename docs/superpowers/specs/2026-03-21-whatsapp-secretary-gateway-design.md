@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-21  
 **Status:** Draft  
+**Epic:** EP-SECRETARY-001  
 **Goal:** Add a WhatsApp-first company secretary that can communicate through a single company identity, act within the authority of validated employees, serve unknown/public contacts in a limited mode, and route cross-human asks into the platform's governed queue.
 
 ---
