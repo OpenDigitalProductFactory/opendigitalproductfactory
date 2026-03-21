@@ -108,7 +108,7 @@ export default async function AssetDetailPage({ params }: Props) {
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{asset.name}</h1>
         </div>
         {asset.status === "active" && (
-          <AssetDisposalForm assetId={asset.id} currentBookValue={currentBookValue} />
+          <AssetDisposalForm assetId={asset.id} currentBookValue={currentBookValue} currencySymbol={sym} />
         )}
       </div>
 

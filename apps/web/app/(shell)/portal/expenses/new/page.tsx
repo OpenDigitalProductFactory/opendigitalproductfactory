@@ -3,8 +3,13 @@
 
 import Link from "next/link";
 import { CreateExpenseForm } from "@/components/finance/CreateExpenseForm";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 export default async function NewExpensePage() {
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -27,7 +32,7 @@ export default async function NewExpensePage() {
         </p>
       </div>
 
-      <CreateExpenseForm />
+      <CreateExpenseForm currencySymbol={sym} />
     </div>
   );
 }

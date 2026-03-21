@@ -1,14 +1,13 @@
 // apps/web/app/(shell)/finance/reports/revenue-by-customer/page.tsx
 import Link from "next/link";
 import { getRevenueByCustomer } from "@/lib/actions/reports";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 interface SearchParams {
   start?: string;
   end?: string;
 }
-
-const formatMoney = (amount: number) =>
-  `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
 export default async function RevenueByCustomerPage({
   searchParams,
@@ -24,6 +23,11 @@ export default async function RevenueByCustomerPage({
 
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+  const formatMoney = (amount: number) =>
+    `${sym}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
   const rows = await getRevenueByCustomer(startDate, endDate);
 

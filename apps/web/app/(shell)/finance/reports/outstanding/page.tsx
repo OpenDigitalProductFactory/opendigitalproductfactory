@@ -1,9 +1,8 @@
 // apps/web/app/(shell)/finance/reports/outstanding/page.tsx
 import Link from "next/link";
 import { getOutstandingInvoicesReport } from "@/lib/actions/reports";
-
-const formatMoney = (amount: number) =>
-  `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 function overdueColour(days: number): string {
   if (days <= 7) return "#fbbf24";
@@ -14,6 +13,10 @@ function overdueColour(days: number): string {
 
 export default async function OutstandingInvoicesPage() {
   const invoices = await getOutstandingInvoicesReport();
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+  const formatMoney = (amount: number) =>
+    `${sym}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
   // Sort by days overdue descending (worst first)
   const sorted = [...invoices].sort((a, b) => b.daysOverdue - a.daysOverdue);
