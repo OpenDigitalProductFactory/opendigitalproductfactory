@@ -42,6 +42,7 @@ export interface PublicSection {
 export interface PublicStorefrontConfig {
   tagline: string | null;
   description: string | null;
+  timezone: string;
   heroImageUrl: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
