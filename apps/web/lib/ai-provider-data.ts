@@ -179,6 +179,17 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
     ...p,
     bestFor: p.bestFor as string[],
     avoidFor: p.avoidFor as string[],
+    // EP-INF-003: ModelCard fields
+    modelClass: p.modelClass,
+    modelFamily: p.modelFamily,
+    maxInputTokens: p.maxInputTokens,
+    maxOutputTokens: p.maxOutputTokens,
+    capabilities: p.capabilities as Record<string, unknown>,
+    pricing: p.pricing as Record<string, unknown>,
+    metadataSource: p.metadataSource,
+    metadataConfidence: p.metadataConfidence,
+    inputModalities: p.inputModalities as string[],
+    outputModalities: p.outputModalities as string[],
   }));
 });
 

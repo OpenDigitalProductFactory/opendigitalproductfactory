@@ -12,28 +12,72 @@ type Props = {
   onProfile: (modelId: string) => void;
 };
 
-const CAPABILITY_COLOURS: Record<string, string> = {
-  "deep-thinker": "#7c8cf8",
-  "fast-worker":  "#4ade80",
-  "specialist":   "#38bdf8",
-  "budget":       "#fbbf24",
-  "embedding":    "#a78bfa",
+// ── Model class colours ──────────────────────────────────────────────────────
+
+const MODEL_CLASS_COLOURS: Record<string, string> = {
+  chat:      "#38bdf8", // blue
+  reasoning: "#a78bfa", // purple
+  embedding: "#4ade80", // green
+  image_gen: "#fb923c", // orange
+  code:      "#2dd4bf", // teal
 };
 
-const COST_COLOURS: Record<string, string> = {
-  "$":    "#4ade80",
-  "$$":   "#38bdf8",
-  "$$$":  "#fbbf24",
-  "$$$$": "#f87171",
+function modelClassColour(cls: string): string {
+  return MODEL_CLASS_COLOURS[cls] ?? "#8888a0";
+}
+
+// ── Metadata confidence colours ──────────────────────────────────────────────
+
+const CONFIDENCE_COLOURS: Record<string, string> = {
+  high:   "#4ade80",
+  medium: "#fbbf24",
+  low:    "#f87171",
 };
 
-function capabilityColour(tier: string): string {
-  return CAPABILITY_COLOURS[tier] ?? "#8888a0";
+// ── Token formatting ─────────────────────────────────────────────────────────
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M tokens`;
+  }
+  if (tokens >= 1_000) {
+    const k = tokens / 1_000;
+    return `${Number.isInteger(k) ? k : k.toFixed(1)}K tokens`;
+  }
+  return `${tokens} tokens`;
 }
 
-function costColour(tier: string): string {
-  return COST_COLOURS[tier] ?? "#8888a0";
+// ── Pricing formatting ───────────────────────────────────────────────────────
+
+function formatPricing(pricing: Record<string, unknown> | undefined): string | null {
+  if (!pricing) return null;
+  const input = pricing.inputPerMToken;
+  const output = pricing.outputPerMToken;
+  if (typeof input === "number" && typeof output === "number") {
+    return `$${input} / $${output} per M tokens`;
+  }
+  return null;
 }
+
+// ── Capability badges ────────────────────────────────────────────────────────
+
+type CapBadge = { label: string; key: string };
+
+const CAPABILITY_BADGE_MAP: { key: string; label: string }[] = [
+  { key: "toolUse",          label: "Tools" },
+  { key: "thinking",         label: "Thinking" },
+  { key: "imageInput",       label: "Vision" },
+  { key: "structuredOutput", label: "Structured Output" },
+  { key: "codeExecution",    label: "Code Exec" },
+];
+
+function getCapabilityBadges(capabilities: Record<string, unknown> | undefined): CapBadge[] {
+  if (!capabilities) return [];
+  return CAPABILITY_BADGE_MAP.filter((c) => capabilities[c.key] === true);
+}
+
+// ── Shared components ────────────────────────────────────────────────────────
 
 function Badge({ label, colour }: { label: string; colour: string }) {
   return (
@@ -51,7 +95,6 @@ function Badge({ label, colour }: { label: string; colour: string }) {
     </span>
   );
 }
-
 
 function ActionButton({
   label,
@@ -101,8 +144,13 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
 
   // ── Profiled ──────────────────────────────────────────────────────────────
   if (profile !== null) {
-    const cColour = costColour(profile.costTier);
-    const capColour = capabilityColour(profile.capabilityTier);
+    const caps = profile.capabilities as Record<string, unknown> | undefined;
+    const pricingData = profile.pricing as Record<string, unknown> | undefined;
+    const classLabel = profile.modelClass ?? "chat";
+    const classColour = modelClassColour(classLabel);
+    const pricingStr = formatPricing(pricingData);
+    const capBadges = getCapabilityBadges(caps);
+    const confidenceColour = CONFIDENCE_COLOURS[profile.metadataConfidence ?? "low"] ?? "#f87171";
 
     return (
       <div style={cardStyle}>
@@ -116,18 +164,50 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
               {model.modelId}
             </div>
           </div>
-          {isStale && (
-            <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
-              Last seen: {model.lastSeenAt.toLocaleDateString()}
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            {/* Metadata confidence dot */}
+            <span
+              title={`Metadata confidence: ${profile.metadataConfidence ?? "low"}`}
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: confidenceColour,
+                flexShrink: 0,
+              }}
+            />
+            {isStale && (
+              <span style={{ color: "#fbbf24", fontSize: 10, whiteSpace: "nowrap" }}>
+                Last seen: {model.lastSeenAt.toLocaleDateString()}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Cost / capability badges */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          <Badge label={`Cost: ${profile.costTier}`}             colour={cColour} />
-          <Badge label={`Capability: ${profile.capabilityTier}`} colour={capColour} />
+        {/* Model class + pricing row */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+          <Badge label={classLabel} colour={classColour} />
+          <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>
+            {pricingStr ?? "Pricing unknown"}
+          </span>
         </div>
+
+        {/* Context window */}
+        {profile.maxInputTokens != null && (
+          <div style={{ color: "var(--dpf-muted)", fontSize: 10 }}>
+            Context: {formatTokenCount(profile.maxInputTokens)}
+          </div>
+        )}
+
+        {/* Capability badges */}
+        {capBadges.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {capBadges.map((b) => (
+              <Badge key={b.key} label={b.label} colour="var(--dpf-muted)" />
+            ))}
+          </div>
+        )}
 
         {/* Re-sync button */}
         {canWrite && (
@@ -179,7 +259,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     );
   }
 
-  // ── Unprofiled ────────────────────────────────────────────────────────────
+  // ── Unprofiled ──────────────────────────────────────────────────────────────
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
