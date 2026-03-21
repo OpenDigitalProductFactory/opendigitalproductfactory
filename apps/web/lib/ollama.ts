@@ -17,7 +17,7 @@ export interface OllamaHardwareInfo {
  * Query Ollama's native /api/ps and /api/tags to extract hardware info.
  * Returns null if Ollama is unreachable.
  */
-async function getOllamaHardwareInfo(baseUrl: string): Promise<OllamaHardwareInfo | null> {
+export async function getOllamaHardwareInfo(baseUrl: string): Promise<OllamaHardwareInfo | null> {
   try {
     const psRes = await fetch(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(3000) });
     if (!psRes.ok) return null;
