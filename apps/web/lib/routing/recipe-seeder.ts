@@ -113,7 +113,7 @@ function buildProviderSettings(
   const settings: Record<string, unknown> = { max_tokens: maxTokens };
 
   if (isAnthropic(providerId)) {
-    applyAnthropicSettings(settings, modelCard.capabilities, contract.reasoningDepth);
+    applyAnthropicSettings(settings, modelCard.capabilities, contract.reasoningDepth, maxTokens);
   } else if (isOpenAI(providerId) && modelCard.modelClass === "reasoning") {
     applyOpenAIReasoningSettings(settings, contract.reasoningDepth);
   } else if (isOpenAI(providerId) && modelCard.modelClass !== "reasoning") {
@@ -130,20 +130,25 @@ function applyAnthropicSettings(
   settings: Record<string, unknown>,
   capabilities: ModelCardCapabilities,
   reasoningDepth: string,
+  outputMaxTokens: number,
 ): void {
   if (
     reasoningDepth === "medium" &&
     capabilities.adaptiveThinking === true
   ) {
     settings.thinking = { type: "adaptive" };
+    // Adaptive thinking manages its own budget — no max_tokens adjustment needed
   } else if (
     (reasoningDepth === "medium" || reasoningDepth === "high") &&
     capabilities.thinking === true
   ) {
+    const budgetTokens = THINKING_BUDGETS[reasoningDepth] ?? 4096;
     settings.thinking = {
       type: "enabled",
-      budget_tokens: THINKING_BUDGETS[reasoningDepth],
+      budget_tokens: budgetTokens,
     };
+    // Anthropic requires max_tokens >= budget_tokens + actual output tokens
+    settings.max_tokens = outputMaxTokens + budgetTokens;
   }
   // No temperature — Anthropic defaults are good
 }
