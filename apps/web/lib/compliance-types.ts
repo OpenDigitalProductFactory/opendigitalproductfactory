@@ -283,6 +283,27 @@ export type SubmissionInput = {
   notes?: string | null;
 };
 
+export type OnboardingObligationInput = {
+  title: string;
+  reference?: string | null;
+  category?: string | null;
+  frequency?: string | null;
+  applicability?: string | null;
+  description?: string | null;
+};
+
+export type OnboardingControlInput = {
+  title: string;
+  controlType: string;
+  linkedObligationIndices: number[];
+};
+
+export type OnboardingInput = {
+  regulation: RegulationInput;
+  obligations: OnboardingObligationInput[];
+  controls?: OnboardingControlInput[];
+};
+
 // ─── Validators ───────────────────────────────────────────────────────────────
 
 /** Returns null if valid, or an error message if invalid. */
