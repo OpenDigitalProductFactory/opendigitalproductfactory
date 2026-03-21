@@ -244,18 +244,55 @@ if (-not (Is-StepDone "docker")) {
     Write-OK "Already installed"
 }
 
-# --- Step 4: Verify project files ---------------------------------------------
+# --- Step 4: Download / copy DPF project files --------------------------------
 
-Write-Step 4 9 "Verifying project files..."
+Write-Step 4 9 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
-    # Verify docker-compose.yml exists -- it should, since the user cloned/downloaded the repo
-    if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
-        Write-Warn "docker-compose.yml not found in $DPF_DIR"
-        Write-Warn "Please clone or download the full project into this directory first:"
-        Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
-        exit 1
+    # If running from a different location than DPF_DIR, copy or download files
+    if ($scriptDir -ne $DPF_DIR) {
+        # Check if the script lives in a full repo checkout (has docker-compose.yml)
+        if (Test-Path "$scriptDir\docker-compose.yml") {
+            Write-Action "Copying project files from $scriptDir..."
+            # Preserve .env if it exists at the destination
+            $envBackup = $null
+            if (Test-Path "$DPF_DIR\.env") {
+                $envBackup = Get-Content "$DPF_DIR\.env" -Raw
+            }
+            Copy-Item -Path "$scriptDir\*" -Destination $DPF_DIR -Recurse -Force
+            if ($envBackup) {
+                $envBackup | Set-Content "$DPF_DIR\.env"
+            }
+        } else {
+            # Try downloading from GitHub
+            Write-Action "Downloading latest release..."
+            $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
+            $zipPath = "$env:TEMP\dpf-latest.zip"
+            try {
+                Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
+            } catch {
+                Write-Warn "Could not download from GitHub: $($_.Exception.Message)"
+                Write-Warn "Make sure you have the full project files in $scriptDir or $DPF_DIR"
+                Write-Warn "Clone the repo: git clone https://github.com/markdbodman/opendigitalproductfactory.git"
+                exit 1
+            }
+
+            Write-Action "Extracting..."
+            Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
+            $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
+            Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
+            Remove-Item $zipPath -ErrorAction SilentlyContinue
+            Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
+        }
+    } else {
+        # Already running from DPF_DIR -- verify project files are present
+        if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
+            Write-Warn "docker-compose.yml not found in $DPF_DIR"
+            Write-Warn "Make sure you have the full project files. Clone the repo first:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
+            exit 1
+        }
+        Write-OK "Project files already in place"
     }
-    Write-OK "Project files found in $DPF_DIR"
 
     # Write version file
     "main" | Set-Content "$DPF_DIR\.version"
