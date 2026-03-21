@@ -62,3 +62,11 @@ export type { RoutedExecutionPlan, RecipeRow } from "./recipe-types";
 export { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
 export { buildSeedRecipe } from "./recipe-seeder";
 export { loadChampionRecipe } from "./recipe-loader";
+
+// EP-INF-006: Adaptive loop
+export type { RewardWeights, OutcomeSignals } from "./reward";
+export { computeReward, DEFAULT_REWARD_WEIGHTS } from "./reward";
+export { recordRouteOutcome } from "./route-outcome";
+export { updateRecipePerformance } from "./recipe-performance";
+export { selectRecipeWithExploration, evaluatePromotions, promoteChallenger } from "./champion-challenger";
+export { shouldRunGoldenTests } from "./golden-realignment";
