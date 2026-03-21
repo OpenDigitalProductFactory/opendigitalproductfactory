@@ -787,6 +787,7 @@ model ModelProvider {
   authorizeUrl             String?
   tokenUrl                 String?
   oauthClientId            String?
+  oauthRedirectUri         String?
   costPerformanceNotes     String?
   endpointType             String         @default("llm")
   sensitivityClearance     String[]       @default([])
@@ -2468,6 +2469,7 @@ model Obligation {
   ownerEmployee   EmployeeProfile?        @relation("ObligationOwner", fields: [ownerEmployeeId], references: [id])
   regulation      Regulation              @relation(fields: [regulationId], references: [id])
   policies        Policy[]
+  policyLinks     PolicyObligationLink[]
 
   @@index([regulationId])
   @@index([ownerEmployeeId])
@@ -2774,6 +2776,7 @@ model Policy {
   ownerEmployee        EmployeeProfile?       @relation("PolicyOwner", fields: [ownerEmployeeId], references: [id])
   acknowledgments      PolicyAcknowledgment[]
   requirements         PolicyRequirement[]
+  obligationLinks      PolicyObligationLink[]
 
   @@index([ownerEmployeeId])
   @@index([approvedByEmployeeId])
@@ -2862,6 +2865,29 @@ model PolicyAcknowledgment {
   @@unique([policyId, employeeProfileId, policyVersion])
   @@index([policyId])
   @@index([employeeProfileId])
+}
+
+model PolicyObligationLink {
+  id           String     @id @default(cuid())
+  policyId     String
+  obligationId String
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  policy       Policy     @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, obligationId])
+  @@index([policyId])
+  @@index([obligationId])
+}
+
+model OnboardingDraft {
+  id        String   @id @default(cuid())
+  data      Json
+  createdBy String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 }
 
 model RegulatoryMonitorScan {
