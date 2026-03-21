@@ -7,6 +7,7 @@ const TABS = [
   { label: "Workforce", href: "/platform/ai" },
   { label: "External Services", href: "/platform/ai/providers" },
   { label: "Route Log", href: "/platform/ai/routing" },
+  { label: "Operations", href: "/platform/ai/operations" },
   { label: "Action History", href: "/platform/ai/history" },
 ];
 
