@@ -311,6 +311,40 @@ describe("inferContract – defaults", () => {
   });
 });
 
+// ── Capability flags (EP-INF-008b) ──────────────────────────────────────────
+
+describe("inferContract – capability flags", () => {
+  it("sets requiresWebSearch for web-search task type", async () => {
+    const contract = await inferContract("web-search", SIMPLE_MESSAGES);
+    expect(contract.requiresWebSearch).toBe(true);
+  });
+
+  it("does not set requiresWebSearch for non-web-search tasks", async () => {
+    const contract = await inferContract("greeting", SIMPLE_MESSAGES);
+    expect(contract.requiresWebSearch).toBeUndefined();
+  });
+
+  it("sets requiresCodeExecution from route context", async () => {
+    const contract = await inferContract("code-gen", SIMPLE_MESSAGES, undefined, undefined, {
+      requiresCodeExecution: true,
+    });
+    expect(contract.requiresCodeExecution).toBe(true);
+  });
+
+  it("sets requiresComputerUse from route context", async () => {
+    const contract = await inferContract("tool-action", SIMPLE_MESSAGES, undefined, undefined, {
+      requiresComputerUse: true,
+    });
+    expect(contract.requiresComputerUse).toBe(true);
+  });
+
+  it("does not set capability flags by default", async () => {
+    const contract = await inferContract("greeting", SIMPLE_MESSAGES);
+    expect(contract.requiresCodeExecution).toBeUndefined();
+    expect(contract.requiresComputerUse).toBeUndefined();
+  });
+});
+
 // ── Unique contractId ───────────────────────────────────────────────────────
 
 describe("inferContract – contractId", () => {

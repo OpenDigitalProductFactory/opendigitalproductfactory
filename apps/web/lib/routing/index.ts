@@ -70,3 +70,12 @@ export { recordRouteOutcome } from "./route-outcome";
 export { updateRecipePerformance } from "./recipe-performance";
 export { selectRecipeWithExploration, evaluatePromotions, promoteChallenger } from "./champion-challenger";
 export { shouldRunGoldenTests } from "./golden-realignment";
+
+// EP-INF-008a: Execution adapter framework
+export type { ExecutionAdapterHandler, AdapterRequest, AdapterResult, ResolvedProvider, ToolCallEntry } from "./adapter-types";
+export { registerExecutionAdapter, getExecutionAdapter } from "./execution-adapter-registry";
+export { chatAdapter } from "./chat-adapter";
+
+// EP-INF-008b: Provider tools
+export { buildProviderTools } from "./provider-tools";
+export { isAnthropic, isOpenAI } from "./provider-utils";
