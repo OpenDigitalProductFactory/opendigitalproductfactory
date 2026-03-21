@@ -174,17 +174,7 @@ export async function routeAndCall(
   // listed below" — they latch onto the tool names and hallucinate calls.
   // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
-    systemPrompt = `You are a helpful AI assistant running on a local model.
-
-This is a CONVERSATION-ONLY request. You have no tools and cannot take any actions.
-Do not mention calling functions, creating items, or making changes.
-Respond naturally and helpfully to what the user says.
-
-If the user asks you to do something that requires taking action (creating tasks,
-modifying settings, running queries), explain that this requires a more capable
-AI model and suggest they configure a cloud AI provider in Platform > AI Providers.
-
-Keep responses concise and conversational.`;
+    systemPrompt = `You are a helpful assistant. Respond naturally to the user. Keep replies short.`;
   }
 
   // 3b. If a preferred provider was requested, check if the decision matches.
