@@ -4,14 +4,23 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# If the script lives in a directory that already has docker-compose.yml,
-# use that directory as the install location (no download needed).
+# Determine a sensible default: if the script already sits in a project
+# directory (has docker-compose.yml), default to that path.
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 if (-not $InstallDir) {
     if (Test-Path "$scriptDir\docker-compose.yml") {
-        $InstallDir = $scriptDir
+        $defaultDir = $scriptDir
     } else {
-        $InstallDir = "C:\DPF"
+        $defaultDir = "C:\DPF"
+    }
+
+    Write-Host ""
+    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
+    $answer = Read-Host "  Install directory [$defaultDir]"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $InstallDir = $defaultDir
+    } else {
+        $InstallDir = $answer.Trim()
     }
 }
 $DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
