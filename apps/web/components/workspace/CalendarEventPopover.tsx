@@ -74,15 +74,15 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
     >
       <div
         style={{
-          background: "#1a1a2e",
-          border: "1px solid #2a2a40",
+          background: "var(--dpf-surface-1)",
+          border: "1px solid var(--dpf-border)",
           borderRadius: 10,
           padding: 20,
           width: 360,
           maxWidth: "90vw",
         }}
       >
-        <h3 style={{ color: "#fff", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+        <h3 style={{ color: "var(--dpf-text)", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
           New Calendar Event
         </h3>
 
@@ -95,7 +95,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
             autoFocus
             style={{
               padding: "6px 10px", fontSize: 13, borderRadius: 4,
-              border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+              border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
             }}
           />
 
@@ -105,7 +105,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
               onChange={(e) => setForm((p) => ({ ...p, eventType: e.target.value }))}
               style={{
                 flex: 1, padding: "6px 8px", fontSize: 12, borderRadius: 4,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             >
               {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -115,7 +115,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
               onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
               style={{
                 flex: 1, padding: "6px 8px", fontSize: 12, borderRadius: 4,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             >
               {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -129,7 +129,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
               onChange={(e) => setForm((p) => ({ ...p, startAt: e.target.value }))}
               style={{
                 flex: 1, padding: "6px 8px", fontSize: 12, borderRadius: 4,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             />
             <input
@@ -139,12 +139,12 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
               placeholder="End date"
               style={{
                 flex: 1, padding: "6px 8px", fontSize: 12, borderRadius: 4,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             />
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#b0b0c8" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dpf-muted)" }}>
             <input
               type="checkbox"
               checked={form.allDay}
@@ -160,7 +160,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
             rows={2}
             style={{
               padding: "6px 10px", fontSize: 12, borderRadius: 4, resize: "none",
-              border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff",
+              border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
             }}
           />
         </div>
@@ -177,7 +177,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
             onClick={onClose}
             style={{
               padding: "6px 14px", fontSize: 12, borderRadius: 4,
-              border: "1px solid #2a2a40", background: "transparent", color: "#b0b0c8", cursor: "pointer",
+              border: "1px solid var(--dpf-border)", background: "transparent", color: "var(--dpf-muted)", cursor: "pointer",
             }}
           >
             Cancel
@@ -188,8 +188,8 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
             disabled={isPending}
             style={{
               padding: "6px 14px", fontSize: 12, borderRadius: 4,
-              border: "1px solid rgba(124,140,248,0.4)", background: "rgba(124,140,248,0.15)",
-              color: "#7c8cf8", cursor: "pointer", opacity: isPending ? 0.5 : 1,
+              border: "1px solid color-mix(in srgb, var(--dpf-accent) 40%, transparent)", background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
+              color: "var(--dpf-accent)", cursor: "pointer", opacity: isPending ? 0.5 : 1,
             }}
           >
             {isPending ? "Creating..." : "Create"}

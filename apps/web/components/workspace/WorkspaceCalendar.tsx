@@ -45,7 +45,7 @@ export function WorkspaceCalendar({ events }: Props) {
         allDay: e.allDay,
         backgroundColor: e.color,
         borderColor: e.color,
-        textColor: "#fff",
+        textColor: "var(--dpf-text)",
         editable: e.editable,
         extendedProps: {
           category: e.category,
@@ -89,7 +89,7 @@ export function WorkspaceCalendar({ events }: Props) {
           --fc-page-bg-color: transparent;
           --fc-neutral-bg-color: var(--dpf-surface-2);
           --fc-list-event-hover-bg-color: var(--dpf-surface-2);
-          --fc-today-bg-color: rgba(124, 140, 248, 0.05);
+          --fc-today-bg-color: color-mix(in srgb, var(--dpf-accent) 5%, transparent);
           --fc-event-border-color: transparent;
           font-size: 11px;
         }
@@ -97,8 +97,8 @@ export function WorkspaceCalendar({ events }: Props) {
         .fc .fc-daygrid-day-number { color: var(--dpf-text); font-size: 11px; }
         .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: var(--dpf-accent); font-weight: 700; }
         .fc .fc-button { background: var(--dpf-surface-2); border-color: var(--dpf-border); color: var(--dpf-text); font-size: 11px; padding: 4px 10px; }
-        .fc .fc-button:hover { background: rgba(124,140,248,0.15); }
-        .fc .fc-button-active { background: rgba(124,140,248,0.2) !important; border-color: var(--dpf-accent) !important; }
+        .fc .fc-button:hover { background: color-mix(in srgb, var(--dpf-accent) 15%, transparent); }
+        .fc .fc-button-active { background: color-mix(in srgb, var(--dpf-accent) 20%, transparent) !important; border-color: var(--dpf-accent) !important; }
         .fc .fc-toolbar-title { color: var(--dpf-text); font-size: 15px; font-weight: 600; }
         .fc .fc-event { border-radius: 3px; padding: 1px 3px; font-size: 10px; cursor: pointer; }
         .fc .fc-daygrid-event-dot { display: none; }
