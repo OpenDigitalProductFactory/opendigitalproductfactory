@@ -334,6 +334,37 @@ The inference layer's `buildAuthHeaders()` function currently has branches for `
 
 **Note:** The codebase currently has duplicate definitions of `getProviderBearerToken()` and `getDecryptedCredential()` in both `ai-provider-internals.ts` (canonical) and `ai-inference.ts`. The implementation should consolidate — `ai-inference.ts` should import from `ai-provider-internals.ts` rather than maintaining its own copy. This prevents the refactored function from being inconsistent across files.
 
+## Implementation Findings (2026-03-21)
+
+Testing revealed important constraints about OpenAI's subscription OAuth tokens:
+
+### OpenAI Token Scope Limitations
+
+The ChatGPT subscription OAuth token obtained via the shared Codex client ID (`app_EMoamEEZ73f0CkXaXp7hrann`) has restricted access:
+
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `/v1/chat/completions` | **429** `insufficient_quota` | Token is recognized but subscription plan doesn't include platform API quota |
+| `/v1/models` | **403** Forbidden | Entirely blocked for subscription tokens |
+| `/v1/responses` | **401** Missing scope `api.responses.write` | OAuth scopes requested (`openid profile email offline_access`) don't include API access scopes |
+
+**Key finding:** The Codex CLI/VS Code extension does NOT use the platform API (`api.openai.com/v1/`). It uses a separate ChatGPT backend endpoint (`chatgpt.com/backend-api/codex/responses`) which accepts the subscription token natively. This endpoint is undocumented and not intended for third-party use.
+
+### Implications for AI Co-worker Routing
+
+- The stored OAuth token **cannot** be used for chat completions through the standard OpenAI inference path (`/v1/chat/completions`)
+- The `openai` provider still requires a separate platform API key for chat routing
+- The OAuth token is useful for Codex MCP server invocations (agent orchestration epic) which would call the ChatGPT backend API, not the platform API
+- The OAuth credential does **not** automatically create a chat-capable route — model discovery, profiling, and routing are skipped for OAuth agent providers
+
+### Provider-Specific Redirect URI
+
+The shared Codex client ID only allows `http://localhost:1455/auth/callback` as a redirect URI. The implementation adds `oauthRedirectUri` as a data-driven field on `ModelProvider` to handle this per provider. The callback route exists at `/auth/callback` to match.
+
+### Auth Method Auto-Switch
+
+The OAuth callback automatically sets the provider's `authMethod` to `oauth2_authorization_code` on successful token exchange. This prevents the test/discovery pipeline from using API key logic when OAuth credentials are active.
+
 ## What Is NOT In Scope
 
 - **Per-user OAuth tokens** — the credential is platform-wide, owned by the admin who signed in. Multi-tenant per-user token support would require a different architecture (token per user session, not per provider).
@@ -342,6 +373,8 @@ The inference layer's `buildAuthHeaders()` function currently has branches for `
 - **Device code flow** — beta on OpenAI's side, worse UX, not generic. Can be added as a fourth auth method later if needed.
 - **Automatic provider switching** — if OAuth token expires and API key is also configured, the system does not auto-switch. Admin must choose their active auth method.
 - **Consent/scope management UI** — scopes are defined in the registry. No admin-facing scope picker.
+- **ChatGPT backend API access** — the `chatgpt.com/backend-api/` endpoint is undocumented and not supported for third-party use. Codex integration should use the MCP server path (agent orchestration epic), not direct API calls.
+- **Automatic chat route creation** — OAuth sign-in does not create a new chat-capable route for the co-worker. The subscription token cannot access the platform chat completions API.
 
 ## Files to Create or Modify
 
