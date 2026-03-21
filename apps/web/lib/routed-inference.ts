@@ -168,6 +168,20 @@ export async function routeAndCall(
     );
   }
 
+  // 3a. When tools are stripped, simplify the system prompt so the local model
+  // doesn't hallucinate tool calls from the prompt text. The original prompt
+  // may list tools and authorities designed for capable models — a small local
+  // model will try to act on those instructions even without the tool API.
+  if (toolsStripped) {
+    systemPrompt = `This is a CONVERSATION request. You have NO tools and CANNOT take actions.
+Do not mention tools, do not say you will call functions, do not create items or make changes.
+You can only respond with helpful conversation. If asked to do something you cannot do,
+explain that a more capable AI model is needed and suggest the user configure one.
+
+---
+${systemPrompt}`;
+  }
+
   // 3b. If a preferred provider was requested, check if the decision matches.
   // If not, and the preferred provider is in the fallback chain, reorder so
   // it's tried first (soft preference, not a hard pin).
