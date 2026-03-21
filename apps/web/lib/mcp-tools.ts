@@ -790,6 +790,53 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
   },
+  {
+    name: "prefill_onboarding_wizard",
+    description: "Pre-fill the regulation onboarding wizard with AI-drafted data. Stores a draft and returns the wizard URL for human review.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Full regulation/standard name" },
+        shortName: { type: "string", description: "Abbreviation (e.g., GDPR, WCAG)" },
+        sourceType: { type: "string", enum: ["external", "standard", "framework", "internal"], description: "Type of regulation/standard" },
+        jurisdiction: { type: "string", description: "Geographic scope (e.g., EU, UK, Global)" },
+        industry: { type: "string", description: "Industry applicability" },
+        sourceUrl: { type: "string", description: "URL to official text" },
+        obligations: {
+          type: "array",
+          description: "Extracted obligations",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              reference: { type: "string" },
+              category: { type: "string" },
+              frequency: { type: "string" },
+              applicability: { type: "string" },
+              description: { type: "string" },
+            },
+            required: ["title"],
+          },
+        },
+        suggestedControls: {
+          type: "array",
+          description: "Suggested control mappings",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              controlType: { type: "string", enum: ["preventive", "detective", "corrective"] },
+              linkedObligationIndices: { type: "array", items: { type: "number" } },
+            },
+            required: ["title", "controlType"],
+          },
+        },
+      },
+      required: ["name", "shortName", "sourceType"],
+    },
+    requiredCapability: "manage_compliance",
+    sideEffect: true,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -2055,6 +2102,34 @@ export async function executeTool(
         take: typeof params["limit"] === "number" ? params["limit"] : 10,
       });
       return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
+    }
+
+    case "prefill_onboarding_wizard": {
+      const data = {
+        name: String(params["name"] ?? ""),
+        shortName: String(params["shortName"] ?? ""),
+        sourceType: String(params["sourceType"] ?? "external"),
+        jurisdiction: String(params["jurisdiction"] ?? ""),
+        industry: params["industry"] ? String(params["industry"]) : null,
+        sourceUrl: params["sourceUrl"] ? String(params["sourceUrl"]) : null,
+        obligations: Array.isArray(params["obligations"]) ? params["obligations"] : [],
+        suggestedControls: Array.isArray(params["suggestedControls"]) ? params["suggestedControls"] : [],
+      };
+
+      const draft = await prisma.onboardingDraft.create({
+        data: {
+          data: data as any,
+          createdBy: userId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const wizardUrl = `/compliance/onboard?draft=${draft.id}`;
+      return {
+        success: true,
+        message: `Onboarding draft created. Navigate to ${wizardUrl} to review and commit.`,
+        data: { wizardUrl, draftId: draft.id },
+      };
     }
 
     default: {

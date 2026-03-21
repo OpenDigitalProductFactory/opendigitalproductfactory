@@ -426,6 +426,13 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         prompt: "Help me add a new obligation to this regulation",
       },
       {
+        label: "Onboard a regulation or standard",
+        description: "Research and import a regulation, standard, or framework into the compliance register",
+        capability: "manage_compliance",
+        taskType: "analysis",
+        prompt: "Help the user onboard a new regulation, standard, or framework. Ask what they want to onboard. Then: (1) Research it — use web search for public standards, or ask for a document upload for proprietary ones. (2) Extract the obligation structure — titles, references (article/clause numbers), categories, frequency, applicability. (3) Suggest control mappings where obvious. (4) Call prefill_onboarding_wizard with the drafted structure to create a draft and navigate the user to the onboarding wizard for review.",
+      },
+      {
         label: "Report an issue",
         description: "Report a bug or give feedback",
         capability: null,
