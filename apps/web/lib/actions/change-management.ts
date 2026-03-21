@@ -25,7 +25,7 @@ async function requireOpsAccess(): Promise<string> {
 
 // ─── RFC ID Generation ──────────────────────────────────────────────────────
 
-export function generateRfcId(): string {
+export async function generateRfcId(): Promise<string> {
   const year = new Date().getFullYear();
   const hex = crypto.randomBytes(4).toString("hex").toUpperCase();
   return `RFC-${year}-${hex}`;
