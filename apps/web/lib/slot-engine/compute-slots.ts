@@ -200,7 +200,7 @@ export async function computeAvailableSlots(
   }
 
   if (config.schedulingPattern === "class") {
-    return aggregateClass(providerSlots, config, dayStartUTC, dayEndUTC);
+    return aggregateClass(providerSlots, config, dayStartUTC, dayEndUTC, item.storefrontId, item.itemId, timezone);
   }
 
   // Default: next-available
@@ -308,7 +308,10 @@ async function aggregateClass(
   providerSlots: Map<string, SlotCandidate[]>,
   config: { capacity: number; durationMinutes: number },
   dayStartUTC: Date,
-  dayEndUTC: Date
+  dayEndUTC: Date,
+  storefrontId: string,
+  itemId: string,
+  timezone: string
 ): Promise<AvailableSlotsResult> {
   // For class mode, each slot time is a class window.
   // We need to count existing bookings per slot time.
@@ -326,6 +329,8 @@ async function aggregateClass(
   // Count bookings for each slot time window on this date
   const allBookings = await prisma.storefrontBooking.findMany({
     where: {
+      storefrontId,
+      itemId,
       scheduledAt: { gte: dayStartUTC, lte: dayEndUTC },
       status: { not: "cancelled" },
     },
@@ -337,7 +342,7 @@ async function aggregateClass(
   for (const slot of sortedSlots) {
     // Count bookings that match this slot time (by scheduled time matching slot start)
     const enrollment = allBookings.filter((b) => {
-      const bookingMin = b.scheduledAt.getUTCHours() * 60 + b.scheduledAt.getUTCMinutes();
+      const bookingMin = utcToLocalMinutes(b.scheduledAt, timezone);
       return bookingMin === slot.startMinutes;
     }).length;
 
