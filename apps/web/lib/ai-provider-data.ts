@@ -80,6 +80,7 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
         authorizeUrl:         p.authorizeUrl,
         tokenUrl:             p.tokenUrl,
         oauthClientId:        p.oauthClientId,
+        oauthRedirectUri:     p.oauthRedirectUri,
       } satisfies ProviderRow,
       credential: raw ? maskCredential(raw) : null,
     };
@@ -115,6 +116,7 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       authorizeUrl:         provider.authorizeUrl,
       tokenUrl:             provider.tokenUrl,
       oauthClientId:        provider.oauthClientId,
+      oauthRedirectUri:     provider.oauthRedirectUri,
     } satisfies ProviderRow,
     credential: credential ? maskCredential(credential) : null,
   };

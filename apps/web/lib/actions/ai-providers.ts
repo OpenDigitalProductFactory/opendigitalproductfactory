@@ -100,6 +100,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.authorizeUrl !== undefined      && { authorizeUrl:      entry.authorizeUrl ?? null }),
           ...(entry.tokenUrl !== undefined          && { tokenUrl:          entry.tokenUrl ?? null }),
           ...(entry.oauthClientId !== undefined     && { oauthClientId:     entry.oauthClientId ?? null }),
+          ...(entry.oauthRedirectUri !== undefined  && { oauthRedirectUri:  entry.oauthRedirectUri ?? null }),
         },
       });
       updated++;
@@ -132,6 +133,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           authorizeUrl:         entry.authorizeUrl ?? null,
           tokenUrl:             entry.tokenUrl ?? null,
           oauthClientId:        entry.oauthClientId ?? null,
+          oauthRedirectUri:     entry.oauthRedirectUri ?? null,
         },
       });
       added++;
