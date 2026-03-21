@@ -34,58 +34,58 @@ export function AiCapabilitiesStep({ onContinue, onSkip, onPause }: Props) {
 
             {/* Tier cards */}
             <div className="space-y-4 mb-8">
-              <div className="border rounded-lg p-4 bg-green-50 border-green-200">
+              <div className="border border-[#4ade80]/20 rounded-lg p-4 bg-[#4ade80]/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-green-600 font-medium">Active</span>
+                  <span className="text-[#4ade80] font-medium">Active</span>
                   <h3 className="font-semibold">This Platform (Local AI)</h3>
                 </div>
-                <p className="text-sm text-gray-600">Running on your hardware. Private, free, handles conversation and guided tasks. Limited by your hardware capacity.</p>
+                <p className="text-sm text-[var(--dpf-muted)]">Running on your hardware. Private, free, handles conversation and guided tasks. Limited by your hardware capacity.</p>
               </div>
 
-              <div className="border rounded-lg p-4 bg-white">
+              <div className="border border-[var(--dpf-border)] rounded-lg p-4 bg-[var(--dpf-surface-1)]">
                 <h3 className="font-semibold mb-2">Cloud AI Services</h3>
-                <p className="text-sm text-gray-600">Services like Anthropic or OpenAI. Pay per use, significantly more capable. Needed for complex analysis, document processing, and code generation.</p>
+                <p className="text-sm text-[var(--dpf-muted)]">Services like Anthropic or OpenAI. Pay per use, significantly more capable. Needed for complex analysis, document processing, and code generation.</p>
                 {!showAddProvider && (
                   <button
                     onClick={() => setShowAddProvider(true)}
-                    className="mt-3 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50"
+                    className="mt-3 px-4 py-2 text-sm font-medium text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/30 rounded-lg hover:bg-[var(--dpf-accent)]/5"
                   >
                     Add a cloud provider
                   </button>
                 )}
               </div>
 
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h3 className="font-semibold mb-2 text-gray-500">Enterprise / Private Cloud</h3>
-                <p className="text-sm text-gray-400">Azure OpenAI, AWS Bedrock — cloud capability with your own infrastructure. Available to set up later.</p>
+              <div className="border border-[var(--dpf-border)] rounded-lg p-4 bg-[var(--dpf-surface-2)]">
+                <h3 className="font-semibold mb-2 text-[var(--dpf-muted)]">Enterprise / Private Cloud</h3>
+                <p className="text-sm text-[var(--dpf-muted)]">Azure OpenAI, AWS Bedrock — cloud capability with your own infrastructure. Available to set up later.</p>
               </div>
             </div>
 
             {/* Add provider section */}
             {showAddProvider && (
-              <div className="border rounded-lg p-4 space-y-4">
+              <div className="border border-[var(--dpf-border)] rounded-lg p-4 space-y-4">
                 <h3 className="font-semibold">Connect a Cloud Provider</h3>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
-                  <select value={selectedProvider} onChange={(e) => setSelectedProvider(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                  <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">Provider</label>
+                  <select value={selectedProvider} onChange={(e) => setSelectedProvider(e.target.value)} className="w-full px-3 py-2 rounded-lg">
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
                     <option value="gemini">Google (Gemini)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                  <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste your API key here" className="w-full px-3 py-2 border rounded-lg" />
+                  <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">API Key</label>
+                  <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste your API key here" className="w-full px-3 py-2 rounded-lg" />
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => { setTestStatus("testing"); setTimeout(() => setTestStatus("success"), 1500); }}
                     disabled={!apiKey || testStatus === "testing"}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-medium text-white bg-[var(--dpf-accent)] rounded-lg hover:opacity-90 disabled:opacity-50"
                   >
                     {testStatus === "testing" ? "Testing..." : "Test Connection"}
                   </button>
-                  {testStatus === "success" && <span className="text-sm text-green-600">Connected successfully</span>}
+                  {testStatus === "success" && <span className="text-sm text-[#4ade80]">Connected successfully</span>}
                   {testStatus === "failed" && <span className="text-sm text-red-600">Connection failed. Check your API key.</span>}
                 </div>
               </div>

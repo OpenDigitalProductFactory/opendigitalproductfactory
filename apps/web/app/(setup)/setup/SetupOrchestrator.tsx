@@ -144,7 +144,7 @@ export function SetupOrchestrator({ progress: initialProgress }: Props) {
         );
       default:
         return (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
+          <div className="flex-1 flex items-center justify-center text-[var(--dpf-muted)]">
             <div className="text-center">
               <p className="text-lg">Step: {progress.currentStep}</p>
               <p className="text-sm mt-2">(Coming soon)</p>
@@ -152,14 +152,14 @@ export function SetupOrchestrator({ progress: initialProgress }: Props) {
                 <button
                   onClick={handleSkip}
                   disabled={isPending}
-                  className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50"
+                  className="px-4 py-2 text-sm text-[var(--dpf-muted)] border border-[var(--dpf-border)] rounded hover:bg-[var(--dpf-surface-2)]"
                 >
                   Skip
                 </button>
                 <button
                   onClick={() => handleContinue()}
                   disabled={isPending}
-                  className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700"
+                  className="px-4 py-2 text-sm text-white bg-[var(--dpf-accent)] rounded hover:opacity-90"
                 >
                   Continue
                 </button>

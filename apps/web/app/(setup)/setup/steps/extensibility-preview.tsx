@@ -24,15 +24,15 @@ export function ExtensibilityPreviewStep({ onContinue, onSkip, onPause }: Props)
           <div className="flex-1 p-8 max-w-xl">
             <h2 className="text-xl font-semibold mb-6">Platform Extensibility</h2>
             <div className="space-y-4">
-              <div className="border rounded-lg p-6 bg-blue-50 border-blue-200">
-                <h3 className="font-semibold text-blue-900 mb-2">Build What You Need</h3>
-                <p className="text-sm text-blue-800">Describe what you need in plain language, and the platform's AI workforce will develop it for you. New workflows, reports, integrations \u2014 whatever your business requires.</p>
+              <div className="border border-[#3b82f6]/20 rounded-lg p-6 bg-[#3b82f6]/10">
+                <h3 className="font-semibold text-[var(--dpf-text)] mb-2">Build What You Need</h3>
+                <p className="text-sm text-[var(--dpf-text)]">Describe what you need in plain language, and the platform's AI workforce will develop it for you. New workflows, reports, integrations \u2014 whatever your business requires.</p>
               </div>
-              <div className="border rounded-lg p-6 bg-green-50 border-green-200">
-                <h3 className="font-semibold text-green-900 mb-2">Share With the Community</h3>
-                <p className="text-sm text-green-800">Anything you build can be donated back to the community so other businesses benefit too. Or keep it private \u2014 your choice.</p>
+              <div className="border border-[#4ade80]/20 rounded-lg p-6 bg-[#4ade80]/10">
+                <h3 className="font-semibold text-[var(--dpf-text)] mb-2">Share With the Community</h3>
+                <p className="text-sm text-[var(--dpf-text)]">Anything you build can be donated back to the community so other businesses benefit too. Or keep it private \u2014 your choice.</p>
               </div>
-              <p className="text-sm text-gray-500">You'll find the Build Studio in your workspace when you're ready to explore this.</p>
+              <p className="text-sm text-[var(--dpf-muted)]">You'll find the Build Studio in your workspace when you're ready to explore this.</p>
             </div>
           </div>
           <SetupStepNav onContinue={() => onContinue({})} onSkip={onSkip} onPause={onPause} continueLabel="Next" />
