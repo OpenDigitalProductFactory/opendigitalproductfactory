@@ -121,6 +121,11 @@ export interface RouteDecision {
   taskType: string;
   sensitivity: SensitivityLevel;
   timestamp: Date;
+
+  // EP-INF-005b: Execution recipe fields
+  selectedRecipeId?: string;
+  selectedRecipeVersion?: number;
+  executionPlan?: import("./recipe-types").RoutedExecutionPlan;
 }
 
 // ── Pinned / Blocked overrides ──
