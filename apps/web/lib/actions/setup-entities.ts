@@ -58,6 +58,13 @@ export async function createOwnerAccount(
   setupId: string,
   data: { name: string; email: string; password: string },
 ) {
+  // If user already exists (e.g., re-running setup), link to existing account
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existing) {
+    await linkSetupToUser(setupId, existing.id);
+    return { userId: existing.id, email: existing.email };
+  }
+
   const passwordHash = await hashPassword(data.password);
 
   const user = await prisma.user.create({
