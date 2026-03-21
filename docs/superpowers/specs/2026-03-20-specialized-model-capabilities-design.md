@@ -1,133 +1,148 @@
 # EP-INF-008: Specialized Model Capabilities
 
 **Date:** 2026-03-20
-**Status:** Proposed
+**Status:** Approved
 **Author:** Mark Bodman (CEO) + Claude (COO/design partner)
-**Epic:** EP-INF-008
+**Epic:** EP-INF-008 (umbrella — 4 sub-epics)
 
 **Prerequisites:**
 - EP-INF-003 through EP-INF-006 (routing redesign) — implemented
-- EP-INF-005b (Execution Recipes) — provides the recipe abstraction for different execution strategies
+- EP-INF-005b (Execution Recipes) — provides the recipe abstraction
 
 ---
 
 ## Problem Statement
 
-The routing redesign (EP-INF-003 through EP-INF-006) built a comprehensive pipeline for chat and reasoning models. But providers are shipping models with fundamentally different APIs, execution patterns, and capabilities that the current pipeline cannot leverage:
+The routing redesign built a comprehensive pipeline for chat and reasoning models. But providers ship models with fundamentally different APIs, execution patterns, and unique capabilities that the current pipeline cannot leverage. Every provider's specialized models are discovered, classified, and immediately retired because `callProvider()` only speaks one API dialect per provider.
 
-1. **Google Deep Research** — uses the Interactions API (not `generateContent`). Takes minutes, not seconds. Produces research reports by browsing the web and synthesizing sources. Currently retired because it 400s on our standard API path.
-
-2. **Google Grounding & Code Execution** — models with built-in web search and sandboxed code execution. Available via `generateContent` but require specific tool declarations we don't send.
-
-3. **Anthropic Computer Use** — models that can control a browser or desktop. Requires a tool-use loop with screenshot/action cycles.
-
-4. **OpenAI Codex / Agent Models** — agentic coding models with their own execution API. Already registered as `codex-agent` but unused by routing.
-
-5. **Realtime Models** — OpenAI's Realtime API for voice/streaming. WebSocket-based, not HTTP request/response.
-
-6. **Image/Audio/Video Generation** — DALL-E, Sora, TTS, etc. Different input/output modalities and API endpoints.
-
-The `ModelCard` from EP-INF-003 already captures capabilities (tool use, code execution, thinking, etc.) and `modelClass` already classifies models into types. But the routing pipeline only serves `chat` and `reasoning` — everything else is excluded in `getExclusionReasonV2()`.
-
-### What We're Missing
-
-Every provider publishes unique capabilities that could serve platform tasks better than generic chat:
-- A "research this competitor" task could use Google Deep Research instead of a chat model doing web search
-- A "execute this code and verify the output" task could use Gemini Code Execution or Anthropic Computer Use
-- A "generate a product image" task could use DALL-E instead of requiring an external tool
-- A "transcribe this meeting recording" task could use Whisper
-
-The routing system knows these models exist (from discovery) and knows what they can do (from the ModelCard). It just can't use them because `callProvider()` only speaks one API dialect per provider.
+The ModelCard captures what each model can do. The routing pipeline knows which models exist. The execution layer just can't use most of them.
 
 ---
 
-## Goals
+## Architecture: Three Capability Patterns
 
-1. Extend the execution layer to support multiple API types per provider, not just `generateContent`/`/messages`/`/chat/completions`.
-2. Route specialized requests to specialized models when available and appropriate.
-3. Handle async/long-running model executions (Deep Research takes minutes).
-4. Make specialized capabilities discoverable and auditable — operators should see what unique capabilities each provider offers.
+Analysis of specialized models across all providers reveals three patterns:
 
-## Proposed Scope
+### Pattern A: Same API, Different Tools/Config (80% of cases)
 
-### Phase 1: Execution Adapter Registry
+Most "specialized" capabilities use the provider's standard chat API with specific tool declarations:
 
-Extend the `ExecutionRecipe` concept with an `executionAdapter` field that specifies which API to use:
+| Capability | Provider | API | What's Different |
+|---|---|---|---|
+| Code Execution | Google Gemini | `generateContent` | Add `code_execution` tool declaration |
+| Grounding (Web Search) | Google Gemini | `generateContent` | Add `google_search_retrieval` tool |
+| Computer Use | Anthropic | `/messages` | Add `computer_20241022` tool type + screenshot loop |
+| Extended Thinking | Anthropic | `/messages` | Add `thinking` parameter (already in recipes) |
+| Structured Output (strict) | OpenAI | `/chat/completions` | Add `response_format: { type: "json_schema" }` |
 
-```typescript
-type ExecutionAdapter =
-  | "chat"              // standard: /messages, /chat/completions, generateContent
-  | "deep_research"     // Google Interactions API
-  | "code_execution"    // Gemini code execution tool
-  | "computer_use"      // Anthropic computer use tool loop
-  | "image_generation"  // DALL-E, Imagen
-  | "audio_transcription" // Whisper
-  | "audio_generation"  // TTS
-  | "realtime"          // WebSocket-based streaming
-  | "agent"             // Codex agent, multi-step agentic
-```
+**These don't need new adapters.** They need richer `ExecutionRecipe` tool configurations. The recipe's `providerSettings` and `toolPolicy` already have the structure — we just need to populate them correctly and update the routing to match tasks to these capabilities.
 
-Each adapter implements a common interface:
-```typescript
-interface ExecutionAdapterHandler {
-  readonly adapterId: ExecutionAdapter;
-  canHandle(plan: RoutedExecutionPlan): boolean;
-  execute(plan: RoutedExecutionPlan, input: AdapterInput): Promise<AdapterOutput>;
-}
-```
+### Pattern B: Different HTTP Endpoint, Same Shape
 
-### Phase 2: RequestContract Capability Matching
+| Capability | Provider | Endpoint | Pattern |
+|---|---|---|---|
+| Image Generation | OpenAI (DALL-E) | `POST /images/generations` | Text → image URL |
+| Audio Transcription | OpenAI (Whisper) | `POST /audio/transcriptions` | Audio file → text |
+| Text-to-Speech | OpenAI (TTS) | `POST /audio/speech` | Text → audio file |
+| Embeddings | OpenAI/Google | `POST /embeddings` | Text → vector |
 
-Extend `RequestContract` with capability requirements that map to specialized models:
-- `requiresWebResearch: true` → prefer Deep Research models
-- `requiresCodeExecution: true` → prefer Code Execution models
-- `requiresImageGeneration: true` → route to image models
-- `requiresAudioTranscription: true` → route to audio models
+**One generic adapter** with configurable endpoint + request/response mapping handles all of these.
 
-### Phase 3: Background/Async Execution
+### Pattern C: Truly Different API
 
-Some models (Deep Research) take minutes. The execution layer needs:
-- Fire-and-forget dispatch with status polling
-- Progress callbacks or webhook-based notification
-- Timeout handling for long-running tasks
+| Capability | Provider | API | Why Different |
+|---|---|---|---|
+| Deep Research | Google | Interactions API | Long-running (minutes), polling, multi-step |
+| Realtime Voice | OpenAI | WebSocket | Bidirectional streaming, not request/response |
+
+**Purpose-built adapters** required. These are fundamentally different execution models.
+
+---
+
+## Epic Decomposition
+
+### EP-INF-008a: Execution Adapter Framework
+
+**Scope:** The common infrastructure all adapters plug into.
+- `ExecutionAdapter` type on `ExecutionRecipe`
+- Adapter handler registry (maps adapter type → handler)
+- Dispatch logic in `callProvider()` — select handler based on recipe's adapter
+- Default `"chat"` adapter wraps current `callProvider()` behavior (backward compat)
+
+**Size:** Small — mostly wiring and a registry pattern.
+
+### EP-INF-008b: Tool-Based Capabilities (Pattern A)
+
+**Scope:** Activate capabilities that work via the standard chat API + tool declarations.
+- Gemini Code Execution — recipe adds `code_execution` tool
+- Gemini Grounding — recipe adds `google_search_retrieval` tool
+- Anthropic Computer Use — recipe adds computer use tools + screenshot/action loop
+- Extend `RequestContract` with capability flags: `requiresCodeExecution`, `requiresWebSearch`, `requiresComputerUse`
+- Extend `routeEndpointV2` to match capability requirements to model capabilities
+- Seed recipes for models that support these capabilities
+
+**Size:** Medium — mostly recipe configuration + routing extension. Highest value, least new code.
+
+### EP-INF-008c: Alternate Endpoint Models (Pattern B)
+
+**Scope:** Support models that use different HTTP endpoints but follow a simple request/response pattern.
+- Generic endpoint adapter: configurable URL, request body template, response mapping
+- Image generation adapter (DALL-E, Imagen)
+- Audio transcription adapter (Whisper)
+- Text-to-speech adapter
+- Embedding adapter (if needed beyond current vector DB integration)
+- Extend `modelClass` routing to send image requests to image models, audio to audio models
+
+**Size:** Medium — one adapter pattern, multiple configurations.
+
+### EP-INF-008d: Async/Long-Running Models (Pattern C)
+
+**Scope:** Support models that take minutes, not seconds.
+- Background execution with status polling
 - Result storage and retrieval
+- Progress callbacks / notification
+- Google Deep Research via Interactions API
+- Timeout handling for multi-minute operations
+- UI integration — show "research in progress" state
 
-### Phase 4: Provider Capability Discovery Enhancement
-
-Extend the adapter-based discovery to extract provider-specific capabilities that go beyond the standard `ModelCardCapabilities` booleans:
-- Google: grounding sources, code execution languages, Interactions API support
-- Anthropic: computer use tool types, supported screen resolutions
-- OpenAI: realtime voice models, supported audio formats
-
----
-
-## What This Changes
-
-| Current State | After EP-INF-008 |
-|---|---|
-| `callProvider()` speaks one API per provider | Multiple execution adapters per provider |
-| Non-chat models are retired | Non-chat models are routed to appropriate adapters |
-| `modelClass` is a filter (exclude non-chat) | `modelClass` is a routing signal (match to adapter) |
-| Only sync request/response | Sync + async/background execution |
-| One `ExecutionRecipe` format | Recipes specify which adapter to use |
+**Size:** Large — new execution model, new UI state, new persistence.
 
 ---
 
-## Relationship to Existing Epics
+## Recommended Order
 
-- **EP-INF-003** provided ModelCard capabilities — this epic uses them for adapter selection
-- **EP-INF-005a** provided RequestContract — this epic extends it with capability requirements
-- **EP-INF-005b** provided ExecutionRecipe — this epic adds `executionAdapter` field
-- **EP-INF-006** provided champion/challenger — specialized adapters can have their own recipes
+```
+EP-INF-008a (Framework)     → Small, foundation
+    ↓
+EP-INF-008b (Tool-Based)    → Highest value, builds on framework
+    ↓
+EP-INF-008c (Alt Endpoints) → Image/audio, builds on framework
+    ↓
+EP-INF-008d (Async/LR)      → Deep Research, most complex
+```
+
+EP-INF-008b should ship first after the framework — it unlocks Code Execution, Grounding, and Computer Use with minimal new code because the recipes already exist as a concept.
 
 ---
 
-## Next Steps
+## What This Enables
 
-This epic needs research before spec:
-1. Document each provider's specialized APIs (endpoints, auth, request/response formats)
-2. Identify which platform task types would benefit from specialized models
-3. Prioritize: which adapter delivers the most value first? (likely Deep Research or Code Execution)
-4. Design the async execution pattern for long-running models
+| Task | Current | After EP-INF-008 |
+|---|---|---|
+| "Research competitor X deeply" | Chat model does web search tool calls | Deep Research model produces full report |
+| "Run this code and verify output" | Chat model generates code text | Code Execution model runs code in sandbox |
+| "Fill out this web form" | Not possible | Computer Use model controls browser |
+| "Generate a product mockup" | External tool integration | Image gen model creates directly |
+| "Transcribe this meeting" | External service | Audio model transcribes directly |
+| "Search for recent news on Y" | Chat model with search tool | Grounded model with built-in web search |
 
-This should be broken into sub-epics per adapter type, with Deep Research or Code Execution as the first implementation.
+---
+
+## Relationship to Existing Architecture
+
+- **ModelCard** (EP-INF-003) already captures capabilities — `codeExecution`, `imageInput`, etc.
+- **RequestContract** (EP-INF-005a) already has `modality` and `interactionMode` — extend with capability flags
+- **ExecutionRecipe** (EP-INF-005b) already has `providerSettings` and `toolPolicy` — extend with `executionAdapter`
+- **Champion/Challenger** (EP-INF-006) works per-recipe — specialized recipes can have their own evolution
+
+The routing redesign was designed for this. EP-INF-008 activates what the infrastructure was built to support.
