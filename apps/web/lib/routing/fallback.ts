@@ -38,14 +38,22 @@ export async function callWithFallbackChain(
     );
   }
 
-  // Build chain from RouteDecision — each entry carries both providerId and modelId
-  const selectedEntry = { providerId: decision.selectedEndpoint!, modelId: decision.selectedModelId! };
+  // Build chain from RouteDecision — resolve actual providerId from candidate traces
+  const resolveEntry = (endpointId: string) => {
+    const candidate = decision.candidates.find(c => c.endpointId === endpointId && !c.excluded);
+    return {
+      endpointId,
+      providerId: candidate?.providerId ?? endpointId,
+      modelId: candidate?.modelId ?? "",
+    };
+  };
+
+  const selectedEntry = resolveEntry(decision.selectedEndpoint!);
+  // Override modelId with the authoritative value from the decision
+  selectedEntry.modelId = decision.selectedModelId!;
 
   // Get fallback entries from the candidates in the decision trace
-  const fallbackEntries = decision.fallbackChain.map(epId => {
-    const candidate = decision.candidates.find(c => c.endpointId === epId && !c.excluded);
-    return { providerId: epId, modelId: candidate?.modelId ?? "" };
-  });
+  const fallbackEntries = decision.fallbackChain.map(epId => resolveEntry(epId));
 
   const allEntries = [selectedEntry, ...fallbackEntries];
 

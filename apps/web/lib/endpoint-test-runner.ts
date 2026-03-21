@@ -4,7 +4,7 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import { callWithFailover } from "./ai-provider-priority";
+import { routeAndCall } from "./routed-inference";
 import { assembleSystemPrompt, type PromptInput } from "./prompt-assembler";
 import { evaluateResponseForTest, updatePerformanceProfile } from "./orchestrator-evaluator";
 import {
@@ -87,9 +87,9 @@ async function runProbe(
     const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
     const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
-    const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
+    const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
       ...(probeToolsFormatted ? { tools: probeToolsFormatted } : {}),
-      modelRequirements: { preferredProviderId: providerId },
+      preferredProviderId: providerId,
     });
 
     // Detect failover — if a different endpoint answered, mark as infrastructure failure
@@ -97,8 +97,8 @@ async function runProbe(
       return { probeId: probe.id, category: probe.category, name: probe.name, pass: false, reason: "Endpoint unavailable — response came from fallback provider." };
     }
 
-    // Extract tool calls from response (provider-specific parsing)
-    const toolCalls = (result as Record<string, unknown>).toolCalls as unknown[] | undefined;
+    // Extract tool calls from response
+    const toolCalls = result.toolCalls as unknown[] | undefined;
 
     const assertionResult = probe.assert(result.content, toolCalls);
     return { probeId: probe.id, category: probe.category, name: probe.name, ...assertionResult };
@@ -120,9 +120,9 @@ async function runScenario(
     const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 
     const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
-    const result = await callWithFailover(messages, systemPrompt, promptInput.sensitivity, {
+    const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
       ...(scenarioToolsFormatted ? { tools: scenarioToolsFormatted } : {}),
-      modelRequirements: { preferredProviderId: providerId },
+      preferredProviderId: providerId,
     });
 
     if (result.downgraded) {
@@ -234,11 +234,7 @@ export async function runEndpointTests(opts: {
       },
     });
 
-    // Run probes against this model's provider
-    // Note: callWithFailover targets the provider; within a provider, it uses the
-    // model resolved from the priority list. For single-model providers (most cases),
-    // this is deterministic. For multi-model providers (Ollama), the top-ranked model
-    // is used. Future: pass modelId directly to force a specific model.
+    // Run probes against this model's provider via V2 routing with preferred provider bias.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
       const result = await runProbe(probe, providerId);

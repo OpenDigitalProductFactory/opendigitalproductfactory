@@ -7,10 +7,10 @@ import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import { resolveAgentForRoute, generateCannedResponse } from "@/lib/agent-routing";
 import { serializeMessage } from "@/lib/agent-coworker-data";
 import {
-  callWithFailover,
   NoAllowedProvidersForSensitivityError,
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
+import { NoEligibleEndpointsError } from "@/lib/routed-inference";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
@@ -27,16 +27,6 @@ import { deleteAttachmentsForThread } from "@/lib/file-upload";
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
-import {
-  loadEndpointManifests,
-  loadTaskRequirement,
-  loadPolicyRules,
-  loadOverrides,
-  routeEndpoint,
-  persistRouteDecision,
-  inferContract,
-  routeEndpointV2,
-} from "@/lib/routing";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
@@ -458,109 +448,34 @@ export async function sendMessage(input: {
     ...(dbAgent?.preferredProviderId ? { preferredProviderId: dbAgent.preferredProviderId } : {}),
   };
 
-  // --- Task classification and performance routing (unified mode only) ---
-  let resolvedEndpointId: string | undefined;
+  // --- Task classification and performance profile injection ---
+  // EP-INF-009b: Routing is handled by the agentic loop via routeAndCall().
+  // We classify here for metadata and performance profile instruction injection.
   let taskTypeId: string = "unknown";
-  let manifestRouteDecision: import("@/lib/routing/types").RouteDecision | undefined;
 
-  if (useUnified) {
-    // Classify the task
+  {
     const recentContent = chatHistory.slice(-3).map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
     const classification = classifyTask(trimmedContent, recentContent);
     taskTypeId = classification.taskType;
 
-    // Performance-weighted routing (only for confident classifications)
+    // Inject task-specific instructions from performance profile (if confident classification)
     if (classification.taskType !== "unknown" && classification.confidence >= 0.5) {
-      const profiles = await loadPerformanceProfiles(classification.taskType);
-      const routeCtx = resolveRouteContext(input.routeContext);
-
-      // ── EP-INF-005a: Contract-based routing (V2 primary, legacy fallback) ──
       try {
-        const [manifests, policies, epOverrides] = await Promise.all([
-          loadEndpointManifests(),
-          loadPolicyRules(),
-          loadOverrides(classification.taskType),
-        ]);
-
-        // Primary: contract-based routing (EP-INF-005a)
-        let manifestDecision: import("@/lib/routing/types").RouteDecision;
-        try {
-          const contract = await inferContract(
-            classification.taskType,
-            chatHistory,
-            toolsForProvider as Array<Record<string, unknown>> | undefined,
-            undefined, // outputSchema — not available in this context yet
-            {
-              sensitivity: routeCtx.sensitivity,
-              interactionMode: "sync",
-              requiresCodeExecution:
-                modelReqs?.requiredCapabilities?.includes("codeExecution")
-                || classification.requiresCodeExecution
-                || undefined,
-              requiresWebSearch:
-                modelReqs?.requiredCapabilities?.includes("webSearch")
-                || classification.requiresWebSearch
-                || undefined,
-              requiresComputerUse:
-                modelReqs?.requiredCapabilities?.includes("computerUse")
-                || classification.requiresComputerUse
-                || undefined,
-            },
-          );
-          manifestDecision = await routeEndpointV2(manifests, contract, policies, epOverrides);
-        } catch (v2Err) {
-          // Fallback: legacy routing
-          console.warn("[routing] V2 failed, falling back to legacy:", v2Err);
-          const taskReq = await loadTaskRequirement(classification.taskType);
-          manifestDecision = routeEndpoint(
-            manifests,
-            taskReq,
-            routeCtx.sensitivity,
-            policies,
-            epOverrides,
-          );
-        }
-
-        // Persist routing decision for audit trail
-        await persistRouteDecision(manifestDecision, undefined, false);
-
-        if (manifestDecision.selectedEndpoint) {
-          resolvedEndpointId = manifestDecision.selectedEndpoint;
-          manifestRouteDecision = manifestDecision;
-          console.log(
-            `[routing] ${classification.taskType}: ${manifestDecision.reason}`,
-          );
-
-          // Ensure performance profile exists for the selected endpoint
-          const taskTypeDef = getTaskType(classification.taskType);
-          if (taskTypeDef) {
-            await ensurePerformanceProfile(resolvedEndpointId, classification.taskType, taskTypeDef.defaultInstructions);
-          }
-
-          // Inject task-specific instructions from performance profile
-          const profile = profiles.find((p) => p.endpointId === resolvedEndpointId);
-          if (profile?.currentInstructions) {
-            populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
-          }
-        } else {
-          console.warn(
-            `[routing] ${classification.taskType}: no eligible endpoint — falling back to legacy. ${manifestDecision.reason}`,
-          );
+        const profiles = await loadPerformanceProfiles(classification.taskType);
+        // Find the best performance profile to inject guidance from
+        const profile = profiles[0];
+        if (profile?.currentInstructions) {
+          populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
         }
       } catch (err) {
-        console.error("[routing] manifest router error, falling back to legacy:", err);
+        console.error("[routing] performance profile load error:", err);
       }
-    }
-
-    // Apply resolved endpoint as preferred provider
-    if (resolvedEndpointId) {
-      modelReqs.preferredProviderId = resolvedEndpointId;
     }
   }
 
   try {
     // ── Agentic execution loop ──────────────────────────────────────────────
-    // Agent calls tools iteratively until it responds with text only (max 6 iterations).
+    // EP-INF-009b: The loop handles V2 routing internally via routeAndCall().
     const { runAgenticLoop } = await import("@/lib/agentic-loop");
     const { agentEventBus } = await import("@/lib/agent-event-bus");
     const agenticResult = await runAgenticLoop({
@@ -573,8 +488,8 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       agentId: agent.agentId,
       threadId: input.threadId,
+      taskType: taskTypeId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
-      ...(manifestRouteDecision ? { routeDecision: manifestRouteDecision } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });
 
@@ -591,8 +506,8 @@ export async function sendMessage(input: {
           content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
           agentId: agent.agentId, routeContext: input.routeContext,
           providerId: agenticResult.providerId,
-          taskType: useUnified ? taskTypeId : null,
-          routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
+          taskType: taskTypeId !== "unknown" ? taskTypeId : null,
+          routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
@@ -660,14 +575,16 @@ export async function sendMessage(input: {
       }
     }
   } catch (e) {
-    if (e instanceof NoAllowedProvidersForSensitivityError) {
+    if (e instanceof NoEligibleEndpointsError || e instanceof NoAllowedProvidersForSensitivityError) {
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
       const sysMsg = await prisma.agentMessage.create({
         data: {
           threadId: input.threadId,
           role: "system",
-          content: `The current page is marked ${agent.sensitivity}. No allowed AI provider is configured for that sensitivity, so the coworker switched to a local fallback response.`,
+          content: e instanceof NoEligibleEndpointsError
+            ? `No eligible AI endpoints for this task (${e.reason}). The coworker used a local fallback response.`
+            : `The current page is marked ${agent.sensitivity}. No allowed AI provider is configured for that sensitivity, so the coworker switched to a local fallback response.`,
           agentId: agent.agentId,
           routeContext: input.routeContext,
         },
@@ -754,8 +671,8 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       routeContext: input.routeContext,
       providerId: responseProviderId,
-      taskType: useUnified ? taskTypeId : null,
-      routedEndpointId: useUnified ? (resolvedEndpointId ?? null) : null,
+      taskType: taskTypeId !== "unknown" ? taskTypeId : null,
+      routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
     },
     select: {
       id: true,
@@ -786,8 +703,9 @@ export async function sendMessage(input: {
   }).catch(() => {});
 
   // Fire-and-forget: process observer
-  const mainMeta: RoutingMeta | undefined = (useUnified && resolvedEndpointId) ? {
-    endpointId: resolvedEndpointId,
+  // EP-INF-009b: endpoint is resolved per-iteration by routeAndCall; use providerId from result
+  const mainMeta: RoutingMeta | undefined = (taskTypeId !== "unknown" && responseProviderId) ? {
+    endpointId: responseProviderId,
     taskType: taskTypeId,
     sensitivity: resolveRouteContext(input.routeContext).sensitivity,
     userMessage: trimmedContent,

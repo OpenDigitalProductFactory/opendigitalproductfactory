@@ -2,7 +2,8 @@
 // Orchestrates code generation inside a sandbox container.
 
 import { execInSandbox } from "@/lib/sandbox";
-import { getProviderPriority, callWithFailover } from "@/lib/ai-provider-priority";
+import { getProviderPriority } from "@/lib/ai-provider-priority";
+import { routeAndCall } from "@/lib/routed-inference";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 import type { AgentEvent } from "@/lib/agent-event-bus";
 
@@ -191,11 +192,11 @@ export async function executeBuildPlan(params: {
   let providerId: string;
   let modelId: string;
   try {
-    const result = await callWithFailover(
+    const result = await routeAndCall(
       [{ role: "user", content: prompt }],
       "You are a code generation agent. Output file contents in the specified format. Do not explain — just write code.",
       "internal",
-      { task: "code_generation" },
+      { taskType: "code_generation" },
     );
     llmResponse = result.content;
     providerId = result.providerId;

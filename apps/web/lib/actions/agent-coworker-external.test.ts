@@ -18,9 +18,12 @@ vi.mock("@/lib/agent-routing", () => ({
 }));
 
 vi.mock("@/lib/ai-provider-priority", () => ({
-  callWithFailover: vi.fn(),
   NoAllowedProvidersForSensitivityError: class extends Error {},
   NoProvidersAvailableError: class extends Error {},
+}));
+
+vi.mock("@/lib/routed-inference", () => ({
+  routeAndCall: vi.fn(),
 }));
 
 vi.mock("@/lib/ai-inference", () => ({
@@ -43,6 +46,15 @@ vi.mock("@/lib/route-context", () => ({
 
 vi.mock("@/lib/process-observer-hook", () => ({
   observeConversation: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/task-classifier", () => ({
+  classifyTask: vi.fn().mockReturnValue({ taskType: "conversation", confidence: 0.8, requiresCodeExecution: false, requiresWebSearch: false, requiresComputerUse: false }),
+}));
+
+vi.mock("@/lib/agent-router-data", () => ({
+  loadPerformanceProfiles: vi.fn().mockResolvedValue([]),
+  ensurePerformanceProfile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/feature-build-data", () => ({
@@ -103,14 +115,14 @@ vi.mock("@dpf/db", () => ({
 
 import { auth } from "@/lib/auth";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
-import { callWithFailover } from "@/lib/ai-provider-priority";
+import { routeAndCall } from "@/lib/routed-inference";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockResolveAgentForRoute = resolveAgentForRoute as ReturnType<typeof vi.fn>;
-const mockCallWithFailover = callWithFailover as ReturnType<typeof vi.fn>;
+const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
 const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
@@ -162,12 +174,16 @@ describe("agent coworker external access", () => {
 
   it("passes external access state into available tool filtering", async () => {
     mockGetAvailableTools.mockReturnValue([]);
-    mockCallWithFailover.mockResolvedValue({
+    mockRouteAndCall.mockResolvedValue({
       content: "No tools used.",
       providerId: "ollama-local",
+      modelId: "llama3.1",
       inputTokens: 1,
       outputTokens: 1,
-      inferenceMs: 10,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
     });
 
     await sendMessage({
@@ -197,13 +213,16 @@ describe("agent coworker external access", () => {
         executionMode: "immediate",
       },
     ]);
-    mockCallWithFailover
+    mockRouteAndCall
       .mockResolvedValueOnce({
         content: "",
         providerId: "ollama-local",
+        modelId: "llama3.1",
         inputTokens: 1,
         outputTokens: 1,
-        inferenceMs: 10,
+        downgraded: false,
+        downgradeMessage: null,
+        routeDecision: {},
         toolCalls: [
           {
             id: "mock_id",
@@ -228,9 +247,12 @@ describe("agent coworker external access", () => {
           "```",
         ].join("\n"),
         providerId: "ollama-local",
+        modelId: "llama3.1",
         inputTokens: 1,
         outputTokens: 1,
-        inferenceMs: 10,
+        downgraded: false,
+        downgradeMessage: null,
+        routeDecision: {},
         toolCalls: [],
       });
     mockExecuteTool.mockResolvedValue({

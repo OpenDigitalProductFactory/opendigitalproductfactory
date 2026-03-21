@@ -1332,9 +1332,9 @@ export async function executeTool(
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
       const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
-      const { callWithFailover } = await import("@/lib/ai-provider-priority");
-      const llmResult = await callWithFailover(
-        [{ role: "user", content: prompt }], "You are a design reviewer.", "internal", {},
+      const { routeAndCall } = await import("@/lib/routed-inference");
+      const llmResult = await routeAndCall(
+        [{ role: "user", content: prompt }], "You are a design reviewer.", "internal",
       );
       const review = parseReviewResponse(llmResult.content);
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
@@ -1351,9 +1351,9 @@ export async function executeTool(
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const { buildPlanReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
       const prompt = buildPlanReviewPrompt(build.buildPlan as Parameters<typeof buildPlanReviewPrompt>[0]);
-      const { callWithFailover } = await import("@/lib/ai-provider-priority");
-      const llmResult = await callWithFailover(
-        [{ role: "user", content: prompt }], "You are a plan reviewer.", "internal", {},
+      const { routeAndCall } = await import("@/lib/routed-inference");
+      const llmResult = await routeAndCall(
+        [{ role: "user", content: prompt }], "You are a plan reviewer.", "internal",
       );
       const review = parseReviewResponse(llmResult.content);
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
