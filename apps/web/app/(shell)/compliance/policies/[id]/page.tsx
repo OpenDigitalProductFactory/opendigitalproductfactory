@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { transitionPolicyStatus } from "@/lib/actions/policy";
 import { EditPolicyForm } from "@/components/compliance/EditPolicyForm";
+import { LinkPolicyObligationForm } from "@/components/compliance/LinkPolicyObligationForm";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -45,7 +46,13 @@ export default async function PolicyDetailPage({ params }: Props) {
     include: {
       ownerEmployee: { select: { displayName: true } },
       approvedBy: { select: { displayName: true } },
-      obligation: { select: { id: true, title: true } },
+      obligationLinks: {
+        include: {
+          obligation: {
+            include: { regulation: { select: { id: true, shortName: true, sourceType: true } } },
+          },
+        },
+      },
       requirements: {
         where: { status: "active" },
         include: {
@@ -61,6 +68,11 @@ export default async function PolicyDetailPage({ params }: Props) {
     },
   });
   if (!policy) notFound();
+
+  const allObligations = await prisma.obligation.findMany({
+    where: { status: "active" },
+    select: { id: true, title: true, reference: true, regulation: { select: { shortName: true, sourceType: true } } },
+  });
 
   const totalEmployees = await prisma.employeeProfile.count({ where: { status: "active" } });
   const availableTransitions = VALID_TRANSITIONS[policy.lifecycleStatus] ?? [];
@@ -132,14 +144,35 @@ export default async function PolicyDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* Obligation link */}
-      {policy.obligation ? (
-        <p className="text-xs text-blue-400 mb-6">
-          Linked to obligation: <a href={`/compliance/obligations/${policy.obligation.id}`} className="underline">{policy.obligation.title}</a>
-        </p>
-      ) : (
-        <p className="text-xs text-[var(--dpf-muted)] mb-6">Not linked to a regulation or standard.</p>
-      )}
+      {/* Linked Obligations */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest">
+            Linked Obligations ({policy.obligationLinks.length})
+          </h2>
+          <LinkPolicyObligationForm
+            policyId={policy.id}
+            linkedObligationIds={policy.obligationLinks.map((l: any) => l.obligationId)}
+            availableObligations={allObligations}
+          />
+        </div>
+        {policy.obligationLinks.length > 0 ? (
+          <div className="space-y-1">
+            {policy.obligationLinks.map((link: any) => (
+              <div key={link.id} className="flex items-center gap-2 text-xs">
+                <span className="px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
+                  {link.obligation.regulation?.shortName ?? "—"}
+                </span>
+                <a href={`/compliance/obligations/${link.obligation.id}`} className="text-[var(--dpf-accent)] hover:underline">
+                  {link.obligation.title}
+                </a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--dpf-muted)]">No obligations linked yet.</p>
+        )}
+      </div>
 
       {/* Requirements */}
       <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
