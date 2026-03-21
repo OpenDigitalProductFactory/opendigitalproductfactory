@@ -51,6 +51,7 @@ model User {
   billApprovals                BillApproval[]           @relation("BillApprovalResponses")
   recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
   expenseApprovals             ExpenseClaim[]           @relation("ExpenseApprovals")
+  platformSetupProgress        PlatformSetupProgress?   @relation("UserSetupProgress")
 }
 
 model UserGroup {
@@ -822,6 +823,7 @@ model ModelProvider {
   supportsStructuredOutput Boolean        @default(false)
   supportsToolUse          Boolean        @default(false)
   toolFidelity             Int            @default(50)
+  userFacingDescription    Json?
   modelProfiles            ModelProfile[]
 }
 
@@ -1394,8 +1396,25 @@ model Organization {
   logoUrl          String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
-  brandingConfig   BrandingConfig?
-  storefrontConfig StorefrontConfig?
+  brandingConfig        BrandingConfig?
+  storefrontConfig      StorefrontConfig?
+  platformSetupProgress PlatformSetupProgress? @relation("OrgSetupProgress")
+}
+
+model PlatformSetupProgress {
+  id             String        @id @default(cuid())
+  userId         String?       @unique
+  organizationId String?       @unique
+  currentStep    String        @default("business-identity")
+  steps          Json          @default("{}")
+  context        Json          @default("{}")
+  pausedAt       DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user         User?         @relation("UserSetupProgress", fields: [userId], references: [id])
+  organization Organization? @relation("OrgSetupProgress", fields: [organizationId], references: [id])
 }
 
 model RuntimeAdvisory {
@@ -3372,6 +3391,38 @@ model McpCatalogSync {
   error             String?   @db.Text
 
   @@index([startedAt])
+}
+
+// ─── EP-INF-009d: Async/Long-Running Inference Operations ──────────
+
+model AsyncInferenceOp {
+  id              String    @id @default(cuid())
+  providerId      String
+  modelId         String
+  operationId     String?                         // Provider's operation/interaction ID
+  contractFamily  String
+  requestContext  Json                             // Serialized request params
+
+  status          String    @default("pending")   // pending | running | completed | failed | cancelled | expired
+
+  resultText      String?   @db.Text              // Final text result
+  resultData      Json?                            // Full structured result
+  errorMessage    String?   @db.Text
+
+  progressPct     Int?                             // 0-100
+  progressMessage String?
+
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime                         // Hard deadline
+
+  threadId        String?                          // Event bus key for SSE progress
+  callerContext   Json?                            // Opaque caller context
+
+  @@index([status])
+  @@index([providerId, status])
+  @@index([threadId])
 }
 
 // ─── Finance: Invoicing & Payments ─────────────────────────────────
