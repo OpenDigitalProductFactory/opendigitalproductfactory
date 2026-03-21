@@ -34,6 +34,8 @@ export interface RoutedInferenceResult {
   outputTokens: number;
   downgraded: boolean;
   downgradeMessage: string | null;
+  /** True when tools were stripped due to capability degradation (local model). */
+  toolsStripped: boolean;
   /** The V2 route decision that selected this endpoint (for audit/metadata). */
   routeDecision: RouteDecision;
   /** EP-INF-009d: Set when interactionMode is "background". Poll via pollAsyncOperation(). */
@@ -259,6 +261,7 @@ export async function routeAndCall(
         outputTokens: 0,
         downgraded: false,
         downgradeMessage: null,
+        toolsStripped,
         routeDecision: decision,
         asyncOperationId: asyncOpId,
       };
@@ -274,6 +277,7 @@ export async function routeAndCall(
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
+      toolsStripped,
       routeDecision: decision,
     };
   }
@@ -297,6 +301,7 @@ export async function routeAndCall(
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     downgraded: result.downgraded,
     downgradeMessage: result.downgradeMessage,
+    toolsStripped,
     routeDecision: decision,
   };
 }
