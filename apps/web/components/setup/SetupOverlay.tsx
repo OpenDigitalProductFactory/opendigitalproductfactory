@@ -58,9 +58,8 @@ export function SetupOverlay({ progressId, currentStep, steps }: Props) {
   const [isPending, startTransition] = useTransition();
 
   // Auto-open the coworker panel with a pre-written welcome for this step.
-  // Uses welcomeMessage (not autoMessage) — no LLM call, just injects the
-  // text directly as an assistant message. Small delay ensures the panel
-  // component is mounted before the event fires.
+  // Fires on step change AND pathname change — so the welcome re-appears
+  // when the user navigates within a step (e.g., provider detail → back).
   useEffect(() => {
     const welcome = STEP_WELCOME[currentStep];
     if (!welcome) return;
@@ -72,7 +71,7 @@ export function SetupOverlay({ progressId, currentStep, steps }: Props) {
       );
     }, 300);
     return () => clearTimeout(timer);
-  }, [currentStep]);
+  }, [currentStep, pathname]);
 
   const navigateToStep = (step: string, completed?: boolean) => {
     if (completed) {
@@ -121,6 +120,16 @@ export function SetupOverlay({ progressId, currentStep, steps }: Props) {
   // Check if this is the last step
   const currentIdx = SETUP_STEPS.indexOf(currentStep as SetupStep);
   const isLastStep = currentIdx === SETUP_STEPS.length - 1;
+
+  // Signal to the coworker panel that setup is active
+  useEffect(() => {
+    document.documentElement.setAttribute("data-setup-active", "true");
+    document.documentElement.setAttribute("data-setup-last-step", isLastStep ? "true" : "false");
+    return () => {
+      document.documentElement.removeAttribute("data-setup-active");
+      document.documentElement.removeAttribute("data-setup-last-step");
+    };
+  }, [isLastStep]);
 
   // Listen for setup action clicks from the coworker panel
   useEffect(() => {
