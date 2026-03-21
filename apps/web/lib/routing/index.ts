@@ -56,3 +56,9 @@ export type { RequestContract } from "./request-contract";
 export { inferContract } from "./request-contract";
 export { estimateCost, estimateSuccessProbability, rankByCostPerSuccess } from "./cost-ranking";
 export { routeEndpointV2 } from "./pipeline-v2";
+
+// EP-INF-005b: Execution recipes
+export type { RoutedExecutionPlan, RecipeRow } from "./recipe-types";
+export { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
+export { buildSeedRecipe } from "./recipe-seeder";
+export { loadChampionRecipe } from "./recipe-loader";
