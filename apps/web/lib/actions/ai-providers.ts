@@ -291,6 +291,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
+  } else if (provider.authMethod === "oauth2_authorization_code") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
   }
   // authMethod === "none" → no headers needed
 

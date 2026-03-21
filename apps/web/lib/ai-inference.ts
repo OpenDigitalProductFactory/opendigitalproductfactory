@@ -3,8 +3,16 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
-import { decryptSecret } from "@/lib/credential-crypto";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
+import {
+  getDecryptedCredential,
+  getProviderExtraHeaders,
+  getProviderBearerToken,
+  isAnthropicProvider,
+  isAnthropicOAuthToken,
+  getClaudeCodeOAuthToken,
+  ANTHROPIC_OAUTH_BETA_HEADERS,
+} from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "./routing/recipe-types";
 import { getExecutionAdapter } from "./routing/execution-adapter-registry";
 import "./routing/chat-adapter"; // side-effect: registers "chat" adapter
@@ -83,110 +91,6 @@ export function classifyHttpError(
   return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers);
 }
 
-// ─── Auth Helpers (extracted from actions/ai-providers.ts) ───────────────────
-
-export async function getDecryptedCredential(providerId: string) {
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (!cred) return null;
-  return {
-    ...cred,
-    secretRef:    cred.secretRef    ? decryptSecret(cred.secretRef)    : null,
-    clientSecret: cred.clientSecret ? decryptSecret(cred.clientSecret) : null,
-  };
-}
-
-function isAnthropicProvider(providerId: string): boolean {
-  return providerId === "anthropic" || providerId.startsWith("anthropic-");
-}
-
-export function getProviderExtraHeaders(providerId: string): Record<string, string> {
-  if (isAnthropicProvider(providerId)) return { "anthropic-version": "2023-06-01" };
-  return {};
-}
-
-/** Detect if an Anthropic key is a subscription OAuth token (from `claude setup-token`) */
-export function isAnthropicOAuthToken(apiKey: string): boolean {
-  return apiKey.includes("sk-ant-oat");
-}
-
-/**
- * Beta header required for Anthropic subscription (OAuth) token inference.
- * Only `oauth-2025-04-20` is needed here — `claude-code-20250219` is for Claude Code
- * agentic features and causes HTTP 400 on non-agentic calls (e.g. evals, Haiku).
- */
-export const ANTHROPIC_OAUTH_BETA_HEADERS = "oauth-2025-04-20";
-
-/**
- * Read the current access token from Claude Code's local credentials file.
- * OAuth access tokens are short-lived; Claude Code auto-refreshes them.
- * This keeps the platform in sync without manual re-entry.
- */
-function getClaudeCodeOAuthToken(): string | null {
-  try {
-    const os = require("os");
-    const fs = require("fs");
-    const path = require("path");
-    const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
-    const raw = fs.readFileSync(credPath, "utf-8");
-    const creds = JSON.parse(raw);
-    const oauth = creds?.claudeAiOauth;
-    if (!oauth?.accessToken) return null;
-    // Check expiry (5-minute buffer)
-    if (oauth.expiresAt && oauth.expiresAt < Date.now() + 5 * 60 * 1000) {
-      console.warn("[getClaudeCodeOAuthToken] Token expired or expiring soon");
-      return null;
-    }
-    return oauth.accessToken;
-  } catch {
-    return null;
-  }
-}
-
-export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
-  const credential = await getDecryptedCredential(providerId);
-  if (!credential) return { error: "No credential configured" };
-  if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
-    return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
-  }
-
-  // Return cached token if still valid (5-minute buffer)
-  if (credential.cachedToken && credential.tokenExpiresAt) {
-    const buffer = 5 * 60 * 1000;
-    if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
-      return { token: credential.cachedToken };
-    }
-  }
-
-  const params = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: credential.clientId,
-    client_secret: credential.clientSecret,
-    ...(credential.scope ? { scope: credential.scope } : {}),
-  });
-
-  try {
-    const res = await fetch(credential.tokenEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return { error: `Token exchange failed: HTTP ${res.status}` };
-
-    const body = await res.json() as { access_token: string; expires_in: number };
-    const expiresAt = new Date(Date.now() + body.expires_in * 1000);
-
-    await prisma.credentialEntry.update({
-      where: { providerId },
-      data: { cachedToken: body.access_token, tokenExpiresAt: expiresAt, status: "ok" },
-    });
-
-    return { token: body.access_token };
-  } catch (e) {
-    return { error: `Token exchange error: ${e instanceof Error ? e.message : String(e)}` };
-  }
-}
-
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
 
 async function buildAuthHeaders(
@@ -213,6 +117,10 @@ async function buildAuthHeaders(
       headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
     }
   } else if (authMethod === "oauth2_client_credentials") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
+  } else if (authMethod === "oauth2_authorization_code") {
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
@@ -328,6 +236,7 @@ export async function callProvider(
   };
 
   // 3. Dispatch to adapter
+  console.log(`[callProvider] ${providerId}/${modelId} adapter=${effectivePlan.executionAdapter} maxTokens=${effectivePlan.maxTokens}`);
   const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
   const result = await adapter.execute({
     providerId,

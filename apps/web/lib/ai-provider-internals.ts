@@ -5,7 +5,7 @@
 // by the server actions in ai-providers.ts (which add auth guards).
 
 import { prisma, type Prisma } from "@dpf/db";
-import { decryptSecret } from "@/lib/credential-crypto";
+import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import {
   computeTokenCost,
   computeComputeCost,
@@ -24,6 +24,8 @@ export async function getDecryptedCredential(providerId: string) {
     ...cred,
     secretRef:    cred.secretRef    ? decryptSecret(cred.secretRef)    : null,
     clientSecret: cred.clientSecret ? decryptSecret(cred.clientSecret) : null,
+    cachedToken:  cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null,
+    refreshToken: cred.refreshToken ? decryptSecret(cred.refreshToken) : null,
   };
 }
 
@@ -42,8 +44,12 @@ export function isAnthropicOAuthToken(apiKey: string): boolean {
   return apiKey.includes("sk-ant-oat");
 }
 
-/** Beta headers required for Anthropic subscription token auth */
-export const ANTHROPIC_OAUTH_BETA_HEADERS = "claude-code-20250219,oauth-2025-04-20";
+/**
+ * Beta header required for Anthropic subscription (OAuth) token inference.
+ * Only `oauth-2025-04-20` is needed — `claude-code-20250219` is for Claude Code
+ * agentic features and causes HTTP 400 on non-agentic calls (e.g. evals, Haiku).
+ */
+export const ANTHROPIC_OAUTH_BETA_HEADERS = "oauth-2025-04-20";
 
 type TokenUsage = {
   inputTokens: number | undefined;
@@ -75,8 +81,55 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
   };
 }
 
-/** OAuth token exchange — obtain or refresh bearer token for a provider. */
+/**
+ * Read the current access token from Claude Code's local credentials file.
+ * OAuth access tokens are short-lived; Claude Code auto-refreshes them.
+ * This keeps the platform in sync without manual re-entry.
+ */
+export function getClaudeCodeOAuthToken(): string | null {
+  try {
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+    const raw = fs.readFileSync(credPath, "utf-8");
+    const creds = JSON.parse(raw);
+    const oauth = creds?.claudeAiOauth;
+    if (!oauth?.accessToken) return null;
+    // Check expiry (5-minute buffer)
+    if (oauth.expiresAt && oauth.expiresAt < Date.now() + 5 * 60 * 1000) {
+      console.warn("[getClaudeCodeOAuthToken] Token expired or expiring soon");
+      return null;
+    }
+    return oauth.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+/** OAuth token exchange — obtain or refresh bearer token for a provider.
+ *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
+ *  oauth2_client_credentials uses the client_credentials grant.
+ */
 export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  if (!provider) return { error: "Provider not found" };
+
+  if (provider.authMethod === "oauth2_authorization_code") {
+    const { refreshOAuthToken } = await import("@/lib/provider-oauth");
+    const credential = await getDecryptedCredential(providerId);
+    if (!credential) return { error: "No credential configured" };
+
+    if (credential.cachedToken && credential.tokenExpiresAt) {
+      const buffer = 5 * 60 * 1000;
+      if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
+        return { token: credential.cachedToken };
+      }
+    }
+    return refreshOAuthToken(providerId);
+  }
+
+  // Existing client_credentials flow
   const credential = await getDecryptedCredential(providerId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
@@ -113,7 +166,11 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
 
     await prisma.credentialEntry.update({
       where: { providerId },
-      data: { cachedToken: body.access_token, tokenExpiresAt: expiresAt, status: "ok" },
+      data: {
+        cachedToken: encryptSecret(body.access_token),
+        tokenExpiresAt: expiresAt,
+        status: "ok",
+      },
     });
 
     return { token: body.access_token };
@@ -153,6 +210,10 @@ export async function discoverModelsInternal(
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) return { discovered: 0, newCount: 0, error: tokenResult.error };
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
+  } else if (provider.authMethod === "oauth2_authorization_code") {
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) return { discovered: 0, newCount: 0, error: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
