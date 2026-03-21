@@ -6,6 +6,8 @@ import { prisma } from "@dpf/db";
 import { decryptSecret } from "@/lib/credential-crypto";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import type { RoutedExecutionPlan } from "./routing/recipe-types";
+import { getExecutionAdapter } from "./routing/execution-adapter-registry";
+import "./routing/chat-adapter"; // side-effect: registers "chat" adapter
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -305,159 +307,45 @@ export async function callProvider(
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
 ): Promise<InferenceResult> {
+  // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
-
   const baseUrl = provider.baseUrl ?? provider.endpoint;
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
-
   const headers = await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
-  // Build provider-specific request
-  let chatUrl: string;
-  let body: Record<string, unknown>;
-  let extractText: (data: Record<string, unknown>) => string;
-
-  if (providerId === "anthropic" || providerId.startsWith("anthropic-")) {
-    // Anthropic (including anthropic-sub): system prompt is a separate param
-    chatUrl = `${baseUrl}/messages`;
-    body = {
-      model: modelId,
-      max_tokens: plan?.maxTokens ?? 4096,
-      system: systemPrompt,
-      messages: messages
-        .filter((m) => m.role !== "system")
-        .map((m) => formatMessageForAnthropic(m)),
-    };
-    // EP-INF-005b: Apply execution plan provider settings
-    if (plan?.providerSettings?.thinking) {
-      (body as any).thinking = plan.providerSettings.thinking;
-    }
-    if (plan?.temperature !== undefined) {
-      (body as any).temperature = plan.temperature;
-    }
-    // Anthropic tools use { name, description, input_schema } format (not OpenAI's { type: "function", function: {...} })
-    if (tools && tools.length > 0) {
-      body.tools = tools.map((t) => {
-        const fn = (t as { function?: { name?: string; description?: string; parameters?: unknown } }).function;
-        return fn ? { name: fn.name, description: fn.description, input_schema: fn.parameters } : t;
-      });
-    }
-    extractText = (d) => {
-      const content = d.content as Array<{ type?: string; text?: string }> | undefined;
-      // Anthropic returns text blocks and tool_use blocks in the same content array
-      return content?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("") ?? "";
-    };
-  } else if (providerId === "gemini") {
-    // Gemini: system as first user content, then alternating user/model turns
-    chatUrl = `${baseUrl}/models/${modelId}:generateContent`;
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
-    if (systemPrompt) {
-      contents.push({ role: "user", parts: [{ text: systemPrompt }] });
-      contents.push({ role: "model", parts: [{ text: "Understood. I will follow these instructions." }] });
-    }
-    for (const m of messages) {
-      if (m.role === "tool") continue; // Gemini doesn't support tool role — skip
-      const textContent = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-      contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: textContent }] });
-    }
-    body = { contents };
-    // EP-INF-005b: Apply execution plan parameters for Gemini
-    if (plan?.maxTokens) {
-      (body as any).generationConfig = { ...(body as any).generationConfig, maxOutputTokens: plan.maxTokens };
-    }
-    if (plan?.temperature !== undefined) {
-      (body as any).generationConfig = { ...(body as any).generationConfig, temperature: plan.temperature };
-    }
-    extractText = (d) => {
-      const candidates = d.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined;
-      return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    };
-  } else {
-    // OpenAI-compatible: system prompt prepended to messages array
-    // Covers: openai, azure-openai, ollama, groq, together, fireworks, xai, mistral, cohere (v2), deepseek, openrouter, litellm, portkey, martian
-    const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-    chatUrl = `${apiBase}/chat/completions`;
-    const allMessages = [
-      { role: "system" as const, content: systemPrompt },
-      ...messages.map((m) => formatMessageForOpenAI(m)),
-    ];
-    body = { model: modelId, messages: allMessages, max_tokens: plan?.maxTokens ?? 4096, keep_alive: -1 };
-    // EP-INF-005b: Apply execution plan parameters for OpenAI-compatible
-    if (plan?.temperature !== undefined) (body as any).temperature = plan.temperature;
-    if (plan?.providerSettings?.reasoning_effort) (body as any).reasoning_effort = plan.providerSettings.reasoning_effort;
-    if (plan?.toolPolicy?.toolChoice && tools && tools.length > 0) {
-      (body as any).tool_choice = plan.toolPolicy.toolChoice;
-    }
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-    }
-    extractText = (d) => {
-      const msg = (d.choices as Array<{ message?: { content?: string; reasoning?: string; tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
-      // Some models (qwen3) use chain-of-thought: content has the answer, reasoning has the thinking
-      // If content is empty but reasoning exists, the model may not have finished thinking within token limit
-      return msg?.content || msg?.reasoning || "";
-    };
-  }
-
-  const startMs = Date.now();
-  let res: Response;
-  try {
-    res = await fetch(chatUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(180_000), // 3min — local models need time to load on first call
-    });
-  } catch (e) {
-    throw new InferenceError(
-      `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
-      "network",
-      providerId,
-    );
-  }
-  const inferenceMs = Date.now() - startMs;
-
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    throw classifyHttpError(res.status, providerId, errBody, res.headers);
-  }
-
-  const data = await res.json() as Record<string, unknown>;
-  const usage = typeof data.usage === "object" && data.usage !== null
-    ? data.usage as Record<string, unknown>
-    : {};
-
-  const readUsageNumber = (...keys: string[]): number => {
-    for (const key of keys) {
-      const value = usage[key];
-      if (typeof value === "number") return value;
-    }
-    return 0;
+  // 2. Build minimal plan if none provided (backward compat)
+  const effectivePlan: RoutedExecutionPlan = plan ?? {
+    providerId,
+    modelId,
+    recipeId: null,
+    contractFamily: "unknown",
+    executionAdapter: "chat",
+    maxTokens: 4096,
+    providerSettings: {},
+    toolPolicy: {},
+    responsePolicy: {},
   };
 
-  // Extract tool calls from response (using shared helpers that preserve IDs)
-  let toolCalls: InferenceResult["toolCalls"];
+  // 3. Dispatch to adapter
+  const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
+  const result = await adapter.execute({
+    providerId,
+    modelId,
+    plan: effectivePlan,
+    provider: { baseUrl, headers },
+    messages,
+    systemPrompt,
+    tools,
+  });
 
-  if (providerId === "anthropic" || providerId.startsWith("anthropic-")) {
-    // Anthropic: tool_use blocks in the content array
-    const contentBlocks = data.content as Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
-    toolCalls = extractAnthropicToolCalls(contentBlocks ?? []);
-    if (toolCalls.length === 0) toolCalls = undefined;
-  } else {
-    // OpenAI-compatible: tool_calls in the message object
-    const rawMsg = (data.choices as Array<{ message?: { tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>)?.[0]?.message;
-    if (rawMsg?.tool_calls && rawMsg.tool_calls.length > 0) {
-      toolCalls = extractOpenAIToolCalls(rawMsg.tool_calls);
-    }
-  }
-
+  // 4. Map AdapterResult → InferenceResult
   return {
-    content: extractText(data),
-    inputTokens: readUsageNumber("input_tokens", "prompt_tokens"),
-    outputTokens: readUsageNumber("output_tokens", "completion_tokens"),
-    inferenceMs,
-    ...(toolCalls !== undefined && { toolCalls }),
+    content: result.text,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    inferenceMs: result.inferenceMs,
+    ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
   };
 }
 
