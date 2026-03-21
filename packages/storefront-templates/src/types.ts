@@ -45,6 +45,16 @@ export interface SectionTemplate {
   sortOrder: number;
 }
 
+export interface SchedulingDefaults {
+  schedulingPattern: "slot" | "class" | "recurring";
+  assignmentMode: "next-available" | "customer-choice";
+  defaultOperatingHours: { day: number; start: string; end: string }[];
+  defaultBeforeBuffer: number;
+  defaultAfterBuffer: number;
+  minimumNoticeHours: number;
+  maxAdvanceDays: number;
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -54,4 +64,5 @@ export interface ArchetypeDefinition {
   sectionTemplates: SectionTemplate[];
   formSchema: FormField[];
   tags: string[];
+  schedulingDefaults?: SchedulingDefaults;
 }

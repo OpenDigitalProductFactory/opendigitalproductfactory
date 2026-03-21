@@ -1,4 +1,14 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+const EDUCATION_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [1, 2, 3, 4, 5].map((day) => ({ day, start: "09:00", end: "18:00" })),
+  defaultBeforeBuffer: 5,
+  defaultAfterBuffer: 5,
+  minimumNoticeHours: 24,
+  maxAdvanceDays: 60,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -62,6 +72,7 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
       { name: "subject", label: "Subject", type: "select" as const, required: true, options: ["Maths", "English", "Science", "History", "Languages", "Other"] },
       { name: "examBoard", label: "Exam board (if applicable)", type: "text" as const, required: false },
     ],
+    schedulingDefaults: EDUCATION_SCHEDULING,
   },
   {
     archetypeId: "music-school",
@@ -90,6 +101,7 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
       { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Complete beginner", "Some experience", "Intermediate", "Advanced"] },
       { name: "studentAge", label: "Student age", type: "text" as const, required: false },
     ],
+    schedulingDefaults: EDUCATION_SCHEDULING,
   },
   {
     archetypeId: "driving-school",

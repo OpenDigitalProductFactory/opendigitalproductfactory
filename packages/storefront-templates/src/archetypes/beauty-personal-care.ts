@@ -1,4 +1,14 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+const BEAUTY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "09:00", end: "18:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 10,
+  minimumNoticeHours: 2,
+  maxAdvanceDays: 60,
+};
 
 const BOOKING_CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -35,6 +45,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "preferredStyle", label: "Preferred style", type: "select" as const, required: false, options: ["Classic", "Modern", "Edgy", "Natural", "Not sure"] },
       { name: "stylistPreference", label: "Stylist preference", type: "text" as const, required: false, placeholder: "Leave blank for any available" },
     ],
+    schedulingDefaults: BEAUTY_SCHEDULING,
   },
   {
     archetypeId: "barber-shop",
@@ -60,6 +71,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       ...BOOKING_CONTACT_FIELDS,
       { name: "barberPreference", label: "Barber preference", type: "text" as const, required: false, placeholder: "Leave blank for next available" },
     ],
+    schedulingDefaults: BEAUTY_SCHEDULING,
   },
   {
     archetypeId: "nail-salon",
@@ -86,6 +98,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       ...BOOKING_CONTACT_FIELDS,
       { name: "nailLength", label: "Nail length preference", type: "select" as const, required: false, options: ["Short", "Medium", "Long", "Extra long"] },
     ],
+    schedulingDefaults: BEAUTY_SCHEDULING,
   },
   {
     archetypeId: "beauty-spa",
@@ -114,6 +127,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "skinType", label: "Skin type", type: "select" as const, required: false, options: ["Normal", "Dry", "Oily", "Combination", "Sensitive"] },
       { name: "allergies", label: "Allergies or sensitivities", type: "textarea" as const, required: false },
     ],
+    schedulingDefaults: BEAUTY_SCHEDULING,
   },
   {
     archetypeId: "personal-trainer",
@@ -140,5 +154,6 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "fitnessGoal", label: "Fitness goal", type: "select" as const, required: true, options: ["Weight loss", "Muscle gain", "Endurance", "General fitness", "Sport-specific", "Rehabilitation"] },
       { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Beginner", "Intermediate", "Advanced"] },
     ],
+    schedulingDefaults: BEAUTY_SCHEDULING,
   },
 ];

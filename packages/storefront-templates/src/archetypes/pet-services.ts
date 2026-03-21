@@ -1,4 +1,14 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+const PET_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "next-available",
+  defaultOperatingHours: [1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "08:00", end: "18:00" })),
+  defaultBeforeBuffer: 5,
+  defaultAfterBuffer: 15,
+  minimumNoticeHours: 4,
+  maxAdvanceDays: 60,
+};
 
 const BOOKING_CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -41,6 +51,7 @@ export const petServicesArchetypes: ArchetypeDefinition[] = [
       ...PET_FIELDS,
       { name: "coatType", label: "Coat type", type: "select" as const, required: false, options: ["Short", "Medium", "Long", "Wire", "Curly", "Double coat"] },
     ],
+    schedulingDefaults: PET_SCHEDULING,
   },
   {
     archetypeId: "dog-walking",
@@ -67,6 +78,7 @@ export const petServicesArchetypes: ArchetypeDefinition[] = [
       ...PET_FIELDS,
       { name: "walkFrequency", label: "Walking frequency", type: "select" as const, required: false, options: ["One-off", "Daily", "Weekdays only", "A few times a week"] },
     ],
+    schedulingDefaults: PET_SCHEDULING,
   },
   {
     archetypeId: "pet-boarding",
@@ -95,5 +107,6 @@ export const petServicesArchetypes: ArchetypeDefinition[] = [
       { name: "checkInDate", label: "Check-in date", type: "text" as const, required: true, placeholder: "DD/MM/YYYY" },
       { name: "checkOutDate", label: "Check-out date", type: "text" as const, required: true, placeholder: "DD/MM/YYYY" },
     ],
+    schedulingDefaults: PET_SCHEDULING,
   },
 ];

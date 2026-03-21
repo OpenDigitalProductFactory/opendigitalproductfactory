@@ -28,4 +28,11 @@ describe("archetype catalog", () => {
       expect(sorted[0].type, `${a.archetypeId} hero should be first section`).toBe("hero");
     }
   });
+
+  it("all booking-type archetypes have schedulingDefaults", () => {
+    const bookingArchetypes = ALL_ARCHETYPES.filter((a) => a.ctaType === "booking");
+    for (const a of bookingArchetypes) {
+      expect(a.schedulingDefaults, `${a.archetypeId} missing schedulingDefaults`).toBeDefined();
+    }
+  });
 });
