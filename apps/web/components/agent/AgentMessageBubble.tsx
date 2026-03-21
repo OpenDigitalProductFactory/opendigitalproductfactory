@@ -51,8 +51,8 @@ function formatProposalParams(
     if (display.length > 120) display = display.slice(0, 117) + "...";
     return (
       <div key={k} style={{ marginBottom: 2 }}>
-        <span style={{ color: "#a0a0b8", fontWeight: 500 }}>{label}:</span>{" "}
-        <span style={{ color: "#d0d0e8" }}>{display}</span>
+        <span style={{ color: "var(--dpf-muted)", fontWeight: 500 }}>{label}:</span>{" "}
+        <span style={{ color: "var(--dpf-text)" }}>{display}</span>
       </div>
     );
   });
@@ -63,7 +63,7 @@ const MARKDOWN_COMPONENTS: Components = {
   ul: ({ children }) => <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ul>,
   ol: ({ children }) => <ol style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ol>,
   li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
-  strong: ({ children }) => <strong style={{ fontWeight: 700, color: "#ffffff" }}>{children}</strong>,
+  strong: ({ children }) => <strong style={{ fontWeight: 700, color: "var(--dpf-text)" }}>{children}</strong>,
   em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
   h1: ({ children }) => (
     <h1 style={{ margin: "0 0 8px 0", fontSize: 16, fontWeight: 700, lineHeight: 1.3 }}>{children}</h1>
@@ -80,7 +80,7 @@ const MARKDOWN_COMPONENTS: Components = {
       <code
         {...props}
         style={{
-          background: "rgba(255,255,255,0.08)",
+          background: "color-mix(in srgb, var(--dpf-text) 8%, transparent)",
           borderRadius: 4,
           padding: "1px 4px",
           fontSize: 12,
@@ -98,7 +98,7 @@ const MARKDOWN_COMPONENTS: Components = {
       style={{
         margin: "0 0 8px 0",
         padding: "8px 10px",
-        background: "rgba(0,0,0,0.22)",
+        background: "color-mix(in srgb, var(--dpf-bg) 22%, transparent)",
         borderRadius: 8,
         overflowX: "auto",
         fontSize: 12,
@@ -161,7 +161,7 @@ export function AgentMessageBubble({
       ? "rgba(74,222,128,0.4)"
       : isRejected || isFailed
         ? "rgba(239,68,68,0.4)"
-        : "rgba(124,140,248,0.4)";
+        : "color-mix(in srgb, var(--dpf-accent) 40%, transparent)";
 
     const actionLabel = p.actionType
       .replace(/_/g, " ")
@@ -177,19 +177,19 @@ export function AgentMessageBubble({
       return (
         <div style={{ marginBottom: 12 }}>
           {message.content && (
-            <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", fontSize: 13, lineHeight: 1.4, background: "rgba(22, 22, 37, 0.8)", color: "#e0e0ff", marginBottom: 6 }}>
+            <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", fontSize: 13, lineHeight: 1.4, background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)", color: "var(--dpf-text)", marginBottom: 6 }}>
               {message.content}
             </div>
           )}
           <div style={{
-            background: "rgba(26, 26, 46, 0.9)",
+            background: "color-mix(in srgb, var(--dpf-surface-2) 90%, transparent)",
             border: `1px solid ${borderColor}`,
             borderRadius: 10, padding: "10px 14px", fontSize: 12,
           }}>
-            <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, color: "var(--dpf-text)", marginBottom: 4 }}>
               Propose File Change
             </div>
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#7c8cf8", marginBottom: 4 }}>
+            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--dpf-accent)", marginBottom: 4 }}>
               {filePath}
             </div>
             <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8 }}>
@@ -197,15 +197,15 @@ export function AgentMessageBubble({
             </div>
             {diff && (
               <pre style={{
-                background: "#0d0d18", borderRadius: 6, padding: 8, fontSize: 10,
+                background: "var(--dpf-bg)", borderRadius: 6, padding: 8, fontSize: 10,
                 fontFamily: "monospace", lineHeight: 1.5, overflow: "auto", maxHeight: 300,
-                border: "1px solid #2a2a40", margin: "0 0 8px",
+                border: "1px solid var(--dpf-border)", margin: "0 0 8px",
               }}>
                 {diff.split("\n").map((line, i) => {
                   const colour = line.startsWith("+") && !line.startsWith("+++") ? "#4ade80"
                     : line.startsWith("-") && !line.startsWith("---") ? "#ef4444"
-                    : line.startsWith("@@") ? "#7c8cf8"
-                    : "#8888a0";
+                    : line.startsWith("@@") ? "var(--dpf-accent)"
+                    : "var(--dpf-muted)";
                   return (
                     <div key={i} style={{ color: colour }}>
                       {line}
@@ -257,8 +257,8 @@ export function AgentMessageBubble({
                 borderRadius: "12px 12px 12px 2px",
                 fontSize: 13,
                 lineHeight: 1.4,
-                background: "rgba(22, 22, 37, 0.8)",
-                color: "#e0e0ff",
+                background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
+                color: "var(--dpf-text)",
                 marginBottom: 6,
                 wordBreak: "break-word",
               }}
@@ -269,14 +269,14 @@ export function AgentMessageBubble({
           {/* Proposal card */}
           <div
             style={{
-              background: "rgba(26, 26, 46, 0.9)",
+              background: "color-mix(in srgb, var(--dpf-surface-2) 90%, transparent)",
               border: `1px solid ${borderColor}`,
               borderRadius: 10,
               padding: "10px 14px",
               fontSize: 12,
             }}
           >
-            <div style={{ fontWeight: 600, color: "#e0e0ff", marginBottom: 6 }}>
+            <div style={{ fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
               {actionLabel}
             </div>
             <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
@@ -360,8 +360,8 @@ export function AgentMessageBubble({
           borderRadius: isUser ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
           fontSize: 13,
           lineHeight: 1.5,
-          background: isUser ? "var(--dpf-accent)" : "rgba(22, 22, 37, 0.8)",
-          color: isUser ? "#ffffff" : "#e0e0ff",
+          background: isUser ? "var(--dpf-accent)" : "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
+          color: "var(--dpf-text)",
           wordBreak: "break-word",
           opacity: isUser && deliveryState === "sending" ? 0.74 : 1,
         }}
@@ -399,9 +399,9 @@ export function AgentMessageBubble({
               onClick={onRetry}
               style={{
                 background: "none",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
+                border: "1px solid color-mix(in srgb, var(--dpf-text) 12%, transparent)",
                 borderRadius: 999,
-                color: "#e0e0ff",
+                color: "var(--dpf-text)",
                 cursor: "pointer",
                 fontSize: 11,
                 lineHeight: 1,
