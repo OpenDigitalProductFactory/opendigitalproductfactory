@@ -8,6 +8,7 @@ import {
   parseModelsResponse,
   getBillingLabel,
 } from "./ai-provider-types";
+import { generatePKCE } from "./provider-oauth";
 
 describe("computeTokenCost", () => {
   it("returns 0 for zero tokens", () => {
@@ -189,5 +190,45 @@ describe("getBillingLabel", () => {
       inputPricePerMToken: 1.5,
       outputPricePerMToken: 6.0,
     })).toBe("Pay-per-use · $1.50/$6.00 per M tokens");
+  });
+});
+
+describe("generatePKCE", () => {
+  it("generates a code_verifier of correct length", () => {
+    const { codeVerifier, codeChallenge } = generatePKCE();
+    expect(codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("generates a code_challenge that differs from verifier", () => {
+    const { codeVerifier, codeChallenge } = generatePKCE();
+    expect(codeChallenge).not.toBe(codeVerifier);
+    expect(codeChallenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("generates unique values each call", () => {
+    const a = generatePKCE();
+    const b = generatePKCE();
+    expect(a.codeVerifier).not.toBe(b.codeVerifier);
+  });
+});
+
+describe("PKCE S256 compliance", () => {
+  it("code_challenge is SHA-256 of code_verifier in base64url", () => {
+    const { codeVerifier, codeChallenge } = generatePKCE();
+    const { createHash } = require("crypto");
+    const expectedChallenge = createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    expect(codeChallenge).toBe(expectedChallenge);
+  });
+
+  it("code_verifier uses only base64url characters (no +, /, =)", () => {
+    for (let i = 0; i < 10; i++) {
+      const { codeVerifier } = generatePKCE();
+      expect(codeVerifier).not.toMatch(/[+/=]/);
+    }
   });
 });
