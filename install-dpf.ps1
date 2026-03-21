@@ -140,8 +140,8 @@ if (-not (Is-StepDone "wsl2")) {
         Write-Warn "Windows needs to restart to finish setting up."
         Write-Host ""
         Write-Host "  After your computer restarts:" -ForegroundColor White
-        Write-Host "  1. Open PowerShell (search 'PowerShell' in the Start menu)"
-        Write-Host "  2. Run this command:  $DPF_DIR\install-dpf.ps1"
+        Write-Host "  1. Open the folder where you saved the installer"
+        Write-Host "  2. Double-click install-dpf.bat (or run it from a terminal)"
         Write-Host "  3. The installer will pick up where it left off"
         Write-Host ""
         Write-Host "  Restarting in 15 seconds... (press Ctrl+C to cancel)" -ForegroundColor Yellow
@@ -258,6 +258,8 @@ if (-not (Is-StepDone "download")) {
     # Copy convenience scripts to DPF root
     Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
     Copy-Item "$DPF_DIR\scripts\dpf-stop.ps1" "$DPF_DIR\dpf-stop.ps1" -ErrorAction SilentlyContinue
+    Copy-Item "$DPF_DIR\scripts\dpf-start.bat" "$DPF_DIR\dpf-start.bat" -ErrorAction SilentlyContinue
+    Copy-Item "$DPF_DIR\scripts\dpf-stop.bat" "$DPF_DIR\dpf-stop.bat" -ErrorAction SilentlyContinue
 
     # Add install directory to user PATH if not already there
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
