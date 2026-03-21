@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles } from "@/lib/ai-provider-data";
+import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { getInfraCIs } from "@dpf/db";
 import { getEndpointPerformance, getRoutingProfiles, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
@@ -11,12 +11,14 @@ import EndpointPerformancePanel from "@/components/platform/EndpointPerformanceP
 import RouteDecisionLog from "@/components/platform/RouteDecisionLog";
 import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
+import { RecipePanel } from "@/components/platform/RecipePanel";
+import { OAuthConnectionStatus } from "@/components/platform/OAuthConnectionStatus";
 
 type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
@@ -24,6 +26,8 @@ export default async function ProviderDetailPage({ params }: Props) {
     getEndpointPerformance(providerId),
     getRoutingProfiles(providerId),
     getRecentRouteDecisions(providerId),
+    getRecipesForProvider(providerId),
+    getModelClassCounts(providerId),
   ]);
   if (!pw) notFound();
 
@@ -65,6 +69,18 @@ export default async function ProviderDetailPage({ params }: Props) {
             </a>
           )}
         </div>
+        {/* Capability summary */}
+        {modelClassCounts.length > 0 && (
+          <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 6 }}>
+            Capabilities: {modelClassCounts.map((c, i) => (
+              <span key={c.modelClass}>
+                {i > 0 && " · "}
+                {c.modelClass === "chat" ? "Chat" : c.modelClass === "reasoning" ? "Reasoning" : c.modelClass.replace("_", " ")}
+                {" "}({c.count})
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {hardwareInfo && (
@@ -97,9 +113,21 @@ export default async function ProviderDetailPage({ params }: Props) {
       {pw.provider.endpointType === "service" ? (
         <McpServiceDetail provider={pw.provider} />
       ) : (
-        <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
-          <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
-        </div>
+        <>
+          {pw.credential && (
+            <OAuthConnectionStatus
+              credential={pw.credential}
+              authMethod={pw.provider.authMethod}
+              authorizeUrl={pw.provider.authorizeUrl ?? null}
+              providerId={pw.provider.providerId}
+            />
+          )}
+          <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
+            <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
+          </div>
+          {/* Execution Recipes */}
+          <RecipePanel recipes={recipes} />
+        </>
       )}
 
       <EndpointPerformancePanel

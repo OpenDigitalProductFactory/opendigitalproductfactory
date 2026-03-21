@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerDimensionEval } from "@/lib/actions/endpoint-performance";
 import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
+import { ModelClassBadge } from "./ModelClassBadge";
 
 // EP-INF-006: Routing profile data merged into ModelCard
 type RoutingProfileData = {
@@ -34,20 +35,6 @@ type Props = {
   endpointId?: string;
   onRunEval?: (modelId: string) => void;
 };
-
-// ── Model class colours ──────────────────────────────────────────────────────
-
-const MODEL_CLASS_COLOURS: Record<string, string> = {
-  chat:      "#38bdf8", // blue
-  reasoning: "#a78bfa", // purple
-  embedding: "#4ade80", // green
-  image_gen: "#fb923c", // orange
-  code:      "#2dd4bf", // teal
-};
-
-function modelClassColour(cls: string): string {
-  return MODEL_CLASS_COLOURS[cls] ?? "#8888a0";
-}
 
 // ── Metadata confidence colours ──────────────────────────────────────────────
 
@@ -260,8 +247,6 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
   if (profile !== null) {
     const caps = profile.capabilities as Record<string, unknown> | undefined;
     const pricingData = profile.pricing as Record<string, unknown> | undefined;
-    const classLabel = profile.modelClass ?? "chat";
-    const classColour = modelClassColour(classLabel);
     const pricingStr = formatPricing(pricingData);
     const capBadges = getCapabilityBadges(caps);
     const confidenceColour = CONFIDENCE_COLOURS[profile.metadataConfidence ?? "low"] ?? "#f87171";
@@ -304,7 +289,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
 
         {/* Model class + pricing row */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-          <Badge label={classLabel} colour={classColour} />
+          <ModelClassBadge modelClass={profile.modelClass ?? "chat"} />
           <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>
             {pricingStr ?? "Pricing unknown"}
           </span>
