@@ -9,9 +9,12 @@ import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { routeEndpointV2, getExclusionReasonV2 } from "./pipeline-v2";
 
-// Mock recipe-loader so loadChampionRecipe returns null (no DB in unit tests)
-vi.mock("./recipe-loader", () => ({
-  loadChampionRecipe: vi.fn().mockResolvedValue(null),
+// Mock champion-challenger so selectRecipeWithExploration returns null recipe (no DB in unit tests)
+vi.mock("./champion-challenger", () => ({
+  selectRecipeWithExploration: vi.fn().mockResolvedValue({
+    recipe: null,
+    explorationMode: "champion",
+  }),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -486,5 +489,16 @@ describe("routeEndpointV2", () => {
     expect(decision.executionPlan).toBeDefined();
     expect(decision.executionPlan?.maxTokens).toBe(4096); // default plan
     expect(decision.executionPlan?.recipeId).toBeNull();   // no recipe in DB
+  });
+
+  // ── EP-INF-006: Exploration integration ──────────────────────────────
+
+  it("includes explorationMode in RouteDecision", async () => {
+    const ep = makeEndpoint({
+      id: "ep-explore-test",
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 1.0, outputPerMToken: 5.0 },
+    });
+    const decision = await routeEndpointV2([ep], makeContract(), [], []);
+    expect(decision.explorationMode).toBe("champion");
   });
 });

@@ -23,7 +23,7 @@ import {
   rankByCostPerSuccess,
 } from "./cost-ranking";
 import { computeFitness } from "./scoring";
-import { loadChampionRecipe } from "./recipe-loader";
+import { selectRecipeWithExploration } from "./champion-challenger";
 import { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
@@ -325,8 +325,10 @@ export async function routeEndpointV2(
   const winner = ranked[0]!;
   const fallbackEntries = ranked.slice(1, 4); // up to 3 fallbacks
 
-  // EP-INF-005b: Recipe lookup — find champion recipe for the winning endpoint
-  const recipe = await loadChampionRecipe(winner.endpoint.providerId, winner.endpoint.modelId, contract.contractFamily);
+  // EP-INF-005b/006: Recipe lookup with exploration selection
+  const { recipe, explorationMode } = await selectRecipeWithExploration(
+    winner.endpoint.providerId, winner.endpoint.modelId, contract,
+  );
   const executionPlan = recipe
     ? buildPlanFromRecipe(recipe, contract)
     : buildDefaultPlan(winner.endpoint, contract);
@@ -374,5 +376,7 @@ export async function routeEndpointV2(
     selectedRecipeId: recipe?.id,
     selectedRecipeVersion: recipe?.version,
     executionPlan,
+    explorationMode,
+    challengerRecipeId: explorationMode === "challenger" ? recipe?.id : undefined,
   };
 }

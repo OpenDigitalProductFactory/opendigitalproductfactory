@@ -9,6 +9,7 @@ import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
+import { recordRouteOutcome } from "./route-outcome";
 
 export interface FallbackResult {
   providerId: string;
@@ -87,6 +88,22 @@ export async function callWithFallbackChain(
       recordRequest(entry.providerId, entry.modelId,
         (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
 
+      // EP-INF-006: Record route outcome (fire-and-forget)
+      recordRouteOutcome({
+        providerId: entry.providerId,
+        modelId: entry.modelId,
+        recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
+        contractFamily: plan?.contractFamily ?? decision.taskType,
+        taskType: decision.taskType,
+        latencyMs: result.inferenceMs,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        costUsd: null,
+        schemaValid: null,
+        toolSuccess: result.toolCalls ? true : null,
+        fallbackOccurred: i > 0,
+      }).catch((err) => console.error("[outcome] Failed to record:", err));
+
       const downgraded = i > 0;
       return {
         providerId: entry.providerId,
@@ -164,6 +181,23 @@ export async function callWithFallbackChain(
               ),
             );
         }
+
+        // EP-INF-006: Record error outcome (fire-and-forget)
+        recordRouteOutcome({
+          providerId: entry.providerId,
+          modelId: entry.modelId,
+          recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
+          contractFamily: plan?.contractFamily ?? decision.taskType,
+          taskType: decision.taskType,
+          latencyMs: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: null,
+          schemaValid: false,
+          toolSuccess: false,
+          fallbackOccurred: i > 0,
+          providerErrorCode: e.code,
+        }).catch((err) => console.error("[outcome] Failed to record error:", err));
       }
     }
   }
