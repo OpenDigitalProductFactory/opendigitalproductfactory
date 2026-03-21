@@ -85,7 +85,7 @@ export async function createRFC(input: {
   if (!input.title.trim()) throw new Error("Title is required");
   if (!input.description.trim()) throw new Error("Description is required");
 
-  const rfcId = generateRfcId();
+  const rfcId = await generateRfcId();
   const type = input.type ?? "normal";
   const isEmergency = type === "emergency";
 
