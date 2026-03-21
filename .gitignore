@@ -8,3 +8,4 @@ packages/db/generated/
 .env*.local
 .superpowers/
 .worktrees/
+.playwright-mcp/
