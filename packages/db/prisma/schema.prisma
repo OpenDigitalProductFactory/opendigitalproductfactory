@@ -1148,6 +1148,49 @@ model ContactAccountRole {
   @@index([isPrimary])
 }
 
+// EP-INF-006: Outcome telemetry and recipe performance tracking
+model RouteOutcome {
+  id                String   @id @default(cuid())
+  requestId         String   @unique
+  providerId        String
+  modelId           String
+  recipeId          String?
+  contractFamily    String
+  taskType          String
+  latencyMs         Int
+  inputTokens       Int
+  outputTokens      Int
+  costUsd           Float?
+  schemaValid       Boolean?
+  toolSuccess       Boolean?
+  fallbackOccurred  Boolean  @default(false)
+  graderScore       Float?
+  humanScore        Float?
+  providerErrorCode String?
+  createdAt         DateTime @default(now())
+
+  @@index([recipeId, contractFamily])
+  @@index([providerId, modelId])
+}
+
+model RecipePerformance {
+  id                 String    @id @default(cuid())
+  recipeId           String
+  contractFamily     String
+  sampleCount        Int       @default(0)
+  successCount       Int       @default(0)
+  avgLatencyMs       Float     @default(0)
+  avgCostUsd         Float     @default(0)
+  avgGraderScore     Float?
+  avgHumanScore      Float?
+  avgSchemaValidRate Float?
+  avgToolSuccessRate Float?
+  ewmaReward         Float     @default(0)
+  lastObservedAt     DateTime?
+
+  @@unique([recipeId, contractFamily])
+}
+
 model Engagement {
   id            String           @id @default(cuid())
   engagementId  String           @unique // ENG-<uuid>
