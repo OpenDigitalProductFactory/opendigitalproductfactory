@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/ai-provider-priority", () => ({ callWithFailover: vi.fn() }));
+vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn() }));
 vi.mock("@/lib/actions/compliance", () => ({ createObligation: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
@@ -34,7 +34,7 @@ vi.mock("@dpf/db", () => ({
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { callWithFailover } from "@/lib/ai-provider-priority";
+import { routeAndCall } from "@/lib/routed-inference";
 import { createObligation } from "@/lib/actions/compliance";
 import {
   triggerRegulatoryMonitorScan,
@@ -75,13 +75,13 @@ describe("triggerRegulatoryMonitorScan", () => {
       },
     ] as never);
     vi.mocked(prisma.regulation.update).mockResolvedValue({} as never);
-    vi.mocked(callWithFailover).mockResolvedValue({
+    vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({
         hasChanged: true, confidence: "high", summary: "New deadline",
         severity: "high", suggestedAction: "Update obligations",
       }),
-      inputTokens: 100, outputTokens: 50, inferenceMs: 500,
-      providerId: "test", modelId: "test", downgraded: false, downgradeMessage: null,
+      inputTokens: 100, outputTokens: 50, toolCalls: [],
+      providerId: "test", modelId: "test", downgraded: false, downgradeMessage: null, routeDecision: {} as any,
     } as never);
     vi.mocked(prisma.regulatoryAlert.create).mockResolvedValue({ id: "alert-1" } as never);
 
@@ -102,13 +102,13 @@ describe("triggerRegulatoryMonitorScan", () => {
       },
     ] as never);
     vi.mocked(prisma.regulation.update).mockResolvedValue({} as never);
-    vi.mocked(callWithFailover).mockResolvedValue({
+    vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({
         hasChanged: true, confidence: "low", summary: "Possible change",
         severity: "low", suggestedAction: "Verify",
       }),
-      inputTokens: 100, outputTokens: 50, inferenceMs: 500,
-      providerId: "test", modelId: "test", downgraded: false, downgradeMessage: null,
+      inputTokens: 100, outputTokens: 50, toolCalls: [],
+      providerId: "test", modelId: "test", downgraded: false, downgradeMessage: null, routeDecision: {} as any,
     } as never);
 
     const result = await triggerRegulatoryMonitorScan("manual");

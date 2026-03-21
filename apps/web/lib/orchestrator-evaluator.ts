@@ -4,7 +4,7 @@
 // Resilient by design: any failure results in a silent return, never a thrown error.
 
 import { prisma } from "@dpf/db";
-import { callWithFailover } from "./ai-provider-priority";
+import { routeAndCall } from "./routed-inference";
 import { routePrimary } from "./agent-router";
 import { loadEndpoints } from "./agent-router-data";
 import { getTaskType } from "./task-types";
@@ -113,9 +113,9 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
   const messages: ChatMessage[] = [{ role: "user", content: evaluationPrompt }];
 
   // 5. Call the orchestrator to evaluate
-  const result = await callWithFailover(messages, "You are a quality evaluator. Return only valid JSON.", sensitivity ?? "internal", {
-    task: "conversation",
-    modelRequirements: { preferredProviderId: orchestratorId },
+  const result = await routeAndCall(messages, "You are a quality evaluator. Return only valid JSON.", sensitivity ?? "internal", {
+    taskType: "conversation",
+    preferredProviderId: orchestratorId,
   });
 
   // 6. Parse JSON response
@@ -225,9 +225,9 @@ export async function evaluateResponseForTest(input: {
     ].join("\n");
 
     const messages: ChatMessage[] = [{ role: "user", content: evaluationPrompt }];
-    const result = await callWithFailover(messages, "You are a quality evaluator. Return only valid JSON.", input.sensitivity ?? "internal", {
-      task: "conversation",
-      modelRequirements: { preferredProviderId: orchestratorRoute.endpointId },
+    const result = await routeAndCall(messages, "You are a quality evaluator. Return only valid JSON.", input.sensitivity ?? "internal", {
+      taskType: "conversation",
+      preferredProviderId: orchestratorRoute.endpointId,
     });
 
     const jsonMatch = result.content.match(/\{[^}]+\}/);

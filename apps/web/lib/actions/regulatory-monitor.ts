@@ -11,7 +11,7 @@ import {
   generateScanId, generateAlertId, buildScanPrompt,
   type LLMScanResponse, validateAlertResolution,
 } from "@/lib/regulatory-monitor-types";
-import { callWithFailover } from "@/lib/ai-provider-priority";
+import { routeAndCall } from "@/lib/routed-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
 
 // ─── Scan Execution ─────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ export async function triggerRegulatoryMonitorScan(
         const prompt = buildScanPrompt(reg);
         const messages: ChatMessage[] = [{ role: "user", content: prompt }];
 
-        const result = await callWithFailover(
+        const result = await routeAndCall(
           messages,
           "You are a regulatory compliance monitoring assistant. Respond only in valid JSON.",
           "internal",

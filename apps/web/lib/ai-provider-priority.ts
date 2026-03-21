@@ -348,6 +348,11 @@ export type ModelRequirements = {
   preferredProviderId?: string;
 };
 
+/**
+ * @deprecated EP-INF-009b: Use `routeAndCall()` from `@/lib/routed-inference` instead.
+ * This function bypasses the V2 routing pipeline (no capability filtering, no recipes,
+ * no champion/challenger, no outcome telemetry). Retained temporarily for test compat.
+ */
 export async function callWithFailover(
   messages: ChatMessage[],
   systemPrompt: string,

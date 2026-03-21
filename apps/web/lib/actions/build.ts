@@ -17,7 +17,7 @@ import {
   type ReviewResult,
 } from "@/lib/feature-build-types";
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
-import { callWithFailover } from "@/lib/ai-provider-priority";
+import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -591,11 +591,11 @@ export async function saveBuildEvidence(
 // ─── Build Disciplines — Reviewer Actions ────────────────────────────────────
 
 async function callReviewerLLM(prompt: string): Promise<string> {
-  const result = await callWithFailover(
+  const result = await routeAndCall(
     [{ role: "user", content: prompt }],
     "You are a build discipline reviewer. Respond only with the requested JSON format.",
     "internal",
-    { task: "analysis" },
+    { taskType: "analysis" },
   );
   return result.content;
 }
