@@ -168,18 +168,23 @@ export async function routeAndCall(
     );
   }
 
-  // 3a. When tools are stripped, simplify the system prompt so the local model
-  // doesn't hallucinate tool calls from the prompt text. The original prompt
-  // may list tools and authorities designed for capable models — a small local
-  // model will try to act on those instructions even without the tool API.
+  // 3a. When tools are stripped, REPLACE the system prompt entirely.
+  // The original prompt lists tools by name ("create_backlog_item", etc.) and
+  // describes authorities. Small local models can't handle "ignore the tools
+  // listed below" — they latch onto the tool names and hallucinate calls.
+  // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
-    systemPrompt = `This is a CONVERSATION request. You have NO tools and CANNOT take actions.
-Do not mention tools, do not say you will call functions, do not create items or make changes.
-You can only respond with helpful conversation. If asked to do something you cannot do,
-explain that a more capable AI model is needed and suggest the user configure one.
+    systemPrompt = `You are a helpful AI assistant running on a local model.
 
----
-${systemPrompt}`;
+This is a CONVERSATION-ONLY request. You have no tools and cannot take any actions.
+Do not mention calling functions, creating items, or making changes.
+Respond naturally and helpfully to what the user says.
+
+If the user asks you to do something that requires taking action (creating tasks,
+modifying settings, running queries), explain that this requires a more capable
+AI model and suggest they configure a cloud AI provider in Platform > AI Providers.
+
+Keep responses concise and conversational.`;
   }
 
   // 3b. If a preferred provider was requested, check if the decision matches.
