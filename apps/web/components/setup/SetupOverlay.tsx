@@ -74,39 +74,36 @@ export function SetupOverlay({ progressId, currentStep, steps }: Props) {
     return () => clearTimeout(timer);
   }, [currentStep]);
 
+  const navigateToStep = (step: string, completed?: boolean) => {
+    if (completed) {
+      // Setup complete — hard navigate to workspace so overlay disappears
+      window.location.href = "/workspace";
+      return;
+    }
+    const nextRoute = STEP_ROUTES[step] ?? "/workspace";
+    // Hard navigate to trigger full server re-render — router.push/refresh
+    // doesn't reliably update the server-rendered overlay props across routes
+    window.location.href = nextRoute;
+  };
+
   const handleContinue = () => {
     startTransition(async () => {
       const updated = await advanceStep(progressId);
-      if (updated.completedAt) {
-        // Setup complete — navigate to workspace, overlay will disappear
-        router.push("/workspace");
-        router.refresh();
-        return;
-      }
-      const nextRoute = STEP_ROUTES[updated.currentStep] ?? "/workspace";
-      router.push(nextRoute);
-      router.refresh();
+      navigateToStep(updated.currentStep, !!updated.completedAt);
     });
   };
 
   const handleSkip = () => {
     startTransition(async () => {
       const updated = await skipStep(progressId);
-      if (updated.completedAt) {
-        router.push("/workspace");
-        router.refresh();
-        return;
-      }
-      const nextRoute = STEP_ROUTES[updated.currentStep] ?? "/workspace";
-      router.push(nextRoute);
-      router.refresh();
+      navigateToStep(updated.currentStep, !!updated.completedAt);
     });
   };
 
   const handlePause = () => {
     startTransition(async () => {
       await pauseSetup(progressId);
-      router.refresh();
+      window.location.href = "/workspace";
     });
   };
 
