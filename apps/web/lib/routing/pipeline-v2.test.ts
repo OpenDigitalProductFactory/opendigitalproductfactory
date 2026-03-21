@@ -3,11 +3,16 @@
  * See: docs/superpowers/specs/2026-03-20-contract-based-selection-design.md
  */
 
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { EndpointManifest, EndpointOverride, PolicyRuleEval } from "./types";
 import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { routeEndpointV2, getExclusionReasonV2 } from "./pipeline-v2";
+
+// Mock recipe-loader so loadChampionRecipe returns null (no DB in unit tests)
+vi.mock("./recipe-loader", () => ({
+  loadChampionRecipe: vi.fn().mockResolvedValue(null),
+}));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -234,8 +239,8 @@ describe("getExclusionReasonV2", () => {
 // ── routeEndpointV2 ─────────────────────────────────────────────────────────
 
 describe("routeEndpointV2", () => {
-  it("produces valid RouteDecision with selectedEndpoint and selectedModelId", () => {
-    const decision = routeEndpointV2(
+  it("produces valid RouteDecision with selectedEndpoint and selectedModelId", async () => {
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       makeContract(),
       [],
@@ -248,12 +253,12 @@ describe("routeEndpointV2", () => {
     expect(decision.candidates.length).toBeGreaterThan(0);
   });
 
-  it("excludes models lacking required image input capability", () => {
+  it("excludes models lacking required image input capability", async () => {
     const contract = makeContract({
       modality: { input: ["text", "image"], output: ["text"] },
     });
     // qualityModel has imageInput: true, cheapModel does not
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       contract,
       [],
@@ -265,14 +270,14 @@ describe("routeEndpointV2", () => {
     expect(cheapCandidate?.excluded).toBe(true);
   });
 
-  it("excludes models lacking structuredOutput when requiresStrictSchema=true", () => {
+  it("excludes models lacking structuredOutput when requiresStrictSchema=true", async () => {
     const noSchemaModel = makeEndpoint({
       id: "ep-no-schema",
       capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true },
       pricing: { ...EMPTY_PRICING, inputPerMToken: 1.0, outputPerMToken: 5.0 },
     });
     const contract = makeContract({ requiresStrictSchema: true });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [noSchemaModel, qualityModel],
       contract,
       [],
@@ -284,9 +289,9 @@ describe("routeEndpointV2", () => {
     expect(excluded?.excludedReason).toContain("structuredOutput");
   });
 
-  it("handles residencyPolicy local_only (excludes non-ollama)", () => {
+  it("handles residencyPolicy local_only (excludes non-ollama)", async () => {
     const contract = makeContract({ residencyPolicy: "local_only" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel, localModel],
       contract,
       [],
@@ -300,9 +305,9 @@ describe("routeEndpointV2", () => {
     expect(cloudExcluded.length).toBe(2);
   });
 
-  it("prefers cheaper model for minimize_cost budget", () => {
+  it("prefers cheaper model for minimize_cost budget", async () => {
     const contract = makeContract({ budgetClass: "minimize_cost" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       contract,
       [],
@@ -312,9 +317,9 @@ describe("routeEndpointV2", () => {
     expect(decision.selectedEndpoint).toBe("ep-cheap");
   });
 
-  it("prefers quality model for quality_first budget", () => {
+  it("prefers quality model for quality_first budget", async () => {
     const contract = makeContract({ budgetClass: "quality_first" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       contract,
       [],
@@ -324,7 +329,7 @@ describe("routeEndpointV2", () => {
     expect(decision.selectedEndpoint).toBe("ep-quality");
   });
 
-  it("penalizes null pricing (not treated as free)", () => {
+  it("penalizes null pricing (not treated as free)", async () => {
     const nullPricing = makeEndpoint({
       id: "ep-null-pricing",
       pricing: EMPTY_PRICING,
@@ -338,7 +343,7 @@ describe("routeEndpointV2", () => {
       reasoning: 70,
     });
     const contract = makeContract({ budgetClass: "balanced" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [nullPricing, knownPricing],
       contract,
       [],
@@ -351,10 +356,10 @@ describe("routeEndpointV2", () => {
     expect(knownCandidate!.fitnessScore).toBeGreaterThan(nullCandidate!.fitnessScore);
   });
 
-  it("returns null selectedEndpoint when no eligible candidates", () => {
+  it("returns null selectedEndpoint when no eligible candidates", async () => {
     const retired = makeEndpoint({ id: "ep-retired", status: "retired" });
     const disabled = makeEndpoint({ id: "ep-disabled", status: "disabled" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [retired, disabled],
       makeContract(),
       [],
@@ -365,7 +370,7 @@ describe("routeEndpointV2", () => {
     expect(decision.excludedCount).toBe(2);
   });
 
-  it("builds fallback chain from next 3 candidates", () => {
+  it("builds fallback chain from next 3 candidates", async () => {
     const ep1 = makeEndpoint({
       id: "ep-1", reasoning: 90, pricing: { ...EMPTY_PRICING, inputPerMToken: 3.0, outputPerMToken: 15.0 },
     });
@@ -382,7 +387,7 @@ describe("routeEndpointV2", () => {
       id: "ep-5", reasoning: 50, pricing: { ...EMPTY_PRICING, inputPerMToken: 0.3, outputPerMToken: 1.0 },
     });
     const contract = makeContract({ budgetClass: "quality_first" });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [ep1, ep2, ep3, ep4, ep5],
       contract,
       [],
@@ -395,13 +400,13 @@ describe("routeEndpointV2", () => {
     expect(decision.fallbackChain[0]).toBe(decision.selectedEndpoint);
   });
 
-  it("excludes retired/disabled status models", () => {
+  it("excludes retired/disabled status models", async () => {
     const retired = makeEndpoint({ id: "ep-retired", status: "retired" });
     const active = makeEndpoint({
       id: "ep-active",
       pricing: { ...EMPTY_PRICING, inputPerMToken: 1.0, outputPerMToken: 5.0 },
     });
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [retired, active],
       makeContract(),
       [],
@@ -414,14 +419,14 @@ describe("routeEndpointV2", () => {
 
   // ── Pin/Block override tests ───────────────────────────────────────────
 
-  it("respects pinned override", () => {
+  it("respects pinned override", async () => {
     const pinOverride: EndpointOverride = {
       endpointId: "ep-cheap",
       taskType: "reasoning",
       pinned: true,
       blocked: false,
     };
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       makeContract(),
       [],
@@ -430,14 +435,14 @@ describe("routeEndpointV2", () => {
     expect(decision.selectedEndpoint).toBe("ep-cheap");
   });
 
-  it("respects blocked override", () => {
+  it("respects blocked override", async () => {
     const blockOverride: EndpointOverride = {
       endpointId: "ep-quality",
       taskType: "reasoning",
       pinned: false,
       blocked: true,
     };
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       makeContract(),
       [],
@@ -449,7 +454,7 @@ describe("routeEndpointV2", () => {
     expect(blockedCandidate?.excludedReason).toContain("Blocked");
   });
 
-  it("applies policy rules", () => {
+  it("applies policy rules", async () => {
     const blockAnthropicRule: PolicyRuleEval = {
       id: "rule-block-anthropic",
       name: "Block Anthropic",
@@ -460,7 +465,7 @@ describe("routeEndpointV2", () => {
         value: "anthropic",
       },
     };
-    const decision = routeEndpointV2(
+    const decision = await routeEndpointV2(
       [qualityModel, cheapModel],
       makeContract(),
       [blockAnthropicRule],
@@ -468,5 +473,18 @@ describe("routeEndpointV2", () => {
     );
     expect(decision.selectedEndpoint).toBe("ep-cheap");
     expect(decision.policyRulesApplied).toContain("rule-block-anthropic");
+  });
+
+  // ── EP-INF-005b: Execution plan integration ────────────────────────────
+
+  it("includes executionPlan in RouteDecision", async () => {
+    const ep = makeEndpoint({
+      id: "ep-plan-test",
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 1.0, outputPerMToken: 5.0 },
+    });
+    const decision = await routeEndpointV2([ep], makeContract(), [], []);
+    expect(decision.executionPlan).toBeDefined();
+    expect(decision.executionPlan?.maxTokens).toBe(4096); // default plan
+    expect(decision.executionPlan?.recipeId).toBeNull();   // no recipe in DB
   });
 });

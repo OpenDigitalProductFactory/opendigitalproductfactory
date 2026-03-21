@@ -23,6 +23,8 @@ import {
   rankByCostPerSuccess,
 } from "./cost-ranking";
 import { computeFitness } from "./scoring";
+import { loadChampionRecipe } from "./recipe-loader";
+import { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
@@ -157,12 +159,12 @@ function filterHardV2(
  *   Stage 5: Capacity penalty (EP-INF-004)
  *   Stage 6: Select winner + build fallback chain
  */
-export function routeEndpointV2(
+export async function routeEndpointV2(
   endpoints: EndpointManifest[],
   contract: RequestContract,
   policyRules: PolicyRuleEval[],
   overrides: EndpointOverride[],
-): RouteDecision {
+): Promise<RouteDecision> {
   const timestamp = new Date();
   const allCandidates: CandidateTrace[] = [];
   const allExcludedReasons: string[] = [];
@@ -323,6 +325,12 @@ export function routeEndpointV2(
   const winner = ranked[0]!;
   const fallbackEntries = ranked.slice(1, 4); // up to 3 fallbacks
 
+  // EP-INF-005b: Recipe lookup — find champion recipe for the winning endpoint
+  const recipe = await loadChampionRecipe(winner.endpoint.providerId, winner.endpoint.modelId, contract.contractFamily);
+  const executionPlan = recipe
+    ? buildPlanFromRecipe(recipe, contract)
+    : buildDefaultPlan(winner.endpoint, contract);
+
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)
   const eligibleTraces: CandidateTrace[] = ranked.map(
     ({ endpoint: ep, rankScore, estimatedCost }) => ({
@@ -363,5 +371,8 @@ export function routeEndpointV2(
     taskType: contract.taskType,
     sensitivity,
     timestamp,
+    selectedRecipeId: recipe?.id,
+    selectedRecipeVersion: recipe?.version,
+    executionPlan,
   };
 }
