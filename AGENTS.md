@@ -83,6 +83,42 @@ Epics must be actively managed — not just created and forgotten.
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included so the user can verify.
 
+## Design Research — Best-of-Breed Benchmarking
+
+Every new feature design MUST include a research phase benchmarking against open source and commercial best-of-breed solutions before finalizing the spec. This is not optional — it prevents reinventing solved problems and ensures the platform adopts proven patterns.
+
+### When to Research
+
+- Before writing or updating any design spec (`docs/superpowers/specs/`)
+- When adding a new domain capability (booking, CRM, invoicing, etc.)
+- When the design involves scheduling, workflow, or data model decisions with well-known industry patterns
+
+### What to Research
+
+1. **Open source leaders** — Find 2-3 actively maintained open source projects in the same domain. Read their data models (Prisma schemas, DB migrations), not just their feature lists.
+2. **Commercial best-of-breed** — Identify 2-3 commercial products that dominate the vertical. Study their API docs, data models, and architectural patterns.
+3. **Anti-patterns** — Search for known pitfalls (race conditions, timezone bugs, stale data) specific to the domain.
+
+### What to Document
+
+The spec must include a "Research & Benchmarking" section with:
+- Systems compared and what was learned from each
+- Patterns adopted (with attribution) and why
+- Patterns rejected and why
+- Gaps our design fills that existing solutions don't (our differentiators)
+- Anti-patterns identified and how the design avoids them
+
+### Integration with Build Process
+
+Platform AI coworkers involved in feature design (Build Studio, architecture agents) must:
+- Search for open source implementations before proposing data models
+- Reference specific projects and schemas, not abstract "best practices"
+- Flag when a proposed design diverges from established industry patterns and justify the divergence
+
+This research step is part of the brainstorming/design phase, not a separate task. It feeds directly into the spec.
+
+---
+
 ## Data Model Stewardship
 
 When adding any large feature, audit the existing schema for refactoring opportunities before finalising the new data model. Do not proceed with a spec until this audit is complete.
