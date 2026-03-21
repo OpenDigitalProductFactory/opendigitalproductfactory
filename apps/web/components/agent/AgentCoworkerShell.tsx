@@ -122,9 +122,28 @@ export function AgentCoworkerShell({ userContext }: Props) {
     function handleOpenPanel(e: Event) {
       setIsOpen(true);
       savePanelOpen(userKey, true);
-      const detail = (e as CustomEvent<{ autoMessage?: string } | undefined>).detail;
+      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string } | undefined>).detail;
       if (detail?.autoMessage) {
         setPendingAutoMessage(detail.autoMessage);
+      }
+      // welcomeMessage: inject a pre-written assistant message without LLM call
+      if (detail?.welcomeMessage) {
+        setInitialMessages((prev) => {
+          // Don't duplicate if already present
+          if (prev.some((m) => m.content === detail.welcomeMessage)) return prev;
+          return [...prev, {
+            id: `welcome-${Date.now()}`,
+            role: "assistant",
+            content: detail.welcomeMessage!,
+            createdAt: new Date().toISOString(),
+            agentId: "onboarding-coo",
+            tone: null,
+            routeContext: null,
+            providerId: null,
+            taskType: null,
+            routedEndpointId: null,
+          }];
+        });
       }
     }
     document.addEventListener("open-agent-feedback", handleOpenPanel);
