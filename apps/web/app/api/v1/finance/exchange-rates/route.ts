@@ -4,9 +4,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { storeExchangeRates } from "@/lib/actions/currency";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 // ECB fallback rates (GBP base) — used when live fetch is unavailable
 const ECB_RATES: Array<{ base: string; target: string; rate: number }> = [

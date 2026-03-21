@@ -1,8 +1,8 @@
 // GET /api/v1/finance/invoices/:id/pdf — download invoice PDF
 
 import { NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
 import { getInvoice } from "@/lib/actions/finance";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 

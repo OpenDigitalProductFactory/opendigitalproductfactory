@@ -24,7 +24,7 @@ async function requireManageFinance(): Promise<string> {
 
 // ─── calculateNextDate ────────────────────────────────────────────────────────
 
-export function calculateNextDate(currentDate: Date, frequency: string): Date {
+export async function calculateNextDate(currentDate: Date, frequency: string): Promise<Date> {
   // Work in UTC to avoid timezone-driven date drift
   const y = currentDate.getUTCFullYear();
   const m = currentDate.getUTCMonth();

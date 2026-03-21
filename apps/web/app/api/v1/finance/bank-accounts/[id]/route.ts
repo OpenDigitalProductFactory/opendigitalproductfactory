@@ -2,9 +2,9 @@
 
 import { NextResponse } from "next/server";
 import { getBankAccount } from "@/lib/actions/banking";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 export async function GET(
   request: Request,

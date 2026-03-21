@@ -27,7 +27,7 @@ export default async function AgedDebtorsPage() {
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-[var(--dpf-muted)]">Reports</span>
+        <Link href="/finance/reports" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Reports</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <span className="text-xs text-[var(--dpf-text)]">Aged Debtors</span>
       </div>

@@ -25,19 +25,20 @@ interface Supplier {
 interface Props {
   suppliers: Supplier[];
   defaultSupplierId?: string;
+  defaultCurrency?: string;
 }
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function CreatePOForm({ suppliers, defaultSupplierId }: Props) {
+export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedSupplierId, setSelectedSupplierId] = useState(defaultSupplierId ?? "");
-  const [currency, setCurrency] = useState("GBP");
+  const [currency, setCurrency] = useState(defaultCurrency ?? "GBP");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [terms, setTerms] = useState("");
   const [notes, setNotes] = useState("");
@@ -152,6 +153,14 @@ export function CreatePOForm({ suppliers, defaultSupplierId }: Props) {
               </option>
             ))}
           </select>
+          <a
+            href="/finance/suppliers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-[var(--dpf-accent)] hover:underline mt-1 inline-block"
+          >
+            + Create new supplier
+          </a>
         </div>
         <div>
           <label className={labelClasses}>Currency</label>

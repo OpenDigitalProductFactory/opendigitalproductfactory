@@ -60,7 +60,7 @@ function governanceDenied(message: string): GovernanceActionResult {
   return { ok: false, message };
 }
 
-export function validateDelegationGrantInput(input: DelegationGrantInput): string | null {
+export async function validateDelegationGrantInput(input: DelegationGrantInput): Promise<string | null> {
   if (!input.granteeAgentId.trim()) return "Select an agent.";
   if (input.expiresAt <= input.validFrom) return "Grant expiry must be after the start time.";
   if (input.scope.actionFamilies.length === 0) return "Grant scope must include at least one action family.";

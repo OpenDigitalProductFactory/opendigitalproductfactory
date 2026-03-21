@@ -6,7 +6,10 @@ import { BaseCurrencySelector } from "@/components/finance/BaseCurrencySelector"
 import { FetchRatesButton } from "@/components/finance/FetchRatesButton";
 import { ManualRateForm } from "@/components/finance/ManualRateForm";
 
-const SUPPORTED_CURRENCIES = ["GBP", "USD", "EUR"];
+const SUPPORTED_CURRENCIES = [
+  "GBP", "USD", "EUR", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK",
+  "JPY", "SGD", "HKD", "ZAR", "AED", "INR", "BRL", "MXN", "PLN", "CZK",
+];
 
 export default async function CurrencySettingsPage() {
   const [orgSettings, recentRates] = await Promise.all([
@@ -44,7 +47,7 @@ export default async function CurrencySettingsPage() {
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-[var(--dpf-muted)]">Settings</span>
+        <Link href="/finance/settings" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Settings</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <span className="text-xs text-[var(--dpf-text)]">Currency</span>
       </div>

@@ -6,9 +6,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { refreshSchema } from "@dpf/validators";
-import { rotateRefreshToken, signAccessToken } from "@/lib/api/jwt.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { rotateRefreshToken, signAccessToken } from "@/lib/api/jwt";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 export async function POST(request: Request) {
   try {

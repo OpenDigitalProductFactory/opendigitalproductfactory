@@ -4,9 +4,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { updateBacklogItemSchema } from "@dpf/validators";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 export async function PATCH(
   request: Request,

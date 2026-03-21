@@ -5,9 +5,9 @@ import { NextResponse } from "next/server";
 import { updateBillSchema } from "@/lib/ap-validation";
 import { getBill } from "@/lib/actions/ap";
 import { prisma } from "@dpf/db";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 

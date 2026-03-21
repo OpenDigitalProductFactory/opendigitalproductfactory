@@ -30,7 +30,7 @@ export default async function DunningSettingsPage() {
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-[var(--dpf-muted)]">Settings</span>
+        <Link href="/finance/settings" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Settings</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <span className="text-xs text-[var(--dpf-text)]">Dunning</span>
       </div>

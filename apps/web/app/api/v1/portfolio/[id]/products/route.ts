@@ -6,10 +6,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError, apiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
-import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError, apiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
+import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination";
 
 export async function GET(
   request: NextRequest,

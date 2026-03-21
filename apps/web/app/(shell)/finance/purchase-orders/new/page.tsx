@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/purchase-orders/new/page.tsx
 import { listSuppliers } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
 import { CreatePOForm } from "@/components/finance/CreatePOForm";
 import Link from "next/link";
 
@@ -8,7 +9,10 @@ type Props = { searchParams: Promise<{ supplierId?: string }> };
 export default async function NewPOPage({ searchParams }: Props) {
   const { supplierId } = await searchParams;
 
-  const suppliers = await listSuppliers();
+  const [suppliers, orgSettings] = await Promise.all([
+    listSuppliers(),
+    getOrgSettings(),
+  ]);
 
   return (
     <div>
@@ -39,6 +43,7 @@ export default async function NewPOPage({ searchParams }: Props) {
             defaultCurrency: s.defaultCurrency,
           }))}
           defaultSupplierId={supplierId}
+          defaultCurrency={orgSettings.baseCurrency}
         />
       </div>
     </div>

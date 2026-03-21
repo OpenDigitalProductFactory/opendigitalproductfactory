@@ -5,7 +5,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 
 /** Generate SK-XXXXXXXX (8 hex chars = 32 bits of entropy, collision-safe to ~65k skills) */
-export function generateSkillId(): string {
+export async function generateSkillId(): Promise<string> {
   return `SK-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 }
 

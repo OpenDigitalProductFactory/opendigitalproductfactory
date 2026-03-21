@@ -5,10 +5,10 @@ import * as crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { createEpicSchema } from "@dpf/validators";
-import { authenticateRequest } from "@/lib/api/auth-middleware.js";
-import { ApiError } from "@/lib/api/error.js";
-import { apiSuccess } from "@/lib/api/response.js";
-import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination.js";
+import { authenticateRequest } from "@/lib/api/auth-middleware";
+import { ApiError } from "@/lib/api/error";
+import { apiSuccess } from "@/lib/api/response";
+import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination";
 
 export async function GET(request: Request) {
   try {

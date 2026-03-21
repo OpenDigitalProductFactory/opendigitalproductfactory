@@ -2,6 +2,8 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -37,6 +39,7 @@ export default async function FinancePage() {
     pendingExpenseCount,
     activeAssets,
     setupStatus,
+    orgSettings,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -142,7 +145,12 @@ export default async function FinancePage() {
 
     // Financial setup status — for setup prompt banner
     getFinancialSetupStatus(),
+
+    // Org settings — for base currency
+    getOrgSettings(),
   ]);
+
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
   const owedCount = totalOutstanding._count;
@@ -234,7 +242,7 @@ export default async function FinancePage() {
                 className="text-2xl font-bold"
                 style={{ color: totalCash >= 0 ? "#4ade80" : "#ef4444" }}
               >
-                £{formatMoney(totalCash)}
+                {sym}{formatMoney(totalCash)}
               </p>
               <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
                 across {bankAccounts.length} account{bankAccounts.length !== 1 ? "s" : ""}
@@ -252,10 +260,10 @@ export default async function FinancePage() {
             className="text-2xl font-bold"
             style={{ color: forecastBalance >= totalCash ? "#4ade80" : "#ef4444" }}
           >
-            £{formatMoney(forecastBalance)}
+            {sym}{formatMoney(forecastBalance)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            +£{formatMoney(inflowsIn30)} in · -£{formatMoney(outflowsIn30)} out
+            +{sym}{formatMoney(inflowsIn30)} in · -{sym}{formatMoney(outflowsIn30)} out
           </p>
         </div>
 
@@ -265,7 +273,7 @@ export default async function FinancePage() {
             Money Owed To You
           </p>
           <p className="text-2xl font-bold text-[var(--dpf-text)]">
-            £{formatMoney(owedAmount)}
+            {sym}{formatMoney(owedAmount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             {owedCount} invoice{owedCount !== 1 ? "s" : ""} outstanding
@@ -304,7 +312,7 @@ export default async function FinancePage() {
             Money In This Month
           </p>
           <p className="text-2xl font-bold text-[var(--dpf-text)]">
-            £{formatMoney(paidAmount)}
+            {sym}{formatMoney(paidAmount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             {paidCount} invoice{paidCount !== 1 ? "s" : ""} paid
@@ -320,7 +328,7 @@ export default async function FinancePage() {
             className="text-2xl font-bold"
             style={{ color: moneyOweAmount > 0 ? "#ef4444" : "#4ade80" }}
           >
-            £{formatMoney(moneyOweAmount)}
+            {sym}{formatMoney(moneyOweAmount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             {moneyOweCount} bill{moneyOweCount !== 1 ? "s" : ""} awaiting payment
@@ -354,7 +362,7 @@ export default async function FinancePage() {
             className="text-2xl font-bold"
             style={{ color: overdueGt30Amount > 0 ? "#ef4444" : "#4ade80" }}
           >
-            £{formatMoney(overdueGt30Amount)}
+            {sym}{formatMoney(overdueGt30Amount)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             <Link href="/finance/reports/aged-debtors" className="hover:underline">
@@ -393,7 +401,7 @@ export default async function FinancePage() {
             className="text-2xl font-bold"
             style={{ color: totalAssetValue > 0 ? "#4ade80" : "#8888a0" }}
           >
-            £{formatMoney(totalAssetValue)}
+            {sym}{formatMoney(totalAssetValue)}
           </p>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             {activeAssets.length} asset{activeAssets.length !== 1 ? "s" : ""} across{" "}
@@ -617,7 +625,7 @@ export default async function FinancePage() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        £{formatMoney(Number(inv.totalAmount))}
+                        {sym}{formatMoney(Number(inv.totalAmount))}
                       </td>
                     </tr>
                   );
