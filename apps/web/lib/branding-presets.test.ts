@@ -6,13 +6,16 @@ import {
   contrastRatio,
   hexToHsl,
   hslToHex,
+  validateTokenContrast,
+  type Correction,
 } from "./branding-presets";
 
 describe("deriveThemeTokens", () => {
   it("generates dual token sets from an accent color", () => {
     const tokens = deriveThemeTokens("#2563eb");
     expect(tokens.dark.version).toBe("1.0.0");
-    expect(tokens.dark.palette.accent).toBe("#2563eb");
+    // Accent is contrast-adjusted for dark bg (ensureContrast nudges lightness)
+    expect(tokens.dark.palette.accent).toMatch(/^#[0-9a-fA-F]{6}$/);
     expect(tokens.dark.palette.bg).toBeTruthy();
     expect(tokens.light.palette.bg).toBe("#fafafa");
   });
@@ -44,8 +47,7 @@ describe("OOTB_PRESETS", () => {
   it("each preset has required fields with dual tokens", () => {
     for (const preset of OOTB_PRESETS) {
       expect(preset.scope).toMatch(/^theme-preset:/);
-      expect(preset.companyName).toBeTruthy();
-      expect(preset.logoUrl).toBe("/logos/open-digital-product-factory-logo.svg");
+      expect(preset.label).toBeTruthy();
       expect(preset.tokens.dark.palette.accent).toBeTruthy();
       expect(preset.tokens.light.palette.accent).toBeTruthy();
     }
@@ -217,4 +219,58 @@ describe("WCAG AA contrast compliance", () => {
       });
     });
   }
+});
+
+describe("validateTokenContrast", () => {
+  it("returns empty corrections for compliant tokens", () => {
+    const { dark } = deriveThemeTokens("#2563eb");
+    const result = validateTokenContrast(dark, "dark");
+    expect(result.corrections).toHaveLength(0);
+  });
+
+  it("returns empty corrections for compliant light tokens", () => {
+    const { light } = deriveThemeTokens("#2563eb");
+    const result = validateTokenContrast(light, "light");
+    expect(result.corrections).toHaveLength(0);
+  });
+
+  it("auto-corrects non-compliant muted text", () => {
+    const { light } = deriveThemeTokens("#2563eb");
+    const broken = { ...light, palette: { ...light.palette, muted: "#e0e0e0" } };
+    const result = validateTokenContrast(broken, "light");
+    expect(result.corrections.length).toBeGreaterThan(0);
+    const mutedFix = result.corrections.find(c => c.foreground === "palette.muted");
+    expect(mutedFix).toBeDefined();
+    expect(mutedFix!.mode).toBe("light");
+    expect(mutedFix!.correctedRatio).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(result.correctedTokens.palette.muted, result.correctedTokens.palette.bg))
+      .toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("auto-corrects non-compliant accent", () => {
+    const { light } = deriveThemeTokens("#2563eb");
+    const broken = { ...light, palette: { ...light.palette, accent: "#ffff00" } };
+    const result = validateTokenContrast(broken, "light");
+    const accentFix = result.corrections.find(c => c.foreground === "palette.accent");
+    expect(accentFix).toBeDefined();
+  });
+
+  it("checks text against all surfaces", () => {
+    const { dark } = deriveThemeTokens("#2563eb");
+    const broken = {
+      ...dark,
+      palette: { ...dark.palette, text: "#333333" },
+      surfaces: { ...dark.surfaces },
+    };
+    const result = validateTokenContrast(broken, "dark");
+    expect(result.corrections.length).toBeGreaterThan(0);
+  });
+
+  it("checks state colors against bg", () => {
+    const { light } = deriveThemeTokens("#2563eb");
+    const broken = { ...light, states: { ...light.states, focus: "#fafafa" } };
+    const result = validateTokenContrast(broken, "light");
+    const focusFix = result.corrections.find(c => c.foreground === "states.focus");
+    expect(focusFix).toBeDefined();
+  });
 });
