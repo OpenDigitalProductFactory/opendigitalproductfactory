@@ -49,10 +49,10 @@ export function WhatsNextStep({ onContinue, onSkip, onPause, context, steps }: P
             <div className="space-y-4">
               {completed.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">Completed</h3>
+                  <h3 className="text-sm font-medium text-[var(--dpf-text)] mb-2">Completed</h3>
                   <ul className="space-y-1">
                     {completed.map((s) => (
-                      <li key={s} className="flex items-center gap-2 text-sm text-green-700">
+                      <li key={s} className="flex items-center gap-2 text-sm text-[#4ade80]">
                         <span>&#10003;</span> {STEP_NAMES[s] || s}
                       </li>
                     ))}
@@ -61,19 +61,19 @@ export function WhatsNextStep({ onContinue, onSkip, onPause, context, steps }: P
               )}
               {skipped.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">Skipped (available in Settings)</h3>
+                  <h3 className="text-sm font-medium text-[var(--dpf-text)] mb-2">Skipped (available in Settings)</h3>
                   <ul className="space-y-1">
                     {skipped.map((s) => (
-                      <li key={s} className="flex items-center gap-2 text-sm text-gray-400">
+                      <li key={s} className="flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
                         <span>&#8212;</span> {STEP_NAMES[s] || s}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              <div className="border-t pt-4 mt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Next Steps</h3>
-                <ul className="space-y-2 text-sm text-gray-600">
+              <div className="border-t border-[var(--dpf-border)] pt-4 mt-6">
+                <h3 className="text-sm font-medium text-[var(--dpf-text)] mb-2">Next Steps</h3>
+                <ul className="space-y-2 text-sm text-[var(--dpf-muted)]">
                   {!hasCloudProvider && <li>Add a cloud AI provider for full platform capability</li>}
                   <li>Explore your workspace and meet your AI coworkers</li>
                   <li>Open the chat panel anytime for help</li>

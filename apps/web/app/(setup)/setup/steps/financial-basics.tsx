@@ -28,8 +28,8 @@ export function FinancialBasicsStep({ onContinue, onSkip, onPause }: Props) {
             <h2 className="text-xl font-semibold mb-6">Financial Basics</h2>
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Currency</label>
-                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">Default Currency</label>
+                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 rounded-lg">
                   <option value="USD">US Dollar (USD)</option>
                   <option value="EUR">Euro (EUR)</option>
                   <option value="GBP">British Pound (GBP)</option>
@@ -38,8 +38,8 @@ export function FinancialBasicsStep({ onContinue, onSkip, onPause }: Props) {
                   <option value="JPY">Japanese Yen (JPY)</option>
                 </select>
               </div>
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <p className="text-sm text-gray-500">Payment provider integration and tax configuration can be set up later from Platform Settings.</p>
+              <div className="border border-[var(--dpf-border)] rounded-lg p-4 bg-[var(--dpf-surface-2)]">
+                <p className="text-sm text-[var(--dpf-muted)]">Payment provider integration and tax configuration can be set up later from Platform Settings.</p>
               </div>
             </div>
           </div>

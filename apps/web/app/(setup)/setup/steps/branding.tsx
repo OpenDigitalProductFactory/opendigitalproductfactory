@@ -28,19 +28,19 @@ export function BrandingStep({ onContinue, onSkip, onPause }: Props) {
             <h2 className="text-xl font-semibold mb-6">Branding</h2>
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
-                <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="e.g., Quality care, close to home" className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">Tagline</label>
+                <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="e.g., Quality care, close to home" className="w-full px-3 py-2 rounded-lg" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">Primary Color</label>
                 <div className="flex items-center gap-3">
-                  <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-10 h-10 border rounded cursor-pointer" />
-                  <span className="text-sm text-gray-500">{primaryColor}</span>
+                  <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-10 h-10 border border-[var(--dpf-border)] rounded cursor-pointer" />
+                  <span className="text-sm text-[var(--dpf-muted)]">{primaryColor}</span>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
-                <div className="border-2 border-dashed rounded-lg p-8 text-center text-gray-400">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">Logo</label>
+                <div className="border-2 border-dashed border-[var(--dpf-border)] rounded-lg p-8 text-center text-[var(--dpf-muted)]">
                   <p>Logo upload will be available here</p>
                   <p className="text-xs mt-1">You can add this later from Platform Settings</p>
                 </div>

@@ -20,10 +20,10 @@ export default async function SetupPage() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="max-w-md text-center space-y-4">
             <h1 className="text-2xl font-bold">Welcome</h1>
-            <p className="text-gray-600">
+            <p className="text-[var(--dpf-muted)]">
               Something went wrong during setup initialization: {result.error}
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-[var(--dpf-muted)]">
               Try refreshing this page. If the problem persists, check the server logs.
             </p>
           </div>

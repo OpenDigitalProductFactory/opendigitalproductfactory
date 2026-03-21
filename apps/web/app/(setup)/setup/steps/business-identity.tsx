@@ -39,7 +39,7 @@ export function BusinessIdentityStep({ onContinue, onSkip, onPause }: Props) {
             <h2 className="text-xl font-semibold mb-6">Business Identity</h2>
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
                   Organization Name *
                 </label>
                 <input
@@ -47,17 +47,17 @@ export function BusinessIdentityStep({ onContinue, onSkip, onPause }: Props) {
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
                   placeholder="e.g., Riverside Medical Group"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
                   Industry / Sector
                 </label>
                 <select
                   value={industry}
                   onChange={(e) => setIndustry(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-lg"
                 >
                   <option value="">Select an industry...</option>
                   <option value="healthcare">Healthcare</option>
@@ -73,7 +73,7 @@ export function BusinessIdentityStep({ onContinue, onSkip, onPause }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
                   Primary Location
                 </label>
                 <input
@@ -81,17 +81,17 @@ export function BusinessIdentityStep({ onContinue, onSkip, onPause }: Props) {
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g., Portland, Oregon"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
                   Timezone
                 </label>
                 <select
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-lg"
                 >
                   <option value="">Select timezone...</option>
                   <option value="America/New_York">Eastern (US)</option>
