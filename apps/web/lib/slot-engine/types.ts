@@ -1,3 +1,5 @@
+import { bookingConfigSchema } from "@dpf/validators";
+
 /** A contiguous time window in minutes-since-midnight (local time) */
 export interface TimeWindow {
   startMinutes: number; // 0-1439
@@ -43,9 +45,6 @@ export interface ResolvedBookingConfig {
 }
 
 export function resolveBookingConfig(raw: Record<string, unknown>): ResolvedBookingConfig {
-  // Import bookingConfigSchema from @dpf/validators for safe parsing
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { bookingConfigSchema } = require("@dpf/validators");
   const parsed = bookingConfigSchema.safeParse(raw);
   const cfg = parsed.success ? parsed.data : raw;
   const dur = typeof cfg.durationMinutes === "number" ? cfg.durationMinutes : 60;
