@@ -124,6 +124,110 @@ function ensureContrast(fg: string, bg: string, minRatio: number): string {
   return hslToHex(h, s, l);
 }
 
+export type Correction = {
+  mode: "light" | "dark";
+  foreground: string;
+  background: string;
+  original: string;
+  corrected: string;
+  originalRatio: number;
+  correctedRatio: number;
+};
+
+type ContrastCheck = {
+  fgPath: string;
+  bgPath: string;
+  getFg: (t: ThemeTokens) => string;
+  getBg: (t: ThemeTokens) => string;
+  setFg: (t: ThemeTokens, v: string) => void;
+  minRatio: number;
+};
+
+function makeChecks(): ContrastCheck[] {
+  const text45 = (bgPath: string, getBg: (t: ThemeTokens) => string): ContrastCheck => ({
+    fgPath: "palette.text", bgPath, minRatio: 4.5,
+    getFg: t => t.palette.text, getBg,
+    setFg: (t, v) => { t.palette.text = v; },
+  });
+
+  return [
+    text45("palette.bg", t => t.palette.bg),
+    text45("palette.surface1", t => t.palette.surface1),
+    text45("palette.surface2", t => t.palette.surface2),
+    text45("surfaces.panel", t => t.surfaces.panel),
+    text45("surfaces.card", t => t.surfaces.card),
+    text45("surfaces.sidebar", t => t.surfaces.sidebar),
+    text45("surfaces.modal", t => t.surfaces.modal),
+    { fgPath: "palette.muted", bgPath: "palette.bg", minRatio: 4.5,
+      getFg: t => t.palette.muted, getBg: t => t.palette.bg,
+      setFg: (t, v) => { t.palette.muted = v; } },
+    { fgPath: "palette.muted", bgPath: "palette.surface1", minRatio: 4.5,
+      getFg: t => t.palette.muted, getBg: t => t.palette.surface1,
+      setFg: (t, v) => { t.palette.muted = v; } },
+    { fgPath: "palette.accent", bgPath: "palette.bg", minRatio: 4.5,
+      getFg: t => t.palette.accent, getBg: t => t.palette.bg,
+      setFg: (t, v) => { t.palette.accent = v; } },
+    { fgPath: "palette.accent", bgPath: "palette.surface1", minRatio: 3,
+      getFg: t => t.palette.accent, getBg: t => t.palette.surface1,
+      setFg: (t, v) => { t.palette.accent = v; } },
+    { fgPath: "palette.border", bgPath: "palette.bg", minRatio: 3,
+      getFg: t => t.palette.border, getBg: t => t.palette.bg,
+      setFg: (t, v) => { t.palette.border = v; } },
+    { fgPath: "palette.border", bgPath: "palette.surface1", minRatio: 3,
+      getFg: t => t.palette.border, getBg: t => t.palette.surface1,
+      setFg: (t, v) => { t.palette.border = v; } },
+    { fgPath: "states.focus", bgPath: "palette.bg", minRatio: 3,
+      getFg: t => t.states.focus, getBg: t => t.palette.bg,
+      setFg: (t, v) => { t.states.focus = v; } },
+    { fgPath: "states.focus", bgPath: "palette.surface1", minRatio: 3,
+      getFg: t => t.states.focus, getBg: t => t.palette.surface1,
+      setFg: (t, v) => { t.states.focus = v; } },
+    ...["success", "warning", "error", "info"].map((key): ContrastCheck => ({
+      fgPath: `states.${key}`, bgPath: "palette.bg", minRatio: 3,
+      getFg: t => t.states[key as keyof typeof t.states],
+      getBg: t => t.palette.bg,
+      setFg: (t, v) => { (t.states as Record<string, string>)[key] = v; },
+    })),
+  ];
+}
+
+const CONTRAST_CHECKS = makeChecks();
+
+export function validateTokenContrast(
+  tokens: ThemeTokens,
+  mode: "light" | "dark" = "light",
+): {
+  correctedTokens: ThemeTokens;
+  corrections: Correction[];
+} {
+  const corrected: ThemeTokens = JSON.parse(JSON.stringify(tokens));
+  const corrections: Correction[] = [];
+
+  for (const check of CONTRAST_CHECKS) {
+    const fg = check.getFg(corrected);
+    const bg = check.getBg(corrected);
+    if (!fg || !bg || !/^#[0-9a-fA-F]{6}$/.test(fg) || !/^#[0-9a-fA-F]{6}$/.test(bg)) continue;
+
+    const ratio = contrastRatio(fg, bg);
+    if (ratio >= check.minRatio) continue;
+
+    const fixed = ensureContrast(fg, bg, check.minRatio);
+    const fixedRatio = contrastRatio(fixed, bg);
+    check.setFg(corrected, fixed);
+    corrections.push({
+      mode,
+      foreground: check.fgPath,
+      background: check.bgPath,
+      original: fg,
+      corrected: fixed,
+      originalRatio: Math.round(ratio * 100) / 100,
+      correctedRatio: Math.round(fixedRatio * 100) / 100,
+    });
+  }
+
+  return { correctedTokens: corrected, corrections };
+}
+
 type DeriveOptions = { fontFamily?: string; headingFontFamily?: string };
 
 function deriveDarkTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
@@ -132,15 +236,16 @@ function deriveDarkTokens(accent: string, opts?: DeriveOptions): ThemeTokens {
   const surface1 = mixWithDark(accent, darkBase, 0.07);
   const surface2 = mixWithDark(accent, darkBase, 0.05);
   const muted = ensureContrast(lighten(accent, 0.4), bg, 4.5);
-  const border = mixWithDark(accent, "#1a1a2e", 0.2);
+  const border = ensureContrast(mixWithDark(accent, "#1a1a2e", 0.2), bg, 3);
   const text = ensureContrast("#e2e2f0", bg, 4.5);
+  const accentAdj = ensureContrast(accent, bg, 4.5);
 
   const font = opts?.fontFamily ?? "Inter, system-ui, sans-serif";
   const headingFont = opts?.headingFontFamily ?? font;
 
   return {
     version: "1.0.0",
-    palette: { bg, surface1, surface2, accent, muted, border, text },
+    palette: { bg, surface1, surface2, accent: accentAdj, muted, border, text },
     typography: { fontFamily: font, headingFontFamily: headingFont },
     spacing: { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px" },
     radius: { sm: "6px", md: "10px", lg: "14px", xl: "18px" },
@@ -198,15 +303,13 @@ export function deriveThemeTokens(accent: string, opts?: DeriveOptions): DualThe
 }
 
 type PresetRow = {
-  id: string; scope: string; companyName: string; logoUrl: string; tokens: DualThemeTokens;
+  id: string; scope: string; label: string; tokens: DualThemeTokens;
 };
-
-const DPF_LOGO = "/logos/open-digital-product-factory-logo.svg";
 
 function makePreset(slug: string, name: string, accent: string, font?: string): PresetRow {
   const scope = `theme-preset:${slug}`;
   return {
-    id: scope, scope, companyName: name, logoUrl: DPF_LOGO,
+    id: scope, scope, label: name,
     tokens: deriveThemeTokens(accent, font ? { fontFamily: font } : undefined),
   };
 }
