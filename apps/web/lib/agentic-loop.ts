@@ -2,9 +2,7 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 
-import { callWithFailover, type FailoverResult } from "./ai-provider-priority";
-import { callWithFallbackChain, type FallbackResult } from "./routing/fallback";
-import type { RouteDecision } from "./routing/types";
+import { routeAndCall, type RoutedInferenceResult } from "./routed-inference";
 import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
 import type { ChatMessage } from "./ai-inference";
 
@@ -106,8 +104,10 @@ export async function runAgenticLoop(params: {
   routeContext: string;
   agentId: string;
   threadId: string;
+  taskType?: string;
   modelRequirements?: Record<string, unknown>;
-  routeDecision?: RouteDecision;
+  /** @deprecated V2 routing is handled internally by routeAndCall. Ignored. */
+  routeDecision?: unknown;
   onProgress?: (event: import("./agent-event-bus").AgentEvent) => void;
 }): Promise<AgenticResult> {
   const {
@@ -120,16 +120,25 @@ export async function runAgenticLoop(params: {
     routeContext,
     agentId,
     threadId,
+    taskType,
     modelRequirements,
-    routeDecision,
     onProgress,
   } = params;
+
+  // Build routeAndCall options once (reused every iteration)
+  const routeOptions = {
+    ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+    taskType: taskType ?? "conversation",
+    ...(modelRequirements && typeof modelRequirements === "object" && "preferredProviderId" in modelRequirements
+      ? { preferredProviderId: modelRequirements.preferredProviderId as string }
+      : {}),
+  };
 
   let messages = [...chatHistory];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
-  let lastResult: FailoverResult | FallbackResult | null = null;
+  let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   let fabricationRetried = false;
   const startTime = Date.now();
@@ -157,12 +166,7 @@ export async function runAgenticLoop(params: {
         },
       ];
       // Allow one more iteration for the model to respond with a summary, then exit
-      const summaryResult = await (routeDecision?.selectedEndpoint
-        ? callWithFallbackChain(routeDecision, messages, systemPrompt, toolsForProvider)
-        : callWithFailover(messages, systemPrompt, sensitivity, {
-            ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-            ...(modelRequirements && Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
-          }));
+      const summaryResult = await routeAndCall(messages, systemPrompt, sensitivity, routeOptions);
       return {
         content: summaryResult.content || "I got stuck in a loop. Here's what I have so far — please check the build evidence.",
         providerId: summaryResult.providerId,
@@ -176,36 +180,12 @@ export async function runAgenticLoop(params: {
       };
     }
 
-    let result: FailoverResult | FallbackResult;
-
-    if (routeDecision?.selectedEndpoint) {
-      // EP-INF-001: Use manifest-based routing with fallback chain
-      const fbResult = await callWithFallbackChain(
-        routeDecision,
-        messages,
-        systemPrompt,
-        toolsForProvider,
-      );
-      result = fbResult;
-    } else {
-      // Legacy path: callWithFailover builds its own priority list
-      result = await callWithFailover(
-        messages,
-        systemPrompt,
-        sensitivity,
-        {
-          ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-          ...(modelRequirements && Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
-        },
-      );
-    }
+    // EP-INF-009b: All inference goes through V2 routing pipeline
+    const result = await routeAndCall(messages, systemPrompt, sensitivity, routeOptions);
 
     lastResult = result;
-    // Handle both token formats: FailoverResult has flat fields, FallbackResult has nested
-    const inputTok = "inputTokens" in result ? (result as FailoverResult).inputTokens : result.tokenUsage?.inputTokens;
-    const outputTok = "outputTokens" in result ? (result as FailoverResult).outputTokens : result.tokenUsage?.outputTokens;
-    totalInputTokens += inputTok ?? 0;
-    totalOutputTokens += outputTok ?? 0;
+    totalInputTokens += result.inputTokens;
+    totalOutputTokens += result.outputTokens;
 
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
@@ -220,7 +200,10 @@ export async function runAgenticLoop(params: {
 
       // Safety net: nudge the model to use tools if it responded with text-only.
       // Catches both mid-workflow stalls AND first-iteration zero-tool responses.
-      const shouldNudgeNow = shouldNudge({
+      // Skip nudging entirely when tools were stripped by routing degradation —
+      // the model gave a correct conversational response, nudging would push it
+      // to hallucinate tool calls it can't make.
+      const shouldNudgeNow = result.toolsStripped ? false : shouldNudge({
         continuationNudges,
         iteration,
         maxIterations: MAX_ITERATIONS,

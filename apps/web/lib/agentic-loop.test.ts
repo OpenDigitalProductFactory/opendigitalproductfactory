@@ -3,19 +3,37 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Import pure functions that don't need mocks
 import { shouldNudge, detectFabrication } from "./agentic-loop";
 
-vi.mock("./ai-provider-priority", () => ({
-  callWithFailover: vi.fn(),
-}));
-vi.mock("./routing/fallback", () => ({
-  callWithFallbackChain: vi.fn(),
+vi.mock("./routed-inference", () => ({
+  routeAndCall: vi.fn(),
 }));
 vi.mock("./mcp-tools", () => ({
   executeTool: vi.fn(),
 }));
 
 import { runAgenticLoop } from "./agentic-loop";
-import { callWithFailover } from "./ai-provider-priority";
+import { routeAndCall } from "./routed-inference";
 import { executeTool } from "./mcp-tools";
+
+// Helper to build a mock RoutedInferenceResult
+function mockResult(overrides: {
+  content: string;
+  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  inputTokens?: number;
+  outputTokens?: number;
+}) {
+  return {
+    content: overrides.content,
+    providerId: "anthropic-sub",
+    modelId: "claude-haiku-4-5-20251001",
+    downgraded: false,
+    downgradeMessage: null,
+    toolsStripped: false,
+    inputTokens: overrides.inputTokens ?? 100,
+    outputTokens: overrides.outputTokens ?? 50,
+    toolCalls: overrides.toolCalls ?? [],
+    routeDecision: {} as any,
+  };
+}
 
 describe("shouldNudge", () => {
   it("nudges on first iteration when model returns text-only with tools available", () => {
@@ -120,21 +138,16 @@ describe("runAgenticLoop", () => {
   };
 
   it("creates structured messages with tool call IDs after tool execution", async () => {
-    const mockFailover = vi.mocked(callWithFailover);
+    const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
 
     // Iteration 0: model calls a tool
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "Searching for agent code.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 100,
       outputTokens: 50,
-      inferenceMs: 500,
       toolCalls: [{ id: "toolu_01A", name: "search_project_files", arguments: { query: "agent" } }],
-    });
+    }));
 
     mockExecuteTool.mockResolvedValueOnce({
       success: true,
@@ -143,36 +156,26 @@ describe("runAgenticLoop", () => {
     });
 
     // Iteration 1: model responds with text only (short → nudge fires)
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "I found 3 agent-related files: a.ts, b.ts, c.ts.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 200,
       outputTokens: 80,
-      inferenceMs: 400,
-    });
+    }));
 
     // Iteration 2: after nudge, model gives longer final answer → exits loop
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "I found 3 agent-related files: a.ts, b.ts, c.ts. These contain the component structure, routing logic, and message state management you'll need for the alert feature. The AgentFAB component already has a status indicator.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 300,
       outputTokens: 100,
-      inferenceMs: 500,
-    });
+    }));
 
     const result = await runAgenticLoop(baseParams);
 
     expect(result.content).toContain("I found 3 agent-related files");
     expect(result.executedTools).toHaveLength(1);
 
-    // Verify the messages passed to the second callWithFailover call
-    const secondCallMessages = mockFailover.mock.calls[1]![0]; // first arg is messages
+    // Verify the messages passed to the second routeAndCall call
+    const secondCallMessages = mockRoute.mock.calls[1]![0]; // first arg is messages
 
     // Should have: user msg, assistant with toolCalls, tool result
     const assistantMsg = secondCallMessages.find((m: any) => m.role === "assistant" && m.toolCalls);
@@ -187,31 +190,21 @@ describe("runAgenticLoop", () => {
   });
 
   it("returns text-only response when no tool calls (after nudge)", async () => {
-    const mockFailover = vi.mocked(callWithFailover);
+    const mockRoute = vi.mocked(routeAndCall);
 
     // First response: short text-only → triggers nudge (iteration 0, < 200 chars)
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "Hello! How can I help?",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 50,
       outputTokens: 20,
-      inferenceMs: 200,
-    });
+    }));
 
     // Second response after nudge: still text-only → exits loop
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "I can help you build features. What would you like to create?",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 80,
       outputTokens: 30,
-      inferenceMs: 200,
-    });
+    }));
 
     const result = await runAgenticLoop(baseParams);
     // After nudge, returns the second response
@@ -221,58 +214,43 @@ describe("runAgenticLoop", () => {
   });
 
   it("handles multiple tool calls in one iteration", async () => {
-    const mockFailover = vi.mocked(callWithFailover);
+    const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
 
     // Model calls two tools at once
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "Searching and reading.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 100,
       outputTokens: 50,
-      inferenceMs: 500,
       toolCalls: [
         { id: "toolu_01A", name: "search_project_files", arguments: { query: "agent" } },
         { id: "toolu_01B", name: "search_project_files", arguments: { query: "coworker" } },
       ],
-    });
+    }));
 
     mockExecuteTool
       .mockResolvedValueOnce({ success: true, message: "Found 3 files" })
       .mockResolvedValueOnce({ success: true, message: "Found 2 files" });
 
     // Iteration 1: model responds with text only (short → nudge fires)
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "Found agent and coworker files.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 200,
       outputTokens: 80,
-      inferenceMs: 400,
-    });
+    }));
 
     // Iteration 2: after nudge, model gives longer response → exits loop
-    mockFailover.mockResolvedValueOnce({
+    mockRoute.mockResolvedValueOnce(mockResult({
       content: "I found agent-related files in the project. The main coworker panel is in AgentCoworkerPanel.tsx and the agent routing is in agent-routing.ts. Both files contain the patterns you need for your feature.",
-      providerId: "anthropic-sub",
-      modelId: "claude-haiku-4-5-20251001",
-      downgraded: false,
-      downgradeMessage: null,
       inputTokens: 300,
       outputTokens: 100,
-      inferenceMs: 500,
-    });
+    }));
 
     const result = await runAgenticLoop(baseParams);
     expect(result.executedTools).toHaveLength(2);
 
     // Should have ONE assistant message and TWO tool result messages in second call
-    const secondCallMessages = mockFailover.mock.calls[1]![0];
+    const secondCallMessages = mockRoute.mock.calls[1]![0];
     const toolMsgs = secondCallMessages.filter((m: any) => m.role === "tool");
     expect(toolMsgs).toHaveLength(2);
     expect(toolMsgs[0]!.toolCallId).toBe("toolu_01A");
