@@ -100,6 +100,7 @@ export type FeatureBuildRow = {
   taskResults: TaskResult[] | null;
   verificationOut: VerificationOutput | null;
   acceptanceMet: AcceptanceCriterion[] | null;
+  uxTestResults: Array<{ step: string; passed: boolean; screenshotUrl: string | null; error: string | null }> | null;
   accountableEmployeeId: string | null;
   claimedByAgentId: string | null;
   claimedAt: Date | null;
@@ -215,6 +216,12 @@ export function checkPhaseGate(
     if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
     const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
     if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
+    // UX tests: soft gate — if present, all must pass. New builds always have them (Review prompt runs them).
+    if (evidence.uxTestResults) {
+      const uxResults = evidence.uxTestResults as Array<{ passed?: boolean }>;
+      const failed = uxResults.filter((s) => !s.passed).length;
+      if (failed > 0) return { allowed: false, reason: `${failed} UX test(s) failed. Fix issues before shipping.` };
+    }
     return { allowed: true };
   }
 
