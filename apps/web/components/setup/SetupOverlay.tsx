@@ -13,19 +13,30 @@ import {
 import { advanceStep, skipStep, pauseSetup, completeSetup } from "@/lib/actions/setup-progress";
 
 /**
- * Step-specific greetings sent as auto-messages to the coworker panel.
- * These are sent FROM the user to the route's agent, prompting the agent
- * to provide onboarding context for that page.
+ * Pre-written COO welcome messages for each setup step.
+ * These appear directly in the coworker panel as assistant messages —
+ * NO LLM call needed. The local model can't reliably generate useful
+ * onboarding guidance, so we write it ourselves.
  */
-const STEP_GREETINGS: Record<string, string> = {
+const STEP_WELCOME: Record<string, string> = {
   "ai-providers":
-    "I'm new here and setting up the platform for the first time. Can you help me understand what I'm looking at on this AI Providers page and what I should configure?",
+    "Welcome to External Services. This is where you manage your AI providers — the engines that power the platform's intelligence.\n\n" +
+    "Right now, Ollama is running locally on your machine. It handles basic conversation (like this), but for complex tasks like document analysis, code generation, or taking actions, you'll want to add a cloud provider.\n\n" +
+    "To add one: click a provider like Anthropic or OpenAI, paste your API key, and click Test Connection. The platform will automatically use the best provider for each task.\n\n" +
+    "When you're ready, click Continue below — or Skip if you want to explore this later.",
   "branding":
-    "I'm setting up the platform for the first time. Can you walk me through the branding options here?",
+    "This is your branding page. Everything here controls how your platform looks — to your team and to your customers.\n\n" +
+    "You can set your logo, colors, and tagline. Changes apply across the entire platform, including the storefront if you set one up.\n\n" +
+    "Don't worry about getting it perfect now — you can always come back here from Admin > Branding.",
   "org-settings":
-    "I'm going through initial setup. Can you explain what these organization settings are for and what I should fill in?",
+    "These are your organization settings — the basics about your business.\n\n" +
+    "You can update your organization name, contact details, and location here. This information is used across the platform for things like compliance context and customer-facing materials.\n\n" +
+    "Take a look and fill in what you'd like. You can always update these later.",
   "workspace":
-    "I just finished setting up the platform. Can you show me around the workspace and what I can do here?",
+    "This is your workspace — where you and your team do day-to-day work.\n\n" +
+    "From here you can manage your backlog, talk to AI coworkers, and access all areas of the platform from the navigation above.\n\n" +
+    "The AI Coworker panel (that's me) is always available — just click the button in the bottom right corner whenever you need help.\n\n" +
+    "That's the end of the setup tour. Welcome aboard!",
 };
 
 type Props = {
@@ -46,14 +57,21 @@ export function SetupOverlay({ progressId, currentStep, steps }: Props) {
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
 
-  // Auto-open the coworker panel with an onboarding greeting for this step
+  // Auto-open the coworker panel with a pre-written welcome for this step.
+  // Uses welcomeMessage (not autoMessage) — no LLM call, just injects the
+  // text directly as an assistant message. Small delay ensures the panel
+  // component is mounted before the event fires.
   useEffect(() => {
-    const greeting = STEP_GREETINGS[currentStep];
-    document.dispatchEvent(
-      new CustomEvent("open-agent-panel", {
-        detail: greeting ? { autoMessage: greeting } : undefined,
-      }),
-    );
+    const welcome = STEP_WELCOME[currentStep];
+    if (!welcome) return;
+    const timer = setTimeout(() => {
+      document.dispatchEvent(
+        new CustomEvent("open-agent-panel", {
+          detail: { welcomeMessage: welcome },
+        }),
+      );
+    }, 300);
+    return () => clearTimeout(timer);
   }, [currentStep]);
 
   const handleContinue = () => {
