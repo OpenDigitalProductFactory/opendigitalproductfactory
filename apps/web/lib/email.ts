@@ -220,6 +220,81 @@ export function composeDunningEmail(params: DunningEmailParams) {
   return { to, subject, text, html };
 }
 
+// ─── composeExpenseApprovalEmail ──────────────────────────────────────────────
+
+type ExpenseApprovalEmailParams = {
+  to: string;
+  claimId: string;
+  employeeName: string;
+  title: string;
+  totalAmount: string;
+  currency: string;
+  itemCount: number;
+  approveUrl: string;
+};
+
+export function composeExpenseApprovalEmail(params: ExpenseApprovalEmailParams) {
+  const { to, claimId, employeeName, title, totalAmount, currency, itemCount, approveUrl } = params;
+
+  const subject = `Expense claim ${claimId} from ${employeeName} needs your approval`;
+
+  const text = [
+    `Expense Claim Approval Required`,
+    ``,
+    `Claim: ${claimId}`,
+    `Employee: ${employeeName}`,
+    `Title: ${title}`,
+    `Items: ${itemCount}`,
+    `Total: ${currency} ${totalAmount}`,
+    ``,
+    `Review and respond: ${approveUrl}`,
+    ``,
+    `Please approve or reject this expense claim at the link above.`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;">
+  <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+    <div style="background:white;border-radius:8px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <h1 style="margin:0 0 8px;font-size:24px;color:#111;">Expense Claim Approval Required</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;">From employee: ${employeeName}</p>
+
+      <div style="background:#f3f4f6;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Claim Reference</span>
+          <span style="font-size:16px;font-weight:600;color:#111;">${claimId}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Title</span>
+          <span style="font-size:14px;color:#111;">${title}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Items</span>
+          <span style="font-size:14px;color:#111;">${itemCount} item(s)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#6b7280;font-size:14px;">Total Amount</span>
+          <span style="font-size:24px;font-weight:700;color:#111;">${currency} ${totalAmount}</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-bottom:16px;">
+        <a href="${approveUrl}?response=approve" style="display:inline-block;background:#22c55e;color:white;font-size:16px;font-weight:600;padding:14px 36px;border-radius:8px;text-decoration:none;margin-right:12px;">Approve</a>
+        <a href="${approveUrl}?response=reject" style="display:inline-block;background:#ef4444;color:white;font-size:16px;font-weight:600;padding:14px 36px;border-radius:8px;text-decoration:none;">Reject</a>
+      </div>
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        You are receiving this because you are an expense approver.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { to, subject, text, html };
+}
+
 export async function sendEmail(options: EmailOptions): Promise<{ messageId: string }> {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || "587", 10);
