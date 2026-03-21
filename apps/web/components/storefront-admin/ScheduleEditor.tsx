@@ -103,7 +103,9 @@ export function ScheduleEditor({
       grouped.get(key)!.push(i);
     });
     for (const [key, days] of grouped) {
-      const [startTime, endTime] = key.split("-");
+      const keyParts = key.split("-");
+      const startTime = keyParts[0] ?? "09:00";
+      const endTime = keyParts[1] ?? "17:00";
       availabilityPayload.push({ days, startTime, endTime });
     }
 
@@ -143,6 +145,7 @@ export function ScheduleEditor({
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {DAY_NAMES.map((name, i) => {
           const d = dayStates[i];
+          if (!d) return null;
           return (
             <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
               <input

@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Seed default provider, availability, and booking config from template scheduling defaults
-  const template = ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
+  const template = ALL_ARCHETYPES.find((a: { archetypeId: string }) => a.archetypeId === archetypeId);
   if (template?.schedulingDefaults) {
     const defaults = template.schedulingDefaults;
 
@@ -106,7 +106,9 @@ export async function POST(req: NextRequest) {
       grouped.get(key)!.push(h.day);
     }
     for (const [key, days] of grouped) {
-      const [startTime, endTime] = key.split("-");
+      const keyParts = key.split("-");
+      const startTime = keyParts[0] ?? "09:00";
+      const endTime = keyParts[1] ?? "17:00";
       await prisma.providerAvailability.create({
         data: { providerId: provider.id, days, startTime, endTime },
       });
