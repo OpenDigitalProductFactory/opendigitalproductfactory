@@ -103,12 +103,17 @@ function stripPrefix(modelId: string): string {
 function extractCapabilities(
   supportedParams: string[],
   inputModalities: string[],
+  pricing?: ORPricing,
 ): ModelCardCapabilities {
   if (supportedParams.length === 0) {
     return { ...EMPTY_CAPABILITIES };
   }
 
   const hasParam = (p: string) => supportedParams.includes(p);
+
+  // webSearch: true if the model has non-zero web_search pricing (indicates support)
+  const webSearchPrice = pricing?.web_search ? parseFloat(pricing.web_search) : 0;
+  const webSearch = webSearchPrice > 0 ? true : null;
 
   return {
     ...EMPTY_CAPABILITIES,
@@ -117,6 +122,7 @@ function extractCapabilities(
     streaming: hasParam("stream") ? true : null,
     imageInput: inputModalities.includes("image") ? true : null,
     pdfInput: inputModalities.includes("file") ? true : null,
+    webSearch,
   };
 }
 
@@ -192,7 +198,7 @@ export const openRouterAdapter: ProviderAdapter = {
       inputModalities,
       outputModalities,
 
-      capabilities: extractCapabilities(supportedParams, inputModalities),
+      capabilities: extractCapabilities(supportedParams, inputModalities, raw.pricing),
       pricing: extractPricing(raw.pricing),
 
       supportedParameters: supportedParams,
