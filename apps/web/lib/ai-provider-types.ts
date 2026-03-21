@@ -145,6 +145,17 @@ export type ModelProfileRow = {
   speedRating: string | null;
   generatedBy: string;
   generatedAt: Date;
+  // EP-INF-003: ModelCard fields
+  modelClass?: string;
+  modelFamily?: string | null;
+  maxInputTokens?: number | null;
+  maxOutputTokens?: number | null;
+  capabilities?: Record<string, unknown>;
+  pricing?: Record<string, unknown>;
+  metadataSource?: string;
+  metadataConfidence?: string;
+  inputModalities?: string[];
+  outputModalities?: string[];
 };
 
 // ─── Registry JSON shape ──────────────────────────────────────────────────────
