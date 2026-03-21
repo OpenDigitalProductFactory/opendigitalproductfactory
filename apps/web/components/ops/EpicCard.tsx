@@ -55,7 +55,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   const statusColour = EPIC_STATUS_COLOURS[epic.status] ?? "#8888a0";
-  const portfolioLabels = epic.portfolios.map((p) => p.portfolio.name).join(" · ");
+  const portfolioLabels = epic.portfolios.filter((p) => p.portfolio).map((p) => p.portfolio.name).join(" · ");
 
   function handleDelete() {
     startTransition(async () => {
@@ -72,7 +72,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
         {/* col: expand — w-4 */}
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="w-4 shrink-0 text-[8px] text-[var(--dpf-muted)] hover:text-white text-center"
+          className="w-4 shrink-0 text-[8px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-center"
           aria-label={expanded ? "Collapse" : "Expand"}
         >
           {expanded ? "▼" : "▶"}
@@ -88,7 +88,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
         </div>
 
         {/* col: title — flex-1 */}
-        <p className="flex-1 min-w-0 text-xs text-white truncate">
+        <p className="flex-1 min-w-0 text-xs text-[var(--dpf-text)] truncate">
           {epic.title}
           <span className="ml-1.5 text-[9px] text-[var(--dpf-muted)] tabular-nums">({totalCount})</span>
           <span className="ml-2 text-[9px] text-[var(--dpf-muted)]">
@@ -126,14 +126,14 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
                 {isPending ? "…" : "confirm"}
               </button>
               <button onClick={() => setConfirmDelete(false)}
-                className="text-[10px] text-[var(--dpf-muted)] hover:text-white px-1">
+                className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] px-1">
                 cancel
               </button>
             </>
           ) : (
             <>
               <button onClick={() => onEdit(epic)}
-                className="text-[10px] text-[var(--dpf-muted)] hover:text-white px-1">
+                className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] px-1">
                 edit
               </button>
               <button onClick={() => setConfirmDelete(true)}

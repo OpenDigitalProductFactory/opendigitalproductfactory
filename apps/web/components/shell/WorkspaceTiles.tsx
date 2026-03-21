@@ -32,7 +32,7 @@ export function WorkspaceTiles({ tiles, tileStatus = {} }: Props) {
             className="group block p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-2 hover:bg-[var(--dpf-surface-2)] transition-colors"
             style={{ borderLeftColor: tile.accentColor }}
           >
-            <p className="text-sm font-semibold text-white mb-1">{tile.label}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)] mb-1">{tile.label}</p>
             {/* Metric rows */}
             {status?.metrics && status.metrics.length > 0 && (
               <div className="mt-1.5 space-y-0.5">

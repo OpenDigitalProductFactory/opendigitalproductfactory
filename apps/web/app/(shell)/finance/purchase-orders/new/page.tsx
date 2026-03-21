@@ -14,21 +14,21 @@ export default async function NewPOPage({ searchParams }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <Link
           href="/finance/purchase-orders"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Purchase Orders
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">New PO</span>
+        <span className="text-xs text-[var(--dpf-text)]">New PO</span>
       </div>
 
-      <h1 className="text-xl font-bold text-white mb-6">New Purchase Order</h1>
+      <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">New Purchase Order</h1>
 
       <div className="max-w-3xl">
         <CreatePOForm

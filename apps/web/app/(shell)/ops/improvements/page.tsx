@@ -15,7 +15,7 @@ export default async function ImprovementsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Operations</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Operations</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {total} improvement{total !== 1 ? "s" : ""}
           {actionable > 0 ? ` · ${actionable} need${actionable !== 1 ? "" : "s"} attention` : ""}

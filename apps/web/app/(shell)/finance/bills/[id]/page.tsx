@@ -34,22 +34,22 @@ export default async function BillDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <Link href="/finance/bills" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance/bills" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Bills
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{bill.billRef}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{bill.billRef}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-bold text-white">{bill.billRef}</h1>
+            <h1 className="text-xl font-bold text-[var(--dpf-text)]">{bill.billRef}</h1>
             <span
               className="text-[9px] px-2 py-0.5 rounded-full"
               style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
@@ -75,7 +75,7 @@ export default async function BillDetailPage({ params }: Props) {
             className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
           >
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">{label}</p>
-            <p className="text-sm text-white">{value}</p>
+            <p className="text-sm text-[var(--dpf-text)]">{value}</p>
           </div>
         ))}
       </div>
@@ -99,7 +99,7 @@ export default async function BillDetailPage({ params }: Props) {
             <tbody>
               {bill.lineItems.map((li) => (
                 <tr key={li.id} className="border-b border-[var(--dpf-border)] last:border-0">
-                  <td className="px-4 py-2.5 text-white">{li.description}</td>
+                  <td className="px-4 py-2.5 text-[var(--dpf-text)]">{li.description}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">{Number(li.quantity)}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     £{formatMoney(li.unitPrice)}
@@ -107,7 +107,7 @@ export default async function BillDetailPage({ params }: Props) {
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(li.taxRate)}%
                   </td>
-                  <td className="px-4 py-2.5 text-right text-white">
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                     £{formatMoney(li.lineTotal)}
                   </td>
                 </tr>
@@ -118,21 +118,21 @@ export default async function BillDetailPage({ params }: Props) {
                 <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
                   Subtotal
                 </td>
-                <td className="px-4 py-2.5 text-right text-white">£{formatMoney(bill.subtotal)}</td>
+                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">£{formatMoney(bill.subtotal)}</td>
               </tr>
               {Number(bill.taxAmount) > 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
                     Tax
                   </td>
-                  <td className="px-4 py-2.5 text-right text-white">£{formatMoney(bill.taxAmount)}</td>
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">£{formatMoney(bill.taxAmount)}</td>
                 </tr>
               )}
               <tr className="border-t border-[var(--dpf-border)]">
-                <td colSpan={4} className="px-4 py-2.5 text-right text-white text-[10px] uppercase tracking-widest font-semibold">
+                <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-text)] text-[10px] uppercase tracking-widest font-semibold">
                   Total
                 </td>
-                <td className="px-4 py-2.5 text-right text-white font-bold">
+                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)] font-bold">
                   £{formatMoney(bill.totalAmount)}
                 </td>
               </tr>
@@ -156,7 +156,7 @@ export default async function BillDetailPage({ params }: Props) {
                   className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] flex items-start justify-between gap-4"
                 >
                   <div>
-                    <p className="text-sm text-white">{approval.approver.email}</p>
+                    <p className="text-sm text-[var(--dpf-text)]">{approval.approver.email}</p>
                     {approval.comments && (
                       <p className="text-xs text-[var(--dpf-muted)] mt-1">{approval.comments}</p>
                     )}
@@ -203,7 +203,7 @@ export default async function BillDetailPage({ params }: Props) {
                         {alloc.payment.paymentRef}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right text-white">
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       £{formatMoney(alloc.amount)}
                     </td>
                   </tr>

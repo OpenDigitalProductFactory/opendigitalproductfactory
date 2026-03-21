@@ -6,7 +6,7 @@ import { ComplianceModal } from "./ComplianceModal";
 import { createPolicy } from "@/lib/actions/policy";
 import { POLICY_CATEGORIES } from "@/lib/policy-types";
 
-const inputClasses = "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
+const inputClasses = "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 
 export function CreatePolicyForm() {
@@ -65,7 +65,7 @@ export function CreatePolicyForm() {
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-white">Cancel</button>
+            <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Cancel</button>
             <button type="submit" disabled={loading}
               className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-accent)] text-white hover:opacity-90 disabled:opacity-50">
               {loading ? "Creating..." : "Create"}

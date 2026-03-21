@@ -21,7 +21,7 @@ export default async function ActionsPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Corrective Actions</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Corrective Actions</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{actions.length} total</p>
         </div>
         <CreateCorrectiveActionForm />
@@ -30,7 +30,7 @@ export default async function ActionsPage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="status" defaultValue={sp.status ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           {CORRECTIVE_ACTION_STATUSES.map((s) => (
             <option key={s} value={s}>{s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -38,7 +38,7 @@ export default async function ActionsPage({ searchParams }: Props) {
         </select>
 
         <select name="sourceType" defaultValue={sp.sourceType ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All sources</option>
           {CORRECTIVE_ACTION_SOURCE_TYPES.map((t) => (
             <option key={t} value={t}>{t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -46,7 +46,7 @@ export default async function ActionsPage({ searchParams }: Props) {
         </select>
 
         <select name="overdue" defaultValue={sp.overdue ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All due dates</option>
           <option value="yes">Overdue only</option>
         </select>
@@ -58,7 +58,7 @@ export default async function ActionsPage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/actions"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -75,13 +75,13 @@ export default async function ActionsPage({ searchParams }: Props) {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white">{a.title}</span>
+                      <span className="text-sm text-[var(--dpf-text)]">{a.title}</span>
                       {isOverdue && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">OVERDUE</span>
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{a.sourceType}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{a.sourceType}</span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
                         a.status === "verified" ? "bg-green-900/30 text-green-400" :
                         a.status === "completed" ? "bg-blue-900/30 text-blue-400" :

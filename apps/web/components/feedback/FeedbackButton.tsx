@@ -73,7 +73,7 @@ export function FeedbackButton({ userId }: Props) {
           zIndex: 50,
           overflow: "hidden",
         }}>
-          <div style={{ padding: "10px 12px 0", fontSize: 12, fontWeight: 600, color: "#e0e0ff" }}>
+          <div style={{ padding: "10px 12px 0", fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
             Send Feedback
           </div>
           <FeedbackForm

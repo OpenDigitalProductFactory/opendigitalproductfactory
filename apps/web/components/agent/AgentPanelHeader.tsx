@@ -75,7 +75,7 @@ export function AgentPanelHeader({
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#e0e0ff" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
             {agent.agentName}
           </span>
           <AgentSkillsDropdown
@@ -86,7 +86,7 @@ export function AgentPanelHeader({
             onCreateSkill={() => {}}
           />
           {providerInfo && (
-            <span style={{ fontSize: 9, color: "#8888a0", fontFamily: "monospace" }}>
+            <span style={{ fontSize: 9, color: "var(--dpf-muted)", fontFamily: "monospace" }}>
               {providerInfo.providerId}:{providerInfo.modelId}
             </span>
           )}
@@ -283,7 +283,7 @@ export function AgentPanelHeader({
               zIndex: 2,
             }}
           >
-            <span style={{ fontSize: 12, color: "#e0e0ff", lineHeight: 1.4 }}>
+            <span style={{ fontSize: 12, color: "var(--dpf-text)", lineHeight: 1.4 }}>
               Erase this page conversation?
             </span>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>

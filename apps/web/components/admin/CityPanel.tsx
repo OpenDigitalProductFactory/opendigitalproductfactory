@@ -112,7 +112,7 @@ export function CityPanel({ cities, countries, regions }: Props) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-left"
       >
-        <h3 className="text-sm font-semibold text-white">
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
           Cities ({activeCount} active)
         </h3>
         <span className="text-[var(--dpf-muted)] text-sm">

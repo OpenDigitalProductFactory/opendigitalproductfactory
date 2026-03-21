@@ -39,9 +39,9 @@ export function AgentGovernanceCard({ agent }: Props) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[9px] font-mono text-[var(--dpf-muted)]">{agent.agentId}</p>
-          <p className="mt-1 text-sm font-semibold text-white">{agent.name}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{agent.name}</p>
         </div>
-        <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-[var(--dpf-muted)]">
+        <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-[var(--dpf-muted)]">
           Tier {agent.tier}
         </span>
       </div>
@@ -52,13 +52,13 @@ export function AgentGovernanceCard({ agent }: Props) {
 
       <div className="mt-3 space-y-1.5 text-[10px] text-[var(--dpf-muted)]">
         <p>
-          Capability class: <span className="text-white">{agent.capabilityClassName ?? "Not assigned"}</span>
+          Capability class: <span className="text-[var(--dpf-text)]">{agent.capabilityClassName ?? "Not assigned"}</span>
         </p>
         <p>
-          Autonomy: <span className="text-white capitalize">{formatAutonomyLabel(agent.autonomyLevel)}</span>
+          Autonomy: <span className="text-[var(--dpf-text)] capitalize">{formatAutonomyLabel(agent.autonomyLevel)}</span>
         </p>
         <p>
-          Owning team: <span className="text-white">{agent.owningTeamName ?? "Unassigned"}</span>
+          Owning team: <span className="text-[var(--dpf-text)]">{agent.owningTeamName ?? "Unassigned"}</span>
         </p>
       </div>
 
@@ -66,7 +66,7 @@ export function AgentGovernanceCard({ agent }: Props) {
         <p className="text-[10px] font-medium" style={{ color: colour }}>
           {agent.portfolioName ?? "Cross-cutting"}
         </p>
-        <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium text-white">
+        <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-text)]">
           {formatCountLabel(agent.activeGrantCount)}
         </span>
       </div>

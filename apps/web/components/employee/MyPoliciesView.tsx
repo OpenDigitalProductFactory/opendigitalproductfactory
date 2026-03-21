@@ -45,8 +45,8 @@ export function MyPoliciesView() {
             {data.pendingAcknowledgments.map((p) => (
               <div key={p.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
                 <div>
-                  <span className="text-sm text-white">{p.title}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)] ml-2">{p.category}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{p.title}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] ml-2">{p.category}</span>
                 </div>
                 <button onClick={() => handleAcknowledge(p.id)}
                   className="px-3 py-1 text-xs font-medium rounded bg-[var(--dpf-accent)] text-white hover:opacity-90">
@@ -69,7 +69,7 @@ export function MyPoliciesView() {
             {data.pendingTraining.map((r) => (
               <div key={r.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
                 <div>
-                  <span className="text-sm text-white">{r.trainingRequirement?.trainingTitle ?? r.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{r.trainingRequirement?.trainingTitle ?? r.title}</span>
                   <span className="text-[9px] text-[var(--dpf-muted)] ml-2">({r.policy.title})</span>
                   {r.trainingRequirement?.externalUrl && (
                     <a href={r.trainingRequirement.externalUrl} target="_blank" rel="noopener noreferrer"
@@ -97,8 +97,8 @@ export function MyPoliciesView() {
             {data.completedHistory.map((c) => (
               <div key={c.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
                 <div>
-                  <span className="text-sm text-white">{c.requirement.title}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)] ml-2">{c.requirement.requirementType}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{c.requirement.title}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] ml-2">{c.requirement.requirementType}</span>
                   <p className="text-[9px] text-[var(--dpf-muted)] mt-1">{c.requirement.policy.title}</p>
                 </div>
                 <span className="text-xs text-[var(--dpf-muted)]">{new Date(c.completedAt).toLocaleDateString()}</span>

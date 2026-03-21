@@ -51,17 +51,17 @@ export default async function ProviderDetailPage({ params }: Props) {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <Link href="/platform/ai/providers" style={{ color: "#b0b0c8", fontSize: 12 }}>← External Services</Link>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
+        <Link href="/platform/ai/providers" style={{ color: "var(--dpf-muted)", fontSize: 12 }}>← External Services</Link>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--dpf-text)", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
-          <span style={{ fontSize: 12, color: "#b0b0c8", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
+          <span style={{ fontSize: 12, color: "var(--dpf-muted)", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
           {pw.provider.docsUrl && (
-            <a href={pw.provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#7c8cf8", fontSize: 12 }}>
+            <a href={pw.provider.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dpf-accent)", fontSize: 12 }}>
               Docs
             </a>
           )}
           {pw.provider.consoleUrl && (
-            <a href={pw.provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#7c8cf8", fontSize: 12 }}>
+            <a href={pw.provider.consoleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dpf-accent)", fontSize: 12 }}>
               Console
             </a>
           )}
@@ -82,13 +82,13 @@ export default async function ProviderDetailPage({ params }: Props) {
 
       {pw.provider.costPerformanceNotes && (
         <div style={{
-          background: "#161625",
+          background: "var(--dpf-surface-1)",
           borderLeft: "3px solid #7c8cf8",
           borderRadius: 6,
           padding: "12px 16px",
           marginBottom: 16,
           fontSize: 12,
-          color: "#b0b0c8",
+          color: "var(--dpf-muted)",
           lineHeight: 1.5,
         }}>
           {pw.provider.costPerformanceNotes}
@@ -99,7 +99,7 @@ export default async function ProviderDetailPage({ params }: Props) {
         <McpServiceDetail provider={pw.provider} />
       ) : (
         <>
-          <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
+          <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
             <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} />
           </div>
 
@@ -126,18 +126,18 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
   const isPluginManaged = provider.category === "mcp-subscribed" && !provider.endpoint && !provider.baseUrl;
 
   return (
-    <div style={{ background: "#1a1a2e", border: "1px solid #2a2a40", borderRadius: 8, padding: 20 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 16 }}>MCP Service Configuration</h2>
+    <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
+      <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 16 }}>MCP Service Configuration</h2>
 
       {isPluginManaged && (
         <div style={{
-          background: "#161625",
+          background: "var(--dpf-surface-1)",
           borderLeft: "3px solid #38bdf8",
           borderRadius: 6,
           padding: "12px 16px",
           marginBottom: 16,
           fontSize: 12,
-          color: "#b0b0c8",
+          color: "var(--dpf-muted)",
           lineHeight: 1.5,
         }}>
           This service is managed by a Claude Code plugin. Connection details are handled by the plugin runtime — no manual URL configuration needed.
@@ -146,53 +146,53 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint Type</div>
-          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.endpointType}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint Type</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.endpointType}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Category</div>
-          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.category}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Category</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.category}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Transport</div>
-          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.mcpTransport ?? "Plugin-managed"}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Transport</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.mcpTransport ?? "Plugin-managed"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Status</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Status</div>
           <div style={{ fontSize: 13, color: provider.status === "active" ? "#4ade80" : "#fbbf24" }}>{provider.status}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
-          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.capabilityTier ?? "basic"}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.capabilityTier ?? "basic"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost Band</div>
-          <div style={{ fontSize: 13, color: "#e0e0ff" }}>{provider.costBand ?? "free"}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost Band</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.costBand ?? "free"}</div>
         </div>
       </div>
 
       {/* Sensitivity Clearance */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Sensitivity Clearance</div>
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Sensitivity Clearance</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(provider.sensitivityClearance ?? []).length > 0
             ? (provider.sensitivityClearance ?? []).map((s: string) => (
-                <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#161625", color: "#b0b0c8" }}>{s}</span>
+                <span key={s} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "var(--dpf-surface-1)", color: "var(--dpf-muted)" }}>{s}</span>
               ))
-            : <span style={{ fontSize: 11, color: "#8888a0" }}>None configured</span>
+            : <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>None configured</span>
           }
         </div>
       </div>
 
       {/* Task Tags */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Task Tags</div>
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Task Tags</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(provider.taskTags ?? []).length > 0
             ? (provider.taskTags ?? []).map((tag: string) => (
-                <span key={tag} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#161625", color: "#b0b0c8" }}>{tag}</span>
+                <span key={tag} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "var(--dpf-surface-1)", color: "var(--dpf-muted)" }}>{tag}</span>
               ))
-            : <span style={{ fontSize: 11, color: "#8888a0" }}>None configured</span>
+            : <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>None configured</span>
           }
         </div>
       </div>
@@ -200,8 +200,8 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
       {/* Endpoint URL (if manually configured) */}
       {(provider.endpoint || provider.baseUrl) && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint URL</div>
-          <div style={{ fontSize: 12, color: "#e0e0ff", fontFamily: "monospace" }}>{provider.endpoint ?? provider.baseUrl}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint URL</div>
+          <div style={{ fontSize: 12, color: "var(--dpf-text)", fontFamily: "monospace" }}>{provider.endpoint ?? provider.baseUrl}</div>
         </div>
       )}
     </div>

@@ -20,10 +20,10 @@ export default async function AgentHistoryPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
           Action History
         </h1>
-        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           {stats.total} proposal{stats.total !== 1 ? "s" : ""} recorded
         </p>
       </div>
@@ -42,17 +42,17 @@ export default async function AgentHistoryPage() {
             <div
               key={card.key}
               style={{
-                background: "#1a1a2e",
-                border: "1px solid #2a2a40",
+                background: "var(--dpf-surface-1)",
+                border: "1px solid var(--dpf-border)",
                 borderLeft: `3px solid ${card.accent}`,
                 borderRadius: 6,
                 padding: "10px 12px",
               }}
             >
-              <div style={{ fontSize: 10, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {card.label}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 600, color: "#fff", marginTop: 4 }}>
+              <div style={{ fontSize: 22, fontWeight: 600, color: "var(--dpf-text)", marginTop: 4 }}>
                 {stats[card.key]}
               </div>
             </div>

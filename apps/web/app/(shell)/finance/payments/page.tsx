@@ -53,17 +53,17 @@ export default async function PaymentsPage({ searchParams }: Props) {
       <div className="mb-2">
         <Link
           href="/finance"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">Payments</span>
+        <span className="text-xs text-[var(--dpf-text)]">Payments</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Payments</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Payments</h1>
       </div>
 
       {/* Direction filter pills */}
@@ -72,8 +72,8 @@ export default async function PaymentsPage({ searchParams }: Props) {
           href="/finance/payments"
           className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
             !direction
-              ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+              ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           }`}
         >
           All
@@ -82,8 +82,8 @@ export default async function PaymentsPage({ searchParams }: Props) {
           href="/finance/payments?direction=inbound"
           className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
             direction === "inbound"
-              ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+              ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           }`}
         >
           Inbound
@@ -92,8 +92,8 @@ export default async function PaymentsPage({ searchParams }: Props) {
           href="/finance/payments?direction=outbound"
           className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
             direction === "outbound"
-              ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+              ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           }`}
         >
           Outbound
@@ -151,7 +151,7 @@ export default async function PaymentsPage({ searchParams }: Props) {
                       {linkedInvoice ? (
                         <Link
                           href={`/finance/invoices/${linkedInvoice.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white transition-colors"
+                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                         >
                           {linkedInvoice.invoiceRef}
                         </Link>
@@ -164,7 +164,7 @@ export default async function PaymentsPage({ searchParams }: Props) {
                         ? new Date(pmt.receivedAt).toLocaleDateString("en-GB")
                         : new Date(pmt.createdAt).toLocaleDateString("en-GB")}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-white">
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       £{formatMoney(Number(pmt.amount))}
                     </td>
                   </tr>

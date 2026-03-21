@@ -11,7 +11,7 @@ export default async function RegulationsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Regulations</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Regulations</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{regulations.length} registered</p>
         </div>
         <CreateRegulationForm />
@@ -25,8 +25,8 @@ export default async function RegulationsPage() {
             <a key={r.id} href={`/compliance/regulations/${r.id}`}
               className="block p-4 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-semibold text-white">{r.shortName}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
+                <span className="text-sm font-semibold text-[var(--dpf-text)]">{r.shortName}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${r.status === "active" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
                   {r.status}
                 </span>

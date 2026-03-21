@@ -19,7 +19,7 @@ export function NavBar({ items }: { items: NavItem[] }) {
             href={item.href}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               active
-                ? "bg-[var(--dpf-accent)] text-[var(--dpf-text)]"
+                ? "bg-[var(--dpf-accent)] text-white"
                 : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] border border-[var(--dpf-border)]"
             }`}
           >

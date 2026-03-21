@@ -29,15 +29,15 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/actions" className="text-xs text-[var(--dpf-muted)] hover:text-white">Actions</Link>
+        <Link href="/compliance/actions" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Actions</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{action.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{action.title}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{action.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{action.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[action.status] ?? "bg-gray-900/30 text-gray-400"}`}>
             {action.status}
           </span>
@@ -55,24 +55,24 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Source Type</p>
-          <p className="text-sm font-semibold text-white">{action.sourceType}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{action.sourceType}</p>
         </div>
         {action.dueDate && (
           <div className={`p-3 rounded-lg border ${isOverdue ? "border-red-500/50" : "border-[var(--dpf-border)]"}`}>
             <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
-            <p className={`text-sm font-semibold ${isOverdue ? "text-red-400" : "text-white"}`}>{new Date(action.dueDate).toLocaleDateString()}</p>
+            <p className={`text-sm font-semibold ${isOverdue ? "text-red-400" : "text-[var(--dpf-text)]"}`}>{new Date(action.dueDate).toLocaleDateString()}</p>
           </div>
         )}
         {action.completedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Completed At</p>
-            <p className="text-sm font-semibold text-white">{new Date(action.completedAt).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(action.completedAt).toLocaleDateString()}</p>
           </div>
         )}
         {action.owner && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Owner</p>
-            <p className="text-sm font-semibold text-white">{action.owner.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{action.owner.displayName}</p>
           </div>
         )}
       </div>
@@ -81,7 +81,7 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
       {action.rootCause && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Root Cause</h2>
-          <p className="text-sm text-white">{action.rootCause}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{action.rootCause}</p>
         </div>
       )}
 
@@ -93,19 +93,19 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
             {action.verificationMethod && (
               <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
                 <p className="text-xs text-[var(--dpf-muted)]">Method</p>
-                <p className="text-sm font-semibold text-white">{action.verificationMethod}</p>
+                <p className="text-sm font-semibold text-[var(--dpf-text)]">{action.verificationMethod}</p>
               </div>
             )}
             {action.verificationDate && (
               <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
                 <p className="text-xs text-[var(--dpf-muted)]">Verification Date</p>
-                <p className="text-sm font-semibold text-white">{new Date(action.verificationDate).toLocaleDateString()}</p>
+                <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(action.verificationDate).toLocaleDateString()}</p>
               </div>
             )}
             {action.verifiedBy && (
               <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
                 <p className="text-xs text-[var(--dpf-muted)]">Verified By</p>
-                <p className="text-sm font-semibold text-white">{action.verifiedBy.displayName}</p>
+                <p className="text-sm font-semibold text-[var(--dpf-text)]">{action.verifiedBy.displayName}</p>
               </div>
             )}
           </div>
@@ -120,8 +120,8 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
             href={`/compliance/incidents/${action.incident.id}`}
             className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
           >
-            <span className="text-sm font-semibold text-white">{action.incident.title}</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{action.incident.incidentId}</span>
+            <span className="text-sm font-semibold text-[var(--dpf-text)]">{action.incident.title}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{action.incident.incidentId}</span>
             <span className="text-xs text-blue-400">View</span>
           </Link>
         </div>
@@ -135,8 +135,8 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
             href={`/compliance/audits/${action.auditFinding.auditId}`}
             className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
           >
-            <span className="text-sm font-semibold text-white">{action.auditFinding.title}</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{action.auditFinding.findingId}</span>
+            <span className="text-sm font-semibold text-[var(--dpf-text)]">{action.auditFinding.title}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{action.auditFinding.findingId}</span>
             <span className="text-xs text-blue-400">View</span>
           </Link>
         </div>

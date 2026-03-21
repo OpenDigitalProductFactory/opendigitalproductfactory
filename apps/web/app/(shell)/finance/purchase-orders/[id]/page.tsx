@@ -36,22 +36,22 @@ export default async function PODetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <Link href="/finance/purchase-orders" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance/purchase-orders" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Purchase Orders
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{po.poNumber}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{po.poNumber}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-bold text-white">{po.poNumber}</h1>
+            <h1 className="text-xl font-bold text-[var(--dpf-text)]">{po.poNumber}</h1>
             <span
               className="text-[9px] px-2 py-0.5 rounded-full"
               style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
@@ -87,7 +87,7 @@ export default async function PODetailPage({ params }: Props) {
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">
               {label}
             </p>
-            <p className="text-sm text-white">{value}</p>
+            <p className="text-sm text-[var(--dpf-text)]">{value}</p>
           </div>
         ))}
       </div>
@@ -121,7 +121,7 @@ export default async function PODetailPage({ params }: Props) {
             <tbody>
               {po.lineItems.map((li) => (
                 <tr key={li.id} className="border-b border-[var(--dpf-border)] last:border-0">
-                  <td className="px-4 py-2.5 text-white">{li.description}</td>
+                  <td className="px-4 py-2.5 text-[var(--dpf-text)]">{li.description}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(li.quantity)}
                   </td>
@@ -131,7 +131,7 @@ export default async function PODetailPage({ params }: Props) {
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(li.taxRate)}%
                   </td>
-                  <td className="px-4 py-2.5 text-right text-white">
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                     £{formatMoney(li.lineTotal)}
                   </td>
                 </tr>
@@ -145,7 +145,7 @@ export default async function PODetailPage({ params }: Props) {
                 >
                   Subtotal
                 </td>
-                <td className="px-4 py-2.5 text-right text-white">
+                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                   £{formatMoney(po.subtotal)}
                 </td>
               </tr>
@@ -157,7 +157,7 @@ export default async function PODetailPage({ params }: Props) {
                   >
                     Tax
                   </td>
-                  <td className="px-4 py-2.5 text-right text-white">
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                     £{formatMoney(po.taxAmount)}
                   </td>
                 </tr>
@@ -165,11 +165,11 @@ export default async function PODetailPage({ params }: Props) {
               <tr className="border-t border-[var(--dpf-border)]">
                 <td
                   colSpan={4}
-                  className="px-4 py-2.5 text-right text-white text-[10px] uppercase tracking-widest font-semibold"
+                  className="px-4 py-2.5 text-right text-[var(--dpf-text)] text-[10px] uppercase tracking-widest font-semibold"
                 >
                   Total
                 </td>
-                <td className="px-4 py-2.5 text-right text-white font-bold">
+                <td className="px-4 py-2.5 text-right text-[var(--dpf-text)] font-bold">
                   £{formatMoney(po.totalAmount)}
                 </td>
               </tr>
@@ -210,7 +210,7 @@ export default async function PODetailPage({ params }: Props) {
                       <td className="px-4 py-2.5">
                         <Link
                           href={`/finance/bills/${bill.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white"
+                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                         >
                           {bill.billRef}
                         </Link>
@@ -223,7 +223,7 @@ export default async function PODetailPage({ params }: Props) {
                           {bill.status.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-white">
+                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         £{formatMoney(bill.totalAmount)}
                       </td>
                     </tr>

@@ -151,8 +151,8 @@ export function StructuredValueStreamNode({ data, selected = false }: Props) {
       >
         {childStages.map((stage, idx) => (
           <div
-            key={stage.id}
-            data-value-stream-stage-slot={stage.id}
+            key={stage.viewElementId}
+            data-value-stream-stage-slot={stage.viewElementId}
             style={{
               flexShrink: 0,
               width: layout.stages[idx]?.width ?? 120,

@@ -18,7 +18,7 @@ export function AgentAttachmentCard({ attachment }: { attachment: AttachmentInfo
     <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-xs mt-1 mb-1">
       <span className="text-base">{icon}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-white truncate">{attachment.fileName}</div>
+        <div className="text-[var(--dpf-text)] truncate">{attachment.fileName}</div>
         <div className="text-[var(--dpf-muted)] text-[10px]">
           {sizeLabel}
           {attachment.parsedSummary && <span> &middot; {attachment.parsedSummary}</span>}

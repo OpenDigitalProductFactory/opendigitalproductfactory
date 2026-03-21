@@ -21,38 +21,38 @@ export default async function AccountPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", marginBottom: 16 }}>Account Settings</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--dpf-text)", marginBottom: 16 }}>Account Settings</h1>
 
       <div style={{
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 8,
         padding: 20,
         marginBottom: 16,
       }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 12 }}>Company</h2>
-        <p style={{ fontSize: 14, color: "#e0e0ff" }}>{account?.name}</p>
-        <p style={{ fontSize: 11, color: "#8888a0", fontFamily: "monospace" }}>{account?.accountId}</p>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 12 }}>Company</h2>
+        <p style={{ fontSize: 14, color: "var(--dpf-text)" }}>{account?.name}</p>
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", fontFamily: "monospace" }}>{account?.accountId}</p>
       </div>
 
       <div style={{
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 8,
         padding: 20,
       }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 12 }}>Contacts</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 12 }}>Contacts</h2>
         {account?.contacts.map((c) => (
           <div key={c.id} style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "8px 0",
-            borderBottom: "1px solid #2a2a40",
+            borderBottom: "1px solid var(--dpf-border)",
           }}>
             <div>
-              <span style={{ fontSize: 13, color: "#e0e0ff" }}>{c.email}</span>
-              <span style={{ fontSize: 10, color: "#8888a0", marginLeft: 8 }}>
+              <span style={{ fontSize: 13, color: "var(--dpf-text)" }}>{c.email}</span>
+              <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 8 }}>
                 since {new Date(c.createdAt).toLocaleDateString()}
               </span>
             </div>

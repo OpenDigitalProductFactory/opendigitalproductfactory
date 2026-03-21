@@ -52,24 +52,6 @@ function Badge({ label, colour }: { label: string; colour: string }) {
   );
 }
 
-function Chip({ label, variant }: { label: string; variant: "best" | "avoid" }) {
-  const colour = variant === "best" ? "#4ade80" : "#f87171";
-  return (
-    <span
-      style={{
-        background: `${colour}15`,
-        color: colour,
-        fontSize: 10,
-        padding: "2px 7px",
-        borderRadius: 10,
-        border: `1px solid ${colour}40`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
 
 function ActionButton({
   label,
@@ -91,9 +73,9 @@ function ActionButton({
       title={title}
       style={{
         padding: "4px 12px",
-        background: primary ? "#2a2a50" : "transparent",
-        border: `1px solid ${primary ? "#7c8cf8" : "#2a2a40"}`,
-        color: primary ? "#7c8cf8" : "#e0e0ff",
+        background: primary ? "var(--dpf-surface-2)" : "transparent",
+        border: `1px solid ${primary ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+        color: primary ? "var(--dpf-accent)" : "var(--dpf-text)",
         borderRadius: 4,
         fontSize: 10,
         cursor: disabled ? "not-allowed" : "pointer",
@@ -107,8 +89,8 @@ function ActionButton({
 
 export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, hasActiveProvider, onProfile }: Props) {
   const cardStyle: React.CSSProperties = {
-    background: "#1a1a2e",
-    border: "1px solid #2a2a40",
+    background: "var(--dpf-surface-1)",
+    border: "1px solid var(--dpf-border)",
     borderRadius: 6,
     padding: "12px 14px",
     opacity: isStale ? 0.7 : 1,
@@ -127,10 +109,10 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
         {/* Header row */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: "#e0e0ff", fontSize: 12, fontWeight: 600, lineHeight: 1.3, wordBreak: "break-all" }}>
+            <div style={{ color: "var(--dpf-text)", fontSize: 12, fontWeight: 600, lineHeight: 1.3, wordBreak: "break-all" }}>
               {profile.friendlyName}
             </div>
-            <div style={{ color: "#8888a0", fontSize: 10, marginTop: 2, wordBreak: "break-all" }}>
+            <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginTop: 2, wordBreak: "break-all" }}>
               {model.modelId}
             </div>
           </div>
@@ -141,47 +123,20 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           )}
         </div>
 
-        {/* Summary */}
-        {profile.summary && (
-          <div style={{ color: "#e0e0ff", fontSize: 10, lineHeight: 1.5, opacity: 0.8 }}>
-            {profile.summary}
-          </div>
-        )}
-
-        {/* Cost / speed / context badges */}
+        {/* Cost / capability badges */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          <Badge label={`Cost: ${profile.costTier}`}         colour={cColour} />
+          <Badge label={`Cost: ${profile.costTier}`}             colour={cColour} />
           <Badge label={`Capability: ${profile.capabilityTier}`} colour={capColour} />
-          {profile.speedRating   && <Badge label={`Speed: ${profile.speedRating}`}     colour="#38bdf8" />}
-          {profile.contextWindow && <Badge label={`Context: ${profile.contextWindow}`} colour="#a78bfa" />}
         </div>
 
-        {/* Best-for chips */}
-        {profile.bestFor.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {profile.bestFor.map((tag) => (
-              <Chip key={tag} label={tag} variant="best" />
-            ))}
-          </div>
-        )}
-
-        {/* Avoid-for chips */}
-        {profile.avoidFor.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {profile.avoidFor.map((tag) => (
-              <Chip key={tag} label={tag} variant="avoid" />
-            ))}
-          </div>
-        )}
-
-        {/* Re-profile button */}
+        {/* Re-sync button */}
         {canWrite && (
           <div>
             <ActionButton
-              label="Re-profile"
+              label="Re-sync"
               onClick={() => onProfile(model.modelId)}
               disabled={!hasActiveProvider}
-              {...(!hasActiveProvider && { title: "No active provider — cannot profile" })}
+              {...(!hasActiveProvider && { title: "No active provider — cannot sync" })}
             />
           </div>
         )}
@@ -195,7 +150,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
       <div style={cardStyle}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: "#e0e0ff", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
+            <div style={{ color: "var(--dpf-text)", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
               {model.modelId}
             </div>
             <div style={{ color: "#f87171", fontSize: 10, marginTop: 4 }}>
@@ -229,10 +184,10 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     <div style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#e0e0ff", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
+          <div style={{ color: "var(--dpf-text)", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
             {model.modelId}
           </div>
-          <div style={{ color: "#8888a0", fontSize: 10, marginTop: 4 }}>
+          <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginTop: 4 }}>
             Not yet profiled
           </div>
         </div>

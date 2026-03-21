@@ -25,7 +25,7 @@ export default async function ControlsPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Controls</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Controls</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{controls.length} active</p>
         </div>
         <CreateControlForm />
@@ -34,7 +34,7 @@ export default async function ControlsPage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="controlType" defaultValue={sp.controlType ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All types</option>
           <option value="preventive">Preventive</option>
           <option value="detective">Detective</option>
@@ -42,7 +42,7 @@ export default async function ControlsPage({ searchParams }: Props) {
         </select>
 
         <select name="implementationStatus" defaultValue={sp.implementationStatus ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           <option value="planned">Planned</option>
           <option value="in-progress">In Progress</option>
@@ -51,7 +51,7 @@ export default async function ControlsPage({ searchParams }: Props) {
         </select>
 
         <select name="effectiveness" defaultValue={sp.effectiveness ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All effectiveness</option>
           <option value="effective">Effective</option>
           <option value="partially-effective">Partially Effective</option>
@@ -66,7 +66,7 @@ export default async function ControlsPage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/controls"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -81,14 +81,14 @@ export default async function ControlsPage({ searchParams }: Props) {
               className="block p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-sm text-white">{c.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{c.title}</span>
                   <div className="flex gap-2 mt-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{c.controlType}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{c.controlType}</span>
                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[c.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
                       {c.implementationStatus}
                     </span>
                     {c.effectiveness && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{c.effectiveness}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{c.effectiveness}</span>
                     )}
                   </div>
                 </div>

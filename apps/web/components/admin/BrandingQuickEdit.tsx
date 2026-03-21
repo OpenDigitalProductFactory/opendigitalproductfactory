@@ -159,7 +159,7 @@ export function BrandingQuickEdit({
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-[var(--dpf-text)] text-xs font-semibold disabled:opacity-60"
+            className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-white text-xs font-semibold disabled:opacity-60"
           >
             {saving ? "Saving…" : saved ? "Saved!" : "Save brand"}
           </button>

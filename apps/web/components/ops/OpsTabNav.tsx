@@ -22,8 +22,8 @@ export function OpsTabNav() {
           className={[
             "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
             active(t.href)
-              ? "text-white border-b-2 border-[var(--dpf-accent)]"
-              : "text-[var(--dpf-muted)] hover:text-white",
+              ? "text-[var(--dpf-text)] border-b-2 border-[var(--dpf-accent)]"
+              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
           ].join(" ")}
         >
           {t.label}

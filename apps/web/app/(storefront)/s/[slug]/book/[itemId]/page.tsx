@@ -20,7 +20,7 @@ export default async function BookItemPage({
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Book: {item.name}</h1>
-      <p style={{ color: "#6b7280", marginBottom: 24, fontSize: 14 }}>{durationMinutes} minute appointment</p>
+      <p style={{ color: "var(--dpf-muted)", marginBottom: 24, fontSize: 14 }}>{durationMinutes} minute appointment</p>
       <BookingForm orgSlug={slug} itemId={item.itemId} itemName={item.name} durationMinutes={durationMinutes} />
     </div>
   );

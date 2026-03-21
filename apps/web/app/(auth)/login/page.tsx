@@ -1,29 +1,43 @@
 // apps/web/app/(auth)/login/page.tsx
 import { signIn } from "@/lib/auth";
+import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 
 type Props = {
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; error?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: Props) {
-  const { reset } = await searchParams;
+  const { reset, error } = await searchParams;
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
       <div className="w-full max-w-sm p-8 bg-[var(--dpf-surface-1)] rounded-xl border border-[var(--dpf-border)]">
-        <h1 className="text-xl font-bold text-white mb-6">Digital Product Factory</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">Digital Product Factory</h1>
         {reset === "success" ? (
           <p className="mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
             Password updated. Sign in with your new password.
           </p>
         ) : null}
+        {error === "CredentialsSignin" ? (
+          <p className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            Invalid email or password.
+          </p>
+        ) : null}
         <form
           action={async (formData: FormData) => {
             "use server";
-            await signIn("workforce", {
-              email: formData.get("email"),
-              password: formData.get("password"),
-              redirectTo: "/workspace",
-            });
+            try {
+              await signIn("workforce", {
+                email: formData.get("email"),
+                password: formData.get("password"),
+                redirectTo: "/workspace",
+              });
+            } catch (err) {
+              if (err instanceof AuthError) {
+                redirect(`/login?error=${err.type}`);
+              }
+              throw err;
+            }
           }}
           className="space-y-4"
         >
@@ -36,7 +50,7 @@ export default async function LoginPage({ searchParams }: Props) {
               name="email"
               type="email"
               required
-              className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-white text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
             />
           </div>
           <div>
@@ -48,7 +62,7 @@ export default async function LoginPage({ searchParams }: Props) {
               name="password"
               type="password"
               required
-              className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-white text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
             />
           </div>
           <button

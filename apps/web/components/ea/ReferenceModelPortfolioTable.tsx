@@ -38,7 +38,7 @@ export function ReferenceModelPortfolioTable({ rows }: Props) {
             <th className="px-3 py-2 text-left font-medium">Out of MVP</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[var(--dpf-border)] text-white">
+        <tbody className="divide-y divide-[var(--dpf-border)] text-[var(--dpf-text)]">
           {rows.map((row) => (
             <tr key={row.scopeRef}>
               <td className="px-3 py-2 font-medium">{row.scopeName}</td>

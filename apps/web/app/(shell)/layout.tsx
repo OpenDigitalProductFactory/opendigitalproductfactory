@@ -25,8 +25,6 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     prisma.brandingConfig.findUnique({
       where: { scope: "organization" },
       select: {
-        companyName: true,
-        logoUrl: true,
         logoUrlLight: true,
         tokens: true,
       },
@@ -94,14 +92,14 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <Header
           platformRole={user.platformRole}
           isSuperuser={user.isSuperuser}
-          brandName={organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory"}
+          brandName={organization?.name ?? "Open Digital Product Factory"}
           brandLogoUrl={resolveBrandingLogoUrl(
-            organization?.logoUrl ?? activeBranding?.logoUrl ?? null,
-            organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory",
+            organization?.logoUrl ?? null,
+            organization?.name ?? "Open Digital Product Factory",
           )}
           brandLogoUrlLight={resolveBrandingLogoUrl(
             activeBranding?.logoUrlLight ?? null,
-            organization?.name ?? activeBranding?.companyName ?? "Open Digital Product Factory",
+            organization?.name ?? "Open Digital Product Factory",
           )}
           userId={user.id}
         />

@@ -81,7 +81,7 @@ export function ServiceSection({ endpointType, displayName, providers, children 
         </span>
 
         {/* Display name */}
-        <span style={{ color: "#e0e0ff", fontSize: 11, fontWeight: 600, flex: 1 }}>
+        <span style={{ color: "var(--dpf-text)", fontSize: 11, fontWeight: 600, flex: 1 }}>
           {displayName}
         </span>
 

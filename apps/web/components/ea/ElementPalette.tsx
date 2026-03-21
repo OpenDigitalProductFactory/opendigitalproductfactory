@@ -31,13 +31,13 @@ export function ElementPalette({ elementTypes, onDragStart, onSearchExisting }: 
   })).filter((g) => g.types.length > 0);
 
   return (
-    <div style={{ width: 180, background: "#161625", borderRight: "1px solid #2a2a40", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-      <div style={{ padding: "6px 10px", borderBottom: "1px solid #2a2a40" }}>
+    <div style={{ width: 180, background: "var(--dpf-surface-1)", borderRight: "1px solid var(--dpf-border)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--dpf-border)" }}>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search elements…"
-          style={{ width: "100%", padding: "3px 6px", background: "#0f0f1a", border: "1px solid #2a2a40", borderRadius: 3, color: "#e0e0ff", fontSize: 11, boxSizing: "border-box" }}
+          style={{ width: "100%", padding: "3px 6px", background: "var(--dpf-bg)", border: "1px solid var(--dpf-border)", borderRadius: 3, color: "var(--dpf-text)", fontSize: 11, boxSizing: "border-box" }}
         />
       </div>
 
@@ -46,7 +46,7 @@ export function ElementPalette({ elementTypes, onDragStart, onSearchExisting }: 
           const colours = LAYER_COLOURS[layer]!;
           return (
             <div key={layer}>
-              <div style={{ padding: "3px 10px 1px", fontSize: 10, fontWeight: 700, color: "#8888a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <div style={{ padding: "3px 10px 1px", fontSize: 10, fontWeight: 700, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {layer}
               </div>
               {types.map((et) => (
@@ -66,12 +66,12 @@ export function ElementPalette({ elementTypes, onDragStart, onSearchExisting }: 
       </div>
 
       {/* ExistingElementSearch is deferred to Phase EA-3. Button is disabled for now. */}
-      <div style={{ padding: "6px 10px", borderTop: "1px solid #2a2a40" }}>
+      <div style={{ padding: "6px 10px", borderTop: "1px solid var(--dpf-border)" }}>
         <button
           onClick={onSearchExisting}
           disabled
           title="Search existing elements — coming in Phase EA-3"
-          style={{ width: "100%", padding: 4, background: "#1a1a2e", border: "1px dashed #8888a0", borderRadius: 3, color: "#8888a0", fontSize: 11, cursor: "not-allowed", opacity: 0.5 }}
+          style={{ width: "100%", padding: 4, background: "var(--dpf-surface-1)", border: "1px dashed var(--dpf-muted)", borderRadius: 3, color: "var(--dpf-muted)", fontSize: 11, cursor: "not-allowed", opacity: 0.5 }}
         >
           + Search existing…
         </button>

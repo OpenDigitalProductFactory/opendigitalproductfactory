@@ -60,7 +60,8 @@ export function ItemsManager({ storefrontId, items: initial }: { storefrontId: s
                       padding: "2px 8px",
                       borderRadius: 4,
                       border: "1px solid var(--dpf-border)",
-                      background: item.isActive ? "none" : "#f3f4f6",
+                      background: "var(--dpf-surface-1)",
+                      color: "var(--dpf-text)",
                       cursor: "pointer",
                     }}
                   >

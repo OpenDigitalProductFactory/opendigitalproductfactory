@@ -35,11 +35,11 @@ export default async function ReferenceModelPage({ params }: Props) {
       <div>
         <div className="mb-6">
           <div className="mb-2">
-            <Link href="/ea/models" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+            <Link href="/ea/models" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
               EA / Reference Models
             </Link>
           </div>
-          <h1 className="text-xl font-bold text-white">{detail.name}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{detail.name}</h1>
           <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
             {detail.version} · {detail.authorityType} · {detail.status}
           </p>
@@ -60,7 +60,7 @@ export default async function ReferenceModelPage({ params }: Props) {
 
         <section className="mb-6">
           <div className="mb-3">
-            <h2 className="text-sm font-semibold text-white">Artifacts</h2>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Artifacts</h2>
             <p className="text-xs text-[var(--dpf-muted)]">
               Authoritative and supporting source materials tracked for this model.
             </p>
@@ -74,7 +74,7 @@ export default async function ReferenceModelPage({ params }: Props) {
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--dpf-muted)]">
                   {artifact.authority}
                 </p>
-                <p className="mt-1 text-sm font-medium text-white">{artifact.kind}</p>
+                <p className="mt-1 text-sm font-medium text-[var(--dpf-text)]">{artifact.kind}</p>
                 <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">{artifact.path}</p>
               </div>
             ))}
@@ -83,7 +83,7 @@ export default async function ReferenceModelPage({ params }: Props) {
 
         <section className="mb-6">
           <div className="mb-3">
-            <h2 className="text-sm font-semibold text-white">Portfolio Coverage</h2>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Portfolio Coverage</h2>
             <p className="text-xs text-[var(--dpf-muted)]">
               MVP-aligned coverage posture by portfolio scope.
             </p>

@@ -26,15 +26,15 @@ export default async function RegulationDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/regulations" className="text-xs text-[var(--dpf-muted)] hover:text-white">Regulations</Link>
+        <Link href="/compliance/regulations" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Regulations</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{regulation.shortName}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{regulation.shortName}</span>
       </div>
 
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{regulation.shortName}</h1>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{regulation.jurisdiction}</span>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{regulation.shortName}</h1>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{regulation.jurisdiction}</span>
           <EditRegulationForm id={regulation.id} regulation={regulation} />
         </div>
         <p className="text-sm text-[var(--dpf-muted)]">{regulation.name}</p>
@@ -49,20 +49,20 @@ export default async function RegulationDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Status</p>
-          <p className="text-sm font-semibold text-white">{regulation.status}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{regulation.status}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Source Type</p>
-          <p className="text-sm font-semibold text-white">{regulation.sourceType}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{regulation.sourceType}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Obligations</p>
-          <p className="text-sm font-semibold text-white">{regulation.obligations.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{regulation.obligations.length}</p>
         </div>
         {regulation.effectiveDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Effective Date</p>
-            <p className="text-sm font-semibold text-white">{new Date(regulation.effectiveDate).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(regulation.effectiveDate).toLocaleDateString()}</p>
           </div>
         )}
       </div>
@@ -85,11 +85,11 @@ export default async function RegulationDetailPage({ params }: Props) {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${hasControls ? "bg-green-400" : "bg-red-400"}`} />
-                    <span className="text-sm text-white">{o.title}</span>
+                    <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                   </div>
                   <div className="flex gap-2 mt-1">
                     {o.reference && <span className="text-[9px] text-[var(--dpf-muted)]">{o.reference}</span>}
-                    {o.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{o.category}</span>}
+                    {o.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{o.category}</span>}
                   </div>
                 </div>
                 <div className="text-right text-xs text-[var(--dpf-muted)]">

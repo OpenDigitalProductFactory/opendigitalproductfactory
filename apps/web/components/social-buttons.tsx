@@ -26,9 +26,9 @@ const buttonStyle: React.CSSProperties = {
   padding: "10px 16px",
   fontSize: 14,
   borderRadius: 6,
-  border: "1px solid #2a2a40",
-  background: "#0d0d18",
-  color: "#fff",
+  border: "1px solid var(--dpf-border)",
+  background: "var(--dpf-bg)",
+  color: "var(--dpf-text)",
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
@@ -61,9 +61,9 @@ export function SocialButtons() {
 export function SocialDivider() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
-      <div style={{ flex: 1, height: 1, background: "#2a2a40" }} />
-      <span style={{ color: "#8888a0", fontSize: 12 }}>or sign in with email</span>
-      <div style={{ flex: 1, height: 1, background: "#2a2a40" }} />
+      <div style={{ flex: 1, height: 1, background: "var(--dpf-border)" }} />
+      <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>or sign in with email</span>
+      <div style={{ flex: 1, height: 1, background: "var(--dpf-border)" }} />
     </div>
   );
 }

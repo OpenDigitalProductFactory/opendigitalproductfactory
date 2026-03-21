@@ -59,7 +59,7 @@ export function ApprovalForm({ token }: Props) {
         >
           {isApproved ? "Bill Approved" : "Bill Rejected"}
         </h2>
-        <p style={{ color: "#6b7280", fontSize: 14, margin: 0 }}>
+        <p style={{ color: "var(--dpf-muted)", fontSize: 14, margin: 0 }}>
           {isApproved
             ? "Thank you. The bill has been approved and the team has been notified."
             : "The bill has been rejected. The team has been notified."}
@@ -94,7 +94,7 @@ export function ApprovalForm({ token }: Props) {
             border: "1px solid #d1d5db",
             borderRadius: 8,
             fontSize: 14,
-            color: "#111",
+            color: "var(--dpf-text)",
             resize: "vertical",
             fontFamily: "inherit",
             boxSizing: "border-box",

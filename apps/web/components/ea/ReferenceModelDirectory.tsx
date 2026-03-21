@@ -12,7 +12,7 @@ export function ReferenceModelDirectory({ models }: Props) {
         <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
           EA Conformance
         </p>
-        <h2 className="mt-1 text-lg font-semibold text-white">Reference Models</h2>
+        <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">Reference Models</h2>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
           Compare the platform against seeded and approved reference models.
         </p>
@@ -30,7 +30,7 @@ export function ReferenceModelDirectory({ models }: Props) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">{model.name}</p>
+                  <p className="text-sm font-semibold text-[var(--dpf-text)]">{model.name}</p>
                   <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
                     {model.version} · {model.status}
                   </p>

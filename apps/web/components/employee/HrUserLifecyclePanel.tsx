@@ -63,7 +63,7 @@ export function HrUserLifecyclePanel({ users, roles }: Props) {
   return (
     <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white">HR user lifecycle</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">HR user lifecycle</h2>
         <p className="text-xs text-[var(--dpf-muted)] mt-1">Manage role assignment and active/inactive state. Password setup/reset stays in Admin.</p>
       </div>
 
@@ -73,7 +73,7 @@ export function HrUserLifecyclePanel({ users, roles }: Props) {
           <select
             value={selectedUserId}
             onChange={(e) => syncFromSelected(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-2 text-sm text-white"
+            className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
           >
             {sortedUsers.map((user) => (
               <option key={user.id} value={user.id}>
@@ -88,7 +88,7 @@ export function HrUserLifecyclePanel({ users, roles }: Props) {
           <select
             value={roleId}
             onChange={(e) => setRoleId(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-2 text-sm text-white"
+            className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
           >
             {roles.map((role) => (
               <option key={role.roleId} value={role.roleId}>

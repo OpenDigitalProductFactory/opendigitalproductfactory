@@ -4,16 +4,16 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import type { GraphData } from "@/lib/actions/graph";
 
 const LABEL_LEGEND = [
-  { label: "Portfolio", color: "#7c8cf8", key: "Portfolio" },
+  { label: "Portfolio", color: "var(--dpf-accent)", key: "Portfolio" },
   { label: "Product", color: "#4ade80", key: "DigitalProduct" },
   { label: "Taxonomy", color: "#fb923c", key: "TaxonomyNode" },
   { label: "Infrastructure", color: "#38bdf8", key: "InfraCI" },
 ];
 
 const LINK_TYPES = [
-  { label: "Belongs To", key: "BELONGS_TO", color: "#7c8cf8" },
+  { label: "Belongs To", key: "BELONGS_TO", color: "var(--dpf-accent)" },
   { label: "Classified As", key: "CLASSIFIED_AS", color: "#fb923c" },
-  { label: "Parent Of", key: "PARENT_OF", color: "#8888a0" },
+  { label: "Parent Of", key: "PARENT_OF", color: "var(--dpf-muted)" },
   { label: "Depends On", key: "DEPENDS_ON", color: "#38bdf8" },
 ];
 
@@ -305,14 +305,14 @@ export function RelationshipGraph({ data }: Props) {
           {focusNode && (
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[10px] text-[var(--dpf-muted)]">Focus:</span>
-              <span className="text-xs text-white font-medium">{focusNode.name}</span>
+              <span className="text-xs text-[var(--dpf-text)] font-medium">{focusNode.name}</span>
               <span className="text-[9px] px-1 rounded" style={{ background: `${focusNode.color}20`, color: focusNode.color }}>
                 {focusNode.label}
               </span>
               <button
                 type="button"
                 onClick={() => setFocusNodeId(null)}
-                className="text-[9px] text-[var(--dpf-muted)] hover:text-white"
+                className="text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 clear
               </button>
@@ -331,8 +331,8 @@ export function RelationshipGraph({ data }: Props) {
                 onClick={() => setMaxHops(h)}
                 className={`px-1.5 py-0.5 text-[9px] rounded border transition-colors ${
                   maxHops === h
-                    ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/20"
-                    : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+                    ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/20"
+                    : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                 }`}
               >
                 {h === 0 ? "All" : h}

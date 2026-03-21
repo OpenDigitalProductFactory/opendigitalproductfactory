@@ -65,7 +65,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Obligations</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Obligations</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
             {obligations.length} result{obligations.length !== 1 ? "s" : ""}
           </p>
@@ -83,7 +83,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
               href={filterUrl("regulation", "")}
               className={`text-[10px] px-2 py-1 rounded border transition-colors ${
                 !filters.regulation
-                  ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
+                  ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
                   : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
               }`}
             >
@@ -95,7 +95,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
                 href={filterUrl("regulation", r.id)}
                 className={`text-[10px] px-2 py-1 rounded border transition-colors ${
                   filters.regulation === r.id
-                    ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
+                    ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
                     : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
                 }`}
               >
@@ -113,7 +113,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
               href={filterUrl("category", "")}
               className={`text-[10px] px-2 py-1 rounded border transition-colors ${
                 !filters.category
-                  ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
+                  ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
                   : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
               }`}
             >
@@ -125,7 +125,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
                 href={filterUrl("category", cat)}
                 className={`text-[10px] px-2 py-1 rounded border transition-colors ${
                   filters.category === cat
-                    ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
+                    ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
                     : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
                 }`}
               >
@@ -145,7 +145,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
                 href={filterUrl("status", s === "active" && !filters.status ? "" : s)}
                 className={`text-[10px] px-2 py-1 rounded border transition-colors ${
                   (s === "active" && !filters.status) || filters.status === s
-                    ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
+                    ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
                     : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
                 }`}
               >
@@ -185,11 +185,11 @@ export default async function ObligationsPage({ searchParams }: Props) {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${coverage}`} />
-                      <span className="text-sm text-white">{o.title}</span>
+                      <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{o.regulation.shortName}</span>
-                      {o.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{o.category}</span>}
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{o.regulation.shortName}</span>
+                      {o.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{o.category}</span>}
                     </div>
                   </div>
                   <div className="text-right text-xs text-[var(--dpf-muted)]">

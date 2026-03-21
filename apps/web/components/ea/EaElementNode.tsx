@@ -125,7 +125,7 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
         <div style={{ position: "absolute", top: 4, right: 6, fontSize: 10, color: "#336", opacity: 0.7 }}>🔒</div>
       )}
       {isPropose && (
-        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 10, color: "#7c8cf8" }}>✏️</div>
+        <div style={{ position: "absolute", top: 4, right: 6, fontSize: 10, color: "var(--dpf-accent)" }}>✏️</div>
       )}
     </div>
   );

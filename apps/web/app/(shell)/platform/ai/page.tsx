@@ -64,10 +64,10 @@ export default async function PlatformAiPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
           AI Workforce
         </h1>
-        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
         </p>
       </div>
@@ -90,7 +90,7 @@ export default async function PlatformAiPage() {
             <div style={{ fontSize: 12, fontWeight: 600, color: "#fbbf24" }}>
               {agentsWithBrokenProviders.length} agent{agentsWithBrokenProviders.length !== 1 ? "s have" : " has"} an inactive provider
             </div>
-            <div style={{ fontSize: 11, color: "#b0b0c8", marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
               {agentsWithBrokenProviders.map((a) => a.name).join(", ")} — these agents will fall back to auto-routing which may use a less suitable model.
             </div>
           </div>

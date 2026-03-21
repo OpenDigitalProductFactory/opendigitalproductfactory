@@ -15,12 +15,23 @@ export async function GET(request: Request) {
     const { cursor, limit } = parsePagination(url.searchParams);
     const search = url.searchParams.get("search");
 
+    const status = url.searchParams.get("status");
+
     const where: Record<string, unknown> = {};
     if (cursor) {
       where.id = { lt: cursor };
     }
+    if (status) {
+      where.status = status;
+    }
     if (search) {
-      where.name = { contains: search, mode: "insensitive" };
+      // Use full-text search if available, fall back to ILIKE
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { contacts: { some: { email: { contains: search, mode: "insensitive" } } } },
+        { contacts: { some: { firstName: { contains: search, mode: "insensitive" } } } },
+        { contacts: { some: { lastName: { contains: search, mode: "insensitive" } } } },
+      ];
     }
 
     const accounts = await prisma.customerAccount.findMany({

@@ -35,15 +35,15 @@ export default async function IncidentDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/incidents" className="text-xs text-[var(--dpf-muted)] hover:text-white">Incidents</Link>
+        <Link href="/compliance/incidents" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Incidents</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{incident.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{incident.title}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{incident.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{incident.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[incident.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
             {incident.severity}
           </span>
@@ -84,29 +84,29 @@ export default async function IncidentDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Occurred At</p>
-          <p className="text-sm font-semibold text-white">{new Date(incident.occurredAt).toLocaleString()}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(incident.occurredAt).toLocaleString()}</p>
         </div>
         {incident.detectedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Detected At</p>
-            <p className="text-sm font-semibold text-white">{new Date(incident.detectedAt).toLocaleString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(incident.detectedAt).toLocaleString()}</p>
           </div>
         )}
         {incident.category && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Category</p>
-            <p className="text-sm font-semibold text-white">{incident.category}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{incident.category}</p>
           </div>
         )}
         {incident.reportedBy && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Reported By</p>
-            <p className="text-sm font-semibold text-white">{incident.reportedBy.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{incident.reportedBy.displayName}</p>
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Corrective Actions</p>
-          <p className="text-sm font-semibold text-white">{incident.correctiveActions.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{incident.correctiveActions.length}</p>
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export default async function IncidentDetailPage({ params }: Props) {
       {incident.rootCause && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Root Cause</h2>
-          <p className="text-sm text-white">{incident.rootCause}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{incident.rootCause}</p>
         </div>
       )}
 
@@ -126,8 +126,8 @@ export default async function IncidentDetailPage({ params }: Props) {
             href={`/compliance/risks/${incident.riskAssessment.id}`}
             className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
           >
-            <span className="text-sm font-semibold text-white">{incident.riskAssessment.title}</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{incident.riskAssessment.assessmentId}</span>
+            <span className="text-sm font-semibold text-[var(--dpf-text)]">{incident.riskAssessment.title}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{incident.riskAssessment.assessmentId}</span>
             <span className="text-xs text-blue-400">View</span>
           </Link>
         </div>
@@ -152,13 +152,13 @@ export default async function IncidentDetailPage({ params }: Props) {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white">{a.title}</span>
+                      <span className="text-sm text-[var(--dpf-text)]">{a.title}</span>
                       {isOverdue && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">OVERDUE</span>
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{a.sourceType}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{a.sourceType}</span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
                         a.status === "verified" ? "bg-green-900/30 text-green-400" :
                         a.status === "completed" ? "bg-blue-900/30 text-blue-400" :

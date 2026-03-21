@@ -25,7 +25,7 @@ export default async function RisksPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Risk Assessments</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Risk Assessments</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{risks.length} active</p>
         </div>
         <CreateRiskAssessmentForm />
@@ -34,7 +34,7 @@ export default async function RisksPage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="inherentRisk" defaultValue={sp.inherentRisk ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All risk levels</option>
           {RISK_LEVELS.map((l) => (
             <option key={l} value={l}>{l.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -42,7 +42,7 @@ export default async function RisksPage({ searchParams }: Props) {
         </select>
 
         <select name="status" defaultValue={sp.status ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -55,7 +55,7 @@ export default async function RisksPage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/risks"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -69,7 +69,7 @@ export default async function RisksPage({ searchParams }: Props) {
             <Link key={r.id} href={`/compliance/risks/${r.id}`} className="block p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-sm text-white">{r.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{r.title}</span>
                   <div className="flex gap-2 mt-1">
                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[r.inherentRisk] ?? "bg-gray-900/30 text-gray-400"}`}>
                       Inherent: {r.inherentRisk}

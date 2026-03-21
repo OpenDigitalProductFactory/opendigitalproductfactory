@@ -44,9 +44,9 @@ export function ProposalHistoryClient({ proposals }: Props) {
   });
 
   const selectStyle: React.CSSProperties = {
-    background: "#1a1a2e",
-    border: "1px solid #2a2a40",
-    color: "#e0e0ff",
+    background: "var(--dpf-surface-1)",
+    border: "1px solid var(--dpf-border)",
+    color: "var(--dpf-text)",
     fontSize: 12,
     padding: "6px 10px",
     borderRadius: 4,
@@ -84,7 +84,7 @@ export function ProposalHistoryClient({ proposals }: Props) {
         <div style={{
           textAlign: "center",
           padding: "48px 20px",
-          color: "#8888a0",
+          color: "var(--dpf-muted)",
           fontSize: 13,
         }}>
           {proposals.length === 0
@@ -101,7 +101,7 @@ export function ProposalHistoryClient({ proposals }: Props) {
             padding: "8px 12px",
             fontSize: 10,
             fontWeight: 600,
-            color: "#8888a0",
+            color: "var(--dpf-muted)",
             textTransform: "uppercase",
             letterSpacing: "0.05em",
           }}>
@@ -128,11 +128,11 @@ export function ProposalHistoryClient({ proposals }: Props) {
                     gap: 8,
                     padding: "10px 12px",
                     background: isExpanded ? "#1e1e35" : "#1a1a2e",
-                    border: "1px solid #2a2a40",
+                    border: "1px solid var(--dpf-border)",
                     borderRadius: isExpanded ? "6px 6px 0 0" : 6,
                     cursor: "pointer",
                     fontSize: 12,
-                    color: "#e0e0ff",
+                    color: "var(--dpf-text)",
                     alignItems: "center",
                   }}
                 >
@@ -145,13 +145,13 @@ export function ProposalHistoryClient({ proposals }: Props) {
                   }}>
                     {p.status}
                   </span>
-                  <span style={{ color: "#8888a0", fontSize: 11 }}>
+                  <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
                     {timeAgo(p.proposedAt)}
                   </span>
-                  <span style={{ color: "#8888a0", fontSize: 11 }}>
+                  <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
                     {p.decidedByEmail ?? "\u2014"}
                   </span>
-                  <span style={{ color: "#8888a0", fontSize: 11 }}>
+                  <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
                     {p.resultEntityId ?? (p.resultError ? p.resultError.slice(0, 30) + (p.resultError.length > 30 ? "..." : "") : "\u2014")}
                   </span>
                 </div>
@@ -159,23 +159,23 @@ export function ProposalHistoryClient({ proposals }: Props) {
                 {/* Expanded detail */}
                 {isExpanded && (
                   <div style={{
-                    background: "#161625",
-                    border: "1px solid #2a2a40",
+                    background: "var(--dpf-surface-1)",
+                    border: "1px solid var(--dpf-border)",
                     borderTop: "none",
                     borderRadius: "0 0 6px 6px",
                     padding: "12px 16px",
                     fontSize: 12,
                   }}>
-                    <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>
+                    <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>
                       Parameters
                     </div>
                     {Object.entries(p.parameters).map(([k, v]) => (
                       <div key={k} style={{ marginBottom: 4 }}>
-                        <span style={{ color: "#8888a0" }}>{k}: </span>
-                        <span style={{ color: "#e0e0ff" }}>{String(v)}</span>
+                        <span style={{ color: "var(--dpf-muted)" }}>{k}: </span>
+                        <span style={{ color: "var(--dpf-text)" }}>{String(v)}</span>
                       </div>
                     ))}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12, fontSize: 11, color: "#8888a0" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
                       <div>
                         <span style={{ color: "#666" }}>Proposed: </span>
                         {new Date(p.proposedAt).toLocaleString()}

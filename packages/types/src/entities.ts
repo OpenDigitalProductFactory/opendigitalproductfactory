@@ -19,6 +19,43 @@ export type CustomerAccount = Prisma.CustomerAccountGetPayload<{
   include: { contacts: true };
 }>;
 
+export type CustomerAccountWithRoles = Prisma.CustomerAccountGetPayload<{
+  include: {
+    contacts: true;
+    contactRoles: { include: { contact: true } };
+  };
+}>;
+
+export type ContactAccountRole = Prisma.ContactAccountRoleGetPayload<{
+  include: { contact: true; account: true };
+}>;
+
+export type Engagement = Prisma.EngagementGetPayload<{
+  include: {
+    contact: true;
+    account: true;
+    assignedTo: { select: { id: true; email: true } };
+  };
+}>;
+
+export type Opportunity = Prisma.OpportunityGetPayload<{
+  include: {
+    account: true;
+    contact: true;
+    assignedTo: { select: { id: true; email: true } };
+    activities: true;
+  };
+}>;
+
+export type Activity = Prisma.ActivityGetPayload<{
+  include: {
+    account: { select: { id: true; accountId: true; name: true } };
+    contact: { select: { id: true; email: true; firstName: true; lastName: true } };
+    opportunity: { select: { id: true; opportunityId: true; title: true } };
+    createdBy: { select: { id: true; email: true } };
+  };
+}>;
+
 export type AgentThread = Prisma.AgentThreadGetPayload<{
   include: { messages: true };
 }>;

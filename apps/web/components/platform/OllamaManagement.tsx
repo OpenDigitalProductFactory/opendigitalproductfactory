@@ -76,14 +76,14 @@ export function OllamaManagement({ canWrite }: Props) {
 
   return (
     <div style={{
-      background: "#1a1a2e",
-      border: "1px solid #2a2a40",
+      background: "var(--dpf-surface-1)",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 8,
       padding: 20,
       marginBottom: 16,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: 0 }}>
           Model Management
         </h2>
         <button
@@ -94,9 +94,9 @@ export function OllamaManagement({ canWrite }: Props) {
             fontSize: 11,
             padding: "4px 10px",
             borderRadius: 4,
-            border: "1px solid #2a2a40",
+            border: "1px solid var(--dpf-border)",
             background: "transparent",
-            color: "#b0b0c8",
+            color: "var(--dpf-muted)",
             cursor: "pointer",
             opacity: isPending ? 0.5 : 1,
           }}
@@ -112,23 +112,23 @@ export function OllamaManagement({ canWrite }: Props) {
           gap: 16,
           marginBottom: 16,
           padding: "8px 12px",
-          background: "#161625",
+          background: "var(--dpf-surface-1)",
           borderRadius: 6,
           fontSize: 11,
         }}>
           <div>
-            <span style={{ color: "#b0b0c8" }}>Models: </span>
-            <span style={{ color: "#fff", fontWeight: 500 }}>{models.length}</span>
+            <span style={{ color: "var(--dpf-muted)" }}>Models: </span>
+            <span style={{ color: "var(--dpf-text)", fontWeight: 500 }}>{models.length}</span>
           </div>
           <div>
-            <span style={{ color: "#b0b0c8" }}>Disk: </span>
-            <span style={{ color: "#fff", fontWeight: 500 }}>{totalSizeGb.toFixed(1)} GB</span>
+            <span style={{ color: "var(--dpf-muted)" }}>Disk: </span>
+            <span style={{ color: "var(--dpf-text)", fontWeight: 500 }}>{totalSizeGb.toFixed(1)} GB</span>
           </div>
           {running.length > 0 && (
             <div>
-              <span style={{ color: "#b0b0c8" }}>VRAM: </span>
+              <span style={{ color: "var(--dpf-muted)" }}>VRAM: </span>
               <span style={{ color: "#4ade80", fontWeight: 500 }}>{totalVramGb.toFixed(1)} GB</span>
-              <span style={{ color: "#b0b0c8" }}> ({running.length} loaded)</span>
+              <span style={{ color: "var(--dpf-muted)" }}> ({running.length} loaded)</span>
             </div>
           )}
         </div>
@@ -169,9 +169,9 @@ export function OllamaManagement({ canWrite }: Props) {
               padding: "6px 10px",
               fontSize: 12,
               borderRadius: 4,
-              border: "1px solid #2a2a40",
-              background: "#161625",
-              color: "#fff",
+              border: "1px solid var(--dpf-border)",
+              background: "var(--dpf-surface-1)",
+              color: "var(--dpf-text)",
               outline: "none",
             }}
           />
@@ -197,13 +197,13 @@ export function OllamaManagement({ canWrite }: Props) {
 
       {/* Model list */}
       {!loaded && isPending && (
-        <div style={{ color: "#b0b0c8", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
           <span className="animate-pulse">Loading models...</span>
         </div>
       )}
 
       {loaded && models.length === 0 && (
-        <div style={{ color: "#b0b0c8", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
           No models installed. Pull a model to get started.
         </div>
       )}
@@ -223,7 +223,7 @@ export function OllamaManagement({ canWrite }: Props) {
                   padding: "8px 10px",
                   borderRadius: 6,
                   background: isRunning ? "rgba(74,222,128,0.05)" : "transparent",
-                  border: `1px solid ${isRunning ? "rgba(74,222,128,0.2)" : "#2a2a40"}`,
+                  border: `1px solid ${isRunning ? "rgba(74,222,128,0.2)" : "var(--dpf-border)"}`,
                 }}
               >
                 {/* Status dot */}
@@ -238,7 +238,7 @@ export function OllamaManagement({ canWrite }: Props) {
                 {/* Model name + details */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: "#fff", fontFamily: "monospace" }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--dpf-text)", fontFamily: "monospace" }}>
                       {m.name}
                     </span>
                     {isRunning && (
@@ -247,7 +247,7 @@ export function OllamaManagement({ canWrite }: Props) {
                       </span>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 8, fontSize: 10, color: "#b0b0c8", marginTop: 2 }}>
+                  <div style={{ display: "flex", gap: 8, fontSize: 10, color: "var(--dpf-muted)", marginTop: 2 }}>
                     {m.parameterSize && <span>{m.parameterSize}</span>}
                     {m.quantization && <span>{m.quantization}</span>}
                     <span>{m.sizeGb} GB</span>
@@ -282,9 +282,9 @@ export function OllamaManagement({ canWrite }: Props) {
                           fontSize: 10,
                           padding: "3px 8px",
                           borderRadius: 3,
-                          border: "1px solid #2a2a40",
+                          border: "1px solid var(--dpf-border)",
                           background: "transparent",
-                          color: "#b0b0c8",
+                          color: "var(--dpf-muted)",
                           cursor: "pointer",
                         }}
                       >

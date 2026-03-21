@@ -107,7 +107,7 @@ export default async function WorkspacePage() {
   const tileStatus: Record<string, TileStatus> = {
     ea_modeler: {
       metrics: [
-        { label: "Views", value: eaViewCount, color: "#7c8cf8" },
+        { label: "Views", value: eaViewCount, color: "var(--dpf-accent)" },
       ],
     },
     ai_workforce: {
@@ -165,7 +165,7 @@ export default async function WorkspacePage() {
     },
     admin: {
       metrics: [
-        { label: "Users", value: userCount, color: "#8888a0" },
+        { label: "Users", value: userCount, color: "var(--dpf-muted)" },
       ],
     },
     compliance: {
@@ -219,7 +219,7 @@ export default async function WorkspacePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">
           Welcome, {session.user.platformRole ?? "Guest"}
         </h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">

@@ -126,7 +126,7 @@ export function BrandingWizard({
               type="button"
               onClick={handleAnalyzeUrl}
               disabled={analyzing || !urlInput.trim()}
-              className="px-3 py-2 rounded bg-[var(--dpf-accent)] text-xs text-[var(--dpf-text)] font-semibold disabled:opacity-50"
+              className="px-3 py-2 rounded bg-[var(--dpf-accent)] text-xs text-white font-semibold disabled:opacity-50"
             >
               {analyzing ? "Analyzing…" : "Analyze"}
             </button>
@@ -262,7 +262,7 @@ export function BrandingWizard({
                 type="button"
                 disabled={saving}
                 onClick={handleSave}
-                className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-[var(--dpf-text)] text-xs font-semibold disabled:opacity-60"
+                className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-white text-xs font-semibold disabled:opacity-60"
               >
                 {saving ? "Applying…" : "Looks good — apply"}
               </button>
@@ -409,7 +409,7 @@ export function BrandingWizard({
               type="button"
               disabled={saving}
               onClick={handleSave}
-              className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-[var(--dpf-text)] text-xs font-semibold disabled:opacity-60"
+              className="px-4 py-2 rounded bg-[var(--dpf-accent)] text-white text-xs font-semibold disabled:opacity-60"
             >
               {saving ? "Applying…" : "Apply brand"}
             </button>

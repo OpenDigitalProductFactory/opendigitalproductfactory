@@ -46,7 +46,7 @@ export default async function InventoryPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="mb-4 shrink-0">
-        <h1 className="text-xl font-bold text-white">Inventory</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Inventory</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {products.length.toLocaleString()} product{products.length !== 1 ? "s" : ""}
         </p>
@@ -68,7 +68,7 @@ export default async function InventoryPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
             Product Inventory
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Digital Products</h2>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">Digital Products</h2>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -90,7 +90,7 @@ export default async function InventoryPage() {
                 style={{ borderLeftColor: colour }}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-sm font-semibold text-white leading-tight">{p.name}</p>
+                  <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight">{p.name}</p>
                   <span
                     className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
                     style={{ background: `${statusColour}20`, color: statusColour }}

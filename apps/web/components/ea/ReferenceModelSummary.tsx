@@ -19,7 +19,7 @@ export function ReferenceModelSummary({ models }: Props) {
   return (
     <section className="mb-6">
       <div className="mb-3">
-        <h2 className="text-sm font-semibold text-white">Reference Models</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Reference Models</h2>
         <p className="text-xs text-[var(--dpf-muted)]">
           Assessment-ready models managed through Enterprise Architecture.
         </p>
@@ -34,7 +34,7 @@ export function ReferenceModelSummary({ models }: Props) {
             <p className="mb-1 text-[10px] font-mono uppercase tracking-widest text-[var(--dpf-muted)]">
               {model.status}
             </p>
-            <p className="text-sm font-semibold text-white">{model.name}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{model.name}</p>
             <p className="mb-2 text-xs text-[var(--dpf-muted)]">{model.version}</p>
             <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
               <p>{model.criteriaCount} criteria</p>

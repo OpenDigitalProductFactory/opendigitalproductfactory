@@ -66,7 +66,7 @@ export default async function PlatformPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Platform</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Platform</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {capabilities.length} capabilit{capabilities.length !== 1 ? "ies" : "y"}
         </p>
@@ -88,7 +88,7 @@ export default async function PlatformPage() {
                 {c.capabilityId}
               </p>
               <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="text-sm font-semibold text-white leading-tight">
+                <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight">
                   {c.name}
                 </p>
                 <span
@@ -113,7 +113,7 @@ export default async function PlatformPage() {
       )}
 
       <div style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#e0e0ff", marginBottom: 12 }}>Platform Services</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 12 }}>Platform Services</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
           <Link
             href="/platform/ai"
@@ -127,8 +127,8 @@ export default async function PlatformPage() {
               textDecoration: "none",
             }}
           >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#e0e0ff", margin: "0 0 4px" }}>AI Providers</p>
-            <p style={{ fontSize: 10, color: "#8888a0", margin: 0 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>AI Providers</p>
+            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
               Provider registry, credentials, token spend
             </p>
           </Link>
@@ -144,10 +144,10 @@ export default async function PlatformPage() {
               textDecoration: "none",
             }}
           >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#e0e0ff", margin: "0 0 4px" }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
               Integrations
             </p>
-            <p style={{ fontSize: 10, color: "#8888a0", margin: 0 }}>
+            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
               MCP catalog, sync, archetype recommendations
             </p>
           </Link>
@@ -163,10 +163,10 @@ export default async function PlatformPage() {
               textDecoration: "none",
             }}
           >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#e0e0ff", margin: "0 0 4px" }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
               Services
             </p>
-            <p style={{ fontSize: 10, color: "#8888a0", margin: 0 }}>
+            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
               Registered MCP services, health, tools
             </p>
           </Link>

@@ -43,18 +43,18 @@ export default async function ControlDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/controls" className="text-xs text-[var(--dpf-muted)] hover:text-white">Controls</Link>
+        <Link href="/compliance/controls" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Controls</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{control.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{control.title}</span>
       </div>
 
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{control.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{control.title}</h1>
           <EditControlForm id={control.id} control={control} />
         </div>
         <div className="flex gap-2 mt-1">
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{control.controlType}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{control.controlType}</span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[control.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
             {control.implementationStatus}
           </span>
@@ -69,34 +69,34 @@ export default async function ControlDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Control Type</p>
-          <p className="text-sm font-semibold text-white">{control.controlType}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{control.controlType}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Implementation Status</p>
-          <p className="text-sm font-semibold text-white">{control.implementationStatus}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{control.implementationStatus}</p>
         </div>
         {control.reviewFrequency && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Review Frequency</p>
-            <p className="text-sm font-semibold text-white">{control.reviewFrequency}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{control.reviewFrequency}</p>
           </div>
         )}
         {control.effectiveness && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Effectiveness</p>
-            <p className="text-sm font-semibold text-white">{control.effectiveness}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{control.effectiveness}</p>
           </div>
         )}
         {control.ownerEmployee && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Owner</p>
-            <p className="text-sm font-semibold text-white">{control.ownerEmployee.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{control.ownerEmployee.displayName}</p>
           </div>
         )}
         {control.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-white">{new Date(control.nextReviewDate).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(control.nextReviewDate).toLocaleDateString()}</p>
           </div>
         )}
       </div>
@@ -104,7 +104,7 @@ export default async function ControlDetailPage({ params }: Props) {
       {control.description && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Description</h2>
-          <p className="text-sm text-white">{control.description}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{control.description}</p>
         </div>
       )}
 
@@ -126,7 +126,7 @@ export default async function ControlDetailPage({ params }: Props) {
               <div className="min-w-0">
                 <Link
                   href={`/compliance/obligations/${link.obligation.id}`}
-                  className="text-sm text-white hover:text-[var(--dpf-accent)] transition-colors"
+                  className="text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] transition-colors"
                 >
                   {link.obligation.title}
                 </Link>
@@ -147,9 +147,9 @@ export default async function ControlDetailPage({ params }: Props) {
           {control.evidence.map((ev) => (
             <div key={ev.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
               <div>
-                <span className="text-sm text-white">{ev.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{ev.title}</span>
                 <div className="flex gap-2 mt-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{ev.evidenceType}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{ev.evidenceType}</span>
                 </div>
               </div>
               <span className="text-xs text-[var(--dpf-muted)]">{new Date(ev.collectedAt).toLocaleDateString()}</span>
@@ -167,7 +167,7 @@ export default async function ControlDetailPage({ params }: Props) {
           {control.riskAssessments.map((link) => (
             <Link key={link.riskAssessment.id} href={`/compliance/risks/${link.riskAssessment.id}`}
               className="block p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
-              <span className="text-sm text-white">{link.riskAssessment.title}</span>
+              <span className="text-sm text-[var(--dpf-text)]">{link.riskAssessment.title}</span>
               <span className="text-[9px] text-[var(--dpf-muted)] ml-2">{link.riskAssessment.assessmentId}</span>
             </Link>
           ))}

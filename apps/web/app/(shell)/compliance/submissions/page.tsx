@@ -32,7 +32,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Regulatory Submissions</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Regulatory Submissions</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{submissions.length} total</p>
         </div>
         <CreateSubmissionForm regulations={regulations} />
@@ -41,7 +41,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="status" defaultValue={sp.status ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           {SUBMISSION_STATUSES.map((s) => (
             <option key={s} value={s}>{s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -49,7 +49,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
         </select>
 
         <select name="submissionType" defaultValue={sp.submissionType ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All types</option>
           {SUBMISSION_TYPES.map((t) => (
             <option key={t} value={t}>{t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -63,7 +63,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/submissions"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -80,10 +80,10 @@ export default async function SubmissionsPage({ searchParams }: Props) {
             return (
               <a key={s.id} href={`/compliance/submissions/${s.id}`} className="block p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between hover:border-[var(--dpf-muted)] transition-colors">
                 <div>
-                  <span className="text-sm text-white">{s.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{s.title}</span>
                   <div className="flex gap-2 mt-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{s.recipientBody}</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{s.submissionType}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{s.recipientBody}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{s.submissionType}</span>
                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[s.status] ?? "bg-gray-900/30 text-gray-400"}`}>
                       {s.status}
                     </span>

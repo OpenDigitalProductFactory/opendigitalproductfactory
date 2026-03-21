@@ -69,14 +69,14 @@ export default async function PolicyDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/policies" className="text-xs text-[var(--dpf-muted)] hover:text-white">Policies</Link>
+        <Link href="/compliance/policies" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Policies</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{policy.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{policy.title}</span>
       </div>
 
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{policy.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{policy.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[policy.lifecycleStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
             {policy.lifecycleStatus}
           </span>
@@ -104,22 +104,22 @@ export default async function PolicyDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Category</p>
-          <p className="text-sm font-semibold text-white">{policy.category}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{policy.category}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Version</p>
-          <p className="text-sm font-semibold text-white">{policy.version}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{policy.version}</p>
         </div>
         {policy.ownerEmployee && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Owner</p>
-            <p className="text-sm font-semibold text-white">{policy.ownerEmployee.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{policy.ownerEmployee.displayName}</p>
           </div>
         )}
         {policy.approvedBy && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Approved By</p>
-            <p className="text-sm font-semibold text-white">{policy.approvedBy.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{policy.approvedBy.displayName}</p>
           </div>
         )}
       </div>
@@ -144,9 +144,9 @@ export default async function PolicyDetailPage({ params }: Props) {
           {policy.requirements.map((r) => (
             <div key={r.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
               <div>
-                <span className="text-sm text-white">{r.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{r.title}</span>
                 <div className="flex gap-2 mt-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{r.requirementType}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.requirementType}</span>
                   {r.frequency && <span className="text-[9px] text-[var(--dpf-muted)]">{r.frequency}</span>}
                   {r.trainingRequirement && (
                     <span className="text-[9px] text-[var(--dpf-muted)]">
@@ -174,7 +174,7 @@ export default async function PolicyDetailPage({ params }: Props) {
         <div className="space-y-1">
           {policy.acknowledgments.map((a) => (
             <div key={a.id} className="flex justify-between text-sm">
-              <span className="text-white">{a.employeeProfile.displayName}</span>
+              <span className="text-[var(--dpf-text)]">{a.employeeProfile.displayName}</span>
               <span className="text-[var(--dpf-muted)]">v{a.policyVersion} — {new Date(a.acknowledgedAt).toLocaleDateString()}</span>
             </div>
           ))}

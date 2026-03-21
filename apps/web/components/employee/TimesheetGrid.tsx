@@ -155,9 +155,9 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => navigateWeek(-1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&larr;</button>
-          <span className="text-xs text-white font-medium">Week of {weekLabel}</span>
-          <button type="button" onClick={() => navigateWeek(1)} className="text-[var(--dpf-muted)] hover:text-white text-xs px-1">&rarr;</button>
+          <button type="button" onClick={() => navigateWeek(-1)} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-xs px-1">&larr;</button>
+          <span className="text-xs text-[var(--dpf-text)] font-medium">Week of {weekLabel}</span>
+          <button type="button" onClick={() => navigateWeek(1)} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-xs px-1">&rarr;</button>
         </div>
       </div>
 
@@ -187,7 +187,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
                   key={entry.dayOfWeek}
                   style={{ background: isWeekend ? "rgba(255,255,255,0.02)" : "transparent" }}
                 >
-                  <td className="py-1.5 text-white font-medium">{DAY_NAMES[entry.dayOfWeek]}</td>
+                  <td className="py-1.5 text-[var(--dpf-text)] font-medium">{DAY_NAMES[entry.dayOfWeek]}</td>
                   <td className="py-1.5 text-[var(--dpf-muted)]">{entry.date}</td>
                   <td className="py-1.5 text-center">
                     {isEditable ? (
@@ -198,10 +198,10 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
                         step={0.25}
                         value={entry.hours || ""}
                         onChange={(e) => updateEntry(entry.dayOfWeek, "hours", parseFloat(e.target.value) || 0)}
-                        className="w-16 px-2 py-1 text-center text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+                        className="w-16 px-2 py-1 text-center text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
                       />
                     ) : (
-                      <span className="text-white">{entry.hours}</span>
+                      <span className="text-[var(--dpf-text)]">{entry.hours}</span>
                     )}
                   </td>
                   <td className="py-1.5 text-center">
@@ -213,7 +213,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
                         step={5}
                         value={entry.breakMinutes || ""}
                         onChange={(e) => updateEntry(entry.dayOfWeek, "breakMinutes", parseInt(e.target.value) || 0)}
-                        className="w-16 px-2 py-1 text-center text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+                        className="w-16 px-2 py-1 text-center text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
                       />
                     ) : (
                       <span className="text-[var(--dpf-muted)]">{entry.breakMinutes}</span>
@@ -225,8 +225,8 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
           </tbody>
           <tfoot>
             <tr className="border-t border-[var(--dpf-border)]">
-              <td colSpan={2} className="py-2 text-white font-semibold">Total</td>
-              <td className="py-2 text-center font-semibold text-white">{totalHours}h</td>
+              <td colSpan={2} className="py-2 text-[var(--dpf-text)] font-semibold">Total</td>
+              <td className="py-2 text-center font-semibold text-[var(--dpf-text)]">{totalHours}h</td>
               <td className="py-2 text-center text-[var(--dpf-muted)]">{totalBreaks}m</td>
             </tr>
           </tfoot>
@@ -248,7 +248,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Weekly notes (optional)"
           rows={2}
-          className="mt-3 w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white placeholder:text-[var(--dpf-muted)] resize-none"
+          className="mt-3 w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] resize-none"
         />
       )}
 
@@ -260,7 +260,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
               type="button"
               disabled={isPending}
               onClick={handleSave}
-              className="text-[11px] px-3 py-1.5 rounded border border-[var(--dpf-border)] text-white hover:bg-[var(--dpf-surface-2)] disabled:opacity-50"
+              className="text-[11px] px-3 py-1.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50"
             >
               Save Draft
             </button>

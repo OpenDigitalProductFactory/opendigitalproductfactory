@@ -24,7 +24,7 @@ export function DiscoveryRunSummary({
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
             Bootstrap Discovery
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">
+          <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">
             {run ? run.runKey : "No discovery run yet"}
           </h2>
           <p className="mt-1 text-sm text-[var(--dpf-muted)]">
@@ -41,19 +41,19 @@ export function DiscoveryRunSummary({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg bg-black/20 p-3">
+        <div className="rounded-lg bg-[var(--dpf-surface-2)] p-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
             Entities
           </p>
-          <p className="mt-1 text-xl font-semibold text-white">{health.totalEntities}</p>
+          <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">{health.totalEntities}</p>
         </div>
-        <div className="rounded-lg bg-black/20 p-3">
+        <div className="rounded-lg bg-[var(--dpf-surface-2)] p-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
             Stale
           </p>
           <p className="mt-1 text-xl font-semibold text-[#fbbf24]">{health.staleEntities}</p>
         </div>
-        <div className="rounded-lg bg-black/20 p-3">
+        <div className="rounded-lg bg-[var(--dpf-surface-2)] p-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
             Open Issues
           </p>

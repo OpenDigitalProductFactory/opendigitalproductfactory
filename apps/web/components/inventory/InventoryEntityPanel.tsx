@@ -25,7 +25,7 @@ export function InventoryEntityPanel({
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
             Operational Inventory
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Discovered Assets</h2>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">Discovered Assets</h2>
         </div>
         <span className="text-sm text-[var(--dpf-muted)]">{entities.length} entities</span>
       </div>
@@ -37,16 +37,16 @@ export function InventoryEntityPanel({
           return (
           <article
             key={entity.id}
-            className="rounded-lg border border-white/8 bg-black/20 p-3"
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">{entity.name}</p>
+                <p className="text-sm font-medium text-[var(--dpf-text)]">{entity.name}</p>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
                   {entity.entityType}
                 </p>
               </div>
-              <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] text-[var(--dpf-muted)]">
+              <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] text-[var(--dpf-muted)]">
                 {entity.attributionStatus === "needs_review" ? "Review needed" : entity.attributionStatus}
               </span>
             </div>

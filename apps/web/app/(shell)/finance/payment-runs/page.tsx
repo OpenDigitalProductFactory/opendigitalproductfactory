@@ -16,14 +16,14 @@ export default async function PaymentRunsPage() {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">Payment Runs</span>
+        <span className="text-xs text-[var(--dpf-text)]">Payment Runs</span>
       </div>
 
-      <h1 className="text-xl font-bold text-white mb-6">Payment Runs</h1>
+      <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">Payment Runs</h1>
 
       {/* New Payment Run Builder */}
       <section className="mb-10">
@@ -107,7 +107,7 @@ export default async function PaymentRunsPage() {
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                         {run.allocations.length}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-white">
+                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         {run.currency} {formatMoney(run.amount)}
                       </td>
                     </tr>

@@ -38,7 +38,7 @@ function fitnessColor(score: number): string {
 // ── Candidate table ───────────────────────────────────────────────────────────
 
 function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
-  if (!candidates.length) return <p style={{ color: "#8888a0", fontSize: 11 }}>No candidates recorded.</p>;
+  if (!candidates.length) return <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>No candidates recorded.</p>;
 
   const dims = Object.keys(candidates[0]?.dimensionScores ?? {});
 
@@ -46,15 +46,15 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid #2a2a40" }}>
-            <th style={{ textAlign: "left", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Model</th>
-            <th style={{ textAlign: "right", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Fitness</th>
+          <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
+            <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--dpf-muted)", fontWeight: 500 }}>Model</th>
+            <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--dpf-muted)", fontWeight: 500 }}>Fitness</th>
             {dims.map((d) => (
-              <th key={d} style={{ textAlign: "right", padding: "4px 8px", color: "#8888a0", fontWeight: 500, textTransform: "capitalize" }}>
+              <th key={d} style={{ textAlign: "right", padding: "4px 8px", color: "var(--dpf-muted)", fontWeight: 500, textTransform: "capitalize" }}>
                 {d}
               </th>
             ))}
-            <th style={{ textAlign: "left", padding: "4px 8px", color: "#8888a0", fontWeight: 500 }}>Exclusion</th>
+            <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--dpf-muted)", fontWeight: 500 }}>Exclusion</th>
           </tr>
         </thead>
         <tbody>
@@ -112,22 +112,22 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
           alignItems: "center",
           padding: "10px 12px",
           textAlign: "left",
-          color: "#fff",
+          color: "var(--dpf-text)",
         }}
       >
         {/* Time */}
-        <span style={{ fontSize: 10, color: "#8888a0", fontFamily: "monospace" }}>
+        <span style={{ fontSize: 10, color: "var(--dpf-muted)", fontFamily: "monospace" }}>
           {fmtTime(row.createdAt)}
         </span>
 
         {/* Task type */}
         <span style={{
           fontSize: 10,
-          background: "#1e1e3a",
-          border: "1px solid #2a2a40",
+          background: "var(--dpf-surface-1)",
+          border: "1px solid var(--dpf-border)",
           borderRadius: 4,
           padding: "2px 6px",
-          color: "#7c8cf8",
+          color: "var(--dpf-accent)",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -168,14 +168,14 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
         </span>
 
         {/* Expand toggle */}
-        <span style={{ fontSize: 11, color: "#8888a0", textAlign: "right" }}>
+        <span style={{ fontSize: 11, color: "var(--dpf-muted)", textAlign: "right" }}>
           {row.candidateTrace.length} candidate{row.candidateTrace.length !== 1 ? "s" : ""}
           {" "}{expanded ? "▲" : "▼"}
         </span>
       </button>
 
       {/* Reason */}
-      <div style={{ padding: "0 12px 6px", fontSize: 11, color: "#8888a0" }}>
+      <div style={{ padding: "0 12px 6px", fontSize: 11, color: "var(--dpf-muted)" }}>
         {row.reason}
       </div>
 
@@ -183,9 +183,9 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
       {expanded && (
         <div style={{ padding: "0 12px 16px", borderTop: "1px solid #1e1e3a", marginTop: 4 }}>
           {/* Metadata row */}
-          <div style={{ display: "flex", gap: 16, marginTop: 12, marginBottom: 12, fontSize: 11, color: "#8888a0" }}>
+          <div style={{ display: "flex", gap: 16, marginTop: 12, marginBottom: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
             {row.agentMessageId && (
-              <span>Message: <span style={{ color: "#fff", fontFamily: "monospace" }}>{row.agentMessageId.slice(0, 12)}…</span></span>
+              <span>Message: <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{row.agentMessageId.slice(0, 12)}…</span></span>
             )}
             {row.fallbackChain.length > 0 && (
               <span>Fallback chain: <span style={{ color: "#facc15", fontFamily: "monospace" }}>{row.fallbackChain.join(" → ")}</span></span>
@@ -194,7 +194,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <span>Policies: <span style={{ color: "#f97316" }}>{row.policyRulesApplied.join(", ")}</span></span>
             )}
             {row.shadowMode && (
-              <span style={{ color: "#7c8cf8" }}>Shadow mode</span>
+              <span style={{ color: "var(--dpf-accent)" }}>Shadow mode</span>
             )}
           </div>
 
@@ -241,12 +241,12 @@ export function RouteDecisionLogClient({ rows }: Props) {
   if (rows.length === 0) {
     return (
       <div style={{
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 8,
         padding: 32,
         textAlign: "center",
-        color: "#8888a0",
+        color: "var(--dpf-muted)",
         fontSize: 13,
       }}>
         No routing decisions recorded yet. Decisions are logged each time the router selects an endpoint for an agent task.
@@ -285,10 +285,10 @@ export function RouteDecisionLogClient({ rows }: Props) {
         gap: 8,
         padding: "6px 12px",
         fontSize: 10,
-        color: "#8888a0",
+        color: "var(--dpf-muted)",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        borderBottom: "1px solid #2a2a40",
+        borderBottom: "1px solid var(--dpf-border)",
       }}>
         <span>Time</span>
         <span>Task</span>
@@ -299,14 +299,14 @@ export function RouteDecisionLogClient({ rows }: Props) {
       </div>
 
       {/* Rows */}
-      <div style={{ background: "#12121e", borderRadius: "0 0 8px 8px" }}>
+      <div style={{ background: "var(--dpf-bg)", borderRadius: "0 0 8px 8px" }}>
         {filtered.map((row) => (
           <DecisionRow key={row.id} row={row} />
         ))}
       </div>
 
       {filtered.length === 0 && (
-        <div style={{ padding: 24, textAlign: "center", color: "#8888a0", fontSize: 12 }}>
+        <div style={{ padding: 24, textAlign: "center", color: "var(--dpf-muted)", fontSize: 12 }}>
           No decisions for task type "{taskFilter}".
         </div>
       )}

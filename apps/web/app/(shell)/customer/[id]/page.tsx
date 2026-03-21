@@ -1,0 +1,316 @@
+// apps/web/app/(shell)/customer/[id]/page.tsx — Account detail with timeline
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@dpf/db";
+
+const STATUS_COLOURS: Record<string, string> = {
+  prospect: "#fbbf24",
+  qualified: "#fb923c",
+  onboarding: "#38bdf8",
+  active: "#4ade80",
+  at_risk: "#ef4444",
+  suspended: "#8888a0",
+  closed: "#555566",
+};
+
+const ACTIVITY_ICONS: Record<string, string> = {
+  note: "📝",
+  call: "📞",
+  email: "📧",
+  meeting: "📅",
+  task: "☑️",
+  status_change: "🔄",
+  quote_event: "📋",
+  system: "⚙️",
+};
+
+export default async function AccountDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const [account, activities, opportunities, engagements] = await Promise.all([
+    prisma.customerAccount.findUnique({
+      where: { id },
+      include: {
+        contacts: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            jobTitle: true,
+            isActive: true,
+            doNotContact: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+        contactRoles: {
+          include: { contact: { select: { id: true, email: true, firstName: true, lastName: true } } },
+          orderBy: [{ isPrimary: "desc" }, { startedAt: "desc" }],
+        },
+        parentAccount: { select: { id: true, accountId: true, name: true } },
+        childAccounts: { select: { id: true, accountId: true, name: true, status: true } },
+      },
+    }),
+    prisma.activity.findMany({
+      where: { accountId: id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        createdBy: { select: { id: true, email: true } },
+        contact: { select: { id: true, firstName: true, lastName: true } },
+        opportunity: { select: { id: true, title: true } },
+      },
+    }),
+    prisma.opportunity.findMany({
+      where: { accountId: id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        opportunityId: true,
+        title: true,
+        stage: true,
+        probability: true,
+        expectedValue: true,
+        isDormant: true,
+      },
+    }),
+    prisma.engagement.findMany({
+      where: { accountId: id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, engagementId: true, title: true, status: true },
+    }),
+  ]);
+
+  if (!account) notFound();
+
+  const statusColour = STATUS_COLOURS[account.status] ?? "#8888a0";
+
+  return (
+    <div>
+      {/* Breadcrumb */}
+      <div className="mb-2">
+        <Link href="/customer" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
+          Accounts
+        </Link>
+        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+        <span className="text-xs text-[var(--dpf-text)]">{account.name}</span>
+      </div>
+
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
+          <span
+            className="text-[9px] px-1.5 py-0.5 rounded-full"
+            style={{ background: `${statusColour}20`, color: statusColour }}
+          >
+            {account.status}
+          </span>
+        </div>
+        <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
+          {account.accountId}
+        </p>
+      </div>
+
+      {/* Metadata grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {account.industry && (
+          <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+            <p className="text-[10px] text-[var(--dpf-muted)]">Industry</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{account.industry}</p>
+          </div>
+        )}
+        {account.website && (
+          <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+            <p className="text-[10px] text-[var(--dpf-muted)]">Website</p>
+            <p className="text-sm text-[var(--dpf-accent)] truncate">{account.website}</p>
+          </div>
+        )}
+        {account.employeeCount && (
+          <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+            <p className="text-[10px] text-[var(--dpf-muted)]">Employees</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{account.employeeCount.toLocaleString()}</p>
+          </div>
+        )}
+        {account.annualRevenue && (
+          <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+            <p className="text-[10px] text-[var(--dpf-muted)]">Annual Revenue</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">
+              {account.currency} {Number(account.annualRevenue).toLocaleString()}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column — Timeline (2/3 width) */}
+        <div className="lg:col-span-2">
+          <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+            Activity Timeline
+            <span className="ml-2 normal-case font-normal">{activities.length}</span>
+          </h2>
+
+          {activities.length === 0 ? (
+            <p className="text-sm text-[var(--dpf-muted)]">No activity recorded yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {activities.map((act) => (
+                <div
+                  key={act.id}
+                  className="p-3 rounded-lg bg-[var(--dpf-surface-1)] flex gap-3"
+                >
+                  <span className="text-sm shrink-0">
+                    {ACTIVITY_ICONS[act.type] ?? "•"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-[var(--dpf-text)]">{act.subject}</p>
+                    {act.body && (
+                      <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 line-clamp-2">
+                        {act.body}
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-1 text-[9px] text-[var(--dpf-muted)]">
+                      <span>{new Date(act.createdAt).toLocaleString()}</span>
+                      {act.createdBy && <span>by {act.createdBy.email}</span>}
+                      {act.opportunity && (
+                        <Link
+                          href={`/customer/opportunities/${act.opportunity.id}`}
+                          className="text-[var(--dpf-accent)] hover:underline"
+                        >
+                          {act.opportunity.title}
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right column — Sidebar */}
+        <div className="space-y-6">
+          {/* Contacts */}
+          <div>
+            <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+              Contacts
+              <span className="ml-2 normal-case font-normal">{account.contacts.length}</span>
+            </h2>
+            <div className="space-y-2">
+              {account.contacts.map((c) => (
+                <div
+                  key={c.id}
+                  className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
+                >
+                  <p className="text-xs font-semibold text-[var(--dpf-text)]">
+                    {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.email}
+                  </p>
+                  {c.jobTitle && (
+                    <p className="text-[9px] text-[var(--dpf-muted)]">{c.jobTitle}</p>
+                  )}
+                  <p className="text-[9px] text-[var(--dpf-muted)]">{c.email}</p>
+                  {c.phone && (
+                    <p className="text-[9px] text-[var(--dpf-muted)]">{c.phone}</p>
+                  )}
+                  <div className="flex gap-1 mt-1">
+                    {!c.isActive && (
+                      <span className="text-[8px] px-1 py-0.5 rounded-full bg-red-900/30 text-red-400">
+                        inactive
+                      </span>
+                    )}
+                    {c.doNotContact && (
+                      <span className="text-[8px] px-1 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400">
+                        do not contact
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Opportunities */}
+          {opportunities.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+                Opportunities
+                <span className="ml-2 normal-case font-normal">{opportunities.length}</span>
+              </h2>
+              <div className="space-y-2">
+                {opportunities.map((o) => (
+                  <Link
+                    key={o.id}
+                    href={`/customer/opportunities/${o.id}`}
+                    className="block p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]"
+                  >
+                    <p className="text-xs text-[var(--dpf-text)]">{o.title}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] text-[var(--dpf-muted)]">{o.stage}</span>
+                      <span className="text-[9px] text-[var(--dpf-muted)]">{o.probability}%</span>
+                      {o.expectedValue && (
+                        <span className="text-[9px] font-mono text-[var(--dpf-text)]">
+                          £{Number(o.expectedValue).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Parent / child accounts */}
+          {account.parentAccount && (
+            <div>
+              <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
+                Parent Account
+              </h2>
+              <Link
+                href={`/customer/${account.parentAccount.id}`}
+                className="block p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <p className="text-xs text-[var(--dpf-text)]">{account.parentAccount.name}</p>
+              </Link>
+            </div>
+          )}
+
+          {account.childAccounts.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
+                Subsidiaries
+              </h2>
+              <div className="space-y-1">
+                {account.childAccounts.map((child) => (
+                  <Link
+                    key={child.id}
+                    href={`/customer/${child.id}`}
+                    className="block p-2 rounded bg-[var(--dpf-surface-1)] text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                  >
+                    {child.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {account.notes && (
+            <div>
+              <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
+                Notes
+              </h2>
+              <p className="text-xs text-[var(--dpf-muted)] whitespace-pre-wrap">
+                {account.notes}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -253,7 +253,7 @@ function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edg
     source: e.fromViewElementId,
     target: e.toViewElementId,
     type: "eaRelationship",
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#7c8cf8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--dpf-accent)" },
     data: { relationshipType: e.relationshipType, onDelete: () => onDelete(e.id), edgeVariant },
   }));
 }
@@ -541,7 +541,7 @@ export function EaCanvas({
   }
 
   return (
-    <div style={{ display: "flex", height: "100%", background: "#0f0f1a" }}>
+    <div style={{ display: "flex", height: "100%", background: "var(--dpf-bg)" }}>
       <ElementPalette
         elementTypes={paletteTypes}
         onDragStart={handleDragStart}
@@ -550,10 +550,10 @@ export function EaCanvas({
 
       <div style={{ flex: 1, position: "relative" }}>
         {/* Status bar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "#1a1a2e", borderBottom: "1px solid #2a2a40" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "var(--dpf-surface-1)", borderBottom: "1px solid var(--dpf-border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "#8888a0", fontSize: 10 }}>EA /</span>
-            <span style={{ color: "#e0e0ff", fontSize: 11, fontWeight: 600 }}>{viewName}</span>
+            <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>EA /</span>
+            <span style={{ color: "var(--dpf-text)", fontSize: 11, fontWeight: 600 }}>{viewName}</span>
             <span style={{
               fontSize: 10, padding: "2px 6px", borderRadius: 3,
               background: viewStatus === "approved" ? "#1e3a2f" : "#1a1a2e",
@@ -562,7 +562,7 @@ export function EaCanvas({
             }}>
               {viewStatus.toUpperCase()}
             </span>
-            {viewpoint && <span style={{ color: "#8888a0", fontSize: 10 }}>Viewpoint: {viewpoint.name}</span>}
+            {viewpoint && <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>Viewpoint: {viewpoint.name}</span>}
           </div>
 
           {/* Edge style toggle */}
@@ -613,7 +613,7 @@ export function EaCanvas({
             onMove={(_evt, vp) => { viewportRef.current = vp; }}
           >
             <Background color="#2a2a40" gap={20} />
-            <Controls style={{ background: "#1a1a2e", border: "1px solid #2a2a40" }} />
+            <Controls style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)" }} />
           </ReactFlow>
         </div>
       </div>

@@ -147,7 +147,7 @@ export function EmployeeFormPanel({
   if (!isOpen) return null;
 
   const inputClasses =
-    "bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]";
+    "bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]";
   const labelClasses =
     "text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]";
 
@@ -165,12 +165,12 @@ export function EmployeeFormPanel({
         <div className="w-3/4 max-w-3xl max-h-[85vh] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg flex flex-col shadow-2xl pointer-events-auto">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--dpf-border)]">
-            <h2 className="text-sm font-semibold text-white">
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
               {isEdit ? "Edit Employee" : "New Employee"}
             </h2>
             <button
               onClick={onClose}
-              className="text-[var(--dpf-muted)] hover:text-white text-lg leading-none"
+              className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-lg leading-none"
             >
               &times;
             </button>
@@ -415,7 +415,7 @@ export function EmployeeFormPanel({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+              className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
             >
               Cancel
             </button>

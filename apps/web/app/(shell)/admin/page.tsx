@@ -32,7 +32,7 @@ export default async function AdminPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Admin</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Admin</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {users.length} user{users.length !== 1 ? "s" : ""}
         </p>
@@ -52,7 +52,7 @@ export default async function AdminPage() {
               style={{ borderLeftColor: "#8888a0" }}
             >
               <div className="flex items-start justify-between gap-2 mb-2">
-                <p className="text-sm font-semibold text-white leading-tight truncate">{u.email}</p>
+                <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">{u.email}</p>
                 <div className="flex gap-1 shrink-0">
                   {u.isSuperuser && (
                     <span

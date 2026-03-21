@@ -15,16 +15,16 @@ export default async function SuppliersPage() {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">Suppliers</span>
+        <span className="text-xs text-[var(--dpf-text)]">Suppliers</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-xl font-bold text-white">Suppliers</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Suppliers</h1>
         <Link
           href="/finance/suppliers/new"
           className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
@@ -68,7 +68,7 @@ export default async function SuppliersPage() {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/suppliers/${s.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white transition-colors"
+                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                       >
                         {s.supplierId}
                       </Link>
@@ -76,7 +76,7 @@ export default async function SuppliersPage() {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/suppliers/${s.id}`}
-                        className="text-white hover:underline"
+                        className="text-[var(--dpf-text)] hover:underline"
                       >
                         {s.name}
                       </Link>

@@ -40,11 +40,11 @@ export default async function PayPage({ params }: Props) {
           }}
         >
           <h1
-            style={{ margin: "0 0 4px", fontSize: 28, fontWeight: 700, color: "#111" }}
+            style={{ margin: "0 0 4px", fontSize: 28, fontWeight: 700, color: "var(--dpf-text)" }}
           >
             {invoice.invoiceRef}
           </h1>
-          <p style={{ margin: "0 0 32px", color: "#6b7280", fontSize: 14 }}>
+          <p style={{ margin: "0 0 32px", color: "var(--dpf-muted)", fontSize: 14 }}>
             Invoice for {invoice.account.name}
           </p>
 
@@ -84,7 +84,7 @@ export default async function PayPage({ params }: Props) {
               </>
             ) : (
               <>
-                <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 14 }}>
+                <p style={{ margin: "0 0 4px", color: "var(--dpf-muted)", fontSize: 14 }}>
                   Amount Due
                 </p>
                 <p
@@ -92,13 +92,13 @@ export default async function PayPage({ params }: Props) {
                     margin: 0,
                     fontSize: 32,
                     fontWeight: 700,
-                    color: "#111",
+                    color: "var(--dpf-text)",
                   }}
                 >
                   {invoice.currency}{" "}
                   {due.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: "8px 0 0", color: "#6b7280", fontSize: 13 }}>
+                <p style={{ margin: "8px 0 0", color: "var(--dpf-muted)", fontSize: 13 }}>
                   Due{" "}
                   {new Date(invoice.dueDate).toLocaleDateString("en-GB", {
                     day: "numeric",
@@ -121,7 +121,7 @@ export default async function PayPage({ params }: Props) {
                     textAlign: "left",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -132,7 +132,7 @@ export default async function PayPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -143,7 +143,7 @@ export default async function PayPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -154,7 +154,7 @@ export default async function PayPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -166,7 +166,7 @@ export default async function PayPage({ params }: Props) {
               {invoice.lineItems.map((li, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
                   <td
-                    style={{ padding: "10px 0", fontSize: 14, color: "#111" }}
+                    style={{ padding: "10px 0", fontSize: 14, color: "var(--dpf-text)" }}
                   >
                     {li.description}
                   </td>
@@ -174,7 +174,7 @@ export default async function PayPage({ params }: Props) {
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#6b7280",
+                      color: "var(--dpf-muted)",
                       textAlign: "right",
                     }}
                   >
@@ -184,7 +184,7 @@ export default async function PayPage({ params }: Props) {
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#6b7280",
+                      color: "var(--dpf-muted)",
                       textAlign: "right",
                     }}
                   >
@@ -197,7 +197,7 @@ export default async function PayPage({ params }: Props) {
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#111",
+                      color: "var(--dpf-text)",
                       textAlign: "right",
                       fontWeight: 500,
                     }}
@@ -219,8 +219,8 @@ export default async function PayPage({ params }: Props) {
             <div
               style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}
             >
-              <span style={{ fontSize: 14, color: "#6b7280" }}>Subtotal</span>
-              <span style={{ fontSize: 14, color: "#111" }}>
+              <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Subtotal</span>
+              <span style={{ fontSize: 14, color: "var(--dpf-text)" }}>
                 {invoice.currency}{" "}
                 {Number(invoice.subtotal).toLocaleString("en-GB", {
                   minimumFractionDigits: 2,
@@ -235,8 +235,8 @@ export default async function PayPage({ params }: Props) {
                   marginBottom: 4,
                 }}
               >
-                <span style={{ fontSize: 14, color: "#6b7280" }}>Tax</span>
-                <span style={{ fontSize: 14, color: "#111" }}>
+                <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Tax</span>
+                <span style={{ fontSize: 14, color: "var(--dpf-text)" }}>
                   {invoice.currency}{" "}
                   {Number(invoice.taxAmount).toLocaleString("en-GB", {
                     minimumFractionDigits: 2,
@@ -252,10 +252,10 @@ export default async function PayPage({ params }: Props) {
                 borderTop: "1px solid #e5e7eb",
               }}
             >
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--dpf-text)" }}>
                 Total
               </span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--dpf-text)" }}>
                 {invoice.currency}{" "}
                 {total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
               </span>
@@ -266,7 +266,7 @@ export default async function PayPage({ params }: Props) {
           {!isPaid && (
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <p
-                style={{ fontSize: 13, color: "#6b7280", marginBottom: 12 }}
+                style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 12 }}
               >
                 To pay, please transfer to the bank details provided in your
                 invoice email, or contact us for alternative payment options.
@@ -294,7 +294,7 @@ export default async function PayPage({ params }: Props) {
           {/* Notes */}
           {invoice.notes && (
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16 }}>
-              <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>
+              <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: 0 }}>
                 {invoice.notes}
               </p>
             </div>

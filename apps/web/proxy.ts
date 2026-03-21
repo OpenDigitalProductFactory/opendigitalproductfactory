@@ -5,25 +5,13 @@
 
 import { auth } from "@/lib/auth";
 import { classifyRoute, RouteClass } from "@/lib/storefront-middleware";
-import { prisma } from "@dpf/db";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
-
-// Force Node.js runtime — Prisma requires Node TCP sockets.
-export const runtime = "nodejs";
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
-async function getOrgSlug(): Promise<string> {
-  try {
-    const org = await prisma.organization.findFirst({ select: { slug: true } });
-    return org?.slug ?? "store";
-  } catch {
-    return "store";
-  }
-}
 
 export default auth(async function proxy(req: NextAuthRequest) {
   const { pathname } = req.nextUrl;
@@ -39,12 +27,9 @@ export default auth(async function proxy(req: NextAuthRequest) {
     return NextResponse.next();
   }
 
-  // ── Legacy customer auth → 301 to canonical storefront ───────────────────
+  // ── Legacy customer auth → 301 to canonical portal auth ─────────────────
   if (routeClass === RouteClass.LegacyCustomerAuth) {
-    const slug = await getOrgSlug();
-    const target = pathname.includes("signup")
-      ? `/s/${slug}/sign-up`
-      : `/s/${slug}/sign-in`;
+    const target = pathname.includes("signup") ? "/portal/sign-up" : "/portal/sign-in";
     return NextResponse.redirect(new URL(target, req.url), 301);
   }
 
@@ -52,8 +37,7 @@ export default auth(async function proxy(req: NextAuthRequest) {
   if (routeClass === RouteClass.Portal) {
     const user = req.auth?.user as { type?: string } | undefined;
     if (!user || user.type !== "customer") {
-      const slug = await getOrgSlug();
-      return NextResponse.redirect(new URL(`/s/${slug}/sign-in`, req.url));
+      return NextResponse.redirect(new URL("/portal/sign-in", req.url));
     }
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set("x-pathname", pathname);

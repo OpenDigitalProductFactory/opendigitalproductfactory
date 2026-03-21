@@ -54,8 +54,8 @@ export default async function ProvidersPage() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: 0 }}>External Services</h1>
-        <p style={{ fontSize: 11, color: "#8888a0", marginTop: 2 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>External Services</h1>
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           {providers.length} service{providers.length !== 1 ? "s" : ""} registered
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
@@ -68,14 +68,14 @@ export default async function ProvidersPage() {
       {/* Section 1: External Services Registry */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             External Services
           </div>
           {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
         </div>
 
         {providers.length === 0 ? (
-          <p style={{ color: "#8888a0", fontSize: 11 }}>No services registered. Click &quot;Update Providers&quot; to import.</p>
+          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>No services registered. Click &quot;Update Providers&quot; to import.</p>
         ) : (
           groupByEndpointTypeAndCategory(providers).map((group) => (
             <ServiceSection
@@ -99,7 +99,7 @@ export default async function ProvidersPage() {
 
       {/* Section 3: Scheduled Jobs */}
       <div>
-        <div style={{ color: "#7c8cf8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+        <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
           Scheduled Jobs
         </div>
         <ScheduledJobsTable jobs={freshJobs} canWrite={canWrite} />

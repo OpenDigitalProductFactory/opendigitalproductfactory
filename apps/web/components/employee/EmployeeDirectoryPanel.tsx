@@ -94,7 +94,7 @@ function EmployeeCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-mono text-[var(--dpf-muted)]">{employee.employeeId}</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
             {employee.displayName}
             {directReportCount > 0 && (
               <span className="ml-2 inline-flex items-center rounded-full bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--dpf-muted)]">
@@ -112,19 +112,19 @@ function EmployeeCard({
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Department</dt>
-          <dd className="text-white">{employee.departmentName ?? "Unassigned"}</dd>
+          <dd className="text-[var(--dpf-text)]">{employee.departmentName ?? "Unassigned"}</dd>
         </div>
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Position</dt>
-          <dd className="text-white">{employee.positionTitle ?? "Unassigned"}</dd>
+          <dd className="text-[var(--dpf-text)]">{employee.positionTitle ?? "Unassigned"}</dd>
         </div>
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Manager</dt>
-          <dd className="text-white">{employee.managerName ?? "None"}</dd>
+          <dd className="text-[var(--dpf-text)]">{employee.managerName ?? "None"}</dd>
         </div>
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Location</dt>
-          <dd className="text-white">{employee.workLocationName ?? "Unset"}</dd>
+          <dd className="text-[var(--dpf-text)]">{employee.workLocationName ?? "Unset"}</dd>
         </div>
       </dl>
     </article>
@@ -145,7 +145,7 @@ export function EmployeeDirectoryPanel({ employees }: Props) {
     <section className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Employee directory</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Employee directory</h2>
           <p className="text-xs text-[var(--dpf-muted)] mt-1">
             Workforce identity, organization placement, and reporting lines.
           </p>

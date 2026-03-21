@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createBill } from "@/lib/actions/ap";
 
 const inputClasses =
-  "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-white rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
+  "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 
 interface LineItem {
@@ -350,12 +350,12 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId }:
         {/* Live totals */}
         <div className="mt-4 pt-4 border-t border-[var(--dpf-border)] flex flex-col items-end gap-1">
           <p className="text-xs text-[var(--dpf-muted)]">
-            Subtotal: <span className="text-white">{currency} {formatMoney(totals.subtotal)}</span>
+            Subtotal: <span className="text-[var(--dpf-text)]">{currency} {formatMoney(totals.subtotal)}</span>
           </p>
           <p className="text-xs text-[var(--dpf-muted)]">
-            Tax: <span className="text-white">{currency} {formatMoney(totals.tax)}</span>
+            Tax: <span className="text-[var(--dpf-text)]">{currency} {formatMoney(totals.tax)}</span>
           </p>
-          <p className="text-sm font-bold text-white">
+          <p className="text-sm font-bold text-[var(--dpf-text)]">
             Total: {currency} {formatMoney(totals.total)}
           </p>
         </div>
@@ -381,7 +381,7 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId }:
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-4 py-2 rounded-md text-sm border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors"
+          className="px-4 py-2 rounded-md text-sm border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
         >
           Cancel
         </button>

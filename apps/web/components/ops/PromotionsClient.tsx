@@ -81,7 +81,7 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               filter === s
                 ? "bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border-[var(--dpf-accent)]/40"
-                : "bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] border-[var(--dpf-border)] hover:text-white"
+                : "bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] border-[var(--dpf-border)] hover:text-[var(--dpf-text)]"
             }`}
           >
             {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -105,7 +105,7 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-[var(--dpf-text)]">
                       {p.productVersion.digitalProduct?.name ?? "Unknown Product"}
                     </span>
                     <span className="text-sm font-mono text-[var(--dpf-accent)]">
@@ -126,7 +126,7 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
                     </p>
                   )}
                   {p.rationale && (
-                    <p className="text-xs text-white/70 mt-2 italic">
+                    <p className="text-xs text-[var(--dpf-text)]/70 mt-2 italic">
                       Rationale: {p.rationale}
                     </p>
                   )}
@@ -164,7 +164,7 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
                     value={rationale}
                     onChange={(e) => setRationale(e.target.value)}
                     placeholder="Rationale (optional but recommended for audit trail)..."
-                    className="w-full p-2 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-sm text-white placeholder:text-[var(--dpf-muted)] resize-none"
+                    className="w-full p-2 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] resize-none"
                     rows={2}
                   />
                   <div className="flex gap-2 mt-2">
@@ -184,7 +184,7 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
                     </button>
                     <button
                       onClick={() => { setActionTarget(null); setRationale(""); }}
-                      className="px-4 py-1.5 text-xs rounded-lg text-[var(--dpf-muted)] hover:text-white transition-colors"
+                      className="px-4 py-1.5 text-xs rounded-lg text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                     >
                       Cancel
                     </button>

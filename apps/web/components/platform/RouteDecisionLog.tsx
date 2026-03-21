@@ -66,8 +66,8 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
 
   return (
     <div style={{
-      background: "#161625",
-      border: "1px solid #2a2a40",
+      background: "var(--dpf-surface-1)",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 6,
       padding: "12px 14px",
       marginBottom: 8,
@@ -89,7 +89,7 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
         </span>
 
         {/* Endpoint */}
-        <span style={{ fontSize: 12, color: "#e0e0ff", fontFamily: "monospace" }}>
+        <span style={{ fontSize: 12, color: "var(--dpf-text)", fontFamily: "monospace" }}>
           {decision.selectedEndpointId}
         </span>
 
@@ -124,13 +124,13 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
         )}
 
         {/* Time */}
-        <span style={{ fontSize: 11, color: "#8888a0", flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: "var(--dpf-muted)", flexShrink: 0 }}>
           {relativeTime(decision.createdAt)}
         </span>
       </div>
 
       {/* Reason */}
-      <div style={{ fontSize: 12, color: "#b0b0c8", lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
         {expanded ? decision.reason : truncatedReason}
         {needsExpand && (
           <button
@@ -138,7 +138,7 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
             style={{
               marginLeft: 6,
               fontSize: 11,
-              color: "#7c8cf8",
+              color: "var(--dpf-accent)",
               background: "none",
               border: "none",
               cursor: "pointer",
@@ -158,9 +158,9 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
               fontSize: 10,
               padding: "1px 7px",
               borderRadius: 4,
-              background: "#0d0d1a",
-              color: "#8888a0",
-              border: "1px solid #2a2a40",
+              background: "var(--dpf-bg)",
+              color: "var(--dpf-muted)",
+              border: "1px solid var(--dpf-border)",
             }}>
               {rule}
             </span>
@@ -175,17 +175,17 @@ export default function RouteDecisionLog({ decisions }: Props) {
   return (
     <div style={{
       marginTop: 24,
-      background: "#1a1a2e",
-      border: "1px solid #2a2a40",
+      background: "var(--dpf-surface-1)",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 8,
       padding: 20,
     }}>
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: 0 }}>
           Route Decision Log
         </h2>
-        <p style={{ fontSize: 12, color: "#b0b0c8", marginTop: 6, lineHeight: 1.5, maxWidth: 560 }}>
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.5, maxWidth: 560 }}>
           Every time the platform selects an AI endpoint for a task, the decision
           is logged here with the full reasoning. This audit trail shows what was
           selected, why, and what alternatives were considered.
@@ -196,7 +196,7 @@ export default function RouteDecisionLog({ decisions }: Props) {
         <div style={{
           textAlign: "center",
           padding: "32px 0",
-          color: "#8888a0",
+          color: "var(--dpf-muted)",
           fontSize: 12,
         }}>
           No routing decisions recorded for this endpoint yet.

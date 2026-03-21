@@ -2,6 +2,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { CustomerTabNav } from "@/components/customer/CustomerTabNav";
 
 export default async function CustomerLayout({
   children,
@@ -19,5 +20,10 @@ export default async function CustomerLayout({
     notFound();
   }
 
-  return <>{children}</>;
+  return (
+    <div>
+      <CustomerTabNav />
+      {children}
+    </div>
+  );
 }
