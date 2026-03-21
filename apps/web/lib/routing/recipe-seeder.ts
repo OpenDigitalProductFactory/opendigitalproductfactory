@@ -8,6 +8,7 @@
  */
 
 import type { ModelCardCapabilities } from "./model-card-types";
+import { isAnthropic, isOpenAI } from "./provider-utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -86,14 +87,6 @@ function deriveMaxTokens(
 ): number {
   const cap = modelMaxOutputTokens ?? 4096;
   return Math.min(Math.max(estimatedOutputTokens * 2, 1024), cap);
-}
-
-function isAnthropic(providerId: string): boolean {
-  return providerId === "anthropic" || providerId.startsWith("anthropic-");
-}
-
-function isOpenAI(providerId: string): boolean {
-  return providerId === "openai" || providerId.startsWith("openai-");
 }
 
 function buildProviderSettings(
