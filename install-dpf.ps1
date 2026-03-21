@@ -114,6 +114,13 @@ if (-not (Test-Path $DPF_DIR)) {
     New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
 }
 
+# Pre-flight: ensure git is installed
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Warn "Git is not installed or not in your PATH."
+    Write-Warn "Please install Git from https://git-scm.com/download/win and try again."
+    exit 1
+}
+
 # --- Step 1: Check Windows ----------------------------------------------------
 
 Write-Step 1 9 "Checking Windows version..."
