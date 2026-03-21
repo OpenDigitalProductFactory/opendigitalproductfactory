@@ -2737,6 +2737,7 @@ model Policy {
   policyId             String                 @unique
   title                String
   description          String?
+  body                 String?
   category             String
   version              Int                    @default(1)
   lifecycleStatus      String                 @default("draft")

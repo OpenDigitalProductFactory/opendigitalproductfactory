@@ -85,6 +85,14 @@ export default async function PolicyDetailPage({ params }: Props) {
         {policy.description && <p className="text-sm text-[var(--dpf-muted)]">{policy.description}</p>}
       </div>
 
+      {/* Policy Document Body */}
+      {policy.body && (
+        <div className="mb-6 p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">Policy Document</h2>
+          <div className="text-sm text-[var(--dpf-text)] whitespace-pre-wrap leading-relaxed">{policy.body}</div>
+        </div>
+      )}
+
       {/* Lifecycle Transitions */}
       {availableTransitions.length > 0 && (
         <div className="flex items-center gap-2 mb-6">
@@ -130,7 +138,7 @@ export default async function PolicyDetailPage({ params }: Props) {
           Linked to obligation: <a href={`/compliance/obligations/${policy.obligation.id}`} className="underline">{policy.obligation.title}</a>
         </p>
       ) : (
-        <p className="text-xs text-[var(--dpf-muted)] mb-6">Not linked to a regulation.</p>
+        <p className="text-xs text-[var(--dpf-muted)] mb-6">Not linked to a regulation or standard.</p>
       )}
 
       {/* Requirements */}

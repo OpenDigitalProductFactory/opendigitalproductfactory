@@ -20,6 +20,7 @@ type Props = {
   policy: {
     title: string;
     description?: string | null;
+    body?: string | null;
     category: string;
     reviewDate?: Date | string | null;
     reviewFrequency?: string | null;
@@ -41,6 +42,7 @@ export function EditPolicyForm({ id, policy }: Props) {
       title: form.get("title") as string,
       category: form.get("category") as string,
       description: (form.get("description") as string) || null,
+      body: (form.get("body") as string) || null,
       reviewDate: reviewDateStr ? new Date(reviewDateStr) : null,
       reviewFrequency: (form.get("reviewFrequency") as string) || null,
       notes: (form.get("notes") as string) || null,
@@ -90,6 +92,10 @@ export function EditPolicyForm({ id, policy }: Props) {
           <div>
             <label className={labelClasses}>Description</label>
             <textarea name="description" rows={2} className={inputClasses} defaultValue={policy.description ?? ""} />
+          </div>
+          <div>
+            <label className={labelClasses}>Policy Document</label>
+            <textarea name="body" rows={10} className={inputClasses} defaultValue={policy.body ?? ""} placeholder="Enter the full policy text here..." />
           </div>
           <div>
             <label className={labelClasses}>Notes</label>

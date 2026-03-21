@@ -1,4 +1,4 @@
-// apps/web/app/(shell)/portal/expenses/page.tsx
+// apps/web/app/(shell)/finance/my-expenses/page.tsx
 // Employee portal: list of the current user's own expense claims
 
 import { listExpenseClaims } from "@/lib/actions/expenses";
@@ -35,7 +35,7 @@ export default async function MyExpensesPage() {
           </p>
         </div>
         <Link
-          href="/portal/expenses/new"
+          href="/finance/my-expenses/new"
           className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
         >
           New Expense Claim
@@ -47,7 +47,7 @@ export default async function MyExpensesPage() {
         <div className="text-center py-16">
           <p className="text-sm text-[var(--dpf-muted)]">No expense claims yet.</p>
           <Link
-            href="/portal/expenses/new"
+            href="/finance/my-expenses/new"
             className="mt-3 inline-block text-xs text-[var(--dpf-accent)] hover:underline"
           >
             Submit your first expense claim →
@@ -85,7 +85,7 @@ export default async function MyExpensesPage() {
                   >
                     <td className="px-4 py-2.5">
                       <Link
-                        href={`/portal/expenses/${claim.id}`}
+                        href={`/finance/my-expenses/${claim.id}`}
                         className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                       >
                         {claim.claimId}
@@ -93,7 +93,7 @@ export default async function MyExpensesPage() {
                     </td>
                     <td className="px-4 py-2.5">
                       <Link
-                        href={`/portal/expenses/${claim.id}`}
+                        href={`/finance/my-expenses/${claim.id}`}
                         className="text-[var(--dpf-text)] hover:underline"
                       >
                         {claim.title}

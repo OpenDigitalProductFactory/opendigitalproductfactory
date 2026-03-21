@@ -280,6 +280,56 @@ describe("buildSeedRecipe – responsePolicy", () => {
   });
 });
 
+// ── providerTools in seed output (EP-INF-008b) ──────────────────────────────
+
+describe("buildSeedRecipe – providerTools", () => {
+  it("Gemini + codeExecution + sync.code-gen → providerTools in providerSettings", () => {
+    const result = buildSeedRecipe(
+      "gemini",
+      "gemini-2.0-flash",
+      "sync.code-gen",
+      baseModelCard({ capabilities: caps({ codeExecution: true }) }),
+      baseContract(),
+    );
+    expect(result.providerSettings.providerTools).toEqual([{ code_execution: {} }]);
+  });
+
+  it("Gemini + webSearch + sync.web-search → grounding tool in providerSettings", () => {
+    const result = buildSeedRecipe(
+      "gemini",
+      "gemini-2.0-flash",
+      "sync.web-search",
+      baseModelCard({ capabilities: caps({ webSearch: true }) }),
+      baseContract(),
+    );
+    expect(result.providerSettings.providerTools).toBeDefined();
+    expect((result.providerSettings.providerTools as any[])[0]).toHaveProperty("google_search_retrieval");
+  });
+
+  it("Anthropic + computerUse + sync.tool-action → computer tool in providerSettings", () => {
+    const result = buildSeedRecipe(
+      "anthropic",
+      "claude-sonnet-4-5",
+      "sync.tool-action",
+      baseModelCard({ capabilities: caps({ computerUse: true }) }),
+      baseContract(),
+    );
+    expect(result.providerSettings.providerTools).toBeDefined();
+    expect((result.providerSettings.providerTools as any[])[0]).toHaveProperty("type", "computer_20241022");
+  });
+
+  it("no matching capability → no providerTools key", () => {
+    const result = buildSeedRecipe(
+      "openai",
+      "gpt-4o",
+      "sync.code-gen",
+      baseModelCard(),
+      baseContract(),
+    );
+    expect(result.providerSettings.providerTools).toBeUndefined();
+  });
+});
+
 // ── maxTokens derivation ─────────────────────────────────────────────────────
 
 describe("buildSeedRecipe – maxTokens derivation", () => {

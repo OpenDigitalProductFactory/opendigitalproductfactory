@@ -81,7 +81,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
     setError(null);
     try {
       await createExpenseClaim(buildInput());
-      router.push("/portal/expenses");
+      router.push("/finance/my-expenses");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save draft");
     } finally {
@@ -96,7 +96,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
     try {
       const claim = await createExpenseClaim(buildInput());
       await submitExpenseClaim(claim.id);
-      router.push("/portal/expenses");
+      router.push("/finance/my-expenses");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to submit claim");
     } finally {

@@ -1,4 +1,4 @@
-// apps/web/app/(shell)/portal/expenses/new/page.tsx
+// apps/web/app/(shell)/finance/my-expenses/new/page.tsx
 // Employee portal: create a new expense claim
 
 import Link from "next/link";
@@ -15,7 +15,7 @@ export default async function NewExpensePage() {
       {/* Breadcrumb */}
       <div className="mb-2">
         <Link
-          href="/portal/expenses"
+          href="/finance/my-expenses"
           className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           My Expenses

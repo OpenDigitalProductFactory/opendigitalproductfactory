@@ -62,6 +62,7 @@ export type PolicyInput = {
   title: string;
   category: string;
   description?: string | null;
+  body?: string | null;
   effectiveDate?: Date | null;
   reviewDate?: Date | null;
   reviewFrequency?: string | null;
