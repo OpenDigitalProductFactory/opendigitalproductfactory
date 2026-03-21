@@ -9,6 +9,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedGeographicData } from "./seed-geographic-data.js";
 import * as crypto from "crypto";
 
 const DATA_DIR = join(__dirname, "..", "data");
@@ -1203,6 +1204,7 @@ async function seedMobileAppReminder(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
+  await seedGeographicData(prisma);
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
