@@ -19,6 +19,7 @@ const ROUTE_SENSITIVITY: Array<{ prefix: string; sensitivity: RouteSensitivity }
   { prefix: "/inventory", sensitivity: "internal" },
   { prefix: "/portfolio", sensitivity: "internal" },
   { prefix: "/workspace", sensitivity: "confidential" },
+  { prefix: "/setup", sensitivity: "internal" },
 ];
 
 function isLocalProvider(provider: ProviderPolicyInfo): boolean {
