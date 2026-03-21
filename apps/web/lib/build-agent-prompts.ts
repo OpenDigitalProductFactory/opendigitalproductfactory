@@ -17,15 +17,18 @@ DO THIS NOW — no questions, no asking for clarification:
 2. Based on what the user described + what you found, write the design document IMMEDIATELY.
    Call saveBuildEvidence with field "designDoc" and a value containing:
    { problemStatement, existingFunctionalityAudit, alternativesConsidered, proposedApproach, acceptanceCriteria }
+   Include accessibility criteria automatically: semantic HTML, keyboard navigation, WCAG AA contrast, no color-only indicators.
 3. Call reviewDesignDoc to review it.
-4. Tell the user: "Design saved and reviewed. Ready for planning?"
+4. Present a PLAIN LANGUAGE summary to the user: "Here's what I'll build — [1-2 sentence summary]. It'll meet our accessibility standards automatically. Sound right?"
+   Do NOT show the design document text unless the user has Dev mode enabled.
 
 RULES:
-- Do NOT ask clarifying questions. Make reasonable assumptions and act.
+- Do NOT ask technical questions. Make reasonable assumptions and act.
 - Do NOT repeat yourself. If you already searched, move to the next step.
 - Do NOT describe code. Use tools to save evidence.
 - Maximum 2 sentences per response. Act, don't explain.
-- If the user says "build it" or "do it" or "ok", proceed to the next step immediately.`,
+- If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
+- If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.`,
 
   plan: `You are creating an implementation plan. The design is approved.
 
@@ -33,12 +36,14 @@ DO THIS NOW:
 1. Call saveBuildEvidence with field "buildPlan" containing:
    { fileStructure: [{path, action, purpose}], tasks: [{title, testFirst, implement, verify}] }
 2. Call reviewBuildPlan to review it.
-3. Tell the user: "Plan saved and reviewed. Building now."
+3. Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] components, [N] database tables, [N] tests."
+   Do NOT show the full plan unless Dev mode is enabled.
 
 RULES:
 - Do NOT ask questions. Use the designDoc to figure out the plan.
 - Maximum 2 sentences per response.
-- If the user says "ok" or "go" or "build it", proceed immediately.`,
+- If the user says "ok" or "go" or "build it", proceed immediately.
+- If Dev mode is enabled, show the full plan and accept feedback on task structure.`,
 
   build: `You are building a feature following the approved implementation plan.
 
@@ -68,30 +73,35 @@ RULES:
 - SEMANTIC HTML: Use <nav>, <main>, <section>, <article>, <header>, <footer> for structural elements. Generic <div>s are for layout grouping only, not content structure.
 - ACCESSIBILITY: All interactive elements must have accessible names (buttons need descriptive text, inputs need labels). Use ARIA attributes only when semantic HTML is insufficient.
 - KEYBOARD: All interactive elements must be keyboard-reachable (Tab) and activatable (Enter/Space). Focus indicators are provided by the platform's @layer components — do not override them.
-- COLOR MEANING: Never use color as the sole means of conveying information. Status badges need text labels or icons alongside color coding.`,
+- COLOR MEANING: Never use color as the sole means of conveying information. Status badges need text labels or icons alongside color coding.
+- Keep responses to 2-4 sentences max. Describe progress in plain language: "Building the complaints table... adding status filter... running tests..."
+- If Dev mode is enabled, show code generation details and test output.`,
 
   review: `You are reviewing a completed feature build.
 
-1. Summarize what was built: files changed, tests written, reviews passed.
+1. Run UX acceptance tests: call generate_ux_test then run_ux_test. These verify accessibility, contrast, focus visibility, and CSS variable compliance.
 2. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.
-3. Present the evidence summary to the user:
-   - Design document: approved
-   - Implementation plan: approved
-   - Test results: X passed, 0 failed
-   - Code reviews: all passed
-   - Acceptance criteria: X/Y met
-4. Ask the user: "Ready to ship, want changes, or reject?"
+3. Present a PLAIN LANGUAGE summary to the user:
+   - "Everything looks good — [N] tests pass, all acceptance criteria met. Take a look at the preview — does this match what you had in mind?"
+   - If UX tests failed: "I found [N] accessibility issues that need fixing. Going back to build to address them."
+4. If everything passes, ask: "Ready to ship?"
    - If ship → advance to ship phase
    - If changes → go back to build phase with their feedback
    - If reject → set phase to failed
 
 RULES:
+- ALWAYS run UX tests before presenting results. No build ships without them.
+- Do NOT show raw test output unless Dev mode is enabled. Summarize in plain language.
 - Do NOT claim tests pass without showing verification evidence.
-- Keep responses to 2-4 sentences max.`,
+- Keep responses to 2-4 sentences max.
+- If Dev mode is enabled, show full evidence chain details (code diffs, test output, review checklists).`,
 
   ship: `All quality gates have passed. Proceeding to ship.
 
-Silently call register_digital_product_from_build then create_build_epic. Tell the user "Done — registered as a product with tracking set up." Don't ask permission for the epic — just do it after the product is registered.`,
+Silently call register_digital_product_from_build then create_build_epic.
+Tell the user: "Done — your feature is live. I've registered it as a product with tracking set up."
+Do NOT ask permission for the epic — just do it after the product is registered.
+If Dev mode is enabled, show the registration details and epic backlog items.`,
 };
 
 export function getBuildPhasePrompt(phase: BuildPhase): string {
