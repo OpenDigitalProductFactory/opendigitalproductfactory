@@ -126,6 +126,10 @@ export interface RouteDecision {
   selectedRecipeId?: string;
   selectedRecipeVersion?: number;
   executionPlan?: import("./recipe-types").RoutedExecutionPlan;
+
+  // EP-INF-006: Exploration fields
+  explorationMode?: "champion" | "challenger";
+  challengerRecipeId?: string;
 }
 
 // ── Pinned / Blocked overrides ──
