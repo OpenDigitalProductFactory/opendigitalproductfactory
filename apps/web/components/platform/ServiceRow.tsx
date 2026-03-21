@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+import type { ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
 import { getBillingLabel } from "@/lib/ai-provider-types";
+import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -77,9 +78,10 @@ const SENSITIVITY_ABBR: Record<string, string> = {
 
 type Props = {
   pw: ProviderWithCredential;
+  modelSummary?: ProviderModelSummary;
 };
 
-export function ServiceRow({ pw }: Props) {
+export function ServiceRow({ pw, modelSummary }: Props) {
   const { provider, credential } = pw;
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -156,6 +158,27 @@ export function ServiceRow({ pw }: Props) {
         >
           {typeLabel}
         </span>
+
+        {/* Model count — LLM only */}
+        {provider.endpointType === "llm" && modelSummary && (
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--dpf-muted)",
+              flexShrink: 0,
+              fontFamily: "monospace",
+            }}
+          >
+            {modelSummary.activeModels}/{modelSummary.totalModels} models
+          </span>
+        )}
+
+        {/* Non-chat capability badges — LLM only */}
+        {provider.endpointType === "llm" && modelSummary && modelSummary.nonChatClasses.length > 0 && (
+          <span className="hidden sm:inline" style={{ flexShrink: 0 }}>
+            <ModelClassBadges classes={modelSummary.nonChatClasses} />
+          </span>
+        )}
 
         {/* Sensitivity clearance badges — hidden on small screens */}
         {provider.sensitivityClearance.length > 0 && (
