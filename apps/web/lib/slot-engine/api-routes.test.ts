@@ -24,10 +24,11 @@ vi.mock("@/lib/slot-engine/validate-item", () => ({
   validateItemOwnership: vi.fn(),
 }));
 
-// Imports after mocks
-import { GET as datesGET } from "@/app/api/storefront/[slug]/dates/route";
-import { GET as slotsGET } from "@/app/api/storefront/[slug]/slots/route";
-import { POST as holdPOST } from "@/app/api/storefront/[slug]/hold/route";
+// Imports after mocks — use relative paths because Vitest/Node ESM cannot
+// resolve @/ aliases for Next.js dynamic-route folders (bracket names).
+import { GET as datesGET } from "../../app/api/storefront/[slug]/dates/route";
+import { GET as slotsGET } from "../../app/api/storefront/[slug]/slots/route";
+import { POST as holdPOST } from "../../app/api/storefront/[slug]/hold/route";
 import { prisma } from "@dpf/db";
 import { getAvailableDates, computeAvailableSlots } from "@/lib/slot-engine";
 import { validateItemOwnership } from "@/lib/slot-engine/validate-item";

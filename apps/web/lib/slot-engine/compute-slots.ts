@@ -413,7 +413,9 @@ export async function getAvailableDates(
   }
 
   // Iterate each day in the month
-  const [yearStr, monthStr] = yearMonth.split("-");
+  const parts = yearMonth.split("-");
+  const yearStr = parts[0] ?? "";
+  const monthStr = parts[1] ?? "01";
   const year = parseInt(yearStr);
   const month = parseInt(monthStr); // 1-based
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();

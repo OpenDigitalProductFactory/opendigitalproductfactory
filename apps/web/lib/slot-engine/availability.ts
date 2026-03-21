@@ -1,8 +1,8 @@
 import type { AvailabilityRow, TimeWindow } from "./types";
 
 function timeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+  const parts = time.split(":").map(Number);
+  return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
 }
 
 function isSameDate(a: Date, b: Date): boolean {

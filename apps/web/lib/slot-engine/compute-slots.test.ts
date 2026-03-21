@@ -59,8 +59,9 @@ describe("computeAvailableSlots", () => {
     expect(result.mode).toBe("next-available");
     if (result.mode === "next-available") {
       expect(result.slots.length).toBeGreaterThan(0);
-      expect(result.slots[0].startTime).toBe("09:00");
-      expect(result.slots[0].providerId).toBe("prov-1");
+      const first = result.slots[0];
+      expect(first?.startTime).toBe("09:00");
+      expect(first?.providerId).toBe("prov-1");
     }
   });
 

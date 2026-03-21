@@ -48,16 +48,24 @@ export function resolveBookingConfig(raw: Record<string, unknown>): ResolvedBook
   const parsed = bookingConfigSchema.safeParse(raw);
   const cfg = parsed.success ? parsed.data : raw;
   const dur = typeof cfg.durationMinutes === "number" ? cfg.durationMinutes : 60;
+
+  function num(v: unknown, fallback: number): number {
+    return typeof v === "number" ? v : fallback;
+  }
+  function str<T extends string>(v: unknown, fallback: T): T {
+    return typeof v === "string" ? (v as T) : fallback;
+  }
+
   return {
     durationMinutes: dur,
-    beforeBufferMinutes: cfg.beforeBufferMinutes ?? 0,
-    afterBufferMinutes: cfg.afterBufferMinutes ?? 0,
-    minimumNoticeHours: cfg.minimumNoticeHours ?? 1,
-    maxAdvanceDays: cfg.maxAdvanceDays ?? 60,
-    slotIntervalMinutes: cfg.slotIntervalMinutes ?? dur,
-    schedulingPattern: cfg.schedulingPattern ?? "slot",
-    assignmentMode: cfg.assignmentMode ?? "next-available",
-    capacity: cfg.capacity ?? 1,
-    bookingLimits: cfg.bookingLimits ?? {},
+    beforeBufferMinutes: num(cfg.beforeBufferMinutes, 0),
+    afterBufferMinutes: num(cfg.afterBufferMinutes, 0),
+    minimumNoticeHours: num(cfg.minimumNoticeHours, 1),
+    maxAdvanceDays: num(cfg.maxAdvanceDays, 60),
+    slotIntervalMinutes: num(cfg.slotIntervalMinutes, dur),
+    schedulingPattern: str<"slot" | "class" | "recurring">(cfg.schedulingPattern, "slot"),
+    assignmentMode: str<"next-available" | "customer-choice">(cfg.assignmentMode, "next-available"),
+    capacity: num(cfg.capacity, 1),
+    bookingLimits: (cfg.bookingLimits ?? {}) as { day?: number; week?: number; month?: number },
   };
 }
