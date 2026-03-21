@@ -136,15 +136,29 @@ async function activateBestOllamaModelOnly(baseUrl: string): Promise<void> {
 
   if (!bestId) return;
 
-  // Activate best, deactivate rest
+  // Activate best, deactivate rest, and ensure baseline capabilities
   const bestProfile = profiles.find((p) => p.id === bestId)!;
   console.log(`[ollama] Activating best model: ${bestProfile.modelId} (score: ${bestScore.toFixed(0)})`);
 
+  // Ollama baseline capabilities — streaming always true, tools depend on model
+  const baselineCapabilities = {
+    toolUse: false,
+    structuredOutput: false,
+    streaming: true,
+    imageInput: false,
+    pdfInput: false,
+    codeExecution: false,
+    webSearch: false,
+    computerUse: false,
+  };
+
   for (const p of profiles) {
     if (p.id === bestId) {
-      if (p.modelStatus !== "active") {
-        await prisma.modelProfile.update({ where: { id: p.id }, data: { modelStatus: "active" } });
-      }
+      // Ensure active + capabilities are set (may be null from incomplete profiling)
+      await prisma.modelProfile.update({
+        where: { id: p.id },
+        data: { modelStatus: "active", capabilities: baselineCapabilities },
+      });
     } else {
       if (p.modelStatus === "active") {
         await prisma.modelProfile.update({ where: { id: p.id }, data: { modelStatus: "inactive" } });
