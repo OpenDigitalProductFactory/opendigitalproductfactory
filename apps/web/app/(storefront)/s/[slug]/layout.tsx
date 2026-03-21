@@ -11,13 +11,15 @@ export default async function StorefrontLayout({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const storefront = await getPublicStorefront(slug);
+  // includeUnpublished: auth pages (sign-in, sign-up) must work even before
+  // the storefront is published. Content pages enforce isPublished themselves.
+  const storefront = await getPublicStorefront(slug, { includeUnpublished: true });
   if (!storefront) notFound();
 
   const brandingCss = buildBrandingStyleTag(storefront.brandingTokens ?? null);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#ffffff", color: "#111827" }}>
+    <div style={{ minHeight: "100vh", background: "var(--dpf-bg)", color: "var(--dpf-text)" }}>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <StorefrontNav
         orgName={storefront.orgName}
