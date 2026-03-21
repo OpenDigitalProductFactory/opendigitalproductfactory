@@ -2,6 +2,7 @@
 import { getInvoice } from "@/lib/actions/finance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -80,6 +81,18 @@ export default async function InvoiceDetailPage({ params }: Props) {
           <p className="text-sm text-[var(--dpf-muted)]">
             {invoice.account.name}
           </p>
+          {/* Action buttons */}
+          <div className="flex gap-2 mt-3">
+            <a
+              href={`/api/v1/finance/invoices/${invoice.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors"
+            >
+              Download PDF
+            </a>
+            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} />
+          </div>
         </div>
         <div className="text-right">
           <p className="text-2xl font-bold text-white">
