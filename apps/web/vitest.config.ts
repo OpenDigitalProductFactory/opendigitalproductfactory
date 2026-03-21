@@ -12,6 +12,9 @@ export default defineConfig({
     exclude: ["node_modules", ".next"],
   },
   resolve: {
-    alias: { "@": resolve(__dirname, ".") },
+    alias: {
+      "@": resolve(__dirname, "."),
+      "@dpf/finance-templates": resolve(__dirname, "../../packages/finance-templates/src/index.ts"),
+    },
   },
 });
