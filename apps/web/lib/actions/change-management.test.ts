@@ -57,14 +57,14 @@ beforeEach(() => {
 // ─── RFC ID Generation ──────────────────────────────────────────────────────
 
 describe("generateRfcId", () => {
-  it("returns RFC-YYYY-XXXXXXXX format", () => {
-    const id = generateRfcId();
+  it("returns RFC-YYYY-XXXXXXXX format", async () => {
+    const id = await generateRfcId();
     const year = new Date().getFullYear();
     expect(id).toMatch(new RegExp(`^RFC-${year}-[0-9A-F]{8}$`));
   });
 
-  it("generates unique IDs", () => {
-    const ids = new Set(Array.from({ length: 20 }, () => generateRfcId()));
+  it("generates unique IDs", async () => {
+    const ids = new Set(await Promise.all(Array.from({ length: 20 }, () => generateRfcId())));
     expect(ids.size).toBe(20);
   });
 });

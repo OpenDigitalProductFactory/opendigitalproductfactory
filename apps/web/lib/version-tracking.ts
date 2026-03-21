@@ -66,7 +66,7 @@ export async function createProductVersionWithRFC(input: {
   rfc: { id: string; rfcId: string };
 }> {
   const promotionId = generatePromotionId();
-  const rfcId = generateRfcId();
+  const rfcId = await generateRfcId();
 
   return prisma.$transaction(async (tx) => {
     // 1. Create ProductVersion
