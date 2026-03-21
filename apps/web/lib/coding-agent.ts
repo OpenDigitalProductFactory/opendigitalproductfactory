@@ -82,6 +82,18 @@ export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unk
 
   parts.push(
     "",
+    "## UX Standards (mandatory — see docs/platform-usability-standards.md)",
+    "- CSS Variables: Use var(--dpf-text), var(--dpf-muted), var(--dpf-surface-1), var(--dpf-surface-2), var(--dpf-bg), var(--dpf-border), var(--dpf-accent) for all colors. NEVER use text-white, text-black, bg-white, bg-black, or inline hex values. Exception: text-white on bg-[var(--dpf-accent)] buttons.",
+    "- Contrast: Text on backgrounds must meet 4.5:1 ratio. UI components (borders, focus rings) must meet 3:1. These are enforced by the platform's branding system.",
+    "- Semantic HTML: Use <nav>, <main>, <section>, <article>, <aside>, <header>, <footer> — not generic <div>s for structural elements.",
+    "- ARIA: Interactive elements must have accessible names. Buttons need descriptive text (not just 'Submit'). Form inputs need associated <label> elements.",
+    "- Keyboard: All interactive elements must be reachable via Tab and activatable via Enter/Space. Focus indicators are provided by @layer components in globals.css.",
+    "- Color: Never use color as the sole means of conveying information. Status indicators need text labels or icons alongside color.",
+    "- Form elements: Inherit baseline styles from @layer components in globals.css automatically — no custom focus/placeholder/disabled styling needed.",
+  );
+
+  parts.push(
+    "",
     "## Rules",
     "- Write all files to /workspace",
     "- Use TypeScript strict mode",

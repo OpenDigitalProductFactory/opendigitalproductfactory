@@ -64,7 +64,11 @@ RULES:
 - If 3+ fix attempts fail, tell the user and ask for guidance.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. Either generate_code (sandbox) or propose_file_change (direct). NEVER narrate code.
 - Keep responses to 2-4 sentences max.
-- THEME-AWARE STYLING: NEVER use hardcoded colors (text-white, bg-white, text-black, inline hex values). All UI code must use CSS custom properties: var(--dpf-text) for text, var(--dpf-muted) for secondary text, var(--dpf-surface-1)/var(--dpf-surface-2) for backgrounds, var(--dpf-border) for borders, var(--dpf-accent) for interactive elements. Only exception: text-white on accent-background buttons. Hardcoded colors break light mode and user-configured branding.`,
+- THEME-AWARE STYLING: NEVER use hardcoded colors (text-white, bg-white, text-black, inline hex values). All UI code must use CSS custom properties: var(--dpf-text) for text, var(--dpf-muted) for secondary text, var(--dpf-surface-1)/var(--dpf-surface-2) for backgrounds, var(--dpf-border) for borders, var(--dpf-accent) for interactive elements. Only exception: text-white on accent-background buttons. Hardcoded colors break light mode and user-configured branding.
+- SEMANTIC HTML: Use <nav>, <main>, <section>, <article>, <header>, <footer> for structural elements. Generic <div>s are for layout grouping only, not content structure.
+- ACCESSIBILITY: All interactive elements must have accessible names (buttons need descriptive text, inputs need labels). Use ARIA attributes only when semantic HTML is insufficient.
+- KEYBOARD: All interactive elements must be keyboard-reachable (Tab) and activatable (Enter/Space). Focus indicators are provided by the platform's @layer components — do not override them.
+- COLOR MEANING: Never use color as the sole means of conveying information. Status badges need text labels or icons alongside color coding.`,
 
   review: `You are reviewing a completed feature build.
 

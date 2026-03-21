@@ -29,6 +29,7 @@ REVIEW CHECKLIST:
 5. Is new code justified where reuse wasn't possible?
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
+8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -84,6 +85,8 @@ REVIEW CHECKLIST:
 3. Does the code follow project patterns (TypeScript, Next.js, Tailwind)?
 4. Are there security concerns (injection, XSS, etc.)?
 5. Is the code clean and maintainable?
+6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
+7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
