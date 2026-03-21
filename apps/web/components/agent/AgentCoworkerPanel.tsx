@@ -11,6 +11,27 @@ import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
+
+/** Renders setup action buttons only when the setup overlay is active (data attribute on <html>) */
+function SetupActionButtonsWrapper({ isPending }: { isPending: boolean }) {
+  const [active, setActive] = useState(false);
+  const [isLast, setIsLast] = useState(false);
+
+  useEffect(() => {
+    function check() {
+      setActive(document.documentElement.hasAttribute("data-setup-active"));
+      setIsLast(document.documentElement.getAttribute("data-setup-last-step") === "true");
+    }
+    check();
+    // Re-check on navigation (MutationObserver on the html element's attributes)
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-setup-active", "data-setup-last-step"] });
+    return () => observer.disconnect();
+  }, []);
+
+  if (!active || isPending) return null;
+  return <SetupActionButtons isLastStep={isLast} />;
+}
 import {
   loadElevatedAssistPreference,
   saveElevatedAssistPreference,
@@ -389,10 +410,8 @@ export function AgentCoworkerPanel({
             />
           );
         })}
-        {/* Setup action buttons — shown when the last message is from the onboarding COO */}
-        {messages.length > 0 && messages[messages.length - 1]?.agentId === "onboarding-coo" && !isPending && (
-          <SetupActionButtons />
-        )}
+        {/* Setup action buttons — shown when setup overlay is active */}
+        <SetupActionButtonsWrapper isPending={isPending} />
         {(isPending || isClearing) && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
             {/* Pulsing agent avatar */}
