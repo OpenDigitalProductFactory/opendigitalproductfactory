@@ -6,6 +6,7 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
+import type { RoutedExecutionPlan } from "./recipe-types";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 
@@ -28,6 +29,7 @@ export async function callWithFallbackChain(
   messages: ChatMessage[],
   systemPrompt: string,
   tools?: Array<Record<string, unknown>>,
+  plan?: RoutedExecutionPlan,
 ): Promise<FallbackResult> {
   if (!decision.selectedEndpoint) {
     throw new Error(
@@ -78,6 +80,7 @@ export async function callWithFallbackChain(
         messages,
         systemPrompt,
         tools,
+        i === 0 ? plan : undefined,
       );
 
       // EP-INF-004: Record successful request for rate tracking
