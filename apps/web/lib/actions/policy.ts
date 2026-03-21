@@ -376,3 +376,83 @@ export async function getPolicyAcknowledgmentStatus(policyId: string) {
     pending: allEmployees.filter((e) => !ackedIds.has(e.id)),
   };
 }
+
+// ─── Policy ↔ Obligation Linking ──────────────────────────────────────────────
+
+export async function linkPolicyToObligation(
+  policyId: string,
+  obligationId: string,
+  notes?: string | null,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  const existing = await prisma.policyObligationLink.findUnique({
+    where: { policyId_obligationId: { policyId, obligationId } },
+  });
+  if (existing) return { ok: false, message: "Link already exists." };
+
+  await prisma.policyObligationLink.create({
+    data: { policyId, obligationId, notes: notes ?? null },
+  });
+
+  await logComplianceAction("policy", policyId, "obligation-linked", employeeId, null, {
+    notes: `Linked to obligation ${obligationId}`,
+  });
+  revalidatePath("/compliance");
+  return { ok: true, message: "Obligation linked to policy." };
+}
+
+export async function unlinkPolicyFromObligation(
+  policyId: string,
+  obligationId: string,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  await prisma.policyObligationLink.delete({
+    where: { policyId_obligationId: { policyId, obligationId } },
+  }).catch(() => null);
+
+  await logComplianceAction("policy", policyId, "obligation-unlinked", employeeId, null, {
+    notes: `Unlinked obligation ${obligationId}`,
+  });
+  revalidatePath("/compliance");
+  return { ok: true, message: "Obligation unlinked from policy." };
+}
+
+export async function getPolicyObligations(policyId: string) {
+  await requireViewCompliance();
+  return prisma.policyObligationLink.findMany({
+    where: { policyId },
+    include: {
+      obligation: {
+        include: {
+          regulation: { select: { id: true, shortName: true, sourceType: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function migrateObligationIdToLinks(): Promise<{ migrated: number }> {
+  const policies = await prisma.policy.findMany({
+    where: { obligationId: { not: null } },
+    select: { id: true, obligationId: true },
+  });
+  let migrated = 0;
+  for (const policy of policies) {
+    if (!policy.obligationId) continue;
+    const exists = await prisma.policyObligationLink.findUnique({
+      where: { policyId_obligationId: { policyId: policy.id, obligationId: policy.obligationId } },
+    });
+    if (!exists) {
+      await prisma.policyObligationLink.create({
+        data: { policyId: policy.id, obligationId: policy.obligationId },
+      });
+      migrated++;
+    }
+  }
+  return { migrated };
+}
