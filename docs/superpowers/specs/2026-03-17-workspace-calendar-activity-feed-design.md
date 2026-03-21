@@ -1,6 +1,7 @@
 # EP-CALENDAR-001: Workspace Calendar & Activity Feed — Design Spec
 
 **Date:** 2026-03-17
+**Status:** Merged into EP-CAL-001 (calendar infrastructure, 2026-03-15)
 **Goal:** Full-month corporate calendar on the workspace landing page with role-filtered activity feed, event creation, and architecture for external calendar sync. Uses FullCalendar (MIT) as the rendering engine.
 
 ---

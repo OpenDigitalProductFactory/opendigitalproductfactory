@@ -10,7 +10,7 @@ async function seed() {
         endpointType: "llm",
         sensitivityClearance: isLocal
           ? ["public", "internal", "confidential", "restricted"]
-          : ["public", "internal"],
+          : ["public", "internal", "confidential"],
         capabilityTier: p.providerId === "ollama" ? "analytical" : "deep-thinker",
         costBand: isLocal ? "free" : "medium",
         taskTags: ["reasoning", "summarization", "code-gen"],

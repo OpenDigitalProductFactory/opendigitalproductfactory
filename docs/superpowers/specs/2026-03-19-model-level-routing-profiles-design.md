@@ -1,7 +1,7 @@
 # EP-INF-002: Model-Level Routing Profiles
 
 **Date:** 2026-03-19
-**Status:** Draft
+**Status:** Superseded by EP-INF-003 (provider model registry with model-level profiles, 2026-03-20)
 **Author:** Mark Bodman (CEO) + Claude (design partner)
 **Epic:** EP-INF-002
 

@@ -1,6 +1,7 @@
 # MVP Epic & Backlog Cleanup — Design Spec
 
 **Date:** 2026-03-14
+**Status:** Superseded by 2026-03-20-epic-review-and-reconciliation.md (comprehensive audit)
 **Goal:** Clean up duplicate/stale backlog items, fix statuses, assign orphans, mark subsumed items, and create three new MVP-critical epics that define the path to a self-iterating platform.
 
 **MVP Definition:** A standalone platform deployment (no VS Code) that can iterate on itself and build new products within the context of the 4 portfolios. AI agents have real conversations, run in Docker with managed Ollama, and can take governed actions with human approval.

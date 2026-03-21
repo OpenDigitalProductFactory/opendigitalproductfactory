@@ -1,7 +1,7 @@
 # Phase 7A — AI Provider Registry & Token Spend Design
 
 **Date:** 2026-03-12
-**Status:** Draft
+**Status:** Implemented — extended by EP-INF-003 (provider model registry, 2026-03-20)
 **Scope:** Dynamic AI provider registry, credential management, auth validation, token spend tracking, and a central platform scheduler. Lives at `/platform/ai`.
 
 ---

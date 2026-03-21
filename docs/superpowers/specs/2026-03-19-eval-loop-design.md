@@ -1,7 +1,7 @@
 # EP-INF-001-P6: Continuous Evaluation Loop
 
 **Date:** 2026-03-19
-**Status:** Draft
+**Status:** Superseded by EP-INF-006 (adaptive loop & evaluation realignment, 2026-03-20)
 **Author:** Mark Bodman (CEO) + Claude (design partner)
 **Epic:** EP-INF-001 (Phase 6)
 

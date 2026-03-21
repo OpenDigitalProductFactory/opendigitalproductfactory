@@ -1,7 +1,7 @@
 # EP-CODEX-001: OpenAI Codex Provider + MCP Server Integration
 
 **Date:** 2026-03-15
-**Status:** Draft
+**Status:** Superseded — auth replaced by EP-OAUTH-001 (generic OAuth authorization code, 2026-03-21)
 **Epic:** EP-CODEX-001
 
 ## Problem

@@ -1,7 +1,7 @@
 # Phase 7B: Expanded Provider Registry, OAuth & AI Model Profiles
 
 **Date:** 2026-03-13
-**Status:** Design approved
+**Status:** Implemented — extended by EP-INF-003 (provider model registry) + EP-OAUTH-001 (generic OAuth)
 **Depends on:** Phase 7A (AI Provider Registry & Token Spend)
 
 ---

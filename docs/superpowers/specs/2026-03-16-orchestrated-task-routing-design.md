@@ -1,7 +1,7 @@
 # Orchestrated Task Routing & Trusted AI Kernel
 
 **Date:** 2026-03-16
-**Status:** Draft
+**Status:** Superseded by EP-INF-003 through EP-INF-007 (contract-based routing redesign, 2026-03-20)
 **Author:** Mark Bodman (CEO) + Claude (design partner)
 **Depends on:** `docs/superpowers/specs/2026-03-16-unified-mcp-coworker-design.md` (Phase 1-2 implemented)
 

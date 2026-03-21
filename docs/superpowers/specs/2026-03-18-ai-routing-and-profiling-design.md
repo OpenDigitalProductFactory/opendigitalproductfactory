@@ -1,7 +1,7 @@
 # EP-INF-001: AI Endpoint Routing and Model Profiling
 
 **Date:** 2026-03-18
-**Status:** Draft
+**Status:** Superseded by EP-INF-003 through EP-INF-007 (routing redesign, 2026-03-20)
 **Author:** Mark Bodman (CEO) + Claude (design partner)
 **Epic:** EP-INF-001
 
