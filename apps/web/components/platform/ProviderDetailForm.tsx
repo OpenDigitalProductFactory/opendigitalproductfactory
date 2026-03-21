@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
+import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
 import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
@@ -60,6 +62,18 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [tokenEndpoint, setTokenEndpoint]           = useState(credential?.tokenEndpoint ?? "");
   const [scope, setScope]                           = useState(credential?.scope ?? "");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState(provider.authMethod);
+
+  const searchParams = useSearchParams();
+  const oauthResult = searchParams.get("oauth");
+  const oauthReason = searchParams.get("reason");
+
+  useEffect(() => {
+    if (oauthResult === "success") {
+      setSaveMessage("Successfully connected via OAuth");
+    } else if (oauthResult === "error") {
+      setTestResult({ ok: false, message: `OAuth failed: ${oauthReason ?? "unknown error"}` });
+    }
+  }, [oauthResult, oauthReason]);
 
   const needsEndpoint   = provider.baseUrl === null;
   const hasDualAuth     = provider.supportedAuthMethods.length > 1;
@@ -152,7 +166,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const step = provider.status === "active" && hasProfiles ? 5
     : provider.status === "active" ? 4
     : testResult?.ok ? 3
-    : (secretRef || credential?.secretHint || selectedAuthMethod === "none") ? 2
+    : (secretRef || credential?.secretHint || selectedAuthMethod === "none" || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")) ? 2
     : 1;
 
   const STEPS = [
@@ -272,13 +286,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           >
             {provider.supportedAuthMethods.map((m) => (
               <option key={m} value={m}>
-                {m === "api_key" ? "API Key" : m === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
+                {m === "api_key" ? "API Key" : m === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : m === "oauth2_authorization_code" ? "OAuth (Sign in)" : "None"}
               </option>
             ))}
           </select>
         ) : (
           <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
-            {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
+            {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : selectedAuthMethod === "oauth2_authorization_code" ? "OAuth (Sign in)" : "None"}
           </span>
         )}
       </div>
@@ -423,6 +437,74 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             />
           </div>
         </>
+      )}
+
+      {selectedAuthMethod === "oauth2_authorization_code" && (
+        <div style={{ marginBottom: 16 }}>
+          {credential?.status === "ok" && credential?.tokenExpiresAt ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
+                <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
+                  Connected · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => startTransition(async () => {
+                  await disconnectProviderOAuth(provider.providerId);
+                  router.refresh();
+                })}
+                style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : credential?.status === "expired" ? (
+            <div>
+              <div style={{ color: "#f59e0b", fontSize: 13, marginBottom: 8 }}>
+                Token expired — sign in again
+              </div>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => startTransition(async () => {
+                  const result = await startProviderOAuth(provider.providerId);
+                  if ("authorizeUrl" in result) {
+                    window.open(result.authorizeUrl, "_self");
+                  } else {
+                    setTestResult({ ok: false, message: result.error });
+                  }
+                })}
+                style={{ background: "#7c8cf8", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+              >
+                Sign in with {provider.name}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ color: "#8888a0", fontSize: 13, marginBottom: 8 }}>
+                No account linked
+              </div>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => startTransition(async () => {
+                  const result = await startProviderOAuth(provider.providerId);
+                  if ("authorizeUrl" in result) {
+                    window.open(result.authorizeUrl, "_self");
+                  } else {
+                    setTestResult({ ok: false, message: result.error });
+                  }
+                })}
+                style={{ background: "#7c8cf8", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+              >
+                Sign in with {provider.name}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Compute settings */}
