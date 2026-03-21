@@ -2,7 +2,7 @@
 
 import { DocsSidebar } from "./DocsSidebar";
 import { DocsSearch } from "./DocsSearch";
-import type { DocHeading, DocsIndex } from "@/lib/docs";
+import type { DocHeading, DocsIndex } from "@/lib/docs-types";
 
 type Props = {
   index: DocsIndex;

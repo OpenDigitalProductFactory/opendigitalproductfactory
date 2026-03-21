@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs";
+import { AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs-types";
 
 type Props = {
   index: DocsIndex;
