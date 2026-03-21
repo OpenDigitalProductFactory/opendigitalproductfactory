@@ -707,6 +707,37 @@ These epics will receive their own full specs when reached. The summaries below 
 
 ---
 
+## Section 11: UI Updates
+
+### ModelProfileRow Type Extension
+
+The `ModelProfileRow` type in `ai-provider-types.ts` must include the new ModelCard fields so the UI can display them:
+- `modelClass`, `modelFamily`, `maxInputTokens`, `maxOutputTokens`
+- `capabilities` (JSON), `pricing` (JSON)
+- `metadataSource`, `metadataConfidence`
+- `inputModalities`, `outputModalities`
+
+### ModelCard Component
+
+The `ModelCard.tsx` component replaces the old `capabilityTier`/`costTier` badge display with:
+- **Model class badge** — colour-coded by class (chat, reasoning, embedding, etc.)
+- **Pricing** — actual `$X / $Y per M tokens` from `ModelCardPricing`, not freetext tier
+- **Capabilities** — boolean badges: Tools, Thinking, Vision, Structured Output, Code Exec
+- **Context window** — formatted from `maxInputTokens` (e.g., "1M tokens", "128K tokens")
+- **Metadata confidence** — green/yellow/red indicator
+
+### Unified Model View
+
+The provider detail page previously had two separate panels showing the same model:
+1. `ModelSection` → `ModelCard` (discovery + profile basics)
+2. `RoutingProfilePanel` (dimension score bars + eval controls)
+
+These are merged into a single `ModelCard` with an optional collapsible "Routing Scores" section containing the 7 dimension bars, source/eval metadata, and "Run Eval" button. The `RoutingProfilePanel` is removed from the page layout.
+
+**Principle:** One entity = one card. Never show the same data entity in two separate UI panels on the same page.
+
+---
+
 ## Appendix A: Provider Documentation Sources
 
 These sources inform the adapter field mappings and should be referenced during implementation:
