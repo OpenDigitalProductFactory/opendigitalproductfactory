@@ -45,7 +45,7 @@ function baseContract(overrides: Partial<{
 // ── Anthropic provider settings ──────────────────────────────────────────────
 
 describe("buildSeedRecipe – Anthropic", () => {
-  it("high reasoning + thinking capable → thinking enabled with 8192 budget", () => {
+  it("high reasoning + thinking capable → thinking enabled with 8192 budget, max_tokens includes budget", () => {
     const result = buildSeedRecipe(
       "anthropic",
       "claude-sonnet-4-5",
@@ -56,6 +56,8 @@ describe("buildSeedRecipe – Anthropic", () => {
 
     expect(result.providerSettings).toHaveProperty("thinking");
     expect(result.providerSettings.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
+    // max_tokens = deriveMaxTokens(2000, 8192) + budget = 4000 + 8192 = 12192
+    expect(result.providerSettings.max_tokens).toBe(4000 + 8192);
   });
 
   it("medium + adaptive thinking → thinking type adaptive", () => {
@@ -80,6 +82,8 @@ describe("buildSeedRecipe – Anthropic", () => {
     );
 
     expect(result.providerSettings.thinking).toEqual({ type: "enabled", budget_tokens: 4096 });
+    // max_tokens = deriveMaxTokens(2000, 8192) + budget = 4000 + 4096 = 8096
+    expect(result.providerSettings.max_tokens).toBe(4000 + 4096);
   });
 
   it("minimal reasoning → no thinking in providerSettings", () => {
@@ -104,6 +108,7 @@ describe("buildSeedRecipe – Anthropic", () => {
     );
 
     expect(result.providerSettings.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
+    expect(result.providerSettings.max_tokens).toBe(4000 + 8192);
   });
 });
 
