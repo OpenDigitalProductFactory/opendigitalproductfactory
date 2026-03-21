@@ -78,6 +78,9 @@ export type ProviderRow = {
   structuredOutput: number;
   conversational: number;
   contextRetention: number;
+  authorizeUrl: string | null;
+  tokenUrl: string | null;
+  oauthClientId: string | null;
 };
 
 /** Client-safe credential info — secrets are never sent to the browser. */
@@ -89,6 +92,8 @@ export type CredentialRow = {
   tokenEndpoint: string | null;
   scope: string | null;
   status: string;
+  tokenExpiresAt: string | null;
+  hasRefreshToken: boolean;
 };
 
 export type ProviderWithCredential = {
@@ -166,7 +171,7 @@ export type RegistryProviderEntry = {
   families: string[];
   category: "direct" | "router" | "agent" | "mcp-subscribed" | "mcp-internal";
   baseUrl: string | null;
-  authMethod: "api_key" | "oauth2_client_credentials" | "none";
+  authMethod: "api_key" | "oauth2_client_credentials" | "oauth2_authorization_code" | "none";
   supportedAuthMethods: string[];
   authHeader: string | null;
   costModel: string;
@@ -188,6 +193,9 @@ export type RegistryProviderEntry = {
     pricingInfo?: string;
     enableUrl?: string;
   } | null;
+  authorizeUrl?: string | null;
+  tokenUrl?: string | null;
+  oauthClientId?: string | null;
 };
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
