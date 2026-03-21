@@ -411,8 +411,8 @@
     "catalogVisibility": "visible",
     "authorizeUrl": "https://auth.openai.com/oauth/authorize",
     "tokenUrl": "https://auth.openai.com/oauth/token",
-    "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
-    "oauthRedirectUri": "http://localhost:1455/auth/callback"
+    "oauthClientId": null,
+    "oauthRedirectUri": null
   },
   {
     "providerId": "openrouter",
