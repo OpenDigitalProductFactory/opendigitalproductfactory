@@ -326,9 +326,13 @@ Same upsert policy as existing fields: on re-sync, these values are overwritten 
 
 The existing `configureProvider()` action validates OAuth fields: "if any OAuth field is provided, require clientId, clientSecret, and tokenEndpoint." This validation is specific to `client_credentials` and must be scoped accordingly — it should only trigger when `authMethod === "oauth2_client_credentials"`. The `oauth2_authorization_code` flow stores credentials via the callback route, not via `configureProvider()`. The save action for `oauth2_authorization_code` only needs to persist `authMethod` and `enabledFamilies`.
 
+When `authMethod` changes via `configureProvider()`, fields belonging to the previous auth method should be nulled out. For example, switching from `oauth2_authorization_code` to `api_key` should clear `cachedToken`, `refreshToken`, and `tokenExpiresAt`. Switching from `api_key` to `oauth2_authorization_code` should clear `secretRef`.
+
 ### 9. `buildAuthHeaders()` in `ai-inference.ts`
 
 The inference layer's `buildAuthHeaders()` function currently has branches for `api_key` and `oauth2_client_credentials`. A new branch is needed for `oauth2_authorization_code` — it calls `getProviderBearerToken()` (which handles the refresh internally) and sets `Authorization: Bearer {token}`. The logic is identical to the `client_credentials` branch — the difference is in how the token was obtained, which is handled by `getProviderBearerToken()`.
+
+**Note:** The codebase currently has duplicate definitions of `getProviderBearerToken()` and `getDecryptedCredential()` in both `ai-provider-internals.ts` (canonical) and `ai-inference.ts`. The implementation should consolidate — `ai-inference.ts` should import from `ai-provider-internals.ts` rather than maintaining its own copy. This prevents the refactored function from being inconsistent across files.
 
 ## What Is NOT In Scope
 
