@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@dpf/db": "workspace:*",
     "@floating-ui/react": "^0.27.19",
     "@fullcalendar/core": "^6.1.20",
