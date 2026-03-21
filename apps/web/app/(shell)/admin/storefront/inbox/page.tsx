@@ -6,7 +6,7 @@ export default async function InboxPage() {
   const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (!config) redirect("/admin/storefront/setup");
 
-  const [inquiries, bookings, orders, donations] = await Promise.all([
+  const [inquiries, bookings, orders, donations, providerList] = await Promise.all([
     prisma.storefrontInquiry.findMany({
       where: { storefrontId: config.id },
       orderBy: { createdAt: "desc" },
@@ -30,7 +30,9 @@ export default async function InboxPage() {
         customerName: true,
         customerEmail: true,
         scheduledAt: true,
+        status: true,
         createdAt: true,
+        provider: { select: { name: true } },
       },
     }),
     prisma.storefrontOrder.findMany({
@@ -58,6 +60,11 @@ export default async function InboxPage() {
         createdAt: true,
       },
     }),
+    prisma.serviceProvider.findMany({
+      where: { storefrontId: config.id, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    }),
   ]);
 
   type InboxEntry = {
@@ -68,6 +75,8 @@ export default async function InboxPage() {
     type: string;
     detail: string;
     createdAt: string;
+    providerName: string | null;
+    status: string;
   };
 
   const entries: InboxEntry[] = [
@@ -79,6 +88,8 @@ export default async function InboxPage() {
       type: "inquiry",
       detail: i.message ?? "",
       createdAt: i.createdAt.toISOString(),
+      providerName: null,
+      status: "",
     })),
     ...bookings.map((b) => ({
       id: b.id,
@@ -88,6 +99,8 @@ export default async function InboxPage() {
       type: "booking",
       detail: b.scheduledAt.toLocaleDateString("en-GB"),
       createdAt: b.createdAt.toISOString(),
+      providerName: b.provider?.name ?? null,
+      status: b.status,
     })),
     ...orders.map((o) => ({
       id: o.id,
@@ -97,6 +110,8 @@ export default async function InboxPage() {
       type: "order",
       detail: `£${o.totalAmount.toString()}`,
       createdAt: o.createdAt.toISOString(),
+      providerName: null,
+      status: "",
     })),
     ...donations.map((d) => ({
       id: d.id,
@@ -106,8 +121,10 @@ export default async function InboxPage() {
       type: "donation",
       detail: `£${d.amount.toString()}`,
       createdAt: d.createdAt.toISOString(),
+      providerName: null,
+      status: "",
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  return <StorefrontInbox entries={entries} />;
+  return <StorefrontInbox entries={entries} providers={providerList} />;
 }
