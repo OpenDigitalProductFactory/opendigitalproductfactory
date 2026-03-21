@@ -7,15 +7,38 @@ import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from
 import { ModelSection } from "@/components/platform/ModelSection";
 import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 
+// EP-INF-006: Routing profile shape passed through to ModelSection → ModelCard
+type RoutingProfile = {
+  modelId: string;
+  friendlyName: string;
+  reasoning: number;
+  codegen: number;
+  toolFidelity: number;
+  instructionFollowingScore: number;
+  structuredOutputScore: number;
+  conversational: number;
+  contextRetention: number;
+  profileSource: string;
+  profileConfidence: string;
+  evalCount: number;
+  lastEvalAt: string | null;
+  maxContextTokens: number | null;
+  supportsToolUse: boolean;
+  modelStatus: string;
+  retiredAt: string | null;
+};
+
 type Props = {
   pw: ProviderWithCredential;
   canWrite: boolean;
   models: DiscoveredModelRow[];
   profiles: ModelProfileRow[];
   hasActiveProvider: boolean;
+  // EP-INF-006: Routing profiles merged into model cards
+  routingProfiles?: RoutingProfile[];
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
   const { provider, credential } = pw;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -510,6 +533,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             canWrite={canWrite}
             hasActiveProvider={hasActiveProvider}
             latestDiscovery={models.length > 0 ? new Date(Math.max(...models.map(m => new Date(m.lastSeenAt).getTime()))) : null}
+            routingProfiles={routingProfiles}
+            endpointId={provider.providerId}
           />
         </div>
       )}
