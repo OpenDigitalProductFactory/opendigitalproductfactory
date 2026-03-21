@@ -121,15 +121,10 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
       continue;
     }
 
-    // Active provider with no discovered/profiled models in DB — still include
-    // it as a fallback. Ollama and similar local providers can self-select a
-    // model even if discovery hasn't run yet.
-    entries.push({
-      providerId: p.providerId,
-      modelId: "",
-      rank: i + 1,
-      capabilityTier: "unknown",
-    });
+    // Active provider with no discovered/profiled models in DB — skip it.
+    // Providers without any discovered model can't be called (empty modelId
+    // causes API errors). They'll appear once discovery/profiling runs.
+    continue;
   }
 
   return entries;
@@ -177,9 +172,27 @@ export async function getProviderPriority(task: string = "conversation"): Promis
         });
         const missing = allLlmProviders.filter((p) => !storedIds.has(p.providerId));
         const nextRank = Math.max(...activeEntries.map((e) => e.rank)) + 1;
+        // Only include missing providers that have at least one profiled model
+        const missingEntries: Array<{ providerId: string; modelId: string; rank: number; capabilityTier: string }> = [];
+        for (let mi = 0; mi < missing.length; mi++) {
+          const p = missing[mi]!;
+          const bestModel = await prisma.modelProfile.findFirst({
+            where: { providerId: p.providerId, status: "active" },
+            orderBy: { updatedAt: "desc" },
+            select: { modelId: true },
+          });
+          if (bestModel) {
+            missingEntries.push({
+              providerId: p.providerId,
+              modelId: bestModel.modelId,
+              rank: nextRank + mi,
+              capabilityTier: "unknown",
+            });
+          }
+        }
         const merged = [
           ...activeEntries,
-          ...missing.map((p, i) => ({ providerId: p.providerId, modelId: "", rank: nextRank + i, capabilityTier: "unknown" })),
+          ...missingEntries,
         ];
         return merged.sort((a, b) => a.rank - b.rank);
       }
@@ -371,6 +384,12 @@ export async function callWithFailover(
     // If no models meet requirements, fall back to unfiltered list (graceful degradation)
   }
 
+  // Skip entries with empty modelId — providers without profiled models can't be called
+  filteredPriority = filteredPriority.filter((e) => e.modelId && e.modelId.length > 0);
+  if (filteredPriority.length === 0) {
+    throw new NoAllowedProvidersForSensitivityError(sensitivity);
+  }
+
   const baselineTier = filteredPriority[0]!.capabilityTier;
   const attempts: Array<{ providerId: string; error: string }> = [];
   const limit = Math.min(filteredPriority.length, MAX_CASCADE_DEPTH);
@@ -421,8 +440,13 @@ export async function callWithFailover(
         quotaDisableMessage = `The preferred AI provider hit its usage quota and has been temporarily paused. It will resume ${timeStr}. Using an alternative for now.`;
       }
 
-      // Auto-retire deprecated/removed models (404) — delete from discovered + profile, try next
-      if (e instanceof InferenceError && e.code === "model_not_found") {
+      // Auto-retire deprecated/removed models (404) or models that can't be called via
+      // standard chat API (e.g., Gemini Interactions-only models returning 400)
+      const shouldRetire =
+        (e instanceof InferenceError && e.code === "model_not_found") ||
+        (e instanceof InferenceError && e.code === "provider_error" &&
+          errMsg.includes("only supports Interactions API"));
+      if (shouldRetire) {
         await retireDeprecatedModel(entry.providerId, entry.modelId).catch((err) =>
           console.error("[callWithFailover] retire model failed:", err),
         );
