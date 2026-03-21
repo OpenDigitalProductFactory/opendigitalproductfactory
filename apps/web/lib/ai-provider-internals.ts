@@ -343,7 +343,12 @@ export async function profileModelsInternal(
         maxInputTokens: card.maxInputTokens,
         inputModalities: card.inputModalities,
         outputModalities: card.outputModalities,
-        capabilities: card.capabilities as any,
+        // For Ollama: force streaming=true (all models support it) since the
+        // model card probe can't detect this and returns null for everything.
+        // Null capabilities cause routing exclusion (streaming required for sync).
+        capabilities: providerId === "ollama"
+          ? { ...card.capabilities, streaming: true } as any
+          : card.capabilities as any,
         pricing: card.pricing as any,
         supportedParameters: card.supportedParameters,
         defaultParameters: card.defaultParameters as any,
@@ -482,7 +487,9 @@ export async function profileModelsInternal(
       maxInputTokens: card.maxInputTokens,
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
-      capabilities: card.capabilities as any,
+      capabilities: providerId === "ollama"
+        ? { ...card.capabilities, streaming: true } as any
+        : card.capabilities as any,
       pricing: card.pricing as any,
       supportedParameters: card.supportedParameters,
       defaultParameters: card.defaultParameters as any,
@@ -587,7 +594,9 @@ export async function backfillModelCards(): Promise<number> {
         maxInputTokens: card.maxInputTokens,
         inputModalities: card.inputModalities as any,
         outputModalities: card.outputModalities as any,
-        capabilities: card.capabilities as any,
+        capabilities: dm.providerId === "ollama"
+          ? { ...card.capabilities, streaming: true } as any
+          : card.capabilities as any,
         pricing: card.pricing as any,
         supportedParameters: card.supportedParameters as any,
         metadataSource: card.metadataSource,
@@ -616,14 +625,26 @@ export async function seedAllRecipes(): Promise<number> {
     include: { provider: true },
   });
 
-  const contractFamilies = [
+  // Chat/reasoning contract families (for chat/reasoning/code model classes)
+  const chatContractFamilies = [
     "sync.greeting", "sync.status-query", "sync.summarization",
     "sync.reasoning", "sync.data-extraction", "sync.code-gen",
     "sync.web-search", "sync.creative", "sync.tool-action",
   ];
 
+  // EP-INF-009c: Non-chat contract families keyed by modelClass
+  const nonChatContractFamilies: Record<string, string[]> = {
+    image_gen: ["sync.image-gen"],
+    embedding: ["sync.embedding"],
+    audio: ["sync.transcription"],
+  };
+
   let seeded = 0;
   for (const profile of profiles) {
+    // Select contract families based on model class
+    const modelClass = (profile.modelClass as string) ?? "chat";
+    const contractFamilies = nonChatContractFamilies[modelClass] ?? chatContractFamilies;
+
     for (const family of contractFamilies) {
       // Check if recipe already exists
       const existing = await prisma.executionRecipe.findFirst({
@@ -665,6 +686,7 @@ export async function seedAllRecipes(): Promise<number> {
           version: 1,
           status: "champion",
           origin: "seed",
+          executionAdapter: recipe.executionAdapter,
           providerSettings: recipe.providerSettings,
           toolPolicy: recipe.toolPolicy,
           responsePolicy: recipe.responsePolicy,
