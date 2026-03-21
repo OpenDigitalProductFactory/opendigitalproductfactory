@@ -253,6 +253,11 @@ export async function runDimensionEval(
 
   if (!modelProfile) throw new Error(`ModelProfile ${providerId}/${modelId} not found`);
 
+  // Don't eval retired or disabled models — they can't be called
+  if (modelProfile.modelStatus === "retired" || modelProfile.modelStatus === "disabled") {
+    throw new Error(`Model ${providerId}/${modelId} is ${modelProfile.modelStatus} — cannot run evaluation`);
+  }
+
   const currentEvalCount = modelProfile.evalCount;
   const runId = `DE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
