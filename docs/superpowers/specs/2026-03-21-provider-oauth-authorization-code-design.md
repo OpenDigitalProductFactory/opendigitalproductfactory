@@ -13,7 +13,7 @@ The platform's provider credential system supports two authentication methods: A
 
 The current `anthropic-sub` provider works around this limitation with a manual `claude setup-token` CLI step that produces an OAuth token disguised as an API key (`sk-ant-oat`). This is fragile and provider-specific.
 
-OpenClaw (an open-source AI gateway) already supports Codex OAuth sign-in, confirming the flow is production-ready. The platform needs a generic authorization code + PKCE flow that any provider can opt into.
+Multiple open-source AI tools (Roo Code, OpenClaw, term-llm) already implement Codex OAuth sign-in, confirming the flow is production-ready. The platform needs a generic authorization code + PKCE flow that any provider can opt into.
 
 ## Goals
 
@@ -59,14 +59,17 @@ The `refreshToken` field is encrypted at rest using the existing `encryptSecret(
 
 #### `ModelProvider` — add OAuth endpoint fields
 
-Two new nullable columns on `ModelProvider`:
+Three new nullable columns on `ModelProvider`:
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `authorizeUrl` | `String?` | OAuth authorize endpoint (e.g. `https://auth.openai.com/oauth/authorize`) |
 | `tokenUrl` | `String?` | OAuth token endpoint (e.g. `https://auth.openai.com/oauth/token`) |
+| `oauthClientId` | `String?` | Default client ID for the authorization code flow (e.g. Codex's shared `app_EMoa…`) |
 
 These are persisted from the registry JSON during `syncProviderRegistry()`, same as `baseUrl`, `docsUrl`, etc.
+
+`oauthClientId` is distinct from `CredentialEntry.clientId` (which is for the `client_credentials` flow). It represents a pre-configured client ID that the provider's OAuth flow expects. For providers that require per-app registration, the admin can override it in the UI.
 
 #### New model: `OAuthPendingFlow`
 
@@ -91,7 +94,13 @@ model OAuthPendingFlow {
 
 #### Type update: `RegistryProviderEntry`
 
-Three new optional fields:
+The `authMethod` union type must be extended:
+
+```typescript
+authMethod: "api_key" | "oauth2_client_credentials" | "oauth2_authorization_code" | "none";
+```
+
+Three new optional fields added:
 
 ```typescript
 export type RegistryProviderEntry = {
@@ -102,7 +111,7 @@ export type RegistryProviderEntry = {
 };
 ```
 
-`oauthClientId` is distinct from `CredentialEntry.clientId` (which is for the `client_credentials` flow). It represents a pre-configured client ID that the provider's OAuth flow expects — for Codex, this is the shared `app_EMoa…` ID used by Codex CLI, Roo Code, and OpenClaw. For providers that require app registration, the admin can override it in the UI.
+The same three fields are added to `ProviderRow` as `string | null`.
 
 #### CODEX registry entry update
 
@@ -144,14 +153,15 @@ No other provider registry entries change in this spec. Future providers (includ
 **Step 1 — Admin clicks "Sign in with {provider}"** on the provider detail page. Shown when `selectedAuthMethod === "oauth2_authorization_code"`.
 
 **Step 2 — Client calls server action `startProviderOAuth(providerId)`** which:
-1. Looks up `authorizeUrl` and `oauthClientId` from the `ModelProvider` record
-2. Generates PKCE values:
+1. Calls `requireManageProviders()` (same auth guard as `configureProvider()`)
+2. Looks up `authorizeUrl` and `oauthClientId` from the `ModelProvider` record
+3. Generates PKCE values:
    - `code_verifier`: 32 random bytes, base64url-encoded
    - `code_challenge`: SHA-256 hash of `code_verifier`, base64url-encoded
-3. Generates `state`: random UUID
-4. Cleans up expired `OAuthPendingFlow` records (createdAt > 10 minutes ago)
-5. Creates new `OAuthPendingFlow` record with `{ state, codeVerifier, providerId }`
-6. Returns the full authorize URL:
+4. Generates `state`: random UUID
+5. Cleans up expired `OAuthPendingFlow` records (createdAt > 10 minutes ago)
+6. Creates new `OAuthPendingFlow` record with `{ state, codeVerifier, providerId }`
+7. Returns the full authorize URL:
    ```
    {authorizeUrl}?
      response_type=code&
@@ -168,11 +178,12 @@ No other provider registry entries change in this spec. Future providers (includ
 **Step 4 — Provider redirects back** to `{APP_URL}/api/v1/auth/provider-oauth/callback?code={code}&state={state}`
 
 **Step 5 — Callback route handler** (`GET /api/v1/auth/provider-oauth/callback`):
-1. Reads `code` and `state` from query params
-2. Looks up `OAuthPendingFlow` by `state` — rejects if not found (CSRF / replay)
-3. Retrieves `codeVerifier` and `providerId` from the pending record
-4. Looks up `tokenUrl` and `oauthClientId` from the `ModelProvider` record
-5. POSTs to `tokenUrl`:
+1. Verifies admin session is authenticated (the callback is a browser redirect, so the session cookie is present — reject if not logged in)
+2. Reads `code` and `state` from query params
+3. Looks up `OAuthPendingFlow` by `state` — rejects if not found (CSRF / replay)
+4. Retrieves `codeVerifier` and `providerId` from the pending record
+5. Looks up `tokenUrl` and `oauthClientId` from the `ModelProvider` record
+6. POSTs to `tokenUrl`:
    ```
    grant_type=authorization_code
    code={code}
@@ -180,14 +191,14 @@ No other provider registry entries change in this spec. Future providers (includ
    client_id={oauthClientId}
    redirect_uri={APP_URL}/api/v1/auth/provider-oauth/callback
    ```
-6. Receives response: `{ access_token, refresh_token, expires_in }`
-7. Encrypts and stores in `CredentialEntry`:
+7. Receives response: `{ access_token, refresh_token, expires_in }`
+8. Encrypts and stores in `CredentialEntry`:
    - `cachedToken` ← encrypted `access_token`
    - `refreshToken` ← encrypted `refresh_token`
    - `tokenExpiresAt` ← `now() + expires_in seconds`
    - `status` ← `"ok"`
-8. Deletes the `OAuthPendingFlow` record
-9. Redirects admin to `/platform/ai/providers/{providerId}?oauth=success`
+9. Deletes the `OAuthPendingFlow` record
+10. Redirects admin to `/platform/ai/providers/{providerId}?oauth=success`
 
 **Error handling in callback:**
 - Missing or invalid `state` → redirect to provider page with `?oauth=error&reason=invalid_state`
@@ -206,12 +217,18 @@ No other provider registry entries change in this spec. Future providers (includ
 
 ### 4. Token Refresh
 
-`getProviderBearerToken()` in `ai-provider-internals.ts` is extended with a refresh path for `oauth2_authorization_code` providers:
+`getProviderBearerToken()` in `ai-provider-internals.ts` is refactored to:
+1. Internally look up the `ModelProvider` record (currently it only reads `CredentialEntry`)
+2. Dispatch based on `provider.authMethod` — the existing `client_credentials` logic becomes one branch, and `authorization_code` becomes a second branch
+
+`getDecryptedCredential()` must also be extended to decrypt `cachedToken` and `refreshToken` in addition to `secretRef` and `clientSecret`. Currently it only decrypts two fields — the authorization code flow stores encrypted tokens in both `cachedToken` and `refreshToken`.
+
+**Note on `cachedToken` encryption consistency:** The existing `client_credentials` flow stores `cachedToken` in plaintext (no `encryptSecret()` call at line 116). The authorization code flow will encrypt it. During implementation, the `client_credentials` path should also be updated to encrypt `cachedToken` for consistency. The `getDecryptedCredential()` function should handle both encrypted and plaintext values gracefully during the transition (attempt decrypt, fall back to raw value).
 
 ```
 function getProviderBearerToken(providerId):
-  credential = getDecryptedCredential(providerId)
-  provider = getProvider(providerId)
+  credential = getDecryptedCredential(providerId)  // now decrypts cachedToken + refreshToken too
+  provider = getProvider(providerId)                // NEW: fetch ModelProvider record
 
   if provider.authMethod === "oauth2_client_credentials":
     // ... existing client_credentials flow unchanged ...
@@ -242,7 +259,9 @@ function getProviderBearerToken(providerId):
 
 **No background refresh job.** Tokens are refreshed on-demand when inference requests need them. This matches the existing `client_credentials` pattern and avoids unnecessary refresh cycles when the provider isn't actively used.
 
-**Concurrent requests:** Same safety model as existing code — if multiple requests find an expired token simultaneously, each performs a refresh. Last writer wins; all tokens are equally valid. The `refreshToken` may be rotated by the provider, so the last-written value is the correct one.
+**Concurrent requests:** If multiple requests find an expired token simultaneously, each attempts a refresh. For access tokens, last writer wins — all tokens are equally valid. For refresh tokens, providers may use one-time-use rotation (per RFC 6749 Section 6), where a second concurrent refresh with the old token would fail.
+
+**Mitigation:** The implementation should use optimistic concurrency on the `refreshToken` field — before writing the new refresh token, check that the stored value still matches the one used for the request. If it has changed (another request already refreshed), skip the write and re-read the fresh `cachedToken` instead. This is acceptable complexity given that concurrent refresh is rare (admin-level provider usage, not per-user).
 
 ### 5. Provider Status Transitions
 
@@ -258,6 +277,14 @@ When `getProviderBearerToken` returns an error for an `oauth2_authorization_code
 
 ### 6. UI Changes
 
+#### `CredentialRow` client-safe type extension
+
+The existing `CredentialRow` type (client-safe, no secrets) must be extended with:
+- `tokenExpiresAt: string | null` — ISO timestamp for displaying "token expires in X" in the UI
+- `hasRefreshToken: boolean` — indicates whether auto-refresh is available (never exposes the actual token)
+
+These fields enable the connection status display without sending any sensitive data to the client.
+
 #### `ProviderDetailForm` — OAuth sign-in mode
 
 When `selectedAuthMethod === "oauth2_authorization_code"`:
@@ -272,7 +299,7 @@ When `selectedAuthMethod === "oauth2_authorization_code"`:
 
 #### Dual-auth dropdown
 
-Already works — no new logic. When `supportedAuthMethods.length > 1`, the dropdown appears. Admin selects between "API Key" and "OAuth (Sign in)". The form switches between the API key input and the sign-in button.
+The dropdown already renders when `supportedAuthMethods.length > 1`. The label mapping must be extended — the existing code maps `api_key` → "API Key", `oauth2_client_credentials` → "OAuth2 Client Credentials", and falls through to "None" for unknown values. Add: `oauth2_authorization_code` → "OAuth (Sign in)". Admin selects between "API Key" and "OAuth (Sign in)". The form switches between the API key input and the sign-in button.
 
 #### Callback landing
 
@@ -291,9 +318,17 @@ The existing sync function in `actions/ai-providers.ts` persists registry fields
 
 - `authorizeUrl` → `ModelProvider.authorizeUrl`
 - `tokenUrl` → `ModelProvider.tokenUrl`
-- `oauthClientId` → stored in the provider record (new field, or in a JSON config column — TBD during implementation, but the simplest path is a new `String?` column)
+- `oauthClientId` → `ModelProvider.oauthClientId`
 
 Same upsert policy as existing fields: on re-sync, these values are overwritten from the registry. Admin overrides (if supported later) would need a separate mechanism.
+
+### 8. `configureProvider()` Validation Update
+
+The existing `configureProvider()` action validates OAuth fields: "if any OAuth field is provided, require clientId, clientSecret, and tokenEndpoint." This validation is specific to `client_credentials` and must be scoped accordingly — it should only trigger when `authMethod === "oauth2_client_credentials"`. The `oauth2_authorization_code` flow stores credentials via the callback route, not via `configureProvider()`. The save action for `oauth2_authorization_code` only needs to persist `authMethod` and `enabledFamilies`.
+
+### 9. `buildAuthHeaders()` in `ai-inference.ts`
+
+The inference layer's `buildAuthHeaders()` function currently has branches for `api_key` and `oauth2_client_credentials`. A new branch is needed for `oauth2_authorization_code` — it calls `getProviderBearerToken()` (which handles the refresh internally) and sets `Authorization: Bearer {token}`. The logic is identical to the `client_credentials` branch — the difference is in how the token was obtained, which is handled by `getProviderBearerToken()`.
 
 ## What Is NOT In Scope
 
@@ -309,16 +344,17 @@ Same upsert policy as existing fields: on re-sync, these values are overwritten 
 ### Create
 - Prisma migration: `refreshToken` on `CredentialEntry`, `authorizeUrl`/`tokenUrl`/`oauthClientId` on `ModelProvider`, `OAuthPendingFlow` model
 - `apps/web/lib/provider-oauth.ts` — PKCE generation, `startProviderOAuth()` logic, token exchange, refresh
-- `apps/web/app/api/v1/auth/provider-oauth/callback/route.ts` — callback route handler
-- `apps/web/lib/actions/provider-oauth.ts` — server action wrapper for `startProviderOAuth()`
+- `apps/web/app/api/v1/auth/provider-oauth/callback/route.ts` — callback route handler (with session auth guard)
+- `apps/web/lib/actions/provider-oauth.ts` — server action wrapper for `startProviderOAuth()` (with `requireManageProviders()` guard)
 
 ### Modify
-- `packages/db/prisma/schema.prisma` — new fields + new model
+- `packages/db/prisma/schema.prisma` — new fields (`refreshToken`, `authorizeUrl`, `tokenUrl`, `oauthClientId`) + new `OAuthPendingFlow` model
 - `packages/db/data/providers-registry.json` — CODEX entry updated with OAuth fields
-- `apps/web/lib/ai-provider-types.ts` — extend `RegistryProviderEntry` and `ProviderRow` with `authorizeUrl`, `tokenUrl`, `oauthClientId`
-- `apps/web/lib/ai-provider-internals.ts` — extend `getProviderBearerToken()` with refresh token path
-- `apps/web/lib/actions/ai-providers.ts` — `syncProviderRegistry()` persists new fields
-- `apps/web/components/platform/ProviderDetailForm.tsx` — OAuth sign-in button, connection status, disconnect
+- `apps/web/lib/ai-provider-types.ts` — extend `authMethod` union with `"oauth2_authorization_code"`, extend `RegistryProviderEntry` and `ProviderRow` with `authorizeUrl`, `tokenUrl`, `oauthClientId`; extend `CredentialRow` with `tokenExpiresAt` and `hasRefreshToken`
+- `apps/web/lib/ai-provider-internals.ts` — refactor `getProviderBearerToken()` to look up provider record and dispatch by `authMethod`; extend `getDecryptedCredential()` to decrypt `cachedToken` and `refreshToken`; encrypt `cachedToken` consistently for both flows
+- `apps/web/lib/ai-inference.ts` — add `oauth2_authorization_code` branch to `buildAuthHeaders()`
+- `apps/web/lib/actions/ai-providers.ts` — `syncProviderRegistry()` persists new fields; scope OAuth validation in `configureProvider()` to `client_credentials` only
+- `apps/web/components/platform/ProviderDetailForm.tsx` — OAuth sign-in button, connection status, disconnect, dropdown label for `oauth2_authorization_code`
 
 ### Test
-- `apps/web/lib/ai-providers.test.ts` — PKCE generation, token refresh logic (success, failure, rotation), state validation
+- `apps/web/lib/ai-providers.test.ts` — PKCE generation, token refresh logic (success, failure, rotation), state validation, optimistic concurrency on refresh token
