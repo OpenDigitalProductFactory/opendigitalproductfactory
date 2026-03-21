@@ -42,7 +42,8 @@ const STEP_WELCOME: Record<string, string> = {
     "Before we wrap up, two important settings in the AI Coworker panel you should know about:\n\n" +
     "Hands Off / Hands On — By default, the AI is in \"Hands Off\" mode. It can read and analyze but won't make changes. Switch to \"Hands On\" when you want it to take action — create tasks, modify settings, propose code changes. You control when it acts.\n\n" +
     "External Access — By default, the AI can't reach the internet. Turn on External Access when you need it to search the web, fetch documentation, or pull in outside information. It stays off until you say so.\n\n" +
-    "These are your guardrails. The AI Coworker is powerful, but it only does what you allow. Welcome aboard!",
+    "These are your guardrails. The AI Coworker is powerful, but it only does what you allow.\n\n" +
+    "Try it now — switch to Hands On mode, then click the Skills menu and select \"Analyze this page.\" Watch what your AI coworker can do. Welcome aboard!",
 };
 
 type Props = {
