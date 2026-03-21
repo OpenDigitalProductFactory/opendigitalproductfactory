@@ -11,6 +11,11 @@ import type {
   ScheduledJobRow,
   DiscoveredModelRow,
   ModelProfileRow,
+  ProviderModelSummary,
+  RecipeGridRow,
+  McpServerGridRow,
+  AsyncOpRow,
+  ToolInventoryItem,
 } from "./ai-provider-types";
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
@@ -204,6 +209,153 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
     outputModalities: p.outputModalities as string[],
   }));
 });
+
+// ── EP-INF-010: Platform Services UX queries ────────────────────────────────
+
+/** Aggregate model counts and non-chat capability classes per provider. */
+export const getProviderModelSummaries = cache(
+  async (): Promise<Map<string, ProviderModelSummary>> => {
+    const profiles = await prisma.modelProfile.findMany({
+      select: { providerId: true, modelClass: true, modelStatus: true },
+    });
+    const map = new Map<string, ProviderModelSummary>();
+    for (const p of profiles) {
+      const s = map.get(p.providerId) ?? { totalModels: 0, activeModels: 0, nonChatClasses: [] };
+      s.totalModels++;
+      if (p.modelStatus === "active") s.activeModels++;
+      if (!["chat", "reasoning"].includes(p.modelClass) && !s.nonChatClasses.includes(p.modelClass)) {
+        s.nonChatClasses.push(p.modelClass);
+      }
+      map.set(p.providerId, s);
+    }
+    return map;
+  },
+);
+
+/** Execution recipes for a single provider (detail page). */
+export const getRecipesForProvider = cache(
+  async (providerId: string): Promise<RecipeGridRow[]> => {
+    const rows = await prisma.executionRecipe.findMany({
+      where: { providerId },
+      orderBy: [{ contractFamily: "asc" }, { version: "desc" }],
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      contractFamily: r.contractFamily,
+      modelId: r.modelId,
+      executionAdapter: r.executionAdapter,
+      status: r.status,
+      version: r.version,
+      origin: r.origin,
+    }));
+  },
+);
+
+/** Model class distribution for a single provider (detail page capability summary). */
+export const getModelClassCounts = cache(
+  async (providerId: string): Promise<{ modelClass: string; count: number }[]> => {
+    const groups = await prisma.modelProfile.groupBy({
+      by: ["modelClass"],
+      where: { providerId },
+      _count: true,
+    });
+    return groups
+      .map((g) => ({ modelClass: g.modelClass, count: g._count }))
+      .sort((a, b) => b.count - a.count);
+  },
+);
+
+/** Activated MCP servers with tool counts for the providers grid (section 1d). */
+export const getActivatedMcpServers = cache(
+  async (): Promise<McpServerGridRow[]> => {
+    const servers = await prisma.mcpServer.findMany({
+      where: { deactivatedAt: null },
+      include: {
+        integration: {
+          select: { name: true, logoUrl: true, category: true },
+        },
+        tools: { select: { isEnabled: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+    return servers.map((s) => ({
+      id: s.id,
+      serverId: s.serverId,
+      name: s.integration?.name ?? s.name,
+      status: s.status,
+      transport: s.transport,
+      healthStatus: s.healthStatus,
+      lastHealthCheck: s.lastHealthCheck?.toISOString() ?? null,
+      category: s.category,
+      tags: s.tags as string[],
+      activatedBy: s.activatedBy,
+      activatedAt: s.activatedAt?.toISOString() ?? null,
+      integrationName: s.integration?.name ?? null,
+      integrationLogoUrl: s.integration?.logoUrl ?? null,
+      integrationCategory: s.integration?.category ?? null,
+      toolCount: s.tools.length,
+      enabledToolCount: s.tools.filter((t) => t.isEnabled).length,
+    }));
+  },
+);
+
+/** Recent async inference operations (operations page). */
+export const getAsyncOperations = cache(
+  async (): Promise<AsyncOpRow[]> => {
+    const ops = await prisma.asyncInferenceOp.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return ops.map((o) => ({
+      id: o.id,
+      providerId: o.providerId,
+      modelId: o.modelId,
+      contractFamily: o.contractFamily,
+      status: o.status,
+      progressPct: o.progressPct,
+      progressMessage: o.progressMessage,
+      errorMessage: o.errorMessage,
+      createdAt: o.createdAt.toISOString(),
+      startedAt: o.startedAt?.toISOString() ?? null,
+      completedAt: o.completedAt?.toISOString() ?? null,
+      expiresAt: o.expiresAt.toISOString(),
+    }));
+  },
+);
+
+/** Combined tool inventory: platform built-in tools + MCP server tools. */
+export const getToolInventory = cache(
+  async (): Promise<ToolInventoryItem[]> => {
+    const { PLATFORM_TOOLS } = await import("./mcp-tools");
+    const platformItems: ToolInventoryItem[] = PLATFORM_TOOLS.map((t) => ({
+      name: t.name,
+      source: "Platform",
+      type: "platform" as const,
+      enabled: true,
+      gating: t.requiredCapability ?? null,
+    }));
+
+    const mcpTools = await prisma.mcpServerTool.findMany({
+      where: {
+        server: {
+          deactivatedAt: null,
+          healthStatus: "healthy",
+        },
+      },
+      include: { server: { select: { name: true, serverId: true } } },
+    });
+    const mcpItems: ToolInventoryItem[] = mcpTools.map((t) => ({
+      name: `${t.server.serverId}__${t.toolName}`,
+      source: t.server.name,
+      type: "mcp" as const,
+      enabled: t.isEnabled,
+      gating: null,
+      originalName: t.toolName,
+    }));
+
+    return [...platformItems, ...mcpItems];
+  },
+);
 
 export type ServiceGroup = {
   endpointType: string;
