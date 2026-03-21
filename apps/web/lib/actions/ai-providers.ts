@@ -20,6 +20,8 @@ import {
   isAnthropicProvider,
   isAnthropicOAuthToken,
   ANTHROPIC_OAUTH_BETA_HEADERS,
+  backfillModelCards,
+  seedAllRecipes,
 } from "@/lib/ai-provider-internals";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -544,4 +546,33 @@ export async function registerMcpService(input: {
       supportedAuthMethods: ["none"],
     },
   });
+}
+
+// ─── EP-INF-007: Routing backfill & recipe seeding ───────────────────────────
+
+/**
+ * Admin action: backfill ModelCard fields for all existing ModelProfiles,
+ * then seed execution recipes for all active/degraded models.
+ * Requires manage_provider_connections capability.
+ */
+export async function runRoutingBackfillAndSeed(): Promise<{
+  backfilledCards: number;
+  seededRecipes: number;
+  error?: string;
+}> {
+  await requireManageProviders();
+
+  try {
+    const backfilledCards = await backfillModelCards();
+    console.log(`[routing-backfill] Backfilled ${backfilledCards} model card(s)`);
+
+    const seededRecipes = await seedAllRecipes();
+    console.log(`[routing-backfill] Seeded ${seededRecipes} recipe(s)`);
+
+    return { backfilledCards, seededRecipes };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[routing-backfill] Failed:", message);
+    return { backfilledCards: 0, seededRecipes: 0, error: message };
+  }
 }
