@@ -11,6 +11,16 @@ import type { ModelCardCapabilities } from "./model-card-types";
 import { isAnthropic, isOpenAI } from "./provider-utils";
 import { buildProviderTools } from "./provider-tools";
 
+// EP-INF-009c: Model class → execution adapter mapping
+const MODEL_CLASS_ADAPTER: Record<string, string> = {
+  chat: "chat",
+  reasoning: "chat",
+  image_gen: "image_gen",
+  embedding: "embedding",
+  audio: "transcription",
+  code: "chat",
+};
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const THINKING_BUDGETS: Record<string, number> = {
@@ -54,6 +64,7 @@ export function buildSeedRecipe(
   providerSettings: Record<string, unknown>;
   toolPolicy: Record<string, unknown>;
   responsePolicy: Record<string, unknown>;
+  executionAdapter: string;
 } {
   const maxTokens = deriveMaxTokens(
     contract.estimatedOutputTokens,
@@ -82,7 +93,10 @@ export function buildSeedRecipe(
     providerSettings.providerTools = providerTools;
   }
 
-  return { providerSettings, toolPolicy, responsePolicy };
+  // EP-INF-009c: Select adapter based on model class
+  const executionAdapter = MODEL_CLASS_ADAPTER[modelCard.modelClass] ?? "chat";
+
+  return { providerSettings, toolPolicy, responsePolicy, executionAdapter };
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────

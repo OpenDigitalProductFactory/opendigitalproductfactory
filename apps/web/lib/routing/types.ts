@@ -99,6 +99,7 @@ export interface PolicyCondition {
 
 export interface CandidateTrace {
   endpointId: string;
+  providerId: string;
   modelId: string;
   endpointName: string;
   fitnessScore: number;

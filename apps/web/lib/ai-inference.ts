@@ -16,6 +16,10 @@ import {
 import type { RoutedExecutionPlan } from "./routing/recipe-types";
 import { getExecutionAdapter } from "./routing/execution-adapter-registry";
 import "./routing/chat-adapter"; // side-effect: registers "chat" adapter
+import "./routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
+import "./routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
+import "./routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
+import "./routing/async-adapter"; // EP-INF-009d: registers "async" adapter
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -236,7 +240,6 @@ export async function callProvider(
   };
 
   // 3. Dispatch to adapter
-  console.log(`[callProvider] ${providerId}/${modelId} adapter=${effectivePlan.executionAdapter} maxTokens=${effectivePlan.maxTokens}`);
   const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
   const result = await adapter.execute({
     providerId,

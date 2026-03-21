@@ -345,6 +345,52 @@ describe("inferContract – capability flags", () => {
   });
 });
 
+// ── EP-INF-009c: requiredModelClass inference ────────────────────────────────
+
+describe("inferContract – requiredModelClass (EP-INF-009c)", () => {
+  it("sets requiredModelClass to image_gen for image-gen task type", async () => {
+    const contract = await inferContract("image-gen", SIMPLE_MESSAGES);
+    expect(contract.requiredModelClass).toBe("image_gen");
+  });
+
+  it("sets requiredModelClass to embedding for embedding task type", async () => {
+    const contract = await inferContract("embedding", SIMPLE_MESSAGES);
+    expect(contract.requiredModelClass).toBe("embedding");
+  });
+
+  it("sets requiredModelClass to audio for transcription task type", async () => {
+    const contract = await inferContract("transcription", SIMPLE_MESSAGES);
+    expect(contract.requiredModelClass).toBe("audio");
+  });
+
+  it("does not set requiredModelClass for standard chat task types", async () => {
+    const contract = await inferContract("greeting", SIMPLE_MESSAGES);
+    expect(contract.requiredModelClass).toBeUndefined();
+  });
+
+  it("allows explicit requiredModelClass override via routeContext", async () => {
+    const contract = await inferContract("reasoning", SIMPLE_MESSAGES, undefined, undefined, {
+      requiredModelClass: "image_gen" as any,
+    });
+    expect(contract.requiredModelClass).toBe("image_gen");
+  });
+
+  it("sets output modality to image for image-gen tasks", async () => {
+    const contract = await inferContract("image-gen", SIMPLE_MESSAGES);
+    expect(contract.modality.output).toEqual(["image"]);
+  });
+
+  it("sets output modality to json for embedding tasks", async () => {
+    const contract = await inferContract("embedding", SIMPLE_MESSAGES);
+    expect(contract.modality.output).toEqual(["json"]);
+  });
+
+  it("disables streaming for non-chat model class tasks", async () => {
+    const contract = await inferContract("image-gen", SIMPLE_MESSAGES);
+    expect(contract.requiresStreaming).toBe(false);
+  });
+});
+
 // ── Unique contractId ───────────────────────────────────────────────────────
 
 describe("inferContract – contractId", () => {
