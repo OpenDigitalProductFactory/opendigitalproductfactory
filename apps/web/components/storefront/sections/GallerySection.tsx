@@ -23,7 +23,7 @@ export function GallerySection({ content }: { content: Record<string, unknown> }
               style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }}
             />
             {img.caption && (
-              <div style={{ fontSize: 12, color: "#6b7280", padding: "4px 0" }}>{img.caption}</div>
+              <div style={{ fontSize: 12, color: "var(--dpf-muted)", padding: "4px 0" }}>{img.caption}</div>
             )}
           </div>
         ))}

@@ -24,7 +24,7 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
 
   return (
     <div style={{
-      border: "1px solid #e5e7eb",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 8,
       padding: 20,
       display: "flex",
@@ -34,12 +34,12 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
       {item.imageUrl && (
         <img src={item.imageUrl} alt={item.name} style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 4 }} />
       )}
-      <div style={{ fontWeight: 600, fontSize: 16, color: "#111827" }}>{item.name}</div>
+      <div style={{ fontWeight: 600, fontSize: 16, color: "var(--dpf-text)" }}>{item.name}</div>
       {item.description && (
-        <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{item.description}</div>
+        <div style={{ fontSize: 13, color: "var(--dpf-muted)", lineHeight: 1.5 }}>{item.description}</div>
       )}
       {priceDisplay && (
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{priceDisplay}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--dpf-text)" }}>{priceDisplay}</div>
       )}
       <div style={{ marginTop: "auto", paddingTop: 8 }}>
         <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={orgSlug} itemId={item.itemId} />

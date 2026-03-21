@@ -54,8 +54,8 @@ export function DonationForm({ orgSlug }: { orgSlug: string }) {
               onClick={() => { setSelected(amt); setCustom(""); }}
               style={{
                 padding: "8px 16px", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer",
-                background: selected === amt ? "var(--dpf-accent, #4f46e5)" : "#f3f4f6",
-                color: selected === amt ? "#fff" : "#374151",
+                background: selected === amt ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-surface-2)",
+                color: selected === amt ? "var(--dpf-text)" : "var(--dpf-text)",
                 border: "none",
               }}>
               £{amt}
@@ -63,11 +63,11 @@ export function DonationForm({ orgSlug }: { orgSlug: string }) {
           ))}
         </div>
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14, color: "#6b7280" }}>Custom: £</span>
+          <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Custom: £</span>
           <input type="number" min="1" step="0.01" value={custom}
             onChange={(e) => { setCustom(e.target.value); setSelected(null); }}
             placeholder="Other amount"
-            style={{ padding: "6px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14, width: 120 }} />
+            style={{ padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14, width: 120 }} />
         </div>
       </div>
       {[
@@ -77,20 +77,20 @@ export function DonationForm({ orgSlug }: { orgSlug: string }) {
         <div key={f.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 500 }}>{f.label}</label>
           <input type={f.type} name={f.name} required={f.required}
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }} />
+            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
         </div>
       ))}
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <label style={{ fontSize: 13, fontWeight: 500 }}>Message (optional)</label>
         <textarea name="message" rows={3}
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14, resize: "vertical" }} />
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14, resize: "vertical" }} />
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
         <input type="checkbox" name="anonymous" />
         Make this donation anonymous
       </label>
       <button type="submit" disabled={loading}
-        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
         {loading ? "Processing…" : "Donate"}
       </button>
     </form>

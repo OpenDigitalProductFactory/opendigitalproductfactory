@@ -59,7 +59,7 @@ export function BookingForm({
         <div key={f.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 500 }}>{f.label}</label>
           <input type={f.type} name={f.name} required={f.required !== false}
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }} />
+            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
         </div>
       ))}
       <div style={{ display: "flex", gap: 12 }}>
@@ -67,22 +67,22 @@ export function BookingForm({
           <label style={{ fontSize: 13, fontWeight: 500 }}>Date *</label>
           <input type="date" name="date" required
             min={new Date().toISOString().split("T")[0]}
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }} />
+            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
           <label style={{ fontSize: 13, fontWeight: 500 }}>Time *</label>
           <input type="time" name="time" required
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }} />
+            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
         </div>
       </div>
-      <div style={{ fontSize: 13, color: "#6b7280" }}>Duration: {durationMinutes} minutes</div>
+      <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>Duration: {durationMinutes} minutes</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <label style={{ fontSize: 13, fontWeight: 500 }}>Notes (optional)</label>
         <textarea name="notes" rows={3}
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14, resize: "vertical" }} />
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14, resize: "vertical" }} />
       </div>
       <button type="submit" disabled={loading}
-        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
         {loading ? "Booking…" : `Book ${itemName}`}
       </button>
     </form>

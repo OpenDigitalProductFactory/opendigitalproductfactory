@@ -33,7 +33,7 @@ export function CtaButton({
         display: "inline-block",
         padding: "8px 20px",
         background: "var(--dpf-accent, #4f46e5)",
-        color: "#fff",
+        color: "var(--dpf-text)",
         borderRadius: 6,
         fontSize: 14,
         fontWeight: 600,

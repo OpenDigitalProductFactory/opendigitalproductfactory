@@ -14,8 +14,8 @@ export function HeroSection({
       textAlign: "center",
       background: bg
         ? `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${bg}) center/cover`
-        : "linear-gradient(135deg, var(--dpf-accent, #4f46e5) 0%, #7c3aed 100%)",
-      color: "#fff",
+        : "linear-gradient(135deg, var(--dpf-accent, #4f46e5) 0%, var(--dpf-accent-2, #7c3aed) 100%)",
+      color: "var(--dpf-text)",
       borderRadius: 12,
       marginBottom: 40,
     }}>

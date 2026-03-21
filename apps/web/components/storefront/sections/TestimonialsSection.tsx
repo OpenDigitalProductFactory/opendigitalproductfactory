@@ -21,17 +21,17 @@ export function TestimonialsSection({ content }: { content: Record<string, unkno
       }}>
         {testimonials.map((t, i) => (
           <div key={i} style={{
-            border: "1px solid #e5e7eb",
+            border: "1px solid var(--dpf-border)",
             borderRadius: 8,
             padding: 20,
-            background: "#f9fafb",
+            background: "var(--dpf-surface-2)",
           }}>
-            <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: "0 0 12px", fontStyle: "italic" }}>
+            <p style={{ fontSize: 14, color: "var(--dpf-text)", lineHeight: 1.6, margin: "0 0 12px", fontStyle: "italic" }}>
               &ldquo;{t.text ?? t.quote ?? ""}&rdquo;
             </p>
-            <div style={{ fontWeight: 600, fontSize: 13, color: "#111827" }}>{t.author}</div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: "var(--dpf-text)" }}>{t.author}</div>
             {t.role && (
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{t.role}</div>
+              <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>{t.role}</div>
             )}
           </div>
         ))}
