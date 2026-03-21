@@ -2,7 +2,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory } from "@/lib/ai-provider-data";
+import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
@@ -12,6 +12,8 @@ import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
 import { AiTabNav } from "@/components/platform/AiTabNav";
+import { McpServiceRow } from "@/components/platform/McpServiceRow";
+import Link from "next/link";
 
 
 export default async function ProvidersPage() {
@@ -41,12 +43,13 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
     detectMcpServers(),
+    getActivatedMcpServers(),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -91,6 +94,61 @@ export default async function ProvidersPage() {
           ))
         )}
       </div>
+
+      {/* Section 1b: Activated MCP Services */}
+      {mcpServers.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Activated MCP Services
+              <span style={{ color: "var(--dpf-muted)", fontWeight: 400, marginLeft: 6 }}>
+                {mcpServers.length} service{mcpServers.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <Link
+              href="/platform/integrations"
+              style={{ color: "var(--dpf-accent)", fontSize: 10 }}
+            >
+              Browse Catalog →
+            </Link>
+          </div>
+          <div
+            style={{
+              background: "var(--dpf-surface-1, #13131f)",
+              border: "1px solid var(--dpf-border, #2a2a40)",
+              borderRadius: 6,
+              overflow: "hidden",
+            }}
+          >
+            {mcpServers.map((s) => (
+              <McpServiceRow key={s.id} server={s} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mcpServers.length === 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+            MCP Services
+          </div>
+          <div style={{
+            background: "var(--dpf-surface-1)",
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            padding: "20px 16px",
+            textAlign: "center",
+          }}>
+            <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: 0 }}>
+              No MCP services activated.{" "}
+              <Link href="/platform/integrations" style={{ color: "var(--dpf-accent)" }}>
+                Browse the integration catalog
+              </Link>{" "}
+              to activate services.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Section 2: Token Spend */}
       <div style={{ marginBottom: 32 }}>
