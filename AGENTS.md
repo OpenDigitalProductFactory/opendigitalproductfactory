@@ -205,6 +205,8 @@ If the local dev DB has drifted despite the hook (e.g. SQL was applied directly 
 
 ## Design Principles
 
+> **FOR SUBAGENT DISPATCHERS:** When dispatching any subagent that creates or modifies UI components, you MUST include the Theme-Aware Styling rules below in the subagent prompt. Subagents do not read AGENTS.md — they only know what you tell them. Failure to include theming context results in components that ignore the platform's branding system.
+
 These principles apply to all new UI development on the platform.
 
 ### Section Organization
