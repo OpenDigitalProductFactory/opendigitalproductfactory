@@ -284,14 +284,30 @@ if (-not (Is-StepDone "download")) {
             Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
         }
     } else {
-        # Already running from DPF_DIR -- verify project files are present
+        # Running from DPF_DIR -- check if project files are already here
         if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
-            Write-Warn "docker-compose.yml not found in $DPF_DIR"
-            Write-Warn "Make sure you have the full project files. Clone the repo first:"
-            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
-            exit 1
+            # Project files missing -- download from GitHub
+            Write-Action "Downloading project files from GitHub..."
+            $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
+            $zipPath = "$env:TEMP\dpf-latest.zip"
+            try {
+                Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
+            } catch {
+                Write-Warn "Could not download from GitHub: $($_.Exception.Message)"
+                Write-Warn "Clone the repo manually:"
+                Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
+                exit 1
+            }
+
+            Write-Action "Extracting..."
+            Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
+            $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
+            Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
+            Remove-Item $zipPath -ErrorAction SilentlyContinue
+            Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
+        } else {
+            Write-OK "Project files already in place"
         }
-        Write-OK "Project files already in place"
     }
 
     # Write version file
