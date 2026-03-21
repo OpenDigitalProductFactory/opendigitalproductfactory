@@ -11,6 +11,7 @@
  */
 
 import { randomUUID } from "crypto";
+import type { ModelClass } from "./model-card-types";
 
 // ── RequestContract type ────────────────────────────────────────────────────
 
@@ -51,7 +52,22 @@ export interface RequestContract {
   maxLatencyMs?: number;
   allowedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
+
+  // ── EP-INF-009c: Model class constraint ───────────────────────
+  /** When set, only endpoints with this modelClass are eligible.
+   *  When absent, defaults to chat/reasoning filter. */
+  requiredModelClass?: ModelClass;
 }
+
+// ── Reasoning depth defaults per task type ──────────────────────────────────
+
+// ── EP-INF-009c: Task type → required model class mapping ────────────────
+
+const TASK_MODEL_CLASS: Record<string, ModelClass> = {
+  "image-gen": "image_gen",
+  "embedding": "embedding",
+  "transcription": "audio",
+};
 
 // ── Reasoning depth defaults per task type ──────────────────────────────────
 
@@ -65,6 +81,7 @@ const DEFAULT_REASONING_DEPTH: Record<string, RequestContract["reasoningDepth"]>
   "code-gen": "medium",
   "tool-action": "medium",
   "reasoning": "high",
+  "onboarding": "minimal",
 };
 
 // ── Input modality types we scan for in multimodal content arrays ────────
@@ -88,6 +105,7 @@ export async function inferContract(
     requiresCodeExecution?: boolean;
     requiresWebSearch?: boolean;
     requiresComputerUse?: boolean;
+    requiredModelClass?: ModelClass;
   },
 ): Promise<RequestContract> {
   // ── Deterministic flags ─────────────────────────────────────────────────
@@ -98,8 +116,8 @@ export async function inferContract(
   const interactionMode = (routeContext?.interactionMode ?? "sync") as
     RequestContract["interactionMode"];
 
-  // ── Streaming: default true for sync, false otherwise ─────────────────
-  const requiresStreaming = interactionMode === "sync";
+  // ── Streaming: default true for sync chat, false for non-chat/background ──
+  const requiresStreaming = interactionMode === "sync" && !routeContext?.requiredModelClass && !TASK_MODEL_CLASS[taskType];
 
   // ── Capability requirements ────────────────────────────────────────────
   const requiresCodeExecution = routeContext?.requiresCodeExecution === true;
@@ -124,10 +142,17 @@ export async function inferContract(
     }
   }
 
+  // ── EP-INF-009c: Model class from task type or explicit override ────
+  const requiredModelClass = routeContext?.requiredModelClass ?? TASK_MODEL_CLASS[taskType];
+
   // ── Output modality ───────────────────────────────────────────────────
   let outputModalities: Array<"text" | "json" | "image" | "audio" | "tool_call">;
 
-  if (requiresStrictSchema) {
+  if (requiredModelClass === "image_gen") {
+    outputModalities = ["image"];
+  } else if (requiredModelClass === "embedding") {
+    outputModalities = ["json"]; // vector data
+  } else if (requiresStrictSchema) {
     outputModalities = ["json"];
   } else if (requiresTools) {
     outputModalities = ["text", "tool_call"];
@@ -190,6 +215,8 @@ export async function inferContract(
 
     reasoningDepth,
     budgetClass,
+
+    ...(requiredModelClass ? { requiredModelClass } : {}),
   };
 
   // ── Optional fields from routeContext ──────────────────────────────────

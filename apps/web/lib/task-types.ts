@@ -128,6 +128,14 @@ export const TASK_TYPES: TaskTypeDefinition[] = [
       "Execute the requested action using the appropriate tool. Confirm what you did in 1-2 sentences. Do not narrate your plan.",
     evaluationTokenLimit: 300,
   },
+  {
+    id: "onboarding",
+    description: "Platform onboarding guided conversation",
+    heuristicPatterns: [/setup/i, /onboarding/i, /getting started/i, /configure/i],
+    minCapabilityTier: "basic",
+    defaultInstructions: "Guide the user through platform setup. Be professional and understanding.",
+    evaluationTokenLimit: 500,
+  },
 ];
 
 export function getTaskType(id: string): TaskTypeDefinition | undefined {

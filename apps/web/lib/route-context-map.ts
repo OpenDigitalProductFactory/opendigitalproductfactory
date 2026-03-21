@@ -441,6 +441,16 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  "/setup": {
+    routePrefix: "/setup",
+    domain: "Platform Onboarding",
+    sensitivity: "internal",
+    domainContext:
+      "The user is going through initial platform setup. Guide them through each step: business identity, account creation, AI capabilities, branding, financials, and workspace creation. Be professional, understanding, and transparent about the local AI model's limitations.",
+    domainTools: [],
+    skills: [],
+  },
+
   "/workspace": {
     routePrefix: "/workspace",
     domain: "Workspace",

@@ -294,6 +294,16 @@ BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (pa
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  "/setup": {
+    agentId: "onboarding-coo",
+    agentName: "Onboarding COO",
+    agentDescription: "Guides new platform owners through initial setup.",
+    capability: null,
+    sensitivity: "internal",
+    systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup. This is a CONVERSATION request. You have no tools.",
+    skills: [],
+    modelRequirements: { preferredProviderId: "ollama" },
+  },
   "/workspace": {
     agentId: "coo",
     agentName: "COO",
