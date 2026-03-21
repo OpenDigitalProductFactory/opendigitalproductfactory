@@ -3525,3 +3525,67 @@ model ExecutionRecipe {
   @@unique([providerId, modelId, contractFamily, version])
   @@index([contractFamily, status])
 }
+
+// ─── Finance: Banking & Reconciliation ─────────────────────────────
+
+model BankAccount {
+  id              String              @id @default(cuid())
+  bankAccountId   String              @unique
+  name            String
+  bankName        String?
+  accountNumber   String?
+  sortCode        String?
+  iban            String?
+  swift           String?
+  currency        String              @default("GBP")
+  accountType     String              @default("current")
+  isDefault       Boolean             @default(false)
+  openingBalance  Decimal             @default(0)
+  currentBalance  Decimal             @default(0)
+  lastReconciledAt DateTime?
+  status          String              @default("active")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  transactions    BankTransaction[]
+
+  @@index([status])
+}
+
+model BankTransaction {
+  id               String            @id @default(cuid())
+  bankAccountId    String
+  transactionDate  DateTime
+  description      String
+  amount           Decimal
+  balance          Decimal?
+  reference        String?
+  category         String?
+  matchStatus      String            @default("unmatched")
+  matchedPaymentId String?
+  importBatchId    String?
+  createdAt        DateTime          @default(now())
+
+  bankAccount      BankAccount       @relation(fields: [bankAccountId], references: [id])
+
+  @@index([bankAccountId])
+  @@index([matchStatus])
+  @@index([transactionDate])
+  @@index([importBatchId])
+}
+
+model BankRule {
+  id              String              @id @default(cuid())
+  name            String
+  matchField      String
+  matchType       String              @default("contains")
+  matchValue      String
+  accountCode     String?
+  category        String?
+  taxRate         Decimal?
+  description     String?
+  isActive        Boolean             @default(true)
+  hitCount        Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
