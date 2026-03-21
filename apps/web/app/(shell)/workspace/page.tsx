@@ -47,6 +47,9 @@ export default async function WorkspacePage() {
     overdueActionCount,
     publishedPolicyCount,
     pendingAlertCount,
+    financeOutstanding,
+    financeOverdueCount,
+    financeUnpaidBillCount,
   ] = await Promise.all([
     prisma.digitalProduct.count(),
     prisma.digitalProduct.count({ where: { lifecycleStatus: "active" } }),
@@ -73,6 +76,14 @@ export default async function WorkspacePage() {
     prisma.correctiveAction.count({ where: { status: { in: ["open", "in-progress"] }, dueDate: { lt: new Date() } } }),
     prisma.policy.count({ where: { lifecycleStatus: "published", status: "active" } }),
     prisma.regulatoryAlert.count({ where: { status: "pending" } }),
+    // Finance metrics
+    prisma.invoice.aggregate({
+      where: { status: { in: ["sent", "viewed", "partially_paid", "overdue"] } },
+      _sum: { amountDue: true },
+      _count: true,
+    }),
+    prisma.invoice.count({ where: { status: "overdue" } }),
+    prisma.bill.count({ where: { status: { in: ["approved", "partially_paid"] } } }),
   ]);
 
   // Check for agents with inactive preferred providers
@@ -183,6 +194,28 @@ export default async function WorkspacePage() {
             ].filter(Boolean).join(" · "),
             badgeColor: "#fbbf24",
           }
+        : {}),
+    },
+    finance: {
+      metrics: [
+        {
+          label: "Outstanding",
+          value: `${financeOutstanding._count}`,
+          color: financeOutstanding._count > 0 ? "#fbbf24" : "#4ade80",
+        },
+        {
+          label: "Overdue",
+          value: financeOverdueCount,
+          color: financeOverdueCount > 0 ? "#ef4444" : "#4ade80",
+        },
+        {
+          label: "Bills due",
+          value: financeUnpaidBillCount,
+          color: financeUnpaidBillCount > 0 ? "#fb923c" : "#4ade80",
+        },
+      ],
+      ...(financeOverdueCount > 0
+        ? { badge: `${financeOverdueCount} overdue invoice${financeOverdueCount !== 1 ? "s" : ""}`, badgeColor: "#ef4444" }
         : {}),
     },
   };
