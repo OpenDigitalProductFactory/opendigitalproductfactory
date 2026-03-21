@@ -48,6 +48,8 @@ function detectGeminiDeprecation(raw: GeminiModel): boolean {
   if (desc.includes("deprecated") || desc.includes("no longer available")) return true;
   // Models with no supported generation methods are effectively unusable
   if (raw.supportedGenerationMethods && raw.supportedGenerationMethods.length === 0) return true;
+  // Models that don't support generateContent can't be called via our API path
+  if (raw.supportedGenerationMethods && !raw.supportedGenerationMethods.includes("generateContent")) return true;
   return false;
 }
 

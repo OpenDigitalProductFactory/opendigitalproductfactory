@@ -338,25 +338,20 @@ export async function runDimensionEval(
     .flatMap((d) => d.testResults)
     .find((t) => t.error)?.error ?? null;
 
-  // If ALL dimensions are inconclusive and the error indicates model is gone, retire it
+  // If ALL dimensions are inconclusive, the model is unusable — retire it.
+  // This covers: model removed (404), deprecated, wrong API type (400),
+  // auth restrictions, and any other consistent failure pattern.
   const allInconclusive = dimensions.every((d) => d.inconclusive);
   if (allInconclusive && firstError) {
-    const isModelGone = firstError.includes("model_not_found") ||
-      firstError.includes("Model not found") ||
-      firstError.includes("no longer available") ||
-      firstError.includes("404");
-
-    if (isModelGone) {
-      await prisma.modelProfile.update({
-        where: { providerId_modelId: { providerId, modelId } },
-        data: {
-          modelStatus: "retired",
-          retiredAt: new Date(),
-          retiredReason: `Auto-retired: ${firstError.slice(0, 200)}`,
-        },
-      });
-      console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: model no longer available`);
-    }
+    await prisma.modelProfile.update({
+      where: { providerId_modelId: { providerId, modelId } },
+      data: {
+        modelStatus: "retired",
+        retiredAt: new Date(),
+        retiredReason: `Auto-retired: ${firstError.slice(0, 200)}`,
+      },
+    });
+    console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
   }
 
   return {
