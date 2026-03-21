@@ -175,6 +175,20 @@ export async function routeAndCall(
   // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
     systemPrompt = `You are a helpful assistant. Respond naturally to the user. Keep replies short.`;
+
+    // Also strip chat history to just the current message — old messages from
+    // capable-model conversations contain tool calls and context that confuse
+    // local models. Semantic memory recall is in the system prompt (now replaced)
+    // but old assistant messages in the history are equally toxic.
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUserMsg) {
+      messages = [lastUserMsg];
+    }
+
+    console.log(
+      `[routing] Tools stripped: prompt replaced, history trimmed to 1 message,`,
+      `tools=${options?.tools?.length ?? 0}→0`,
+    );
   }
 
   // 3b. If a preferred provider was requested, check if the decision matches.
