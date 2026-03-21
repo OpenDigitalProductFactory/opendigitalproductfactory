@@ -21,7 +21,11 @@ function getToday(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
-export function CreateExpenseForm() {
+interface CreateExpenseFormProps {
+  currencySymbol: string;
+}
+
+export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<"draft" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +184,7 @@ export function CreateExpenseForm() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelClasses}>Amount (£) *</label>
+                  <label className={labelClasses}>Amount ({currencySymbol}) *</label>
                   <input
                     type="number"
                     min="0.01"
@@ -224,7 +228,7 @@ export function CreateExpenseForm() {
         {/* Live total */}
         <div className="mt-4 pt-4 border-t border-[var(--dpf-border)] flex justify-end">
           <p className="text-sm font-bold text-[var(--dpf-text)]">
-            Total: £{formatMoney(liveTotal)}
+            Total: {currencySymbol}{formatMoney(liveTotal)}
           </p>
         </div>
       </div>

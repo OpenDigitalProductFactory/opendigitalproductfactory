@@ -1,6 +1,8 @@
 // apps/web/app/(shell)/finance/reports/aged-creditors/page.tsx
 import { getAgedCreditors } from "@/lib/actions/dunning";
 import Link from "next/link";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 const COLUMN_COLOURS = {
   current: "#4ade80",
@@ -12,9 +14,11 @@ const COLUMN_COLOURS = {
 
 export default async function AgedCreditorsPage() {
   const { rows, grandTotals } = await getAgedCreditors();
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: number) =>
-    `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
+    `${sym}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
   return (
     <div>

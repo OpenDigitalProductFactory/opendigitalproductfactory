@@ -1,14 +1,13 @@
 // apps/web/app/(shell)/finance/reports/cash-flow/page.tsx
 import Link from "next/link";
 import { getCashFlowReport } from "@/lib/actions/reports";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 interface SearchParams {
   start?: string;
   end?: string;
 }
-
-const formatMoney = (amount: number) =>
-  `£${Math.abs(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
 export default async function CashFlowPage({
   searchParams,
@@ -24,6 +23,11 @@ export default async function CashFlowPage({
 
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+  const formatMoney = (amount: number) =>
+    `${sym}${Math.abs(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
 
   const data = await getCashFlowReport(startDate, endDate);
 

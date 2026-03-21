@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/banking/page.tsx
 import { listBankAccounts } from "@/lib/actions/banking";
 import Link from "next/link";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 export default async function BankingPage() {
   const accounts = await listBankAccounts();
@@ -100,7 +101,7 @@ export default async function BankingPage() {
                     style={{ color: balance >= 0 ? "#4ade80" : "#ef4444" }}
                   >
                     {balance < 0 ? "-" : ""}
-                    {account.currency === "GBP" ? "£" : account.currency}{" "}
+                    {getCurrencySymbol(account.currency)}{" "}
                     {formatMoney(Math.abs(balance))}
                   </p>
                 </div>

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getBankAccount } from "@/lib/actions/banking";
 import { ReconciliationFeed } from "@/components/finance/ReconciliationFeed";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -88,6 +89,7 @@ export default async function ReconcilePage({ params }: Props) {
             matchStatus: tx.matchStatus,
           }))}
           totalCount={summary.totalCount}
+          currencySymbol={getCurrencySymbol(account.currency)}
         />
       )}
     </div>

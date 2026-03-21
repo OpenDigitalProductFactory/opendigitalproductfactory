@@ -11,9 +11,10 @@ const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 interface Props {
   assetId: string;
   currentBookValue: number;
+  currencySymbol: string;
 }
 
-export function AssetDisposalForm({ assetId, currentBookValue }: Props) {
+export function AssetDisposalForm({ assetId, currentBookValue, currencySymbol }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -74,7 +75,7 @@ export function AssetDisposalForm({ assetId, currentBookValue }: Props) {
             required
           />
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            Book value: £{currentBookValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+            Book value: {currencySymbol}{currentBookValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
           </p>
         </div>
         <div>

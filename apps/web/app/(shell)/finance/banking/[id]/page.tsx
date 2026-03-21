@@ -2,6 +2,7 @@
 import { getBankAccount, getReconciliationSummary } from "@/lib/actions/banking";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 
 const MATCH_STATUS_COLOURS: Record<string, string> = {
   unmatched: "#fbbf24",
@@ -88,11 +89,11 @@ export default async function BankAccountDetailPage({ params }: Props) {
           { label: "Account Type", value: account.accountType.replace("_", " ") },
           {
             label: "Opening Balance",
-            value: `${account.currency === "GBP" ? "£" : account.currency} ${formatMoney(account.openingBalance)}`,
+            value: `${getCurrencySymbol(account.currency)} ${formatMoney(account.openingBalance)}`,
           },
           {
             label: "Current Balance",
-            value: `${account.currency === "GBP" ? "£" : account.currency} ${formatMoney(balance)}`,
+            value: `${getCurrencySymbol(account.currency)} ${formatMoney(balance)}`,
           },
           {
             label: "Last Reconciled",

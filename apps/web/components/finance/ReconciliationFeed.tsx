@@ -27,6 +27,7 @@ interface Props {
   bankAccountId: string;
   initialTransactions: Transaction[];
   totalCount: number;
+  currencySymbol: string;
 }
 
 type TxState = "idle" | "loading-suggestions" | "suggestions-open" | "confirming" | "skipped" | "matched";
@@ -39,7 +40,7 @@ interface TxEntry {
   error: string | null;
 }
 
-export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCount }: Props) {
+export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCount, currencySymbol }: Props) {
   const [entries, setEntries] = useState<TxEntry[]>(() =>
     initialTransactions.map((tx) => ({
       tx,
@@ -249,7 +250,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                           High confidence match
                         </p>
                         <p className="text-[10px] text-[var(--dpf-muted)]">
-                          {highConfidenceMatch.paymentRef} · £{formatMoney(highConfidenceMatch.amount)}
+                          {highConfidenceMatch.paymentRef} · {currencySymbol}{formatMoney(highConfidenceMatch.amount)}
                         </p>
                       </div>
                       <button
@@ -324,7 +325,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                               </div>
                               <div className="text-right">
                                 <p className="text-xs font-mono text-[var(--dpf-text)]">
-                                  £{formatMoney(c.amount)}
+                                  {currencySymbol}{formatMoney(c.amount)}
                                 </p>
                                 <p
                                   className="text-[9px]"
