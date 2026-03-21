@@ -35,18 +35,27 @@ Every adapter implements a common interface. The `"chat"` adapter wraps the exis
 ```typescript
 // apps/web/lib/routing/adapter-types.ts
 
+/** Reusable named type for tool call entries (matches existing InferenceResult.toolCalls shape) */
+type ToolCallEntry = { id: string; name: string; arguments: Record<string, unknown> };
+
+interface ResolvedProvider {
+  baseUrl: string;
+  headers: Record<string, string>;
+}
+
 interface AdapterRequest {
   providerId: string;
   modelId: string;
   plan: RoutedExecutionPlan;
-  messages: ChatMessage[];
+  provider: ResolvedProvider;  // pre-resolved by callProvider() before dispatch
+  messages: ChatMessage[];     // ChatMessage imported from ai-inference.ts
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
 }
 
 interface AdapterResult {
   text: string;
-  toolCalls: ToolCallResult[];
+  toolCalls: ToolCallEntry[];
   usage: { inputTokens: number; outputTokens: number };
   inferenceMs: number;
   raw?: Record<string, unknown>;
@@ -58,7 +67,15 @@ interface ExecutionAdapterHandler {
 }
 ```
 
-`AdapterRequest` encapsulates everything the adapter needs. `AdapterResult` is the normalized output. The `raw` field preserves the full provider response for debugging.
+**`ResolvedProvider`** — `callProvider()` performs the DB lookup (`prisma.modelProvider.findUnique()`) and `buildAuthHeaders()` before dispatching to the adapter. The adapter receives pre-resolved `baseUrl` and `headers`, keeping adapters free of Prisma dependencies.
+
+**`ToolCallEntry`** — Named alias matching the existing `InferenceResult.toolCalls` inline type: `{ id: string; name: string; arguments: Record<string, unknown> }`.
+
+**`ChatMessage`** — Imported from `ai-inference.ts`. This creates a one-way dependency (routing → inference types). If this becomes a concern, `ChatMessage` can be extracted to a shared types file in a future cleanup, but the current direction (routing importing from inference) is acceptable and matches how `RoutedExecutionPlan` is already imported by inference.
+
+`AdapterResult` is the normalized output. The `raw` field preserves the full provider response for debugging.
+
+**Error handling:** Adapters throw `InferenceError` directly (imported from `ai-inference.ts`). The error codes (`network`, `auth`, `rate_limit`, `model_not_found`, `provider_error`) and HTTP status classification transfer unchanged into the chat adapter. `callProvider()` does not catch or re-wrap adapter errors — they propagate directly to the fallback chain and rate tracker.
 
 ### Section 2: Adapter Registry
 
@@ -69,10 +86,11 @@ A typed `Map<string, ExecutionAdapterHandler>` with registration and lookup:
 
 const adapters = new Map<string, ExecutionAdapterHandler>();
 
-function registerAdapter(adapter: ExecutionAdapterHandler): void;
-function getAdapter(type: string): ExecutionAdapterHandler;  // throws if not found
-function hasAdapter(type: string): boolean;
+function registerExecutionAdapter(adapter: ExecutionAdapterHandler): void;
+function getExecutionAdapter(type: string): ExecutionAdapterHandler;  // throws if not found
 ```
+
+Functions are named `registerExecutionAdapter` / `getExecutionAdapter` to avoid collision with the existing `getAdapter()` in `adapter-registry.ts` (which returns provider metadata adapters).
 
 The chat adapter is registered at module load time. No dynamic loading, no plugin system — a static map.
 
@@ -95,9 +113,15 @@ const chatAdapter: ExecutionAdapterHandler = {
 
 The three provider branches (Anthropic at `/messages`, Gemini at `/models/{id}:generateContent`, OpenAI-compat at `/v1/chat/completions`) move into this adapter. Each branch gains `providerTools` merging logic (see EP-INF-008b below).
 
+The chat adapter receives a `ResolvedProvider` (baseUrl + headers) and constructs the provider-specific URL and request body. It uses `request.provider.baseUrl` and `request.provider.headers` — no Prisma dependency.
+
+**Gemini tool call extraction:** The current `callProvider()` does not extract tool calls from Gemini responses (only Anthropic and OpenAI). The chat adapter adds Gemini tool call extraction: Gemini returns `functionCall` parts in the response, with shape `{ functionCall: { name: string; args: Record<string, unknown> } }`. These are mapped to `ToolCallEntry` with a generated ID. For `code_execution` responses, the `executableCode` and `codeExecutionResult` parts are returned as text content, not tool calls.
+
+**`isAnthropic()` / `isOpenAI()` helper sharing:** These helpers are currently private in `recipe-seeder.ts`. Extract to a new `apps/web/lib/routing/provider-utils.ts` shared module with both functions. Both `recipe-seeder.ts` and `chat-adapter.ts` (and `provider-tools.ts`) import from there.
+
 ### Section 4: callProvider() Refactor
 
-`callProvider()` becomes a thin dispatcher:
+`callProvider()` becomes a thin dispatcher. It retains responsibility for provider lookup, auth resolution, and result mapping — the adapter only handles the HTTP call and response parsing.
 
 ```typescript
 export async function callProvider(
@@ -108,19 +132,40 @@ export async function callProvider(
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
 ): Promise<InferenceResult> {
-  const adapterType = plan?.executionAdapter ?? "chat";
-  const adapter = getAdapter(adapterType);
+  // 1. Resolve provider (DB lookup + auth headers) — stays in callProvider
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
+  const baseUrl = provider.baseUrl ?? provider.endpoint;
+  if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
+  const headers = await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
+  // 2. Build minimal plan if none provided (backward compat: maxTokens=4096, adapter="chat")
+  const effectivePlan: RoutedExecutionPlan = plan ?? {
+    providerId, modelId, recipeId: null, contractFamily: "unknown",
+    maxTokens: 4096, executionAdapter: "chat",
+    providerSettings: {}, toolPolicy: {}, responsePolicy: {},
+  };
+
+  // 3. Dispatch to adapter
+  const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
   const result = await adapter.execute({
-    providerId, modelId, plan: plan ?? buildMinimalPlan(providerId, modelId),
+    providerId, modelId, plan: effectivePlan,
+    provider: { baseUrl, headers },
     messages, systemPrompt, tools,
   });
 
-  return mapAdapterResultToInferenceResult(result);
+  // 4. Map AdapterResult → InferenceResult
+  return {
+    content: result.text,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    inferenceMs: result.inferenceMs,
+    ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
+  };
 }
 ```
 
-When no plan is provided (backward compat), a minimal plan with `executionAdapter: "chat"` and `maxTokens: 4096` is built inline — preserving current behavior exactly.
+The inline plan construction replaces the previously referenced `buildMinimalPlan()` — no separate function needed. The result mapping from `AdapterResult` to `InferenceResult` is a direct field mapping inline in `callProvider()` — no separate `mapAdapterResultToInferenceResult()` function needed.
 
 ### Section 5: Schema & Type Extensions
 
@@ -139,7 +184,7 @@ executionAdapter: string;  // "chat" | "image_gen" | "audio" | "async"
 executionAdapter: string;  // defaults to "chat"
 ```
 
-All existing recipes get `executionAdapter: "chat"` via the default. No migration needed for existing data.
+All existing recipes get `executionAdapter: "chat"` via the Prisma default. Adding this column requires a Prisma schema migration (`prisma migrate dev`), but no data migration — existing rows automatically get the default value. Only `"chat"` is valid in the 008a/008b scope; future values (`"image_gen"`, `"audio"`, `"async"`) ship with 008c/008d.
 
 ---
 
@@ -268,12 +313,13 @@ function buildProviderTools(
   }
 
   // Anthropic computer use for tool-action contracts
+  // isAnthropic() imported from provider-utils.ts
   if (isAnthropic(providerId) && capabilities.computerUse === true
       && contractFamily === "sync.tool-action") {
     tools.push({
       type: "computer_20241022",
       name: "computer",
-      display_width_px: 1024,
+      display_width_px: 1024,   // Hardcoded defaults; future: make configurable via recipe
       display_height_px: 768,
     });
   }
@@ -340,10 +386,11 @@ Models without these capabilities are excluded from consideration when the contr
 
 | File | Responsibility |
 |---|---|
-| `apps/web/lib/routing/adapter-types.ts` | `ExecutionAdapterHandler`, `AdapterRequest`, `AdapterResult` types |
-| `apps/web/lib/routing/execution-adapter-registry.ts` | Registry: `registerAdapter()`, `getAdapter()`, `hasAdapter()` |
-| `apps/web/lib/routing/chat-adapter.ts` | Default `"chat"` adapter — existing `callProvider()` per-provider branches |
+| `apps/web/lib/routing/adapter-types.ts` | `ExecutionAdapterHandler`, `AdapterRequest`, `AdapterResult`, `ResolvedProvider`, `ToolCallEntry` |
+| `apps/web/lib/routing/execution-adapter-registry.ts` | Registry: `registerExecutionAdapter()`, `getExecutionAdapter()` |
+| `apps/web/lib/routing/chat-adapter.ts` | Default `"chat"` adapter — existing `callProvider()` per-provider branches + Gemini tool call extraction |
 | `apps/web/lib/routing/provider-tools.ts` | `buildProviderTools()` — derives provider tools from capabilities + contract |
+| `apps/web/lib/routing/provider-utils.ts` | `isAnthropic()`, `isOpenAI()` — shared provider ID helpers (extracted from recipe-seeder) |
 | `apps/web/lib/routing/execution-adapter-registry.test.ts` | Registry tests |
 | `apps/web/lib/routing/chat-adapter.test.ts` | Chat adapter dispatch + providerTools merge tests |
 | `apps/web/lib/routing/provider-tools.test.ts` | Provider tools derivation tests |
@@ -356,7 +403,7 @@ Models without these capabilities are excluded from consideration when the contr
 | `apps/web/lib/routing/recipe-types.ts` | Add `executionAdapter` to `RoutedExecutionPlan` and `RecipeRow` |
 | `apps/web/lib/routing/model-card-types.ts` | Add `webSearch`, `computerUse` to `ModelCardCapabilities` and `EMPTY_CAPABILITIES` |
 | `apps/web/lib/routing/request-contract.ts` | Add `requiresCodeExecution`, `requiresWebSearch`, `requiresComputerUse` optional flags |
-| `apps/web/lib/routing/recipe-seeder.ts` | Call `buildProviderTools()`, include in seed output |
+| `apps/web/lib/routing/recipe-seeder.ts` | Call `buildProviderTools()`, include in seed output; import `isAnthropic`/`isOpenAI` from `provider-utils` |
 | `apps/web/lib/routing/execution-plan.ts` | Pass `executionAdapter` through to plan |
 | `apps/web/lib/routing/pipeline-v2.ts` | Add capability-based exclusion checks |
 | `apps/web/lib/ai-inference.ts` | `callProvider()` → thin adapter dispatcher |
@@ -374,19 +421,21 @@ All 28 existing test files pass without modification. No changes to: `scoring.ts
 
 **`execution-adapter-registry.test.ts`:**
 - Registers and retrieves an adapter by type
-- Default "chat" adapter is registered
-- `getAdapter()` throws for unknown type
-- `hasAdapter()` returns true/false correctly
+- Default "chat" adapter is registered at import time
+- `getExecutionAdapter()` throws for unknown type
 - Duplicate registration overwrites
 
 **`chat-adapter.test.ts`:**
 - Anthropic branch: correct URL, body shape, max_tokens from plan, thinking config
 - Gemini branch: correct URL, contents format, generationConfig from plan
 - OpenAI-compat branch: correct URL, messages format, max_tokens/temperature from plan
-- providerTools merged into Gemini request body
-- providerTools merged into Anthropic request body
+- providerTools merged into Gemini request body (top-level tools array)
+- providerTools merged into Anthropic request body (tools array)
+- Gemini providerTools + caller function tools coexist in same request body (no collision)
+- Gemini tool call extraction: functionCall parts → ToolCallEntry[]
+- Gemini code_execution response: executableCode/codeExecutionResult parts → text content
 - No providerTools: request body unchanged (backward compat)
-- No plan: uses default maxTokens=4096 (backward compat)
+- Error propagation: adapter throws InferenceError, propagates with correct code/providerId
 
 **`provider-tools.test.ts`:**
 - Gemini + codeExecution + sync.code-gen → `[{ code_execution: {} }]`
@@ -396,6 +445,7 @@ All 28 existing test files pass without modification. No changes to: `scoring.ts
 - Wrong contract family → empty array
 - Multiple capabilities on same model → combined array
 - OpenAI provider → empty array (no Pattern A tools for OpenAI yet)
+- Unknown provider (ollama, openrouter, litellm) → empty array
 
 ### Extended Existing Tests
 
@@ -420,6 +470,14 @@ All 28 existing test files pass without modification. No changes to: `scoring.ts
 - Plan includes `executionAdapter` from recipe
 - Default plan has `executionAdapter: "chat"`
 
+### Integration Test (callProvider → adapter → result)
+
+**`ai-inference.test.ts`** (new or extend existing):
+- `callProvider()` with plan dispatches to chat adapter, returns correct InferenceResult
+- `callProvider()` without plan uses default "chat" adapter with maxTokens=4096
+- `callProvider()` with unknown adapter type throws
+- InferenceError from adapter propagates to caller with correct code/providerId
+
 ### Backward Compatibility
 
 - `callProvider()` without plan parameter → identical behavior to current
@@ -439,3 +497,10 @@ All 28 existing test files pass without modification. No changes to: `scoring.ts
 | `providerTools` pattern in `providerSettings` | Pattern B/C may use similar config-driven approach |
 
 The framework is built for extensibility but ships with exactly one adapter and three Pattern A capabilities.
+
+---
+
+## Known Issues (Pre-existing, Out of Scope)
+
+- **`keep_alive: -1` in OpenAI-compat branch** — Currently sent unconditionally for all OpenAI-compatible providers (line 385 of `ai-inference.ts`). This is Ollama-specific. The chat adapter refactoring preserves this behavior to avoid breaking changes, but it should be fixed in a future cleanup (only send for `providerId === "ollama"`).
+- **Contract family naming inconsistency** — Runtime uses hyphens (`sync.code-gen`) but some test fixtures and comments use underscores (`sync.code_gen`). This pre-dates EP-INF-008. The implementation should use the runtime values (hyphens) consistently.
