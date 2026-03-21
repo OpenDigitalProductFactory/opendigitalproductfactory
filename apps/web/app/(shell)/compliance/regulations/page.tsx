@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import Link from "next/link";
 import { CreateRegulationForm } from "@/components/compliance/CreateRegulationForm";
 
 export default async function RegulationsPage() {
@@ -14,7 +15,12 @@ export default async function RegulationsPage() {
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Regulations</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{regulations.length} registered</p>
         </div>
-        <CreateRegulationForm />
+        <div className="flex items-center gap-2">
+          <Link href="/compliance/onboard" className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-accent)] text-white hover:opacity-90">
+            Onboard Regulation / Standard
+          </Link>
+          <CreateRegulationForm />
+        </div>
       </div>
 
       {regulations.length === 0 ? (
