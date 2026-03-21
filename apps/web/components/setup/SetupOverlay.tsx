@@ -23,20 +23,26 @@ const STEP_WELCOME: Record<string, string> = {
     "Welcome to External Services. This is where you manage your AI providers — the engines that power the platform's intelligence.\n\n" +
     "Right now, Ollama is running locally on your machine. It handles basic conversation (like this), but for complex tasks like document analysis, code generation, or taking actions, you'll want to add a cloud provider.\n\n" +
     "To add one: click a provider like Anthropic or OpenAI, paste your API key, and click Test Connection. The platform will automatically use the best provider for each task.\n\n" +
-    "When you're ready, click Continue below — or Skip if you want to explore this later.",
+    "When you're done here, click Continue below to move on — or Skip if you'd like to come back to this later.",
   "branding":
     "This is your branding page. Everything here controls how your platform looks — to your team and to your customers.\n\n" +
     "You can set your logo, colors, and tagline. Changes apply across the entire platform, including the storefront if you set one up.\n\n" +
-    "Don't worry about getting it perfect now — you can always come back here from Admin > Branding.",
+    "Don't worry about getting it perfect now — you can always come back here from Admin > Branding.\n\n" +
+    "When you're done, click Continue — or Skip to move on.",
   "org-settings":
     "These are your organization settings — the basics about your business.\n\n" +
     "You can update your organization name, contact details, and location here. This information is used across the platform for things like compliance context and customer-facing materials.\n\n" +
-    "Take a look and fill in what you'd like. You can always update these later.",
+    "Take a look and fill in what you'd like — then click Continue when you're ready, or Skip to come back later.",
+  "build-studio":
+    "This is the Build Studio — one of the most powerful features of the platform.\n\n" +
+    "If you need something the platform doesn't have out of the box, you can describe what you need and the AI workforce will help build it: new workflows, reports, integrations, custom pages — whatever your business requires.\n\n" +
+    "Anything you build can be kept private or donated back to the community so other businesses benefit too.\n\n" +
+    "Feel free to explore — when you're ready, click Continue to finish the tour, or Skip to come back later.",
   "workspace":
     "This is your workspace — where you and your team do day-to-day work.\n\n" +
     "From here you can manage your backlog, talk to AI coworkers, and access all areas of the platform from the navigation above.\n\n" +
     "The AI Coworker panel (that's me) is always available — just click the button in the bottom right corner whenever you need help.\n\n" +
-    "That's the end of the setup tour. Welcome aboard!",
+    "Click Finish Setup below to complete the tour. Welcome aboard!",
 };
 
 type Props = {
