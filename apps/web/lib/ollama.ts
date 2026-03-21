@@ -117,7 +117,14 @@ export async function checkBundledProviders(): Promise<void> {
 
     await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
-    // Already active — refresh hardware info only (no re-discovery)
+    // Already active — check if models need discovery (e.g., first run after manual activation)
+    const profileCount = await prisma.modelProfile.count({ where: { providerId: "ollama" } });
+    if (profileCount === 0) {
+      const result = await discoverModelsInternal("ollama");
+      if (result.discovered < 20) {
+        await profileModelsInternal("ollama");
+      }
+    }
     await enrichOllamaInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {
     // Deactivate
