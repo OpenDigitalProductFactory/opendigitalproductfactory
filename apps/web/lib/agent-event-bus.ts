@@ -11,7 +11,13 @@ export type AgentEvent =
   | { type: "iteration"; iteration: number; toolCount: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
-  | { type: "done" };
+  | { type: "done" }
+  // EP-INF-009d: Async inference events
+  | { type: "async:started"; operationId: string; providerId: string; modelId: string }
+  | { type: "async:progress"; operationId: string; progressPct: number; message: string }
+  | { type: "async:complete"; operationId: string }
+  | { type: "async:failed"; operationId: string; error: string }
+  | { type: "async:expired"; operationId: string };
 
 type Handler = (event: AgentEvent) => void;
 
