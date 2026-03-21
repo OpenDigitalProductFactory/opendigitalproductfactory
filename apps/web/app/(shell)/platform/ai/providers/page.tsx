@@ -2,7 +2,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers, getProviderModelSummaries } from "@/lib/ai-provider-data";
+import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers, getProviderModelSummaries, getToolInventory } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
@@ -13,6 +13,7 @@ import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
 import { AiTabNav } from "@/components/platform/AiTabNav";
 import { McpServiceRow } from "@/components/platform/McpServiceRow";
+import { ToolInventoryPanel } from "@/components/platform/ToolInventoryPanel";
 import Link from "next/link";
 
 
@@ -43,7 +44,7 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers, modelSummaries] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers, modelSummaries, toolInventory] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
@@ -51,6 +52,7 @@ export default async function ProvidersPage() {
     detectMcpServers(),
     getActivatedMcpServers(),
     getProviderModelSummaries(),
+    getToolInventory(),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -150,6 +152,14 @@ export default async function ProvidersPage() {
           </div>
         </div>
       )}
+
+      {/* Agent Tool Inventory */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+          Tool Inventory
+        </div>
+        <ToolInventoryPanel tools={toolInventory} />
+      </div>
 
       {/* Section 2: Token Spend */}
       <div style={{ marginBottom: 32 }}>
