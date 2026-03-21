@@ -34,6 +34,8 @@ import {
   loadOverrides,
   routeEndpoint,
   persistRouteDecision,
+  inferContract,
+  routeEndpointV2,
 } from "@/lib/routing";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
@@ -472,21 +474,40 @@ export async function sendMessage(input: {
       const profiles = await loadPerformanceProfiles(classification.taskType);
       const routeCtx = resolveRouteContext(input.routeContext);
 
-      // ── EP-INF-001: Manifest-based routing (replaces legacy routeWithPerformance) ──
+      // ── EP-INF-005a: Contract-based routing (V2 primary, legacy fallback) ──
       try {
-        const [manifests, taskReq, policies, epOverrides] = await Promise.all([
+        const [manifests, policies, epOverrides] = await Promise.all([
           loadEndpointManifests(),
-          loadTaskRequirement(classification.taskType),
           loadPolicyRules(),
           loadOverrides(classification.taskType),
         ]);
-        const manifestDecision = routeEndpoint(
-          manifests,
-          taskReq,
-          routeCtx.sensitivity,
-          policies,
-          epOverrides,
-        );
+
+        // Primary: contract-based routing (EP-INF-005a)
+        let manifestDecision: import("@/lib/routing/types").RouteDecision;
+        try {
+          const contract = await inferContract(
+            classification.taskType,
+            chatHistory,
+            toolsForProvider as Array<Record<string, unknown>> | undefined,
+            undefined, // outputSchema — not available in this context yet
+            {
+              sensitivity: routeCtx.sensitivity,
+              interactionMode: "sync",
+            },
+          );
+          manifestDecision = await routeEndpointV2(manifests, contract, policies, epOverrides);
+        } catch (v2Err) {
+          // Fallback: legacy routing
+          console.warn("[routing] V2 failed, falling back to legacy:", v2Err);
+          const taskReq = await loadTaskRequirement(classification.taskType);
+          manifestDecision = routeEndpoint(
+            manifests,
+            taskReq,
+            routeCtx.sensitivity,
+            policies,
+            epOverrides,
+          );
+        }
 
         // Persist routing decision for audit trail
         await persistRouteDecision(manifestDecision, undefined, false);
