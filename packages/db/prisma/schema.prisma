@@ -45,6 +45,10 @@ model User {
   opportunityAssignments       Opportunity[]            @relation("OpportunityAssignments")
   activitiesCreated            Activity[]               @relation("ActivityCreations")
   quotesCreated                Quote[]                  @relation("QuoteCreations")
+  billsCreated                 Bill[]                   @relation("BillCreations")
+  posCreated                   PurchaseOrder[]          @relation("PurchaseOrderCreations")
+  approvalRules                ApprovalRule[]           @relation("ApprovalRuleApprover")
+  billApprovals                BillApproval[]           @relation("BillApprovalResponses")
 }
 
 model UserGroup {
@@ -3295,12 +3299,164 @@ model PaymentAllocation {
   id              String              @id @default(cuid())
   paymentId       String
   invoiceId       String?
+  billId          String?
   amount          Decimal
   createdAt       DateTime            @default(now())
 
   payment         Payment             @relation(fields: [paymentId], references: [id])
   invoice         Invoice?            @relation(fields: [invoiceId], references: [id])
+  bill            Bill?               @relation(fields: [billId], references: [id])
 
   @@index([paymentId])
   @@index([invoiceId])
+  @@index([billId])
+}
+
+// ─── Finance: Accounts Payable ─────────────────────────────────────
+
+model Supplier {
+  id              String              @id @default(cuid())
+  supplierId      String              @unique
+  name            String
+  contactName     String?
+  email           String?
+  phone           String?
+  address         Json?
+  taxId           String?
+  paymentTerms    String?             @default("Net 30")
+  defaultCurrency String              @default("GBP")
+  status          String              @default("active")
+  bankDetails     Json?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  bills           Bill[]
+  purchaseOrders  PurchaseOrder[]
+
+  @@index([status])
+}
+
+model Bill {
+  id              String              @id @default(cuid())
+  billRef         String              @unique
+  supplierId      String
+  status          String              @default("draft")
+  invoiceRef      String?
+  issueDate       DateTime
+  dueDate         DateTime
+  currency        String              @default("GBP")
+  subtotal        Decimal
+  taxAmount       Decimal             @default(0)
+  totalAmount     Decimal
+  amountPaid      Decimal             @default(0)
+  amountDue       Decimal
+  purchaseOrderId String?
+  approvalToken   String?             @unique
+  notes           String?
+  createdById     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  createdBy       User?               @relation("BillCreations", fields: [createdById], references: [id])
+  lineItems       BillLineItem[]
+  allocations     PaymentAllocation[]
+  approvals       BillApproval[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model BillLineItem {
+  id              String              @id @default(cuid())
+  billId          String
+  description     String
+  quantity        Decimal             @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal             @default(0)
+  taxAmount       Decimal             @default(0)
+  lineTotal       Decimal
+  accountCode     String?
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  bill            Bill                @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([billId])
+}
+
+model PurchaseOrder {
+  id              String              @id @default(cuid())
+  poNumber        String              @unique
+  supplierId      String
+  status          String              @default("draft")
+  currency        String              @default("GBP")
+  subtotal        Decimal
+  taxAmount       Decimal             @default(0)
+  totalAmount     Decimal
+  deliveryDate    DateTime?
+  terms           String?
+  notes           String?
+  sentAt          DateTime?
+  createdById     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  createdBy       User?               @relation("PurchaseOrderCreations", fields: [createdById], references: [id])
+  lineItems       PurchaseOrderLineItem[]
+  bills           Bill[]
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+model PurchaseOrderLineItem {
+  id              String              @id @default(cuid())
+  purchaseOrderId String
+  description     String
+  quantity        Decimal             @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal             @default(0)
+  taxAmount       Decimal             @default(0)
+  lineTotal       Decimal
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  purchaseOrder   PurchaseOrder       @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+}
+
+model ApprovalRule {
+  id              String              @id @default(cuid())
+  name            String
+  minAmount       Decimal             @default(0)
+  maxAmount       Decimal?
+  approverId      String
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  approver        User                @relation("ApprovalRuleApprover", fields: [approverId], references: [id])
+}
+
+model BillApproval {
+  id              String              @id @default(cuid())
+  billId          String
+  approverId      String
+  status          String              @default("pending")
+  token           String              @unique
+  respondedAt     DateTime?
+  comments        String?
+  createdAt       DateTime            @default(now())
+
+  bill            Bill                @relation(fields: [billId], references: [id])
+  approver        User                @relation("BillApprovalResponses", fields: [approverId], references: [id])
+
+  @@index([billId])
+  @@index([token])
 }
