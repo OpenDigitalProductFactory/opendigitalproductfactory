@@ -517,7 +517,7 @@ export default async function FinancePage() {
             <Link href="/finance/expense-claims" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Expense Claims →
             </Link>
-            <Link href="/portal/expenses" className="text-xs text-[var(--dpf-accent)] hover:underline">
+            <Link href="/finance/my-expenses" className="text-xs text-[var(--dpf-accent)] hover:underline">
               My Expenses →
             </Link>
           </div>

@@ -24,6 +24,7 @@ export function CreatePolicyForm() {
       title: form.get("title") as string,
       category: form.get("category") as string,
       description: (form.get("description") as string) || null,
+      body: (form.get("body") as string) || null,
       notes: (form.get("notes") as string) || null,
     });
     setLoading(false);
@@ -57,11 +58,15 @@ export function CreatePolicyForm() {
           </div>
           <div>
             <label className={labelClasses}>Description</label>
-            <textarea name="description" rows={2} className={inputClasses} />
+            <textarea name="description" rows={2} className={inputClasses} placeholder="Brief summary of the policy's purpose" />
+          </div>
+          <div>
+            <label className={labelClasses}>Policy Document</label>
+            <textarea name="body" rows={8} className={inputClasses} placeholder="Enter the full policy text here..." />
           </div>
           <div>
             <label className={labelClasses}>Notes</label>
-            <textarea name="notes" rows={2} className={inputClasses} />
+            <textarea name="notes" rows={2} className={inputClasses} placeholder="Internal notes (not shown in published policy)" />
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">

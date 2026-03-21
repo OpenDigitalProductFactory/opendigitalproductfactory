@@ -9,6 +9,7 @@
 
 import type { ModelCardCapabilities } from "./model-card-types";
 import { isAnthropic, isOpenAI } from "./provider-utils";
+import { buildProviderTools } from "./provider-tools";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ const OPENAI_CHAT_TEMPERATURE: Record<string, number> = {
 export function buildSeedRecipe(
   providerId: string,
   _modelId: string,
-  _contractFamily: string,
+  contractFamily: string,
   modelCard: {
     capabilities: ModelCardCapabilities;
     maxOutputTokens: number | null;
@@ -75,6 +76,11 @@ export function buildSeedRecipe(
     strictSchema: contract.requiresStrictSchema,
     stream: contract.requiresStreaming,
   };
+
+  const providerTools = buildProviderTools(providerId, modelCard.capabilities, contractFamily);
+  if (providerTools.length > 0) {
+    providerSettings.providerTools = providerTools;
+  }
 
   return { providerSettings, toolPolicy, responsePolicy };
 }
