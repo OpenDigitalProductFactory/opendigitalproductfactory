@@ -3,8 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SetupProgressBar } from "@/components/setup/SetupProgressBar";
-import { type SetupStep, type StepStatus } from "@/lib/actions/setup-progress";
+import { type SetupStep, type StepStatus } from "@/lib/actions/setup-constants";
 import { advanceStep, skipStep, pauseSetup } from "@/lib/actions/setup-progress";
+import { BusinessIdentityStep } from "./steps/business-identity";
+import { OwnerAccountStep } from "./steps/owner-account";
 
 type Props = {
   progress: {
@@ -63,7 +65,52 @@ export function SetupOrchestrator({ progress: initialProgress }: Props) {
     setProgress((prev) => ({ ...prev, currentStep: step }));
   };
 
-  // Render a placeholder for now — step components will be wired in Task 8
+  function renderStep() {
+    switch (progress.currentStep) {
+      case "business-identity":
+        return (
+          <BusinessIdentityStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+          />
+        );
+      case "owner-account":
+        return (
+          <OwnerAccountStep
+            onContinue={handleContinue}
+            onSkip={handleSkip}
+            onPause={handlePause}
+          />
+        );
+      default:
+        return (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <p className="text-lg">Step: {progress.currentStep}</p>
+              <p className="text-sm mt-2">(Coming soon)</p>
+              <div className="mt-4 flex gap-3 justify-center">
+                <button
+                  onClick={handleSkip}
+                  disabled={isPending}
+                  className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => handleContinue()}
+                  disabled={isPending}
+                  className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <SetupProgressBar
@@ -71,16 +118,7 @@ export function SetupOrchestrator({ progress: initialProgress }: Props) {
         steps={progress.steps}
         onStepClick={handleStepClick}
       />
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        <div className="text-center">
-          <p className="text-lg">Step: {progress.currentStep}</p>
-          <p className="text-sm mt-2">(Step components will be added next)</p>
-          <div className="mt-4 flex gap-3 justify-center">
-            <button onClick={handleSkip} disabled={isPending} className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50">Skip</button>
-            <button onClick={() => handleContinue()} disabled={isPending} className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700">Continue</button>
-          </div>
-        </div>
-      </div>
+      {renderStep()}
     </div>
   );
 }
