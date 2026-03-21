@@ -31,6 +31,8 @@ function maskCredential(cred: {
   tokenEndpoint: string | null;
   scope: string | null;
   status: string;
+  tokenExpiresAt?: Date | null;
+  refreshToken?: string | null;
 }): CredentialRow {
   return {
     providerId:       cred.providerId,
@@ -40,6 +42,8 @@ function maskCredential(cred: {
     tokenEndpoint:    cred.tokenEndpoint,
     scope:            cred.scope,
     status:           cred.status,
+    tokenExpiresAt:   cred.tokenExpiresAt?.toISOString() ?? null,
+    hasRefreshToken:  cred.refreshToken != null && cred.refreshToken !== "",
   };
 }
 
@@ -73,6 +77,9 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
         structuredOutput:     p.structuredOutput,
         conversational:       p.conversational,
         contextRetention:     p.contextRetention,
+        authorizeUrl:         p.authorizeUrl,
+        tokenUrl:             p.tokenUrl,
+        oauthClientId:        p.oauthClientId,
       } satisfies ProviderRow,
       credential: raw ? maskCredential(raw) : null,
     };
@@ -105,6 +112,9 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       structuredOutput:     provider.structuredOutput,
       conversational:       provider.conversational,
       contextRetention:     provider.contextRetention,
+      authorizeUrl:         provider.authorizeUrl,
+      tokenUrl:             provider.tokenUrl,
+      oauthClientId:        provider.oauthClientId,
     } satisfies ProviderRow,
     credential: credential ? maskCredential(credential) : null,
   };

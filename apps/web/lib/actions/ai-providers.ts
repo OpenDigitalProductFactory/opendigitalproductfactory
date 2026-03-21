@@ -97,6 +97,9 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
           ...(entry.endpointType !== undefined      && { endpointType:      entry.endpointType }),
           ...(entry.catalogEntry !== undefined      && { catalogEntry:      entry.catalogEntry ?? undefined }),
+          ...(entry.authorizeUrl !== undefined      && { authorizeUrl:      entry.authorizeUrl ?? null }),
+          ...(entry.tokenUrl !== undefined          && { tokenUrl:          entry.tokenUrl ?? null }),
+          ...(entry.oauthClientId !== undefined     && { oauthClientId:     entry.oauthClientId ?? null }),
         },
       });
       updated++;
@@ -126,6 +129,9 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           catalogVisibility:    entry.catalogVisibility ?? "visible",
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType }),
           ...(entry.catalogEntry !== undefined && entry.catalogEntry !== null && { catalogEntry: entry.catalogEntry }),
+          authorizeUrl:         entry.authorizeUrl ?? null,
+          tokenUrl:             entry.tokenUrl ?? null,
+          oauthClientId:        entry.oauthClientId ?? null,
         },
       });
       added++;
@@ -172,9 +178,31 @@ export async function configureProvider(input: {
   await requireManageProviders();
 
   // Validate OAuth fields: if any OAuth field is provided, require the essential ones
-  const hasOAuthField = input.clientId !== undefined || input.clientSecret !== undefined || input.tokenEndpoint !== undefined;
-  if (hasOAuthField && (!input.clientId || !input.clientSecret || !input.tokenEndpoint)) {
-    return { error: "OAuth requires Client ID, Client Secret, and Token Endpoint" };
+  // (skip for oauth2_authorization_code — those fields are stored on the provider row, not credentials)
+  if (input.authMethod !== "oauth2_authorization_code") {
+    const hasOAuthField = input.clientId !== undefined || input.clientSecret !== undefined || input.tokenEndpoint !== undefined;
+    if (hasOAuthField && (!input.clientId || !input.clientSecret || !input.tokenEndpoint)) {
+      return { error: "OAuth requires Client ID, Client Secret, and Token Endpoint" };
+    }
+  }
+
+  // Clear credential fields from previous auth method when switching
+  if (input.authMethod) {
+    const clearFields: Record<string, null> = {};
+    if (input.authMethod === "api_key") {
+      Object.assign(clearFields, { cachedToken: null, refreshToken: null, tokenExpiresAt: null, clientId: null, clientSecret: null, tokenEndpoint: null });
+    } else if (input.authMethod === "oauth2_authorization_code") {
+      Object.assign(clearFields, { secretRef: null, clientId: null, clientSecret: null, tokenEndpoint: null });
+    } else if (input.authMethod === "oauth2_client_credentials") {
+      Object.assign(clearFields, { secretRef: null, cachedToken: null, refreshToken: null, tokenExpiresAt: null });
+    }
+    if (Object.keys(clearFields).length > 0) {
+      await prisma.credentialEntry.upsert({
+        where: { providerId: input.providerId },
+        create: { providerId: input.providerId, ...clearFields },
+        update: clearFields,
+      });
+    }
   }
 
   // Upsert credential with whatever fields are provided

@@ -244,7 +244,7 @@
     "category": "agent",
     "baseUrl": "https://api.openai.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": ["api_key", "oauth2_authorization_code"],
     "authHeader": "Authorization",
     "costModel": "token",
     "families": ["codex-mini"],
@@ -254,7 +254,10 @@
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": "Pay-per-use (API key) or Subscription (ChatGPT plan)",
     "costPerformanceNotes": "Agentic coding specialist. ~3x cheaper than GPT-4o for code tasks. Runs in sandboxed environment with tool use and persistent threads.",
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "authorizeUrl": "https://auth.openai.com/oauth/authorize",
+    "tokenUrl": "https://auth.openai.com/oauth/token",
+    "oauthClientId": "app_EMoaXYZ"
   },
   {
     "providerId": "openrouter",
