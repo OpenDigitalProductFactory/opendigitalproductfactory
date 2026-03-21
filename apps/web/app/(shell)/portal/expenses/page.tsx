@@ -2,6 +2,8 @@
 // Employee portal: list of the current user's own expense claims
 
 import { listExpenseClaims } from "@/lib/actions/expenses";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -13,7 +15,11 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default async function MyExpensesPage() {
-  const claims = await listExpenseClaims({ employeeOnly: true });
+  const [claims, orgSettings] = await Promise.all([
+    listExpenseClaims({ employeeOnly: true }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -107,7 +113,7 @@ export default async function MyExpensesPage() {
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(claim.totalAmount)}
+                      {sym}{formatMoney(claim.totalAmount)}
                     </td>
                   </tr>
                 );

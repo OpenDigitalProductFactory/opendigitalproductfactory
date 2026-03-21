@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/bills/page.tsx
 import { listBills } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -18,10 +20,14 @@ type Props = { searchParams: Promise<{ status?: string; supplierId?: string }> }
 export default async function BillsPage({ searchParams }: Props) {
   const { status, supplierId } = await searchParams;
 
-  const bills = await listBills({
-    status: status ?? undefined,
-    supplierId: supplierId ?? undefined,
-  });
+  const [bills, orgSettings] = await Promise.all([
+    listBills({
+      status: status ?? undefined,
+      supplierId: supplierId ?? undefined,
+    }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -142,7 +148,7 @@ export default async function BillsPage({ searchParams }: Props) {
                       {new Date(bill.dueDate).toLocaleDateString("en-GB")}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(bill.totalAmount)}
+                      {sym}{formatMoney(bill.totalAmount)}
                     </td>
                   </tr>
                 );

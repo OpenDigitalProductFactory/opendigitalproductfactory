@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/payments/page.tsx
 import { prisma } from "@dpf/db";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 type Props = { searchParams: Promise<{ direction?: string }> };
@@ -7,21 +9,25 @@ type Props = { searchParams: Promise<{ direction?: string }> };
 export default async function PaymentsPage({ searchParams }: Props) {
   const { direction } = await searchParams;
 
-  const payments = await prisma.payment.findMany({
-    where: direction
-      ? { direction: direction.toLowerCase() }
-      : undefined,
-    orderBy: { createdAt: "desc" },
-    include: {
-      allocations: {
-        include: {
-          invoice: {
-            select: { id: true, invoiceRef: true },
+  const [payments, orgSettings] = await Promise.all([
+    prisma.payment.findMany({
+      where: direction
+        ? { direction: direction.toLowerCase() }
+        : undefined,
+      orderBy: { createdAt: "desc" },
+      include: {
+        allocations: {
+          include: {
+            invoice: {
+              select: { id: true, invoiceRef: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -165,7 +171,7 @@ export default async function PaymentsPage({ searchParams }: Props) {
                         : new Date(pmt.createdAt).toLocaleDateString("en-GB")}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(Number(pmt.amount))}
+                      {sym}{formatMoney(Number(pmt.amount))}
                     </td>
                   </tr>
                 );

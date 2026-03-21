@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/suppliers/[id]/page.tsx
 import { getSupplier } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -26,6 +28,9 @@ export default async function SupplierDetailPage({ params }: Props) {
   const { id } = await params;
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -148,7 +153,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                           : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        £{formatMoney(bill.totalAmount)}
+                        {sym}{formatMoney(bill.totalAmount)}
                       </td>
                     </tr>
                   );
@@ -210,7 +215,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        £{formatMoney(po.totalAmount)}
+                        {sym}{formatMoney(po.totalAmount)}
                       </td>
                     </tr>
                   );

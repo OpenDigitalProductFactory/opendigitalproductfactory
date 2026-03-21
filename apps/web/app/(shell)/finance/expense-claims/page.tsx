@@ -2,6 +2,8 @@
 // Manager view: all expense claims with status filter and pending count
 
 import { listExpenseClaims } from "@/lib/actions/expenses";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -19,7 +21,11 @@ type Props = { searchParams: Promise<{ status?: string }> };
 export default async function ExpenseClaimsPage({ searchParams }: Props) {
   const { status } = await searchParams;
 
-  const claims = await listExpenseClaims({ status: status ?? undefined });
+  const [claims, orgSettings] = await Promise.all([
+    listExpenseClaims({ status: status ?? undefined }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const pendingCount = status
     ? 0
@@ -176,7 +182,7 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(claim.totalAmount)}
+                      {sym}{formatMoney(claim.totalAmount)}
                     </td>
                   </tr>
                 );

@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/purchase-orders/[id]/page.tsx
 import { getPurchaseOrder } from "@/lib/actions/ap";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { POActionButtons } from "@/components/finance/POActionButtons";
@@ -27,6 +29,9 @@ export default async function PODetailPage({ params }: Props) {
   const { id } = await params;
   const po = await getPurchaseOrder(id);
   if (!po) notFound();
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const statusColour = STATUS_COLOURS[po.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
@@ -126,13 +131,13 @@ export default async function PODetailPage({ params }: Props) {
                     {Number(li.quantity)}
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                    £{formatMoney(li.unitPrice)}
+                    {sym}{formatMoney(li.unitPrice)}
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(li.taxRate)}%
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(li.lineTotal)}
+                    {sym}{formatMoney(li.lineTotal)}
                   </td>
                 </tr>
               ))}
@@ -146,7 +151,7 @@ export default async function PODetailPage({ params }: Props) {
                   Subtotal
                 </td>
                 <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                  £{formatMoney(po.subtotal)}
+                  {sym}{formatMoney(po.subtotal)}
                 </td>
               </tr>
               {Number(po.taxAmount) > 0 && (
@@ -158,7 +163,7 @@ export default async function PODetailPage({ params }: Props) {
                     Tax
                   </td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                    £{formatMoney(po.taxAmount)}
+                    {sym}{formatMoney(po.taxAmount)}
                   </td>
                 </tr>
               )}
@@ -170,7 +175,7 @@ export default async function PODetailPage({ params }: Props) {
                   Total
                 </td>
                 <td className="px-4 py-2.5 text-right text-[var(--dpf-text)] font-bold">
-                  £{formatMoney(po.totalAmount)}
+                  {sym}{formatMoney(po.totalAmount)}
                 </td>
               </tr>
             </tfoot>
@@ -224,7 +229,7 @@ export default async function PODetailPage({ params }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        £{formatMoney(bill.totalAmount)}
+                        {sym}{formatMoney(bill.totalAmount)}
                       </td>
                     </tr>
                   );

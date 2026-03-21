@@ -2,6 +2,8 @@
 // Manager detail view for a single expense claim
 
 import { getExpenseClaim } from "@/lib/actions/expenses";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ExpenseClaimActions } from "@/components/finance/ExpenseClaimActions";
@@ -29,6 +31,9 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
   const { id } = await params;
   const claim = await getExpenseClaim(id);
   if (!claim) notFound();
+
+  const orgSettings = await getOrgSettings();
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const statusColour = STATUS_COLOURS[claim.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
@@ -97,7 +102,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
           },
           {
             label: "Total Amount",
-            value: `£${formatMoney(totalAmount)}`,
+            value: `${sym}${formatMoney(totalAmount)}`,
           },
         ].map(({ label, value }) => (
           <div
@@ -161,7 +166,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
                       {item.description}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(item.amount)}
+                      {sym}{formatMoney(item.amount)}
                     </td>
                     <td className="px-4 py-2.5">
                       {item.receiptUrl ? (
@@ -190,7 +195,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
                   Total
                 </td>
                 <td className="px-4 py-2.5 text-right text-[var(--dpf-text)] font-bold">
-                  £{formatMoney(totalAmount)}
+                  {sym}{formatMoney(totalAmount)}
                 </td>
                 <td />
               </tr>

@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/finance/assets/page.tsx
 import { listAssets } from "@/lib/actions/assets";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -42,10 +44,14 @@ function DepreciationBar({ pct }: { pct: number }) {
 export default async function AssetsPage({ searchParams }: Props) {
   const { status, category } = await searchParams;
 
-  const assets = await listAssets({
-    status: status ?? undefined,
-    category: category ?? undefined,
-  });
+  const [assets, orgSettings] = await Promise.all([
+    listAssets({
+      status: status ?? undefined,
+      category: category ?? undefined,
+    }),
+    getOrgSettings(),
+  ]);
+  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -223,10 +229,10 @@ export default async function AssetsPage({ searchParams }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(purchaseCost)}
+                      {sym}{formatMoney(purchaseCost)}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      £{formatMoney(currentBookValue)}
+                      {sym}{formatMoney(currentBookValue)}
                     </td>
                     <td className="px-4 py-2.5">
                       <DepreciationBar pct={pctDepreciated} />
