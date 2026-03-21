@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
-import type { CreateSupplierInput, CreateBillInput } from "@/lib/ap-validation";
+import type { CreateSupplierInput, CreateBillInput, CreatePOInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -338,4 +338,176 @@ export async function getBillByApprovalToken(token: string) {
     },
   });
   return approval;
+}
+
+// ─── PO ref generator ─────────────────────────────────────────────────────────
+
+async function generatePORef(): Promise<string> {
+  const year = new Date().getFullYear();
+  const count = await prisma.purchaseOrder.count();
+  const seq = String(count + 1).padStart(4, "0");
+  return `PO-${year}-${seq}`;
+}
+
+// ─── createPurchaseOrder ──────────────────────────────────────────────────────
+
+export async function createPurchaseOrder(input: CreatePOInput) {
+  const userId = await requireManageFinance();
+
+  const poNumber = await generatePORef();
+
+  let subtotal = 0;
+  let taxAmount = 0;
+  let totalAmount = 0;
+
+  const lineItemsData = input.lineItems.map((item, idx) => {
+    const calc = calcLineItem(item.quantity, item.unitPrice, item.taxRate ?? 0);
+    subtotal = round2(subtotal + calc.subtotal);
+    taxAmount = round2(taxAmount + calc.taxAmount);
+    totalAmount = round2(totalAmount + calc.lineTotal);
+
+    return {
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate ?? 0,
+      taxAmount: calc.taxAmount,
+      lineTotal: calc.lineTotal,
+      sortOrder: idx,
+    };
+  });
+
+  const po = await prisma.purchaseOrder.create({
+    data: {
+      poNumber,
+      supplierId: input.supplierId,
+      currency: input.currency ?? "GBP",
+      deliveryDate: input.deliveryDate ? new Date(input.deliveryDate) : null,
+      terms: input.terms ?? null,
+      notes: input.notes ?? null,
+      status: "draft",
+      subtotal,
+      taxAmount,
+      totalAmount,
+      createdById: userId,
+      lineItems: {
+        create: lineItemsData,
+      },
+    },
+    select: { id: true, poNumber: true, totalAmount: true },
+  });
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/purchase-orders");
+
+  return po;
+}
+
+// ─── getPurchaseOrder ─────────────────────────────────────────────────────────
+
+export async function getPurchaseOrder(id: string) {
+  await requireManageFinance();
+
+  return prisma.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      lineItems: { orderBy: { sortOrder: "asc" } },
+      supplier: { select: { id: true, supplierId: true, name: true } },
+      bills: { select: { id: true, billRef: true, status: true, totalAmount: true } },
+    },
+  });
+}
+
+// ─── listPurchaseOrders ───────────────────────────────────────────────────────
+
+interface ListPOFilters {
+  status?: string;
+  supplierId?: string;
+}
+
+export async function listPurchaseOrders(filters?: ListPOFilters) {
+  await requireManageFinance();
+
+  const where: Record<string, unknown> = {};
+  if (filters?.status) where.status = filters.status;
+  if (filters?.supplierId) where.supplierId = filters.supplierId;
+
+  return prisma.purchaseOrder.findMany({
+    where,
+    include: {
+      supplier: { select: { id: true, supplierId: true, name: true } },
+      lineItems: { orderBy: { sortOrder: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+// ─── sendPurchaseOrder ────────────────────────────────────────────────────────
+
+export async function sendPurchaseOrder(poId: string): Promise<void> {
+  await requireManageFinance();
+
+  await prisma.purchaseOrder.update({
+    where: { id: poId },
+    data: { status: "sent", sentAt: new Date() },
+  });
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/purchase-orders");
+}
+
+// ─── convertPOToBill ──────────────────────────────────────────────────────────
+
+export async function convertPOToBill(poId: string) {
+  await requireManageFinance();
+
+  // Idempotency: check if a bill already exists for this PO
+  const existing = await prisma.bill.findFirst({
+    where: { purchaseOrderId: poId },
+  });
+  if (existing) return existing;
+
+  const po = await prisma.purchaseOrder.findUnique({
+    where: { id: poId },
+    include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!po) throw new Error("Purchase order not found");
+
+  const billRef = await generateBillRef();
+
+  const today = new Date();
+  const dueDate = new Date(today.getTime() + 30 * 86400000); // Net 30 default
+
+  const bill = await prisma.bill.create({
+    data: {
+      billRef,
+      supplierId: po.supplierId,
+      purchaseOrderId: po.id,
+      issueDate: today,
+      dueDate,
+      currency: po.currency,
+      status: "draft",
+      subtotal: po.subtotal,
+      taxAmount: po.taxAmount,
+      totalAmount: po.totalAmount,
+      amountPaid: 0,
+      amountDue: po.totalAmount,
+      lineItems: {
+        create: po.lineItems.map((li, idx) => ({
+          description: li.description,
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          taxRate: li.taxRate,
+          taxAmount: li.taxAmount,
+          lineTotal: li.lineTotal,
+          sortOrder: idx,
+        })),
+      },
+    },
+  });
+
+  revalidatePath("/finance/ap");
+  revalidatePath("/finance/ap/bills");
+
+  return bill;
 }

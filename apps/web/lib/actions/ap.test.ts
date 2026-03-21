@@ -62,6 +62,8 @@ import {
   createBill,
   submitBillForApproval,
   respondToBillApproval,
+  createPurchaseOrder,
+  convertPOToBill,
 } from "./ap";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -291,5 +293,89 @@ describe("respondToBillApproval", () => {
         data: expect.objectContaining({ status: "draft" }),
       }),
     );
+  });
+});
+
+// ─── Purchase Order ────────────────────────────────────────────────────────────
+
+describe("createPurchaseOrder", () => {
+  const validInput = {
+    supplierId: "sup-001",
+    currency: "GBP",
+    lineItems: [
+      { description: "Office Supplies", quantity: 10, unitPrice: 25, taxRate: 20 },
+    ],
+  };
+
+  it("throws Unauthorized when no session", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockCan.mockReturnValue(false);
+    await expect(createPurchaseOrder(validInput)).rejects.toThrow("Unauthorized");
+  });
+
+  it("creates PO with PO- ref and correct totals", async () => {
+    authorizedUser();
+    mockPrisma.purchaseOrder.count.mockResolvedValue(3);
+    mockPrisma.purchaseOrder.create.mockResolvedValue({
+      id: "po-001",
+      poNumber: "PO-2026-0004",
+      totalAmount: 300,
+    });
+
+    const result = await createPurchaseOrder(validInput);
+
+    expect(mockPrisma.purchaseOrder.create).toHaveBeenCalledOnce();
+    const callArgs = mockPrisma.purchaseOrder.create.mock.calls[0][0];
+    // quantity=10, unitPrice=25 => subtotal=250, tax=20% of 250=50, total=300
+    expect(callArgs.data.subtotal).toBe(250);
+    expect(callArgs.data.taxAmount).toBe(50);
+    expect(callArgs.data.totalAmount).toBe(300);
+    expect(callArgs.data.poNumber).toMatch(/^PO-\d{4}-\d{4}$/);
+    expect(result).toMatchObject({ id: "po-001", poNumber: "PO-2026-0004" });
+  });
+});
+
+describe("convertPOToBill", () => {
+  it("is idempotent: returns existing bill if already linked", async () => {
+    authorizedUser();
+    const existingBill = { id: "bill-existing", billRef: "BILL-2026-0001", purchaseOrderId: "po-001" };
+    mockPrisma.bill.findFirst.mockResolvedValue(existingBill);
+
+    const result = await convertPOToBill("po-001");
+
+    expect(result).toEqual(existingBill);
+    expect(mockPrisma.bill.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a bill from PO line items when no existing bill", async () => {
+    authorizedUser();
+    mockPrisma.bill.findFirst.mockResolvedValue(null);
+
+    const fakePO = {
+      id: "po-001",
+      supplierId: "sup-001",
+      currency: "GBP",
+      totalAmount: 300,
+      subtotal: 250,
+      taxAmount: 50,
+      lineItems: [
+        { description: "Office Supplies", quantity: 10, unitPrice: 25, taxRate: 20, taxAmount: 50, lineTotal: 300, sortOrder: 0 },
+      ],
+    };
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValue(fakePO);
+    mockPrisma.bill.count.mockResolvedValue(0);
+    mockPrisma.bill.create.mockResolvedValue({
+      id: "bill-new",
+      billRef: "BILL-2026-0001",
+      purchaseOrderId: "po-001",
+    });
+
+    const result = await convertPOToBill("po-001");
+
+    expect(mockPrisma.bill.create).toHaveBeenCalledOnce();
+    const callArgs = mockPrisma.bill.create.mock.calls[0][0];
+    expect(callArgs.data.purchaseOrderId).toBe("po-001");
+    expect(callArgs.data.supplierId).toBe("sup-001");
+    expect(result).toMatchObject({ id: "bill-new", purchaseOrderId: "po-001" });
   });
 });
