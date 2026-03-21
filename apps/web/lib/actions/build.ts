@@ -382,18 +382,17 @@ export async function shipBuild(input: {
     console.warn("[shipBuild] git tag error:", err);
   }
 
-  // Create ProductVersion + ChangePromotion records (best-effort)
+  // Create ProductVersion + ChangePromotion + RFC records (best-effort)
   try {
-    const { createProductVersion } = await import("@/lib/version-tracking");
+    const { createProductVersionWithRFC } = await import("@/lib/version-tracking");
 
-    await createProductVersion({
+    await createProductVersionWithRFC({
       digitalProductId: result.id,
       version: result.version,
       gitTag: `v${result.version}`,
       gitCommitHash: gitCommitHash ?? "unknown",
       featureBuildId: build.id,
       shippedBy: userId,
-      changeCount,
       ...(build.diffSummary ? { changeSummary: build.diffSummary } : {}),
     });
   } catch (err) {
