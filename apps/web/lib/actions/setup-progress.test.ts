@@ -61,7 +61,7 @@ describe("setup-progress", () => {
       const result = await createSetupProgress();
       expect(prisma.platformSetupProgress.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          currentStep: "business-identity",
+          currentStep: "account-bootstrap",
           steps: expect.any(Object),
           context: {},
         }),
@@ -74,14 +74,14 @@ describe("setup-progress", () => {
     it("marks current step completed and moves to next", async () => {
       const mockProgress = {
         id: "test-id",
-        currentStep: "business-identity",
+        currentStep: "account-bootstrap",
         steps: Object.fromEntries(SETUP_STEPS.map((s) => [s, "pending"])),
         context: {},
       };
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "owner-account",
+        currentStep: "ai-providers",
       });
 
       await advanceStep("test-id", { orgName: "Test Co" });
@@ -89,7 +89,7 @@ describe("setup-progress", () => {
       expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
         where: { id: "test-id" },
         data: expect.objectContaining({
-          currentStep: "owner-account",
+          currentStep: "ai-providers",
         }),
       });
     });
@@ -106,7 +106,7 @@ describe("setup-progress", () => {
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "financial-basics",
+        currentStep: "org-settings",
       });
 
       await skipStep("test-id");

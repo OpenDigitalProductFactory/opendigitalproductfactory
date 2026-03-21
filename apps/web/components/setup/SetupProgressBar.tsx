@@ -1,17 +1,6 @@
 "use client";
 
-import { SETUP_STEPS, type SetupStep, type StepStatus } from "@/lib/actions/setup-constants";
-
-const STEP_LABELS: Record<SetupStep, string> = {
-  "business-identity": "Business",
-  "owner-account": "Account",
-  "ai-capabilities": "AI Setup",
-  "branding": "Branding",
-  "financial-basics": "Financials",
-  "first-workspace": "Workspace",
-  "extensibility-preview": "Extend",
-  "whats-next": "Summary",
-};
+import { SETUP_STEPS, STEP_LABELS, type SetupStep, type StepStatus } from "@/lib/actions/setup-constants";
 
 type Props = {
   currentStep: string;

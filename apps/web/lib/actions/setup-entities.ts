@@ -37,10 +37,9 @@ export async function createOrganization(
       name: data.orgName,
       slug,
       industry: data.industry ?? null,
-      address:
-        data.location || data.timezone
-          ? { location: data.location ?? null, timezone: data.timezone ?? null }
-          : null,
+      address: data.location
+        ? ({ location: data.location, timezone: data.timezone } as Record<string, string>)
+        : undefined,
     },
   });
 
