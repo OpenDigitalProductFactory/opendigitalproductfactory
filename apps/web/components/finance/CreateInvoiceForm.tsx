@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createInvoice } from "@/lib/actions/finance";
 
 const inputClasses =
-  "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-white rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
+  "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 
 interface LineItem {
@@ -221,7 +221,7 @@ export function CreateInvoiceForm({ customers }: Props) {
           <button
             type="button"
             onClick={addLineItem}
-            className="text-[10px] px-2 py-1 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white hover:border-[var(--dpf-accent)] transition-colors"
+            className="text-[10px] px-2 py-1 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] transition-colors"
           >
             + Add Row
           </button>
@@ -298,7 +298,7 @@ export function CreateInvoiceForm({ customers }: Props) {
                 }
                 className={`${inputClasses} w-full text-right`}
               />
-              <span className="text-sm text-white text-right pr-1">
+              <span className="text-sm text-[var(--dpf-text)] text-right pr-1">
                 {currency} {formatMoney(lineTotals[idx] ?? 0)}
               </span>
               <button
@@ -318,7 +318,7 @@ export function CreateInvoiceForm({ customers }: Props) {
         <div className="mt-4 pt-4 border-t border-[var(--dpf-border)] flex flex-col items-end gap-1">
           <div className="flex gap-8 text-xs">
             <span className="text-[var(--dpf-muted)]">Subtotal</span>
-            <span className="text-white w-28 text-right">
+            <span className="text-[var(--dpf-text)] w-28 text-right">
               {currency} {formatMoney(subtotal)}
             </span>
           </div>
@@ -332,7 +332,7 @@ export function CreateInvoiceForm({ customers }: Props) {
           )}
           <div className="flex gap-8 text-sm font-bold mt-1">
             <span className="text-[var(--dpf-muted)]">Total</span>
-            <span className="text-white w-28 text-right">
+            <span className="text-[var(--dpf-text)] w-28 text-right">
               {currency} {formatMoney(total)}
             </span>
           </div>
@@ -343,7 +343,7 @@ export function CreateInvoiceForm({ customers }: Props) {
       <div className="flex justify-end gap-3">
         <a
           href="/finance/invoices"
-          className="px-4 py-2 text-sm text-[var(--dpf-muted)] hover:text-white transition-colors"
+          className="px-4 py-2 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
         >
           Cancel
         </a>

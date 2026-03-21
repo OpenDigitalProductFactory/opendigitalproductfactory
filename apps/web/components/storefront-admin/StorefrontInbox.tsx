@@ -48,7 +48,7 @@ export function StorefrontInbox({ entries }: { entries: Entry[] }) {
         {filtered.map((e) => (
           <div key={e.id} style={{ padding: "12px 16px", border: "1px solid var(--dpf-border)", borderRadius: 8 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "#f3f4f6" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "var(--dpf-surface-2)" }}>
                 {TYPE_LABELS[e.type] ?? e.type}
               </span>
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>

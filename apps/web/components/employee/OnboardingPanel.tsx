@@ -103,7 +103,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs ${task.status === "completed" ? "line-through text-[var(--dpf-muted)]" : "text-white"}`}>
+                  <span className={`text-xs ${task.status === "completed" ? "line-through text-[var(--dpf-muted)]" : "text-[var(--dpf-text)]"}`}>
                     {task.title}
                   </span>
                   {task.required && task.status === "pending" && (
@@ -141,7 +141,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
                       type="button"
                       disabled={isPending}
                       onClick={() => handleSkip(task.taskId)}
-                      className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white disabled:opacity-50"
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-50"
                     >
                       Skip
                     </button>

@@ -41,12 +41,12 @@ export default async function ApproveBillPage({ params }: Props) {
               margin: "0 0 4px",
               fontSize: 28,
               fontWeight: 700,
-              color: "#111",
+              color: "var(--dpf-text)",
             }}
           >
             Bill Approval
           </h1>
-          <p style={{ margin: "0 0 32px", color: "#6b7280", fontSize: 14 }}>
+          <p style={{ margin: "0 0 32px", color: "var(--dpf-muted)", fontSize: 14 }}>
             {bill.billRef} · {bill.supplier.name}
           </p>
 
@@ -85,8 +85,8 @@ export default async function ApproveBillPage({ params }: Props) {
                 marginBottom: 8,
               }}
             >
-              <span style={{ fontSize: 14, color: "#6b7280" }}>Supplier</span>
-              <span style={{ fontSize: 14, color: "#111", fontWeight: 600 }}>
+              <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Supplier</span>
+              <span style={{ fontSize: 14, color: "var(--dpf-text)", fontWeight: 600 }}>
                 {bill.supplier.name}
               </span>
             </div>
@@ -97,8 +97,8 @@ export default async function ApproveBillPage({ params }: Props) {
                 marginBottom: 8,
               }}
             >
-              <span style={{ fontSize: 14, color: "#6b7280" }}>Bill Ref</span>
-              <span style={{ fontSize: 14, color: "#111", fontFamily: "monospace" }}>
+              <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Bill Ref</span>
+              <span style={{ fontSize: 14, color: "var(--dpf-text)", fontFamily: "monospace" }}>
                 {bill.billRef}
               </span>
             </div>
@@ -109,8 +109,8 @@ export default async function ApproveBillPage({ params }: Props) {
                 marginBottom: 8,
               }}
             >
-              <span style={{ fontSize: 14, color: "#6b7280" }}>Due Date</span>
-              <span style={{ fontSize: 14, color: "#111" }}>
+              <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Due Date</span>
+              <span style={{ fontSize: 14, color: "var(--dpf-text)" }}>
                 {new Date(bill.dueDate).toLocaleDateString("en-GB", {
                   day: "numeric",
                   month: "long",
@@ -126,10 +126,10 @@ export default async function ApproveBillPage({ params }: Props) {
                 borderTop: "1px solid #e5e7eb",
               }}
             >
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--dpf-text)" }}>
                 Total
               </span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--dpf-text)" }}>
                 {bill.currency}{" "}
                 {total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
               </span>
@@ -147,7 +147,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     textAlign: "left",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -158,7 +158,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -169,7 +169,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -180,7 +180,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     textAlign: "right",
                     padding: "8px 0",
                     fontSize: 12,
-                    color: "#6b7280",
+                    color: "var(--dpf-muted)",
                     fontWeight: 500,
                   }}
                 >
@@ -191,14 +191,14 @@ export default async function ApproveBillPage({ params }: Props) {
             <tbody>
               {bill.lineItems.map((li, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "10px 0", fontSize: 14, color: "#111" }}>
+                  <td style={{ padding: "10px 0", fontSize: 14, color: "var(--dpf-text)" }}>
                     {li.description}
                   </td>
                   <td
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#6b7280",
+                      color: "var(--dpf-muted)",
                       textAlign: "right",
                     }}
                   >
@@ -208,7 +208,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#6b7280",
+                      color: "var(--dpf-muted)",
                       textAlign: "right",
                     }}
                   >
@@ -221,7 +221,7 @@ export default async function ApproveBillPage({ params }: Props) {
                     style={{
                       padding: "10px 0",
                       fontSize: 14,
-                      color: "#111",
+                      color: "var(--dpf-text)",
                       textAlign: "right",
                       fontWeight: 500,
                     }}

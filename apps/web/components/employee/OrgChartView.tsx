@@ -120,7 +120,7 @@ function OrgNodeRow({
         <button
           className={[
             "flex items-center justify-center w-4 h-4 text-[10px] text-[var(--dpf-muted)] flex-shrink-0",
-            hasChildren ? "cursor-pointer hover:text-white" : "invisible",
+            hasChildren ? "cursor-pointer hover:text-[var(--dpf-text)]" : "invisible",
           ].join(" ")}
           onClick={(e) => {
             e.stopPropagation();
@@ -139,7 +139,7 @@ function OrgNodeRow({
 
         {/* Employee info */}
         <div className="min-w-0 flex-1">
-          <span className="text-sm font-medium text-white">{node.employee.displayName}</span>
+          <span className="text-sm font-medium text-[var(--dpf-text)]">{node.employee.displayName}</span>
           {node.employee.positionTitle && (
             <span className="text-xs text-[var(--dpf-muted)] ml-2">{node.employee.positionTitle}</span>
           )}
@@ -192,7 +192,7 @@ function OrgNodeRow({
                 title={emp.status}
               />
               <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium text-white">{emp.displayName}</span>
+                <span className="text-sm font-medium text-[var(--dpf-text)]">{emp.displayName}</span>
                 <span className="text-[10px] text-[var(--dpf-muted)] ml-2 italic">dotted line</span>
               </div>
             </div>
@@ -243,20 +243,20 @@ export function OrgChartView({ employees, onSelect }: Props) {
     <section className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white">Organization chart</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Organization chart</h2>
           <p className="text-xs text-[var(--dpf-muted)] mt-1">
             Reporting hierarchy based on manager relationships.
           </p>
         </div>
         <div className="flex gap-2">
           <button
-            className="text-[10px] text-[var(--dpf-muted)] hover:text-white transition-colors px-2 py-1 rounded border border-[var(--dpf-border)]"
+            className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors px-2 py-1 rounded border border-[var(--dpf-border)]"
             onClick={() => setExpanded(collectExpandedIds(tree, 0, 99))}
           >
             Expand all
           </button>
           <button
-            className="text-[10px] text-[var(--dpf-muted)] hover:text-white transition-colors px-2 py-1 rounded border border-[var(--dpf-border)]"
+            className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors px-2 py-1 rounded border border-[var(--dpf-border)]"
             onClick={() => setExpanded(new Set())}
           >
             Collapse all

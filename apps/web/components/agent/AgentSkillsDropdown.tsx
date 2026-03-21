@@ -42,7 +42,7 @@ const skillButtonStyle: React.CSSProperties = {
   border: "none",
   padding: "8px 12px",
   cursor: "pointer",
-  color: "#e0e0ff",
+  color: "var(--dpf-text)",
   fontSize: 12,
   lineHeight: 1.3,
 };

@@ -19,7 +19,7 @@ type Props = {
 };
 
 const inputClasses =
-  "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
+  "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
 
 export function LinkObligationForm({ controlId, existingObligationIds, availableObligations }: Props) {
   const [open, setOpen] = useState(false);
@@ -90,15 +90,15 @@ export function LinkObligationForm({ controlId, existingObligationIds, available
                   onClick={() => handleLink(o.id)}
                   className="w-full text-left p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors disabled:opacity-50"
                 >
-                  <span className="text-sm text-white">{o.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                   <div className="flex gap-2 mt-1">
                     {o.regulationShortName && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
                         {o.regulationShortName}
                       </span>
                     )}
                     {o.reference && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
                         {o.reference}
                       </span>
                     )}
@@ -114,7 +114,7 @@ export function LinkObligationForm({ controlId, existingObligationIds, available
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-white"
+              className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
             >
               Cancel
             </button>

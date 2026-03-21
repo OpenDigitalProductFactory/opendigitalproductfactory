@@ -70,7 +70,7 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
             borderRadius: 12,
             padding: "2px 8px 2px 6px",
             fontSize: 11,
-            color: "#e0e0ff",
+            color: "var(--dpf-text)",
             maxWidth: "80%",
           }}>
             <span style={{ fontSize: 12 }}>{"\u{1F4CE}"}</span>
@@ -118,7 +118,7 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
             borderRadius: 6,
             padding: "6px 10px",
             fontSize: 12,
-            color: "#e0e0ff",
+            color: "var(--dpf-text)",
             outline: "none",
             resize: "none",
             overflow: "auto",

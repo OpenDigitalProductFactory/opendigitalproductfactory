@@ -66,7 +66,7 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
       <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
         Status: <strong style={{ color: published ? "#16a34a" : "#6b7280" }}>{published ? "Published" : "Unpublished"}</strong>
         {" · "} Archetype: {config.archetypeId}
-        {" · "} <a href="/storefront/settings" style={{ color: "var(--dpf-accent, #4f46e5)" }}>Edit settings</a>
+        {" · "} <a href="/admin/storefront/settings" style={{ color: "var(--dpf-accent, #4f46e5)" }}>Edit settings</a>
       </div>
     </div>
   );

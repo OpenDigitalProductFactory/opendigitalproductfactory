@@ -131,10 +131,10 @@ export function BacklogPanel({
       <div className="w-3/4 max-h-[85vh] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg flex flex-col shadow-2xl pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--dpf-border)]">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
             {item ? "Edit Backlog Item" : "New Backlog Item"}
           </h2>
-          <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-white text-lg leading-none">×</button>
+          <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-lg leading-none">×</button>
         </div>
 
         {/* Form */}
@@ -146,7 +146,7 @@ export function BacklogPanel({
               type="text"
               value={form.title}
               onChange={(e) => set("title", e.target.value)}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
               placeholder="What needs to be done?"
               required
             />
@@ -167,7 +167,7 @@ export function BacklogPanel({
                   className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${
                     form.type === t
                       ? "bg-[var(--dpf-accent)] text-white"
-                      : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-white"
+                      : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                   }`}
                 >
                   {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -182,7 +182,7 @@ export function BacklogPanel({
             <select
               value={form.status}
               onChange={(e) => set("status", e.target.value as BacklogItemInput["status"])}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
               <option value="open">Open</option>
               <option value="in-progress">In Progress</option>
@@ -199,7 +199,7 @@ export function BacklogPanel({
               min={1}
               value={form.priority ?? ""}
               onChange={(e) => set("priority", e.target.value ? Number(e.target.value) : undefined)}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
               placeholder="Optional"
             />
           </label>
@@ -210,7 +210,7 @@ export function BacklogPanel({
             <select
               value={form.epicId ?? ""}
               onChange={(e) => set("epicId", e.target.value || undefined)}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
               <option value="">— no epic —</option>
               {epics.map((ep) => (
@@ -225,7 +225,7 @@ export function BacklogPanel({
             <select
               value={form.taxonomyNodeId ?? ""}
               onChange={(e) => set("taxonomyNodeId", e.target.value || undefined)}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
               <option value="">— select node —</option>
               {taxonomyNodes.map((n) => (
@@ -241,7 +241,7 @@ export function BacklogPanel({
               <select
                 value={form.digitalProductId ?? ""}
                 onChange={(e) => set("digitalProductId", e.target.value || undefined)}
-                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
                 required
               >
                 <option value="">— select product —</option>
@@ -259,7 +259,7 @@ export function BacklogPanel({
               value={form.body ?? ""}
               onChange={(e) => set("body", e.target.value)}
               rows={4}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
               placeholder="Optional notes…"
             />
           </label>
@@ -288,7 +288,7 @@ export function BacklogPanel({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+            className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           >
             Cancel
           </button>

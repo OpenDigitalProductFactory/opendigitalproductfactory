@@ -48,7 +48,7 @@ export function PortfolioTreeNodeItem({
       >
         {/* Expand/collapse chevron */}
         <button
-          className="w-4 flex-shrink-0 text-[9px] text-[var(--dpf-muted)] hover:text-white mr-1"
+          className="w-4 flex-shrink-0 text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] mr-1"
           onClick={() => hasChildren && onToggle(node.nodeId)}
           aria-label={isOpen ? "Collapse" : "Expand"}
           tabIndex={hasChildren ? 0 : -1}

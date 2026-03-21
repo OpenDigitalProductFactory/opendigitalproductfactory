@@ -14,7 +14,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   operations: { label: "Operations", color: "#38bdf8" },
   platform: { label: "Platform", color: "#fb923c" },
   personal: { label: "Personal", color: "#4ade80" },
-  external: { label: "External", color: "#8888a0" },
+  external: { label: "External", color: "var(--dpf-muted)" },
 };
 
 type Props = {

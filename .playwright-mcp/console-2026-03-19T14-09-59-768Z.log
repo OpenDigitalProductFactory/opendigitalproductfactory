@@ -1,0 +1,2699 @@
+[     146ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://localhost:3000/api/sandbox/preview?buildId=FB-8776ED9E&path=/:0
+[18334591ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18341228ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18347375ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18352919ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18367815ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18367877ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18367970ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18426411ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18427553ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18429841ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18449105ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18455701ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18462476ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18463412ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18466267ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18467863ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18467956ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18476555ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18476620ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18480119ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18480226ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18483202ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18495709ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18495772ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18560158ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18591758ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18593643ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18597842ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18597979ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18617354ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18629166ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18629274ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18638426ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18638504ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18642762ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18642857ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18710348ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18716528ms] [ERROR] ./apps/web/lib/auth.ts:5:1
+Module not found: Can't resolve './password.js'
+  3 | import Credentials from "next-auth/providers/credentials";
+  4 | import { prisma } from "@dpf/db";
+> 5 | import { verifyPassword, hashPassword } from "./password.js";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export type UserType = "admin" | "customer";
+  8 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18716713ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18726442ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18734218ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18734219ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738559ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738559ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738604ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738605ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738825ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738825ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738825ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build?_rsc=10mg9:0
+[18738970ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738971ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18738987ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build?_rsc=10mg9:0
+[18739214ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18739214ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_2fc0cb12._.js:3127
+[18739392ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build:0
+[18739623ms] Error: ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (Error: ./apps/web/lib/auth.ts:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at Object.getCompilationErrors (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\hot-reloader-turbopack.js:1008:59)
+    at DevBundlerService.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\lib\dev-bundler-service.js:44:55)
+    at DevServer.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:706:42)
+    at DevServer.findPageComponents (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:676:43)
+    at async DevServer.renderErrorToResponseImpl (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\base-server.js:1733:26)
+[18739627ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739627ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739627ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739627ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739670ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739670ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739764ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18739764ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18740863ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18740863ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18744521ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18744521ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18745840ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18745840ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18745902ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18745902ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749373ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build:0
+[18749475ms] Error: ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (Error: ./apps/web/lib/auth.ts:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at Object.getCompilationErrors (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\hot-reloader-turbopack.js:1008:59)
+    at DevBundlerService.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\lib\dev-bundler-service.js:44:55)
+    at DevServer.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:706:42)
+    at DevServer.findPageComponents (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:676:43)
+    at async DevServer.renderErrorToResponseImpl (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\base-server.js:1733:26)
+[18749478ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749478ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749478ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749479ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749527ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749527ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749619ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18749619ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18757061ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18757062ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18761259ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18761260ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18761373ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18761373ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18762525ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18762525ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18763176ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18763176ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18763531ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18763531ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764075ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764075ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764159ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764159ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764320ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764320ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764332ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build:0
+[18764403ms] Error: ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (Error: ./apps/web/lib/auth.ts:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at Object.getCompilationErrors (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\hot-reloader-turbopack.js:1008:59)
+    at DevBundlerService.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\lib\dev-bundler-service.js:44:55)
+    at DevServer.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:706:42)
+    at DevServer.findPageComponents (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:676:43)
+    at async DevServer.renderErrorToResponseImpl (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\base-server.js:1733:26)
+[18764408ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764409ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764409ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764409ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import traces:
+  #1 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/layout.tsx
+
+  #2 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/build/page.tsx
+
+  #3 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/app/(shell)/layout.tsx
+
+  #4 [Server Component]:
+    ./apps/web/lib/auth.ts
+    ./apps/web/lib/actions/build-read.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764441ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764441ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764517ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18764517ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18765836ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18765837ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18765897ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18765897ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18803028ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18803028ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18803119ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18803119ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18821497ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18821497ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18821573ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18821574ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18871378ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18871378ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18872759ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18872760ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18878448ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18878448ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18879993ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18879993ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18884798ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18884798ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18889541ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18889541ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18893309ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18893309ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18948609ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18948609ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18948782ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[18948782ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19951979ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19951979ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19952055ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19952056ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19952148ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[19952148ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21454355ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21454355ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21476952ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21476952ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21525119ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21528480ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21531852ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21535410ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/build:0
+[21535563ms] Error: ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (Error: ./apps/web/lib/auth.ts:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at Object.getCompilationErrors (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\hot-reloader-turbopack.js:1008:59)
+    at DevBundlerService.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\lib\dev-bundler-service.js:44:55)
+    at DevServer.getCompilationError (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:706:42)
+    at DevServer.findPageComponents (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\dev\next-dev-server.js:676:43)
+    at async DevServer.renderErrorToResponseImpl (file://H:\OpenDigitalProductFactory\node_modules\.pnpm\next@16.1.6_@babel+core@7.2_af9f2d756f279b6af1db5b112d0d1aaa\node_modules\next\dist\server\base-server.js:1733:26)
+[21535568ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21535569ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21536266ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21536266ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21549974ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21549974ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21550085ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21550085ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553148ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553148ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553445ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553445ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553552ms] [ERROR] ./apps/web/lib/auth.ts:7:1
+Module not found: Can't resolve './password.js'
+   5 | import Apple from "next-auth/providers/apple";
+   6 | import { prisma } from "@dpf/db";
+>  7 | import { verifyPassword, hashPassword } from "./password.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+   9 |
+  10 | export type UserType = "admin" | "customer";
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21553552ms] [ERROR] ./apps/web/lib/auth.ts:8:1
+Module not found: Can't resolve './social-auth.js'
+   6 | import { prisma } from "@dpf/db";
+   7 | import { verifyPassword, hashPassword } from "./password.js";
+>  8 | import { determineSocialAuthFlow, createTempToken } from "./social-auth.js";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export type UserType = "admin" | "customer";
+  11 |
+
+Import trace:
+  Middleware:
+    ./apps/web/lib/auth.ts
+    ./apps/web/proxy.ts
+
+https://nextjs.org/docs/messages/module-not-found @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_e7fffa42._.js:1920
+[21598490ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21601847ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21605217ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21608582ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21611953ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21619318ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21626674ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21634035ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21641417ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21648789ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21656173ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[21663537ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/08ef3_next_dist_client_f1d993d8._.js:2266
+[33921111ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://localhost:3000/api/sandbox/preview?buildId=FB-8776ED9E&path=/:0

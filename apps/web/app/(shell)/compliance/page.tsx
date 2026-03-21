@@ -62,7 +62,7 @@ export default async function CompliancePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Compliance</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Compliance</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {regulationCount} regulation{regulationCount !== 1 ? "s" : ""} · {activeObligationCount} obligation{activeObligationCount !== 1 ? "s" : ""}
         </p>
@@ -92,7 +92,7 @@ export default async function CompliancePage() {
           ? <p className="text-sm text-[var(--dpf-muted)]">No upcoming compliance deadlines.</p>
           : <ul className="space-y-2">
               {upcomingDeadlines.map((e) => (
-                <li key={e.id} className="text-sm text-white flex justify-between">
+                <li key={e.id} className="text-sm text-[var(--dpf-text)] flex justify-between">
                   <span>{e.title}</span>
                   <span className="text-[var(--dpf-muted)]">{new Date(e.startAt).toLocaleDateString()}</span>
                 </li>
@@ -109,7 +109,7 @@ export default async function CompliancePage() {
           : <ul className="space-y-2">
               {recentActivity.map((log) => (
                 <li key={log.id} className="text-sm text-[var(--dpf-muted)]">
-                  <span className="text-white">{log.performedBy?.displayName ?? log.agentId ?? "System"}</span>{" "}
+                  <span className="text-[var(--dpf-text)]">{log.performedBy?.displayName ?? log.agentId ?? "System"}</span>{" "}
                   {log.action} {log.entityType} — {new Date(log.performedAt).toLocaleString()}
                 </li>
               ))}
@@ -127,8 +127,8 @@ export default async function CompliancePage() {
                 <a key={r.id} href={`/compliance/regulations/${r.id}`}
                   className="block p-4 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-white">{r.shortName}</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
+                    <span className="text-sm font-semibold text-[var(--dpf-text)]">{r.shortName}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
                   </div>
                   <p className="text-xs text-[var(--dpf-muted)]">
                     {r._count.obligations} obligation{r._count.obligations !== 1 ? "s" : ""}

@@ -42,15 +42,15 @@ export default async function RiskDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/risks" className="text-xs text-[var(--dpf-muted)] hover:text-white">Risks</Link>
+        <Link href="/compliance/risks" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Risks</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{risk.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{risk.title}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{risk.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{risk.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${risk.status === "active" ? "bg-green-900/30 text-green-400" : "bg-gray-900/30 text-gray-400"}`}>
             {risk.status}
           </span>
@@ -77,37 +77,37 @@ export default async function RiskDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Hazard</p>
-          <p className="text-sm font-semibold text-white">{risk.hazard}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{risk.hazard}</p>
         </div>
         {risk.scope && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Scope</p>
-            <p className="text-sm font-semibold text-white">{risk.scope}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{risk.scope}</p>
           </div>
         )}
         {risk.assessedBy && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Assessed By</p>
-            <p className="text-sm font-semibold text-white">{risk.assessedBy.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{risk.assessedBy.displayName}</p>
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Assessed At</p>
-          <p className="text-sm font-semibold text-white">{new Date(risk.assessedAt).toLocaleDateString()}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.assessedAt).toLocaleDateString()}</p>
         </div>
         {risk.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-white">{new Date(risk.nextReviewDate).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.nextReviewDate).toLocaleDateString()}</p>
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Controls</p>
-          <p className="text-sm font-semibold text-white">{risk.controls.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{risk.controls.length}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Incidents</p>
-          <p className="text-sm font-semibold text-white">{risk.incidents.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{risk.incidents.length}</p>
         </div>
       </div>
 
@@ -115,7 +115,7 @@ export default async function RiskDetailPage({ params }: Props) {
       {risk.notes && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Notes</h2>
-          <p className="text-sm text-white">{risk.notes}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{risk.notes}</p>
         </div>
       )}
 
@@ -142,7 +142,7 @@ export default async function RiskDetailPage({ params }: Props) {
               <div className="min-w-0">
                 <Link
                   href={`/compliance/controls/${link.control.id}`}
-                  className="text-sm text-white hover:text-[var(--dpf-accent)] transition-colors"
+                  className="text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] transition-colors"
                 >
                   {link.control.title}
                 </Link>
@@ -176,7 +176,7 @@ export default async function RiskDetailPage({ params }: Props) {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white">{inc.title}</span>
+                      <span className="text-sm text-[var(--dpf-text)]">{inc.title}</span>
                       {inc.regulatoryNotifiable && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">NOTIFIABLE</span>
                       )}

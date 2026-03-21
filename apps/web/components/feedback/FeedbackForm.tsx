@@ -40,12 +40,12 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
 
   if (submitted) {
     return (
-      <div style={{ padding: 16, textAlign: "center", color: "#e0e0ff", fontSize: 13 }}>
+      <div style={{ padding: 16, textAlign: "center", color: "var(--dpf-text)", fontSize: 13 }}>
         {reportId
           ? `Thanks! Report ${reportId} filed. The platform team has been notified.`
           : "Saved — will be sent when connectivity is restored."}
         {onClose && (
-          <button type="button" onClick={onClose} style={{ display: "block", margin: "12px auto 0", background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "4px 12px", color: "#e0e0ff", fontSize: 12, cursor: "pointer" }}>
+          <button type="button" onClick={onClose} style={{ display: "block", margin: "12px auto 0", background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "4px 12px", color: "var(--dpf-text)", fontSize: 12, cursor: "pointer" }}>
             Close
           </button>
         )}
@@ -54,12 +54,12 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
   }
 
   return (
-    <div style={{ padding: 12, fontSize: 13, color: "#e0e0ff" }}>
+    <div style={{ padding: 12, fontSize: 13, color: "var(--dpf-text)" }}>
       <div style={{ marginBottom: 8 }}>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "#e0e0ff", fontSize: 12 }}
+          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "var(--dpf-text)", fontSize: 12 }}
         >
           <option value="runtime_error">Bug Report</option>
           <option value="feedback">Suggestion</option>
@@ -72,7 +72,7 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what happened or what you'd like to see..."
           rows={4}
-          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "#e0e0ff", fontSize: 12, resize: "vertical" }}
+          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "var(--dpf-text)", fontSize: 12, resize: "vertical" }}
         />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -85,7 +85,7 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
           Submit
         </button>
         {onClose && (
-          <button type="button" onClick={onClose} style={{ background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "#e0e0ff", cursor: "pointer" }}>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "var(--dpf-text)", cursor: "pointer" }}>
             Cancel
           </button>
         )}

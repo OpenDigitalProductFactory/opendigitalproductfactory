@@ -46,16 +46,16 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
   const buttonStyle: React.CSSProperties = isStale
     ? {
         ...baseStyle,
-        background: "#7c8cf820",
-        border: "1px solid #7c8cf8",
-        color: "#7c8cf8",
+        background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)",
+        border: "1px solid var(--dpf-accent)",
+        color: "var(--dpf-accent)",
         fontWeight: 600,
       }
     : {
         ...baseStyle,
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
-        color: "#e0e0ff",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
+        color: "var(--dpf-text)",
       };
 
   return (

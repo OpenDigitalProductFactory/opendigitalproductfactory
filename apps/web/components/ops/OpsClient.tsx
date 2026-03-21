@@ -84,7 +84,7 @@ function SortButton({ label, field, sort, onSort }: {
       className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
         active
           ? "border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
-          : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white hover:border-[var(--dpf-muted)]"
+          : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-[var(--dpf-muted)]"
       }`}
     >
       {label}{icon}

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createEpic, updateEpic } from "@/lib/actions/backlog";
+import { createEpic, updateEpic, type EpicOverlap } from "@/lib/actions/backlog";
 import {
   validateEpicInput,
   EPIC_STATUSES,
@@ -28,6 +28,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
   const router = useRouter();
   const [form, setForm] = useState<EpicInput>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [overlaps, setOverlaps] = useState<EpicOverlap[]>([]);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
       setForm(emptyForm());
     }
     setError(null);
+    setOverlaps([]);
   }, [epic, isOpen]);
 
   function togglePortfolio(portfolioId: string) {
@@ -66,11 +68,17 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
       try {
         if (epic) {
           await updateEpic(epic.id, form);
+          router.refresh();
+          onClose();
         } else {
-          await createEpic(form);
+          const result = await createEpic(form);
+          router.refresh();
+          if (result.similarEpics.length > 0) {
+            setOverlaps(result.similarEpics);
+          } else {
+            onClose();
+          }
         }
-        router.refresh();
-        onClose();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       }
@@ -93,12 +101,12 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
       <div className="w-3/4 max-h-[85vh] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg flex flex-col shadow-2xl pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--dpf-border)]">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
             {epic ? "Edit Epic" : "New Epic"}
           </h2>
           <button
             onClick={onClose}
-            className="text-[var(--dpf-muted)] hover:text-white text-lg leading-none"
+            className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-lg leading-none"
           >
             ×
           </button>
@@ -113,7 +121,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
               type="text"
               value={form.title}
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
               placeholder="What is this initiative?"
               required
             />
@@ -126,7 +134,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
               value={form.description ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
               placeholder="Optional context…"
             />
           </label>
@@ -137,7 +145,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
             <select
               value={form.status}
               onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as EpicInput["status"] }))}
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--dpf-accent)]"
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
               {EPIC_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -158,13 +166,40 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
                   onChange={() => togglePortfolio(p.id)}
                   className="accent-[var(--dpf-accent)]"
                 />
-                <span className="text-sm text-white">{p.name}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{p.name}</span>
               </label>
             ))}
           </div>
 
           {error && (
             <p className="text-xs text-red-400">{error}</p>
+          )}
+
+          {overlaps.length > 0 && (
+            <div className="rounded border border-yellow-600/50 bg-yellow-900/20 p-3 space-y-2">
+              <p className="text-xs text-yellow-400 font-semibold">
+                Epic created — but similar epics already exist:
+              </p>
+              <ul className="space-y-1">
+                {overlaps.map((o) => (
+                  <li key={o.epicId} className="text-xs text-yellow-300/80">
+                    <span className="font-mono">{o.epicId}</span>{" "}
+                    <span className="text-[var(--dpf-text)]">{o.title}</span>{" "}
+                    <span className="text-[var(--dpf-muted)]">({o.status})</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[10px] text-[var(--dpf-muted)]">
+                Review these for potential overlap. You can merge or close duplicates from the Ops backlog.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-yellow-400 underline hover:text-yellow-300"
+              >
+                Dismiss
+              </button>
+            </div>
           )}
         </form>
 
@@ -187,7 +222,7 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-white"
+            className="flex-1 py-2 rounded border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           >
             Cancel
           </button>

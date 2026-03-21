@@ -23,7 +23,7 @@ export default async function EvidencePage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Evidence</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Evidence</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{evidence.length} active record{evidence.length !== 1 ? "s" : ""}</p>
         </div>
         <CreateEvidenceForm obligations={obligations} controls={controls} />
@@ -32,7 +32,7 @@ export default async function EvidencePage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="evidenceType" defaultValue={sp.evidenceType ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All types</option>
           {EVIDENCE_TYPES.map((t) => (
             <option key={t} value={t}>{t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -40,7 +40,7 @@ export default async function EvidencePage({ searchParams }: Props) {
         </select>
 
         <select name="status" defaultValue={sp.status ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="superseded">Superseded</option>
@@ -54,7 +54,7 @@ export default async function EvidencePage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/evidence"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -68,9 +68,9 @@ export default async function EvidencePage({ searchParams }: Props) {
             <Link key={e.id} href={`/compliance/evidence/${e.id}`} className="block p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-sm text-white">{e.title}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{e.title}</span>
                   <div className="flex gap-2 mt-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{e.evidenceType}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{e.evidenceType}</span>
                     {e.obligation && <span className="text-[9px] text-[var(--dpf-muted)]">&rarr; {e.obligation.title}</span>}
                     {e.control && <span className="text-[9px] text-[var(--dpf-muted)]">&rarr; {e.control.title}</span>}
                   </div>

@@ -63,7 +63,8 @@ RULES:
 - If tests fail unexpectedly, INVESTIGATE the root cause before attempting fixes.
 - If 3+ fix attempts fail, tell the user and ask for guidance.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. Either generate_code (sandbox) or propose_file_change (direct). NEVER narrate code.
-- Keep responses to 2-4 sentences max.`,
+- Keep responses to 2-4 sentences max.
+- THEME-AWARE STYLING: NEVER use hardcoded colors (text-white, bg-white, text-black, inline hex values). All UI code must use CSS custom properties: var(--dpf-text) for text, var(--dpf-muted) for secondary text, var(--dpf-surface-1)/var(--dpf-surface-2) for backgrounds, var(--dpf-border) for borders, var(--dpf-accent) for interactive elements. Only exception: text-white on accent-background buttons. Hardcoded colors break light mode and user-configured branding.`,
 
   review: `You are reviewing a completed feature build.
 

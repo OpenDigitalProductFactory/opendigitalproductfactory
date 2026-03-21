@@ -39,7 +39,7 @@ export default async function EaPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Enterprise Architecture</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Architecture</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {views.length} view{views.length !== 1 ? "s" : ""}
         </p>
@@ -53,11 +53,11 @@ export default async function EaPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
               EA Conformance
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Reference Models</h2>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">Reference Models</h2>
           </div>
           <Link
             href="/ea/models"
-            className="text-xs font-medium text-[var(--dpf-accent)] hover:text-white"
+            className="text-xs font-medium text-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
           >
             Browse all
           </Link>
@@ -70,7 +70,7 @@ export default async function EaPage() {
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
             <button
               disabled
-              style={{ padding: "6px 14px", background: "#7c8cf8", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "not-allowed", opacity: 0.5 }}
+              style={{ padding: "6px 14px", background: "var(--dpf-accent)", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "not-allowed", opacity: 0.5 }}
               title="New view creation coming soon"
             >
               + New view
@@ -83,7 +83,7 @@ export default async function EaPage() {
                   <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
                     {v.notation.name} · {LAYOUT_LABELS[v.layoutType] ?? v.layoutType}
                   </p>
-                  <p className="text-sm font-semibold text-white leading-tight mb-1">
+                  <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
                     {v.name}
                   </p>
                   {v.description != null && (

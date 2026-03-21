@@ -40,7 +40,7 @@ export function DetectedServicesBanner({ detected }: Props) {
         {remaining.map((service) => (
           <div key={service.serverId} className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-[#38bdf8] shrink-0" title="detected" />
-            <span className="text-xs text-white flex-1 truncate">{service.name}</span>
+            <span className="text-xs text-[var(--dpf-text)] flex-1 truncate">{service.name}</span>
             <span className="text-[9px] text-[var(--dpf-muted)]">{service.source}</span>
             <button
               type="button"

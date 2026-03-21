@@ -75,13 +75,13 @@ export function ReviewPanel({ cycles, feedback }: Props) {
               placeholder="Cycle name (e.g. 2026 Annual Review)"
               value={newCycle.name}
               onChange={(e) => setNewCycle((p) => ({ ...p, name: e.target.value }))}
-              className="w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              className="w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
             />
             <div className="flex gap-2">
               <select
                 value={newCycle.cadence}
                 onChange={(e) => setNewCycle((p) => ({ ...p, cadence: e.target.value as typeof p.cadence }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
               >
                 <option value="quarterly">Quarterly</option>
                 <option value="semi_annual">Semi-Annual</option>
@@ -128,7 +128,7 @@ export function ReviewPanel({ cycles, feedback }: Props) {
                 <div key={c.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colour }} />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs text-white">{c.name}</span>
+                    <span className="text-xs text-[var(--dpf-text)]">{c.name}</span>
                     <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
                       {c.cadence.replace("_", "-")} · {new Date(c.periodStart).toLocaleDateString()} – {new Date(c.periodEnd).toLocaleDateString()}
                     </span>
@@ -175,7 +175,7 @@ export function ReviewPanel({ cycles, feedback }: Props) {
                     from {f.fromName} · {new Date(f.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <p className="text-xs text-white line-clamp-2">{f.content}</p>
+                <p className="text-xs text-[var(--dpf-text)] line-clamp-2">{f.content}</p>
               </div>
             ))}
           </div>

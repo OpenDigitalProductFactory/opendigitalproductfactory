@@ -50,7 +50,7 @@ export function CountryPanel({ countries }: Props) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-left"
       >
-        <h3 className="text-sm font-semibold text-white">
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
           Countries ({activeCount} active)
         </h3>
         <span className="text-[var(--dpf-muted)] text-sm">

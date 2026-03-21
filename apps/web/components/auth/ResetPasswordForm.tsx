@@ -39,7 +39,7 @@ export function ResetPasswordForm({ token }: Props) {
           name="newPassword"
           type="password"
           required
-          className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-white text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
         />
       </label>
       <label className="block">
@@ -50,7 +50,7 @@ export function ResetPasswordForm({ token }: Props) {
           name="confirmPassword"
           type="password"
           required
-          className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-white text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
         />
       </label>
       <button

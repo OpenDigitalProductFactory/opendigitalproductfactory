@@ -43,14 +43,14 @@ export function HeaderFeedbackButton({ userId }: Props) {
       <button
         type="button"
         onClick={handleClick}
-        className="text-xs text-[var(--dpf-muted)] hover:text-white transition-colors"
+        className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
       >
         Feedback
       </button>
 
       {showForm && (
         <div className="absolute right-0 top-full mt-2 w-[300px] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg shadow-lg z-50 overflow-hidden">
-          <div className="px-3 pt-2.5 text-xs font-semibold text-white">
+          <div className="px-3 pt-2.5 text-xs font-semibold text-[var(--dpf-text)]">
             Send Feedback
           </div>
           <FeedbackForm

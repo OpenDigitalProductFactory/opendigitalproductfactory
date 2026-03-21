@@ -6,7 +6,7 @@ import { ComplianceModal } from "./ComplianceModal";
 import { updatePolicy } from "@/lib/actions/policy";
 import { POLICY_CATEGORIES, REVIEW_FREQUENCIES } from "@/lib/policy-types";
 
-const inputClasses = "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-white placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
+const inputClasses = "w-full rounded border border-[var(--dpf-border)] bg-transparent px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
 
 function formatDate(d: Date | string | null | undefined): string {
@@ -55,7 +55,7 @@ export function EditPolicyForm({ id, policy }: Props) {
   return (
     <>
       <button onClick={() => setOpen(true)}
-        className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white hover:border-[var(--dpf-accent)] transition-colors">
+        className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] transition-colors">
         Edit
       </button>
       <ComplianceModal open={open} onClose={() => setOpen(false)} title="Edit Policy">
@@ -96,7 +96,7 @@ export function EditPolicyForm({ id, policy }: Props) {
             <textarea name="notes" rows={2} className={inputClasses} defaultValue={policy.notes ?? ""} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-white">Cancel</button>
+            <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Cancel</button>
             <button type="submit" disabled={loading}
               className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-accent)] text-white hover:opacity-90 disabled:opacity-50">
               {loading ? "Saving..." : "Save Changes"}

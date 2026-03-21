@@ -17,18 +17,18 @@ export default async function NewBillPage({ searchParams }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <Link href="/finance/bills" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance/bills" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Bills
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">New Bill</span>
+        <span className="text-xs text-[var(--dpf-text)]">New Bill</span>
       </div>
 
-      <h1 className="text-xl font-bold text-white mb-6">New Bill</h1>
+      <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">New Bill</h1>
 
       <div className="max-w-3xl">
         <CreateBillForm

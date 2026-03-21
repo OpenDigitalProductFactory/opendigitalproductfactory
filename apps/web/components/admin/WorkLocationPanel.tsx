@@ -211,7 +211,7 @@ export function WorkLocationPanel({ workLocations }: Props) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-left"
       >
-        <h3 className="text-sm font-semibold text-white">
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
           Work Locations ({workLocations.length})
         </h3>
         <span className="text-[var(--dpf-muted)] text-sm">

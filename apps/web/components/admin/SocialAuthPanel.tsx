@@ -99,7 +99,7 @@ function ProviderSection({
     <div className="mb-6">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white">{title}</span>
+          <span className="text-sm font-semibold text-[var(--dpf-text)]">{title}</span>
           <span
             className="text-[10px] px-2 py-0.5 rounded-full"
             style={{
@@ -138,7 +138,7 @@ function ProviderSection({
               style={{ borderLeftColor: statusColor }}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-white">{cfg.label}</span>
+                <span className="text-sm font-semibold text-[var(--dpf-text)]">{cfg.label}</span>
                 <span
                   className="text-[10px] px-2 py-0.5 rounded-full"
                   style={{ background: `${statusColor}20`, color: statusColor }}
@@ -151,7 +151,7 @@ function ProviderSection({
               {isConfigured && (
                 <div className="mb-3 px-3 py-1.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
                   <span className="text-[10px] text-[var(--dpf-muted)] mr-2">Current:</span>
-                  <span className="text-xs font-mono text-white">
+                  <span className="text-xs font-mono text-[var(--dpf-text)]">
                     {cfg.isSecret ? maskSecret(displayValue!) : displayValue}
                   </span>
                 </div>
@@ -167,7 +167,7 @@ function ProviderSection({
                   onChange={(e) => setValues((prev) => ({ ...prev, [cfg.key]: e.target.value }))}
                   placeholder={isConfigured ? (cfg.isSecret ? "Enter new value to replace" : "Enter new value to replace") : cfg.placeholder}
                   disabled={isPending}
-                  className="flex-1 px-3 py-2 text-xs font-mono bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-white outline-none focus:border-[var(--dpf-accent)]"
+                  className="flex-1 px-3 py-2 text-xs font-mono bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
                   style={cfg.isSecret ? { WebkitTextSecurity: "disc" } as React.CSSProperties : undefined}
                 />
                 <button
@@ -188,22 +188,22 @@ function ProviderSection({
 
 const GoogleSetupGuide = () => (
   <div>
-    <p className="font-semibold text-white mb-2">Google OAuth Setup (free, ~10 minutes)</p>
+    <p className="font-semibold text-[var(--dpf-text)] mb-2">Google OAuth Setup (free, ~10 minutes)</p>
     <p className="mb-2">You need a Google account (personal is fine — no business account required).</p>
     <ol className="list-decimal list-inside space-y-1.5">
-      <li>Go to <span className="text-white font-mono">console.cloud.google.com</span></li>
+      <li>Go to <span className="text-[var(--dpf-text)] font-mono">console.cloud.google.com</span></li>
       <li>Create a new project (or select an existing one)</li>
-      <li>Navigate to <span className="text-white">APIs &amp; Services &rarr; OAuth consent screen</span></li>
-      <li>Configure: User type <span className="text-white">External</span>, add your app name and domain</li>
-      <li>Add scopes: <span className="text-white font-mono">email</span>, <span className="text-white font-mono">profile</span>, <span className="text-white font-mono">openid</span></li>
-      <li>Navigate to <span className="text-white">APIs &amp; Services &rarr; Credentials</span></li>
-      <li>Click <span className="text-white">Create Credentials &rarr; OAuth 2.0 Client IDs</span> &rarr; Web application</li>
-      <li>Add authorized redirect URI: <span className="text-white font-mono">http://localhost:3000/api/auth/callback/google</span> (for local dev)</li>
-      <li>For production, add: <span className="text-white font-mono">https://your-domain/api/auth/callback/google</span></li>
-      <li>Copy the <span className="text-white">Client ID</span> and <span className="text-white">Client Secret</span> into the fields below</li>
+      <li>Navigate to <span className="text-[var(--dpf-text)]">APIs &amp; Services &rarr; OAuth consent screen</span></li>
+      <li>Configure: User type <span className="text-[var(--dpf-text)]">External</span>, add your app name and domain</li>
+      <li>Add scopes: <span className="text-[var(--dpf-text)] font-mono">email</span>, <span className="text-[var(--dpf-text)] font-mono">profile</span>, <span className="text-[var(--dpf-text)] font-mono">openid</span></li>
+      <li>Navigate to <span className="text-[var(--dpf-text)]">APIs &amp; Services &rarr; Credentials</span></li>
+      <li>Click <span className="text-[var(--dpf-text)]">Create Credentials &rarr; OAuth 2.0 Client IDs</span> &rarr; Web application</li>
+      <li>Add authorized redirect URI: <span className="text-[var(--dpf-text)] font-mono">http://localhost:3000/api/auth/callback/google</span> (for local dev)</li>
+      <li>For production, add: <span className="text-[var(--dpf-text)] font-mono">https://your-domain/api/auth/callback/google</span></li>
+      <li>Copy the <span className="text-[var(--dpf-text)]">Client ID</span> and <span className="text-[var(--dpf-text)]">Client Secret</span> into the fields below</li>
     </ol>
     <div className="mt-3 p-2 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
-      <p className="text-white text-xs font-semibold mb-1">Good to know:</p>
+      <p className="text-[var(--dpf-text)] text-xs font-semibold mb-1">Good to know:</p>
       <ul className="list-disc list-inside space-y-0.5">
         <li>Localhost works for development — no public domain needed to start</li>
         <li>In &quot;testing&quot; mode you can add up to 100 test users without domain verification</li>
@@ -216,23 +216,23 @@ const GoogleSetupGuide = () => (
 
 const AppleSetupGuide = () => (
   <div>
-    <p className="font-semibold text-white mb-2">Apple Sign In Setup (~20 minutes, requires Apple Developer account)</p>
+    <p className="font-semibold text-[var(--dpf-text)] mb-2">Apple Sign In Setup (~20 minutes, requires Apple Developer account)</p>
     <p className="mb-2">Requires a paid Apple Developer account ($99/year) — personal or organizational.</p>
     <ol className="list-decimal list-inside space-y-1.5">
-      <li>Go to <span className="text-white font-mono">developer.apple.com</span></li>
-      <li>Navigate to <span className="text-white">Certificates, Identifiers &amp; Profiles</span></li>
-      <li>Register an <span className="text-white">App ID</span> with &quot;Sign in with Apple&quot; capability</li>
-      <li>Register a <span className="text-white">Services ID</span> — this becomes your Client ID</li>
-      <li>Configure domains and return URL: <span className="text-white font-mono">https://your-domain/api/auth/callback/apple</span></li>
-      <li>Create a <span className="text-white">Key</span> for Sign in with Apple</li>
-      <li>Download the <span className="text-white font-mono">.p8</span> private key file — it can only be downloaded once, store it safely</li>
-      <li>Note your <span className="text-white">Key ID</span> and <span className="text-white">Team ID</span> (top right of portal)</li>
+      <li>Go to <span className="text-[var(--dpf-text)] font-mono">developer.apple.com</span></li>
+      <li>Navigate to <span className="text-[var(--dpf-text)]">Certificates, Identifiers &amp; Profiles</span></li>
+      <li>Register an <span className="text-[var(--dpf-text)]">App ID</span> with &quot;Sign in with Apple&quot; capability</li>
+      <li>Register a <span className="text-[var(--dpf-text)]">Services ID</span> — this becomes your Client ID</li>
+      <li>Configure domains and return URL: <span className="text-[var(--dpf-text)] font-mono">https://your-domain/api/auth/callback/apple</span></li>
+      <li>Create a <span className="text-[var(--dpf-text)]">Key</span> for Sign in with Apple</li>
+      <li>Download the <span className="text-[var(--dpf-text)] font-mono">.p8</span> private key file — it can only be downloaded once, store it safely</li>
+      <li>Note your <span className="text-[var(--dpf-text)]">Key ID</span> and <span className="text-[var(--dpf-text)]">Team ID</span> (top right of portal)</li>
       <li>Enter all values in the fields below</li>
     </ol>
     <div className="mt-3 p-2 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
-      <p className="text-white text-xs font-semibold mb-1">Good to know:</p>
+      <p className="text-[var(--dpf-text)] text-xs font-semibold mb-1">Good to know:</p>
       <ul className="list-disc list-inside space-y-0.5">
-        <li>Apple does <span className="text-white">not</span> support localhost — you need a real domain or a tunnel (e.g., ngrok) for development</li>
+        <li>Apple does <span className="text-[var(--dpf-text)]">not</span> support localhost — you need a real domain or a tunnel (e.g., ngrok) for development</li>
         <li>Domain does not need public WHOIS — Apple verifies through its own portal</li>
         <li>The .p8 key file is a one-time download — if lost, you must create a new key</li>
         <li>You can set up Google first and add Apple later — they work independently</li>
@@ -248,7 +248,7 @@ export function SocialAuthPanel({ keyData }: Props) {
 
   return (
     <div className="mt-8">
-      <h2 className="text-lg font-semibold text-white mb-1">Social Sign-In for Customers</h2>
+      <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Social Sign-In for Customers</h2>
       <p className="text-sm text-[var(--dpf-muted)] mb-2">
         Let customers sign in with Google or Apple instead of email/password. Configure at least one provider to enable social sign-in on the customer portal.
       </p>

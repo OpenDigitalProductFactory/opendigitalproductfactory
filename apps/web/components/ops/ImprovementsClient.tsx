@@ -73,8 +73,8 @@ export function ImprovementsClient({ proposals }: Props) {
               className={[
                 "px-2.5 py-1 text-[11px] rounded-full border transition-colors",
                 statusFilter === s
-                  ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/20"
-                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white",
+                  ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/20"
+                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
               ].join(" ")}
             >
               {s === "all" ? "All" : s.replace("_", " ")} ({count})
@@ -114,11 +114,11 @@ export function ImprovementsClient({ proposals }: Props) {
                     {p.severity}
                   </span>
                 </div>
-                <h3 className="text-sm font-semibold text-white leading-snug">{p.title}</h3>
+                <h3 className="text-sm font-semibold text-[var(--dpf-text)] leading-snug">{p.title}</h3>
               </div>
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                style={{ background: "rgba(124,140,248,0.15)", color: "#7c8cf8" }}
+                style={{ background: "rgba(124,140,248,0.15)", color: "var(--dpf-accent)" }}
               >
                 {CATEGORY_LABELS[p.category] ?? p.category}
               </span>
@@ -228,7 +228,7 @@ export function ImprovementsClient({ proposals }: Props) {
                   placeholder="Rejection reason..."
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  className="flex-1 px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-white placeholder:text-[var(--dpf-muted)]"
+                  className="flex-1 px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
                 />
                 <button
                   type="button"

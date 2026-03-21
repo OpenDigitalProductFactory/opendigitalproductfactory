@@ -13,7 +13,7 @@ export default async function PosturePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Compliance Posture</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Compliance Posture</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Point-in-time compliance health</p>
         </div>
         <form action={async () => { "use server"; await takeComplianceSnapshot("manual"); }}>
@@ -48,8 +48,8 @@ export default async function PosturePage() {
             {posture.regulationScores.map((r) => (
               <div key={r.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-white">{r.shortName}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
+                  <span className="text-sm text-[var(--dpf-text)]">{r.shortName}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-[var(--dpf-muted)]">
                   <span>{r.coveredObligations}/{r.totalObligations} covered</span>
@@ -85,7 +85,7 @@ export default async function PosturePage() {
               <tbody>
                 {trend.map((s) => (
                   <tr key={s.snapshotId} className="border-b border-[var(--dpf-border)]">
-                    <td className="py-2 pr-4 text-white">{new Date(s.takenAt).toLocaleDateString()}</td>
+                    <td className="py-2 pr-4 text-[var(--dpf-text)]">{new Date(s.takenAt).toLocaleDateString()}</td>
                     <td className="py-2 pr-4">
                       <span className={`font-semibold ${s.overallScore >= 80 ? "text-green-400" : s.overallScore >= 60 ? "text-yellow-400" : "text-red-400"}`}>
                         {s.overallScore}
@@ -111,7 +111,7 @@ function MetricCard({ label, value, sub }: { label: string; value: number | stri
   return (
     <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
       <p className="text-xs text-[var(--dpf-muted)]">{label}</p>
-      <p className="text-lg font-bold text-white">{value}</p>
+      <p className="text-lg font-bold text-[var(--dpf-text)]">{value}</p>
       <p className="text-[9px] text-[var(--dpf-muted)]">{sub}</p>
     </div>
   );

@@ -43,10 +43,10 @@ export function SectionsManager({ storefrontId, sections: initial }: { storefron
               <span style={{ fontWeight: 600, fontSize: 13 }}>{s.title ?? s.type}</span>
               <span style={{ fontSize: 11, color: "var(--dpf-muted)", marginLeft: 6 }}>{s.type}</span>
             </div>
-            <button onClick={() => moveSection(s.id, "up")} disabled={idx === 0} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "none", cursor: "pointer" }}>↑</button>
-            <button onClick={() => moveSection(s.id, "down")} disabled={idx === sections.length - 1} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "none", cursor: "pointer" }}>↓</button>
+            <button onClick={() => moveSection(s.id, "up")} disabled={idx === 0} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>↑</button>
+            <button onClick={() => moveSection(s.id, "down")} disabled={idx === sections.length - 1} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>↓</button>
             <button onClick={() => toggleVisibility(s.id, !s.isVisible)}
-              style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: s.isVisible ? "none" : "#f3f4f6", cursor: "pointer" }}>
+              style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>
               {s.isVisible ? "Hide" : "Show"}
             </button>
           </div>

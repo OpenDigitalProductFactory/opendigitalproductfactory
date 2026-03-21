@@ -36,21 +36,21 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#0d0d18",
+      background: "var(--dpf-bg)",
       padding: 20,
     }}>
       <div style={{
         width: 380,
         maxWidth: "100%",
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 12,
         padding: 32,
       }}>
-        <h1 style={{ color: "#fff", fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+        <h1 style={{ color: "var(--dpf-text)", fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
           Customer Portal
         </h1>
-        <p style={{ color: "#8888a0", fontSize: 13, marginBottom: 24 }}>
+        <p style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 24 }}>
           Sign in to your account
         </p>
 
@@ -63,7 +63,7 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Email</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Email</label>
             <input
               type="email"
               value={email}
@@ -75,16 +75,16 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
                 padding: "10px 12px",
                 fontSize: 14,
                 borderRadius: 6,
-                border: "1px solid #2a2a40",
-                background: "#0d0d18",
-                color: "#fff",
+                border: "1px solid var(--dpf-border)",
+                background: "var(--dpf-bg)",
+                color: "var(--dpf-text)",
                 outline: "none",
               }}
             />
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Password</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Password</label>
             <input
               type="password"
               value={password}
@@ -95,9 +95,9 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
                 padding: "10px 12px",
                 fontSize: 14,
                 borderRadius: 6,
-                border: "1px solid #2a2a40",
-                background: "#0d0d18",
-                color: "#fff",
+                border: "1px solid var(--dpf-border)",
+                background: "var(--dpf-bg)",
+                color: "var(--dpf-text)",
                 outline: "none",
               }}
             />
@@ -117,8 +117,8 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
               fontWeight: 600,
               borderRadius: 6,
               border: "none",
-              background: "#7c8cf8",
-              color: "#fff",
+              background: "var(--dpf-accent)",
+              color: "var(--dpf-text)",
               cursor: isPending ? "wait" : "pointer",
               opacity: isPending ? 0.7 : 1,
             }}
@@ -127,15 +127,15 @@ export function CustomerLoginForm({ socialEnabled }: { socialEnabled: boolean })
           </button>
         </form>
 
-        <div style={{ marginTop: 20, textAlign: "center", fontSize: 12, color: "#8888a0" }}>
+        <div style={{ marginTop: 20, textAlign: "center", fontSize: 12, color: "var(--dpf-muted)" }}>
           <span>Don&apos;t have an account? </span>
-          <Link href="/customer-signup" style={{ color: "#7c8cf8", textDecoration: "none" }}>
+          <Link href="/customer-signup" style={{ color: "var(--dpf-accent)", textDecoration: "none" }}>
             Sign up
           </Link>
         </div>
 
         <div style={{ marginTop: 8, textAlign: "center", fontSize: 12 }}>
-          <Link href="/login" style={{ color: "#8888a0", textDecoration: "none" }}>
+          <Link href="/login" style={{ color: "var(--dpf-muted)", textDecoration: "none" }}>
             Staff login →
           </Link>
         </div>

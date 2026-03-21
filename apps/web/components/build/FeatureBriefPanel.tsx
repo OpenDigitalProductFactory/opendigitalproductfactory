@@ -18,7 +18,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   if (phase === "review" || phase === "ship" || phase === "complete") {
     return (
       <div className="p-4">
-        <h3 className="text-sm font-bold text-white mb-3">Build Summary</h3>
+        <h3 className="text-sm font-bold text-[var(--dpf-text)] mb-3">Build Summary</h3>
         {diffSummary ? (
           <pre className="text-xs text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed bg-[var(--dpf-surface-2)] p-3 rounded-md border border-[var(--dpf-border)]">
             {diffSummary}
@@ -47,7 +47,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
 
   return (
     <div className="p-4 flex flex-col gap-3">
-      <h3 className="text-sm font-bold text-white">Feature Brief</h3>
+      <h3 className="text-sm font-bold text-[var(--dpf-text)]">Feature Brief</h3>
       <Section label="Title" value={brief.title} />
       <Section label="Description" value={brief.description} />
       <Section label="Portfolio" value={brief.portfolioContext || "Not set"} />

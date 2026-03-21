@@ -150,8 +150,8 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
                       {bill.billRef}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-white">{bill.supplierName}</td>
-                  <td className="px-4 py-2.5 text-right text-white">
+                  <td className="px-4 py-2.5 text-[var(--dpf-text)]">{bill.supplierName}</td>
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                     {bill.currency} {formatMoney(bill.amountDue)}
                   </td>
                 </tr>
@@ -172,7 +172,7 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
                   ? ` · ${uniqueSuppliers} supplier payment${uniqueSuppliers !== 1 ? "s" : ""}`
                   : ""}
               </p>
-              <p className="text-xl font-bold text-white mt-1">
+              <p className="text-xl font-bold text-[var(--dpf-text)] mt-1">
                 GBP {formatMoney(total)}
               </p>
             </div>
@@ -191,16 +191,16 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
       {confirming && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-base font-semibold text-white mb-2">
+            <h3 className="text-base font-semibold text-[var(--dpf-text)] mb-2">
               Confirm Payment Run
             </h3>
             <p className="text-sm text-[var(--dpf-muted)] mb-4">
               This will pay{" "}
-              <span className="text-white font-semibold">
+              <span className="text-[var(--dpf-text)] font-semibold">
                 {selectedIds.size} bill{selectedIds.size !== 1 ? "s" : ""}
               </span>{" "}
               totalling{" "}
-              <span className="text-white font-semibold">
+              <span className="text-[var(--dpf-text)] font-semibold">
                 GBP {formatMoney(total)}
               </span>
               . This action cannot be undone.
@@ -210,7 +210,7 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
               <button
                 onClick={() => setConfirming(false)}
                 disabled={loading}
-                className="flex-1 px-4 py-2 rounded-md text-sm border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors"
+                className="flex-1 px-4 py-2 rounded-md text-sm border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
               >
                 Cancel
               </button>

@@ -127,7 +127,7 @@ export function ServiceRow({ pw }: Props) {
         {/* Name */}
         <span
           style={{
-            color: "#ffffff",
+            color: "var(--dpf-text)",
             fontSize: 11,
             fontWeight: 600,
             flex: "1 1 0",
@@ -168,7 +168,7 @@ export function ServiceRow({ pw }: Props) {
                 key={s}
                 style={{
                   fontSize: 9,
-                  color: "#8888a0",
+                  color: "var(--dpf-muted)",
                   background: "#ffffff0f",
                   padding: "1px 4px",
                   borderRadius: 2,
@@ -189,7 +189,7 @@ export function ServiceRow({ pw }: Props) {
         {provider.capabilityTier && (
           <span
             className="hidden sm:inline"
-            style={{ color: "#8888a0", fontSize: 10, flexShrink: 0 }}
+            style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
           >
             {provider.capabilityTier}
           </span>
@@ -199,7 +199,7 @@ export function ServiceRow({ pw }: Props) {
         {provider.costBand && (
           <span
             className="hidden sm:inline"
-            style={{ color: "#8888a0", fontSize: 10, flexShrink: 0 }}
+            style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
           >
             {provider.costBand}
           </span>
@@ -248,7 +248,7 @@ export function ServiceRow({ pw }: Props) {
           {/* Task tags */}
           {provider.taskTags.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-              <span style={{ color: "#8888a0", fontSize: 10, marginRight: 4, alignSelf: "center" }}>Tasks:</span>
+              <span style={{ color: "var(--dpf-muted)", fontSize: 10, marginRight: 4, alignSelf: "center" }}>Tasks:</span>
               {provider.taskTags.map((tag) => (
                 <span
                   key={tag}
@@ -256,7 +256,7 @@ export function ServiceRow({ pw }: Props) {
                     fontSize: 10,
                     color: "#a0a0c0",
                     background: "#ffffff0a",
-                    border: "1px solid #2a2a40",
+                    border: "1px solid var(--dpf-border)",
                     padding: "1px 6px",
                     borderRadius: 3,
                   }}
@@ -269,7 +269,7 @@ export function ServiceRow({ pw }: Props) {
 
           {/* Model families (LLM only) */}
           {provider.endpointType !== "mcp" && provider.families.length > 0 && (
-            <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 8 }}>
+            <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginBottom: 8 }}>
               <span style={{ marginRight: 4 }}>Models:</span>
               {provider.families.join(" · ")}
             </div>
@@ -277,14 +277,14 @@ export function ServiceRow({ pw }: Props) {
 
           {/* Billing label */}
           {billingLabel && (
-            <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 8 }}>
+            <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginBottom: 8 }}>
               {billingLabel}
             </div>
           )}
 
           {/* Credential hint */}
           {credential?.secretHint && (
-            <div style={{ color: "#8888a0", fontSize: 10, marginBottom: 8 }}>
+            <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginBottom: 8 }}>
               API key: <span style={{ fontFamily: "monospace" }}>{credential.secretHint}</span>
             </div>
           )}
@@ -293,7 +293,7 @@ export function ServiceRow({ pw }: Props) {
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <Link
               href={`/platform/ai/providers/${provider.providerId}`}
-              style={{ color: "#7c8cf8", fontSize: 10 }}
+              style={{ color: "var(--dpf-accent)", fontSize: 10 }}
             >
               Configure →
             </Link>
@@ -302,7 +302,7 @@ export function ServiceRow({ pw }: Props) {
                 href={provider.docsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: "#8888a0", fontSize: 10 }}
+                style={{ color: "var(--dpf-muted)", fontSize: 10 }}
               >
                 Docs
               </a>
@@ -312,7 +312,7 @@ export function ServiceRow({ pw }: Props) {
                 href={provider.consoleUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: "#8888a0", fontSize: 10 }}
+                style={{ color: "var(--dpf-muted)", fontSize: 10 }}
               >
                 Console
               </a>
@@ -327,12 +327,12 @@ export function ServiceRow({ pw }: Props) {
 function DetailItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div style={{ color: "#8888a0", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+      <div style={{ color: "var(--dpf-muted)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
         {label}
       </div>
       <div
         style={{
-          color: "#c0c0d8",
+          color: "var(--dpf-muted)",
           fontSize: 10,
           fontFamily: mono ? "monospace" : undefined,
           overflow: "hidden",

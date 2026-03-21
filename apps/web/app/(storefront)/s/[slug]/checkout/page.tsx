@@ -63,10 +63,10 @@ export default async function CheckoutPage({
     <div style={{ textAlign: "center", padding: "80px 0" }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>{meta.icon}</div>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>{meta.title}</h1>
-      <p style={{ color: "#6b7280", fontSize: 15, marginBottom: 4 }}>
+      <p style={{ color: "var(--dpf-muted)", fontSize: 15, marginBottom: 4 }}>
         Reference: <strong>{ref}</strong>
       </p>
-      <p style={{ color: "#6b7280", fontSize: 14 }}>
+      <p style={{ color: "var(--dpf-muted)", fontSize: 14 }}>
         {"We'll be in touch shortly. You can return to "}
         <a href={`/s/${slug}`} style={{ color: "var(--dpf-accent, #4f46e5)" }}>
           the storefront

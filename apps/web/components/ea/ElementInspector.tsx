@@ -25,9 +25,9 @@ export function ElementInspector({ selected, onUpdated }: Props) {
 
   if (!selected) {
     return (
-      <div style={{ width: 200, background: "#161625", borderLeft: "1px solid #2a2a40", padding: "10px 12px" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#7c8cf8", textTransform: "uppercase" }}>Properties</div>
-        <div style={{ fontSize: 10, color: "#8888a0", marginTop: 4 }}>Nothing selected</div>
+      <div style={{ width: 200, background: "var(--dpf-surface-1)", borderLeft: "1px solid var(--dpf-border)", padding: "10px 12px" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--dpf-accent)", textTransform: "uppercase" }}>Properties</div>
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 4 }}>Nothing selected</div>
       </div>
     );
   }
@@ -53,48 +53,48 @@ export function ElementInspector({ selected, onUpdated }: Props) {
   }
 
   return (
-    <div style={{ width: 200, background: "#161625", borderLeft: "1px solid #2a2a40", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-      <div style={{ padding: "8px 10px", borderBottom: "1px solid #2a2a40" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#7c8cf8", textTransform: "uppercase" }}>Properties</div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#e0e0ff", marginTop: 3 }}>{selected.element.name}</div>
-        <div style={{ fontSize: 10, color: "#8888a0" }}>{selected.elementType.name}</div>
+    <div style={{ width: 200, background: "var(--dpf-surface-1)", borderLeft: "1px solid var(--dpf-border)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--dpf-border)" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--dpf-accent)", textTransform: "uppercase" }}>Properties</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginTop: 3 }}>{selected.element.name}</div>
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{selected.elementType.name}</div>
         {isReadOnly && <div style={{ fontSize: 10, color: "#4a90d9", marginTop: 3 }}>🔒 Read-only reference</div>}
       </div>
 
       <div style={{ padding: "10px 10px", flex: 1, overflow: "auto" }}>
         <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 10, color: "#8888a0", marginBottom: 2, textTransform: "uppercase" }}>Name</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 2, textTransform: "uppercase" }}>Name</div>
           {isReadOnly
             ? <div style={{ fontSize: 11, color: "#ccd" }}>{selected.element.name}</div>
             : <input value={name} onChange={(e) => setName(e.target.value)}
-                style={{ width: "100%", padding: "3px 5px", background: "#0f0f1a", border: "1px solid #2a2a40", borderRadius: 3, color: "#e0e0ff", fontSize: 11, boxSizing: "border-box" }} />
+                style={{ width: "100%", padding: "3px 5px", background: "var(--dpf-bg)", border: "1px solid var(--dpf-border)", borderRadius: 3, color: "var(--dpf-text)", fontSize: 11, boxSizing: "border-box" }} />
           }
         </div>
 
         <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 10, color: "#8888a0", marginBottom: 2, textTransform: "uppercase" }}>Stage</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 2, textTransform: "uppercase" }}>Stage</div>
           <div style={{ fontSize: 10, color: "#ccd" }}>{selected.element.lifecycleStage} / {selected.element.lifecycleStatus}</div>
         </div>
 
         {!isReadOnly && (
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: "#8888a0", marginBottom: 2, textTransform: "uppercase" }}>Description</div>
+            <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 2, textTransform: "uppercase" }}>Description</div>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              style={{ width: "100%", padding: "3px 5px", background: "#0f0f1a", border: "1px solid #2a2a40", borderRadius: 3, color: "#e0e0ff", fontSize: 11, boxSizing: "border-box", resize: "none" }}
+              style={{ width: "100%", padding: "3px 5px", background: "var(--dpf-bg)", border: "1px solid var(--dpf-border)", borderRadius: 3, color: "var(--dpf-text)", fontSize: 11, boxSizing: "border-box", resize: "none" }}
             />
           </div>
         )}
       </div>
 
       {!isReadOnly && (
-        <div style={{ padding: "6px 10px", borderTop: "1px solid #2a2a40", display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ padding: "6px 10px", borderTop: "1px solid var(--dpf-border)", display: "flex", flexDirection: "column", gap: 5 }}>
           <button
             onClick={handleSave}
             disabled={saving}
-            style={{ padding: 5, background: "#7c8cf8", border: "none", borderRadius: 4, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer" }}
+            style={{ padding: 5, background: "var(--dpf-accent)", border: "none", borderRadius: 4, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer" }}
           >
             {saving ? "Saving…" : "Save changes"}
           </button>

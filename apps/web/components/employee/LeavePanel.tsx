@@ -83,7 +83,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: colour }}>
                     {b.leaveType}
                   </div>
-                  <div className="text-lg font-bold text-white">{b.remaining}</div>
+                  <div className="text-lg font-bold text-[var(--dpf-text)]">{b.remaining}</div>
                   <div className="text-[10px] text-[var(--dpf-muted)]">
                     of {b.allocated} days · {b.used} used
                   </div>
@@ -104,7 +104,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
             {pendingApprovals.map((r) => (
               <div key={r.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs text-white">{r.employeeName}</span>
+                  <span className="text-xs text-[var(--dpf-text)]">{r.employeeName}</span>
                   <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
                     {r.leaveType} · {r.days} day{r.days !== 1 ? "s" : ""} · {new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}
                   </span>
@@ -152,7 +152,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
               <select
                 value={newRequest.leaveType}
                 onChange={(e) => setNewRequest((p) => ({ ...p, leaveType: e.target.value }))}
-                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+                className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
               >
                 {policies.map((p) => (
                   <option key={p.policyId} value={p.leaveType}>{p.name}</option>
@@ -164,7 +164,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                 step={0.5}
                 value={newRequest.days}
                 onChange={(e) => setNewRequest((p) => ({ ...p, days: parseFloat(e.target.value) || 1 }))}
-                className="w-16 px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+                className="w-16 px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
                 placeholder="Days"
               />
             </div>
@@ -185,7 +185,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
               placeholder="Reason (optional)"
               value={newRequest.reason}
               onChange={(e) => setNewRequest((p) => ({ ...p, reason: e.target.value }))}
-              className="w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-white"
+              className="w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
             />
             <div className="flex gap-2">
               <button
@@ -217,7 +217,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                 <div key={r.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colour }} />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs text-white">{r.leaveType}</span>
+                    <span className="text-xs text-[var(--dpf-text)]">{r.leaveType}</span>
                     <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
                       {r.days} day{r.days !== 1 ? "s" : ""} · {new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}
                     </span>

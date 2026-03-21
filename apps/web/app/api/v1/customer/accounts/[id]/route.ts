@@ -18,7 +18,15 @@ export async function GET(
 
     const account = await prisma.customerAccount.findUnique({
       where: { id },
-      include: { contacts: true },
+      include: {
+        contacts: true,
+        contactRoles: {
+          include: { contact: true },
+          orderBy: [{ isPrimary: "desc" }, { startedAt: "desc" }],
+        },
+        parentAccount: { select: { id: true, accountId: true, name: true } },
+        childAccounts: { select: { id: true, accountId: true, name: true, status: true } },
+      },
     });
 
     if (!account) {

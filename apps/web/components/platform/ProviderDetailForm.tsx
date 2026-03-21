@@ -144,9 +144,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
-    background: "#1a1a2e",
-    border: "1px solid #2a2a40",
-    color: "#e0e0ff",
+    background: "var(--dpf-surface-1)",
+    border: "1px solid var(--dpf-border)",
+    color: "var(--dpf-text)",
     fontSize: 13,
     padding: "8px 10px",
     borderRadius: 4,
@@ -154,7 +154,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   const labelStyle: React.CSSProperties = {
     display: "block",
-    color: "#c0c0d8",
+    color: "var(--dpf-muted)",
     fontSize: 12,
     marginBottom: 4,
   };
@@ -168,23 +168,23 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           const isLastStep = s.n === STEPS.length;
           const done = step > s.n || (isLastStep && step === s.n);
           const current = step === s.n && !isLastStep;
-          const colour = done ? "#4ade80" : current ? "#7c8cf8" : "#2a2a40";
+          const colour = done ? "#4ade80" : current ? "var(--dpf-accent)" : "var(--dpf-border)";
           return (
             <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60 }}>
                 <div style={{
                   width: 24, height: 24, borderRadius: "50%",
-                  background: done ? "#4ade8030" : current ? "#7c8cf830" : "#1a1a2e",
+                  background: done ? "#4ade8030" : current ? "color-mix(in srgb, var(--dpf-accent) 20%, transparent)" : "var(--dpf-surface-1)",
                   border: `2px solid ${colour}`,
                   display: "grid", placeItems: "center",
                   fontSize: 11, fontWeight: 600, color: colour,
                 }}>
                   {done ? "\u2713" : s.n}
                 </div>
-                <span style={{ fontSize: 10, color: current ? "#e0e0ff" : "#8888a0", marginTop: 4 }}>{s.label}</span>
+                <span style={{ fontSize: 10, color: current ? "var(--dpf-text)" : "var(--dpf-muted)", marginTop: 4 }}>{s.label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div style={{ width: 32, height: 2, background: done ? "#4ade8060" : "#2a2a40", marginBottom: 16 }} />
+                <div style={{ width: 32, height: 2, background: done ? "#4ade8060" : "var(--dpf-border)", marginBottom: 16 }} />
               )}
             </div>
           );
@@ -194,13 +194,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {/* Status + toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
         <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
-        <span style={{ color: "#b0b0c8", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
+        <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
       </div>
 
       {/* Model families — hidden during initial setup, shown as advanced after profiling */}
       {hasProfiles && (
         <details style={{ marginBottom: 16 }}>
-          <summary style={{ color: "#8888a0", fontSize: 12, cursor: "pointer", marginBottom: 6 }}>
+          <summary style={{ color: "var(--dpf-muted)", fontSize: 12, cursor: "pointer", marginBottom: 6 }}>
             Advanced: model families ({enabledFamilies.length}/{provider.families.length} enabled)
           </summary>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
@@ -212,7 +212,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   disabled={!canWrite || isPending}
                   onChange={() => toggleFamily(f)}
                 />
-                <span style={{ fontSize: 12, color: "#e0e0ff" }}>{f}</span>
+                <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>{f}</span>
               </label>
             ))}
           </div>
@@ -245,7 +245,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             value={selectedAuthMethod}
             onChange={(e) => setSelectedAuthMethod(e.target.value)}
             disabled={!canWrite || isPending}
-            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 10px", borderRadius: 4 }}
+            style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", fontSize: 13, padding: "8px 10px", borderRadius: 4 }}
           >
             {provider.supportedAuthMethods.map((m) => (
               <option key={m} value={m}>
@@ -254,7 +254,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             ))}
           </select>
         ) : (
-          <span style={{ color: "#e0e0ff", fontSize: 13 }}>
+          <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
             {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : "None"}
           </span>
         )}
@@ -270,29 +270,29 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         <div style={{ marginBottom: 16 }}>
           {isAnyAnthropic && (
             <div style={{
-              background: "#1a1a30",
-              border: `1px solid ${isAnthropicSub ? "#4ade8030" : "#2a2a40"}`,
+              background: "var(--dpf-surface-1)",
+              border: `1px solid ${isAnthropicSub ? "#4ade8030" : "var(--dpf-border)"}`,
               borderRadius: 6,
               padding: "10px 12px",
               marginBottom: 12,
               fontSize: 12,
               lineHeight: 1.6,
-              color: "#b0b0c8",
+              color: "var(--dpf-muted)",
             }}>
               {isAnthropicSub ? (
                 <>
                   <div style={{ fontWeight: 600, color: "#4ade80", marginBottom: 4 }}>Claude Code / Max Subscription</div>
                   <div>Uses your Claude Max subscription — no per-token cost.</div>
                   <div style={{ marginTop: 4 }}>
-                    Run <code style={{ background: "#0a0a1a", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code> in your terminal, then paste the token below.
+                    Run <code style={{ background: "var(--dpf-bg)", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code> in your terminal, then paste the token below.
                   </div>
-                  <div style={{ marginTop: 4, color: "#6a6a80" }}>Limitations: no prompt caching, no 1M context window.</div>
+                  <div style={{ marginTop: 4, color: "var(--dpf-muted)" }}>Limitations: no prompt caching, no 1M context window.</div>
                 </>
               ) : (
                 <>
-                  <div style={{ fontWeight: 600, color: "#7c8cf8", marginBottom: 4 }}>Anthropic API Key</div>
-                  <div>Pay-per-token billing. Get your API key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#7c8cf8", textDecoration: "none" }}>console.anthropic.com</a>.</div>
-                  <div style={{ marginTop: 4, color: "#6a6a80" }}>Full API access including prompt caching and 1M context.</div>
+                  <div style={{ fontWeight: 600, color: "var(--dpf-accent)", marginBottom: 4 }}>Anthropic API Key</div>
+                  <div>Pay-per-token billing. Get your API key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "var(--dpf-accent)", textDecoration: "none" }}>console.anthropic.com</a>.</div>
+                  <div style={{ marginTop: 4, color: "var(--dpf-muted)" }}>Full API access including prompt caching and 1M context.</div>
                 </>
               )}
             </div>
@@ -300,7 +300,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <label style={labelStyle}>
             {isAnthropicSub ? "Subscription Token" : isAnthropicApi ? "API Key" : "API Key"}
             {credential?.secretHint && !secretRef && (
-              <span style={{ color: isAnthropicSub ? "#4ade80" : "#7c8cf8", marginLeft: 8 }}>
+              <span style={{ color: isAnthropicSub ? "#4ade80" : "var(--dpf-accent)", marginLeft: 8 }}>
                 {credential.secretHint}
               </span>
             )}
@@ -434,14 +434,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleSave}
             disabled={isPending}
-            style={{ padding: "8px 16px", background: "#2a2a50", border: "1px solid #7c8cf8", color: "#7c8cf8", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid #7c8cf8", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
             Save
           </button>
           <button
             onClick={handleTest}
             disabled={isPending}
-            style={{ padding: "8px 16px", background: "transparent", border: "1px solid #2a2a40", color: "#e0e0ff", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
             Test connection
           </button>
@@ -452,7 +452,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             </span>
           )}
           {pipelineStatus && (
-            <span style={{ fontSize: 12, color: "#7c8cf8" }} className="animate-pulse">
+            <span style={{ fontSize: 12, color: "var(--dpf-accent)" }} className="animate-pulse">
               {pipelineStatus}
             </span>
           )}
@@ -464,7 +464,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleRefreshModels}
             disabled={isPending}
-            style={{ background: "#1a1a2e", border: "1px solid #2a2a40", color: "#e0e0ff", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
+            style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
           >
             {isPending ? "Syncing..." : "Sync Models & Profiles"}
           </button>
@@ -491,7 +491,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       )}
 
       {models.length > 0 && (
-        <p style={{ color: "#b0b0c8", fontSize: 12, marginTop: 8 }}>
+        <p style={{ color: "var(--dpf-muted)", fontSize: 12, marginTop: 8 }}>
           {models.length} model{models.length !== 1 ? "s" : ""} discovered
         </p>
       )}
@@ -500,7 +500,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {models.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ color: "#7c8cf8", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+          <div style={{ color: "var(--dpf-accent)", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
             Discovered Models
           </div>
           <ModelSection

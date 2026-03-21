@@ -1,6 +1,6 @@
 # EP-MCP-SURFACE-001: External Services & MCP Surface Visibility
 
-**Status:** Draft
+**Status:** Superseded by EP-MCP-ACT-001 (2026-03-20-mcp-activation-and-services-surface-design.md)
 **Date:** 2026-03-16
 **Epic:** External Services & MCP Surface
 **Scope:** Unify LLM providers and MCP services under one "External Services" tab on the AI Workforce page, with auto-discovery, collapsible list UI, and sensitivity/routing metadata visibility

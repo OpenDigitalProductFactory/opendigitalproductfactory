@@ -12,7 +12,7 @@ export default function ResetPasswordPage({ searchParams }: Props) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
       <div className="w-full max-w-sm p-8 bg-[var(--dpf-surface-1)] rounded-xl border border-[var(--dpf-border)]">
-        <h1 className="text-xl font-bold text-white mb-3">Reset password</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-3">Reset password</h1>
         <ResetPasswordForm token={token} />
       </div>
     </div>

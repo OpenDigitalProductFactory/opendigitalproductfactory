@@ -86,6 +86,29 @@ export async function POST(request: Request) {
 
     const { title, description, portfolioIds } = parsed.data;
 
+    // Check for similar existing epics before creating
+    let similarEpics: Array<{ epicId: string; title: string; status: string; score: number }> = [];
+    try {
+      const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
+      const searchText = `${title} ${description ?? ""}`.trim();
+      const hits = await searchPlatformKnowledge({ query: searchText, entityType: "epic", limit: 5 });
+      if (hits.length > 0) {
+        const epicRows = await prisma.epic.findMany({
+          where: { epicId: { in: hits.map((h) => h.entityId) } },
+          select: { epicId: true, title: true, status: true },
+        });
+        const rowMap = new Map(epicRows.map((r) => [r.epicId, r]));
+        similarEpics = hits
+          .filter((h) => rowMap.has(h.entityId))
+          .map((h) => {
+            const row = rowMap.get(h.entityId)!;
+            return { epicId: row.epicId, title: row.title, status: row.status, score: h.score };
+          });
+      }
+    } catch {
+      // Semantic search unavailable — proceed without overlap check
+    }
+
     const epic = await prisma.$transaction(async (tx) => {
       const created = await tx.epic.create({
         data: {
@@ -106,10 +129,20 @@ export async function POST(request: Request) {
         });
       }
 
+      // Index in platform knowledge for semantic search
+      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
+        storePlatformKnowledge({
+          entityId: created.epicId,
+          entityType: "epic",
+          title,
+          content: description ?? "",
+        })
+      ).catch(() => {});
+
       return created;
     });
 
-    return apiSuccess(epic, 201);
+    return apiSuccess({ ...epic, similarEpics }, 201);
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(

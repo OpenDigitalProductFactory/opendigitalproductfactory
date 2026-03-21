@@ -50,7 +50,7 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
         ref={refs.setFloating}
         style={{
           ...floatingStyles,
-          background: "#1a1a2e",
+          background: "var(--dpf-surface-1)",
           border: "1px solid #4a90d9",
           borderRadius: 8,
           boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
@@ -59,8 +59,8 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
         }}
       >
         <div style={{ padding: "10px 12px 6px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#e0e0ff", marginBottom: 1 }}>{element.name}</div>
-          <div style={{ fontSize: 10, color: "#8888a0", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--dpf-text)", marginBottom: 1 }}>{element.name}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 10 }}>
             {element.typeName} · {element.lifecycleStage} · {element.lifecycleStatus}
           </div>
 
@@ -92,16 +92,16 @@ export function ReferencePopup({ element, anchorEl, onConfirm, onCancel }: Props
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 6, padding: "8px 12px", borderTop: "1px solid #2a2a40" }}>
+        <div style={{ display: "flex", gap: 6, padding: "8px 12px", borderTop: "1px solid var(--dpf-border)" }}>
           <button
             onClick={() => onConfirm(selectedMode)}
-            style={{ flex: 1, padding: 5, background: "#4a90d9", border: "none", borderRadius: 4, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer" }}
+            style={{ flex: 1, padding: 5, background: "var(--dpf-accent)", border: "none", borderRadius: 4, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer" }}
           >
             Add to canvas
           </button>
           <button
             onClick={onCancel}
-            style={{ padding: "5px 9px", background: "transparent", border: "1px solid #2a2a40", borderRadius: 4, color: "#8888a0", fontSize: 10, cursor: "pointer" }}
+            style={{ padding: "5px 9px", background: "transparent", border: "1px solid var(--dpf-border)", borderRadius: 4, color: "var(--dpf-muted)", fontSize: 10, cursor: "pointer" }}
           >
             Cancel
           </button>

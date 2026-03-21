@@ -39,7 +39,7 @@ export function PortfolioNodeDetail({
     <div>
       {/* Breadcrumb */}
       <nav className="flex flex-wrap items-center gap-1 text-xs text-[var(--dpf-muted)] mb-4">
-        <Link href="/portfolio" className="hover:text-white transition-colors">
+        <Link href="/portfolio" className="hover:text-[var(--dpf-text)] transition-colors">
           Portfolio
         </Link>
         {breadcrumbs.map((bc) => (
@@ -47,7 +47,7 @@ export function PortfolioNodeDetail({
             <span>›</span>
             <Link
               href={`/portfolio/${bc.nodeId}`}
-              className="hover:text-white transition-colors"
+              className="hover:text-[var(--dpf-text)] transition-colors"
             >
               {bc.name}
             </Link>
@@ -57,7 +57,7 @@ export function PortfolioNodeDetail({
 
       {/* Title */}
       <div className="flex items-baseline gap-3 mb-5">
-        <h1 className="text-xl font-bold text-white">{node.name}</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">{node.name}</h1>
         <span className="text-sm" style={{ color: colour }}>
           {node.totalCount} products
         </span>
@@ -164,7 +164,7 @@ function PeoplePanel({
       ) : (
         <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg px-4 py-3">
           <div className="flex items-baseline gap-2 mb-1">
-            <p className="text-sm font-semibold text-white">{ownerRole.name}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{ownerRole.name}</p>
             <p className="text-[10px] font-mono" style={{ color: colour }}>
               {ownerRole.roleId}
             </p>

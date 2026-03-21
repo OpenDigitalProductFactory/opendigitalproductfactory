@@ -111,7 +111,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                className="flex-1 px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-white outline-none focus:border-[var(--dpf-accent)]"
+                className="flex-1 px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
               />
               <button
                 onClick={handleCreate}
@@ -129,7 +129,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
                 <div className="text-3xl mb-3 opacity-20">&#128161;</div>
                 <p className="text-[13px] text-[var(--dpf-muted)] mb-2">No builds yet</p>
                 <p className="text-xs text-[var(--dpf-muted)] opacity-70">
-                  Type a feature name above and press <strong className="text-white">New</strong> to start.
+                  Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
                 </p>
               </div>
             ) : (
@@ -148,7 +148,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
                   }}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="text-[13px] font-semibold text-white mb-0.5">{build.title}</div>
+                    <div className="text-[13px] font-semibold text-[var(--dpf-text)] mb-0.5">{build.title}</div>
                     <span
                       role="button"
                       tabIndex={0}
@@ -186,7 +186,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
               <div className="px-4 py-3 border-b border-[var(--dpf-border)] flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-white m-0">{activeBuild.title}</h2>
+                    <h2 className="text-base font-bold text-[var(--dpf-text)] m-0">{activeBuild.title}</h2>
                     <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
                   </div>
                   <span className="text-xs text-[var(--dpf-muted)]">{activeBuild.buildId}</span>
@@ -216,12 +216,12 @@ export function BuildStudio({ builds, portfolios }: Props) {
             <div className="flex-1 grid place-items-center">
               <div className="text-center max-w-md px-8">
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
-                <h2 className="text-lg font-bold text-white mb-3">Product Development Studio</h2>
+                <h2 className="text-lg font-bold text-[var(--dpf-text)] mb-3">Product Development Studio</h2>
                 <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
                   Build features without writing code. Describe what you want, and your AI Coworker will design, build, and deploy it.
                 </p>
                 <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4">
-                  <p className="text-xs font-semibold text-white mb-3 uppercase tracking-wider">How it works</p>
+                  <p className="text-xs font-semibold text-[var(--dpf-text)] mb-3 uppercase tracking-wider">How it works</p>
                   <div className="flex flex-col gap-2.5">
                     <Step n={1} text="Type a feature name in the sidebar and click New" />
                     <Step n={2} text="Your AI Coworker will open and guide you through the process" />

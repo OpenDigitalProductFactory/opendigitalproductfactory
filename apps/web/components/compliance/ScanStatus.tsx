@@ -28,7 +28,7 @@ export function ScanStatus({ latestScan }: { latestScan: ScanInfo }) {
       <div>
         {latestScan ? (
           <>
-            <p className="text-sm text-white">
+            <p className="text-sm text-[var(--dpf-text)]">
               Last scan: {new Date(latestScan.startedAt).toLocaleDateString()}
               <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${
                 latestScan.status === "completed" ? "bg-green-900/30 text-green-400" :

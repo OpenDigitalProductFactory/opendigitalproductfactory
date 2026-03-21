@@ -34,7 +34,7 @@ export function BacklogItemRow({ item, onEdit }: Props) {
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white leading-tight truncate">{item.title}</p>
+        <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">{item.title}</p>
         <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 truncate">
           {item.taxonomyNode?.nodeId ?? "—"}
           {item.digitalProduct ? ` · ${item.digitalProduct.name}` : ""}
@@ -66,7 +66,7 @@ export function BacklogItemRow({ item, onEdit }: Props) {
             </button>
             <button
               onClick={() => setConfirmDelete(false)}
-              className="text-[10px] text-[var(--dpf-muted)] hover:text-white px-1"
+              className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] px-1"
             >
               cancel
             </button>
@@ -75,7 +75,7 @@ export function BacklogItemRow({ item, onEdit }: Props) {
           <>
             <button
               onClick={() => onEdit(item)}
-              className="text-[10px] text-[var(--dpf-muted)] hover:text-white px-1"
+              className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] px-1"
               aria-label="Edit"
             >
               edit

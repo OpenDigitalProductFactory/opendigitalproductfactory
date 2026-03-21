@@ -7,7 +7,6 @@ import { ModelCard } from "@/components/platform/ModelCard";
 import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 
 const PAGE_SIZE = 20;
-const BULK_CONFIRM_THRESHOLD = 50;
 
 type Props = {
   providerId: string;
@@ -35,7 +34,6 @@ export function ModelSection({
     failed: number;
     error?: string;
   } | null>(null);
-  const [profilingStatus, setProfilingStatus] = useState<string | null>(null);
   // Track modelIds that were discovered but not profiled after a profiling run
   const [failedModelIds, setFailedModelIds] = useState<Set<string>>(new Set());
 
@@ -69,8 +67,6 @@ export function ModelSection({
   const pageModels = filtered.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
 
   const unprofiledCount = models.filter((m) => !profileMap.has(m.modelId)).length;
-  const showProfileAllButton =
-    canWrite && hasActiveProvider && unprofiledCount > 0;
 
   function handleProfileSingle(modelId: string) {
     startTransition(async () => {
@@ -92,37 +88,6 @@ export function ModelSection({
     });
   }
 
-  function handleProfileAll() {
-    const unprofiledIds = models
-      .filter((m) => !profileMap.has(m.modelId))
-      .map((m) => m.modelId);
-
-    if (unprofiledIds.length === 0) return;
-
-    if (
-      unprofiledIds.length > BULK_CONFIRM_THRESHOLD &&
-      !window.confirm(
-        `You are about to profile ${unprofiledIds.length} models. This may incur significant API costs. Continue?`
-      )
-    ) {
-      return;
-    }
-
-    startTransition(async () => {
-      setProfilingResult(null);
-      setProfilingStatus(`Profiling ${unprofiledIds.length} model${unprofiledIds.length !== 1 ? "s" : ""}... This may take a minute.`);
-      const result = await profileModels(providerId, unprofiledIds);
-      setProfilingResult(result);
-      setProfilingStatus(null);
-
-      if (result.failed > 0) {
-        setFailedModelIds(new Set(unprofiledIds));
-      }
-
-      router.refresh();
-    });
-  }
-
   function handlePageChange(newPage: number) {
     setPage(newPage);
   }
@@ -134,7 +99,7 @@ export function ModelSection({
 
   if (models.length === 0) {
     return (
-      <div style={{ color: "#8888a0", fontSize: 12, padding: "16px 0" }}>
+      <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "16px 0" }}>
         No models discovered yet. Use the provider configuration above to run discovery.
       </div>
     );
@@ -159,9 +124,9 @@ export function ModelSection({
           onChange={handleSearchChange}
           placeholder="Search models…"
           style={{
-            background: "#1a1a2e",
-            border: "1px solid #2a2a40",
-            color: "#e0e0ff",
+            background: "var(--dpf-surface-1)",
+            border: "1px solid var(--dpf-border)",
+            color: "var(--dpf-text)",
             fontSize: 11,
             padding: "5px 10px",
             borderRadius: 4,
@@ -171,41 +136,12 @@ export function ModelSection({
         />
 
         {/* Count label */}
-        <span style={{ color: "#8888a0", fontSize: 10, flexGrow: 1 }}>
+        <span style={{ color: "var(--dpf-muted)", fontSize: 10, flexGrow: 1 }}>
           {filtered.length} model{filtered.length !== 1 ? "s" : ""}
           {searchLower ? " matching" : ""}
-          {" — "}
-          {unprofiledCount} unprofiled
+          {unprofiledCount > 0 ? ` — ${unprofiledCount} unprofiled` : ""}
         </span>
-
-        {/* Profile All Unprofiled button */}
-        {showProfileAllButton && (
-          <button
-            onClick={handleProfileAll}
-            disabled={isPending}
-            style={{
-              padding: "5px 12px",
-              background: "#2a2a50",
-              border: "1px solid #7c8cf8",
-              color: "#7c8cf8",
-              borderRadius: 4,
-              fontSize: 11,
-              cursor: isPending ? "not-allowed" : "pointer",
-              opacity: isPending ? 0.55 : 1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {isPending ? "Profiling…" : `Profile All Unprofiled (${unprofiledCount})`}
-          </button>
-        )}
       </div>
-
-      {/* Profiling progress */}
-      {profilingStatus && (
-        <div style={{ marginBottom: 10, fontSize: 11, color: "#7c8cf8" }} className="animate-pulse">
-          {profilingStatus}
-        </div>
-      )}
 
       {/* Profiling result message */}
       {profilingResult && (
@@ -250,7 +186,7 @@ export function ModelSection({
           ))}
         </div>
       ) : (
-        <div style={{ color: "#8888a0", fontSize: 12, padding: "12px 0" }}>
+        <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "12px 0" }}>
           No models match your search.
         </div>
       )}
@@ -270,7 +206,7 @@ export function ModelSection({
             style={{
               padding: "4px 10px",
               background: "transparent",
-              border: "1px solid #2a2a40",
+              border: "1px solid var(--dpf-border)",
               color: clampedPage === 0 ? "#8888a0" : "#e0e0ff",
               borderRadius: 4,
               fontSize: 11,
@@ -280,7 +216,7 @@ export function ModelSection({
             Prev
           </button>
 
-          <span style={{ color: "#8888a0", fontSize: 10 }}>
+          <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>
             Page {clampedPage + 1} of {totalPages}
           </span>
 
@@ -290,7 +226,7 @@ export function ModelSection({
             style={{
               padding: "4px 10px",
               background: "transparent",
-              border: "1px solid #2a2a40",
+              border: "1px solid var(--dpf-border)",
               color: clampedPage >= totalPages - 1 ? "#8888a0" : "#e0e0ff",
               borderRadius: 4,
               fontSize: 11,

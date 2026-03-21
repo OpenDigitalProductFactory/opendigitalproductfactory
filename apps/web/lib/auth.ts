@@ -78,28 +78,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          include: { groups: { include: { platformRole: true } } },
-        });
-        if (!user || !user.isActive) return null;
-        const { valid, needsRehash } = await verifyPassword(credentials.password as string, user.passwordHash);
-        if (!valid) return null;
-        if (needsRehash) {
-          const newHash = await hashPassword(credentials.password as string);
-          await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+        try {
+          if (!credentials?.email || !credentials?.password) return null;
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+            include: { groups: { include: { platformRole: true } } },
+          });
+          if (!user || !user.isActive) return null;
+          const { valid, needsRehash } = await verifyPassword(credentials.password as string, user.passwordHash);
+          if (!valid) return null;
+          if (needsRehash) {
+            const newHash = await hashPassword(credentials.password as string);
+            await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+          }
+          return {
+            id: user.id,
+            email: user.email,
+            type: "admin" as const,
+            platformRole: user.groups[0]?.platformRole.roleId ?? null,
+            isSuperuser: user.isSuperuser,
+            accountId: null,
+            accountName: null,
+            contactId: null,
+          };
+        } catch (err) {
+          console.error("[auth] workforce authorize error:", err);
+          return null;
         }
-        return {
-          id: user.id,
-          email: user.email,
-          type: "admin" as const,
-          platformRole: user.groups[0]?.platformRole.roleId ?? null,
-          isSuperuser: user.isSuperuser,
-          accountId: null,
-          accountName: null,
-          contactId: null,
-        };
       },
     }),
     // Customer portal login

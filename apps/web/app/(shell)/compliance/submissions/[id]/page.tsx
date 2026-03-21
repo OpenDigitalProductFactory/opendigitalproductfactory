@@ -55,14 +55,14 @@ export default async function SubmissionDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/submissions" className="text-xs text-[var(--dpf-muted)] hover:text-white">Submissions</Link>
+        <Link href="/compliance/submissions" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Submissions</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{submission.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{submission.title}</span>
       </div>
 
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{submission.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{submission.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[submission.status] ?? "bg-gray-900/30 text-gray-400"}`}>
             {submission.status}
           </span>
@@ -90,7 +90,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {submission.dueDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
-            <p className={`text-sm font-semibold ${daysRemaining !== null && daysRemaining < 0 ? "text-red-400" : daysRemaining !== null && daysRemaining < 7 ? "text-yellow-400" : "text-white"}`}>
+            <p className={`text-sm font-semibold ${daysRemaining !== null && daysRemaining < 0 ? "text-red-400" : daysRemaining !== null && daysRemaining < 7 ? "text-yellow-400" : "text-[var(--dpf-text)]"}`}>
               {new Date(submission.dueDate).toLocaleDateString()}
               {daysRemaining !== null && (
                 <span className="text-xs ml-1">({daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d remaining`})</span>
@@ -101,19 +101,19 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {submission.submittedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Submitted</p>
-            <p className="text-sm font-semibold text-white">{new Date(submission.submittedAt).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(submission.submittedAt).toLocaleDateString()}</p>
           </div>
         )}
         {submission.confirmationRef && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Confirmation</p>
-            <p className="text-sm font-semibold text-white">{submission.confirmationRef}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{submission.confirmationRef}</p>
           </div>
         )}
         {submission.submittedBy && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Submitted By</p>
-            <p className="text-sm font-semibold text-white">{submission.submittedBy.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{submission.submittedBy.displayName}</p>
           </div>
         )}
       </div>
@@ -140,7 +140,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
             <div key={item.obligationId} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${item.hasEvidence ? "bg-green-400" : "bg-red-400"}`} />
-                <span className="text-sm text-white">{item.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{item.title}</span>
               </div>
               <span className="text-xs text-[var(--dpf-muted)]">{item.evidenceCount} evidence record{item.evidenceCount !== 1 ? "s" : ""}</span>
             </div>
@@ -151,7 +151,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
       {submission.notes && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Notes</h2>
-          <p className="text-sm text-white">{submission.notes}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{submission.notes}</p>
         </div>
       )}
     </div>

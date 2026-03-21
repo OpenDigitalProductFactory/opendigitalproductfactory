@@ -34,21 +34,21 @@ export default async function SupplierDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <Link href="/finance/suppliers" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance/suppliers" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Suppliers
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{supplier.name}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{supplier.name}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">{supplier.name}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{supplier.name}</h1>
           <p className="text-[10px] font-mono text-[var(--dpf-muted)] mt-0.5">
             {supplier.supplierId}
           </p>
@@ -62,7 +62,7 @@ export default async function SupplierDetailPage({ params }: Props) {
           </Link>
           <Link
             href={`/finance/purchase-orders/new?supplierId=${supplier.id}`}
-            className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white hover:border-white transition-colors"
+            className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-white transition-colors"
           >
             New PO
           </Link>
@@ -86,7 +86,7 @@ export default async function SupplierDetailPage({ params }: Props) {
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">
               {label}
             </p>
-            <p className="text-sm text-white">{value}</p>
+            <p className="text-sm text-[var(--dpf-text)]">{value}</p>
           </div>
         ))}
       </div>
@@ -129,7 +129,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                       <td className="px-4 py-2.5">
                         <Link
                           href={`/finance/bills/${bill.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white"
+                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                         >
                           {bill.billRef}
                         </Link>
@@ -147,7 +147,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                           ? new Date(bill.dueDate).toLocaleDateString("en-GB")
                           : "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-white">
+                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         £{formatMoney(bill.totalAmount)}
                       </td>
                     </tr>
@@ -196,7 +196,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                       <td className="px-4 py-2.5">
                         <Link
                           href={`/finance/purchase-orders/${po.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white"
+                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                         >
                           {po.poNumber}
                         </Link>
@@ -209,7 +209,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                           {po.status.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-white">
+                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         £{formatMoney(po.totalAmount)}
                       </td>
                     </tr>

@@ -32,17 +32,17 @@ export default async function AuditDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/audits" className="text-xs text-[var(--dpf-muted)] hover:text-white">Audits</Link>
+        <Link href="/compliance/audits" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Audits</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{audit.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{audit.title}</span>
       </div>
 
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">{audit.title}</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">{audit.title}</h1>
         <div className="flex gap-2 mt-1">
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{audit.auditType}</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{audit.status}</span>
-          {audit.overallRating && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{audit.overallRating}</span>}
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{audit.auditType}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{audit.status}</span>
+          {audit.overallRating && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{audit.overallRating}</span>}
         </div>
       </div>
 
@@ -50,23 +50,23 @@ export default async function AuditDetailPage({ params }: Props) {
         {audit.scheduledAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Scheduled</p>
-            <p className="text-sm font-semibold text-white">{new Date(audit.scheduledAt).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.scheduledAt).toLocaleDateString()}</p>
           </div>
         )}
         {audit.conductedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Conducted</p>
-            <p className="text-sm font-semibold text-white">{new Date(audit.conductedAt).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.conductedAt).toLocaleDateString()}</p>
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Findings</p>
-          <p className="text-sm font-semibold text-white">{audit.findings.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{audit.findings.length}</p>
         </div>
         {audit.auditor && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Auditor</p>
-            <p className="text-sm font-semibold text-white">{audit.auditorName ?? audit.auditor.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{audit.auditorName ?? audit.auditor.displayName}</p>
           </div>
         )}
       </div>
@@ -74,7 +74,7 @@ export default async function AuditDetailPage({ params }: Props) {
       {audit.scope && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Scope</h2>
-          <p className="text-sm text-white">{audit.scope}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{audit.scope}</p>
         </div>
       )}
 
@@ -86,7 +86,7 @@ export default async function AuditDetailPage({ params }: Props) {
           {audit.findings.map((f) => (
             <div key={f.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
               <div>
-                <span className="text-sm text-white">{f.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{f.title}</span>
                 <div className="flex gap-2 mt-1">
                   <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${FINDING_COLORS[f.findingType] ?? "bg-gray-900/30 text-gray-400"}`}>
                     {f.findingType}

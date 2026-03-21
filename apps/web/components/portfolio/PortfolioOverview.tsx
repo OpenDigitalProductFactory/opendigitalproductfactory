@@ -11,7 +11,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets }: Props) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Portfolio</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Portfolio</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {roots.length} portfolios · {totalProducts} products
         </p>
@@ -28,12 +28,12 @@ export function PortfolioOverview({ roots, agentCounts, budgets }: Props) {
               className="block p-5 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
               style={{ borderLeftColor: colour }}
             >
-              <h2 className="text-base font-semibold text-white mb-3">
+              <h2 className="text-base font-semibold text-[var(--dpf-text)] mb-3">
                 {root.name}
               </h2>
               <div className="flex items-center gap-4">
                 <div>
-                  <p className="text-xl font-bold text-white">
+                  <p className="text-xl font-bold text-[var(--dpf-text)]">
                     {root.totalCount}
                   </p>
                   <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">

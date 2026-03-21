@@ -60,17 +60,17 @@ export default async function InvoicesPage({ searchParams }: Props) {
       <div className="mb-2">
         <Link
           href="/finance"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">Invoices</span>
+        <span className="text-xs text-[var(--dpf-text)]">Invoices</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-xl font-bold text-white">Invoices</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Invoices</h1>
         <Link
           href="/finance/invoices/new"
           className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
@@ -85,8 +85,8 @@ export default async function InvoicesPage({ searchParams }: Props) {
           href="/finance/invoices"
           className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
             !status
-              ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+              ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           }`}
         >
           All ({totalCount})
@@ -101,8 +101,8 @@ export default async function InvoicesPage({ searchParams }: Props) {
               href={`/finance/invoices?status=${s}`}
               className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
                 isActive
-                  ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+                  ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/10"
+                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               }`}
             >
               <span style={{ color: isActive ? undefined : colour }}>
@@ -150,7 +150,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/invoices/${inv.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white transition-colors"
+                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                       >
                         {inv.invoiceRef}
                       </Link>
@@ -158,7 +158,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/invoices/${inv.id}`}
-                        className="text-white hover:underline"
+                        className="text-[var(--dpf-text)] hover:underline"
                       >
                         {inv.account.name}
                       </Link>
@@ -177,7 +177,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
                       {new Date(inv.dueDate).toLocaleDateString("en-GB")}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-white">
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       £{formatMoney(Number(inv.totalAmount))}
                     </td>
                   </tr>

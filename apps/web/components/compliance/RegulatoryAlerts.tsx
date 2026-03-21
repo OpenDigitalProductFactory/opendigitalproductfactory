@@ -63,7 +63,7 @@ export function RegulatoryAlerts({ alerts }: { alerts: Alert[] }) {
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[a.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
                   {a.severity}
                 </span>
-                <span className="text-sm text-white">{a.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{a.title}</span>
               </div>
               {a.regulation && (
                 <span className="text-[9px] text-[var(--dpf-muted)] mt-1 block">{a.regulation.shortName} · {a.regulation.jurisdiction}</span>
@@ -81,22 +81,22 @@ export function RegulatoryAlerts({ alerts }: { alerts: Alert[] }) {
               <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[selectedAlert.severity] ?? ""}`}>
                 {selectedAlert.severity}
               </span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)] ml-2">{selectedAlert.alertType}</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] ml-2">{selectedAlert.alertType}</span>
             </div>
-            {selectedAlert.description && <p className="text-sm text-white">{selectedAlert.description}</p>}
+            {selectedAlert.description && <p className="text-sm text-[var(--dpf-text)]">{selectedAlert.description}</p>}
             {selectedAlert.suggestedAction && (
-              <div className="p-3 rounded bg-[#222] border border-[var(--dpf-border)]">
+              <div className="p-3 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
                 <p className="text-xs text-[var(--dpf-muted)] mb-1">Suggested Action</p>
-                <p className="text-sm text-white">{selectedAlert.suggestedAction}</p>
+                <p className="text-sm text-[var(--dpf-text)]">{selectedAlert.suggestedAction}</p>
               </div>
             )}
             <div className="flex gap-2 pt-2">
               <button onClick={() => handleDismiss(selectedAlert.id)} disabled={loading}
-                className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-white disabled:opacity-50">
+                className="px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-50">
                 Dismiss
               </button>
               <button onClick={() => handleReview(selectedAlert.id, "flagged-for-further-review")} disabled={loading}
-                className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-white hover:bg-[#333] disabled:opacity-50">
+                className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50">
                 Flag for Review
               </button>
               <button onClick={() => handleReview(selectedAlert.id, "regulation-updated")} disabled={loading}

@@ -95,7 +95,7 @@ export default async function EmployeePage({ searchParams }: Props) {
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Employee</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Employee</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
             {roles.length} role{roles.length !== 1 ? "s" : ""}
           </p>
@@ -141,7 +141,7 @@ export default async function EmployeePage({ searchParams }: Props) {
               <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
                 {r.roleId}
               </p>
-              <p className="text-sm font-semibold text-white leading-tight mb-1">
+              <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
                 {r.name}
               </p>
               {r.description != null && (

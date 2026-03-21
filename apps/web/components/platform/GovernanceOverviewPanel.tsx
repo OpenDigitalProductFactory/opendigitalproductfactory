@@ -32,7 +32,7 @@ export function GovernanceOverviewPanel({ summary, recentGrants }: Props) {
   return (
     <section className="mb-6 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white">Identity governance</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Identity governance</h2>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
           Human accountability, governed agents, and temporary delegation state.
         </p>
@@ -46,7 +46,7 @@ export function GovernanceOverviewPanel({ summary, recentGrants }: Props) {
             style={{ borderLeft: `4px solid ${card.accent}` }}
           >
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">{card.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{summary[card.key]}</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{summary[card.key]}</p>
           </div>
         ))}
       </div>

@@ -27,7 +27,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Incidents</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Incidents</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{incidents.length} total</p>
         </div>
         <CreateIncidentForm />
@@ -36,7 +36,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="severity" defaultValue={sp.severity ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All severities</option>
           {INCIDENT_SEVERITIES.map((s) => (
             <option key={s} value={s}>{s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -44,7 +44,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
         </select>
 
         <select name="status" defaultValue={sp.status ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All statuses</option>
           {INCIDENT_STATUSES.map((s) => (
             <option key={s} value={s}>{s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
@@ -52,7 +52,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
         </select>
 
         <select name="regulatoryNotifiable" defaultValue={sp.regulatoryNotifiable ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[#1a1a1a] text-white focus:outline-none focus:border-[var(--dpf-accent)]">
+          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
           <option value="">All notifiable</option>
           <option value="yes">Notifiable</option>
           <option value="no">Not Notifiable</option>
@@ -65,7 +65,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
 
         {hasFilters && (
           <Link href="/compliance/incidents"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors">
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear
           </Link>
         )}
@@ -83,7 +83,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white">{inc.title}</span>
+                      <span className="text-sm text-[var(--dpf-text)]">{inc.title}</span>
                       {isNotifiable && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">
                           NOTIFIABLE
@@ -94,7 +94,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[inc.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
                         {inc.severity}
                       </span>
-                      {inc.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{inc.category}</span>}
+                      {inc.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{inc.category}</span>}
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isOpen ? "bg-yellow-900/30 text-yellow-400" : "bg-green-900/30 text-green-400"}`}>
                         {inc.status}
                       </span>

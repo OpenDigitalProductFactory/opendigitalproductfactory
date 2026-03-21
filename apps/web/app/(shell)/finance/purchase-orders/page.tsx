@@ -29,16 +29,16 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-white">
+        <Link href="/finance" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">Purchase Orders</span>
+        <span className="text-xs text-[var(--dpf-text)]">Purchase Orders</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-xl font-bold text-white">Purchase Orders</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Purchase Orders</h1>
         <Link
           href="/finance/purchase-orders/new"
           className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
@@ -54,7 +54,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
           className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
             !status
               ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           }`}
         >
           All
@@ -69,7 +69,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
               className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors ${
                 isActive
                   ? "border-[var(--dpf-accent)] text-white bg-[var(--dpf-accent)]/10"
-                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white"
+                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               }`}
             >
               <span style={{ color: isActive ? undefined : colour }}>
@@ -116,7 +116,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/purchase-orders/${po.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-white transition-colors"
+                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
                       >
                         {po.poNumber}
                       </Link>
@@ -124,7 +124,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/finance/purchase-orders/${po.id}`}
-                        className="text-white hover:underline"
+                        className="text-[var(--dpf-text)] hover:underline"
                       >
                         {po.supplier.name}
                       </Link>
@@ -142,7 +142,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
                         ? new Date(po.deliveryDate).toLocaleDateString("en-GB")
                         : "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-white">
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       £{formatMoney(po.totalAmount)}
                     </td>
                   </tr>

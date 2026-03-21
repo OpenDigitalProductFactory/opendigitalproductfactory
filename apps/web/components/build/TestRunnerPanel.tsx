@@ -22,7 +22,7 @@ export function TestRunnerPanel({ steps }: { steps: TestStep[] }) {
 
   return (
     <div className="p-3 space-y-2">
-      <h3 className="text-xs font-semibold text-white uppercase tracking-widest">UX Test Results</h3>
+      <h3 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">UX Test Results</h3>
       {steps.map((s, i) => (
         <div key={i}>
           <button
@@ -33,7 +33,7 @@ export function TestRunnerPanel({ steps }: { steps: TestStep[] }) {
               className="w-2 h-2 rounded-full shrink-0"
               style={{ background: s.passed ? "#4ade80" : "#f87171" }}
             />
-            <span className="text-xs text-white flex-1">{s.step}</span>
+            <span className="text-xs text-[var(--dpf-text)] flex-1">{s.step}</span>
             <span className="text-[10px] text-[var(--dpf-muted)]">{s.passed ? "PASS" : "FAIL"}</span>
           </button>
           {expandedStep === i && (

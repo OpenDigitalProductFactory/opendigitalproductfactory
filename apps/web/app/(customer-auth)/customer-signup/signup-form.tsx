@@ -44,21 +44,21 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#0d0d18",
+      background: "var(--dpf-bg)",
       padding: 20,
     }}>
       <div style={{
         width: 380,
         maxWidth: "100%",
-        background: "#1a1a2e",
-        border: "1px solid #2a2a40",
+        background: "var(--dpf-surface-1)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 12,
         padding: 32,
       }}>
-        <h1 style={{ color: "#fff", fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+        <h1 style={{ color: "var(--dpf-text)", fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
           Create Account
         </h1>
-        <p style={{ color: "#8888a0", fontSize: 13, marginBottom: 24 }}>
+        <p style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 24 }}>
           Sign up for the customer portal
         </p>
 
@@ -71,7 +71,7 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Company Name</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Company Name</label>
             <input
               type="text"
               value={companyName}
@@ -81,13 +81,13 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
               placeholder="Your company or organization"
               style={{
                 width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 6,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff", outline: "none",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)", outline: "none",
               }}
             />
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Email</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Email</label>
             <input
               type="email"
               value={email}
@@ -96,13 +96,13 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
               placeholder="you@company.com"
               style={{
                 width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 6,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff", outline: "none",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)", outline: "none",
               }}
             />
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Password</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Password</label>
             <input
               type="password"
               value={password}
@@ -112,13 +112,13 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
               placeholder="At least 8 characters"
               style={{
                 width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 6,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff", outline: "none",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)", outline: "none",
               }}
             />
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", color: "#b0b0c8", fontSize: 12, marginBottom: 4 }}>Confirm Password</label>
+            <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Confirm Password</label>
             <input
               type="password"
               value={confirmPassword}
@@ -126,7 +126,7 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
               required
               style={{
                 width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 6,
-                border: "1px solid #2a2a40", background: "#0d0d18", color: "#fff", outline: "none",
+                border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)", outline: "none",
               }}
             />
           </div>
@@ -140,7 +140,7 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
             disabled={isPending}
             style={{
               width: "100%", padding: "10px 0", fontSize: 14, fontWeight: 600, borderRadius: 6,
-              border: "none", background: "#7c8cf8", color: "#fff",
+              border: "none", background: "var(--dpf-accent)", color: "#fff",
               cursor: isPending ? "wait" : "pointer", opacity: isPending ? 0.7 : 1,
             }}
           >
@@ -148,9 +148,9 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
           </button>
         </form>
 
-        <div style={{ marginTop: 20, textAlign: "center", fontSize: 12, color: "#8888a0" }}>
+        <div style={{ marginTop: 20, textAlign: "center", fontSize: 12, color: "var(--dpf-muted)" }}>
           <span>Already have an account? </span>
-          <Link href="/customer-login" style={{ color: "#7c8cf8", textDecoration: "none" }}>
+          <Link href="/customer-login" style={{ color: "var(--dpf-accent)", textDecoration: "none" }}>
             Sign in
           </Link>
         </div>

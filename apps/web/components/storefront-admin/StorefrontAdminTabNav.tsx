@@ -3,11 +3,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { label: "Dashboard", href: "/storefront" },
-  { label: "Sections", href: "/storefront/sections" },
-  { label: "Items", href: "/storefront/items" },
-  { label: "Inbox", href: "/storefront/inbox" },
-  { label: "Settings", href: "/storefront/settings" },
+  { label: "Dashboard", href: "/admin/storefront" },
+  { label: "Sections", href: "/admin/storefront/sections" },
+  { label: "Items", href: "/admin/storefront/items" },
+  { label: "Inbox", href: "/admin/storefront/inbox" },
+  { label: "Settings", href: "/admin/storefront/settings" },
 ];
 
 export function StorefrontAdminTabNav() {
@@ -15,7 +15,7 @@ export function StorefrontAdminTabNav() {
   return (
     <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--dpf-border)", marginBottom: 24 }}>
       {TABS.map((tab) => {
-        const active = path === tab.href;
+        const active = tab.href === "/admin/storefront" ? path === "/admin/storefront" : path === tab.href;
         return (
           <Link key={tab.href} href={tab.href} style={{
             padding: "10px 16px",

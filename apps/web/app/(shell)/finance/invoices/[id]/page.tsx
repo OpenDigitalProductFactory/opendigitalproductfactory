@@ -46,26 +46,26 @@ export default async function InvoiceDetailPage({ params }: Props) {
       <div className="mb-2">
         <Link
           href="/finance"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <Link
           href="/finance/invoices"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Invoices
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{invoice.invoiceRef}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{invoice.invoiceRef}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-xl font-bold text-[var(--dpf-text)]">
               {invoice.invoiceRef}
             </h1>
             <span
@@ -87,7 +87,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
               href={`/api/v1/finance/invoices/${invoice.id}/pdf`}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-white transition-colors"
+              className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
             >
               Download PDF
             </a>
@@ -95,7 +95,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           </div>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-white">
+          <p className="text-2xl font-bold text-[var(--dpf-text)]">
             £{formatMoney(totalAmount)}
           </p>
           {amountDue !== totalAmount && (
@@ -110,25 +110,25 @@ export default async function InvoiceDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Issue Date</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
             {new Date(invoice.issueDate).toLocaleDateString("en-GB")}
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
             {new Date(invoice.dueDate).toLocaleDateString("en-GB")}
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Terms</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
             {invoice.paymentTerms ?? "—"}
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Type</p>
-          <p className="text-sm font-semibold text-white capitalize">
+          <p className="text-sm font-semibold text-[var(--dpf-text)] capitalize">
             {invoice.type}
           </p>
         </div>
@@ -166,7 +166,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                   key={item.id}
                   className="border-b border-[var(--dpf-border)] last:border-0"
                 >
-                  <td className="px-4 py-2.5 text-white">{item.description}</td>
+                  <td className="px-4 py-2.5 text-[var(--dpf-text)]">{item.description}</td>
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(item.quantity)}
                   </td>
@@ -176,7 +176,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                   <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
                     {Number(item.taxRate)}%
                   </td>
-                  <td className="px-4 py-2.5 text-right text-white">
+                  <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                     £{formatMoney(Number(item.lineTotal))}
                   </td>
                 </tr>
@@ -190,7 +190,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                 >
                   Subtotal
                 </td>
-                <td className="px-4 py-2 text-right text-white">
+                <td className="px-4 py-2 text-right text-[var(--dpf-text)]">
                   £{formatMoney(subtotal)}
                 </td>
               </tr>
@@ -214,7 +214,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
                 >
                   Total
                 </td>
-                <td className="px-4 py-2 text-right text-white font-bold">
+                <td className="px-4 py-2 text-right text-[var(--dpf-text)] font-bold">
                   £{formatMoney(totalAmount)}
                 </td>
               </tr>
@@ -285,7 +285,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
             Notes
           </h2>
-          <p className="text-sm text-white whitespace-pre-wrap">
+          <p className="text-sm text-[var(--dpf-text)] whitespace-pre-wrap">
             {invoice.notes}
           </p>
         </section>

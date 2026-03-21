@@ -36,15 +36,15 @@ export default async function ObligationDetailPage({ params }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="mb-2">
-        <Link href="/compliance/obligations" className="text-xs text-[var(--dpf-muted)] hover:text-white">Obligations</Link>
+        <Link href="/compliance/obligations" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Obligations</Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">{obligation.title}</span>
+        <span className="text-xs text-[var(--dpf-text)]">{obligation.title}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-white">{obligation.title}</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{obligation.title}</h1>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${obligation.status === "active" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
             {obligation.status}
           </span>
@@ -60,46 +60,46 @@ export default async function ObligationDetailPage({ params }: Props) {
         {obligation.reference && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Reference</p>
-            <p className="text-sm font-semibold text-white">{obligation.reference}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.reference}</p>
           </div>
         )}
         {obligation.category && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Category</p>
-            <p className="text-sm font-semibold text-white">{obligation.category}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.category}</p>
           </div>
         )}
         {obligation.frequency && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Frequency</p>
-            <p className="text-sm font-semibold text-white">{obligation.frequency}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.frequency}</p>
           </div>
         )}
         {obligation.applicability && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Applicability</p>
-            <p className="text-sm font-semibold text-white">{obligation.applicability}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.applicability}</p>
           </div>
         )}
         {obligation.ownerEmployee && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Owner</p>
-            <p className="text-sm font-semibold text-white">{obligation.ownerEmployee.displayName}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.ownerEmployee.displayName}</p>
           </div>
         )}
         {obligation.reviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Review Date</p>
-            <p className="text-sm font-semibold text-white">{new Date(obligation.reviewDate).toLocaleDateString()}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(obligation.reviewDate).toLocaleDateString()}</p>
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Controls</p>
-          <p className="text-sm font-semibold text-white">{obligation.controls.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.controls.length}</p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Evidence</p>
-          <p className="text-sm font-semibold text-white">{obligation.evidence.length}</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.evidence.length}</p>
         </div>
       </div>
 
@@ -107,7 +107,7 @@ export default async function ObligationDetailPage({ params }: Props) {
       {obligation.penaltySummary && (
         <div className="mb-6">
           <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Penalty Summary</h2>
-          <p className="text-sm text-white">{obligation.penaltySummary}</p>
+          <p className="text-sm text-[var(--dpf-text)]">{obligation.penaltySummary}</p>
         </div>
       )}
 
@@ -118,8 +118,8 @@ export default async function ObligationDetailPage({ params }: Props) {
           href={`/compliance/regulations/${obligation.regulation.id}`}
           className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
         >
-          <span className="text-sm font-semibold text-white">{obligation.regulation.shortName}</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{obligation.regulation.jurisdiction}</span>
+          <span className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.regulation.shortName}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{obligation.regulation.jurisdiction}</span>
           <span className="text-xs text-blue-400">View</span>
         </Link>
       </div>
@@ -144,17 +144,17 @@ export default async function ObligationDetailPage({ params }: Props) {
               <div className="min-w-0">
                 <Link
                   href={`/compliance/controls/${link.control.id}`}
-                  className="text-sm text-white hover:text-[var(--dpf-accent)] transition-colors"
+                  className="text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] transition-colors"
                 >
                   {link.control.title}
                 </Link>
                 <div className="flex gap-2 mt-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{link.control.controlType}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{link.control.controlType}</span>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${IMPL_COLORS[link.control.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
                     {link.control.implementationStatus}
                   </span>
                   {link.control.effectiveness && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{link.control.effectiveness}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{link.control.effectiveness}</span>
                   )}
                 </div>
                 {link.notes && (
@@ -178,9 +178,9 @@ export default async function ObligationDetailPage({ params }: Props) {
           {obligation.evidence.map((e) => (
             <div key={e.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
               <div>
-                <span className="text-sm text-white">{e.title}</span>
+                <span className="text-sm text-[var(--dpf-text)]">{e.title}</span>
                 <div className="flex gap-2 mt-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#333] text-[var(--dpf-muted)]">{e.evidenceType}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{e.evidenceType}</span>
                   {e.fileRef && <span className="text-[9px] text-[var(--dpf-muted)]">{e.fileRef}</span>}
                 </div>
               </div>

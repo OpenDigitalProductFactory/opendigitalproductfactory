@@ -138,7 +138,7 @@ export function BrandingPreview({
               type="button"
               style={{
                 background: "var(--preview-accent)",
-                color: "#fff",
+                color: "var(--dpf-text)",
                 border: "none",
                 borderRadius: "6px",
                 padding: "6px 14px",

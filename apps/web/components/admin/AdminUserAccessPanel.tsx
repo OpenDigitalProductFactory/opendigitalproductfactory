@@ -79,20 +79,20 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
   return (
     <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-white">Access setup (Admin)</h3>
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Access setup (Admin)</h3>
         <p className="text-xs text-[var(--dpf-muted)] mt-1">Create user credentials and perform password resets.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Create user</h4>
+          <h4 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-wider">Create user</h4>
           <label className="block">
             <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Email</span>
             <input
               value={createEmail}
               onChange={(e) => setCreateEmail(e.target.value)}
               type="email"
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-white"
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
               placeholder="person@company.com"
             />
           </label>
@@ -102,7 +102,7 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
               value={createPassword}
               onChange={(e) => setCreatePassword(e.target.value)}
               type="password"
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-white"
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
               placeholder="12+ chars, upper/lower/number/symbol"
             />
           </label>
@@ -111,7 +111,7 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
             <select
               value={createRoleId}
               onChange={(e) => setCreateRoleId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-white"
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
             >
               {roles.map((role) => (
                 <option key={role.roleId} value={role.roleId}>
@@ -143,13 +143,13 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
         </div>
 
         <div className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Password reset</h4>
+          <h4 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-wider">Password reset</h4>
           <label className="block">
             <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">User</span>
             <select
               value={resetUserId}
               onChange={(e) => setResetUserId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-white"
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
             >
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
@@ -169,7 +169,7 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
           {resetResult?.recoveryLink ? (
             <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
               <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Manual recovery link</span>
-              <p className="mt-1 break-all text-xs text-white">{resetResult.recoveryLink}</p>
+              <p className="mt-1 break-all text-xs text-[var(--dpf-text)]">{resetResult.recoveryLink}</p>
             </div>
           ) : null}
           <p className={`text-xs ${resultClasses(resetResult)}`}>

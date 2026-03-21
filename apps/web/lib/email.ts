@@ -72,6 +72,67 @@ export function composeInvoiceEmail(params: InvoiceEmailParams) {
   return { to, subject, text, html };
 }
 
+type ApprovalEmailParams = {
+  to: string;
+  billRef: string;
+  supplierName: string;
+  totalAmount: string;
+  currency: string;
+  approveUrl: string;
+};
+
+export function composeApprovalEmail(params: ApprovalEmailParams) {
+  const { to, billRef, supplierName, totalAmount, currency, approveUrl } = params;
+
+  const subject = `Bill ${billRef} from ${supplierName} needs your approval`;
+
+  const text = [
+    `Bill Approval Required`,
+    ``,
+    `Bill: ${billRef}`,
+    `Supplier: ${supplierName}`,
+    `Amount: ${currency} ${totalAmount}`,
+    ``,
+    `Review and respond: ${approveUrl}`,
+    ``,
+    `Please approve or reject this bill at the link above.`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;">
+  <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+    <div style="background:white;border-radius:8px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <h1 style="margin:0 0 8px;font-size:24px;color:#111;">Bill Approval Required</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;">From supplier: ${supplierName}</p>
+
+      <div style="background:#f3f4f6;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Bill Reference</span>
+          <span style="font-size:16px;font-weight:600;color:#111;">${billRef}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#6b7280;font-size:14px;">Total Amount</span>
+          <span style="font-size:24px;font-weight:700;color:#111;">${currency} ${totalAmount}</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-bottom:16px;">
+        <a href="${approveUrl}?response=approve" style="display:inline-block;background:#22c55e;color:white;font-size:16px;font-weight:600;padding:14px 36px;border-radius:8px;text-decoration:none;margin-right:12px;">Approve</a>
+        <a href="${approveUrl}?response=reject" style="display:inline-block;background:#ef4444;color:white;font-size:16px;font-weight:600;padding:14px 36px;border-radius:8px;text-decoration:none;">Reject</a>
+      </div>
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        You are receiving this because you are an approver for bills of this amount.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { to, subject, text, html };
+}
+
 export async function sendEmail(options: EmailOptions): Promise<{ messageId: string }> {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || "587", 10);

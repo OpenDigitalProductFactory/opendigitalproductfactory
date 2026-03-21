@@ -43,6 +43,7 @@ for sql_file in \
   "$SCRIPT_DIR/seed-vision-epics.sql" \
   "$SCRIPT_DIR/seed-hr-epic.sql" \
   "$SCRIPT_DIR/seed-crm-epic.sql" \
+  "$SCRIPT_DIR/seed-crm-sales-pipeline-epic.sql" \
   "$SCRIPT_DIR/seed-sbom-epic.sql" \
   "$SCRIPT_DIR/seed-calendaring-epic.sql" \
   "$SCRIPT_DIR/update-finance-epic.sql" \

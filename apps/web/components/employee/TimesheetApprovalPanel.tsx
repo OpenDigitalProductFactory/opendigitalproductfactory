@@ -43,13 +43,13 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
           <div key={ts.id} className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-xs text-white font-medium">{ts.employeeName}</span>
+                <span className="text-xs text-[var(--dpf-text)] font-medium">{ts.employeeName}</span>
                 <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
                   Week of {new Date(ts.weekStarting).toLocaleDateString()}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-white font-semibold">{ts.totalHours}h</span>
+                <span className="text-xs text-[var(--dpf-text)] font-semibold">{ts.totalHours}h</span>
                 {ts.overtimeHours > 0 && (
                   <span className="text-[10px] text-yellow-400">{ts.overtimeHours}h OT</span>
                 )}
@@ -63,7 +63,7 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
                 return (
                   <div key={i} className="flex-1 text-center">
                     <div className="text-[9px] text-[var(--dpf-muted)]">{day}</div>
-                    <div className="text-[11px] text-white">{entry?.hours ?? 0}</div>
+                    <div className="text-[11px] text-[var(--dpf-text)]">{entry?.hours ?? 0}</div>
                   </div>
                 );
               })}

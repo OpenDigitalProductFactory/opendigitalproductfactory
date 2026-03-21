@@ -23,24 +23,24 @@ export default async function NewInvoicePage() {
       <div className="mb-2">
         <Link
           href="/finance"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Finance
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <Link
           href="/finance/invoices"
-          className="text-xs text-[var(--dpf-muted)] hover:text-white"
+          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           Invoices
         </Link>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <span className="text-xs text-white">New</span>
+        <span className="text-xs text-[var(--dpf-text)]">New</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">New Invoice</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">New Invoice</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           Create a draft invoice to send to a customer
         </p>

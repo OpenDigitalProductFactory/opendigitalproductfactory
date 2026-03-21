@@ -161,7 +161,7 @@ export function EaRelationshipEdge({ id, source, target, selected, data, markerE
             <span style={{
               fontSize: 10,
               color: selected ? "#a5b4fc" : "#7c8cf8",
-              background: "#0f0f1a",
+              background: "var(--dpf-bg)",
               padding: "1px 3px",
               borderRadius: 2,
             }}>
@@ -174,7 +174,7 @@ export function EaRelationshipEdge({ id, source, target, selected, data, markerE
               title="Delete relationship"
               style={{
                 width: 16, height: 16, borderRadius: "50%",
-                background: "#ef4444", border: "none", color: "#fff",
+                background: "#ef4444", border: "none", color: "var(--dpf-text)",
                 fontSize: 10, lineHeight: 1, cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 padding: 0,

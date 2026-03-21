@@ -31,19 +31,19 @@ export function OllamaHardwareInfo({ gpu, vramGb, modelCount }: OllamaHardwareIn
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div>
           <div style={{ color: "var(--dpf-muted, #8888a0)", fontSize: 10 }}>Compute</div>
-          <div style={{ color: "#e0e0ff", fontSize: 12, fontWeight: 600 }}>
+          <div style={{ color: "var(--dpf-text)", fontSize: 12, fontWeight: 600 }}>
             {isGpu ? `${gpu}${vramGb ? ` (${vramGb}GB VRAM)` : ""}` : "CPU-only"}
           </div>
         </div>
         {maxParams && (
           <div>
             <div style={{ color: "var(--dpf-muted, #8888a0)", fontSize: 10 }}>Max Model Size (Q4)</div>
-            <div style={{ color: "#e0e0ff", fontSize: 12, fontWeight: 600 }}>{maxParams} parameters</div>
+            <div style={{ color: "var(--dpf-text)", fontSize: 12, fontWeight: 600 }}>{maxParams} parameters</div>
           </div>
         )}
         <div>
           <div style={{ color: "var(--dpf-muted, #8888a0)", fontSize: 10 }}>Available Models</div>
-          <div style={{ color: "#e0e0ff", fontSize: 12, fontWeight: 600 }}>{modelCount}</div>
+          <div style={{ color: "var(--dpf-text)", fontSize: 12, fontWeight: 600 }}>{modelCount}</div>
         </div>
       </div>
     </div>

@@ -23,7 +23,7 @@ export function LifecycleEventPanel({ events }: Props) {
   return (
     <section className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white">Recent lifecycle events</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Recent lifecycle events</h2>
         <p className="text-xs text-[var(--dpf-muted)] mt-1">
           Append-only workforce timeline for onboarding, role movement, and exits.
         </p>
@@ -40,7 +40,7 @@ export function LifecycleEventPanel({ events }: Props) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-white">{event.eventType}</p>
+                  <p className="text-xs font-semibold text-[var(--dpf-text)]">{event.eventType}</p>
                   <p className="text-[10px] font-mono text-[var(--dpf-muted)]">{event.eventId}</p>
                 </div>
                 <p className="text-[10px] text-[var(--dpf-muted)]">{formatDate(event.effectiveAt)}</p>

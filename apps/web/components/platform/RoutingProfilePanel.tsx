@@ -67,12 +67,12 @@ function DimensionBar({ label, score }: { label: string; score: number }) {
   const color = scoreColor(score);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-      <div style={{ width: 130, fontSize: 11, color: "#8888a0", flexShrink: 0 }}>{label}</div>
+      <div style={{ width: 130, fontSize: 11, color: "var(--dpf-muted)", flexShrink: 0 }}>{label}</div>
       <div style={{
         flex: 1,
         height: 6,
         borderRadius: 3,
-        background: "#0d0d1a",
+        background: "var(--dpf-bg)",
         overflow: "hidden",
       }}>
         <div style={{
@@ -137,7 +137,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
   return (
     <div style={{
       background: isRetired ? "#13131f" : "#161625",
-      border: "1px solid #2a2a40",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 6,
       padding: 14,
       opacity: isRetired ? 0.6 : 1,
@@ -149,7 +149,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
             {profile.friendlyName || profile.modelId}
           </div>
           {profile.friendlyName && (
-            <div style={{ fontSize: 11, color: "#8888a0", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {profile.modelId}
             </div>
           )}
@@ -220,14 +220,14 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
         gap: 16,
         flexWrap: "wrap",
         paddingTop: 10,
-        borderTop: "1px solid #2a2a40",
+        borderTop: "1px solid var(--dpf-border)",
         fontSize: 11,
-        color: "#8888a0",
+        color: "var(--dpf-muted)",
       }}>
-        <span>Source: <span style={{ color: "#b0b0c8" }}>{sourceLabel}</span></span>
-        <span>Evals: <span style={{ color: "#b0b0c8" }}>{profile.evalCount}</span></span>
+        <span>Source: <span style={{ color: "var(--dpf-muted)" }}>{sourceLabel}</span></span>
+        <span>Evals: <span style={{ color: "var(--dpf-muted)" }}>{profile.evalCount}</span></span>
         {profile.lastEvalAt && (
-          <span>Last eval: <span style={{ color: "#b0b0c8" }}>{new Date(profile.lastEvalAt).toLocaleDateString()}</span></span>
+          <span>Last eval: <span style={{ color: "var(--dpf-muted)" }}>{new Date(profile.lastEvalAt).toLocaleDateString()}</span></span>
         )}
         {profile.supportsToolUse && (
           <span style={{ color: "#4ade80" }}>Tool use</span>
@@ -236,7 +236,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
           <span>{(profile.maxContextTokens / 1000).toFixed(0)}k ctx</span>
         )}
         {isRetired && profile.retiredAt && (
-          <span>Retired: <span style={{ color: "#b0b0c8" }}>{new Date(profile.retiredAt).toLocaleDateString()}</span></span>
+          <span>Retired: <span style={{ color: "var(--dpf-muted)" }}>{new Date(profile.retiredAt).toLocaleDateString()}</span></span>
         )}
       </div>
 
@@ -247,7 +247,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
           fontSize: 11,
           color: message.startsWith("Failed") ? "#ef4444" : "#4ade80",
           padding: "6px 10px",
-          background: "#0d0d1a",
+          background: "var(--dpf-bg)",
           borderRadius: 4,
         }}>
           {message}
@@ -265,15 +265,15 @@ export default function RoutingProfilePanel({ endpointId, profiles }: Props) {
   return (
     <div style={{
       marginTop: 24,
-      background: "#1a1a2e",
-      border: "1px solid #2a2a40",
+      background: "var(--dpf-surface-1)",
+      border: "1px solid var(--dpf-border)",
       borderRadius: 8,
       padding: 20,
     }}>
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>Routing Profiles</h2>
-        <p style={{ fontSize: 12, color: "#b0b0c8", marginTop: 6, lineHeight: 1.5, maxWidth: 640 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: 0 }}>Routing Profiles</h2>
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.5, maxWidth: 640 }}>
           Per-model capability scores used by the routing engine to select the best model for each task.
           Higher scores mean the model is preferred for tasks requiring that capability.
           Scores start from seed data and are refined by evaluations and production observations.
@@ -288,18 +288,18 @@ export default function RoutingProfilePanel({ endpointId, profiles }: Props) {
           gap: 16,
           marginBottom: 16,
           fontSize: 12,
-          color: "#8888a0",
+          color: "var(--dpf-muted)",
         }}>
           <span>
             <span style={{ color: "#4ade80", fontWeight: 600 }}>{activeProfiles.length}</span> active
           </span>
           {retiredProfiles.length > 0 && (
             <span>
-              <span style={{ color: "#8888a0", fontWeight: 600 }}>{retiredProfiles.length}</span> retired
+              <span style={{ color: "var(--dpf-muted)", fontWeight: 600 }}>{retiredProfiles.length}</span> retired
             </span>
           )}
           <span>
-            <span style={{ color: "#e0e0ff", fontWeight: 600 }}>{profiles.length}</span> total
+            <span style={{ color: "var(--dpf-text)", fontWeight: 600 }}>{profiles.length}</span> total
           </span>
         </div>
       )}
@@ -310,10 +310,10 @@ export default function RoutingProfilePanel({ endpointId, profiles }: Props) {
           padding: "24px 16px",
           textAlign: "center",
           fontSize: 13,
-          color: "#8888a0",
-          background: "#161625",
+          color: "var(--dpf-muted)",
+          background: "var(--dpf-surface-1)",
           borderRadius: 6,
-          border: "1px solid #2a2a40",
+          border: "1px solid var(--dpf-border)",
         }}>
           No model profiles available. Run &ldquo;Discover Models&rdquo; first.
         </div>

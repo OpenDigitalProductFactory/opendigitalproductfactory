@@ -36,8 +36,8 @@ export function ComplianceModal({ open, onClose, title, children }: Props) {
     >
       <div className="w-full max-w-lg mx-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface,#1a1a2e)] p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-white text-sm">
+          <h2 className="text-lg font-semibold text-[var(--dpf-text)]">{title}</h2>
+          <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-sm">
             ✕
           </button>
         </div>

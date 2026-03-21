@@ -66,7 +66,7 @@ export function EvidenceSummary({ build }: Props) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-semibold text-white uppercase tracking-widest">Evidence Chain</h3>
+      <h3 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Evidence Chain</h3>
       {items.map((item) => (
         <div key={item.label} className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
           <span
@@ -74,7 +74,7 @@ export function EvidenceSummary({ build }: Props) {
             style={{ background: STATUS_COLORS[item.status] ?? "#8888a0" }}
             title={item.status}
           />
-          <span className="text-xs text-white flex-1">{item.label}</span>
+          <span className="text-xs text-[var(--dpf-text)] flex-1">{item.label}</span>
           <span className="text-[10px] text-[var(--dpf-muted)]">{item.detail}</span>
         </div>
       ))}

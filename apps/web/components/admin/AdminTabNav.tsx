@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { label: "Access", href: "/admin" },
   { label: "Branding", href: "/admin/branding" },
+  { label: "Storefront", href: "/admin/storefront" },
   { label: "Reference Data", href: "/admin/reference-data" },
   { label: "Settings", href: "/admin/settings" },
 ];
@@ -24,8 +25,8 @@ export function AdminTabNav() {
           className={[
             "rounded-t px-3 py-1.5 text-xs font-medium transition-colors",
             active(tab.href)
-              ? "border-b-2 border-[var(--dpf-accent)] text-white"
-              : "text-[var(--dpf-muted)] hover:text-white",
+              ? "border-b-2 border-[var(--dpf-accent)] text-[var(--dpf-text)]"
+              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
           ].join(" ")}
         >
           {tab.label}

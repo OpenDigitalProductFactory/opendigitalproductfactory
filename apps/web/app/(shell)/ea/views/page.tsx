@@ -35,7 +35,7 @@ export default async function EaViewsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Enterprise Architecture</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Architecture</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {views.length} view{views.length !== 1 ? "s" : ""}
         </p>
@@ -51,7 +51,7 @@ export default async function EaViewsPage() {
                 <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
                   {v.notation.name} · {LAYOUT_LABELS[v.layoutType] ?? v.layoutType}
                 </p>
-                <p className="text-sm font-semibold text-white leading-tight mb-1">
+                <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
                   {v.name}
                 </p>
                 {v.description != null && (

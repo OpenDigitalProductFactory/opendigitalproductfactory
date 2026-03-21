@@ -97,6 +97,65 @@ export interface UpdateCustomerRequest {
   name?: string;
   industry?: string;
   notes?: string;
+  website?: string;
+  employeeCount?: number;
+  annualRevenue?: number;
+  currency?: string;
+  status?: string;
+  parentAccountId?: string | null;
+  sourceSystem?: string;
+  sourceId?: string;
+}
+
+export interface CreateContactRequest {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  jobTitle?: string;
+  linkedinUrl?: string;
+  source?: "web" | "referral" | "import" | "manual";
+  accountId: string;
+}
+
+export interface UpdateContactRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  jobTitle?: string;
+  linkedinUrl?: string;
+  doNotContact?: boolean;
+  avatarUrl?: string;
+  isActive?: boolean;
+}
+
+export interface ContactWithRoles {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  jobTitle: string | null;
+  isActive: boolean;
+  doNotContact: boolean;
+  accountRoles: {
+    id: string;
+    accountId: string;
+    roleTitle: string | null;
+    isPrimary: boolean;
+    startedAt: string;
+    endedAt: string | null;
+    account: { id: string; accountId: string; name: string };
+  }[];
+}
+
+export interface SimilarContact {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  confidence: number; // 0-100
+  matchedOn: string; // "email" | "name" | "phone"
 }
 
 export interface RegisterDeviceRequest {

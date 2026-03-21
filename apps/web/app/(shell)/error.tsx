@@ -90,7 +90,7 @@ export default function ShellError({
         textAlign: "center",
       }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>!</div>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#e0e0ff", marginBottom: 8 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 8 }}>
           Something went wrong
         </h2>
         <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 20 }}>
@@ -111,7 +111,7 @@ export default function ShellError({
                 border: "1px solid rgba(42,42,64,0.6)",
                 borderRadius: 8,
                 padding: "8px 10px",
-                color: "#e0e0ff",
+                color: "var(--dpf-text)",
                 fontSize: 12,
                 resize: "vertical",
                 marginBottom: 12,
@@ -127,7 +127,7 @@ export default function ShellError({
                   borderRadius: 8,
                   padding: "8px 20px",
                   fontSize: 13,
-                  color: "#fff",
+                  color: "var(--dpf-text)",
                   cursor: "pointer",
                 }}
               >
@@ -142,7 +142,7 @@ export default function ShellError({
                   borderRadius: 8,
                   padding: "8px 20px",
                   fontSize: 13,
-                  color: "#e0e0ff",
+                  color: "var(--dpf-text)",
                   cursor: "pointer",
                 }}
               >
@@ -166,7 +166,7 @@ export default function ShellError({
                 borderRadius: 8,
                 padding: "8px 20px",
                 fontSize: 13,
-                color: "#fff",
+                color: "var(--dpf-text)",
                 cursor: "pointer",
               }}
             >

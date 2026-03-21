@@ -7,7 +7,8 @@ import type {
 } from "./storefront-types";
 
 export const getPublicStorefront = cache(async function getPublicStorefront(
-  slug: string
+  slug: string,
+  { includeUnpublished = false }: { includeUnpublished?: boolean } = {}
 ): Promise<PublicStorefrontConfig | null> {
   const config = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug } },
@@ -67,7 +68,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
     },
   });
 
-  if (!config || !config.isPublished) return null;
+  if (!config || (!includeUnpublished && !config.isPublished)) return null;
 
   const org = config.organization;
 
