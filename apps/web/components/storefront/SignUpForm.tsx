@@ -64,7 +64,7 @@ export function SignUpForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Your name"
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }}
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
         />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -74,7 +74,7 @@ export function SignUpForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }}
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
         />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -84,7 +84,7 @@ export function SignUpForm({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }}
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
         />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -94,16 +94,16 @@ export function SignUpForm({
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14 }}
+          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
         {loading ? "…" : "Create account"}
       </button>
-      <p style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
+      <p style={{ fontSize: 13, color: "var(--dpf-muted)", textAlign: "center" }}>
         Already have an account?{" "}
         <a href={`/s/${orgSlug}/sign-in`} style={{ color: "var(--dpf-accent, #4f46e5)", fontWeight: 500 }}>
           Sign in

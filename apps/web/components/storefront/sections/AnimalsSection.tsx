@@ -14,7 +14,7 @@ export function AnimalsSection({ content }: { content: Record<string, unknown> }
   return (
     <div style={{ padding: "40px 0" }}>
       {intro && (
-        <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.6, marginBottom: 24 }}>{intro}</p>
+        <p style={{ fontSize: 15, color: "var(--dpf-text)", lineHeight: 1.6, marginBottom: 24 }}>{intro}</p>
       )}
       {animals.length > 0 && (
         <div style={{
@@ -24,7 +24,7 @@ export function AnimalsSection({ content }: { content: Record<string, unknown> }
         }}>
           {animals.map((animal, i) => (
             <div key={i} style={{
-              border: "1px solid #e5e7eb",
+              border: "1px solid var(--dpf-border)",
               borderRadius: 8,
               padding: 16,
               display: "flex",
@@ -38,10 +38,10 @@ export function AnimalsSection({ content }: { content: Record<string, unknown> }
                   style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 4 }}
                 />
               )}
-              <div style={{ fontWeight: 600, fontSize: 15, color: "#111827" }}>{animal.name}</div>
-              <div style={{ fontSize: 13, color: "#6b7280" }}>{animal.species}</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: "var(--dpf-text)" }}>{animal.name}</div>
+              <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>{animal.species}</div>
               {animal.description && (
-                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{animal.description}</div>
+                <div style={{ fontSize: 13, color: "var(--dpf-text)", lineHeight: 1.5 }}>{animal.description}</div>
               )}
             </div>
           ))}

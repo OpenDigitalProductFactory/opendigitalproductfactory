@@ -26,10 +26,10 @@ export function TeamSection({ content }: { content: Record<string, unknown> }) {
                 style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", marginBottom: 8 }}
               />
             )}
-            <div style={{ fontWeight: 600, fontSize: 15, color: "#111827" }}>{member.name}</div>
-            <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>{member.role}</div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--dpf-text)" }}>{member.name}</div>
+            <div style={{ fontSize: 13, color: "var(--dpf-muted)", marginTop: 2 }}>{member.role}</div>
             {member.bio && (
-              <div style={{ fontSize: 13, color: "#374151", marginTop: 6, lineHeight: 1.5 }}>{member.bio}</div>
+              <div style={{ fontSize: 13, color: "var(--dpf-text)", marginTop: 6, lineHeight: 1.5 }}>{member.bio}</div>
             )}
           </div>
         ))}

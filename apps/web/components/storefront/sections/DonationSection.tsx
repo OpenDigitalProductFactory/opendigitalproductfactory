@@ -14,11 +14,11 @@ export function DonationSection({
     <div style={{
       padding: "40px 0",
       textAlign: "center",
-      borderTop: "1px solid #e5e7eb",
+      borderTop: "1px solid var(--dpf-border)",
     }}>
-      <h2 style={{ fontSize: 28, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>{title}</h2>
+      <h2 style={{ fontSize: 28, fontWeight: 700, color: "var(--dpf-text)", margin: "0 0 12px" }}>{title}</h2>
       {description && (
-        <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.6, margin: "0 auto 24px", maxWidth: 560 }}>
+        <p style={{ fontSize: 15, color: "var(--dpf-text)", lineHeight: 1.6, margin: "0 auto 24px", maxWidth: 560 }}>
           {description}
         </p>
       )}
@@ -28,7 +28,7 @@ export function DonationSection({
           display: "inline-block",
           padding: "10px 28px",
           background: "var(--dpf-accent, #4f46e5)",
-          color: "#fff",
+          color: "var(--dpf-text)",
           borderRadius: 6,
           fontSize: 15,
           fontWeight: 600,

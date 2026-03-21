@@ -5,7 +5,7 @@ export function AboutSection({ content }: { content: Record<string, unknown> }) 
       {imageUrl && (
         <img src={imageUrl} alt="" style={{ width: 280, borderRadius: 8, flexShrink: 0 }} />
       )}
-      <p style={{ fontSize: 15, lineHeight: 1.75, color: "#374151", flex: 1 }}>{(content.body as string | undefined) ?? ""}</p>
+      <p style={{ fontSize: 15, lineHeight: 1.75, color: "var(--dpf-text)", flex: 1 }}>{(content.body as string | undefined) ?? ""}</p>
     </div>
   );
 }
