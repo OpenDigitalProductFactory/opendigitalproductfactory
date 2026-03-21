@@ -19,6 +19,9 @@ export default async function FinancePage() {
   const in30Days = new Date(now);
   in30Days.setDate(in30Days.getDate() + 30);
 
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const [
     totalOutstanding,
     overdueInvoices,
@@ -28,6 +31,8 @@ export default async function FinancePage() {
     bankAccounts,
     expectedInflows,
     expectedOutflows,
+    activeRecurringCount,
+    overdueGt30,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -105,6 +110,20 @@ export default async function FinancePage() {
       },
       _sum: { amountDue: true },
     }),
+
+    // Active recurring schedules count
+    prisma.recurringSchedule.count({
+      where: { status: "active" },
+    }),
+
+    // Overdue > 30 days — sum amountDue for invoices overdue more than 30 days
+    prisma.invoice.aggregate({
+      where: {
+        status: { in: ["sent", "viewed", "partially_paid", "overdue"] },
+        dueDate: { lt: thirtyDaysAgo },
+      },
+      _sum: { amountDue: true },
+    }),
   ]);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
@@ -115,6 +134,7 @@ export default async function FinancePage() {
   const oldestOverdue = overdueInvoices[0];
   const moneyOweAmount = Number(moneyYouOwe._sum.amountDue ?? 0);
   const moneyOweCount = moneyYouOwe._count;
+  const overdueGt30Amount = Number(overdueGt30._sum.amountDue ?? 0);
 
   // Cash position
   const totalCash = bankAccounts.reduce(
@@ -231,7 +251,7 @@ export default async function FinancePage() {
         </div>
       </div>
 
-      {/* Row 2: Money In + Money You Owe */}
+      {/* Row 2: Money In + Money You Owe + Active Recurring + Overdue >30 days */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Money In This Month */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
@@ -261,6 +281,42 @@ export default async function FinancePage() {
             {moneyOweCount} bill{moneyOweCount !== 1 ? "s" : ""} awaiting payment
           </p>
         </div>
+
+        {/* Active Recurring */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Active Recurring
+          </p>
+          <p
+            className="text-2xl font-bold"
+            style={{ color: activeRecurringCount > 0 ? "#4ade80" : "#8888a0" }}
+          >
+            {activeRecurringCount}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            <Link href="/finance/recurring" className="hover:underline">
+              schedule{activeRecurringCount !== 1 ? "s" : ""} running →
+            </Link>
+          </p>
+        </div>
+
+        {/* Overdue > 30 days */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Overdue &gt; 30 Days
+          </p>
+          <p
+            className="text-2xl font-bold"
+            style={{ color: overdueGt30Amount > 0 ? "#ef4444" : "#4ade80" }}
+          >
+            £{formatMoney(overdueGt30Amount)}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            <Link href="/finance/reports/aged-debtors" className="hover:underline">
+              view aged debtors →
+            </Link>
+          </p>
+        </div>
       </div>
 
       {/* Navigation links */}
@@ -276,6 +332,9 @@ export default async function FinancePage() {
             </Link>
             <Link href="/finance/payments" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Payments →
+            </Link>
+            <Link href="/finance/recurring" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Recurring Schedules →
             </Link>
           </div>
         </div>
@@ -321,6 +380,33 @@ export default async function FinancePage() {
             </Link>
             <Link href="/finance/banking/rules" className="text-xs text-[var(--dpf-accent)] hover:underline">
               Bank Rules →
+            </Link>
+          </div>
+        </div>
+
+        {/* Reports */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Reports
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/reports/aged-debtors" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Aged Debtors →
+            </Link>
+            <Link href="/finance/reports/aged-creditors" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Aged Creditors →
+            </Link>
+          </div>
+        </div>
+
+        {/* Settings */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Settings
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/settings/dunning" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Dunning Settings →
             </Link>
           </div>
         </div>
