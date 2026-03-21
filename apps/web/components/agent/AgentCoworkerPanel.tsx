@@ -10,6 +10,7 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
+import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 import {
   loadElevatedAssistPreference,
   saveElevatedAssistPreference,
@@ -388,6 +389,10 @@ export function AgentCoworkerPanel({
             />
           );
         })}
+        {/* Setup action buttons — shown when the last message is from the onboarding COO */}
+        {messages.length > 0 && messages[messages.length - 1]?.agentId === "onboarding-coo" && !isPending && (
+          <SetupActionButtons />
+        )}
         {(isPending || isClearing) && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
             {/* Pulsing agent avatar */}
