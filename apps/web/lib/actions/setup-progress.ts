@@ -1,27 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-
-export const SETUP_STEPS = [
-  "business-identity",
-  "owner-account",
-  "ai-capabilities",
-  "branding",
-  "financial-basics",
-  "first-workspace",
-  "extensibility-preview",
-  "whats-next",
-] as const;
-
-export type SetupStep = (typeof SETUP_STEPS)[number];
-export type StepStatus = "pending" | "completed" | "skipped";
-
-export type SetupContext = {
-  orgName?: string;
-  industry?: string;
-  hasCloudProvider?: boolean;
-  skippedSteps?: string[];
-};
+import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
 
 /** Check if this is a first-run scenario (no org + no completed setup). */
 export async function isFirstRun(): Promise<boolean> {
