@@ -34,6 +34,7 @@ export default async function FinancePage() {
     activeRecurringCount,
     overdueGt30,
     pendingExpenseCount,
+    activeAssets,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -130,6 +131,12 @@ export default async function FinancePage() {
     prisma.expenseClaim.count({
       where: { status: "submitted" },
     }),
+
+    // Active fixed assets — sum currentBookValue and count by category
+    prisma.fixedAsset.findMany({
+      where: { status: "active" },
+      select: { currentBookValue: true, category: true },
+    }),
   ]);
 
   const owedAmount = Number(totalOutstanding._sum.amountDue ?? 0);
@@ -150,6 +157,13 @@ export default async function FinancePage() {
   const inflowsIn30 = Number(expectedInflows._sum.amountDue ?? 0);
   const outflowsIn30 = Number(expectedOutflows._sum.amountDue ?? 0);
   const forecastBalance = totalCash + inflowsIn30 - outflowsIn30;
+
+  // Asset register
+  const totalAssetValue = activeAssets.reduce(
+    (sum, a) => sum + Number(a.currentBookValue),
+    0,
+  );
+  const assetCategoryCount = new Set(activeAssets.map((a) => a.category)).size;
 
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
@@ -325,7 +339,7 @@ export default async function FinancePage() {
         </div>
       </div>
 
-      {/* Row 3: People widgets */}
+      {/* Row 3: People + Asset widgets */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Pending Expenses */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
@@ -341,6 +355,26 @@ export default async function FinancePage() {
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             <Link href="/finance/expense-claims?status=submitted" className="hover:underline">
               claim{pendingExpenseCount !== 1 ? "s" : ""} awaiting approval →
+            </Link>
+          </p>
+        </div>
+
+        {/* Total Asset Value */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Total Asset Value
+          </p>
+          <p
+            className="text-2xl font-bold"
+            style={{ color: totalAssetValue > 0 ? "#4ade80" : "#8888a0" }}
+          >
+            £{formatMoney(totalAssetValue)}
+          </p>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            {activeAssets.length} asset{activeAssets.length !== 1 ? "s" : ""} across{" "}
+            {assetCategoryCount} categor{assetCategoryCount !== 1 ? "ies" : "y"} ·{" "}
+            <Link href="/finance/assets" className="hover:underline">
+              view register →
             </Link>
           </p>
         </div>
@@ -452,6 +486,24 @@ export default async function FinancePage() {
             </Link>
             <Link href="/portal/expenses" className="text-xs text-[var(--dpf-accent)] hover:underline">
               My Expenses →
+            </Link>
+          </div>
+        </div>
+
+        {/* Management */}
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Management
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link href="/finance/assets" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Asset Register →
+            </Link>
+            <Link href="/finance/assets/new" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Register Asset →
+            </Link>
+            <Link href="/finance/settings/currency" className="text-xs text-[var(--dpf-accent)] hover:underline">
+              Currency Settings →
             </Link>
           </div>
         </div>
