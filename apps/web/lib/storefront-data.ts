@@ -16,6 +16,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
       isPublished: true,
       tagline: true,
       description: true,
+      timezone: true,
       heroImageUrl: true,
       contactEmail: true,
       contactPhone: true,
@@ -75,6 +76,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   return {
     tagline: config.tagline,
     description: config.description,
+    timezone: config.timezone ?? "Europe/London",
     heroImageUrl: config.heroImageUrl,
     contactEmail: config.contactEmail,
     contactPhone: config.contactPhone,
