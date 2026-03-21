@@ -39,8 +39,10 @@ const STEP_WELCOME: Record<string, string> = {
     "Anything you build can be kept private or donated back to the community so other businesses benefit too.",
   "workspace":
     "This is your workspace — where you and your team do day-to-day work.\n\n" +
-    "From here you can manage your backlog, talk to AI coworkers, and access all areas of the platform from the navigation above.\n\n" +
-    "The AI Coworker panel (that's me) is always available — just click the button in the bottom right corner whenever you need help. Welcome aboard!",
+    "Before we wrap up, two important settings in the AI Coworker panel you should know about:\n\n" +
+    "Hands Off / Hands On — By default, the AI is in \"Hands Off\" mode. It can read and analyze but won't make changes. Switch to \"Hands On\" when you want it to take action — create tasks, modify settings, propose code changes. You control when it acts.\n\n" +
+    "External Access — By default, the AI can't reach the internet. Turn on External Access when you need it to search the web, fetch documentation, or pull in outside information. It stays off until you say so.\n\n" +
+    "These are your guardrails. The AI Coworker is powerful, but it only does what you allow. Welcome aboard!",
 };
 
 type Props = {
