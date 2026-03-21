@@ -23,8 +23,8 @@ import {
   skipStep,
   pauseSetup,
   completeSetup,
-  SETUP_STEPS,
 } from "./setup-progress";
+import { SETUP_STEPS } from "./setup-constants";
 
 describe("setup-progress", () => {
   beforeEach(() => {
