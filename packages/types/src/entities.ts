@@ -67,3 +67,20 @@ export type AgentActionProposal = Prisma.AgentActionProposalGetPayload<{}>;
 export type Notification = Prisma.NotificationGetPayload<{}>;
 
 export type AuthorizationDecisionLog = Prisma.AuthorizationDecisionLogGetPayload<{}>;
+
+export interface BookingConfig {
+  durationMinutes: number;
+  beforeBufferMinutes?: number;
+  afterBufferMinutes?: number;
+  minimumNoticeHours?: number;
+  maxAdvanceDays?: number;
+  slotIntervalMinutes?: number;
+  schedulingPattern: "slot" | "class" | "recurring";
+  assignmentMode: "next-available" | "customer-choice";
+  capacity?: number;
+  bookingLimits?: {
+    day?: number;
+    week?: number;
+    month?: number;
+  };
+}
