@@ -93,6 +93,19 @@ describe("geminiAdapter", () => {
         expect(card.capabilities.toolUse).toBe(true);
       });
 
+      it("sets codeExecution true for Gemini 2.0+", () => {
+        expect(card.capabilities.codeExecution).toBe(true);
+      });
+
+      it("sets webSearch true for Gemini 2.0+", () => {
+        expect(card.capabilities.webSearch).toBe(true);
+      });
+
+      it("sets streaming null (no streamGenerateContent in fixture)", () => {
+        // The fixture only has generateContent and countTokens
+        expect(card.capabilities.streaming).toBeNull();
+      });
+
       it("sets metadataSource to api", () => {
         expect(card.metadataSource).toBe("api");
       });
@@ -141,6 +154,14 @@ describe("geminiAdapter", () => {
 
       it("sets toolUse null for embedContent-only model", () => {
         expect(card.capabilities.toolUse).toBeNull();
+      });
+
+      it("sets codeExecution null for embedding model", () => {
+        expect(card.capabilities.codeExecution).toBeNull();
+      });
+
+      it("sets webSearch null for embedding model", () => {
+        expect(card.capabilities.webSearch).toBeNull();
       });
 
       it("sets displayName from displayName field", () => {

@@ -63,12 +63,24 @@ function isEmbeddingOnly(methods: string[]): boolean {
  */
 function extractCapabilities(raw: GeminiModel): ModelCardCapabilities {
   const methods = raw.supportedGenerationMethods ?? [];
+  const modelId = stripModelsPrefix(raw.name);
+  const supportsGenerate = methods.includes("generateContent");
 
-  const toolUse = methods.includes("generateContent") ? true : null;
+  const toolUse = supportsGenerate ? true : null;
+  const streaming = methods.includes("streamGenerateContent") ? true : null;
+
+  // Code execution: Gemini 2.0+ models that support generateContent
+  const codeExecution = supportsGenerate && /^gemini-2/.test(modelId) ? true : null;
+
+  // Web search grounding: Gemini 1.5+ models that support generateContent
+  const webSearch = supportsGenerate && /^gemini-(1\.5|2)/.test(modelId) ? true : null;
 
   return {
     ...EMPTY_CAPABILITIES,
     toolUse,
+    streaming,
+    codeExecution,
+    webSearch,
   };
 }
 

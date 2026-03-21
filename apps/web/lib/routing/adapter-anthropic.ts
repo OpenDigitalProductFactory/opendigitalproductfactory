@@ -155,6 +155,7 @@ export const anthropicAdapter: ProviderAdapter = {
         toolUse: true,
         streaming: true,
         promptCaching: true,
+        computerUse: /^claude-(sonnet|opus)-4/.test(modelId) ? true : null,
       },
 
       // Pricing not available from Anthropic API
