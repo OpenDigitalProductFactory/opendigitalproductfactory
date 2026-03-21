@@ -9,6 +9,7 @@ import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
+import { SetupOverlay } from "@/components/setup/SetupOverlay";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists
@@ -88,12 +89,25 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     }
   }
 
+  // Check for active setup progress (onboarding tour in progress)
+  const activeSetup = await prisma.platformSetupProgress.findFirst({
+    where: { completedAt: null, userId: user.id },
+    select: { id: true, currentStep: true, steps: true },
+  });
+
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
 
   return (
     <>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+        {activeSetup && (
+          <SetupOverlay
+            progressId={activeSetup.id}
+            currentStep={activeSetup.currentStep}
+            steps={activeSetup.steps as Record<string, "pending" | "completed" | "skipped">}
+          />
+        )}
         <StatusBanner />
         <Header
           platformRole={user.platformRole}
@@ -109,7 +123,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           )}
           userId={user.id}
         />
-        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
+        <main className={`flex-1 p-6 max-w-7xl mx-auto w-full ${activeSetup ? "pb-20" : ""}`}>{children}</main>
         <AgentCoworkerShell
           userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
         />

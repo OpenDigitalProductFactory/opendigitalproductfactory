@@ -38,7 +38,7 @@ export async function buildOnboardingPrompt(
 
   // Load provider pricing for cost explanations
   let costSummary = "";
-  if (currentStep === "ai-capabilities") {
+  if (currentStep === "ai-providers") {
     const providers = await prisma.modelProvider.findMany({
       where: { endpointType: "llm", status: { not: "unconfigured" } },
       select: {

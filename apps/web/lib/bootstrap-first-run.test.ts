@@ -33,7 +33,7 @@ import { checkBootstrapNeeded, seedOnboardingAgent } from "./bootstrap-first-run
 import { isFirstRun } from "./actions/setup-progress";
 
 describe("bootstrap-first-run", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   describe("checkBootstrapNeeded", () => {
     it("returns true when isFirstRun is true", async () => {

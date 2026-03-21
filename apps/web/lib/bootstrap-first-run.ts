@@ -79,7 +79,7 @@ export async function executeFirstRunBootstrap(
     const progress = await createSetupProgress();
 
     onStatus?.({ phase: "ready" });
-    return { setupId: progress.id, ollamaAvailable };
+    return { setupId: progress.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     onStatus?.({ phase: "failed", error: msg });

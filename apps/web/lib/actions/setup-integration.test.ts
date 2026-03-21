@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // Mock prisma with in-memory state
 vi.mock("@dpf/db", () => {
@@ -38,47 +38,39 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 8 entries:
-//   0: business-identity
-//   1: owner-account
-//   2: ai-capabilities
-//   3: branding
-//   4: financial-basics
-//   5: first-workspace
-//   6: extensibility-preview
-//   7: whats-next
+// SETUP_STEPS has 5 entries:
+//   0: account-bootstrap
+//   1: ai-providers
+//   2: branding
+//   3: org-settings
+//   4: workspace
 
 describe("setup flow integration", () => {
   it("walks through the full step sequence", async () => {
     // First run detected
     expect(await isFirstRun()).toBe(true);
 
-    // Create setup progress — starts at index 0
+    // Create setup progress — starts at step 0
     const progress = await createSetupProgress();
-    expect(progress.currentStep).toBe("business-identity");
+    expect(progress.currentStep).toBe("account-bootstrap");
 
-    // Advance step 0 → moves to index 1
-    const step2 = await advanceStep(progress.id, { orgName: "Test Co" });
-    expect(step2.currentStep).toBe("owner-account");
+    // Advance step 0 → step 1
+    const step1 = await advanceStep(progress.id, { orgName: "Test Co" });
+    expect(step1.currentStep).toBe("ai-providers");
 
-    // Skip step 1 → moves to index 2
-    const step3 = await skipStep(progress.id);
-    expect(step3.currentStep).toBe("ai-capabilities");
+    // Skip step 1 → step 2
+    const step2 = await skipStep(progress.id);
+    expect(step2.currentStep).toBe("branding");
 
-    // Now at index 2. Need to advance through indices 2, 3, 4, 5, 6 without completing (5 advances),
-    // then one final advance on index 7 that sets completedAt.
+    // Advance step 2 → step 3
+    const step3 = await advanceStep(progress.id);
+    expect(step3.currentStep).toBe("org-settings");
 
-    let current = step3;
+    // Advance step 3 → step 4 (last)
+    const step4 = await advanceStep(progress.id);
+    expect(step4.currentStep).toBe("workspace");
 
-    // Advances on indices 2, 3, 4, 5, 6 — each moves forward without completing
-    for (let i = 0; i < 5; i++) {
-      current = await advanceStep(progress.id);
-    }
-
-    // After 5 advances from index 2, we are on index 7 (whats-next)
-    expect(current.currentStep).toBe("whats-next");
-
-    // Final advance on index 7 — nextStep is null → sets completedAt
+    // Advance step 4 — final, sets completedAt
     const final = await advanceStep(progress.id);
     expect(final.completedAt).toBeTruthy();
   });
