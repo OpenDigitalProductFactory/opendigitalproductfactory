@@ -123,7 +123,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           )}
           userId={user.id}
         />
-        <main className={`flex-1 p-6 max-w-7xl mx-auto w-full ${activeSetup ? "pb-20" : ""}`}>{children}</main>
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
         <AgentCoworkerShell
           userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
         />
