@@ -33,6 +33,7 @@
     "consoleUrl": "https://claude.ai/settings/billing",
     "billingLabel": "Max subscription (included)",
     "costPerformanceNotes": "Uses your Claude Code / Max subscription. Run 'claude setup-token' in terminal to generate token. No prompt caching, no 1M context.",
+    "modelRestrictions": ["claude-haiku-*", "claude-3-haiku-*"],
     "catalogVisibility": "visible"
   },
   {

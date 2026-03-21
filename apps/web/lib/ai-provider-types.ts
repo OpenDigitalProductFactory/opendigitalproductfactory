@@ -178,6 +178,8 @@ export type RegistryProviderEntry = {
   consoleUrl?: string | null;
   billingLabel?: string | null;
   costPerformanceNotes?: string | null;
+  // Model restrictions — allowlist of model ID glob patterns this provider can call
+  modelRestrictions?: string[];
   // Catalog fields (EP-AGENT-CAP-001 Task 11)
   catalogVisibility?: "visible" | "hidden";
   endpointType?: string;
