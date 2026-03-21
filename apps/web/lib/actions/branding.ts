@@ -2,7 +2,7 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { deriveThemeTokens } from "@/lib/branding-presets";
+import { deriveThemeTokens, validateTokenContrast, type Correction, type ThemeTokens } from "@/lib/branding-presets";
 import {
   fetchPublicWebsiteEvidence,
   analyzePublicWebsiteBranding,
@@ -33,6 +33,7 @@ function buildThemeTokens(formData: FormData): Prisma.InputJsonValue {
       accent: tokenValue("palette_accent"),
       muted: tokenValue("palette_muted"),
       border: tokenValue("palette_border"),
+      text: tokenValue("palette_text") || "",
     },
     typography: {
       fontFamily: tokenValue("typography_fontFamily"),
@@ -92,61 +93,69 @@ function revalidateBrandingSurfaces(): void {
   revalidatePath("/workspace");
   revalidatePath("/portfolio");
   revalidatePath("/ea");
+  revalidatePath("/s", "layout");
 }
 
-export async function saveThemePreset(formData: FormData): Promise<void> {
+function validateAndCorrectDualTokens(
+  dualTokens: { dark: unknown; light: unknown }
+): { corrected: { dark: ThemeTokens; light: ThemeTokens }; corrections: Correction[] } {
+  const allCorrections: Correction[] = [];
+
+  const darkResult = validateTokenContrast(dualTokens.dark as ThemeTokens, "dark");
+  allCorrections.push(...darkResult.corrections);
+
+  const lightResult = validateTokenContrast(dualTokens.light as ThemeTokens, "light");
+  allCorrections.push(...lightResult.corrections);
+
+  return {
+    corrected: { dark: darkResult.correctedTokens, light: lightResult.correctedTokens },
+    corrections: allCorrections,
+  };
+}
+
+export async function saveThemePreset(formData: FormData): Promise<{ corrections: Correction[] }> {
   const scope = resolvePresetScope(formData);
-  const companyName = readString(formData.get("companyName")) || "Custom";
-  const logoUrl = readString(formData.get("logoUrl")) || null;
+  const label = readString(formData.get("companyName")) || "Custom";
   const tokens = buildThemeTokens(formData);
   const accent = readString(formData.get("palette_accent")) || "#7c8cf8";
   const fontFamily = readString(formData.get("typography_fontFamily")) || undefined;
   const { light } = deriveThemeTokens(accent, fontFamily ? { fontFamily } : undefined);
-  const dualTokens = { dark: tokens, light } as Prisma.InputJsonValue;
+  const rawDual = { dark: tokens, light };
+  const { corrected, corrections } = validateAndCorrectDualTokens(rawDual as any);
 
   await prisma.brandingConfig.upsert({
     where: { scope },
-    update: {
-      companyName,
-      logoUrl,
-      tokens: dualTokens,
-    },
-    create: {
-      scope,
-      companyName,
-      logoUrl,
-      tokens: dualTokens,
-    },
+    update: { label, tokens: corrected as unknown as Prisma.InputJsonValue },
+    create: { scope, label, tokens: corrected as unknown as Prisma.InputJsonValue },
   });
 
   revalidateBrandingSurfaces();
+  return { corrections };
 }
 
-export async function saveActiveThemePreset(formData: FormData): Promise<void> {
+export async function saveActiveThemePreset(formData: FormData): Promise<{ corrections: Correction[] }> {
   const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
   const logoUrl = readString(formData.get("logoUrl")) || null;
   const tokens = buildThemeTokens(formData);
   const accent = readString(formData.get("palette_accent")) || "#7c8cf8";
   const fontFamily = readString(formData.get("typography_fontFamily")) || undefined;
   const { light } = deriveThemeTokens(accent, fontFamily ? { fontFamily } : undefined);
-  const dualTokens = { dark: tokens, light } as Prisma.InputJsonValue;
+  const rawDual = { dark: tokens, light };
+  const { corrected, corrections } = validateAndCorrectDualTokens(rawDual as any);
 
-  await prisma.brandingConfig.upsert({
-    where: { scope: "organization" },
-    update: {
-      companyName,
-      logoUrl,
-      tokens: dualTokens,
-    },
-    create: {
-      scope: "organization",
-      companyName,
-      logoUrl,
-      tokens: dualTokens,
-    },
-  });
+  await Promise.all([
+    prisma.brandingConfig.upsert({
+      where: { scope: "organization" },
+      update: { tokens: corrected as unknown as Prisma.InputJsonValue },
+      create: { scope: "organization", tokens: corrected as unknown as Prisma.InputJsonValue },
+    }),
+    prisma.organization.updateMany({
+      data: { name: companyName, logoUrl },
+    }),
+  ]);
 
   revalidateBrandingSurfaces();
+  return { corrections };
 }
 
 export async function deleteThemePreset(formData: FormData): Promise<void> {
@@ -220,20 +229,27 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
   }
 }
 
-export async function saveSimpleBrand(formData: FormData): Promise<void> {
+export async function saveSimpleBrand(formData: FormData): Promise<{ corrections: Correction[] }> {
   const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
   const logoUrl = readString(formData.get("logoUrl")) || null;
   const logoUrlLight = readString(formData.get("logoUrlLight")) || null;
   const accent = readString(formData.get("accent")) || "#7c8cf8";
   const fontFamily = readString(formData.get("fontFamily")) || "Inter, system-ui, sans-serif";
 
-  const tokens = deriveThemeTokens(accent, { fontFamily });
+  const rawTokens = deriveThemeTokens(accent, { fontFamily });
+  const { corrected, corrections } = validateAndCorrectDualTokens(rawTokens);
 
-  await prisma.brandingConfig.upsert({
-    where: { scope: "organization" },
-    update: { companyName, logoUrl, logoUrlLight, tokens: tokens as unknown as Prisma.InputJsonValue },
-    create: { scope: "organization", companyName, logoUrl, logoUrlLight, tokens: tokens as unknown as Prisma.InputJsonValue },
-  });
+  await Promise.all([
+    prisma.brandingConfig.upsert({
+      where: { scope: "organization" },
+      update: { logoUrlLight, tokens: corrected as unknown as Prisma.InputJsonValue },
+      create: { scope: "organization", logoUrlLight, tokens: corrected as unknown as Prisma.InputJsonValue },
+    }),
+    prisma.organization.updateMany({
+      data: { name: companyName, logoUrl },
+    }),
+  ]);
 
   revalidateBrandingSurfaces();
+  return { corrections };
 }
