@@ -284,8 +284,8 @@ export async function profileModelsInternal(
       );
     }
 
-    // EP-INF-003: ModelCard fields for upsert
-    const cardFields = {
+    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync
+    const metadataFields = {
       modelFamily: card.modelFamily,
       modelClass: card.modelClass,
       maxInputTokens: card.maxInputTokens,
@@ -309,7 +309,20 @@ export async function profileModelsInternal(
       inputPricePerMToken: card.pricing.inputPerMToken,
       outputPricePerMToken: card.pricing.outputPerMToken,
       supportsToolUse: card.capabilities.toolUse ?? false,
-      // Dimension scores
+    };
+
+    // Dimension scores — only write on CREATE or when profileSource is still "seed".
+    // Never overwrite evaluated or production scores with family baselines.
+    const existingSource = existingProfile
+      ? (await prisma.modelProfile.findUnique({
+          where: { providerId_modelId: { providerId, modelId: m.modelId } },
+          select: { profileSource: true },
+        }))?.profileSource
+      : null;
+
+    const shouldWriteScores = !existingSource || existingSource === "seed";
+
+    const scoreFields = shouldWriteScores ? {
       reasoning: card.dimensionScores.reasoning,
       codegen: card.dimensionScores.codegen,
       toolFidelity: card.dimensionScores.toolFidelity,
@@ -317,16 +330,10 @@ export async function profileModelsInternal(
       structuredOutputScore: card.dimensionScores.structuredOutput,
       conversational: card.dimensionScores.conversational,
       contextRetention: card.dimensionScores.contextRetention,
-      profileSource: (() => {
-        switch (card.dimensionScoreSource) {
-          case "family_baseline": return "seed";
-          case "inferred": return "seed";
-          case "provider": return "seed";
-          case "evaluated": return "evaluated";
-          case "production": return "production";
-          default: return "seed";
-        }
-      })(),
+      profileSource: "seed" as const,
+      profileConfidence: card.metadataConfidence,
+    } : {
+      // Only update confidence from metadata, don't touch scores or source
       profileConfidence: card.metadataConfidence,
     };
 
@@ -341,11 +348,22 @@ export async function profileModelsInternal(
         costTier,
         bestFor:       ["general purpose tasks"],
         avoidFor:      [],
-        ...cardFields,
+        ...metadataFields,
+        // Always write scores on create (first time)
+        reasoning: card.dimensionScores.reasoning,
+        codegen: card.dimensionScores.codegen,
+        toolFidelity: card.dimensionScores.toolFidelity,
+        instructionFollowingScore: card.dimensionScores.instructionFollowing,
+        structuredOutputScore: card.dimensionScores.structuredOutput,
+        conversational: card.dimensionScores.conversational,
+        contextRetention: card.dimensionScores.contextRetention,
+        profileSource: "seed",
+        profileConfidence: card.metadataConfidence,
         generatedBy:          "system:metadata-sync",
       },
       update: {
-        ...cardFields,
+        ...metadataFields,
+        ...scoreFields,
         capabilityTier,
         costTier,
         generatedBy:          "system:metadata-sync",
