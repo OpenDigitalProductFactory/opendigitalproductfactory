@@ -29,6 +29,10 @@ const STEP_WELCOME: Record<string, string> = {
   "org-settings":
     "These are your organization settings — the basics about your business.\n\n" +
     "You can update your organization name, contact details, and location here. This information is used across the platform for things like compliance context and customer-facing materials.",
+  "storefront":
+    "This is your Storefront — a customer-facing portal where your clients can access services, book appointments, view their account, and interact with your business online.\n\n" +
+    "If your business serves customers directly, you can configure the storefront here. If not, you can skip this and come back if you need it later.\n\n" +
+    "When enabled, the welcome page will show a Customer Portal login option alongside the Employee & Admin login.",
   "build-studio":
     "This is the Build Studio — one of the most powerful features of the platform.\n\n" +
     "If you need something the platform doesn't have out of the box, you can describe what you need and the AI workforce will help build it: new workflows, reports, integrations, custom pages — whatever your business requires.\n\n" +
