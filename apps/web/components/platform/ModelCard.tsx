@@ -415,13 +415,14 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           </div>
         )}
 
-        {/* Re-sync button */}
+        {/* Sync metadata button — refreshes capabilities/pricing from provider API, preserves eval scores */}
         {canWrite && (
           <div>
             <ActionButton
-              label="Re-sync"
+              label="Sync Metadata"
               onClick={() => onProfile(model.modelId)}
               disabled={!hasActiveProvider}
+              title="Refresh model capabilities and pricing from provider API. Does not reset evaluated scores."
               {...(!hasActiveProvider && { title: "No active provider — cannot sync" })}
             />
           </div>
