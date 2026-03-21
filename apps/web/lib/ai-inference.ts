@@ -47,7 +47,7 @@ export class InferenceError extends Error {
   }
 }
 
-function classifyHttpError(
+export function classifyHttpError(
   status: number,
   providerId: string,
   body: string,
