@@ -24,6 +24,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey 
   { label: "EA Modeler",   href: "/ea",           capability: "view_ea_modeler" },
   { label: "AI Workforce", href: "/platform/ai",  capability: "view_platform" },
   { label: "Build",        href: "/build",        capability: "view_platform" },
+  { label: "Docs",         href: "/docs",         capability: null },
 ];
 
 export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, brandLogoUrlLight, userId }: Props) {

@@ -9,6 +9,7 @@ export type RouteContextDef = {
   sensitivity: SensitivityLevel;
   domainContext: string;
   domainTools: string[];
+  docsPath?: string;
   skills: Array<{
     label: string;
     description: string;
@@ -64,6 +65,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "create_digital_product",
       "update_lifecycle",
     ],
+    docsPath: "/docs/portfolios/index",
     skills: [
       {
         label: "Health summary",
@@ -100,6 +102,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page shows the digital product inventory with lifecycle stages (plan, design, build, production, retirement) and statuses (draft, active, inactive). Users manage individual product records, stage-gate readiness, and portfolio attribution.",
     domainTools: ["create_digital_product", "update_lifecycle"],
+    docsPath: "/docs/products/index",
     skills: [
       {
         label: "Advance a product",
@@ -137,6 +140,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative.",
     domainTools: [],
+    docsPath: "/docs/architecture/index",
     skills: [
       {
         label: "Create a view",
@@ -166,6 +170,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page manages role assignments, team structures, HITL tier commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified human in the loop.",
     domainTools: [],
+    docsPath: "/docs/hr/index",
     skills: [
       {
         label: "Assign a role",
@@ -201,6 +206,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page displays customer accounts and service relationships. Data here is classified as confidential — it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, and friction points.",
     domainTools: [],
+    docsPath: "/docs/customers/index",
     skills: [
       {
         label: "Add a customer",
@@ -236,6 +242,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page shows the delivery backlog with items, epics, priorities, and statuses. Users create and update work items, track epic progress, and manage delivery flow. Work-in-progress limits and blocker visibility are key operational controls.",
     domainTools: ["query_backlog", "create_backlog_item", "update_backlog_item"],
+    docsPath: "/docs/operations/index",
     skills: [
       {
         label: "Create item",
@@ -290,6 +297,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "list_project_directory",
       "propose_file_change",
     ],
+    docsPath: "/docs/build-studio/index",
     skills: [
       {
         label: "Start a feature",
@@ -319,6 +327,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page manages AI providers, model profiles, token spend, and agent-to-provider assignments. Data here is classified as confidential — it includes API keys, cost data, and infrastructure configuration. Users configure failover chains and optimise capability-per-dollar.",
     domainTools: ["add_provider", "update_provider_category"],
+    docsPath: "/docs/ai-workforce/index",
     skills: [
       {
         label: "Add a provider",
@@ -360,6 +369,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page handles user management, role assignments, branding configuration, and platform settings. Data here is classified as restricted — it includes access control rules, credentials, and security configuration. All changes are auditable.",
     domainTools: [],
+    docsPath: "/docs/admin/index",
     skills: [
       {
         label: "Manage users",
@@ -394,6 +404,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "track corrective actions, run audits, manage internal policies with employee acknowledgments, and submit regulatory reports. " +
       "The agent should understand the regulation currently being viewed and its obligations when on a regulation detail page.",
     domainTools: [],
+    docsPath: "/docs/compliance/index",
     skills: [
       {
         label: "Add a regulation",
@@ -466,6 +477,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "search_project_files",
       "propose_file_change",
     ],
+    docsPath: "/docs/workspace/index",
     skills: [
       {
         label: "Backlog status",
@@ -485,6 +497,24 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Report a bug or give feedback",
         capability: null,
         prompt: "I'd like to report an issue or give feedback.",
+      },
+    ],
+  },
+
+  "/docs": {
+    routePrefix: "/docs",
+    domain: "Documentation",
+    sensitivity: "internal",
+    domainContext:
+      "This page displays the platform user documentation. Users can browse guides for all platform areas, search for topics, and read how-to content.",
+    domainTools: [],
+    docsPath: "/docs",
+    skills: [
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
       },
     ],
   },
