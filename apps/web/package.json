@@ -14,6 +14,7 @@
     "@axe-core/playwright": "^4.11.1",
     "@dpf/db": "workspace:*",
     "@dpf/finance-templates": "workspace:*",
+    "@dpf/storefront-templates": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@floating-ui/react": "^0.27.19",
     "@fullcalendar/core": "^6.1.20",

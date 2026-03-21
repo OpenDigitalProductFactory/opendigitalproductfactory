@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { nanoid } from "nanoid";
+import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -81,6 +82,69 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true },
   });
+
+  // Seed default provider, availability, and booking config from template scheduling defaults
+  const template = ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
+  if (template?.schedulingDefaults) {
+    const defaults = template.schedulingDefaults;
+
+    // 1. Create default ServiceProvider named after the org
+    const provider = await prisma.serviceProvider.create({
+      data: {
+        providerId: `SP-${nanoid(6).toUpperCase()}`,
+        storefrontId: config.id,
+        name: orgName,
+        isActive: true,
+      },
+    });
+
+    // 2. Create availability rows — group days by identical hours
+    const grouped = new Map<string, number[]>();
+    for (const h of defaults.defaultOperatingHours) {
+      const key = `${h.start}-${h.end}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(h.day);
+    }
+    for (const [key, days] of grouped) {
+      const [startTime, endTime] = key.split("-");
+      await prisma.providerAvailability.create({
+        data: { providerId: provider.id, days, startTime, endTime },
+      });
+    }
+
+    // 3. Link provider to all booking items
+    const bookingItems = await prisma.storefrontItem.findMany({
+      where: { storefrontId: config.id, ctaType: "booking" },
+      select: { id: true, name: true },
+    });
+
+    for (const item of bookingItems) {
+      await prisma.providerService.create({
+        data: { providerId: provider.id, itemId: item.id },
+      });
+    }
+
+    // 4. Set bookingConfig on each booking item from template + defaults
+    const itemTemplates = template.itemTemplates;
+    for (const tmpl of itemTemplates) {
+      if ((tmpl.ctaType ?? template.ctaType) === "booking") {
+        await prisma.storefrontItem.updateMany({
+          where: { storefrontId: config.id, name: tmpl.name },
+          data: {
+            bookingConfig: {
+              durationMinutes: tmpl.bookingDurationMinutes ?? 60,
+              schedulingPattern: defaults.schedulingPattern,
+              assignmentMode: defaults.assignmentMode,
+              beforeBufferMinutes: defaults.defaultBeforeBuffer,
+              afterBufferMinutes: defaults.defaultAfterBuffer,
+              minimumNoticeHours: defaults.minimumNoticeHours,
+              maxAdvanceDays: defaults.maxAdvanceDays,
+            },
+          },
+        });
+      }
+    }
+  }
 
   return NextResponse.json({ success: true, storefrontId: config.id });
 }
