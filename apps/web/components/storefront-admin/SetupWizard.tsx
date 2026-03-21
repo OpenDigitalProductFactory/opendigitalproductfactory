@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { FinancialSetupStep } from "./FinancialSetupStep";
 
 type Archetype = {
   archetypeId: string;
@@ -11,7 +12,24 @@ type Archetype = {
   sectionTemplates: unknown;
 };
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
+
+// Map storefront archetype category to finance profile slug
+function financeSlugFromCategory(category: string): string {
+  const map: Record<string, string> = {
+    "healthcare-wellness": "healthcare_wellness",
+    "beauty-personal-care": "beauty_personal",
+    "trades-maintenance": "trades_construction",
+    "professional-services": "professional_services",
+    "education-training": "education_training",
+    "pet-services": "pet_services",
+    "food-hospitality": "food_hospitality",
+    "retail-goods": "retail",
+    "fitness-recreation": "fitness_recreation",
+    "nonprofit-community": "nonprofit",
+  };
+  return map[category] ?? "professional_services";
+}
 
 export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
   const [step, setStep] = useState<Step>(1);
@@ -47,7 +65,8 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { error?: string }).error ?? "Setup failed");
       }
-      window.location.href = "/admin/storefront";
+      // Move to financial setup step
+      setStep(4);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Setup failed");
     } finally {
@@ -111,6 +130,17 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
           <button onClick={() => setStep(3)} style={{ padding: "8px 16px", borderRadius: 6, border: "none", background: "var(--dpf-accent, #4f46e5)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Continue</button>
         </div>
       </div>
+    );
+  }
+
+  // Step 4: financial setup (rendered before the redirect so we keep wizard context)
+  if (step === 4) {
+    return (
+      <FinancialSetupStep
+        archetypeSlug={financeSlugFromCategory(selected?.category ?? "")}
+        archetypeName={selected?.name ?? "your business"}
+        onComplete={() => { window.location.href = "/admin/storefront"; }}
+      />
     );
   }
 
