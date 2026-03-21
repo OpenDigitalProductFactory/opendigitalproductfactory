@@ -325,6 +325,64 @@ export async function profileModelsInternal(
     }
     const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
 
+    // Auto-retire deprecated models — provider says this model is end-of-life
+    if (card.status === "deprecated" || card.status === "retired") {
+      await prisma.modelProfile.upsert({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        create: {
+          providerId, modelId: m.modelId,
+          friendlyName: card.displayName || m.modelId,
+          summary: "Deprecated by provider",
+          capabilityTier: "deprecated", costTier: "$",
+          bestFor: [], avoidFor: [],
+          modelStatus: "retired",
+          retiredAt: new Date(),
+          retiredReason: `Deprecated by provider${card.deprecationDate ? ` (${card.deprecationDate.toISOString().split("T")[0]})` : ""}`,
+          generatedBy: "system:metadata-sync",
+          profileSource: "seed", profileConfidence: "low",
+          reasoning: 50, codegen: 50, toolFidelity: 50,
+          instructionFollowingScore: 50, structuredOutputScore: 50,
+          conversational: 50, contextRetention: 50,
+        },
+        update: {
+          modelStatus: "retired",
+          retiredAt: new Date(),
+          retiredReason: `Deprecated by provider${card.deprecationDate ? ` (${card.deprecationDate.toISOString().split("T")[0]})` : ""}`,
+        },
+      });
+      console.log(`[profiling] Auto-retired deprecated model ${m.modelId} from ${providerId}`);
+      continue;
+    }
+
+    // Auto-retire models with a past deprecation date
+    if (card.deprecationDate && card.deprecationDate < new Date()) {
+      await prisma.modelProfile.upsert({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        create: {
+          providerId, modelId: m.modelId,
+          friendlyName: card.displayName || m.modelId,
+          summary: "Past deprecation date",
+          capabilityTier: "deprecated", costTier: "$",
+          bestFor: [], avoidFor: [],
+          modelStatus: "retired",
+          retiredAt: new Date(),
+          retiredReason: `Deprecation date passed: ${card.deprecationDate.toISOString().split("T")[0]}`,
+          generatedBy: "system:metadata-sync",
+          profileSource: "seed", profileConfidence: "low",
+          reasoning: 50, codegen: 50, toolFidelity: 50,
+          instructionFollowingScore: 50, structuredOutputScore: 50,
+          conversational: 50, contextRetention: 50,
+        },
+        update: {
+          modelStatus: "retired",
+          retiredAt: new Date(),
+          retiredReason: `Deprecation date passed: ${card.deprecationDate.toISOString().split("T")[0]}`,
+        },
+      });
+      console.log(`[profiling] Auto-retired past-deprecation model ${m.modelId} from ${providerId}`);
+      continue;
+    }
+
     // Derive legacy display fields from available data (no LLM needed)
     const friendlyName = card.displayName !== m.modelId
       ? card.displayName
