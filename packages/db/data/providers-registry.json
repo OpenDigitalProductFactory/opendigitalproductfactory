@@ -15,7 +15,18 @@
     "consoleUrl": "https://console.anthropic.com/settings/billing",
     "billingLabel": "Pay-per-token API key",
     "costPerformanceNotes": "Use API key from console.anthropic.com. Pay-per-token billing.",
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "AI research company. Their Claude models excel at analysis, writing, and code.",
+      "authExplained": "API key — a password you get from their website (console.anthropic.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Charges per use. A short conversation costs less than $0.01. Complex analysis might cost $0.05-0.20.",
+      "capabilitySummary": "Strong at reasoning, document analysis, code generation, and following complex instructions.",
+      "limitations": "Data is processed on Anthropic's servers. Not suitable for tasks requiring data to stay on-premise.",
+      "dataResidency": "United States (Anthropic servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data. Consult compliance team for healthcare/financial PII."
+    }
   },
   {
     "providerId": "anthropic-sub",
@@ -34,7 +45,18 @@
     "billingLabel": "Max subscription (included)",
     "costPerformanceNotes": "Uses your Claude Code / Max subscription. Run 'claude setup-token' in terminal to generate token. No prompt caching, no 1M context.",
     "modelRestrictions": ["claude-haiku-*", "claude-3-haiku-*"],
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Anthropic's Claude models accessed through a subscription plan.",
+      "authExplained": "Uses your existing Claude subscription token. No separate API key needed.",
+      "costTier": "subscription",
+      "costExplained": "Included in your Claude subscription. Limited to Haiku-class models.",
+      "capabilitySummary": "Good at conversation and basic analysis. Limited to smaller models.",
+      "limitations": "Only Haiku-class models available. Cannot access Sonnet or Opus through subscription.",
+      "dataResidency": "United States (Anthropic servers).",
+      "setupDifficulty": "moderate",
+      "regulatoryNotes": "Same as Anthropic. SOC 2 Type II certified."
+    }
   },
   {
     "providerId": "openai",
@@ -52,7 +74,18 @@
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Creator of GPT models. Versatile AI for conversation, analysis, and content generation.",
+      "authExplained": "API key — a password you get from their website (platform.openai.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Charges per use. Typical conversations cost less than $0.01. Image generation and advanced models cost more.",
+      "capabilitySummary": "Strong at general conversation, content creation, code, and multimodal tasks (images, voice).",
+      "limitations": "Data is processed on OpenAI's servers. Rate limits can apply during high usage.",
+      "dataResidency": "United States (OpenAI servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 Type II certified. Enterprise tier available for stricter data handling."
+    }
   },
   {
     "providerId": "azure-openai",
@@ -70,7 +103,18 @@
     "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Microsoft's enterprise-grade hosting of OpenAI models, running inside your own Azure environment.",
+      "authExplained": "API key or corporate Azure identity. Your IT team provisions access through your Azure subscription.",
+      "costTier": "pay-per-use",
+      "costExplained": "Similar per-token rates to OpenAI, billed through your existing Azure account. No separate vendor relationship needed.",
+      "capabilitySummary": "Same GPT models as OpenAI but with enterprise controls: data stays in your Azure tenancy, custom fine-tuning, and SLA guarantees.",
+      "limitations": "Requires an active Azure subscription and deployment setup. More configuration steps than direct OpenAI access.",
+      "dataResidency": "Your chosen Azure region. Data does not leave your Azure tenancy.",
+      "setupDifficulty": "moderate",
+      "regulatoryNotes": "Inherits Azure compliance certifications (ISO 27001, SOC 2, HIPAA BAA available). Strong choice for regulated industries."
+    }
   },
   {
     "providerId": "gemini",
@@ -88,7 +132,18 @@
     "consoleUrl": "https://aistudio.google.com/apikey",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Google's AI models, particularly strong at understanding images, documents, and large volumes of content.",
+      "authExplained": "API key — a password you get from Google AI Studio (aistudio.google.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Competitive per-token pricing. A free tier is available for low-volume use. Paid tiers start from fractions of a cent per request.",
+      "capabilitySummary": "Excellent at multimodal tasks (images, PDFs, video frames), long-context documents, and tasks requiring broad general knowledge.",
+      "limitations": "Data is processed on Google's servers. Some models have slower response times for very long documents.",
+      "dataResidency": "United States (Google servers, with some regional options).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 Type II certified. Google Workspace customers have additional data processing agreements. Verify terms for sensitive data."
+    }
   },
   {
     "providerId": "bedrock",
@@ -106,7 +161,18 @@
     "consoleUrl": "https://console.aws.amazon.com/bedrock/",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Amazon's managed AI service giving access to multiple top models — including Claude — running inside your own AWS account.",
+      "authExplained": "AWS IAM credentials managed by your IT team. No separate vendor accounts required for the AI models themselves.",
+      "costTier": "pay-per-use",
+      "costExplained": "Billed through your existing AWS account at per-token rates comparable to direct providers. Consolidated AWS billing applies.",
+      "capabilitySummary": "Access to Claude, Llama, and other leading models with AWS-level security controls, VPC isolation, and audit logging.",
+      "limitations": "Requires an AWS account, IAM setup, and Bedrock model access requests. The most complex provider to configure.",
+      "dataResidency": "Your chosen AWS region. Data stays within your AWS account boundary.",
+      "setupDifficulty": "complex",
+      "regulatoryNotes": "Inherits AWS compliance certifications (ISO 27001, SOC 2, HIPAA, FedRAMP). Best choice for organisations with strict data sovereignty requirements."
+    }
   },
   {
     "providerId": "ollama",
@@ -124,7 +190,18 @@
     "consoleUrl": null,
     "billingLabel": "Local compute \u00b7 electricity cost only",
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "AI running entirely on your own hardware. No data leaves your system.",
+      "authExplained": "None needed — it's already running on your machine.",
+      "costTier": "free",
+      "costExplained": "Costs only the electricity to run your computer. No per-use charges.",
+      "capabilitySummary": "Handles conversation, simple summaries, guided tasks, and basic analysis. Limited by your hardware.",
+      "limitations": "Cannot match cloud models for complex reasoning, large document processing, or specialized tasks.",
+      "dataResidency": "Your machine. Nothing leaves.",
+      "setupDifficulty": "automatic",
+      "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
+    }
   },
   {
     "providerId": "xai",
@@ -140,7 +217,18 @@
     "consoleUrl": "https://console.x.ai",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Elon Musk's AI company. Their Grok models are notable for access to real-time information and current events.",
+      "authExplained": "API key — a password you get from their console (console.x.ai).",
+      "costTier": "pay-per-use",
+      "costExplained": "Competitive per-token pricing, comparable to other major providers.",
+      "capabilitySummary": "Strong at tasks requiring up-to-date information, news analysis, and general conversation. Good reasoning in Grok 3.",
+      "limitations": "Smaller ecosystem than OpenAI or Anthropic. Data processed on xAI servers.",
+      "dataResidency": "United States (xAI servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "Relatively newer provider. Review their data processing terms before using for sensitive business data."
+    }
   },
   {
     "providerId": "mistral",
@@ -156,7 +244,18 @@
     "consoleUrl": "https://console.mistral.ai/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "French AI company known for efficient, multilingual models and a strong commitment to European data standards.",
+      "authExplained": "API key — a password you get from their console (console.mistral.ai).",
+      "costTier": "pay-per-use",
+      "costExplained": "Cost-effective pricing, often cheaper than US counterparts for equivalent quality. Charges per token used.",
+      "capabilitySummary": "Excellent at multilingual tasks (especially European languages), code generation, and instruction following. Efficient models that balance cost and quality.",
+      "limitations": "Smaller model range than OpenAI or Anthropic. Less ecosystem tooling available.",
+      "dataResidency": "European Union (Mistral servers in France).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "GDPR-compliant. EU data residency makes this a strong choice for European businesses or those with EU data obligations."
+    }
   },
   {
     "providerId": "cohere",
@@ -172,7 +271,18 @@
     "consoleUrl": "https://dashboard.cohere.com/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "AI company specialising in enterprise search, retrieval, and document understanding — built for business workflows.",
+      "authExplained": "API key — a password you get from their dashboard (dashboard.cohere.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Competitive pricing with a free tier for development. Production usage billed per token.",
+      "capabilitySummary": "Exceptional at searching and retrieving information from your own documents and databases. Embedding models enable semantic search across large knowledge bases.",
+      "limitations": "Less suited to open-ended creative tasks compared to GPT or Claude. Focused on retrieval and business use cases.",
+      "dataResidency": "United States (Cohere servers, with cloud provider options).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 certified. Enterprise agreements available. Well-suited for business document search and knowledge management."
+    }
   },
   {
     "providerId": "deepseek",
@@ -188,7 +298,18 @@
     "consoleUrl": "https://platform.deepseek.com/top_up",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Chinese AI company offering highly capable reasoning models at very low cost.",
+      "authExplained": "API key — a password you get from their platform (platform.deepseek.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Among the lowest per-token prices available. Complex reasoning tasks that cost $0.10 elsewhere may cost $0.01 here.",
+      "capabilitySummary": "Strong at mathematics, logic, coding, and structured reasoning tasks. The R1 model rivals top-tier models at a fraction of the cost.",
+      "limitations": "Data is processed on servers in China. Not suitable for any data subject to data sovereignty, export controls, or regulatory restrictions.",
+      "dataResidency": "China (DeepSeek servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "Data residency in China creates significant compliance concerns for most regulated industries. Not recommended for business, personal, or sensitive data without legal review."
+    }
   },
   {
     "providerId": "groq",
@@ -204,7 +325,18 @@
     "consoleUrl": "https://console.groq.com/settings/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Ultra-fast AI inference platform using custom hardware. Responses arrive noticeably faster than standard cloud providers.",
+      "authExplained": "API key — a password you get from their console (console.groq.com).",
+      "costTier": "pay-per-use",
+      "costExplained": "Competitive pricing with a free tier. Speed advantage comes at similar or lower cost than OpenAI for equivalent open-source models.",
+      "capabilitySummary": "Best for real-time applications where response speed matters: customer-facing chat, live transcription, and interactive tools. Runs Llama and Mistral models.",
+      "limitations": "Runs open-source models, not proprietary ones like GPT-4 or Claude. Model selection is narrower.",
+      "dataResidency": "United States (Groq servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 Type II certified. Good choice for latency-sensitive applications where open-source models are sufficient."
+    }
   },
   {
     "providerId": "together",
@@ -220,7 +352,18 @@
     "consoleUrl": "https://api.together.ai/settings/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Cloud platform giving access to a large catalogue of open-source AI models in one place.",
+      "authExplained": "API key — a password you get from their platform (api.together.ai).",
+      "costTier": "pay-per-use",
+      "costExplained": "Competitive per-token pricing across a wide model selection. Useful for comparing models or accessing specialised ones.",
+      "capabilitySummary": "Access to over 100 open-source models including Llama, Mistral, Qwen, and others. Good for experimentation and finding the right model for a specific task.",
+      "limitations": "All models are open-source; no access to proprietary models like GPT-4 or Claude. Data processed on Together's servers.",
+      "dataResidency": "United States (Together AI servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 certified. Suitable for most business use cases. Verify specific model terms for regulated data."
+    }
   },
   {
     "providerId": "fireworks",
@@ -236,7 +379,18 @@
     "consoleUrl": "https://fireworks.ai/account/billing",
     "billingLabel": null,
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Fast and cost-efficient inference platform for open-source models, optimised for production workloads.",
+      "authExplained": "API key — a password you get from their platform (fireworks.ai).",
+      "costTier": "pay-per-use",
+      "costExplained": "Among the most cost-effective options for open-source models. Batch processing discounts available for high-volume use.",
+      "capabilitySummary": "Efficient serving of Llama, Mixtral, Qwen, and other open-source models. Good for high-volume, cost-sensitive applications.",
+      "limitations": "Open-source models only. Narrower model selection than Together AI. Data processed on Fireworks servers.",
+      "dataResidency": "United States (Fireworks AI servers).",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "SOC 2 certified. Suitable for production business workloads where open-source models meet the capability requirements."
+    }
   },
   {
     "providerId": "codex",
@@ -257,7 +411,8 @@
     "catalogVisibility": "visible",
     "authorizeUrl": "https://auth.openai.com/oauth/authorize",
     "tokenUrl": "https://auth.openai.com/oauth/token",
-    "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann"
+    "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
+    "oauthRedirectUri": "http://localhost:1455/auth/callback"
   },
   {
     "providerId": "openrouter",
@@ -273,7 +428,18 @@
     "consoleUrl": "https://openrouter.ai/credits",
     "billingLabel": "Pay-per-use \u00b7 rates vary by model",
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "A single API key that gives access to models from many providers — OpenAI, Anthropic, Google, and dozens more.",
+      "authExplained": "One API key from OpenRouter (openrouter.ai) replaces the need for separate keys from each provider.",
+      "costTier": "pay-per-use",
+      "costExplained": "Charges vary by underlying model used. Pricing is transparent and shown per model. A small routing fee may apply.",
+      "capabilitySummary": "Simplifies AI setup by consolidating many providers behind one key. Useful for testing models or switching between them without reconfiguring credentials.",
+      "limitations": "Adds a routing layer between your data and the underlying provider. Not suitable where direct provider contracts are required.",
+      "dataResidency": "Depends on the underlying provider selected. OpenRouter routes requests but does not store content.",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "Review the terms of the specific underlying provider used. OpenRouter itself is a pass-through; compliance obligations rest with the provider."
+    }
   },
   {
     "providerId": "litellm",
