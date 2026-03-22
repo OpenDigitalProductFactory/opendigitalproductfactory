@@ -53,11 +53,13 @@ There are two ways to install, depending on your situation:
 
 No technical experience needed. The installer handles everything automatically.
 
-1. Download [`install-dpf.ps1`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.ps1) (right-click the link -> "Save link as...")
-2. Right-click the downloaded file -> **Run with PowerShell**
-3. Choose install location if needed:
-   - `.\install-dpf.ps1` (default `C:\DPF`)
-   - `.\install-dpf.ps1 -InstallDir D:\DPF`
+1. Download both files into the same folder (right-click each link -> "Save link as..."):
+   - [`install-dpf.bat`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.bat)
+   - [`install-dpf.ps1`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.ps1)
+2. Double-click **`install-dpf.bat`** to start the installer
+3. Choose install location if needed (from a terminal):
+   - `install-dpf.bat` (default `C:\DPF`)
+   - `install-dpf.bat -InstallDir D:\DPF`
 4. Follow the guided steps (5-10 minutes)
 
 The installer will:
@@ -71,7 +73,7 @@ The installer will:
 **After installation:**
 - **Start the platform:** `dpf-start`
 - **Stop the platform:** `dpf-stop`
-- **Uninstall everything:** Right-click [`uninstall-dpf.ps1`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.ps1) -> Run with PowerShell
+- **Uninstall everything:** Double-click [`uninstall-dpf.bat`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.bat) (or right-click `uninstall-dpf.ps1` -> Run with PowerShell)
 
 #### Startup behavior
 
@@ -101,7 +103,7 @@ For developers who want to run Next.js locally with IDE integration, debugging, 
 ```powershell
 git clone https://github.com/markdbodman/opendigitalproductfactory.git
 cd opendigitalproductfactory
-.\scripts\fresh-install.ps1 -InstallDrive H    # or C, D, etc.
+.\scripts\fresh-install.bat -InstallDrive H    # or C, D, etc.
 ```
 
 The script will:
@@ -430,8 +432,10 @@ opendigitalproductfactory/
 ├── packages/db/                 # Prisma schema (42 models) + seed data
 ├── scripts/                     # Convenience + hardware detection
 │   └── fresh-install.ps1        # Developer setup script
-├── install-dpf.ps1              # User installer (non-technical)
-├── uninstall-dpf.ps1            # User uninstaller
+├── install-dpf.bat              # User installer launcher (double-click this)
+├── install-dpf.ps1              # User installer (PowerShell)
+├── uninstall-dpf.bat            # User uninstaller launcher
+├── uninstall-dpf.ps1            # User uninstaller (PowerShell)
 ├── Dockerfile                   # Multi-stage (init + runner)
 ├── docker-compose.yml           # Full stack — self-contained (no exposed ports)
 ├── docker-compose.dev.yml       # Developer overlay — exposes ports to host
