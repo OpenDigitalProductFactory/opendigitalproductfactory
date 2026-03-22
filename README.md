@@ -60,6 +60,8 @@ Both modes include the full platform with AI co-workers, Build Studio sandbox, a
 
 That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start configuration.
 
+**Login credentials** are shown at the end of installation and saved to `.admin-credentials` in your install directory. The email is always `admin@dpf.local` — the password is randomly generated and unique to your install. Change it after first login.
+
 **After installation:**
 - **Start:** `dpf-start`
 - **Stop:** `dpf-stop`
