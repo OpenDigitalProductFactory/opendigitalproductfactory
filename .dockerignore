@@ -5,6 +5,8 @@ node_modules
 .git
 .claude
 .vscode
+.devcontainer
+.pnpm-store
 .env
 .env.local
 *.md
