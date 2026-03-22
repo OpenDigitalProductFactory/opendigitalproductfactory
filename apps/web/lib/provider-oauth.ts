@@ -164,6 +164,21 @@ export async function exchangeOAuthCode(
     data: { authMethod: "oauth2_authorization_code" },
   });
 
+  // Auto-activate linked MCP services (e.g. codex-agent when codex provider connects)
+  const linkedServers = await prisma.mcpServer.findMany({
+    where: { config: { path: ["linkedProviderId"], equals: flow.providerId } },
+  });
+  for (const server of linkedServers) {
+    if (server.status !== "active") {
+      await prisma.mcpServer.update({ where: { id: server.id }, data: { status: "active" } });
+      // Also activate the corresponding ModelProvider if one exists
+      await prisma.modelProvider.updateMany({
+        where: { providerId: server.serverId, status: { not: "active" } },
+        data: { status: "active" },
+      });
+    }
+  }
+
   await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
   return { providerId: flow.providerId };
 }
