@@ -306,7 +306,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     if (provider.authMethod === "oauth2_authorization_code" && provider.category === "agent") {
       const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
       if (cred?.status === "ok" && cred.cachedToken) {
-        await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
+        await prisma.modelProvider.update({
+          where: { providerId },
+          data: { status: "active", sensitivityClearance: ["public", "internal"] },
+        });
         return { ok: true, message: "Connected via OAuth — token valid" };
       }
       return { ok: false, message: "OAuth token not found — sign in again" };
@@ -329,7 +332,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
       // A 200 or even a 400 "max_tokens too low" means auth worked
       if (res.ok || res.status === 400) {
-        await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
+        await prisma.modelProvider.update({
+          where: { providerId },
+          data: { status: "active", sensitivityClearance: ["public", "internal", "confidential"] },
+        });
         return { ok: true, message: `Connected via subscription token — auth verified` };
       }
       const body = await res.text().catch(() => "");
@@ -338,7 +344,14 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
-      await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
+      // Cloud LLM providers get public/internal/confidential clearance by default
+      const clearance = provider.providerId === "ollama"
+        ? ["public", "internal", "confidential", "restricted"]
+        : ["public", "internal", "confidential"];
+      await prisma.modelProvider.update({
+        where: { providerId },
+        data: { status: "active", sensitivityClearance: clearance },
+      });
       return { ok: true, message: `Connected — HTTP ${res.status}` };
     }
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
