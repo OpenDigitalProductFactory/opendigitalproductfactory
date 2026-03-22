@@ -1082,7 +1082,7 @@ async function seedScheduledJobs(): Promise<void> {
       jobId:     "mcp-catalog-sync",
       name:      "MCP Integrations Catalog Sync",
       schedule:  "weekly",
-      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      nextRunAt: new Date(),  // Run immediately on first visit
     },
     update: {
       schedule: "weekly",  // preserve operational state on re-seed
@@ -1202,6 +1202,19 @@ async function seedMobileAppReminder(): Promise<void> {
   console.log("Seeded calendar reminder: Mobile Companion App review on 2026-04-02");
 }
 
+async function seedAnthropicSubScope(): Promise<void> {
+  await prisma.credentialEntry.upsert({
+    where: { providerId: "anthropic-sub" },
+    create: {
+      providerId: "anthropic-sub",
+      scope: "user:inference user:profile",
+      status: "unconfigured",
+    },
+    update: {},  // preserve existing credentials on re-seed
+  });
+  console.log("Seeded anthropic-sub credential scope");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedGeographicData(prisma);
@@ -1229,6 +1242,7 @@ async function main(): Promise<void> {
   await seedMobileAppReminder();
   await seedScheduledJobs();
   await seedMcpServers();
+  await seedAnthropicSubScope();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
   await prisma.epic.upsert({
