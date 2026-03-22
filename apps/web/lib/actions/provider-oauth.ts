@@ -31,5 +31,18 @@ export async function disconnectProviderOAuth(providerId: string): Promise<{ err
       status: "unconfigured",
     },
   });
+
+  // Deactivate linked MCP services when provider disconnects
+  const linkedServers = await prisma.mcpServer.findMany({
+    where: { config: { path: ["linkedProviderId"], equals: providerId } },
+  });
+  for (const server of linkedServers) {
+    await prisma.mcpServer.update({ where: { id: server.id }, data: { status: "inactive" } });
+    await prisma.modelProvider.updateMany({
+      where: { providerId: server.serverId, status: "active" },
+      data: { status: "inactive" },
+    });
+  }
+
   return {};
 }
