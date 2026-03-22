@@ -72,11 +72,29 @@ Epics must be actively managed — not just created and forgotten.
 - Only create a branch for experimental work the user wants to isolate.
 - If a branch is created, merge or discard it quickly — do not let branches linger.
 
-### Verification
+### Verification — Build Gate (mandatory)
 
-- Run `pnpm typecheck` before claiming work is complete.
-- If a migration was added, verify it applies cleanly.
-- Do not claim a feature works without testing it.
+Work is NOT complete until the production build passes. This is non-negotiable.
+
+**Required checks before claiming any task, epic, or session is done:**
+
+1. **Unit tests pass** — `npx vitest run` for affected test files (at minimum)
+2. **Production build succeeds** — `cd apps/web && npx next build` must complete with zero errors
+3. **Migration applies cleanly** — if a migration was added, verify it applies without drift
+
+**When to run the build:**
+- After completing each epic or logical chunk of work (not after every single commit)
+- Before claiming a feature is "done" or "shipped"
+- Before any session wrap-up summary that lists completed work
+
+**Why this matters:** TypeScript errors, missing imports, and type mismatches only surface during `next build` — not during `vitest run` or IDE checks. The project has experienced 300+ build errors discovered only at the end of a development cycle because builds were not run incrementally. Catching these early (per-epic, not per-release) is dramatically cheaper.
+
+**If the build fails:**
+- Fix the errors before moving to the next task
+- Do not defer build fixes to a later session
+- If the failure is pre-existing (not caused by your changes), note it explicitly but still fix if feasible
+
+**Subagent dispatchers:** When dispatching implementation subagents for the final task in an epic, include "run `cd apps/web && npx next build` and fix any errors" as part of the task.
 
 ### Communication
 
