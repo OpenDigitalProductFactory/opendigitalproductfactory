@@ -269,58 +269,21 @@ pnpm --filter @dpf/db seed
 if ($LASTEXITCODE -ne 0) { Write-Fail "Database seed failed" }
 Write-Ok "Base seed complete"
 
-Write-Step "Restoring full database state (epics, backlog, providers)"
+Write-Step "Restoring epics and backlog"
 
-$sqlScripts = @(
-    # Baseline exports
-    "scripts\db-export-epics-backlog.sql",
-    "scripts\db-export-runtime-state.sql",
-    # Epic seeds
-    "scripts\seed-vision-epics.sql",
-    "scripts\seed-hr-epic.sql",
-    "scripts\seed-crm-epic.sql",
-    "scripts\seed-crm-sales-pipeline-epic.sql",
-    "scripts\seed-sbom-epic.sql",
-    "scripts\seed-calendaring-epic.sql",
-    "scripts\seed-usability-standards-epic.sql",
-    "scripts\seed-refdata-admin-epic.sql",
-    "scripts\seed-gdpr-epic.sql",
-    "scripts\seed-miro-collaboration-epic.sql",
-    "scripts\seed-security-agent-epic.sql",
-    "scripts\seed-financial-management-epic.sql",
-    "scripts\seed-finance-review-epic.sql",
-    "scripts\seed-mcp-activation-epic.sql",
-    "scripts\seed-storefront-booking-calendar-epic.sql",
-    "scripts\seed-build-ux-streamlining-epic.sql",
-    "scripts\seed-grc-onboarding-epic.sql",
-    # Updates
-    "scripts\update-finance-epic.sql",
-    "scripts\update-selfdev-epic-runtime-registration.sql",
-    "scripts\update-calendar-epic.sql",
-    "scripts\update-crm-sales-pipeline-backlog.sql",
-    "scripts\update-crm-core-backlog.sql",
-    # Cleanup and reconciliation
-    "scripts\cleanup-orphaned-hr-items.sql",
-    "scripts\dedup-hr-epic.sql",
-    "scripts\mark-neo4j-stories-done.sql",
-    "scripts\mark-neo4j-stories-6-7-done.sql",
-    "scripts\reconcile-epics-2026-03-20.sql"
-)
-
-foreach ($sql in $sqlScripts) {
-    $fullPath = Join-Path $InstallRoot $sql
-    if (Test-Path $fullPath) {
-        $name = Split-Path $sql -Leaf
-        Write-Host "  Applying $name..."
-        try {
-            pnpm --filter @dpf/db exec prisma db execute --file "../../$sql" 2>$null
-        } catch {
-            Write-Warn "$name had errors (may be expected if already applied)"
-        }
+$backlogSql = "scripts\seed-epics-backlog-2026-03-22.sql"
+$fullPath = Join-Path $InstallRoot $backlogSql
+if (Test-Path $fullPath) {
+    Write-Host "  Applying seed-epics-backlog-2026-03-22.sql (83 epics, 421 backlog items)..."
+    try {
+        pnpm --filter @dpf/db exec prisma db execute --file "../../$backlogSql" 2>$null
+    } catch {
+        Write-Warn "Backlog restore had errors (may be expected if already applied)"
     }
+    Write-Ok "Epics and backlog restored"
+} else {
+    Write-Warn "Backlog seed file not found -- skipping"
 }
-
-Write-Ok "Database fully restored"
 
 Write-Host "========================================================" 
 
