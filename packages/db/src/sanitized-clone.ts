@@ -227,7 +227,14 @@ async function insertRows(
   for (const row of rows) {
     const columns = Object.keys(row);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-    const values = columns.map((col) => row[col]);
+    const values = columns.map((col) => {
+      const v = row[col];
+      // Prisma raw queries can't pass JS objects for JSON columns — serialize them
+      if (v !== null && typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
+        return JSON.stringify(v);
+      }
+      return v;
+    });
     const columnList = columns.map((c) => `"${c}"`).join(", ");
 
     await client.$executeRawUnsafe(
