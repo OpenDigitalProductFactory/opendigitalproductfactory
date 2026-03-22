@@ -9,8 +9,6 @@ import {
   getProviderExtraHeaders,
   getProviderBearerToken,
   isAnthropicProvider,
-  isAnthropicOAuthToken,
-  getClaudeCodeOAuthToken,
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "./routing/recipe-types";
@@ -110,16 +108,7 @@ async function buildAuthHeaders(
   if (authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
-
-    // Anthropic subscription tokens (from `claude setup-token`) use Bearer auth, not x-api-key.
-    // These tokens are short-lived; prefer the live token from Claude Code's credentials file.
-    if (isAnthropicProvider(providerId) && isAnthropicOAuthToken(cred.secretRef)) {
-      const liveToken = getClaudeCodeOAuthToken() ?? cred.secretRef;
-      headers["Authorization"] = `Bearer ${liveToken}`;
-      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
-    } else {
-      headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
-    }
+    headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
@@ -128,6 +117,9 @@ async function buildAuthHeaders(
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
+    if (isAnthropicProvider(providerId)) {
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    }
   }
   // "none" auth (e.g., local Ollama) — no auth headers needed
 
