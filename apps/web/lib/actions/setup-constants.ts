@@ -8,6 +8,7 @@ export const SETUP_STEPS = [
   "ai-providers",        // /platform/ai/providers — configure AI providers
   "branding",            // /admin/branding — logo, colors, tagline
   "org-settings",        // /admin/settings — org details, location, timezone
+  "operating-hours",     // /admin/operating-hours — business hours
   "storefront",          // /admin/storefront — customer-facing portal setup
   "build-studio",        // /build — show the self-development capability
   "workspace",           // /workspace — see the workspace, meet the COO
@@ -18,6 +19,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "ai-providers": "/platform/ai/providers",
   "branding": "/admin/branding",
   "org-settings": "/admin/settings",
+  "operating-hours": "/admin/operating-hours",
   "storefront": "/admin/storefront",
   "build-studio": "/build",
   "workspace": "/workspace",
@@ -28,6 +30,7 @@ export const STEP_LABELS: Record<string, string> = {
   "ai-providers": "AI Providers",
   "branding": "Branding",
   "org-settings": "Settings",
+  "operating-hours": "Operating Hours",
   "storefront": "Storefront",
   "build-studio": "Build",
   "workspace": "Workspace",
