@@ -25,7 +25,6 @@
     "@dpf/storefront-templates": "workspace:*",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
-    "country-state-city": "^3.2.1",
     "dotenv": "^16.4.0",
     "i18n-iso-countries": "^7.14.0",
     "neo4j-driver": "^5.27.0",

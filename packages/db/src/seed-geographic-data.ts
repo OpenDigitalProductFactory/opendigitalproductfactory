@@ -1,48 +1,50 @@
 // packages/db/src/seed-geographic-data.ts
 //
 // Seeds geographic reference data: Countries, Regions (states/provinces), and Cities.
-// Uses the `country-state-city` npm package for base data and `i18n-iso-countries`
-// for ISO 3166-1 alpha-3 and numeric codes.
+// Reads from static JSON data files in packages/db/data/.
 //
 // Idempotent: safe to run multiple times. Uses upsert for countries (unique iso2),
 // and findFirst + create for regions/cities (no unique constraint on composite keys).
 
-import { Country, State, City } from "country-state-city";
-import * as countries from "i18n-iso-countries";
+import { readFileSync } from "fs";
+import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Data types matching the JSON file schemas
 // ---------------------------------------------------------------------------
 
-/** Countries that get more cities per region (3 per region vs 1 for others) */
-const MAJOR_COUNTRY_CODES = new Set([
-  "US", "GB", "CA", "AU", "DE", "FR", "IN", "BR", "JP", "CN",
-  "IT", "ES", "NL", "MX", "RU", "KR", "SE", "NO", "DK", "FI",
-  "PL", "AT", "CH", "IE", "NZ", "SG", "ZA", "AE", "SA", "IL",
-]);
+type CountryRecord = {
+  name: string;
+  iso2: string;
+  iso3: string;
+  numericCode: string;
+  phoneCode: string;
+};
 
-const CITIES_PER_REGION_MAJOR = 3;
-const CITIES_PER_REGION_OTHER = 1;
+type RegionRecord = {
+  name: string;
+  code: string;
+  countryCode: string;
+};
+
+type CityRecord = {
+  name: string;
+  regionCode: string;
+  countryCode: string;
+};
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Data loading
 // ---------------------------------------------------------------------------
 
-/**
- * Normalise a phone code to a consistent format (digits and hyphens only).
- * The source data has mixed formats: "93", "+1-684", "+358-18", etc.
- * We store the raw numeric code without leading +.
- */
-function normalizePhoneCode(raw: string): string {
-  if (!raw) return "0";
-  // Strip leading +, trim whitespace
-  return raw.replace(/^\+/, "").trim();
+const DATA_DIR = join(__dirname, "..", "data");
+
+function loadJson<T>(filename: string): T[] {
+  const raw = readFileSync(join(DATA_DIR, filename), "utf-8");
+  return JSON.parse(raw) as T[];
 }
 
-/**
- * Log a progress message with a consistent prefix.
- */
 function log(msg: string): void {
   console.log(`[seed-geo] ${msg}`);
 }
@@ -52,38 +54,30 @@ function log(msg: string): void {
 // ---------------------------------------------------------------------------
 
 async function seedCountries(prisma: PrismaClient): Promise<Map<string, string>> {
-  const allCountries = Country.getAllCountries();
+  const countries = loadJson<CountryRecord>("countries.json");
   const iso2ToDbId = new Map<string, string>();
 
-  log(`Seeding ${allCountries.length} countries...`);
+  log(`Seeding ${countries.length} countries...`);
 
-  for (const c of allCountries) {
-    const iso3 = countries.alpha2ToAlpha3(c.isoCode);
-    const numericCode = countries.alpha2ToNumeric(c.isoCode);
-
-    if (!iso3 || !numericCode) {
-      log(`  SKIP ${c.isoCode} (${c.name}) — missing iso3 or numeric code`);
-      continue;
-    }
-
+  for (const c of countries) {
     const record = await prisma.country.upsert({
-      where: { iso2: c.isoCode },
+      where: { iso2: c.iso2 },
       update: {
         name: c.name,
-        iso3,
-        numericCode,
-        phoneCode: normalizePhoneCode(c.phonecode),
+        iso3: c.iso3,
+        numericCode: c.numericCode,
+        phoneCode: c.phoneCode,
       },
       create: {
         name: c.name,
-        iso2: c.isoCode,
-        iso3,
-        numericCode,
-        phoneCode: normalizePhoneCode(c.phonecode),
+        iso2: c.iso2,
+        iso3: c.iso3,
+        numericCode: c.numericCode,
+        phoneCode: c.phoneCode,
       },
     });
 
-    iso2ToDbId.set(c.isoCode, record.id);
+    iso2ToDbId.set(c.iso2, record.id);
   }
 
   log(`  Seeded ${iso2ToDbId.size} countries.`);
@@ -94,42 +88,35 @@ async function seedRegions(
   prisma: PrismaClient,
   countryIdMap: Map<string, string>,
 ): Promise<{ regionKeyToDbId: Map<string, string>; regionCount: number }> {
-  const allStates = State.getAllStates();
-  const regionKey = (countryId: string, name: string) => `${countryId}::${name}`;
+  const regions = loadJson<RegionRecord>("regions.json");
   const regionKeyToDbId = new Map<string, string>();
 
-  log(`Seeding ${allStates.length} regions/states...`);
+  log(`Seeding ${regions.length} regions/states...`);
 
   let created = 0;
   let existing = 0;
 
-  for (const s of allStates) {
-    const countryDbId = countryIdMap.get(s.countryCode);
-    if (!countryDbId) continue; // skip if country was not seeded
+  for (const r of regions) {
+    const countryDbId = countryIdMap.get(r.countryCode);
+    if (!countryDbId) continue;
 
-    const key = regionKey(countryDbId, s.name);
-
-    // Check if this region already exists
     const found = await prisma.region.findFirst({
-      where: { countryId: countryDbId, name: s.name },
+      where: { countryId: countryDbId, name: r.name },
       select: { id: true },
     });
 
     if (found) {
-      regionKeyToDbId.set(key, found.id);
-      // Also store by countryCode::stateCode for city lookup
-      regionKeyToDbId.set(`${s.countryCode}::${s.isoCode}`, found.id);
+      regionKeyToDbId.set(`${r.countryCode}::${r.code}`, found.id);
       existing++;
     } else {
       const record = await prisma.region.create({
         data: {
-          name: s.name,
-          code: s.isoCode || null,
+          name: r.name,
+          code: r.code || null,
           countryId: countryDbId,
         },
       });
-      regionKeyToDbId.set(key, record.id);
-      regionKeyToDbId.set(`${s.countryCode}::${s.isoCode}`, record.id);
+      regionKeyToDbId.set(`${r.countryCode}::${r.code}`, record.id);
       created++;
     }
   }
@@ -143,52 +130,21 @@ async function seedCities(
   prisma: PrismaClient,
   regionKeyToDbId: Map<string, string>,
 ): Promise<number> {
-  const allCities = City.getAllCities();
+  const cities = loadJson<CityRecord>("cities.json");
 
-  // Group cities by countryCode::stateCode
-  const grouped = new Map<string, Array<{ name: string; countryCode: string; stateCode: string }>>();
-  for (const c of allCities) {
-    const key = `${c.countryCode}::${c.stateCode}`;
-    let arr = grouped.get(key);
-    if (!arr) {
-      arr = [];
-      grouped.set(key, arr);
-    }
-    arr.push(c);
-  }
-
-  // Determine how many cities to keep per region
-  const citiesToSeed: Array<{ name: string; regionDbId: string }> = [];
-
-  grouped.forEach((cities, key) => {
-    const regionDbId = regionKeyToDbId.get(key);
-    if (!regionDbId) return; // no matching region in our DB
-
-    const countryCode = key.split("::")[0]!;
-    const cap = MAJOR_COUNTRY_CODES.has(countryCode)
-      ? CITIES_PER_REGION_MAJOR
-      : CITIES_PER_REGION_OTHER;
-
-    const selected = cities.slice(0, cap);
-    for (const c of selected) {
-      citiesToSeed.push({ name: c.name, regionDbId });
-    }
-  });
-
-  const totalToSeed = citiesToSeed.length;
-  log(`Seeding ${totalToSeed} cities (filtered from ${allCities.length} total)...`);
+  log(`Seeding ${cities.length} cities...`);
 
   let created = 0;
   let existing = 0;
-
-  // Process in batches to show progress
   const BATCH_LOG_INTERVAL = 1000;
 
-  for (let i = 0; i < citiesToSeed.length; i++) {
-    const c = citiesToSeed[i]!;
+  for (let i = 0; i < cities.length; i++) {
+    const c = cities[i]!;
+    const regionDbId = regionKeyToDbId.get(`${c.countryCode}::${c.regionCode}`);
+    if (!regionDbId) continue;
 
     const found = await prisma.city.findFirst({
-      where: { regionId: c.regionDbId, name: c.name },
+      where: { regionId: regionDbId, name: c.name },
       select: { id: true },
     });
 
@@ -198,14 +154,14 @@ async function seedCities(
       await prisma.city.create({
         data: {
           name: c.name,
-          regionId: c.regionDbId,
+          regionId: regionDbId,
         },
       });
       created++;
     }
 
     if ((i + 1) % BATCH_LOG_INTERVAL === 0) {
-      log(`  Progress: ${i + 1}/${totalToSeed} cities processed...`);
+      log(`  Progress: ${i + 1}/${cities.length} cities processed...`);
     }
   }
 
@@ -221,13 +177,8 @@ export async function seedGeographicData(prisma: PrismaClient): Promise<void> {
   log("Starting geographic reference data seed...");
   const startTime = Date.now();
 
-  // Phase 1: Countries (upsert by iso2)
   const countryIdMap = await seedCountries(prisma);
-
-  // Phase 2: Regions / states (findFirst + create)
   const { regionKeyToDbId, regionCount } = await seedRegions(prisma, countryIdMap);
-
-  // Phase 3: Cities (findFirst + create, filtered by tier)
   const cityCount = await seedCities(prisma, regionKeyToDbId);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
