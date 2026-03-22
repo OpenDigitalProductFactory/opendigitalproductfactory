@@ -121,6 +121,8 @@ export async function exchangeOAuthCode(
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.error(`[oauth] Token exchange failed: HTTP ${res.status} ${errBody.slice(0, 500)}`);
       await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
       return { error: "token_exchange_failed" };
     }
