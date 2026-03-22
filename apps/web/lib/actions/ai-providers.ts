@@ -301,6 +301,17 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   try {
     let res: Response;
 
+    // Agent providers (e.g. Codex) with OAuth subscription: the token is valid but can't
+    // use standard API endpoints like /v1/models. Verify credential status only.
+    if (provider.authMethod === "oauth2_authorization_code" && provider.category === "agent") {
+      const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+      if (cred?.status === "ok" && cred.cachedToken) {
+        await prisma.modelProvider.update({ where: { providerId }, data: { status: "active" } });
+        return { ok: true, message: "Connected via OAuth — token valid" };
+      }
+      return { ok: false, message: "OAuth token not found — sign in again" };
+    }
+
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
     if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
       const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
