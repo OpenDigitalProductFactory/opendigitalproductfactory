@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run DPF Web",
+      "label": "DPF: Dev Server",
       "type": "shell",
       "command": "cmd",
       "args": [
@@ -13,6 +13,36 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "DPF: Production Build",
+      "type": "shell",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "pnpm --filter @dpf/db exec prisma generate && pnpm --filter web build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "DPF: Type Check",
+      "type": "shell",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "pnpm --filter web exec tsc --noEmit"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$tsc"
     }
   ]
 }

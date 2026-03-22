@@ -1,5 +1,5 @@
-﻿# ────────────────────────────────────────────────────────────────────────────
-# fresh-install.ps1 — Fresh install of Open Digital Product Factory (Windows)
+﻿Write-Host "========================================================" 
+# fresh-install.ps1  Fresh install of Open Digital Product Factory (Windows)
 #
 # Usage:
 #   .\scripts\fresh-install.ps1                        # defaults to current drive
@@ -12,7 +12,7 @@
 #   3. Creates .env files
 #   4. Starts Docker services (Postgres, Neo4j, Ollama, Qdrant)
 #   5. Runs migrations + seed + full DB restore
-# ────────────────────────────────────────────────────────────────────────────
+Write-Host "========================================================" 
 
 param(
     [string]$InstallDrive = "",
@@ -22,16 +22,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Write-Step($msg)  { Write-Host "`n→ $msg" -ForegroundColor Yellow }
-function Write-Ok($msg)    { Write-Host "  ✓ $msg" -ForegroundColor Green }
+function Write-Step($msg)  { Write-Host "`n $msg" -ForegroundColor Yellow }
+function Write-Ok($msg)    { Write-Host "   $msg" -ForegroundColor Green }
 function Write-Warn($msg)  { Write-Host "  ! $msg" -ForegroundColor Yellow }
-function Write-Fail($msg)  { Write-Host "  ✗ $msg" -ForegroundColor Red; exit 1 }
+function Write-Fail($msg)  { Write-Host "   $msg" -ForegroundColor Red; exit 1 }
 
 Write-Host ""
-Write-Host "  Open Digital Product Factory — Fresh Install (Windows)" -ForegroundColor Cyan
+Write-Host "  Open Digital Product Factory  Fresh Install (Windows)" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 
-# ── Drive selection ──────────────────────────────────────────────────────────
+Write-Host "========================================================" 
 
 if (-not $InstallDrive) {
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 10GB } | Sort-Object Free -Descending
@@ -57,7 +57,7 @@ Write-Host ""
 Write-Host "  Installing to: $InstallRoot" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Prerequisites ────────────────────────────────────────────────────────────
+Write-Host "========================================================" 
 
 Write-Step "Checking prerequisites"
 
@@ -81,7 +81,7 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
 }
 Write-Ok "pnpm found: $(pnpm -v)"
 
-# ── Install dependencies ──────────────────────────────────────────────────
+Write-Host "========================================================" 
 
 Write-Step "Installing project dependencies"
 Push-Location $InstallRoot
@@ -92,14 +92,14 @@ if ($LASTEXITCODE -ne 0) {
 Pop-Location
 Write-Ok "Dependencies installed"
 
-# ── Create root .env for Docker Compose ────────────────────────────────────
+Write-Host "========================================================" 
 
 Write-Step "Creating .env file for Docker Compose"
 
 $envFile = Join-Path $InstallRoot ".env"
 if (-not (Test-Path $envFile)) {
     @"
-# Docker Compose defaults — created by fresh-install.ps1
+# Docker Compose defaults  created by fresh-install.ps1
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
@@ -109,10 +109,10 @@ ADMIN_PASSWORD=changeme123
 "@ | Set-Content -Path $envFile -Encoding UTF8
     Write-Ok "Created .env with default Docker credentials"
 } else {
-    Write-Ok ".env already exists — skipping"
+    Write-Ok ".env already exists  skipping"
 }
 
-# ── Create app-level .env files ────────────────────────────────────────────
+Write-Host "========================================================" 
 
 Write-Step "Creating app-level .env files (Next.js + Prisma)"
 
@@ -128,17 +128,17 @@ if (Test-Path $envExamplePath) {
         (Get-Content $webEnvPath) -replace '<generate with: openssl rand -hex 32>', $encKey | Set-Content $webEnvPath
         Write-Ok "Created apps/web/.env.local with generated encryption key"
     } else {
-        Write-Ok "apps/web/.env.local already exists — skipping"
+        Write-Ok "apps/web/.env.local already exists  skipping"
     }
 
     if (-not (Test-Path $dbEnvPath)) {
         Copy-Item $envExamplePath $dbEnvPath
         Write-Ok "Created packages/db/.env from .env.example"
     } else {
-        Write-Ok "packages/db/.env already exists — skipping"
+        Write-Ok "packages/db/.env already exists  skipping"
     }
 } else {
-    Write-Warn ".env.example not found — skipping app-level .env creation"
+    Write-Warn ".env.example not found  skipping app-level .env creation"
 }
 
 if (-not $SkipDocker) {
@@ -165,7 +165,7 @@ if (-not $SkipDocker) {
     $nvidiaGpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
     $gpuOverride = ""
     if ($nvidiaGpu) {
-        Write-Ok "NVIDIA GPU detected: $($nvidiaGpu.Name) — enabling GPU passthrough"
+        Write-Ok "NVIDIA GPU detected: $($nvidiaGpu.Name)  enabling GPU passthrough"
         $gpuOverride = @"
 
     deploy:
@@ -261,7 +261,7 @@ services:
     }
     Write-Ok "PostgreSQL is ready"
 
-    Write-Host "  Waiting for Ollama (first run downloads model — may take several minutes)..."
+    Write-Host "  Waiting for Ollama (first run downloads model  may take several minutes)..."
     $retries = 90
     while ($retries -gt 0) {
         try {
@@ -271,7 +271,7 @@ services:
         Start-Sleep -Seconds 2
         $retries--
     }
-    if ($retries -eq 0) { Write-Warn "Ollama not ready yet — it may still be downloading. Continue anyway." }
+    if ($retries -eq 0) { Write-Warn "Ollama not ready yet  it may still be downloading. Continue anyway." }
     else { Write-Ok "Ollama is ready" }
 
     Write-Host "  Waiting for Qdrant (vector database for agent memory)..."
@@ -284,11 +284,11 @@ services:
         Start-Sleep -Seconds 2
         $retries--
     }
-    if ($retries -eq 0) { Write-Warn "Qdrant not ready yet — agent memory will initialize on first use." }
+    if ($retries -eq 0) { Write-Warn "Qdrant not ready yet  agent memory will initialize on first use." }
     else { Write-Ok "Qdrant is ready" }
 }
 
-# ── Database setup ───────────────────────────────────────────────────────────
+Write-Host "========================================================" 
 # All commands run from the project root using pnpm workspace filters, which
 # ensures the correct binaries (prisma, tsx) are resolved from node_modules.
 
@@ -341,10 +341,10 @@ foreach ($sql in $sqlScripts) {
 
 Write-Ok "Database fully restored"
 
-# ── Done ─────────────────────────────────────────────────────────────────────
+Write-Host "========================================================" 
 
 Write-Host ""
-Write-Host "  ✓ Fresh install complete!" -ForegroundColor Green
+Write-Host "   Fresh install complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Project location: $InstallRoot" -ForegroundColor Cyan
 Write-Host "  Docker volumes:   ${InstallDrive}:\docker-data\dpf" -ForegroundColor Cyan

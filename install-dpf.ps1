@@ -1,29 +1,48 @@
 ﻿#Requires -Version 5.1
 param(
-    [string]$InstallDir = "C:\DPF"
+    [string]$InstallDir
 )
 $ErrorActionPreference = "Stop"
 
+# Determine a sensible default: if the script already sits in a project
+# directory (has docker-compose.yml), default to that path.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if (-not $InstallDir) {
+    if (Test-Path "$scriptDir\docker-compose.yml") {
+        $defaultDir = $scriptDir
+    } else {
+        $defaultDir = "C:\DPF"
+    }
+
+    Write-Host ""
+    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
+    $answer = Read-Host "  Install directory [$defaultDir]"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $InstallDir = $defaultDir
+    } else {
+        $InstallDir = $answer.Trim()
+    }
+}
 $DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
 $PROGRESS_FILE = "$DPF_DIR\.install-progress"
 $AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
-# â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Helpers ----------------------------------------------------------------
 
 function Write-Step($step, $total, $msg) {
     Write-Host "`nStep $step of $total`: $msg" -ForegroundColor Cyan
 }
 
 function Write-OK($msg) {
-    Write-Host "  âœ“ $msg" -ForegroundColor Green
+    Write-Host "  [OK] $msg" -ForegroundColor Green
 }
 
 function Write-Action($msg) {
-    Write-Host "  â†’ $msg" -ForegroundColor Yellow
+    Write-Host "  -> $msg" -ForegroundColor Yellow
 }
 
 function Write-Warn($msg) {
-    Write-Host "  âš  $msg" -ForegroundColor Red
+    Write-Host "  [!] $msg" -ForegroundColor Red
 }
 
 function Get-Progress {
@@ -82,20 +101,27 @@ function Ensure-DPFStartupTask {
     }
 }
 
-# â”€â”€â”€ Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Banner -------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Magenta
-Write-Host "â•‘  Digital Product Factory â€” Installation              â•‘" -ForegroundColor Magenta
-Write-Host "â•‘  This will set up everything you need automatically  â•‘" -ForegroundColor Magenta
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Magenta
+Write-Host "========================================================" -ForegroundColor Magenta
+Write-Host "|  Digital Product Factory -- Installation              |" -ForegroundColor Magenta
+Write-Host "|  This will set up everything you need automatically  |" -ForegroundColor Magenta
+Write-Host "========================================================" -ForegroundColor Magenta
 
 # Create install dir
 if (-not (Test-Path $DPF_DIR)) {
     New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
 }
 
-# â”€â”€â”€ Step 1: Check Windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Pre-flight: ensure git is installed
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Warn "Git is not installed or not in your PATH."
+    Write-Warn "Please install Git from https://git-scm.com/download/win and try again."
+    exit 1
+}
+
+# --- Step 1: Check Windows ----------------------------------------------------
 
 Write-Step 1 9 "Checking Windows version..."
 if (-not (Is-StepDone "windows_check")) {
@@ -113,7 +139,7 @@ if (-not (Is-StepDone "windows_check")) {
     Write-OK "Already checked"
 }
 
-# â”€â”€â”€ Step 2: WSL2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 2: WSL2 -------------------------------------------------------------
 
 Write-Step 2 9 "Setting up WSL2..."
 if (-not (Is-StepDone "wsl2")) {
@@ -123,7 +149,7 @@ if (-not (Is-StepDone "wsl2")) {
     $needsReboot = $false
 
     if ($vmpFeature.State -ne "Enabled") {
-        Write-Action "Enabling Virtual Machine Platform (safe â€” needed for Docker)..."
+        Write-Action "Enabling Virtual Machine Platform (safe -- needed for Docker)..."
         Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -WarningAction SilentlyContinue | Out-Null
         $needsReboot = $true
     }
@@ -140,8 +166,8 @@ if (-not (Is-StepDone "wsl2")) {
         Write-Warn "Windows needs to restart to finish setting up."
         Write-Host ""
         Write-Host "  After your computer restarts:" -ForegroundColor White
-        Write-Host "  1. Open PowerShell (search 'PowerShell' in the Start menu)"
-        Write-Host "  2. Run this command:  $DPF_DIR\install-dpf.ps1"
+        Write-Host "  1. Open the folder where you saved the installer"
+        Write-Host "  2. Double-click install-dpf.bat (or run it from a terminal)"
         Write-Host "  3. The installer will pick up where it left off"
         Write-Host ""
         Write-Host "  Restarting in 15 seconds... (press Ctrl+C to cancel)" -ForegroundColor Yellow
@@ -166,7 +192,7 @@ if ((Is-StepDone "wsl2_partial") -and -not (Is-StepDone "wsl2")) {
     Save-Progress "wsl2"
 }
 
-# â”€â”€â”€ Step 3: Docker Desktop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 3: Docker Desktop ---------------------------------------------------
 
 Write-Step 3 9 "Installing Docker Desktop..."
 if (-not (Is-StepDone "docker")) {
@@ -178,19 +204,19 @@ if (-not (Is-StepDone "docker")) {
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
 
         Write-Host ""
-        Write-Host "  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Yellow
-        Write-Host "  â•‘  ACTION NEEDED:                                   â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘                                                   â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  The Docker Desktop installer will open.          â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  1. Click 'Accept' on the license agreement       â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  2. Leave all checkboxes at their defaults        â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  3. Click 'Install' and wait for it to finish     â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  4. Click 'Close' when done                       â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘                                                   â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  Docker Desktop is free for businesses with       â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  fewer than 250 employees and under `$10M revenue. â•‘" -ForegroundColor Yellow
-        Write-Host "  â•‘  See https://docker.com/pricing for details.      â•‘" -ForegroundColor Yellow
-        Write-Host "  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Yellow
+        Write-Host "  ========================================================" -ForegroundColor Yellow
+        Write-Host "  |  ACTION NEEDED:                                   |" -ForegroundColor Yellow
+        Write-Host "  |                                                   |" -ForegroundColor Yellow
+        Write-Host "  |  The Docker Desktop installer will open.          |" -ForegroundColor Yellow
+        Write-Host "  |  1. Click 'Accept' on the license agreement       |" -ForegroundColor Yellow
+        Write-Host "  |  2. Leave all checkboxes at their defaults        |" -ForegroundColor Yellow
+        Write-Host "  |  3. Click 'Install' and wait for it to finish     |" -ForegroundColor Yellow
+        Write-Host "  |  4. Click 'Close' when done                       |" -ForegroundColor Yellow
+        Write-Host "  |                                                   |" -ForegroundColor Yellow
+        Write-Host "  |  Docker Desktop is free for businesses with       |" -ForegroundColor Yellow
+        Write-Host "  |  fewer than 250 employees and under `$10M revenue. |" -ForegroundColor Yellow
+        Write-Host "  |  See https://docker.com/pricing for details.      |" -ForegroundColor Yellow
+        Write-Host "  ========================================================" -ForegroundColor Yellow
         Write-Host ""
 
         Start-Process -FilePath $installerPath -Wait
@@ -205,10 +231,11 @@ if (-not (Is-StepDone "docker")) {
     $attempts = 0
     $maxAttempts = 36  # 3 minutes
     while ($attempts -lt $maxAttempts) {
-        try {
-            docker info 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { break }
-        } catch {}
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker info 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 5
         $attempts++
     }
@@ -225,32 +252,75 @@ if (-not (Is-StepDone "docker")) {
     Write-OK "Already installed"
 }
 
-# â”€â”€â”€ Step 4: Download DPF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 4: Download / copy DPF project files --------------------------------
 
-Write-Step 4 9 "Downloading Digital Product Factory..."
+Write-Step 4 9 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
-    Write-Action "Downloading latest release..."
-    $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
-    $zipPath = "$env:TEMP\dpf-latest.zip"
-    Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
-
-    Write-Action "Extracting..."
-    Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\dpf-extract" -Force
-    # Move contents from the nested directory
-    $extracted = Get-ChildItem "$env:TEMP\dpf-extract" | Select-Object -First 1
     if (Test-Path "$DPF_DIR\docker-compose.yml") {
-        # Preserve .env if it exists
-        $envBackup = $null
-        if (Test-Path "$DPF_DIR\.env") {
-            $envBackup = Get-Content "$DPF_DIR\.env" -Raw
+        # Already has project files -- pull latest if it's a git repo
+        if (Test-Path "$DPF_DIR\.git") {
+            Write-Action "Updating project files..."
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            git -C "$DPF_DIR" pull --ff-only 2>&1 | Out-Null
+            $ErrorActionPreference = $oldEAP
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn "Could not update (exit code $LASTEXITCODE)"
+                Write-Warn "You can update manually with: git -C `"$DPF_DIR`" pull"
+            }
         }
+        Write-OK "Project files already in place"
+    } elseif (
+        (-not (Test-Path "$DPF_DIR")) -or
+        (@(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue |
+           Where-Object { $_.Name -notin '.install-progress','.env' }).Count -eq 0)
+    ) {
+        # Directory is empty or has only our progress/env files -- clone directly
+        Write-Action "Cloning project from GitHub..."
+        # Move aside progress/env so git clone can use the directory
+        $stash = @{}
+        foreach ($f in '.install-progress','.env') {
+            if (Test-Path "$DPF_DIR\$f") {
+                $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
+                Remove-Item "$DPF_DIR\$f"
+            }
+        }
+        if ((Test-Path "$DPF_DIR") -and
+            @(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+            Remove-Item "$DPF_DIR"
+        }
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
+            Write-Warn "Clone the repo manually:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
+            exit 1
+        }
+        # Restore stashed files
+        foreach ($f in $stash.Keys) {
+            $stash[$f] | Set-Content "$DPF_DIR\$f"
+        }
+    } else {
+        # Directory has other files (user data, partial install) -- clone to temp and merge
+        Write-Action "Cloning project files from GitHub..."
+        $tempClone = Join-Path $env:TEMP "dpf-clone"
+        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
+            Write-Warn "Clone the repo manually:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
+            exit 1
+        }
+        Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
+        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
     }
-    Copy-Item -Path "$($extracted.FullName)\*" -Destination $DPF_DIR -Recurse -Force
-    if ($envBackup) {
-        $envBackup | Set-Content "$DPF_DIR\.env"
-    }
-    Remove-Item $zipPath -ErrorAction SilentlyContinue
-    Remove-Item "$env:TEMP\dpf-extract" -Recurse -ErrorAction SilentlyContinue
 
     # Write version file
     "main" | Set-Content "$DPF_DIR\.version"
@@ -258,6 +328,8 @@ if (-not (Is-StepDone "download")) {
     # Copy convenience scripts to DPF root
     Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
     Copy-Item "$DPF_DIR\scripts\dpf-stop.ps1" "$DPF_DIR\dpf-stop.ps1" -ErrorAction SilentlyContinue
+    Copy-Item "$DPF_DIR\scripts\dpf-start.bat" "$DPF_DIR\dpf-start.bat" -ErrorAction SilentlyContinue
+    Copy-Item "$DPF_DIR\scripts\dpf-stop.bat" "$DPF_DIR\dpf-stop.bat" -ErrorAction SilentlyContinue
 
     # Add install directory to user PATH if not already there
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -266,13 +338,13 @@ if (-not (Is-StepDone "download")) {
         $env:Path += ";$DPF_DIR"
     }
 
-    Write-OK "Extracted to $DPF_DIR"
+    Write-OK "Set up in $DPF_DIR"
     Save-Progress "download"
 } else {
-    Write-OK "Already downloaded"
+    Write-OK "Already set up"
 }
 
-# â”€â”€â”€ Step 5: Hardware Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 5: Hardware Detection ------------------------------------------------
 
 Write-Step 5 9 "Detecting your hardware..."
 if (-not (Is-StepDone "hardware")) {
@@ -284,7 +356,7 @@ if (-not (Is-StepDone "hardware")) {
     $totalRAM_GB = [math]::Round($mem.TotalPhysicalMemory / 1GB, 1)
     $gpuName = if ($gpu) { $gpu.Name } else { $null }
 
-    # WMI AdapterRAM is a DWORD — caps at 4GB. Use nvidia-smi for accurate VRAM.
+    # WMI AdapterRAM is a DWORD -- caps at 4GB. Use nvidia-smi for accurate VRAM.
     $gpuVRAM_GB = 0
     if ($gpuName) {
         try {
@@ -308,23 +380,23 @@ if (-not (Is-StepDone "hardware")) {
     # Use llama3.1 for chat (no thinking-mode issues, fast responses).
     # llama3.1:70b = 40GB, llama3.1:8b = 4.7GB, llama3.2:3b = 2GB, llama3.2:1b = 1.3GB
     if ($gpuVRAM_GB -ge 12) {
-        $selectedModel = “llama3.1:8b”
-        $modelReason = “fast, high-quality chat — fits fully in your GPU memory”
+        $selectedModel = "llama3.1:8b"
+        $modelReason = "fast, high-quality chat -- fits fully in your GPU memory"
     } elseif ($gpuVRAM_GB -ge 6) {
-        $selectedModel = “llama3.1:8b”
-        $modelReason = “good quality chat, GPU-accelerated”
+        $selectedModel = "llama3.1:8b"
+        $modelReason = "good quality chat, GPU-accelerated"
     } elseif ($gpuVRAM_GB -ge 3) {
-        $selectedModel = “llama3.2:3b”
-        $modelReason = “balanced quality, GPU-accelerated”
+        $selectedModel = "llama3.2:3b"
+        $modelReason = "balanced quality, GPU-accelerated"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = “llama3.1:8b”
-        $modelReason = “good quality chat, fits your RAM (CPU mode)”
+        $selectedModel = "llama3.1:8b"
+        $modelReason = "good quality chat, fits your RAM (CPU mode)"
     } elseif ($totalRAM_GB -ge 8) {
-        $selectedModel = “llama3.2:3b”
-        $modelReason = “fast, works well on your hardware”
+        $selectedModel = "llama3.2:3b"
+        $modelReason = "fast, works well on your hardware"
     } else {
-        $selectedModel = “llama3.2:1b”
-        $modelReason = “lightweight, optimized for your hardware”
+        $selectedModel = "llama3.2:1b"
+        $modelReason = "lightweight, optimized for your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Note: The AI model takes about a minute to load on first use after startup."
@@ -374,7 +446,7 @@ services:
     if (-not $selectedModel) { $selectedModel = "qwen3:1.7b" }
 }
 
-# â”€â”€â”€ Generate .env â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Generate .env -------------------------------------------------------------
 
 if (-not (Test-Path "$DPF_DIR\.env")) {
     $pgPass = Generate-RandomPassword 16
@@ -385,7 +457,7 @@ if (-not (Test-Path "$DPF_DIR\.env")) {
     $hostProfileJson = if (Test-Path "$DPF_DIR\.host-profile.json") { Get-Content "$DPF_DIR\.host-profile.json" -Raw } else { "{}" }
 
     @"
-# Generated by DPF installer â€” do not edit manually
+# Generated by DPF installer -- do not edit manually
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=$pgPass
 DATABASE_URL=postgresql://dpf:$pgPass@postgres:5432/dpf
@@ -399,23 +471,34 @@ SELECTED_MODEL=$selectedModel
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
-# â”€â”€â”€ Step 6: Start Platform â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 6: Start Platform ---------------------------------------------------
 
 Write-Step 6 9 "Starting the platform..."
 if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
     Write-Action "Building the portal (first time takes 3-5 minutes)..."
-    docker compose build --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker compose build --quiet 2>&1 | Out-Null
+    $buildExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($buildExit -ne 0) {
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         docker compose build
-        if ($LASTEXITCODE -ne 0) {
+        $buildExit = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+        if ($buildExit -ne 0) {
             Write-Warn "Build failed. Check the output above for errors."
             exit 1
         }
     }
 
     Write-Action "Starting database, AI engine, and portal..."
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     docker compose up -d
+    $ErrorActionPreference = $oldEAP
 
     # Wait for portal health
     Write-Action "Waiting for the portal to be ready..."
@@ -442,36 +525,37 @@ if (-not (Is-StepDone "started")) {
     Write-OK "Already running"
 }
 
-# â”€â”€â”€ Step 7: Wait for AI Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 7: Wait for AI Model -------------------------------------------------
 
-Write-Step 7 9 “Setting up your AI Coworker...”
-if (-not (Is-StepDone “model”)) {
+Write-Step 7 9 "Setting up your AI Coworker..."
+if (-not (Is-StepDone "model")) {
     # The entrypoint script detects hardware and pulls the model automatically.
     # SELECTED_MODEL from .env is passed as OLLAMA_DEFAULT_MODEL to the container.
-    Write-Action “AI engine is downloading $selectedModel in the background...”
-    Write-Action “This may take several minutes depending on your internet speed.”
+    Write-Action "AI engine is downloading $selectedModel in the background..."
+    Write-Action "This may take several minutes depending on your internet speed."
     $attempts = 0
     $maxAttempts = 120  # 10 minutes
     while ($attempts -lt $maxAttempts) {
-        try {
-            $modelList = docker compose exec -T ollama ollama list 2>$null
-            if ($modelList -match $selectedModel.Replace(“:”, “\:”)) { break }
-        } catch {}
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $modelList = docker compose exec -T ollama ollama list 2>&1
+        $ErrorActionPreference = $oldEAP
+        if ($modelList -match $selectedModel.Replace(":", "\:")) { break }
         Start-Sleep -Seconds 5
         $attempts++
     }
     if ($attempts -ge $maxAttempts) {
-        Write-Warn “Model still downloading. It will be ready when the download completes.”
-        Write-Warn “Check progress: docker compose logs ollama”
+        Write-Warn "Model still downloading. It will be ready when the download completes."
+        Write-Warn "Check progress: docker compose logs ollama"
     } else {
-        Write-OK “AI Coworker is ready ($selectedModel)”
+        Write-OK "AI Coworker is ready ($selectedModel)"
     }
-    Save-Progress “model”
+    Save-Progress "model"
 } else {
-    Write-OK “Already set up”
+    Write-OK "Already set up"
 }
 
-# â”€â”€â”€ Step 8: Open Browser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Step 8: Open Browser -----------------------------------------------------
 
 Write-Step 8 9 "Configuring auto-start on logon..."
 if (-not (Is-StepDone "autostart")) {
@@ -490,22 +574,22 @@ $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PAS
 Start-Process "http://localhost:3000"
 
 Write-Host ""
-Write-Host "  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
-Write-Host "  â•‘  Your Digital Product Factory is ready!              â•‘" -ForegroundColor Green
-Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
-Write-Host "  â•‘  URL:      http://localhost:3000                     â•‘" -ForegroundColor Green
-Write-Host "  â•‘  Email:    admin@dpf.local                           â•‘" -ForegroundColor Green
-Write-Host "  â•‘  Password: $($adminPass.PadRight(40))â•‘" -ForegroundColor Green
-Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
-Write-Host "  â•‘  Save this password â€” it won't be shown again!      â•‘" -ForegroundColor Green
-Write-Host "  â•‘                                                      â•‘" -ForegroundColor Green
-Write-Host "  â•‘  To stop:  Open PowerShell, run: dpf-stop            â•‘" -ForegroundColor Green
-Write-Host "  â•‘  To start: Open PowerShell, run: dpf-start           â•‘" -ForegroundColor Green
-Write-Host "  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
+Write-Host "  ========================================================" -ForegroundColor Green
+Write-Host "  |  Your Digital Product Factory is ready!              |" -ForegroundColor Green
+Write-Host "  |                                                      |" -ForegroundColor Green
+Write-Host "  |  URL:      http://localhost:3000                     |" -ForegroundColor Green
+Write-Host "  |  Email:    admin@dpf.local                           |" -ForegroundColor Green
+Write-Host "  |  Password: $($adminPass.PadRight(40))|" -ForegroundColor Green
+Write-Host "  |                                                      |" -ForegroundColor Green
+Write-Host "  |  Save this password -- it won't be shown again!      |" -ForegroundColor Green
+Write-Host "  |                                                      |" -ForegroundColor Green
+Write-Host "  |  To stop:  Open PowerShell, run: dpf-stop            |" -ForegroundColor Green
+Write-Host "  |  To start: Open PowerShell, run: dpf-start           |" -ForegroundColor Green
+Write-Host "  ========================================================" -ForegroundColor Green
 
 # Save credentials file
 @"
-Digital Product Factory â€” Admin Credentials
+Digital Product Factory -- Admin Credentials
 ============================================
 URL:      http://localhost:3000
 Email:    admin@dpf.local

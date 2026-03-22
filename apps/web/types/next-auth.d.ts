@@ -27,9 +27,9 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
+    type?: "admin" | "customer";
     platformRole?: string | null;
     isSuperuser?: boolean;
-    type?: "admin" | "customer";
     accountId?: string | null;
     accountName?: string | null;
     contactId?: string | null;
