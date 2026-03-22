@@ -41,24 +41,12 @@ services:
       retries: 3
       start_period: 10s
 
-  ollama:
-    image: ollama/ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_models:/root/.ollama
-      - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
-    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
-    environment:
-      OLLAMA_DEFAULT_MODEL: ${SELECTED_MODEL:-}
-    # GPU passthrough — install-dpf.ps1 generates a docker-compose.override.yml
-    # with deploy.resources.reservations.devices when NVIDIA GPU is detected.
-    # Without the override, Ollama runs on CPU only.
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 120s
+  # ─── AI Inference ────────────────────────────────────────────────────────────
+  # Docker Model Runner (built into Docker Desktop 4.40+) provides local LLM
+  # inference via OpenAI-compatible API at http://model-runner.docker.internal/v1.
+  # No separate container needed — models are managed through Docker Desktop.
+  # To pull a model:  docker model pull ai/llama3.2:1B-Q8_0
+  # To list models:   docker model list
 
   portal-init:
     build:
@@ -87,14 +75,13 @@ services:
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
       QDRANT_INTERNAL_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
     depends_on:
       portal-init:
         condition: service_completed_successfully
-      ollama:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -122,7 +109,6 @@ services:
 volumes:
   pgdata:
   neo4jdata:
-  ollama_models:
   qdrant_data:
   playwright_scripts:
   playwright_results:
