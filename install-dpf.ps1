@@ -255,53 +255,65 @@ if (-not (Is-StepDone "docker")) {
 
 Write-Step 4 9 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
-    # If running from a different location than DPF_DIR, copy or download files
-    if ($scriptDir -ne $DPF_DIR) {
-        # Check if the script lives in a full repo checkout (has docker-compose.yml)
-        if (Test-Path "$scriptDir\docker-compose.yml") {
-            Write-Action "Copying project files from $scriptDir..."
-            # Preserve .env if it exists at the destination
-            $envBackup = $null
-            if (Test-Path "$DPF_DIR\.env") {
-                $envBackup = Get-Content "$DPF_DIR\.env" -Raw
-            }
-            Copy-Item -Path "$scriptDir\*" -Destination $DPF_DIR -Recurse -Force
-            if ($envBackup) {
-                $envBackup | Set-Content "$DPF_DIR\.env"
-            }
-        } else {
-            # Clone from GitHub
-            Write-Action "Cloning project from GitHub..."
+    if (Test-Path "$DPF_DIR\docker-compose.yml") {
+        # Already has project files -- pull latest if it's a git repo
+        if (Test-Path "$DPF_DIR\.git") {
+            Write-Action "Updating project files..."
             try {
-                git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+                git -C "$DPF_DIR" pull --ff-only 2>&1 | Out-Null
             } catch {
-                Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
-                Write-Warn "Clone the repo manually:"
-                Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
-                exit 1
+                Write-Warn "Could not update: $($_.Exception.Message)"
+                Write-Warn "You can update manually with: git -C `"$DPF_DIR`" pull"
             }
         }
-    } else {
-        # Running from DPF_DIR -- check if project files are already here
-        if (-not (Test-Path "$DPF_DIR\docker-compose.yml")) {
-            # Project files missing -- clone from GitHub into a temp dir then move files in
-            Write-Action "Cloning project files from GitHub..."
-            $tempClone = "$env:TEMP\dpf-clone"
-            Remove-Item $tempClone -Recurse -ErrorAction SilentlyContinue
-            try {
-                git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
-                Copy-Item -Path "$tempClone\*" -Destination $DPF_DIR -Recurse -Force
-                Remove-Item $tempClone -Recurse -ErrorAction SilentlyContinue
-            } catch {
-                Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
-                Write-Warn "Clone the repo manually:"
-                Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR"
-                exit 1
+        Write-OK "Project files already in place"
+    } elseif (
+        (-not (Test-Path "$DPF_DIR")) -or
+        (@(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue |
+           Where-Object { $_.Name -notin '.install-progress','.env' }).Count -eq 0)
+    ) {
+        # Directory is empty or has only our progress/env files -- clone directly
+        Write-Action "Cloning project from GitHub..."
+        # Move aside progress/env so git clone can use the directory
+        $stash = @{}
+        foreach ($f in '.install-progress','.env') {
+            if (Test-Path "$DPF_DIR\$f") {
+                $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
+                Remove-Item "$DPF_DIR\$f"
             }
-        } else {
-            Write-OK "Project files already in place"
+        }
+        if ((Test-Path "$DPF_DIR") -and
+            @(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+            Remove-Item "$DPF_DIR"
+        }
+        try {
+            git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+        } catch {
+            Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
+            Write-Warn "Clone the repo manually:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
+            exit 1
+        }
+        # Restore stashed files
+        foreach ($f in $stash.Keys) {
+            $stash[$f] | Set-Content "$DPF_DIR\$f"
+        }
+    } else {
+        # Directory has other files (user data, partial install) -- clone to temp and merge
+        Write-Action "Cloning project files from GitHub..."
+        $tempClone = Join-Path $env:TEMP "dpf-clone"
+        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
+        try {
+            git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+            Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
+            Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
+        } catch {
+            Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
+            Write-Warn "Clone the repo manually:"
+            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
+            exit 1
         }
     }
 
