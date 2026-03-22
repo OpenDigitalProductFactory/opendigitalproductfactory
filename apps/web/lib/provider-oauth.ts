@@ -67,15 +67,10 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
     state,
-    scope: "openid profile email offline_access",
   });
 
-  // Provider-specific params (e.g. OpenAI's codex_cli_simplified_flow)
-  if (provider.authorizeUrl.includes("auth.openai.com")) {
-    params.set("codex_cli_simplified_flow", "true");
-  }
-
-  // Override scope from credential entry if configured
+  // Scope: use credential entry override if set, otherwise no default
+  // (providers have different scope requirements — don't assume OIDC scopes)
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
   if (cred?.scope) params.set("scope", cred.scope);
 
