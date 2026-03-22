@@ -1202,6 +1202,78 @@ async function seedMobileAppReminder(): Promise<void> {
   console.log("Seeded calendar reminder: Mobile Companion App review on 2026-04-02");
 }
 
+/**
+ * Discover and profile local LLM models from Docker Model Runner.
+ * Runs at seed time so the routing system has endpoints immediately
+ * without waiting for a page visit to trigger checkBundledProviders().
+ */
+async function seedLocalModels(): Promise<void> {
+  const provider = await prisma.modelProvider.findFirst({
+    where: { providerId: "ollama" },
+  });
+  if (!provider) return;
+
+  const baseUrl = process.env.LLM_BASE_URL ?? provider.baseUrl ?? "http://model-runner.docker.internal/v1";
+  const modelsUrl = baseUrl.includes("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
+
+  let models: Array<{ id: string }> = [];
+  try {
+    const res = await fetch(modelsUrl, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) { console.log("  → Local LLM not reachable, skipping model discovery"); return; }
+    const data = await res.json() as { data?: Array<{ id: string }> };
+    models = data.data ?? [];
+  } catch {
+    console.log("  → Local LLM not reachable, skipping model discovery");
+    return;
+  }
+
+  if (models.length === 0) { console.log("  → No local models found"); return; }
+
+  // Activate provider if unconfigured
+  if (provider.status === "unconfigured") {
+    await prisma.modelProvider.update({ where: { providerId: "ollama" }, data: { status: "active" } });
+  }
+
+  let discovered = 0;
+  for (const m of models) {
+    // Upsert DiscoveredModel
+    await prisma.discoveredModel.upsert({
+      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
+      create: { providerId: "ollama", modelId: m.id, rawMetadata: m as any },
+      update: { rawMetadata: m as any },
+    });
+
+    // Upsert a basic ModelProfile so routing has an endpoint
+    const existing = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
+    });
+    if (!existing) {
+      await prisma.modelProfile.create({
+        data: {
+          providerId: "ollama",
+          modelId: m.id,
+          friendlyName: m.id.replace("docker.io/ai/", ""),
+          summary: "Local model via Docker Model Runner",
+          capabilityTier: "basic",
+          costTier: "free",
+          bestFor: ["conversation", "general"],
+          avoidFor: [],
+          modelStatus: "active",
+          generatedBy: "system:seed",
+          profileSource: "seed",
+          profileConfidence: "low",
+          reasoning: 40, codegen: 30, toolFidelity: 20,
+          instructionFollowingScore: 50, structuredOutputScore: 30,
+          conversational: 60, contextRetention: 40,
+          capabilities: { streaming: true } as any,
+        },
+      });
+      discovered++;
+    }
+  }
+  console.log(`  ✓ Discovered ${models.length} local model(s), ${discovered} new profile(s)`);
+}
+
 async function seedAnthropicSubScope(): Promise<void> {
   await prisma.credentialEntry.upsert({
     where: { providerId: "anthropic-sub" },
@@ -1243,6 +1315,7 @@ async function main(): Promise<void> {
   await seedScheduledJobs();
   await seedMcpServers();
   await seedAnthropicSubScope();
+  await seedLocalModels();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
   await prisma.epic.upsert({

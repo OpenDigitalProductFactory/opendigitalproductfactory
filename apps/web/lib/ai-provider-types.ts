@@ -272,7 +272,10 @@ export function getBillingLabel(provider: BillingLabelInput): string | null {
 export function getTestUrl(provider: Pick<ProviderRow, "providerId" | "baseUrl" | "endpoint">): string | null {
   const base = provider.baseUrl ?? provider.endpoint;
   if (!base) return null;
-  if (provider.providerId === "ollama") return `${base}/api/tags`;
+  // Docker Model Runner uses OpenAI-compatible /v1/models; legacy Ollama uses /api/tags
+  if (provider.providerId === "ollama") {
+    return base.includes("/v1") ? `${base}/models` : `${base}/api/tags`;
+  }
   return `${base}/models`;
 }
 
