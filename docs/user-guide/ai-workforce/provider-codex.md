@@ -58,9 +58,33 @@ The MCP service:
 
 You can view the MCP service status on the External Services page under "Activated MCP Services".
 
+## ChatGPT Provider (Automatic)
+
+When you connect Codex via OAuth, the platform automatically activates a second provider called "ChatGPT (OpenAI Subscription)". This gives the AI coworker access to GPT chat models (currently GPT-5.4) using your same ChatGPT subscription -- no separate configuration needed.
+
+The ChatGPT provider uses a different backend endpoint (`chatgpt.com/backend-api`) and the OpenAI Responses API format. This is necessary because ChatGPT subscription tokens cannot access the standard OpenAI platform API (`api.openai.com`).
+
+You can also sign in from the ChatGPT provider page directly -- it uses the same OpenAI OAuth. Either way, both providers share the token.
+
+## Technical Notes (Provider Integration)
+
+The ChatGPT/Codex integration has several non-obvious requirements:
+
+- **Endpoint**: ChatGPT subscription tokens use `chatgpt.com/backend-api/codex/responses`, NOT `api.openai.com/v1/chat/completions`. The standard API rejects subscription tokens with 403.
+- **API format**: The backend uses the OpenAI Responses API (not Chat Completions). Request format: `{ model, input, instructions, store: false, stream: true }`.
+- **Streaming mandatory**: The backend requires `stream: true`. The platform collects the SSE stream and extracts the `response.completed` event.
+- **Store must be false**: The backend requires `store: false` for subscription tokens.
+- **Model IDs**: Only Codex-supported model IDs work (`gpt-5.4`, `gpt-5.3-codex`, etc.). Standard model names like `gpt-4o` or `codex-mini-latest` are rejected.
+- **No model discovery**: The backend has no `/v1/models` equivalent. Models are seeded by the platform, not discovered.
+- **Credential sync**: Both providers share one OAuth token. Token refresh on either side syncs to the other.
+- **Greenfield install**: The `docker-entrypoint.sh` runs `sync-provider-registry.ts` before `seed.ts` to ensure the chatgpt provider row exists before model seeding.
+
 ## Troubleshooting
 
-- "HTTP 403 on Test Connection with API Key" — your OpenAI API account needs funding. The ChatGPT subscription does not fund API access.
-- "HTTP 403 on Sync Models" — model discovery is not available with OAuth subscription tokens. Models are managed via the platform registry.
-- "Organization and project prompt" — you must select these during OAuth sign-in. Skipping causes the flow to fail.
-- "Port 1455 unreachable" — ensure the platform's Docker container has port 1455 mapped (this is configured in docker-compose.yml).
+- "HTTP 403 on Test Connection with API Key" -- your OpenAI API account needs funding. The ChatGPT subscription does not fund API access.
+- "HTTP 403 on Sync Models" -- model discovery is not available with OAuth subscription tokens. Models are managed via the platform registry.
+- "Organization and project prompt" -- you must select these during OAuth sign-in. Skipping causes the flow to fail.
+- "Port 1455 unreachable" -- ensure the platform's Docker container has port 1455 mapped (this is configured in docker-compose.yml).
+- "Store must be set to false" -- internal error if `store: false` is missing from the Responses API request body.
+- "Stream must be set to true" -- internal error if `stream: true` is missing from the Responses API request body.
+- "Model X is not supported when using Codex with a ChatGPT account" -- the model ID is wrong. Use `gpt-5.4` or another Codex-supported model, not `gpt-4o` or `codex-mini-latest`.
