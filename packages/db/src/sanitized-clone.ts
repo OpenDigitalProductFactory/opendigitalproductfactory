@@ -229,8 +229,14 @@ async function insertRows(
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
     const values = columns.map((col) => {
       const v = row[col];
+      if (v === null || v === undefined) return v;
       // Prisma raw queries can't pass JS objects for JSON columns — serialize them
-      if (v !== null && typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
+      // Arrays are also problematic — PostgreSQL needs them as typed array literals
+      if (typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
+        if (Array.isArray(v)) {
+          // PostgreSQL array literal: {"val1","val2"}
+          return `{${v.map((item: unknown) => typeof item === "string" ? `"${String(item).replace(/"/g, '\\"')}"` : String(item)).join(",")}}`;
+        }
         return JSON.stringify(v);
       }
       return v;
