@@ -20,6 +20,12 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    changeItem: {
+      findMany: vi.fn(),
+    },
+    calendarEvent: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -311,10 +317,25 @@ describe("approveRFC", () => {
 // ─── scheduleRFC ────────────────────────────────────────────────────────────
 
 describe("scheduleRFC", () => {
-  it("transitions to scheduled with planned dates", async () => {
-    vi.mocked(prisma.changeRequest.findUnique).mockResolvedValue({
-      rfcId: "RFC-2026-44444444",
-      status: "approved",
+  it("transitions to scheduled with planned dates and creates CalendarEvent", async () => {
+    vi.mocked(prisma.changeRequest.findUnique)
+      .mockResolvedValueOnce({
+        id: "cr-sched",
+        rfcId: "RFC-2026-44444444",
+        title: "DB upgrade",
+        description: "Upgrade Postgres 16 to 17",
+        status: "approved",
+        approvedById: "emp-approver-1",
+      } as never)
+      .mockResolvedValueOnce({
+        rfcId: "RFC-2026-44444444",
+        status: "approved",
+      } as never);
+    vi.mocked(prisma.changeItem.findMany).mockResolvedValue([
+      { title: "Upgrade postgres", itemType: "infrastructure" },
+    ] as never);
+    vi.mocked(prisma.calendarEvent.create).mockResolvedValue({
+      id: "cal-evt-1",
     } as never);
     vi.mocked(prisma.changeRequest.update).mockResolvedValue({} as never);
 
@@ -322,6 +343,19 @@ describe("scheduleRFC", () => {
     const end = new Date("2026-04-01T04:00:00Z");
     await scheduleRFC("RFC-2026-44444444", start, end, "window-1");
 
+    // CalendarEvent created with correct owner and data
+    expect(prisma.calendarEvent.create).toHaveBeenCalledOnce();
+    const calCreateCall = vi.mocked(prisma.calendarEvent.create).mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect(calCreateCall.data.ownerEmployeeId).toBe("emp-approver-1");
+    expect(calCreateCall.data.eventType).toBe("action");
+    expect(calCreateCall.data.category).toBe("platform");
+    expect(calCreateCall.data.startAt).toEqual(start);
+    expect(calCreateCall.data.endAt).toEqual(end);
+    expect((calCreateCall.data.title as string)).toContain("Maintenance");
+
+    // RFC updated with calendarEventId
     const updateCall = vi.mocked(prisma.changeRequest.update).mock.calls[0][0] as {
       data: Record<string, unknown>;
     };
@@ -329,7 +363,34 @@ describe("scheduleRFC", () => {
     expect(updateCall.data.plannedStartAt).toEqual(start);
     expect(updateCall.data.plannedEndAt).toEqual(end);
     expect(updateCall.data.deploymentWindowId).toBe("window-1");
+    expect(updateCall.data.calendarEventId).toBe("cal-evt-1");
     expect(updateCall.data.scheduledAt).toBeInstanceOf(Date);
+  });
+
+  it("skips CalendarEvent when no approvedById", async () => {
+    vi.mocked(prisma.changeRequest.findUnique)
+      .mockResolvedValueOnce({
+        id: "cr-no-approver",
+        rfcId: "RFC-2026-44444444",
+        title: "Quick fix",
+        description: "Minor change",
+        status: "approved",
+        approvedById: null,
+      } as never)
+      .mockResolvedValueOnce({
+        rfcId: "RFC-2026-44444444",
+        status: "approved",
+      } as never);
+    vi.mocked(prisma.changeRequest.update).mockResolvedValue({} as never);
+
+    const start = new Date("2026-04-01T02:00:00Z");
+    await scheduleRFC("RFC-2026-44444444", start);
+
+    expect(prisma.calendarEvent.create).not.toHaveBeenCalled();
+    const updateCall = vi.mocked(prisma.changeRequest.update).mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect(updateCall.data.calendarEventId).toBeUndefined();
   });
 
   it("rejects without plannedStartAt", async () => {

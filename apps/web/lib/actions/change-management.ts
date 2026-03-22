@@ -201,10 +201,47 @@ export async function scheduleRFC(
 ): Promise<void> {
   if (!plannedStartAt) throw new Error("plannedStartAt is required for scheduling");
 
+  // Fetch the RFC to get approvedById for calendar event ownership
+  const rfc = await prisma.changeRequest.findUnique({ where: { rfcId } });
+  if (!rfc) throw new Error(`RFC not found: ${rfcId}`);
+
+  // Create a CalendarEvent for the maintenance window (EP-CHG-MGMT-011)
+  // Owner = the employee who approved the RFC (per spec Section 4.1)
+  let calendarEventId: string | undefined;
+  const ownerEmployeeId = rfc.approvedById;
+  if (ownerEmployeeId) {
+    const eventId = `CE-RFC-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    const changeItems = await prisma.changeItem.findMany({
+      where: { changeRequestId: rfc.id },
+      select: { title: true, itemType: true },
+    });
+    const itemSummary = changeItems.length > 0
+      ? `\nAffected items: ${changeItems.map((i) => `${i.title} (${i.itemType})`).join(", ")}`
+      : "";
+
+    const event = await prisma.calendarEvent.create({
+      data: {
+        eventId,
+        title: `Maintenance: ${rfc.title}`,
+        description: `RFC ${rfc.rfcId} — ${rfc.description}${itemSummary}`,
+        startAt: plannedStartAt,
+        endAt: plannedEndAt ?? null,
+        allDay: false,
+        eventType: "action",
+        category: "platform",
+        ownerEmployeeId,
+        visibility: "team",
+        color: "#f59e0b", // amber — maintenance
+      },
+    });
+    calendarEventId = event.id;
+  }
+
   await transitionRFC(rfcId, "scheduled", {
     plannedStartAt,
     ...(plannedEndAt ? { plannedEndAt } : {}),
     ...(deploymentWindowId ? { deploymentWindowId } : {}),
+    ...(calendarEventId ? { calendarEventId } : {}),
   });
 }
 

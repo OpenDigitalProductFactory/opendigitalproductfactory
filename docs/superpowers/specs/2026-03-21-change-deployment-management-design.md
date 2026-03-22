@@ -339,6 +339,8 @@ Stored as `ChangeRequest.impactReport` JSON:
 
 ### 4.1 Calendar Integration
 
+**Design decision (2026-03-22):** CalendarEvent ownership resolved — `ownerEmployeeId` = the employee who approved the RFC (`ChangeRequest.approvedById`). For standard changes from the catalog, ownership falls to the catalog entry's `approvedById`. No schema change needed; the existing non-nullable constraint is preserved. If no approver is set (edge case), the CalendarEvent is gracefully skipped.
+
 When an RFC is approved and scheduled:
 - `ownerEmployeeId` is set to the employee who approved or scheduled the RFC. For automated standard changes, use the catalog entry's `approvedById`.
 - A `CalendarEvent` is created with:
@@ -479,9 +481,11 @@ model StandardChangeCatalog {
 | 2 | RFC lifecycle | **Done** | Create/submit/assess/approve/schedule/execute/complete/rollback workflow. 28 tests. Self-dev auto-RFC on shipBuild(). |
 | 3 | Impact integration | Deferred | Auto-assessment on submission using EP-FOUND-OPS impact API. Blocked on EP-FOUND-OPS delivery. |
 | 4 | Deployment windows | **Done** | Window calculation. Blackout enforcement. Scheduling conflict detection. Default profile seeded. 20 tests. |
-| 5 | Calendar & maintenance | Deferred | CalendarEvent creation on approval. Booking blocks during maintenance. Status banner API. Requires CalendarEvent system-ownership resolution. |
-| 6 | UI | **Done** | `/ops/changes` route. Active/Completed/History filters. RFC detail panel with one-click rollback, approve/reject, cancel. |
-| 7 | Standard changes | Deferred | Catalog model exists in schema. Template-based RFC creation. Auto-scheduling. Catalog governance. |
+| 5a | CalendarEvent on schedule | **Done** | CalendarEvent created when RFC transitions to scheduled. Owner = approvedById (per spec Section 4.1). Event category `platform`, type `action`. CalendarEvent ID stored in `ChangeRequest.calendarEventId`. Graceful skip when no approver. 2 tests. |
+| 5b | Status banner API | **Done** | `GET /api/platform/status` — public endpoint returning `{ status, maintenanceActive, activeMaintenanceWindows[] }`. Returns in-progress RFCs with affected items. No auth required (storefront/external consumption). |
+| 5c | Booking blocks | Deferred | Blocking new bookings via `ProviderAvailability` override during maintenance. Blocked on CalendarEvent integration with booking system (EP-FOUND-OPS). |
+| 6 | UI | **Done** | `/ops/changes` route. Active/Completed/History/Catalog filters. RFC detail panel with one-click rollback, approve/reject, cancel. |
+| 7 | Standard changes | **Done** | Catalog CRUD server actions + API (`/api/v1/ops/catalog`). Template-based RFC creation with auto-approval (`/api/v1/ops/catalog/:key/create-rfc`). Catalog UI tab in Changes view. Expiry validation. Risk-level guardrail (only low/medium). 7 tests. |
 | — | Execution engine | **Done** | Ordered execution with health gates. Per-type rollback (code/infra/config/external). One-click RFC rollback. 27 tests. |
-| — | API routes | **Done** | 6 REST endpoints for RFC lifecycle, execution, rollback, windows, business profile. |
+| — | API routes | **Done** | 9 REST endpoints for RFC lifecycle, execution, rollback, windows, business profile, catalog, catalog RFC creation, platform status. |
 | — | Integration tests | **Done** | 7 end-to-end tests: self-dev flow, auto-rollback, one-click rollback, invalid transitions. |
