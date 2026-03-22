@@ -15,15 +15,17 @@ import type { PortfolioForSelect } from "@/lib/backlog-data";
 type Props = {
   builds: FeatureBuildRow[];
   portfolios: PortfolioForSelect[];
+  dpfEnvironment?: string;
 };
 
-export function BuildStudio({ builds, portfolios }: Props) {
+export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
   const router = useRouter();
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
     builds.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const isDevEnvironment = dpfEnvironment === "dev";
 
   useEffect(() => {
     const detail = activeBuild?.buildId ?? null;
@@ -105,25 +107,33 @@ export function BuildStudio({ builds, portfolios }: Props) {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Build List */}
         <div className="w-[360px] border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)]">
-          <div className="p-3 border-b border-[var(--dpf-border)]">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Describe a new feature..."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                className="flex-1 px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-              />
-              <button
-                onClick={handleCreate}
-                disabled={creating || !newTitle.trim()}
-                className="px-4 py-2 text-[13px] font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-              >
-                New
-              </button>
+          {isDevEnvironment ? (
+            <div className="p-3 border-b border-[var(--dpf-border)]">
+              <div className="px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
+                Development environment -- builds are managed from the production instance
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-3 border-b border-[var(--dpf-border)]">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Describe a new feature..."
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  className="flex-1 px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                />
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !newTitle.trim()}
+                  className="px-4 py-2 text-[13px] font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                >
+                  New
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex-1 overflow-auto p-2">
             {builds.length === 0 ? (
@@ -157,6 +167,7 @@ export function BuildStudio({ builds, portfolios }: Props) {
                       title="Delete build"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isDevEnvironment) return;
                         if (!confirm(`Delete "${build.title}"?`)) return;
                         deleteFeatureBuild(build.buildId).then(() => {
                           if (activeBuild?.buildId === build.buildId) setActiveBuild(null);

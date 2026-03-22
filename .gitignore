@@ -9,3 +9,4 @@ packages/db/generated/
 .superpowers/
 .worktrees/
 .playwright-mcp/
+.pnpm-store/
