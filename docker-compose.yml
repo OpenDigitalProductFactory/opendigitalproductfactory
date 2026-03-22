@@ -51,7 +51,8 @@ services:
   portal-init:
     build:
       context: .
-      target: init
+      target: runner
+    command: ["/docker-entrypoint.sh"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
