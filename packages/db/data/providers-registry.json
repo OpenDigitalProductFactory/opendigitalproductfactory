@@ -415,7 +415,7 @@
     "catalogVisibility": "visible",
     "authorizeUrl": "https://auth.openai.com/oauth/authorize",
     "tokenUrl": "https://auth.openai.com/oauth/token",
-    "oauthClientId": null,
+    "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
     "oauthRedirectUri": null
   },
   {
