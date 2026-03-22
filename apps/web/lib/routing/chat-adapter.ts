@@ -118,6 +118,24 @@ export const chatAdapter: ExecutionAdapterHandler = {
         body.tools = [...((body.tools as Array<Record<string, unknown>>) ?? []), ...providerTools];
       }
 
+    } else if (providerId === "chatgpt") {
+      // ── ChatGPT Subscription (Responses API via chatgpt.com/backend-api) ─
+      chatUrl = `${baseUrl}/codex/responses`;
+
+      // Responses API format: input array + instructions (system prompt)
+      const input = messages.map((m) => formatMessageForOpenAI(m));
+
+      body = {
+        model: modelId,
+        input,
+        ...(systemPrompt ? { instructions: systemPrompt } : {}),
+      };
+
+      // Apply temperature
+      if (plan.temperature !== undefined) {
+        (body as Record<string, unknown>).temperature = plan.temperature;
+      }
+
     } else {
       // ── OpenAI-compatible ──────────────────────────────────────────────
       const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
@@ -224,6 +242,26 @@ export const chatAdapter: ExecutionAdapterHandler = {
       const usageMetadata = (data.usageMetadata as Record<string, number>) ?? {};
       inputTokens = usageMetadata.promptTokenCount ?? 0;
       outputTokens = usageMetadata.candidatesTokenCount ?? 0;
+
+    } else if (providerId === "chatgpt") {
+      // ChatGPT Responses API response format
+      // { output: [{ type: "message", content: [{ type: "output_text", text }] }] }
+      const output = data.output as Array<{
+        type?: string;
+        content?: Array<{ type?: string; text?: string }>;
+      }> | undefined;
+      const messageParts = output?.filter((item) => item.type === "message") ?? [];
+      text = messageParts
+        .flatMap((item) => item.content ?? [])
+        .filter((c) => c.type === "output_text")
+        .map((c) => c.text ?? "")
+        .join("");
+
+      const usage = typeof data.usage === "object" && data.usage !== null
+        ? data.usage as Record<string, number>
+        : {};
+      inputTokens = (usage as Record<string, number>).input_tokens ?? 0;
+      outputTokens = (usage as Record<string, number>).output_tokens ?? 0;
 
     } else {
       // OpenAI-compatible response
