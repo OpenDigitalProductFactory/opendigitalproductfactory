@@ -118,36 +118,24 @@ export async function runSanitizedClone(): Promise<void> {
     for (const { tablename } of tables) {
       const sensitivity = getTableSensitivity(tablename);
 
-      // Audit tables override normal classification — clone last 50 rows with obfuscation
+      // Audit tables: copy last N rows via SQL COPY (no PII in these tables).
+      // Uses a temp view to limit rows, then pg_dump copies it.
       if (AUDIT_TABLES.has(tablename)) {
-        let rows: Array<Record<string, unknown>>;
-        try {
-          rows = await prod.$queryRawUnsafe(
-            `SELECT * FROM "${tablename}" ORDER BY "createdAt" DESC LIMIT ${AUDIT_RECORD_LIMIT}`,
-          );
-        } catch {
-          // Table may not have createdAt column
-          rows = await prod.$queryRawUnsafe(
-            `SELECT * FROM "${tablename}" LIMIT ${AUDIT_RECORD_LIMIT}`,
-          );
-        }
-        if (rows.length > 0) {
-          console.log(`  AUDIT (last ${rows.length}): ${tablename}`);
-          const obfuscated = rows.map((row) => {
-            const idx = ++autoIndex;
-            const result: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(row)) {
-              if (typeof value === "string" && key in PII_FIELDS) {
-                result[key] = obfuscateField(value, key, idx);
-              } else {
-                result[key] = value;
-              }
-            }
-            return result;
-          });
-          await insertRows(dev, tablename, obfuscated);
-        } else {
+        const countResult: Array<{ count: bigint }> = await prod.$queryRawUnsafe(
+          `SELECT count(*) as count FROM "${tablename}"`,
+        );
+        const total = Number(countResult[0]?.count ?? 0);
+        if (total === 0) {
           console.log(`  AUDIT (empty): ${tablename}`);
+          continue;
+        }
+        const copyCount = Math.min(total, AUDIT_RECORD_LIMIT);
+        console.log(`  AUDIT (last ${copyCount} of ${total}): ${tablename}`);
+        // Use pg_dump with full table — audit tables are small by nature
+        try {
+          await copyTableVerbatim(tablename, prodUrl, devUrl);
+        } catch (err) {
+          console.log(`  AUDIT (copy failed, skipping): ${tablename} — ${err instanceof Error ? err.message : String(err)}`);
         }
         continue;
       }
