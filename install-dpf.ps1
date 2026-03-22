@@ -288,12 +288,12 @@ if (-not (Is-StepDone "download")) {
             # Project files missing -- clone from GitHub into a temp dir then move files in
             Write-Action "Cloning project files from GitHub..."
             $tempClone = "$env:TEMP\dpf-clone"
-            Remove-Item $tempClone -Recurse -ErrorAction SilentlyContinue
+            Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
             try {
                 git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
                 if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
                 Copy-Item -Path "$tempClone\*" -Destination $DPF_DIR -Recurse -Force
-                Remove-Item $tempClone -Recurse -ErrorAction SilentlyContinue
+                Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
             } catch {
                 Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
                 Write-Warn "Clone the repo manually:"
