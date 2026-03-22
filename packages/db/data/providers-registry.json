@@ -46,7 +46,7 @@
     "costPerformanceNotes": "Uses your Claude Max subscription. Sign in via OAuth or paste a token from 'claude setup-token'. No prompt caching, no 1M context.",
     "authorizeUrl": "https://claude.ai/oauth/authorize",
     "tokenUrl": "https://platform.claude.com/v1/oauth/token",
-    "oauthClientId": "https://claude.ai/oauth/claude-code-client-metadata",
+    "oauthClientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     "oauthRedirectUri": null,
     "modelRestrictions": ["claude-haiku-*", "claude-3-haiku-*"],
     "catalogVisibility": "visible",
