@@ -493,9 +493,11 @@ Create `apps/web/lib/social-auth.ts`:
 import { prisma } from "@dpf/db";
 import { SignJWT, jwtVerify } from "jose";
 
-const TEMP_TOKEN_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "dev-secret-change-me"
-);
+const authSecret = process.env.AUTH_SECRET;
+if (!authSecret) {
+  throw new Error("AUTH_SECRET environment variable is required for social auth token signing");
+}
+const TEMP_TOKEN_SECRET = new TextEncoder().encode(authSecret);
 const TEMP_TOKEN_EXPIRY = "5m";
 
 export type SocialProfile = {
