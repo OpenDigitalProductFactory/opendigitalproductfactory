@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
-import { getOperatingHours, saveOperatingHours } from "@/lib/actions/operating-hours";
+// Import the server action functions dynamically to avoid "use server" module
+// serialization issues during page data collection
+const getOperatingHours = async () => (await import("@/lib/actions/operating-hours")).getOperatingHours();
+const saveOperatingHours = async (input: { schedule: any; timezone?: string; hasStorefront?: boolean }) =>
+  (await import("@/lib/actions/operating-hours")).saveOperatingHours(input);
 
 export async function GET(request: Request) {
   try {
