@@ -428,7 +428,7 @@
     "supportedAuthMethods": ["oauth2_authorization_code"],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["gpt-4o", "gpt-4o-mini"],
+    "families": ["codex-mini"],
     "inputPricePerMToken": 0,
     "outputPricePerMToken": 0,
     "docsUrl": "https://platform.openai.com/docs",

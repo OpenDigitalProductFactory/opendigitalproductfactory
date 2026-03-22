@@ -1360,24 +1360,14 @@ async function seedChatGPTModels(): Promise<void> {
 
   const models = [
     {
-      modelId: "gpt-4o",
-      friendlyName: "GPT-4o",
-      summary: "OpenAI flagship model — fast, capable, multimodal",
-      bestFor: ["conversation", "general-purpose", "code-review"] as string[],
+      modelId: "codex-mini-latest",
+      friendlyName: "Codex Mini (Chat)",
+      summary: "OpenAI Codex model via ChatGPT subscription — general conversation and code",
+      bestFor: ["conversation", "coding", "general-purpose"] as string[],
       avoidFor: ["local-only-required"] as string[],
-      reasoning: 75, codegen: 70, toolFidelity: 80,
-      instructionFollowingScore: 80, structuredOutputScore: 80,
-      conversational: 80, contextRetention: 75,
-    },
-    {
-      modelId: "gpt-4o-mini",
-      friendlyName: "GPT-4o Mini",
-      summary: "OpenAI lightweight model — fast and cost-efficient for simple tasks",
-      bestFor: ["conversation", "simple-tasks", "summarization"] as string[],
-      avoidFor: ["local-only-required", "complex-reasoning"] as string[],
-      reasoning: 60, codegen: 55, toolFidelity: 70,
-      instructionFollowingScore: 75, structuredOutputScore: 75,
-      conversational: 75, contextRetention: 65,
+      reasoning: 70, codegen: 90, toolFidelity: 85,
+      instructionFollowingScore: 80, structuredOutputScore: 70,
+      conversational: 70, contextRetention: 60,
     },
   ];
 
