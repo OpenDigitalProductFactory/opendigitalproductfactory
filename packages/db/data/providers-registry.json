@@ -423,7 +423,7 @@
     "providerId": "chatgpt",
     "name": "ChatGPT (OpenAI Subscription)",
     "category": "direct",
-    "baseUrl": "https://api.openai.com/v1",
+    "baseUrl": "https://chatgpt.com/backend-api",
     "authMethod": "oauth2_authorization_code",
     "supportedAuthMethods": ["oauth2_authorization_code"],
     "authHeader": "Authorization",
