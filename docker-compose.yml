@@ -110,9 +110,65 @@ services:
     profiles: ["build-images"]
     command: ["sleep", "infinity"]  # Kept alive, tests executed on demand
 
+  # ─── Dev Environment (isolated databases for development) ──────────────────
+  dev-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["dev"]
+    environment:
+      POSTGRES_USER: dpf
+      POSTGRES_PASSWORD: dpf_dev
+      POSTGRES_DB: dpf
+    ports:
+      - "5433:5432"
+    volumes:
+      - dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dev-neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    profiles: ["dev"]
+    environment:
+      NEO4J_AUTH: neo4j/dpf_dev_password
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7475:7474"
+      - "7688:7687"
+    volumes:
+      - dev_neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  dev-qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    profiles: ["dev"]
+    volumes:
+      - dev_qdrant_data:/qdrant/storage
+    ports:
+      - "6334:6333"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pgdata:
   neo4jdata:
   qdrant_data:
   playwright_scripts:
   playwright_results:
+  dev_pgdata:
+  dev_neo4jdata:
+  dev_qdrant_data:
