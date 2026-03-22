@@ -4,39 +4,13 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export type DaySchedule = {
-  enabled: boolean;
-  open: string;  // "HH:mm"
-  close: string; // "HH:mm"
-};
-
-export type WeeklySchedule = {
-  monday: DaySchedule;
-  tuesday: DaySchedule;
-  wednesday: DaySchedule;
-  thursday: DaySchedule;
-  friday: DaySchedule;
-  saturday: DaySchedule;
-  sunday: DaySchedule;
-};
+import { GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
+import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 type DayName = (typeof DAY_NAMES)[number];
 
 const CLOSED_DAY: DaySchedule = { enabled: false, open: "09:00", close: "17:00" };
-
-export const GENERIC_DEFAULTS: WeeklySchedule = {
-  monday:    { enabled: true, open: "09:00", close: "17:00" },
-  tuesday:   { enabled: true, open: "09:00", close: "17:00" },
-  wednesday: { enabled: true, open: "09:00", close: "17:00" },
-  thursday:  { enabled: true, open: "09:00", close: "17:00" },
-  friday:    { enabled: true, open: "09:00", close: "17:00" },
-  saturday:  { enabled: false, open: "09:00", close: "17:00" },
-  sunday:    { enabled: false, open: "09:00", close: "17:00" },
-};
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 

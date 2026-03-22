@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { WeeklySchedule, DaySchedule } from "@/lib/actions/operating-hours";
+import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
 
 const DAY_ORDER = [
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
