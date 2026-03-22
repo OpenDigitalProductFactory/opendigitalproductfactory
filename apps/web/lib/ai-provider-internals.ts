@@ -160,10 +160,11 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  // Agent providers with OAuth subscription (e.g. Codex) can't list models via
+  // Agent providers (Codex) and ChatGPT subscription can't list models via
   // standard /v1/models — subscription tokens don't have platform API access.
-  // Models for these providers are registry-defined or discovered while in api_key mode.
-  if (provider.authMethod === "oauth2_authorization_code" && provider.category === "agent") {
+  // Models for these providers are seeded, not discovered.
+  if (provider.authMethod === "oauth2_authorization_code" &&
+      (provider.category === "agent" || providerId === "chatgpt")) {
     return { discovered: 0, newCount: 0 };
   }
 
