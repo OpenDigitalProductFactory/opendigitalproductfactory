@@ -346,6 +346,30 @@ if (-not (Is-StepDone "download")) {
             $InstallMode = "consumer"
             Write-Action "Setting up pre-built platform..."
 
+            # Authenticate with GitHub Container Registry (images are private during early access)
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            docker pull ghcr.io/markdbodman/dpf-portal:latest 2>&1 | Out-Null
+            $needsAuth = ($LASTEXITCODE -ne 0)
+            $ErrorActionPreference = $oldEAP
+
+            if ($needsAuth) {
+                Write-Host ""
+                Write-Host "  The platform images require a GitHub account (free) during early access." -ForegroundColor Cyan
+                Write-Host "  You need a Personal Access Token with 'read:packages' scope." -ForegroundColor Cyan
+                Write-Host "  Create one at: https://github.com/settings/tokens/new?scopes=read:packages" -ForegroundColor Cyan
+                Write-Host ""
+                $ghUser = Read-Host "  GitHub username"
+                $ghToken = Read-Host "  Personal Access Token" -AsSecureString
+                $ghTokenPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ghToken))
+                $ghTokenPlain | docker login ghcr.io -u $ghUser --password-stdin 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warn "GitHub authentication failed. Check your username and token."
+                    exit 1
+                }
+                Write-OK "Authenticated with GitHub Container Registry"
+            }
+
             if (-not (Test-Path $DPF_DIR)) {
                 New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
             }
