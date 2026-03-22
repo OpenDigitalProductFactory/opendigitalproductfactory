@@ -39,11 +39,6 @@ export function getProviderExtraHeaders(providerId: string): Record<string, stri
   return {};
 }
 
-/** Detect if an Anthropic key is a subscription OAuth token (from `claude setup-token`) */
-export function isAnthropicOAuthToken(apiKey: string): boolean {
-  return apiKey.includes("sk-ant-oat");
-}
-
 /**
  * Beta header required for Anthropic subscription (OAuth) token inference.
  * Only `oauth-2025-04-20` is needed — `claude-code-20250219` is for Claude Code
@@ -79,32 +74,6 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
     inputTokens: asNumber(usage.input_tokens) ?? asNumber(usage.prompt_tokens),
     outputTokens: asNumber(usage.output_tokens) ?? asNumber(usage.completion_tokens),
   };
-}
-
-/**
- * Read the current access token from Claude Code's local credentials file.
- * OAuth access tokens are short-lived; Claude Code auto-refreshes them.
- * This keeps the platform in sync without manual re-entry.
- */
-export function getClaudeCodeOAuthToken(): string | null {
-  try {
-    const os = require("os");
-    const fs = require("fs");
-    const path = require("path");
-    const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
-    const raw = fs.readFileSync(credPath, "utf-8");
-    const creds = JSON.parse(raw);
-    const oauth = creds?.claudeAiOauth;
-    if (!oauth?.accessToken) return null;
-    // Check expiry (5-minute buffer)
-    if (oauth.expiresAt && oauth.expiresAt < Date.now() + 5 * 60 * 1000) {
-      console.warn("[getClaudeCodeOAuthToken] Token expired or expiring soon");
-      return null;
-    }
-    return oauth.accessToken;
-  } catch {
-    return null;
-  }
 }
 
 /** OAuth token exchange — obtain or refresh bearer token for a provider.
