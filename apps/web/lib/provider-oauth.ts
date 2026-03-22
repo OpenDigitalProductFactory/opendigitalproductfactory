@@ -99,20 +99,26 @@ export async function exchangeOAuthCode(
 
   const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
-  const params = new URLSearchParams({
+  // Anthropic requires JSON + state; OpenAI requires form-encoded without state
+  const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
+  const tokenData: Record<string, string> = {
     grant_type: "authorization_code",
     code,
     code_verifier: flow.codeVerifier,
     client_id: provider.oauthClientId,
     redirect_uri: redirectUri,
-  });
+  };
+  if (isAnthropicToken) tokenData.state = state;
+
+  const contentType = isAnthropicToken ? "application/json" : "application/x-www-form-urlencoded";
+  const body = isAnthropicToken ? JSON.stringify(tokenData) : new URLSearchParams(tokenData).toString();
 
   let tokenResponse: { access_token: string; refresh_token?: string; expires_in: number };
   try {
     const res = await fetch(provider.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      headers: { "Content-Type": contentType },
+      body,
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
@@ -177,17 +183,20 @@ export async function refreshOAuthToken(
 
   const decryptedRefresh = decryptSecret(cred.refreshToken);
 
-  const params = new URLSearchParams({
+  const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
+  const refreshData: Record<string, string> = {
     grant_type: "refresh_token",
     refresh_token: decryptedRefresh,
     client_id: provider.oauthClientId,
-  });
+  };
+  const contentType = isAnthropicToken ? "application/json" : "application/x-www-form-urlencoded";
+  const refreshBody = isAnthropicToken ? JSON.stringify(refreshData) : new URLSearchParams(refreshData).toString();
 
   try {
     const res = await fetch(provider.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      headers: { "Content-Type": contentType },
+      body: refreshBody,
       signal: AbortSignal.timeout(10_000),
     });
 
