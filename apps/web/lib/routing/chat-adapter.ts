@@ -129,6 +129,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         model: modelId,
         input,
         store: false,
+        stream: true,
         ...(systemPrompt ? { instructions: systemPrompt } : {}),
       };
 
@@ -196,7 +197,32 @@ export const chatAdapter: ExecutionAdapterHandler = {
       throw classifyHttpError(res.status, providerId, errBody, res.headers);
     }
 
-    const data = await res.json() as Record<string, unknown>;
+    // ChatGPT Responses API requires stream:true — collect SSE into final response
+    let data: Record<string, unknown>;
+    if (providerId === "chatgpt") {
+      const rawText = await res.text();
+      // SSE format: lines starting with "data: " followed by JSON, ending with "data: [DONE]"
+      // The last event before [DONE] with type "response.completed" contains the full response
+      const lines = rawText.split("\n");
+      let lastCompleted: Record<string, unknown> | null = null;
+      let lastDelta = "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+        try {
+          const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
+          if (parsed.type === "response.completed" && parsed.response) {
+            lastCompleted = parsed.response as Record<string, unknown>;
+          }
+          // Collect text deltas as fallback
+          if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
+            lastDelta += parsed.delta;
+          }
+        } catch { /* skip malformed lines */ }
+      }
+      data = lastCompleted ?? { output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }] };
+    } else {
+      data = await res.json() as Record<string, unknown>;
+    }
 
     // ── Extract text, tool calls, and usage ──────────────────────────────
     let text: string;
