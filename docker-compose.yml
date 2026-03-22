@@ -180,6 +180,7 @@ services:
       DPF_ENVIRONMENT: dev
     volumes:
       - .:/workspace
+      - dev_node_modules:/workspace/node_modules
     depends_on:
       dev-postgres:
         condition: service_healthy
@@ -200,6 +201,7 @@ services:
       - "3001:3000"
     volumes:
       - .:/workspace
+      - dev_node_modules:/workspace/node_modules
     environment:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       NEO4J_URI: bolt://dev-neo4j:7687
@@ -224,3 +226,4 @@ volumes:
   dev_pgdata:
   dev_neo4jdata:
   dev_qdrant_data:
+  dev_node_modules:
