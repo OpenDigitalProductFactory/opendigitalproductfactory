@@ -28,7 +28,7 @@ type Props = {
 export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, providerId }: Props) {
   if (authMethod !== "oauth2_authorization_code") return null;
 
-  const isConnected = credential.status === "configured" && credential.tokenExpiresAt;
+  const isConnected = (credential.status === "configured" || credential.status === "ok") && credential.tokenExpiresAt;
   const isExpired = credential.tokenExpiresAt
     ? new Date(credential.tokenExpiresAt).getTime() < Date.now()
     : false;
