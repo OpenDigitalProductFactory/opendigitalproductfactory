@@ -179,14 +179,17 @@ export async function exchangeOAuthCode(
     }
   }
 
-  // Auto-activate ChatGPT provider when Codex OAuth completes — same OpenAI token works for GPT chat models
-  if (flow.providerId === "codex") {
-    const chatgptProvider = await prisma.modelProvider.findUnique({ where: { providerId: "chatgpt" } });
-    if (chatgptProvider) {
+  // Bidirectional sync: codex and chatgpt share the same OpenAI OAuth token.
+  // Signing in via either provider activates both.
+  const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
+  const sibling = OPENAI_PAIR[flow.providerId];
+  if (sibling) {
+    const siblingProvider = await prisma.modelProvider.findUnique({ where: { providerId: sibling } });
+    if (siblingProvider) {
       await prisma.credentialEntry.upsert({
-        where: { providerId: "chatgpt" },
+        where: { providerId: sibling },
         create: {
-          providerId: "chatgpt",
+          providerId: sibling,
           cachedToken: encryptSecret(tokenResponse.access_token),
           refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
           tokenExpiresAt: expiresAt,
@@ -200,7 +203,7 @@ export async function exchangeOAuthCode(
         },
       });
       await prisma.modelProvider.update({
-        where: { providerId: "chatgpt" },
+        where: { providerId: sibling },
         data: {
           status: "active",
           authMethod: "oauth2_authorization_code",
