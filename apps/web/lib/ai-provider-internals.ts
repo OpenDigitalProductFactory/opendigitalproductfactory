@@ -158,9 +158,9 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  // Agent providers with OAuth (e.g. Codex) can't list models via /v1/models —
-  // subscription tokens don't have platform API access. Models are registry-defined.
-  if (provider.authMethod === "oauth2_authorization_code" && provider.category === "agent") {
+  // Anthropic subscription tokens can't list models via /v1/models.
+  // Other OAuth providers (e.g. OpenAI Codex) have full API access.
+  if (provider.authMethod === "oauth2_authorization_code" && isAnthropicProvider(providerId)) {
     return { discovered: 0, newCount: 0 };
   }
 
