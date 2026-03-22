@@ -16,7 +16,7 @@ export default async function BuildPage() {
   // Break out of the shell's max-w-7xl + p-6 container for full-bleed layout
   return (
     <div className="fixed inset-0 top-[48px]">
-      <BuildStudio builds={builds} portfolios={portfolios} />
+      <BuildStudio builds={builds} portfolios={portfolios} dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"} />
     </div>
   );
 }
