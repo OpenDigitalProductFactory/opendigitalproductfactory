@@ -105,7 +105,6 @@ export async function exchangeOAuthCode(
     code_verifier: flow.codeVerifier,
     client_id: provider.oauthClientId,
     redirect_uri: redirectUri,
-    state,
   });
 
   let tokenResponse: { access_token: string; refresh_token?: string; expires_in: number };
