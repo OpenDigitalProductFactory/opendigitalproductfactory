@@ -215,7 +215,7 @@ export async function getOperatingHours(): Promise<{
   if (config?.archetypeId) {
     const category = config.archetypeId.split("/")[0];
     return {
-      schedule: getDefaultHoursForArchetype(category),
+      schedule: await getDefaultHoursForArchetype(category),
       timezone: profile?.timezone ?? "UTC",
       isConfirmed: false,
     };
