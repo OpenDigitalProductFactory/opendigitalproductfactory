@@ -20,27 +20,30 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 RUN pnpm --filter web build
 
-# ─── Stage 4: init (migrations, seed, hardware detection) ─────────────────────
+# ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY . .
-# Ensure dependencies are intact before running database migrations/seeding
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# ─── Stage 5: runner (production Next.js) ──────────────────────────────────────
-FROM node:20-alpine AS runner
+# ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
+FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
-# Copy standalone output
+# Copy standalone Next.js output
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
+
+# Copy init dependencies: pnpm workspace, migrations, seed, Prisma client, tsx
+COPY --from=init /app/packages/db ./packages/db
+COPY --from=init /app/node_modules ./node_modules
+COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json ./
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
