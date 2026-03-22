@@ -104,30 +104,27 @@ export async function exchangeOAuthCode(
 
   const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
-  const tokenData = {
+  const params = new URLSearchParams({
     grant_type: "authorization_code",
     code,
     code_verifier: flow.codeVerifier,
     client_id: provider.oauthClientId,
     redirect_uri: redirectUri,
-  };
-
-  // Anthropic's token endpoint requires JSON; standard OAuth uses form-encoded
-  const isJsonTokenEndpoint = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
-  const contentType = isJsonTokenEndpoint ? "application/json" : "application/x-www-form-urlencoded";
-  const body = isJsonTokenEndpoint ? JSON.stringify(tokenData) : new URLSearchParams(tokenData).toString();
+    state,
+  });
 
   let tokenResponse: { access_token: string; refresh_token?: string; expires_in: number };
   try {
     const res = await fetch(provider.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": contentType },
-      body,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
       console.error(`[oauth] Token exchange failed: HTTP ${res.status} ${errBody.slice(0, 500)}`);
+      console.error(`[oauth] Request: POST ${provider.tokenUrl} | redirect_uri=${redirectUri} | client_id=${provider.oauthClientId?.substring(0, 8)}...`);
       await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
       return { error: "token_exchange_failed" };
     }
@@ -186,21 +183,17 @@ export async function refreshOAuthToken(
 
   const decryptedRefresh = decryptSecret(cred.refreshToken);
 
-  const refreshData = {
+  const params = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: decryptedRefresh,
     client_id: provider.oauthClientId,
-  };
-
-  const isJsonTokenEndpoint = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
-  const contentType = isJsonTokenEndpoint ? "application/json" : "application/x-www-form-urlencoded";
-  const body = isJsonTokenEndpoint ? JSON.stringify(refreshData) : new URLSearchParams(refreshData).toString();
+  });
 
   try {
     const res = await fetch(provider.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": contentType },
-      body,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
       signal: AbortSignal.timeout(10_000),
     });
 
