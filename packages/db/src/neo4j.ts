@@ -14,6 +14,11 @@ function getDriver(): Driver {
   const uri  = process.env["NEO4J_URI"]      ?? "bolt://localhost:7687";
   const user = process.env["NEO4J_USER"]     ?? "neo4j";
   const pass = process.env["NEO4J_PASSWORD"] ?? "dpf_dev_password";
+  if (pass === "dpf_dev_password" && process.env.NODE_ENV === "production") {
+    console.warn(
+      "WARNING: Using default Neo4j password in production. Set NEO4J_PASSWORD environment variable."
+    );
+  }
 
   _driver = neo4j.driver(uri, neo4j.auth.basic(user, pass), {
     maxConnectionPoolSize: 50,

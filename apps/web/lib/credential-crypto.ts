@@ -14,11 +14,22 @@ function getEncryptionKey(): Buffer | null {
   return Buffer.from(hex, "hex");
 }
 
+let _warnedMissingKey = false;
+
 /** Encrypt a secret. Returns `enc:<iv>:<tag>:<ciphertext>` (all base64).
  *  If no encryption key is configured, returns plaintext (dev-mode fallback). */
 export function encryptSecret(plaintext: string): string {
   const key = getEncryptionKey();
-  if (!key) return plaintext;
+  if (!key) {
+    if (!_warnedMissingKey) {
+      console.warn(
+        "WARNING: CREDENTIAL_ENCRYPTION_KEY not set — credentials will be stored in plaintext. " +
+          "Set this variable for production deployments."
+      );
+      _warnedMissingKey = true;
+    }
+    return plaintext;
+  }
 
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
