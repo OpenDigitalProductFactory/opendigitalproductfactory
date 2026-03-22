@@ -54,10 +54,11 @@ Both modes include the full platform with AI co-workers, Build Studio sandbox, a
 Open PowerShell and paste:
 
 ```powershell
-git clone https://github.com/markdbodman/opendigitalproductfactory.git
-cd opendigitalproductfactory
+gh api repos/markdbodman/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" > install-dpf.ps1
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
+
+> **Note:** Requires the [GitHub CLI](https://cli.github.com/) (`gh`) with access to this repo. The installer is self-contained — no source code download needed for "Ready to go" mode. If you choose "Customizable", the installer handles the clone for you.
 
 Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. 5-10 minutes.
 
