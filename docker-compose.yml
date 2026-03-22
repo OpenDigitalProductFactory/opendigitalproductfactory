@@ -68,6 +68,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+      - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
     volumes:
       - ./.git:/app/.git:ro
     environment:
