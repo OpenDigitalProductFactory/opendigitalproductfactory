@@ -128,8 +128,8 @@ describe("createAsset", () => {
 // ─── calculateDepreciation (straight_line) ────────────────────────────────────
 
 describe("calculateDepreciation - straight_line", () => {
-  it("returns correct monthly depreciation for 12000 cost, 2000 residual, 60 months", () => {
-    const result = calculateDepreciation(12000, 2000, 60, "straight_line");
+  it("returns correct monthly depreciation for 12000 cost, 2000 residual, 60 months", async () => {
+    const result = await calculateDepreciation(12000, 2000, 60, "straight_line");
 
     expect(result.monthlySchedule).toHaveLength(60);
     // Monthly = (12000 - 2000) / 60 = 166.6666...
@@ -139,19 +139,19 @@ describe("calculateDepreciation - straight_line", () => {
     expect(lastEntry.closingValue).toBeCloseTo(2000, 2);
   });
 
-  it("total depreciation equals purchaseCost - residualValue", () => {
-    const result = calculateDepreciation(12000, 2000, 60, "straight_line");
+  it("total depreciation equals purchaseCost - residualValue", async () => {
+    const result = await calculateDepreciation(12000, 2000, 60, "straight_line");
     expect(result.totalDepreciation).toBeCloseTo(10000, 2);
   });
 
-  it("final closing value exactly equals residualValue", () => {
-    const result = calculateDepreciation(5000, 500, 12, "straight_line");
+  it("final closing value exactly equals residualValue", async () => {
+    const result = await calculateDepreciation(5000, 500, 12, "straight_line");
     const lastEntry = result.monthlySchedule[result.monthlySchedule.length - 1];
     expect(lastEntry.closingValue).toBeCloseTo(500, 5);
   });
 
-  it("opening value of each month equals closing value of previous month", () => {
-    const result = calculateDepreciation(6000, 0, 12, "straight_line");
+  it("opening value of each month equals closing value of previous month", async () => {
+    const result = await calculateDepreciation(6000, 0, 12, "straight_line");
     for (let i = 1; i < result.monthlySchedule.length; i++) {
       expect(result.monthlySchedule[i].openingValue).toBeCloseTo(
         result.monthlySchedule[i - 1].closingValue,
@@ -164,24 +164,24 @@ describe("calculateDepreciation - straight_line", () => {
 // ─── calculateDepreciation (reducing_balance) ─────────────────────────────────
 
 describe("calculateDepreciation - reducing_balance", () => {
-  it("produces decreasing monthly depreciation amounts", () => {
-    const result = calculateDepreciation(10000, 1000, 60, "reducing_balance");
-    const amounts = result.monthlySchedule.map((e) => e.depreciation);
+  it("produces decreasing monthly depreciation amounts", async () => {
+    const result = await calculateDepreciation(10000, 1000, 60, "reducing_balance");
+    const amounts = result.monthlySchedule.map((e: { depreciation: number }) => e.depreciation);
     // Each month should depreciate less than the previous (reducing balance)
     for (let i = 1; i < Math.min(amounts.length, 10); i++) {
       expect(amounts[i]).toBeLessThan(amounts[i - 1]);
     }
   });
 
-  it("approaches but never goes below residualValue", () => {
-    const result = calculateDepreciation(10000, 1000, 60, "reducing_balance");
+  it("approaches but never goes below residualValue", async () => {
+    const result = await calculateDepreciation(10000, 1000, 60, "reducing_balance");
     for (const entry of result.monthlySchedule) {
       expect(entry.closingValue).toBeGreaterThanOrEqual(1000 - 0.001);
     }
   });
 
-  it("opening value chain is consistent", () => {
-    const result = calculateDepreciation(8000, 500, 48, "reducing_balance");
+  it("opening value chain is consistent", async () => {
+    const result = await calculateDepreciation(8000, 500, 48, "reducing_balance");
     for (let i = 1; i < result.monthlySchedule.length; i++) {
       expect(result.monthlySchedule[i].openingValue).toBeCloseTo(
         result.monthlySchedule[i - 1].closingValue,

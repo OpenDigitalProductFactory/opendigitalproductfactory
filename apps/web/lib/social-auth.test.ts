@@ -33,7 +33,9 @@ describe("determineSocialAuthFlow", () => {
       provider: "google", providerAccountId: "google-123", email: "user@test.com", name: "Test User",
     });
     expect(result.flow).toBe("sign-in");
-    expect(result.contact).toBeDefined();
+    if (result.flow === "sign-in") {
+      expect(result.contact).toBeDefined();
+    }
   });
 
   it("returns 'link' when email matches existing contact with password", async () => {
@@ -46,7 +48,9 @@ describe("determineSocialAuthFlow", () => {
       provider: "google", providerAccountId: "google-456", email: "existing@test.com", name: "Existing User",
     });
     expect(result.flow).toBe("link");
-    expect(result.contact).toBeDefined();
+    if (result.flow === "link") {
+      expect(result.contact).toBeDefined();
+    }
   });
 
   it("returns 'auto-link' when email matches contact with null password", async () => {
@@ -68,7 +72,9 @@ describe("determineSocialAuthFlow", () => {
       provider: "google", providerAccountId: "google-new", email: "brand-new@test.com", name: "New User",
     });
     expect(result.flow).toBe("onboard");
-    expect(result.contact).toBeUndefined();
+    if (result.flow === "onboard") {
+      expect("contact" in result).toBe(false);
+    }
   });
 
   it("returns 'blocked' when matched contact is inactive", async () => {

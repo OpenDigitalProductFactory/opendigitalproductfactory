@@ -30,7 +30,7 @@ import { verifyPassword } from "@/lib/password";
 import { verifyTempToken } from "@/lib/social-auth";
 
 describe("linkSocialIdentity", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("links identity when password is correct", async () => {
     (verifyTempToken as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -65,7 +65,7 @@ describe("linkSocialIdentity", () => {
 });
 
 describe("completeProfileWithSocial", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("creates account + contact + identity for new company", async () => {
     (verifyTempToken as ReturnType<typeof vi.fn>).mockResolvedValue({
