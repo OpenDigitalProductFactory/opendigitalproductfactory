@@ -39,8 +39,8 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
 
-      - name: Typecheck (web app)
-        run: pnpm --filter web exec tsc --noEmit
+      - name: Typecheck (all packages)
+        run: pnpm typecheck
 
       - name: Log in to GHCR
         uses: docker/login-action@v3

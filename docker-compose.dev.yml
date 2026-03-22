@@ -1,7 +1,7 @@
-# Developer overlay — exposes database and AI ports to the host so you can
+# Developer overlay — exposes database ports to the host so you can
 # run Next.js locally (pnpm dev) and connect to containers from your IDE.
 #
-# Usage:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
 # Or:     The fresh-install.ps1 script merges these into the override automatically.
 
 services:
@@ -14,6 +14,6 @@ services:
       - "7687:7687"
       - "7474:7474"
 
-  ollama:
+  qdrant:
     ports:
-      - "${OLLAMA_HOST_PORT:-11434}:11434"
+      - "6333:6333"

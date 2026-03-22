@@ -1,5 +1,5 @@
 ---
-title: "Docker Model Runner (Local)"
+title: "Local AI (Docker Model Runner / Ollama)"
 area: ai-workforce
 order: 5
 lastUpdated: "2026-03-22"
@@ -53,6 +53,19 @@ Local models are automatically granted full sensitivity clearance: public, inter
 
 Local inference uses a "compute" cost model instead of per-token pricing. The cost is based on electricity consumption (GPU power draw). In practice, local models are effectively free for development use.
 
+## Using Ollama Instead (BYOP)
+
+If you already have an Ollama instance running on your machine or local network, you can point this provider at it instead of Docker Model Runner.
+
+1. Go to External Services and click the local provider
+2. Change the Base URL from `http://model-runner.docker.internal/v1` to your Ollama endpoint (e.g., `http://host.docker.internal:11434/v1` if running Ollama on the host)
+3. Click Save, then Test Connection
+4. Click "Sync Models & Profiles" to discover your Ollama models
+
+The platform auto-detects whether the endpoint is Docker Model Runner or Ollama and adjusts its model discovery accordingly (`/v1/models` for Docker Model Runner, `/api/tags` for legacy Ollama).
+
+Note: Only one local model can be actively loaded at a time in Ollama. Swapping between models takes 30+ seconds due to VRAM reload.
+
 ## Limitations
 
 - Model quality depends on your hardware (GPU, VRAM)
@@ -63,6 +76,7 @@ Local inference uses a "compute" cost model instead of per-token pricing. The co
 ## Troubleshooting
 
 - "Docker Model Runner not reachable" — ensure Docker Desktop 4.40+ is running with Model Runner enabled
-- "No models discovered" — pull at least one model with `docker model pull`
+- "No models discovered" — pull at least one model with `docker model pull` (Docker Model Runner) or `ollama pull` (Ollama)
 - "Test Connection 404" — the model list endpoint changed format. Ensure you are running the latest platform version
 - "No eligible endpoints" — after pulling a model, visit External Services to trigger discovery and profiling
+- "Ollama connection refused" — if running Ollama on the host, use `http://host.docker.internal:11434/v1` as the base URL (not `localhost`)

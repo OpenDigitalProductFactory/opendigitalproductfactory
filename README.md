@@ -99,14 +99,14 @@ For developers who want to run Next.js locally with IDE integration, debugging, 
 ```powershell
 git clone https://github.com/markdbodman/opendigitalproductfactory.git
 cd opendigitalproductfactory
-.\scripts\fresh-install.bat -InstallDrive H    # or C, D, etc.
+.\scripts\fresh-install.bat
 ```
 
 The script will:
 - Install pnpm dependencies (`node_modules`)
-- Create all `.env` files (Docker + app-level) with working defaults
-- Start Docker containers with **ports exposed** to the host (5432, 7474, 7687)
-- Run database migrations and seed data
+- Create all `.env` files (Docker + app-level) with generated secrets
+- Start Docker containers with **ports exposed** to the host (5432, 7474, 7687, 6333)
+- Run database migrations and seed data (including all epic/backlog SQL scripts)
 
 Then start the dev server:
 
@@ -133,11 +133,24 @@ cp .env.example apps/web/.env.local
 cp .env.example packages/db/.env
 ```
 
-**Start databases:**
+Then edit `.env`, `apps/web/.env.local`, and `packages/db/.env` to replace the `<generate with: ...>` placeholders with real values. On Windows PowerShell:
+
+```powershell
+# Generate AUTH_SECRET (base64)
+[Convert]::ToBase64String((1..32 | ForEach-Object { [byte](Get-Random -Max 256) }))
+# Generate CREDENTIAL_ENCRYPTION_KEY (hex)
+-join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Max 256) })
+```
+
+Or use the automated script (Option A) which handles this automatically.
+
+**Start databases (with ports exposed to host):**
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
 ```
+
+> This exposes PostgreSQL (5432), Neo4j (7687, 7474), and Qdrant (6333) to your host machine.
 
 **Run migrations and seed:**
 
@@ -179,7 +192,7 @@ This isn't a chatbot bolted onto a dashboard. AI is a core architectural layer.
 | **AI Co-worker Panel** | Floating, semi-transparent assistant on every screen. Context-aware — knows which page you're on and what you can do. |
 | **9 Specialist Agents** | Portfolio Advisor, EA Architect, Ops Coordinator, Platform Engineer, and more — each with domain expertise and role-specific skills |
 | **Skills Dropdown** | Each agent offers context-relevant actions filtered by your role. Higher authority = more capabilities. |
-| **17 Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Ollama, Groq, Together, and 10 more — cloud or local, your choice |
+| **23 Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Ollama, Groq, Together, DeepSeek, xAI, Mistral, and more — cloud, local, or router, your choice |
 | **Automatic Failover** | Priority-ranked providers. If one fails, the next takes over. Local AI is always the safety net. |
 | **Weekly Optimization** | Scheduled job ranks providers by capability tier and cost. The platform optimizes its own AI spending. |
 | **Token Spend Tracking** | Per-provider, per-agent cost monitoring. Know exactly what your AI workforce costs. |
@@ -405,7 +418,7 @@ docker compose down        # Stop
 
 ```
 opendigitalproductfactory/
-├── apps/web/                    # Next.js 14 App Router
+├── apps/web/                    # Next.js 16 App Router
 │   ├── app/(shell)/             # 8 authenticated route areas
 │   ├── components/agent/        # AI Coworker panel + skills
 │   ├── lib/                     # Auth, permissions, inference, routing
