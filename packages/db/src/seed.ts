@@ -1281,6 +1281,54 @@ async function seedLocalModels(): Promise<void> {
   console.log(`  ✓ Discovered ${models.length} local model(s), ${discovered} new profile(s)`);
 }
 
+/**
+ * Seed known Codex models. OAuth agent providers can't discover models
+ * via /v1/models, so we seed them from the registry.
+ */
+async function seedCodexModels(): Promise<void> {
+  const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
+  if (!provider) return;
+
+  const codexModels = ["codex-mini-latest"];
+  let created = 0;
+  for (const modelId of codexModels) {
+    await prisma.discoveredModel.upsert({
+      where: { providerId_modelId: { providerId: "codex", modelId } },
+      create: { providerId: "codex", modelId, rawMetadata: { id: modelId } as any, lastSeenAt: new Date() },
+      update: {},
+    });
+    const existing = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId: "codex", modelId } },
+    });
+    if (!existing) {
+      await prisma.modelProfile.create({
+        data: {
+          providerId: "codex",
+          modelId,
+          friendlyName: "Codex Mini",
+          summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
+          capabilityTier: "advanced",
+          costTier: "$$",
+          bestFor: ["coding", "agentic-tasks"],
+          avoidFor: ["conversation"],
+          modelClass: "agent",
+          modelStatus: "active",
+          generatedBy: "system:seed",
+          profileSource: "seed",
+          profileConfidence: "medium",
+          reasoning: 70, codegen: 90, toolFidelity: 85,
+          instructionFollowingScore: 80, structuredOutputScore: 70,
+          conversational: 40, contextRetention: 60,
+          supportsToolUse: true,
+          capabilities: { toolUse: true, streaming: true } as any,
+        },
+      });
+      created++;
+    }
+  }
+  if (created > 0) console.log(`  ✓ Seeded ${created} Codex model profile(s)`);
+}
+
 async function seedAnthropicSubScope(): Promise<void> {
   await prisma.credentialEntry.upsert({
     where: { providerId: "anthropic-sub" },
@@ -1322,6 +1370,7 @@ async function main(): Promise<void> {
   await seedScheduledJobs();
   await seedMcpServers();
   await seedAnthropicSubScope();
+  await seedCodexModels();
   await seedLocalModels();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
