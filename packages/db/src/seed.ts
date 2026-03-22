@@ -1229,9 +1229,15 @@ async function seedLocalModels(): Promise<void> {
 
   if (models.length === 0) { console.log("  → No local models found"); return; }
 
-  // Activate provider if unconfigured
-  if (provider.status === "unconfigured") {
-    await prisma.modelProvider.update({ where: { providerId: "ollama" }, data: { status: "active" } });
+  // Activate provider and grant full sensitivity clearance (local = data never leaves machine)
+  if (provider.status === "unconfigured" || (provider.sensitivityClearance as string[]).length === 0) {
+    await prisma.modelProvider.update({
+      where: { providerId: "ollama" },
+      data: {
+        status: "active",
+        sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+      },
+    });
   }
 
   let discovered = 0;
