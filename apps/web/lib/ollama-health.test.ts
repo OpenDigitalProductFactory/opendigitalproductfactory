@@ -7,6 +7,9 @@ vi.mock("@dpf/db", () => ({
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    modelProfile: {
+      count: vi.fn().mockResolvedValue(1),
+    },
   },
   syncInfraCI: vi.fn(),
 }));
@@ -146,20 +149,15 @@ describe("checkBundledProviders", () => {
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
     } as any);
-    // /api/tags (health check)
+    // /v1/models (health check)
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ models: [{ name: "llama3:8b" }] }),
+      json: async () => ({ data: [{ id: "llama3:8b" }] }),
     });
-    // /api/ps (hardware enrichment)
+    // /v1/models (hardware info — getOllamaHardwareInfo)
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ models: [{ name: "llama3:8b", size_vram: 5_000_000_000 }] }),
-    });
-    // /api/tags (model count)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ models: [{ name: "llama3:8b" }] }),
+      json: async () => ({ data: [{ id: "llama3:8b" }] }),
     });
 
     await checkBundledProviders();
