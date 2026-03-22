@@ -130,7 +130,21 @@ volumes:
 
 **Note:** Consumer mode has no `.git` directory, so the git-based agent tools (`read_source_at_version`, `grep_codebase`, `list_codebase_files`) are unavailable. This is expected — consumer users interact through the UI and AI coworker, not source-level tools. The `DEPLOYED_VERSION` env var is omitted; the portal displays the image tag instead.
 
-**Note:** Sandbox and Playwright services are omitted from the consumer compose. Build Studio sandbox execution is a customizer-only feature — consumers use the platform as-is.
+**Sandbox and Playwright** are included in the consumer compose under the `build-images` profile (same as current). Instead of `build:` directives, they reference pre-built images:
+
+```yaml
+  sandbox-image:
+    image: ghcr.io/markdbodman/dpf-sandbox:${DPF_VERSION:-latest}
+    profiles: ["build-images"]
+    command: ["echo", "Image ready"]
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    profiles: ["build-images"]
+    command: ["sleep", "infinity"]
+```
+
+Consumer users still use Build Studio to develop features on their platform — they just don't compile the portal from source.
 
 **Install flow:**
 
@@ -201,9 +215,14 @@ This requires a Dockerfile change: the `runner` stage must also include the entr
 
 GitHub Actions workflow (`.github/workflows/publish-image.yml`) triggered on git tags matching `v*`:
 
-1. Build the unified image from `Dockerfile`
-2. Push to GHCR as `ghcr.io/markdbodman/dpf-portal:<tag>` and `:latest`
-3. Typecheck gate (`pnpm typecheck`) runs before build to catch errors early
+1. Typecheck gate (`pnpm typecheck`) runs before build to catch errors early
+2. Build the unified portal image from `Dockerfile` → `ghcr.io/markdbodman/dpf-portal:<tag>` and `:latest`
+3. Build the sandbox image from `Dockerfile.sandbox` → `ghcr.io/markdbodman/dpf-sandbox:<tag>` and `:latest`
+4. Push both to GHCR
+
+Two images published per release:
+- `ghcr.io/markdbodman/dpf-portal` — portal init + app
+- `ghcr.io/markdbodman/dpf-sandbox` — Build Studio sandbox base
 
 The install script defaults to `latest` but accepts an optional `--Version` parameter for pinning.
 
