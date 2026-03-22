@@ -215,7 +215,7 @@ export async function getOperatingHours(): Promise<{
   if (config?.archetypeId) {
     const category = config.archetypeId.split("/")[0];
     return {
-      schedule: await getDefaultHoursForArchetype(category),
+      schedule: getDefaultHoursForArchetype(category),
       timezone: profile?.timezone ?? "UTC",
       isConfirmed: false,
     };
@@ -307,9 +307,9 @@ const INDUSTRY_DEFAULTS: Record<string, WeeklySchedule> = {
   },
 };
 
-export async function getDefaultHoursForArchetype(
+export function getDefaultHoursForArchetype(
   archetypeCategory?: string | null
-): Promise<WeeklySchedule> {
+): WeeklySchedule {
   if (archetypeCategory && INDUSTRY_DEFAULTS[archetypeCategory]) {
     return { ...INDUSTRY_DEFAULTS[archetypeCategory] };
   }
