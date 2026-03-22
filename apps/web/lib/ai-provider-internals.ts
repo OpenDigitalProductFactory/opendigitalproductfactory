@@ -158,11 +158,9 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  // Anthropic subscription tokens can't list models via /v1/models.
-  // Other OAuth providers (e.g. OpenAI Codex) have full API access.
-  if (provider.authMethod === "oauth2_authorization_code" && isAnthropicProvider(providerId)) {
-    return { discovered: 0, newCount: 0 };
-  }
+  // Discovery proceeds for all providers — the auth headers (including
+  // anthropic-beta for Anthropic OAuth) are set below. If the API rejects
+  // the call, the error is returned gracefully.
 
   const providerRow = {
     ...provider,
