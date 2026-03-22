@@ -23,7 +23,8 @@
     "incremental": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "exactOptionalPropertyTypes": false
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false
   },
   "include": [
     "next-env.d.ts",
