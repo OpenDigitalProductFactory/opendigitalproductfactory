@@ -18,8 +18,7 @@ export default async function ControlsPage({ searchParams }: Props) {
     ...(sp.implementationStatus && { implementationStatus: sp.implementationStatus }),
     ...(sp.effectiveness && { effectiveness: sp.effectiveness }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
-  const controls = await listControls(hasFilters ? filters : undefined);
+  const controls = await listControls(filters);
 
   return (
     <div>
@@ -64,7 +63,7 @@ export default async function ControlsPage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/controls"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

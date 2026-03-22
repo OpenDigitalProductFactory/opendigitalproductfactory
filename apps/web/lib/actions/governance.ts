@@ -69,7 +69,7 @@ export async function validateDelegationGrantInput(input: DelegationGrantInput):
 }
 
 export async function createDelegationGrant(input: DelegationGrantInput): Promise<GovernanceActionResult> {
-  const validationError = validateDelegationGrantInput(input);
+  const validationError = await validateDelegationGrantInput(input);
   if (validationError) return governanceDenied(validationError);
 
   const actor = await requireAnyCapability(["manage_agents", "manage_user_lifecycle"]);

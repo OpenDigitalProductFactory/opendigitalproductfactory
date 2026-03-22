@@ -306,6 +306,7 @@ export async function generateInvoiceFromSalesOrder(salesOrderId: string) {
 
   return createInvoice({
     accountId: order.accountId,
+    type: "standard",
     dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]!,
     currency: order.currency,
     sourceType: "sales_order",
@@ -350,11 +351,13 @@ export async function generateInvoiceFromStorefrontOrder(orderId: string) {
     description: item.name,
     quantity: item.qty,
     unitPrice: item.unitPrice,
+    discountPercent: 0,
     taxRate: 0,
   }));
 
   return createInvoice({
     accountId: contact.account.id,
+    type: "standard" as const,
     contactId: contact.id,
     dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]!,
     currency: order.currency,

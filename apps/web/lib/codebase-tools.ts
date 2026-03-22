@@ -1,20 +1,14 @@
 // apps/web/lib/codebase-tools.ts
 // Codebase file access with path security for agent tools.
 // Only available on dev instances (INSTANCE_TYPE=dev). Production has no source code.
-
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { resolve, relative, isAbsolute, dirname } from "path";
-import { execSync } from "child_process";
-
-// Project root — Next.js runs from apps/web, so go up two levels
-const PROJECT_ROOT = resolve(process.cwd(), "..", "..");
+//
+// All fs/path/child_process usage is behind dynamic import() to prevent
+// Next.js NFT from tracing the entire project tree during production builds.
 
 // ─── Instance Type ──────────────────────────────────────────────────────────
 
 /** Returns true if this is a development instance with source code access. */
 export function isDevInstance(): boolean {
-  // INSTANCE_TYPE=dev explicitly enables codebase access
-  // Falls back to NODE_ENV check — development = dev, production = prod
   const instanceType = process.env.INSTANCE_TYPE;
   if (instanceType === "dev") return true;
   if (instanceType === "production") return false;
@@ -22,6 +16,11 @@ export function isDevInstance(): boolean {
 }
 
 const DEV_ONLY_ERROR = "Codebase access is only available on dev instances. Production does not have source code.";
+
+async function getProjectRoot(): Promise<string> {
+  const { resolve } = await import(/* turbopackIgnore: true */ "path");
+  return resolve(process.cwd(), "..", "..");
+}
 
 // ─── Path Security ──────────────────────────────────────────────────────────
 
@@ -41,9 +40,22 @@ const BLOCKED_PATTERNS = [
   /^node_modules[\\/]/,
 ];
 
-export function isPathAllowed(filePath: string): boolean {
+export async function isPathAllowed(filePath: string): Promise<boolean> {
+  const { isAbsolute } = await import(/* turbopackIgnore: true */ "path");
   if (isAbsolute(filePath)) return false;
   if (/^[A-Za-z]:/.test(filePath)) return false;
+  if (filePath.includes("..")) return false;
+
+  const normalized = filePath.replace(/\\/g, "/");
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(normalized)) return false;
+  }
+
+  return true;
+}
+
+export function isPathAllowedSync(filePath: string): boolean {
+  if (/^[/\\]/.test(filePath) || /^[A-Za-z]:/.test(filePath)) return false;
   if (filePath.includes("..")) return false;
 
   const normalized = filePath.replace(/\\/g, "/");
@@ -58,13 +70,15 @@ type SafePathResult =
   | { ok: true; path: string }
   | { ok: false; error: string };
 
-export function resolveSafePath(filePath: string): SafePathResult {
-  if (!isPathAllowed(filePath)) {
+export async function resolveSafePath(filePath: string): Promise<SafePathResult> {
+  if (!isPathAllowedSync(filePath)) {
     return { ok: false, error: `Access denied: ${filePath}` };
   }
 
-  const fullPath = resolve(PROJECT_ROOT, filePath);
-  const rel = relative(PROJECT_ROOT, fullPath);
+  const { resolve, relative, isAbsolute } = await import(/* turbopackIgnore: true */ "path");
+  const projectRoot = await getProjectRoot();
+  const fullPath = resolve(projectRoot, filePath);
+  const rel = relative(projectRoot, fullPath);
 
   if (rel.startsWith("..") || isAbsolute(rel)) {
     return { ok: false, error: "Path escapes project root" };
@@ -75,14 +89,15 @@ export function resolveSafePath(filePath: string): SafePathResult {
 
 // ─── File Operations ────────────────────────────────────────────────────────
 
-export function readProjectFile(
+export async function readProjectFile(
   filePath: string,
   options?: { startLine?: number; endLine?: number },
-): { content: string } | { error: string } {
+): Promise<{ content: string } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
-  const resolved = resolveSafePath(filePath);
+  const resolved = await resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
+  const { readFileSync, existsSync } = await import(/* turbopackIgnore: true */ "fs");
   if (!existsSync(resolved.path)) {
     return { error: `File not found: ${filePath}` };
   }
@@ -101,20 +116,21 @@ export function readProjectFile(
   }
 }
 
-export function searchProjectFiles(
+export async function searchProjectFiles(
   query: string,
   options?: { glob?: string; maxResults?: number },
-): { results: Array<{ path: string; line: number; text: string }> } | { error: string } {
+): Promise<{ results: Array<{ path: string; line: number; text: string }> } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const max = options?.maxResults ?? 20;
 
   try {
-    // Use git grep (cross-platform, available wherever git is installed)
+    const { execSync } = await import(/* turbopackIgnore: true */ "child_process");
+    const projectRoot = await getProjectRoot();
     const globArg = options?.glob ? `-- "${options.glob}"` : "";
     const output = execSync(
       `git grep -n --max-count=${max} ${JSON.stringify(query)} HEAD ${globArg}`.trim(),
       {
-        cwd: PROJECT_ROOT,
+        cwd: projectRoot,
         encoding: "utf-8",
         timeout: 10_000,
         maxBuffer: 1024 * 1024,
@@ -123,11 +139,10 @@ export function searchProjectFiles(
 
     const results: Array<{ path: string; line: number; text: string }> = [];
     for (const line of output.split("\n").slice(0, max)) {
-      // git grep format: HEAD:path/to/file:lineNum:matched text
       const match = line.match(/^(?:HEAD:)?(.+?):(\d+):(.*)$/);
       if (match) {
         const [, path, lineNum, text] = match;
-        if (path && lineNum && isPathAllowed(path)) {
+        if (path && lineNum && isPathAllowedSync(path)) {
           results.push({ path, line: parseInt(lineNum, 10), text: text?.trim() ?? "" });
         }
       }
@@ -139,30 +154,32 @@ export function searchProjectFiles(
   }
 }
 
-export function listProjectDirectory(
+export async function listProjectDirectory(
   dirPath: string,
-  options?: { maxDepth?: number },
-): { entries: Array<{ name: string; type: "file" | "dir"; path: string }> } | { error: string } {
+  _options?: { maxDepth?: number },
+): Promise<{ entries: Array<{ name: string; type: "file" | "dir"; path: string }> } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const safePath = dirPath === "" || dirPath === "." ? "." : dirPath;
-  if (safePath !== "." && !isPathAllowed(safePath)) {
+  if (safePath !== "." && !isPathAllowedSync(safePath)) {
     return { error: `Access denied: ${safePath}` };
   }
 
-  const fullPath = safePath === "." ? PROJECT_ROOT : resolve(PROJECT_ROOT, safePath);
+  const { resolve } = await import(/* turbopackIgnore: true */ "path");
+  const projectRoot = await getProjectRoot();
+  const fullPath = safePath === "." ? projectRoot : resolve(projectRoot, safePath);
+  const { readdirSync, existsSync } = await import(/* turbopackIgnore: true */ "fs");
   if (!existsSync(fullPath)) {
     return { error: `Directory not found: ${safePath}` };
   }
 
   try {
-    const { readdirSync, statSync } = require("fs") as typeof import("fs");
     const items = readdirSync(fullPath, { withFileTypes: true });
     const entries: Array<{ name: string; type: "file" | "dir"; path: string }> = [];
 
     for (const item of items) {
       const itemPath = safePath === "." ? item.name : `${safePath}/${item.name}`;
-      if (!isPathAllowed(itemPath)) continue;
-      if (item.name.startsWith(".")) continue; // skip dotfiles
+      if (!isPathAllowedSync(itemPath)) continue;
+      if (item.name.startsWith(".")) continue;
       entries.push({
         name: item.name,
         type: item.isDirectory() ? "dir" : "file",
@@ -181,15 +198,17 @@ export function listProjectDirectory(
   }
 }
 
-export function writeProjectFile(
+export async function writeProjectFile(
   filePath: string,
   content: string,
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
-  const resolved = resolveSafePath(filePath);
+  const resolved = await resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
   try {
+    const { writeFileSync, existsSync, mkdirSync } = await import(/* turbopackIgnore: true */ "fs");
+    const { dirname } = await import(/* turbopackIgnore: true */ "path");
     const dir = dirname(resolved.path);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });

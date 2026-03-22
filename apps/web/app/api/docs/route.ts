@@ -3,7 +3,7 @@
 // Only serves files under docs/ with allowed extensions.
 
 import { NextRequest } from "next/server";
-import { readProjectFile, isPathAllowed } from "@/lib/codebase-tools";
+import { readProjectFile, isPathAllowedSync as isPathAllowed } from "@/lib/codebase-tools";
 
 const ALLOWED_PREFIXES = ["docs/"];
 const ALLOWED_EXTENSIONS = [".md", ".txt"];
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return new Response("Access denied", { status: 403 });
   }
 
-  const result = readProjectFile(path);
+  const result = await readProjectFile(path);
   if ("error" in result) {
     return new Response(result.error, { status: 404 });
   }

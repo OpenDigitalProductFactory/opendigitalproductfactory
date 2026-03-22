@@ -27,7 +27,7 @@ export default async function ServiceDetailPage({
     "manage_provider_connections",
   );
 
-  const health = HEALTH_LABELS[server.healthStatus] ?? HEALTH_LABELS.unknown;
+  const health = HEALTH_LABELS[server.healthStatus] ?? { text: "Unknown", className: "text-gray-500" };
 
   return (
     <div className="p-6 space-y-8 max-w-3xl">

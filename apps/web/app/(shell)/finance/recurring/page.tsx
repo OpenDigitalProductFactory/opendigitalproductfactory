@@ -24,7 +24,9 @@ type Props = { searchParams: Promise<{ status?: string }> };
 export default async function RecurringPage({ searchParams }: Props) {
   const { status } = await searchParams;
 
-  const schedules = await listRecurringSchedules(status ? { status } : undefined);
+  const schedules = status
+    ? await listRecurringSchedules({ status })
+    : await listRecurringSchedules();
 
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });

@@ -86,6 +86,8 @@ export function BuildStudio({ builds, portfolios }: Props) {
         claimedByAgentId: null,
         claimedAt: null,
         claimStatus: null,
+        uxTestResults: null,
+        buildExecState: null,
       });
       setNewTitle("");
       router.refresh();

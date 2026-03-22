@@ -215,6 +215,7 @@ export async function generateDueInvoices(): Promise<{ generated: number; sent: 
       description: li.description,
       quantity: Number(li.quantity),
       unitPrice: Number(li.unitPrice),
+      discountPercent: 0,
       taxRate: Number(li.taxRate),
     }));
 
@@ -224,6 +225,7 @@ export async function generateDueInvoices(): Promise<{ generated: number; sent: 
 
     const invoice = await createInvoice({
       accountId: schedule.accountId,
+      type: "recurring_instance",
       dueDate: dueDate.toISOString().split("T")[0]!,
       currency: schedule.currency,
       sourceType: "recurring",
@@ -240,7 +242,7 @@ export async function generateDueInvoices(): Promise<{ generated: number; sent: 
     }
 
     // Advance nextInvoiceDate
-    const nextDate = calculateNextDate(schedule.nextInvoiceDate, schedule.frequency);
+    const nextDate = await calculateNextDate(schedule.nextInvoiceDate, schedule.frequency);
 
     // Check if schedule is completed
     const isCompleted = schedule.endDate != null && nextDate > schedule.endDate;

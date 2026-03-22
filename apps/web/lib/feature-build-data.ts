@@ -39,6 +39,8 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       claimedByAgentId: true,
       claimedAt: true,
       claimStatus: true,
+      uxTestResults: true,
+      buildExecState: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -61,6 +63,8 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     taskResults: r.taskResults as TaskResult[] | null,
     verificationOut: r.verificationOut as VerificationOutput | null,
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
+    uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
+    buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
@@ -100,6 +104,8 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       claimedByAgentId: true,
       claimedAt: true,
       claimStatus: true,
+      uxTestResults: true,
+      buildExecState: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -124,6 +130,8 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     taskResults: r.taskResults as TaskResult[] | null,
     verificationOut: r.verificationOut as VerificationOutput | null,
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
+    uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
+    buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,

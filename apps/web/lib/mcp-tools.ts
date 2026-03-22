@@ -1541,7 +1541,7 @@ export async function executeTool(
 
     case "list_project_directory": {
       const { listProjectDirectory } = await import("@/lib/codebase-tools");
-      const result = listProjectDirectory(String(params.path ?? "."));
+      const result = await listProjectDirectory(String(params.path ?? "."));
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
       return { success: true, message: summary || "Empty directory", data: { entries: result.entries } };
@@ -1552,7 +1552,7 @@ export async function executeTool(
       const opts: { startLine?: number; endLine?: number } = {};
       if (typeof params.startLine === "number") opts.startLine = params.startLine;
       if (typeof params.endLine === "number") opts.endLine = params.endLine;
-      const result = readProjectFile(String(params.path ?? ""), opts);
+      const result = await readProjectFile(String(params.path ?? ""), opts);
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       return { success: true, message: result.content, data: { content: result.content } };
     }
@@ -1562,7 +1562,7 @@ export async function executeTool(
       const opts: { glob?: string; maxResults?: number } = {};
       if (typeof params.glob === "string") opts.glob = params.glob;
       if (typeof params.maxResults === "number") opts.maxResults = params.maxResults;
-      const result = searchProjectFiles(String(params.query ?? ""), opts);
+      const result = await searchProjectFiles(String(params.query ?? ""), opts);
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
       return { success: true, message: summary || "No matches found", data: { results: result.results } };
@@ -1659,7 +1659,7 @@ export async function executeTool(
       // Fall back to reading the file (dev instances only)
       const { isDevInstance, readProjectFile } = await import("@/lib/codebase-tools");
       if (isDevInstance()) {
-        const result = readProjectFile("codebase-manifest.json");
+        const result = await readProjectFile("codebase-manifest.json");
         if ("content" in result) {
           try {
             const manifest = JSON.parse(result.content);
@@ -1721,11 +1721,11 @@ export async function executeTool(
       const newContent = String(params.newContent ?? "");
       const description = String(params.description ?? "");
 
-      const current = readProjectFile(path);
+      const current = await readProjectFile(path);
       const currentContent = "content" in current ? current.content : "";
       const diff = generateSimpleDiff(currentContent, newContent, path);
 
-      const writeResult = writeProjectFile(path, newContent);
+      const writeResult = await writeProjectFile(path, newContent);
       if ("error" in writeResult) return { success: false, error: writeResult.error, message: writeResult.error };
 
       // Auto-commit the approved change

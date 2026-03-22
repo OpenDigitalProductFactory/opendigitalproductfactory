@@ -12,9 +12,8 @@ export default async function EvidencePage({ searchParams }: Props) {
     ...(sp.evidenceType && { evidenceType: sp.evidenceType }),
     ...(sp.status && { status: sp.status }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
   const [evidence, obligations, controls] = await Promise.all([
-    listEvidence(hasFilters ? filters : undefined),
+    listEvidence(filters),
     prisma.obligation.findMany({ where: { status: "active" }, select: { id: true, title: true }, orderBy: { title: "asc" } }),
     prisma.control.findMany({ where: { status: "active" }, select: { id: true, title: true }, orderBy: { title: "asc" } }),
   ]);
@@ -52,7 +51,7 @@ export default async function EvidencePage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/evidence"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

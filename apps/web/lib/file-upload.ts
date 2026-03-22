@@ -1,6 +1,4 @@
 import { prisma, type Prisma } from "@dpf/db";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { parseFileContent, capParsedContentSize } from "./file-parsers";
 
 const ALLOWED_EXTENSIONS = new Set(["csv", "xls", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf"]);
@@ -52,8 +50,10 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
   const totalStorage = await prisma.agentAttachment.aggregate({ where: { threadId: { in: userThreads.map((t) => t.id) } }, _sum: { sizeBytes: true } });
   if ((totalStorage._sum.sizeBytes ?? 0) + file.size > MAX_USER_STORAGE_BYTES) return { error: "Storage quota exceeded (200MB per user)", status: 507 };
 
+  const { writeFile, mkdir } = await import(/* turbopackIgnore: true */ "fs/promises");
+  const { join } = await import(/* turbopackIgnore: true */ "path");
   const storagePath = await getUploadStoragePath();
-  const { randomUUID } = await import("crypto");
+  const { randomUUID } = await import(/* turbopackIgnore: true */ "crypto");
   const storageKey = `${threadId}/${randomUUID()}.${ext}`;
   await mkdir(join(storagePath, threadId), { recursive: true });
   await writeFile(join(storagePath, storageKey), buffer);
@@ -76,7 +76,8 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
 export async function deleteAttachmentsForThread(threadId: string): Promise<void> {
   const attachments = await prisma.agentAttachment.findMany({ where: { threadId }, select: { storageKey: true } });
   const storagePath = await getUploadStoragePath();
-  const { unlink } = await import("fs/promises");
+  const { unlink } = await import(/* turbopackIgnore: true */ "fs/promises");
+  const { join } = await import(/* turbopackIgnore: true */ "path");
   for (const att of attachments) { await unlink(join(storagePath, att.storageKey)).catch(() => {}); }
   await prisma.agentAttachment.deleteMany({ where: { threadId } });
 }

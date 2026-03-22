@@ -62,7 +62,7 @@ export default async function AssetDetailPage({ params }: Props) {
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
   // Full depreciation schedule for the entire useful life
-  const fullSchedule = calculateDepreciation(
+  const fullSchedule = await calculateDepreciation(
     purchaseCost,
     residualValue,
     asset.usefulLifeMonths,

@@ -306,7 +306,7 @@ async function getPortfolioContext(): Promise<string> {
 async function getInventoryContext(): Promise<string> {
   const products = await prisma.digitalProduct.findMany({
     orderBy: { name: "asc" },
-    select: { productId: true, name: true, lifecycleStage: true, status: true, version: true },
+    select: { productId: true, name: true, lifecycleStage: true, lifecycleStatus: true, version: true },
     take: 30,
   });
 
@@ -320,7 +320,7 @@ async function getInventoryContext(): Promise<string> {
     `${products.length} products`,
     `By stage: ${[...byStage.entries()].map(([s, c]) => `${s}=${c}`).join(", ")}`,
     "",
-    ...products.map((p) => `- ${p.productId}: ${p.name} [${p.lifecycleStage}/${p.status}] v${p.version}`),
+    ...products.map((p) => `- ${p.productId}: ${p.name} [${p.lifecycleStage}/${p.lifecycleStatus}] v${p.version}`),
   ].join("\n");
 }
 
@@ -329,7 +329,7 @@ async function getInventoryContext(): Promise<string> {
 async function getEmployeeContext(): Promise<string> {
   const employees = await prisma.employeeProfile.findMany({
     orderBy: { displayName: "asc" },
-    select: { displayName: true, jobTitle: true, department: true },
+    select: { displayName: true, position: { select: { title: true } }, department: { select: { name: true } } },
     take: 30,
   });
 
@@ -337,7 +337,7 @@ async function getEmployeeContext(): Promise<string> {
     "\nPAGE DATA — Employees:",
     `${employees.length} employee profiles`,
     "",
-    ...employees.map((e) => `- ${e.displayName}: ${e.jobTitle ?? "no title"}, ${e.department ?? "no dept"}`),
+    ...employees.map((e) => `- ${e.displayName}: ${e.position?.title ?? "no title"}, ${e.department?.name ?? "no dept"}`),
   ].join("\n");
 }
 

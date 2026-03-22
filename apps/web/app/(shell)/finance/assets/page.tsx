@@ -46,8 +46,8 @@ export default async function AssetsPage({ searchParams }: Props) {
 
   const [assets, orgSettings] = await Promise.all([
     listAssets({
-      status: status ?? undefined,
-      category: category ?? undefined,
+      ...(status ? { status } : {}),
+      ...(category ? { category } : {}),
     }),
     getOrgSettings(),
   ]);

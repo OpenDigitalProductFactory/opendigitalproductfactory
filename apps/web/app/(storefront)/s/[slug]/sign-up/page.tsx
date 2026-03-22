@@ -12,7 +12,7 @@ export default async function StorefrontSignUpPage({
   return (
     <div style={{ paddingTop: 60, maxWidth: 400, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24 }}>Create an account</h1>
-      <SignUpForm orgSlug={slug} prefillEmail={prefillEmail} />
+      <SignUpForm orgSlug={slug} {...(prefillEmail ? { prefillEmail } : {})} />
     </div>
   );
 }

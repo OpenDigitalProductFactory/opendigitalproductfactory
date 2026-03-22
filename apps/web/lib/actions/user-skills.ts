@@ -23,7 +23,7 @@ export async function createUserSkill(input: {
 
   return prisma.userSkill.create({
     data: {
-      skillId: generateSkillId(),
+      skillId: await generateSkillId(),
       name: input.name,
       intent: input.intent,
       constraints: input.constraints ?? [],

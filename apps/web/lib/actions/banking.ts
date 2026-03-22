@@ -114,7 +114,7 @@ export async function importTransactions(
   for (const tx of parseResult.transactions) {
     const ruleMatch = applyBankRules(
       { description: tx.description, reference: tx.reference, amount: tx.amount },
-      rules,
+      rules.map((r) => ({ ...r, taxRate: r.taxRate ? Number(r.taxRate) : null })),
     );
 
     await prisma.bankTransaction.create({

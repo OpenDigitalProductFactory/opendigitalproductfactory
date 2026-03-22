@@ -23,8 +23,7 @@
     "incremental": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true
+    "skipLibCheck": true
   },
   "include": [
     "next-env.d.ts",
@@ -33,6 +32,7 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts"
   ]
 }

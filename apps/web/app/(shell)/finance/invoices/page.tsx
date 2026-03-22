@@ -31,7 +31,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
 
   const [invoices, statusCounts, orgSettings] = await Promise.all([
     prisma.invoice.findMany({
-      where: status ? { status } : undefined,
+      ...(status ? { where: { status } } : {}),
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

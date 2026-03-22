@@ -1,6 +1,5 @@
 // apps/web/app/(shell)/platform/integrations/page.tsx
 
-import { Suspense } from "react";
 import { queryMcpIntegrations, runMcpCatalogSyncIfDue } from "@/lib/actions/mcp-catalog";
 import { IntegrationCard } from "@/components/platform/IntegrationCard";
 import { IntegrationCatalogFilters } from "@/components/platform/IntegrationCatalogFilters";
@@ -15,9 +14,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const integrations = await queryMcpIntegrations({
     query: q,
-    category,
-    pricingModel: pricing,
-    archetypeId: archetype,
+    ...(category ? { category } : {}),
+    ...(pricing ? { pricingModel: pricing } : {}),
+    ...(archetype ? { archetypeId: archetype } : {}),
     limit: 60,
   });
 
@@ -44,9 +43,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </a>
       </div>
 
-      <Suspense fallback={null}>
-        <IntegrationCatalogFilters />
-      </Suspense>
+      <IntegrationCatalogFilters />
 
       {integrations.length === 0 ? (
         <p className="text-muted-foreground text-sm py-12 text-center">
