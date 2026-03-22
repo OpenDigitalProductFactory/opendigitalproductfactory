@@ -98,18 +98,25 @@ Write-Step "Creating .env file for Docker Compose"
 
 $envFile = Join-Path $InstallRoot ".env"
 if (-not (Test-Path $envFile)) {
+    # Generate real secrets for Docker Compose
+    $encKey = -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Maximum 256) })
+    $authBytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($authBytes)
+    $authSecret = [Convert]::ToBase64String($authBytes)
+
     @"
-# Docker Compose defaults  created by fresh-install.ps1
+# Docker Compose defaults -- created by fresh-install.ps1
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
 NEO4J_AUTH=neo4j/dpf_dev_password
-AUTH_SECRET=dev_secret_change_me
+AUTH_SECRET=$authSecret
+CREDENTIAL_ENCRYPTION_KEY=$encKey
 ADMIN_PASSWORD=changeme123
 "@ | Set-Content -Path $envFile -Encoding UTF8
-    Write-Ok "Created .env with default Docker credentials"
+    Write-Ok "Created .env with generated secrets"
 } else {
-    Write-Ok ".env already exists  skipping"
+    Write-Ok ".env already exists -- skipping"
 }
 
 Write-Host "========================================================" 

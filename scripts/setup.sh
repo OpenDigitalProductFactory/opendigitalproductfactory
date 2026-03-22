@@ -52,19 +52,32 @@ step "Setting up environment"
 
 if [ ! -f apps/web/.env.local ]; then
   cp .env.example apps/web/.env.local
-  # Generate a secure AUTH_SECRET
-  SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
-  sed -i "s|<generate with: openssl rand -base64 32>|$SECRET|" apps/web/.env.local
+  # Generate AUTH_SECRET
+  AUTH_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+  sed -i "s|<generate with: openssl rand -base64 32>|$AUTH_SECRET|" apps/web/.env.local
+  # Generate CREDENTIAL_ENCRYPTION_KEY
+  ENC_KEY=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+  sed -i "s|<generate with: openssl rand -hex 32>|$ENC_KEY|" apps/web/.env.local
   # Enable Docker internal URL for Ollama
   echo "OLLAMA_INTERNAL_URL=http://ollama:11434" >> apps/web/.env.local
-  ok "Created apps/web/.env.local with generated AUTH_SECRET"
+  ok "Created apps/web/.env.local with generated secrets"
 else
-  ok "apps/web/.env.local already exists — skipping"
+  ok "apps/web/.env.local already exists -- skipping"
 fi
 
 if [ ! -f packages/db/.env ]; then
   cp .env.example packages/db/.env
   ok "Created packages/db/.env"
+fi
+
+# Ensure root .env has real secrets for Docker Compose
+if [ ! -f .env ]; then
+  cp .env.docker.example .env
+  AUTH_SECRET=$(openssl rand -base64 32 2>/dev/null || python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())" 2>/dev/null)
+  ENC_KEY=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)
+  sed -i "s|<generate with: openssl rand -base64 32>|$AUTH_SECRET|" .env
+  sed -i "s|<generate with: openssl rand -hex 32>|$ENC_KEY|" .env
+  ok "Created root .env with generated secrets"
 fi
 
 # ── Databases ─────────────────────────────────────────────────────────────────

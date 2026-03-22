@@ -48,7 +48,7 @@ Write-Step "Setting up environment"
 
 if (-not (Test-Path "apps\web\.env.local")) {
     Copy-Item ".env.example" "apps\web\.env.local"
-    # Generate AUTH_SECRET using Python (usually available on Windows)
+    # Generate AUTH_SECRET
     $secret = ""
     if (Get-Command python -ErrorAction SilentlyContinue) {
         $secret = python -c "import secrets; print(secrets.token_hex(32))"
@@ -60,19 +60,37 @@ if (-not (Test-Path "apps\web\.env.local")) {
     if ($secret) {
         (Get-Content "apps\web\.env.local") -replace '<generate with: openssl rand -base64 32>', $secret |
             Set-Content "apps\web\.env.local"
-        Write-Ok "Created apps\web\.env.local with generated AUTH_SECRET"
-    } else {
-        Write-Warn "Created apps\web\.env.local  please set AUTH_SECRET manually"
     }
+    # Generate CREDENTIAL_ENCRYPTION_KEY
+    $encKey = -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Maximum 256) })
+    (Get-Content "apps\web\.env.local") -replace '<generate with: openssl rand -hex 32>', $encKey |
+        Set-Content "apps\web\.env.local"
     # Enable Docker internal URL for Ollama
     Add-Content -Path "apps\web\.env.local" -Value "OLLAMA_INTERNAL_URL=http://ollama:11434"
+    Write-Ok "Created apps\web\.env.local with generated secrets"
 } else {
-    Write-Ok "apps\web\.env.local already exists  skipping"
+    Write-Ok "apps\web\.env.local already exists -- skipping"
 }
 
 if (-not (Test-Path "packages\db\.env")) {
     Copy-Item ".env.example" "packages\db\.env"
     Write-Ok "Created packages\db\.env"
+}
+
+# Ensure root .env has real secrets for Docker Compose
+$rootEnv = ".env"
+if (-not (Test-Path $rootEnv)) {
+    Copy-Item ".env.docker.example" $rootEnv
+    # Generate secrets for Docker Compose env
+    $authBytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($authBytes)
+    $authSecret = [Convert]::ToBase64String($authBytes)
+    $encKey = -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Maximum 256) })
+    (Get-Content $rootEnv) -replace '<generate with: openssl rand -base64 32>', $authSecret |
+        Set-Content $rootEnv
+    (Get-Content $rootEnv) -replace '<generate with: openssl rand -hex 32>', $encKey |
+        Set-Content $rootEnv
+    Write-Ok "Created root .env with generated secrets"
 }
 
 # -- Databases -------------------------------------------------------------------
