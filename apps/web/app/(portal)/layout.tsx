@@ -1,5 +1,7 @@
 // apps/web/app/(portal)/layout.tsx
 // Customer portal shell — uses same branding pipeline as admin shell.
+export const dynamic = "force-dynamic";
+
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";

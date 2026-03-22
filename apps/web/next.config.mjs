@@ -3,6 +3,9 @@ const config = {
   output: "standalone",
   reactStrictMode: true,
   transpilePackages: ["@dpf/db"],
+  outputFileTracingExcludes: {
+    "**/*": ["./node_modules/@swc/core*", "./node_modules/esbuild*"],
+  },
 };
 
 export default config;

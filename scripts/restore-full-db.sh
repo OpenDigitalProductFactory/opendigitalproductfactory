@@ -24,18 +24,18 @@ DB_DIR="$PROJECT_ROOT/packages/db"
 
 echo "=== Step 1: Run Prisma migrations ==="
 cd "$DB_DIR"
-npx prisma migrate deploy
+pnpm --filter @dpf/db exec prisma migrate deploy
 
 echo ""
 echo "=== Step 2: Run Prisma seed ==="
-npx tsx src/seed.ts
+pnpm --filter @dpf/db exec tsx src/seed.ts
 
 echo ""
 echo "=== Step 3: Restore epics + backlog export ==="
-npx prisma db execute --file "$SCRIPT_DIR/db-export-epics-backlog.sql"
+pnpm --filter @dpf/db exec prisma db execute --file "$SCRIPT_DIR/db-export-epics-backlog.sql"
 echo ""
 echo "=== Step 4: Restore runtime state (providers, config, builds) ==="
-npx prisma db execute --file "$SCRIPT_DIR/db-export-runtime-state.sql"
+pnpm --filter @dpf/db exec prisma db execute --file "$SCRIPT_DIR/db-export-runtime-state.sql"
 echo ""
 echo "=== Step 5: Apply incremental epic scripts ==="
 # These are idempotent (upsert/ON CONFLICT patterns)
@@ -56,7 +56,7 @@ for sql_file in \
 ; do
   if [ -f "$sql_file" ]; then
     echo "  Applying $(basename "$sql_file")..."
-    npx prisma db execute --file "$sql_file" --schema prisma/schema.prisma || echo "  WARNING: $(basename "$sql_file") had errors (may be expected if already applied)"
+    pnpm --filter @dpf/db exec prisma db execute --file "$sql_file" --schema prisma/schema.prisma || echo "  WARNING: $(basename "$sql_file") had errors (may be expected if already applied)"
   fi
 done
 
