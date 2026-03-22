@@ -43,6 +43,19 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": "$tsc"
+    },
+    {
+      "label": "DPF: Publish Release",
+      "type": "shell",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "echo Enter version tag (e.g. v0.2.0): && set /p TAG= && git tag %TAG% && git push origin main && git push origin %TAG% && echo Published %TAG% to GHCR"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
     }
   ]
 }
