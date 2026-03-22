@@ -79,14 +79,45 @@ describe("getOperatingHours", () => {
     expect(result.isConfirmed).toBe(true);
   });
 
-  it("returns generic defaults when no profile exists", async () => {
+  it("returns archetype defaults when profile exists but unconfirmed", async () => {
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      businessHours: { monday: { open: "08:00", close: "18:00" } },
+      timezone: "UTC",
+      hoursConfirmedAt: null,
+    } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      archetypeId: "healthcare-wellness/veterinary-clinic",
+    } as never);
+
+    const result = await getOperatingHours();
+    expect(result.schedule.monday.open).toBe("08:00");
+    expect(result.schedule.monday.close).toBe("17:00");
+    expect(result.isConfirmed).toBe(false);
+  });
+
+  it("returns generic defaults when no profile and no archetype", async () => {
     vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null as never);
 
     const result = await getOperatingHours();
     expect(result.schedule.monday.enabled).toBe(true);
     expect(result.schedule.monday.open).toBe("09:00");
     expect(result.schedule.monday.close).toBe("17:00");
     expect(result.schedule.saturday.enabled).toBe(false);
+    expect(result.isConfirmed).toBe(false);
+  });
+
+  it("falls through to generic defaults when unconfirmed and no archetype", async () => {
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      businessHours: { monday: { open: "08:00", close: "18:00" } },
+      timezone: "Europe/London",
+      hoursConfirmedAt: null,
+    } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null as never);
+
+    const result = await getOperatingHours();
+    expect(result.schedule.monday.open).toBe("09:00");
+    expect(result.timezone).toBe("Europe/London");
     expect(result.isConfirmed).toBe(false);
   });
 });

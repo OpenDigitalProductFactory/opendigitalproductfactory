@@ -141,7 +141,7 @@ function deriveDeploymentWindows(
     if (!d.enabled) {
       allDayDays.push(i);
     } else {
-      const key = `${d.close}-${d.open}`;
+      const key = `${d.close}|${d.open}`;
       if (!overnightGroups.has(key)) overnightGroups.set(key, []);
       overnightGroups.get(key)!.push(i);
     }
@@ -151,7 +151,7 @@ function deriveDeploymentWindows(
   let idx = 0;
 
   for (const [key, days] of overnightGroups) {
-    const [startTime, endTime] = key.split("-");
+    const [startTime, endTime] = key.split("|");
     const suffix = idx === 0 ? "business-days" : `business-days-${idx}`;
     windows.push({
       businessProfileId: profileId,
@@ -400,13 +400,13 @@ export async function saveOperatingHours(input: {
       for (let i = 0; i < DAY_NAMES.length; i++) {
         const d = schedule[DAY_NAMES[i]];
         if (!d.enabled) continue;
-        const key = `${d.open}-${d.close}`;
+        const key = `${d.open}|${d.close}`;
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key)!.push(i);
       }
 
       const availabilityRows = Array.from(grouped.entries()).map(([key, days]) => {
-        const [startTime, endTime] = key.split("-");
+        const [startTime, endTime] = key.split("|");
         return {
           providerId: provider.id,
           days,
