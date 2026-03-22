@@ -39,7 +39,7 @@ describe("searchCountries", () => {
       { id: "c1", name: "Australia", iso2: "AU", iso3: "AUS", phoneCode: "+61" },
       { id: "c2", name: "Austria", iso2: "AT", iso3: "AUT", phoneCode: "+43" },
     ];
-    vi.mocked(prisma.country.findMany).mockResolvedValue(countries);
+    vi.mocked(prisma.country.findMany).mockResolvedValue(countries as never);
 
     const result = await searchCountries("aus");
 
@@ -75,7 +75,7 @@ describe("searchRegions", () => {
       { id: "r1", name: "New South Wales", code: "NSW" },
       { id: "r2", name: "New Zealand Region", code: null },
     ];
-    vi.mocked(prisma.region.findMany).mockResolvedValue(regions);
+    vi.mocked(prisma.region.findMany).mockResolvedValue(regions as never);
 
     const result = await searchRegions("country-1", "new");
 
@@ -108,7 +108,7 @@ describe("searchRegions", () => {
 describe("searchCities", () => {
   it("returns cities scoped to regionId", async () => {
     const cities = [{ id: "ci1", name: "Sydney" }];
-    vi.mocked(prisma.city.findMany).mockResolvedValue(cities);
+    vi.mocked(prisma.city.findMany).mockResolvedValue(cities as never);
 
     const result = await searchCities("region-1", "syd");
 
@@ -140,7 +140,7 @@ describe("createRegion", () => {
     const existing = [
       { id: "r1", name: "Queensland", code: "QLD" },
     ];
-    vi.mocked(prisma.region.findMany).mockResolvedValue(existing);
+    vi.mocked(prisma.region.findMany).mockResolvedValue(existing as never);
 
     const result = await createRegion("country-1", "Queens", "QLD");
 
@@ -155,7 +155,7 @@ describe("createRegion", () => {
       id: "r-new",
       name: "Tasmania",
       code: "TAS",
-    });
+    } as never);
 
     const result = await createRegion("country-1", "Tasmania", "TAS");
 
@@ -187,7 +187,7 @@ describe("createRegion", () => {
 describe("createCity", () => {
   it("returns suggestions when near-match exists", async () => {
     const existing = [{ id: "ci1", name: "Melbourne" }];
-    vi.mocked(prisma.city.findMany).mockResolvedValue(existing);
+    vi.mocked(prisma.city.findMany).mockResolvedValue(existing as never);
 
     const result = await createCity("region-1", "Melb");
 
@@ -201,7 +201,7 @@ describe("createCity", () => {
     vi.mocked(prisma.city.create).mockResolvedValue({
       id: "ci-new",
       name: "Hobart",
-    });
+    } as never);
 
     const result = await createCity("region-1", "Hobart");
 
@@ -234,7 +234,7 @@ describe("forceCreateRegion", () => {
       id: "r-force",
       name: "Queensland",
       code: "QLD",
-    });
+    } as never);
 
     const result = await forceCreateRegion("country-1", "Queensland", "QLD");
 
@@ -254,7 +254,7 @@ describe("forceCreateCity", () => {
     vi.mocked(prisma.city.create).mockResolvedValue({
       id: "ci-force",
       name: "Melbourne",
-    });
+    } as never);
 
     const result = await forceCreateCity("region-1", "Melbourne");
 

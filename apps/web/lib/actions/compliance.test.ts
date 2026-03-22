@@ -259,7 +259,7 @@ describe("evidence immutability", () => {
       },
     };
     vi.mocked(prisma.$transaction).mockImplementation(
-      async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+      (async (fn: unknown) => (fn as (tx: typeof mockTx) => Promise<unknown>)(mockTx)) as never,
     );
 
     const result = await supersedeEvidence("evd-old", {
@@ -318,7 +318,7 @@ describe("onboardRegulation", () => {
       controlObligationLink: { create: vi.fn() },
     };
     vi.mocked(prisma.$transaction).mockImplementation(
-      async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+      (async (fn: unknown) => (fn as (tx: typeof mockTx) => Promise<unknown>)(mockTx)) as never,
     );
 
     const result = await onboardRegulation({
@@ -359,7 +359,7 @@ describe("onboardRegulation", () => {
       },
     };
     vi.mocked(prisma.$transaction).mockImplementation(
-      async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+      (async (fn: unknown) => (fn as (tx: typeof mockTx) => Promise<unknown>)(mockTx)) as never,
     );
 
     const result = await onboardRegulation({

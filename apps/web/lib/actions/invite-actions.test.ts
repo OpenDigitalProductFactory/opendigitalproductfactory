@@ -11,7 +11,7 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 
 describe("generateInviteCode", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
   it("creates an invite with the account prefix format", async () => {
     (prisma.customerAccount.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "a-1", name: "Acme Corp" });
     (prisma.accountInvite.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "inv-1", code: "ACME-AB12" });
@@ -22,7 +22,7 @@ describe("generateInviteCode", () => {
 });
 
 describe("validateInviteCode", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
   it("returns account info for valid unused code", async () => {
     (prisma.accountInvite.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "inv-1", code: "ACME-AB12", accountId: "a-1", usedAt: null, expiresAt: null,

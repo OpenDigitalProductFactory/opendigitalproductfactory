@@ -287,14 +287,14 @@ describe("linkWorkLocationAddress", () => {
   it("creates address and links to work location", async () => {
     mockAdmin();
     vi.mocked(prisma.workLocation.findUnique).mockResolvedValue({ id: "loc1" } as never);
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: unknown) => {
       const tx = {
         address: { create: vi.fn().mockResolvedValue({ id: "addr1" }) },
         workLocation: { update: vi.fn().mockResolvedValue({}) },
       };
-      await (fn as (tx: typeof tx) => Promise<void>)(tx);
+      await (fn as (tx: Record<string, unknown>) => Promise<void>)(tx);
       return undefined;
-    });
+    }) as never);
 
     const result = await linkWorkLocationAddress("loc1", {
       label: "headquarters",
@@ -373,12 +373,12 @@ describe("unlinkWorkLocationAddress", () => {
     vi.mocked(prisma.workLocation.findUnique).mockResolvedValue({
       id: "loc1", addressId: "addr1",
     } as never);
-    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: unknown) => {
       const tx = {
         workLocation: { update: vi.fn().mockResolvedValue({}) },
         address: { update: vi.fn().mockResolvedValue({}) },
       };
-      await (fn as (tx: typeof tx) => Promise<void>)(tx);
+      await (fn as (tx: Record<string, unknown>) => Promise<void>)(tx);
       // Verify the calls happened with correct arguments
       expect(tx.workLocation.update).toHaveBeenCalledWith({
         where: { id: "loc1" },
@@ -389,7 +389,7 @@ describe("unlinkWorkLocationAddress", () => {
         data: { status: "inactive" },
       });
       return undefined;
-    });
+    }) as never);
 
     const result = await unlinkWorkLocationAddress("loc1");
 

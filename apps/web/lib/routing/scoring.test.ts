@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { EndpointManifest, TaskRequirementContract } from "./types";
+import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { computeFitness, normalizeWeights } from "./scoring";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -37,6 +38,17 @@ const BASE_ENDPOINT: EndpointManifest = {
   profileSource: "seed",
   profileConfidence: "medium",
   retiredAt: null,
+  modelClass: "chat",
+  modelFamily: null,
+  inputModalities: ["text"],
+  outputModalities: ["text"],
+  capabilities: EMPTY_CAPABILITIES,
+  pricing: EMPTY_PRICING,
+  supportedParameters: [],
+  deprecationDate: null,
+  metadataSource: "curated",
+  metadataConfidence: "medium",
+  perRequestLimits: null,
 };
 
 const sonnet: EndpointManifest = {

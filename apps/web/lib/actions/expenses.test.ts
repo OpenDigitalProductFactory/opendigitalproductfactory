@@ -84,6 +84,8 @@ const validInput = {
       description: "Train to London",
       amount: 45.5,
       currency: "GBP",
+      taxReclaimable: false,
+      taxAmount: 0,
     },
     {
       date: "2026-03-02",
@@ -91,6 +93,8 @@ const validInput = {
       description: "Team lunch",
       amount: 32.0,
       currency: "GBP",
+      taxReclaimable: false,
+      taxAmount: 0,
     },
   ],
 };
