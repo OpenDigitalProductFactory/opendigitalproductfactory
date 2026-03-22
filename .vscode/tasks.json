@@ -45,6 +45,38 @@
       "problemMatcher": "$tsc"
     },
     {
+      "label": "DPF: Start",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose up -d"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "DPF: Stop",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose down"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "DPF: Restart",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose down && docker compose up -d"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "DPF: Logs",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose logs -f --tail 50"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
       "label": "DPF: Publish Release",
       "type": "shell",
       "command": "cmd",
