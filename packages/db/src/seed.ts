@@ -1360,14 +1360,14 @@ async function seedChatGPTModels(): Promise<void> {
 
   const models = [
     {
-      modelId: "codex-mini-latest",
-      friendlyName: "Codex Mini (Chat)",
-      summary: "OpenAI Codex model via ChatGPT subscription — general conversation and code",
-      bestFor: ["conversation", "coding", "general-purpose"] as string[],
+      modelId: "gpt-5.4",
+      friendlyName: "GPT-5.4 (ChatGPT Subscription)",
+      summary: "OpenAI GPT-5.4 via ChatGPT subscription — conversation, coding, reasoning",
+      bestFor: ["conversation", "coding", "general-purpose", "reasoning"] as string[],
       avoidFor: ["local-only-required"] as string[],
-      reasoning: 70, codegen: 90, toolFidelity: 85,
-      instructionFollowingScore: 80, structuredOutputScore: 70,
-      conversational: 70, contextRetention: 60,
+      reasoning: 85, codegen: 90, toolFidelity: 85,
+      instructionFollowingScore: 85, structuredOutputScore: 80,
+      conversational: 80, contextRetention: 75,
     },
   ];
 

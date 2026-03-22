@@ -301,14 +301,18 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   try {
     let res: Response;
 
-    // Agent providers (e.g. Codex) with OAuth subscription: the token is valid but can't
-    // use standard API endpoints like /v1/models. Verify credential status only.
-    if (provider.authMethod === "oauth2_authorization_code" && provider.category === "agent") {
+    // Agent providers (e.g. Codex) and ChatGPT subscription: the token can't hit
+    // standard API endpoints like /v1/models. Verify credential status only.
+    if (provider.authMethod === "oauth2_authorization_code" &&
+        (provider.category === "agent" || providerId === "chatgpt")) {
       const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
       if (cred?.status === "ok" && cred.cachedToken) {
+        const clearance = providerId === "chatgpt"
+          ? ["public", "internal", "confidential"]
+          : ["public", "internal"];
         await prisma.modelProvider.update({
           where: { providerId },
-          data: { status: "active", sensitivityClearance: ["public", "internal"] },
+          data: { status: "active", sensitivityClearance: clearance },
         });
         return { ok: true, message: "Connected via OAuth — token valid" };
       }
