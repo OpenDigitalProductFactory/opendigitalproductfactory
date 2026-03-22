@@ -172,6 +172,47 @@ pnpm --filter web dev      # http://localhost:3000
 
 Login: `admin@dpf.local` / `changeme123`
 
+### Dev Container Setup (VS Code)
+
+For developers who want a fully containerized development environment. Everything runs inside Docker -- no local Node.js or pnpm required.
+
+#### Prerequisites
+
+| Tool | Version |
+|------|---------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 4.40+ |
+| [VS Code](https://code.visualstudio.com/) | Latest |
+| [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) | Latest |
+
+#### First-Time Setup
+
+1. Clone the repo and ensure the production stack is running (`docker compose up -d`)
+2. Open the repo folder in VS Code
+3. Press `F1` and select **Dev Containers: Reopen in Container**
+4. Wait for the dev databases to start, migrations to run, and sanitized data to populate
+
+The dev server starts automatically on port 3001. Open `http://localhost:3001` in your browser. Production remains on port 3000.
+
+Login: `admin@dpf.local` / `changeme123`
+
+#### What the Dev Container Provides
+
+- Isolated PostgreSQL, Neo4j, and Qdrant databases (separate from production)
+- Sanitized copy of production data (PII obfuscated, credentials replaced)
+- Shared LLM inference via Docker Model Runner (no duplication)
+- Pre-installed extensions: ESLint, Prisma, Tailwind CSS, Prettier
+- Hot-reload Next.js dev server
+
+#### For Non-Technical Users
+
+The dev environment is also accessible from the production portal's Build Studio. AI co-workers can develop and test features against the dev environment without VS Code.
+
+#### Important Notes
+
+- Build Studio is read-only in the dev environment (builds are managed from production)
+- Changes made in dev are promoted to production through a governed process (coming soon)
+- The sanitized clone runs on first startup -- production must be running as the data source
+
 ---
 
 ## What's Inside
