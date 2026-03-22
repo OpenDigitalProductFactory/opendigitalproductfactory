@@ -169,12 +169,9 @@ export async function runSanitizedClone(): Promise<void> {
       }
 
       if (sensitivity === "public" || sensitivity === "internal") {
-        // Copy verbatim
+        // Copy verbatim using pg_dump — handles all column types reliably
         console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-        const rows: Array<Record<string, unknown>> = await prod.$queryRawUnsafe(
-          `SELECT * FROM "${tablename}"`,
-        );
-        await insertRows(dev, tablename, rows);
+        await copyTableVerbatim(tablename, prodUrl, devUrl);
       } else if (sensitivity === "confidential") {
         console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
         const rows: Array<Record<string, unknown>> = await prod.$queryRawUnsafe(
@@ -213,9 +210,27 @@ export async function runSanitizedClone(): Promise<void> {
 }
 
 /**
- * Insert rows into a table using raw SQL.
- * FK constraints are disabled globally via session_replication_role=replica
- * before the clone starts, so no per-table trigger toggling is needed.
+ * Copy all rows from a table in production to dev using pg_dump piped to psql.
+ * This is the most reliable approach — handles JSON, arrays, and all column types
+ * without needing to serialize/deserialize through Prisma.
+ */
+async function copyTableVerbatim(
+  tableName: string,
+  prodUrl: string,
+  devUrl: string,
+): Promise<void> {
+  const { exec: execCb } = await import("child_process");
+  const { promisify } = await import("util");
+  const exec = promisify(execCb);
+  await exec(
+    `pg_dump "${prodUrl}" --data-only --table='"${tableName}"' --no-owner --no-privileges | psql "${devUrl}"`,
+  );
+}
+
+/**
+ * Insert rows into a table using raw SQL with proper type casting.
+ * Used for obfuscated rows where we've modified values in JS.
+ * FK constraints are disabled globally via session_replication_role=replica.
  */
 async function insertRows(
   client: PrismaClient,
@@ -226,25 +241,36 @@ async function insertRows(
 
   for (const row of rows) {
     const columns = Object.keys(row);
-    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-    const values = columns.map((col) => {
+    const values: unknown[] = [];
+    const castPlaceholders: string[] = [];
+    let paramIdx = 1;
+
+    for (const col of columns) {
       const v = row[col];
-      if (v === null || v === undefined) return v;
-      // Prisma raw queries can't pass JS objects for JSON columns — serialize them
-      // Arrays are also problematic — PostgreSQL needs them as typed array literals
-      if (typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
+      if (v === null || v === undefined) {
+        castPlaceholders.push(`$${paramIdx}`);
+        values.push(null);
+      } else if (typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
         if (Array.isArray(v)) {
-          // PostgreSQL array literal: {"val1","val2"}
-          return `{${v.map((item: unknown) => typeof item === "string" ? `"${String(item).replace(/"/g, '\\"')}"` : String(item)).join(",")}}`;
+          // Pass arrays as JSON text and cast to the column's array type via SQL
+          castPlaceholders.push(`$${paramIdx}::text[]`);
+          values.push(`{${v.map((item: unknown) => `"${String(item).replace(/"/g, '\\"')}"`).join(",")}}`);
+        } else {
+          // JSON/JSONB columns — pass as text with explicit cast
+          castPlaceholders.push(`$${paramIdx}::jsonb`);
+          values.push(JSON.stringify(v));
         }
-        return JSON.stringify(v);
+      } else {
+        castPlaceholders.push(`$${paramIdx}`);
+        values.push(v);
       }
-      return v;
-    });
+      paramIdx++;
+    }
+
     const columnList = columns.map((c) => `"${c}"`).join(", ");
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "${tableName}" (${columnList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+      `INSERT INTO "${tableName}" (${columnList}) VALUES (${castPlaceholders.join(", ")}) ON CONFLICT DO NOTHING`,
       ...values,
     );
   }
