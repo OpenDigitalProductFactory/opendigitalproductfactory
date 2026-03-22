@@ -307,9 +307,9 @@ const INDUSTRY_DEFAULTS: Record<string, WeeklySchedule> = {
   },
 };
 
-export function getDefaultHoursForArchetype(
+export async function getDefaultHoursForArchetype(
   archetypeCategory?: string | null
-): WeeklySchedule {
+): Promise<WeeklySchedule> {
   if (archetypeCategory && INDUSTRY_DEFAULTS[archetypeCategory]) {
     return { ...INDUSTRY_DEFAULTS[archetypeCategory] };
   }
