@@ -4,7 +4,7 @@
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import { resolve } from "path";
-import { isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
+import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
 const exec = promisify(execCb);
 const PROJECT_ROOT = resolve(process.cwd(), "..", "..");

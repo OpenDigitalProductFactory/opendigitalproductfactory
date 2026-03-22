@@ -177,8 +177,8 @@ export async function getProviderPriority(task: string = "conversation"): Promis
         for (let mi = 0; mi < missing.length; mi++) {
           const p = missing[mi]!;
           const bestModel = await prisma.modelProfile.findFirst({
-            where: { providerId: p.providerId, status: "active" },
-            orderBy: { updatedAt: "desc" },
+            where: { providerId: p.providerId },
+            orderBy: { generatedAt: "desc" },
             select: { modelId: true },
           });
           if (bestModel) {

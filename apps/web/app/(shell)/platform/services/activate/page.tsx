@@ -53,10 +53,10 @@ export default async function ActivateServicePage({
       </p>
 
       <ServiceActivationForm
-        integrationId={integrationId}
-        prefillName={prefillName}
-        prefillCategory={prefillCategory}
-        prefillServerId={prefillServerId}
+        {...(integrationId ? { integrationId } : {})}
+        {...(prefillName ? { prefillName } : {})}
+        {...(prefillCategory ? { prefillCategory } : {})}
+        {...(prefillServerId ? { prefillServerId } : {})}
       />
     </div>
   );

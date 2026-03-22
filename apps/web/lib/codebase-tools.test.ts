@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPathAllowed, resolveSafePath } from "./codebase-tools";
+import { isPathAllowedSync as isPathAllowed, resolveSafePath } from "./codebase-tools";
 
 describe("isPathAllowed", () => {
   it("allows source files", () => {
@@ -48,16 +48,16 @@ describe("isPathAllowed", () => {
 });
 
 describe("resolveSafePath", () => {
-  it("returns resolved path for allowed files", () => {
-    const result = resolveSafePath("apps/web/lib/mcp-tools.ts");
+  it("returns resolved path for allowed files", async () => {
+    const result = await resolveSafePath("apps/web/lib/mcp-tools.ts");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.path).toContain("mcp-tools.ts");
     }
   });
 
-  it("returns error for blocked files", () => {
-    const result = resolveSafePath(".env");
+  it("returns error for blocked files", async () => {
+    const result = await resolveSafePath(".env");
     expect(result.ok).toBe(false);
   });
 });

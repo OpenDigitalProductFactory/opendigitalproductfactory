@@ -22,7 +22,7 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
   const { status } = await searchParams;
 
   const [claims, orgSettings] = await Promise.all([
-    listExpenseClaims({ status: status ?? undefined }),
+    listExpenseClaims({ ...(status ? { status } : {}) }),
     getOrgSettings(),
   ]);
   const sym = getCurrencySymbol(orgSettings.baseCurrency);

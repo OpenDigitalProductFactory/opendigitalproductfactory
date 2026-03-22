@@ -27,14 +27,14 @@ export async function GET(request: Request) {
         threadId: thread.id,
         status: "proposed",
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { proposedAt: "desc" },
       select: {
         id: true,
         proposalId: true,
         actionType: true,
         parameters: true,
         status: true,
-        createdAt: true,
+        proposedAt: true,
         message: {
           select: {
             id: true,
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     return apiSuccess({
       proposals: proposals.map((p) => ({
         ...p,
-        createdAt: p.createdAt.toISOString(),
+        proposedAt: p.proposedAt.toISOString(),
         message: p.message
           ? {
               ...p.message,

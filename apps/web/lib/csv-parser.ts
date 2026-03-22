@@ -90,7 +90,7 @@ export function parseCSV(csvText: string): ParseResult {
   const parsed = Papa.parse<Record<string, string>>(csvText, {
     header: true,
     skipEmptyLines: true,
-    trimHeaders: true,
+    transformHeader: (h) => h.trim(),
   });
 
   const headers: string[] = parsed.meta.fields ?? [];

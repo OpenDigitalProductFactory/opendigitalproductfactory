@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createExpenseClaim, submitExpenseClaim } from "@/lib/actions/expenses";
-import { EXPENSE_CATEGORIES } from "@/lib/expense-validation";
+import { EXPENSE_CATEGORIES, createExpenseClaimSchema } from "@/lib/expense-validation";
 
 const inputClasses =
   "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
@@ -62,17 +62,17 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
     n.toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
   function buildInput() {
-    return {
+    return createExpenseClaimSchema.parse({
       title,
       notes: notes || undefined,
       items: items.map((item) => ({
         date: item.date,
-        category: item.category as typeof EXPENSE_CATEGORIES[number],
+        category: item.category,
         description: item.description,
         amount: parseFloat(item.amount) || 0,
         receiptUrl: item.receiptUrl || undefined,
       })),
-    };
+    });
   }
 
   async function handleSaveDraft(e: React.FormEvent) {

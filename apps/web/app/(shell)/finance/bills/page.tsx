@@ -22,8 +22,8 @@ export default async function BillsPage({ searchParams }: Props) {
 
   const [bills, orgSettings] = await Promise.all([
     listBills({
-      status: status ?? undefined,
-      supplierId: supplierId ?? undefined,
+      ...(status ? { status } : {}),
+      ...(supplierId ? { supplierId } : {}),
     }),
     getOrgSettings(),
   ]);

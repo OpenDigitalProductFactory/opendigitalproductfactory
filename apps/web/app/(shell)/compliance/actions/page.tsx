@@ -12,8 +12,7 @@ export default async function ActionsPage({ searchParams }: Props) {
     ...(sp.sourceType && { sourceType: sp.sourceType }),
     ...(sp.overdue === "yes" && { overdue: true as const }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
-  const actions = await listCorrectiveActions(hasFilters ? filters : undefined);
+  const actions = await listCorrectiveActions(filters);
 
   const now = new Date();
 
@@ -56,7 +55,7 @@ export default async function ActionsPage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/actions"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

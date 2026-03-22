@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -203,10 +203,10 @@ export async function createBusinessProfile(input: {
       profileKey: input.profileKey,
       name: input.name,
       description: input.description ?? null,
-      businessHours: input.businessHours,
+      businessHours: input.businessHours as Prisma.InputJsonValue,
       timezone: input.timezone ?? "UTC",
       hasStorefront: input.hasStorefront ?? false,
-      lowTrafficWindows: input.lowTrafficWindows ?? undefined,
+      ...(input.lowTrafficWindows ? { lowTrafficWindows: input.lowTrafficWindows as Prisma.InputJsonValue } : {}),
     },
   });
 

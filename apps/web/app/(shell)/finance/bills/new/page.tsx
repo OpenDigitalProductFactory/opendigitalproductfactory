@@ -44,9 +44,14 @@ export default async function NewBillPage({ searchParams }: Props) {
             id: po.id,
             poNumber: po.poNumber,
             supplierId: po.supplierId,
-            lineItems: po.lineItems,
+            lineItems: po.lineItems.map((li) => ({
+              description: li.description,
+              quantity: Number(li.quantity),
+              unitPrice: Number(li.unitPrice),
+              taxRate: Number(li.taxRate),
+            })),
           }))}
-          defaultSupplierId={supplierId}
+          {...(supplierId ? { defaultSupplierId: supplierId } : {})}
           defaultCurrency={orgSettings.baseCurrency}
         />
       </div>

@@ -34,7 +34,7 @@ function extractAudioData(request: AdapterRequest): { data: string; mimeType: st
         "type" in part &&
         (part as { type: string }).type === "audio"
       ) {
-        const audioPart = part as AudioContentPart;
+        const audioPart = part as unknown as AudioContentPart;
         return {
           data: audioPart.data,
           mimeType: audioPart.mimeType ?? "audio/mp3",

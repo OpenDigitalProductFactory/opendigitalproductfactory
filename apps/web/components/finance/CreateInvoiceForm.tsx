@@ -33,7 +33,7 @@ function round2(n: number): number {
 function getDefaultDueDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().split("T")[0];
+  return d.toISOString().split("T")[0]!;
 }
 
 export function CreateInvoiceForm({ customers }: Props) {
@@ -121,6 +121,7 @@ export function CreateInvoiceForm({ customers }: Props) {
     try {
       const result = await createInvoice({
         accountId: selectedAccountId,
+        type: "standard",
         dueDate,
         currency,
         paymentTerms: paymentTerms || undefined,
@@ -129,6 +130,7 @@ export function CreateInvoiceForm({ customers }: Props) {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          discountPercent: 0,
           taxRate: item.taxRate,
         })),
       });

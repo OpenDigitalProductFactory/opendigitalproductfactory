@@ -133,7 +133,7 @@ async function runScenario(
       };
     }
 
-    const toolCalls = (result as Record<string, unknown>).toolCalls as unknown[] | undefined;
+    const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
 
     // Check programmatic assertions
     const assertionResults = checkScenarioAssertions(result.content, toolCalls, scenario.assertions);

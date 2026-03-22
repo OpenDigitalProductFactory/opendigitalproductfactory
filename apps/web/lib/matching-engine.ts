@@ -2,7 +2,7 @@ export type MatchCandidate = {
   paymentId: string;
   paymentRef: string;
   amount: number;
-  date: Date;
+  date: Date | null;
   confidence: number; // 0-100
   matchReasons: string[];
 };
@@ -18,7 +18,7 @@ type Payment = {
   id: string;
   paymentRef: string;
   amount: number;
-  receivedAt: Date;
+  receivedAt: Date | null;
   counterpartyId: string | null;
   reference: string | null;
 };
@@ -27,18 +27,18 @@ type BankRule = {
   matchField: string;
   matchType: string;
   matchValue: string;
-  accountCode?: string;
-  category?: string;
-  taxRate?: number;
-  description?: string;
+  accountCode?: string | null;
+  category?: string | null;
+  taxRate?: number | null;
+  description?: string | null;
   isActive: boolean;
 };
 
 type RuleMatch = {
-  accountCode?: string;
-  category?: string;
-  taxRate?: number;
-  description?: string;
+  accountCode?: string | null;
+  category?: string | null;
+  taxRate?: number | null;
+  description?: string | null;
 };
 
 /**
@@ -85,7 +85,7 @@ export function findMatches(transaction: Transaction, payments: Payment[]): Matc
     }
 
     // Date scoring
-    const days = daysBetween(transaction.date, payment.receivedAt);
+    const days = payment.receivedAt ? daysBetween(transaction.date, payment.receivedAt) : Infinity;
     if (days <= 3) {
       confidence += 25;
       matchReasons.push(`date within ${Math.round(days)} day(s)`);

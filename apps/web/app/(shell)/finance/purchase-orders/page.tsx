@@ -21,8 +21,8 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
 
   const [orders, orgSettings] = await Promise.all([
     listPurchaseOrders({
-      status: status ?? undefined,
-      supplierId: supplierId ?? undefined,
+      ...(status ? { status } : {}),
+      ...(supplierId ? { supplierId } : {}),
     }),
     getOrgSettings(),
   ]);

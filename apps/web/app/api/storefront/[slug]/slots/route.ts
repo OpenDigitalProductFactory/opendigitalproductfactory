@@ -26,8 +26,8 @@ export async function GET(
 
   try {
     const result = await computeAvailableSlots(itemId, date, {
-      providerId,
-      holderToken,
+      ...(providerId ? { providerId } : {}),
+      ...(holderToken ? { holderToken } : {}),
     });
     return NextResponse.json(result);
   } catch (err) {

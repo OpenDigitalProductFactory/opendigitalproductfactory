@@ -14,7 +14,7 @@
  * calling code invokes pollAsyncOperation() periodically while waiting.
  */
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import {
   getDecryptedCredential,
@@ -79,12 +79,12 @@ export async function createAsyncOperation(params: {
       modelId: params.modelId,
       operationId: params.operationId,
       contractFamily: params.contractFamily,
-      requestContext: params.requestContext,
+      requestContext: params.requestContext as Prisma.InputJsonValue,
       status: "running",
       startedAt: new Date(),
       expiresAt: new Date(Date.now() + expiryMs),
       threadId: params.threadId,
-      callerContext: params.callerContext ?? undefined,
+      ...(params.callerContext ? { callerContext: params.callerContext as Prisma.InputJsonValue } : {}),
     },
   });
 
@@ -152,7 +152,7 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
           progressPct: 100,
           progressMessage: "Complete",
           resultText: pollResult.text,
-          resultData: pollResult.raw,
+          ...(pollResult.raw ? { resultData: pollResult.raw as Prisma.InputJsonValue } : {}),
         },
       });
       if (op.threadId) {

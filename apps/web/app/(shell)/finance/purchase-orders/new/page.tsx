@@ -42,7 +42,7 @@ export default async function NewPOPage({ searchParams }: Props) {
             name: s.name,
             defaultCurrency: s.defaultCurrency,
           }))}
-          defaultSupplierId={supplierId}
+          {...(supplierId ? { defaultSupplierId: supplierId } : {})}
           defaultCurrency={orgSettings.baseCurrency}
         />
       </div>

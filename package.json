@@ -13,5 +13,10 @@
     "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
     "test:endpoints": "tsx scripts/test-endpoints.ts"
   },
-  "engines": { "node": ">=20", "pnpm": ">=9" }
+  "engines": { "node": ">=20", "pnpm": ">=9" },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19"
+    }
+  }
 }

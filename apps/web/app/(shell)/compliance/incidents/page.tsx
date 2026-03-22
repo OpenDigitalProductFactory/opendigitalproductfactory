@@ -20,8 +20,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
     ...(sp.regulatoryNotifiable === "yes" && { regulatoryNotifiable: true as const }),
     ...(sp.regulatoryNotifiable === "no" && { regulatoryNotifiable: false as const }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
-  const incidents = await listIncidents(hasFilters ? filters : undefined);
+  const incidents = await listIncidents(filters);
 
   return (
     <div>
@@ -63,7 +62,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/incidents"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

@@ -46,7 +46,7 @@ export function getExclusionReasonV2(
 
   // EP-INF-009c: Model class filter — exact match when requiredModelClass is set,
   // otherwise default to chat/reasoning only (preserves pre-009c behavior).
-  const modelClass = (ep as Record<string, unknown>).modelClass ?? "chat";
+  const modelClass = (ep as unknown as Record<string, unknown>).modelClass ?? "chat";
   if (contract.requiredModelClass) {
     if (modelClass !== contract.requiredModelClass) {
       return `modelClass "${modelClass}" does not match required "${contract.requiredModelClass}"`;

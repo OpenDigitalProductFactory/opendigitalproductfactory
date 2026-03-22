@@ -65,7 +65,7 @@ export async function convertAmount(
   to: string,
 ): Promise<{ convertedAmount: number; rateUsed: number }> {
   const rateUsed = await getExchangeRate(from, to);
-  const convertedAmount = convertAmountSync(amount, rateUsed);
+  const convertedAmount = await convertAmountSync(amount, rateUsed);
   return { convertedAmount, rateUsed };
 }
 

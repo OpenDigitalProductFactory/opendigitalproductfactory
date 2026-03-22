@@ -18,8 +18,7 @@ export default async function AuditsPage({ searchParams }: Props) {
     ...(sp.auditType && { auditType: sp.auditType }),
     ...(sp.status && { status: sp.status }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
-  const audits = await listAudits(hasFilters ? filters : undefined);
+  const audits = await listAudits(filters);
 
   return (
     <div>
@@ -54,7 +53,7 @@ export default async function AuditsPage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/audits"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

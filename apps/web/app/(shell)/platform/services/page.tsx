@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export default async function ServicesPage() {
   const [activeServers, unconfigured] = await Promise.all([
-    queryMcpServers({ status: undefined }),
+    queryMcpServers({}),
     queryMcpServers({ status: "unconfigured" }),
   ]);
 

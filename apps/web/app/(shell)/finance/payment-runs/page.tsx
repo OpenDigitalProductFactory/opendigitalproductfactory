@@ -91,7 +91,7 @@ export default async function PaymentRunsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        {new Date(run.receivedAt).toLocaleDateString("en-GB")}
+                        {run.receivedAt ? new Date(run.receivedAt).toLocaleDateString("en-GB") : "—"}
                       </td>
                       <td className="px-4 py-2.5">
                         <span

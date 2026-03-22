@@ -20,9 +20,8 @@ export default async function SubmissionsPage({ searchParams }: Props) {
     ...(sp.status && { status: sp.status }),
     ...(sp.submissionType && { submissionType: sp.submissionType }),
   };
-  const hasFilters = Object.keys(filters).length > 0;
   const [submissions, regulations] = await Promise.all([
-    listSubmissions(hasFilters ? filters : undefined),
+    listSubmissions(filters),
     prisma.regulation.findMany({ where: { status: "active" }, select: { id: true, shortName: true }, orderBy: { shortName: "asc" } }),
   ]);
 
@@ -61,7 +60,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
           Filter
         </button>
 
-        {hasFilters && (
+        {Object.keys(filters).length > 0 && (
           <Link href="/compliance/submissions"
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
             Clear

@@ -11,9 +11,7 @@ export default async function PaymentsPage({ searchParams }: Props) {
 
   const [payments, orgSettings] = await Promise.all([
     prisma.payment.findMany({
-      where: direction
-        ? { direction: direction.toLowerCase() }
-        : undefined,
+      ...(direction ? { where: { direction: direction.toLowerCase() } } : {}),
       orderBy: { createdAt: "desc" },
       include: {
         allocations: {

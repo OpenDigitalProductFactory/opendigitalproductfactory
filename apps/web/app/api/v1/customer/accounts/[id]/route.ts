@@ -73,12 +73,15 @@ export async function PATCH(
     }
 
     const { name, ...rest } = parsed.data;
+    const defined = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => v !== undefined),
+    );
 
     const updated = await prisma.customerAccount.update({
       where: { id },
       data: {
-        ...(name !== undefined && { name: name.trim() }),
-        ...rest,
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...defined,
       },
       include: { contacts: true },
     });

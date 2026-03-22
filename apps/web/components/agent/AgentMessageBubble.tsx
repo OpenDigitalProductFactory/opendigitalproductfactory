@@ -1,8 +1,8 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import type { Components } from "react-markdown";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
+import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
 
 type Props = {
@@ -58,27 +58,28 @@ function formatProposalParams(
   });
 }
 
-const MARKDOWN_COMPONENTS: Components = {
-  p: ({ children }) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
-  ul: ({ children }) => <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ul>,
-  ol: ({ children }) => <ol style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ol>,
-  li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
-  strong: ({ children }) => <strong style={{ fontWeight: 700, color: "var(--dpf-text)" }}>{children}</strong>,
-  em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
-  h1: ({ children }) => (
+type C = { children?: ReactNode };
+
+const MARKDOWN_COMPONENTS = {
+  p: ({ children }: C) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
+  ul: ({ children }: C) => <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ul>,
+  ol: ({ children }: C) => <ol style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ol>,
+  li: ({ children }: C) => <li style={{ marginBottom: 4 }}>{children}</li>,
+  strong: ({ children }: C) => <strong style={{ fontWeight: 700, color: "var(--dpf-text)" }}>{children}</strong>,
+  em: ({ children }: C) => <em style={{ fontStyle: "italic" }}>{children}</em>,
+  h1: ({ children }: C) => (
     <h1 style={{ margin: "0 0 8px 0", fontSize: 16, fontWeight: 700, lineHeight: 1.3 }}>{children}</h1>
   ),
-  h2: ({ children }) => (
+  h2: ({ children }: C) => (
     <h2 style={{ margin: "0 0 8px 0", fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{children}</h2>
   ),
-  h3: ({ children }) => (
+  h3: ({ children }: C) => (
     <h3 style={{ margin: "0 0 6px 0", fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>{children}</h3>
   ),
-  code: ({ children, className, ...props }) => {
+  code: ({ children, className }: C & { className?: string }) => {
     const inline = !className;
     return inline ? (
       <code
-        {...props}
         style={{
           background: "color-mix(in srgb, var(--dpf-text) 8%, transparent)",
           borderRadius: 4,
@@ -90,10 +91,10 @@ const MARKDOWN_COMPONENTS: Components = {
         {children}
       </code>
     ) : (
-      <code className={className} {...props}>{children}</code>
+      <code className={className}>{children}</code>
     );
   },
-  pre: ({ children }) => (
+  pre: ({ children }: C) => (
     <pre
       style={{
         margin: "0 0 8px 0",

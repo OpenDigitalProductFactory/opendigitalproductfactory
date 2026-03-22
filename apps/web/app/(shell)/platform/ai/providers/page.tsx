@@ -91,7 +91,7 @@ export default async function ProvidersPage() {
               providers={group.providers}
             >
               {group.providers.map((pw) => (
-                <ServiceRow key={pw.provider.providerId} pw={pw} modelSummary={modelSummaries.get(pw.provider.providerId)} />
+                <ServiceRow key={pw.provider.providerId} pw={pw} {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})} />
               ))}
             </ServiceSection>
           ))
