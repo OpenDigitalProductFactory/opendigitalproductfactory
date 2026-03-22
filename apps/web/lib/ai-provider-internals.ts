@@ -223,6 +223,9 @@ export async function discoverModelsInternal(
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) return { discovered: 0, newCount: 0, error: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
+    if (isAnthropicProvider(providerId)) {
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    }
   }
 
   let json: unknown;
