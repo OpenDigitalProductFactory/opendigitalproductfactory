@@ -122,28 +122,28 @@ describe("getOperatingHours", () => {
 });
 
 describe("getDefaultHoursForArchetype", () => {
-  it("returns healthcare defaults for healthcare-wellness", () => {
-    const result = getDefaultHoursForArchetype("healthcare-wellness");
+  it("returns healthcare defaults for healthcare-wellness", async () => {
+    const result = await getDefaultHoursForArchetype("healthcare-wellness");
     expect(result.monday.open).toBe("08:00");
     expect(result.monday.close).toBe("17:00");
     expect(result.saturday.enabled).toBe(false);
   });
 
-  it("returns fitness defaults with extended hours", () => {
-    const result = getDefaultHoursForArchetype("fitness-recreation");
+  it("returns fitness defaults with extended hours", async () => {
+    const result = await getDefaultHoursForArchetype("fitness-recreation");
     expect(result.monday.open).toBe("06:00");
     expect(result.monday.close).toBe("21:00");
     expect(result.saturday.enabled).toBe(true);
   });
 
-  it("returns generic defaults for unknown category", () => {
-    const result = getDefaultHoursForArchetype("unknown-category");
+  it("returns generic defaults for unknown category", async () => {
+    const result = await getDefaultHoursForArchetype("unknown-category");
     expect(result.monday.open).toBe("09:00");
     expect(result.saturday.enabled).toBe(false);
   });
 
-  it("returns generic defaults for null", () => {
-    const result = getDefaultHoursForArchetype(null);
+  it("returns generic defaults for null", async () => {
+    const result = await getDefaultHoursForArchetype(null);
     expect(result.monday.open).toBe("09:00");
   });
 });
