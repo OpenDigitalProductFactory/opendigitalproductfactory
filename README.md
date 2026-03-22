@@ -40,61 +40,55 @@ Your data stays on your hardware. The AI agents are there to help you grow and u
 
 ## Installation
 
-There are two ways to install, depending on your situation:
+The installer asks one question: **Ready to go** or **Customizable**.
 
-| Path | Who it's for | What it does |
+| Mode | Who it's for | What happens |
 |------|-------------|--------------|
-| **[User Install](#user-install-windows)** | Business users, non-technical | Everything runs inside Docker. One script, no coding tools needed. |
-| **[Developer Setup](#developer-setup)** | Developers contributing to the platform | Databases in Docker with ports exposed to the host. Next.js runs locally so you can use your IDE, debugger, and hot-reload. |
+| **Ready to go** | Business users, anyone who wants to run it | Pulls pre-built images. No source code, no build step. Running in minutes. |
+| **Customizable** | Developers, power users who want to modify the platform | Clones the full source and builds locally. Your changes live on a custom branch. |
 
----
+Both modes include the full platform with AI co-workers, Build Studio sandbox, and all features. The difference is whether you have source code to modify.
 
-### User Install (Windows)
-
-No technical experience needed. The installer handles everything automatically.
+### Quick Start (Windows)
 
 1. Download both files into the same folder (right-click each link -> "Save link as..."):
    - [`install-dpf.bat`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.bat)
    - [`install-dpf.ps1`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.ps1)
-2. Double-click **`install-dpf.bat`** to start the installer
-3. Choose install location if needed (from a terminal):
-   - `install-dpf.bat` (default `C:\DPF`)
-   - `install-dpf.bat -InstallDir D:\DPF`
+2. Double-click **`install-dpf.bat`**
+3. Choose your mode when prompted
 4. Follow the guided steps (5-10 minutes)
 
-The installer will:
-- Set up Docker Desktop and WSL2 (if not already installed)
-- Download and build the platform — everything runs inside containers
-- Detect your hardware and select an appropriate local AI model
-- Generate secure credentials (random passwords, encryption keys)
-- Start everything and open your browser — ready to use
-- Configure automatic startup on Windows logon via a scheduled task (`DPF-AutoStart`)
+That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start configuration.
 
 **After installation:**
-- **Start the platform:** `dpf-start`
-- **Stop the platform:** `dpf-stop`
-- **Uninstall everything:** Double-click [`uninstall-dpf.bat`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.bat) (or right-click `uninstall-dpf.ps1` -> Run with PowerShell)
+- **Start:** `dpf-start`
+- **Stop:** `dpf-stop`
+- **Uninstall:** Double-click [`uninstall-dpf.bat`](https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.bat)
 
-#### Startup behavior
+#### What each mode installs
 
-The installer creates a scheduled task named `DPF-AutoStart` to launch `dpf-start.ps1` at user logon without opening a browser.
-
-- To disable auto-start, open **Task Scheduler** -> **Task Scheduler Library** -> **DPF-AutoStart** -> **Disable**.
-- To re-enable, set it back to **Enable** (or run `dpf-start` manually).
-- Uninstall removes this scheduled task.
+| | Ready to go | Customizable |
+|---|---|---|
+| **Source code** | No (pre-built images from GHCR) | Yes (full git clone) |
+| **Docker build** | No (`docker compose pull`) | Yes (`docker compose build`) |
+| **Git required** | No | Yes |
+| **Modify the platform** | Via Build Studio (in-app) | Build Studio + direct code changes |
+| **Contribute upstream** | Via in-app PR workflow (coming soon) | Git branch + PR |
+| **Install time** | ~5 minutes (mostly download) | ~10 minutes (includes build) |
+| **Disk footprint** | ~2 GB (images only) | ~5 GB (source + images) |
 
 ---
 
-### Developer Setup
+### Developer Setup (IDE + Hot-Reload)
 
-For developers who want to run Next.js locally with IDE integration, debugging, and hot-reload. Databases and AI run in Docker with ports exposed to your host machine.
+For developers who want to run Next.js locally with IDE integration, debugging, and hot-reload. Databases run in Docker with ports exposed to your host machine. This is separate from the installer — it's for development on the platform itself.
 
 #### Prerequisites
 
 | Tool | Version |
 |------|---------|
 | [Git](https://git-scm.com/download/win) | Latest |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Latest |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 4.40+ |
 | [Node.js](https://nodejs.org/) | 20+ |
 | [pnpm](https://pnpm.io/) | 9+ |
 
@@ -109,7 +103,7 @@ cd opendigitalproductfactory
 The script will:
 - Install pnpm dependencies (`node_modules`)
 - Create all `.env` files (Docker + app-level) with working defaults
-- Start Docker containers with **ports exposed** to the host (5432, 7474, 7687, 11434)
+- Start Docker containers with **ports exposed** to the host (5432, 7474, 7687)
 - Run database migrations and seed data
 
 Then start the dev server:
@@ -126,7 +120,7 @@ cd opendigitalproductfactory
 pnpm install
 ```
 
-**Create environment files** — the project needs two levels of config:
+**Create environment files:**
 
 ```bash
 # 1. Root .env — used by Docker Compose for container credentials
@@ -137,14 +131,10 @@ cp .env.example apps/web/.env.local
 cp .env.example packages/db/.env
 ```
 
-> **Note:** The root `.env` provides `POSTGRES_PASSWORD`, `NEO4J_AUTH`, etc. to Docker.
-> The app-level files (`.env.local`, `packages/db/.env`) point at `localhost` for local dev.
-> Both are git-ignored. The defaults work out of the box — edit them later as needed.
-
-**Start databases with ports exposed** to the host (the dev overlay adds port mappings):
+**Start databases:**
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j ollama
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
 ```
 
 **Run migrations and seed:**
@@ -162,17 +152,6 @@ pnpm --filter web dev      # http://localhost:3000
 ```
 
 Login: `admin@dpf.local` / `changeme123`
-
-#### What's different between User and Developer mode?
-
-| | User Install | Developer Setup |
-|---|---|---|
-| **Next.js** | Runs inside Docker container | Runs locally via `pnpm dev` |
-| **Database ports** | Internal only (not exposed) | Exposed to host (5432, 7687, 7474) |
-| **Credentials** | Random, secure passwords | Dev defaults (`dpf_dev`) |
-| **AI model** | Auto-selected for your hardware | Same, or configure your own |
-| **Hot-reload** | No (production build) | Yes |
-| **IDE debugging** | No | Yes |
 
 ---
 
@@ -202,7 +181,7 @@ This isn't a chatbot bolted onto a dashboard. AI is a core architectural layer.
 | **Automatic Failover** | Priority-ranked providers. If one fails, the next takes over. Local AI is always the safety net. |
 | **Weekly Optimization** | Scheduled job ranks providers by capability tier and cost. The platform optimizes its own AI spending. |
 | **Token Spend Tracking** | Per-provider, per-agent cost monitoring. Know exactly what your AI workforce costs. |
-| **Local-First AI** | Runs Ollama out of the box. No API keys needed. No data leaves your machine. |
+| **Local-First AI** | Runs via Docker Model Runner out of the box. No API keys needed. No data leaves your machine. |
 
 ### Governance & Compliance
 
@@ -242,7 +221,7 @@ flowchart TB
         postgres[(PostgreSQL)]
         neo4j[(Neo4j)]
         qdrant[(Qdrant)]
-        ollama[Ollama<br/>local inference]
+        modelrunner[Docker Model Runner<br/>local inference]
     end
 
     ext[External AI providers<br/>optional]
@@ -254,18 +233,18 @@ flowchart TB
     portal --> postgres
     portal --> neo4j
     portal --> qdrant
-    portal --> ollama
+    portal --> modelrunner
     portal -. multi-provider routing .-> ext
     portal -. launch / inspect / promote .-> sandbox
     operator --> portal
     operator -. HITL approval .-> sandbox
 ```
 
-**Current runtime:** `portal`, `portal-init`, `postgres`, `neo4j`, `qdrant`, and `ollama` are defined in `docker-compose.yml`. Sandbox containers are launched on demand from the `dpf-sandbox` image and are not part of the always-on runtime.
+**Current runtime:** `portal`, `portal-init`, `postgres`, `neo4j`, and `qdrant` are defined in `docker-compose.yml`. Local AI inference is provided by Docker Model Runner (built into Docker Desktop 4.40+) — no separate container needed. Sandbox containers are launched on demand from the `dpf-sandbox` image.
 
 ### Deployment Model 1: Customer Mode
 
-This is the target end-user install. Everything runs in Docker. Only the web app is exposed on port `3000`. Databases and local AI remain internal to the stack.
+This is the target end-user install. Everything runs in Docker. Only the web app is exposed on port `3000`. Databases remain internal to the stack. AI inference runs via Docker Model Runner.
 
 ```mermaid
 flowchart LR
@@ -278,7 +257,7 @@ flowchart LR
             postgres[(postgres)]
             neo4j[(neo4j)]
             qdrant[(qdrant)]
-            ollama[ollama<br/>optional GPU passthrough]
+            modelrunner[Docker Model Runner<br/>built into Docker Desktop]
             sandbox[sandbox containers<br/>on demand]
         end
     end
@@ -288,7 +267,7 @@ flowchart LR
     portal --> postgres
     portal --> neo4j
     portal --> qdrant
-    portal --> ollama
+    portal --> modelrunner
     portal -. create / destroy .-> sandbox
 ```
 
@@ -308,7 +287,7 @@ flowchart LR
         subgraph docker["Docker sidecars"]
             postgres[(postgres<br/>:5432)]
             neo4j[(neo4j<br/>:7474 / :7687)]
-            ollama[ollama<br/>:11434]
+            modelrunner[Docker Model Runner<br/>built-in]
             qdrant[(qdrant<br/>internal by default)]
             sandbox[sandbox containers<br/>on demand]
         end
@@ -317,7 +296,7 @@ flowchart LR
     browser --> localapp
     localapp --> postgres
     localapp --> neo4j
-    localapp --> ollama
+    localapp --> modelrunner
     localapp --> qdrant
     localapp -. launch / inspect .-> sandbox
 ```
@@ -363,7 +342,7 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | **Recommended for serious use** | 8+ cores | 32 GB | 100-200 GB NVMe SSD | Optional, 8-12 GB VRAM recommended | Small teams, local-first AI, better responsiveness, moderate sandbox iteration |
 | **Best for self-building / sandbox-heavy use** | 12+ cores | 64 GB+ | 200+ GB NVMe SSD | 16 GB+ VRAM recommended | Frequent sandbox launches, heavier local models, preview/test loops, future self-improvement workflows |
 
-**Current local model auto-selection:** the platform chooses a default Ollama model based on detected RAM and VRAM. On constrained CPU-only systems it falls back to smaller Qwen variants; on stronger GPU-backed systems it selects larger defaults automatically.
+**Current local model auto-selection:** the installer chooses a default model via Docker Model Runner based on detected RAM and VRAM. On constrained systems it selects smaller models; on GPU-backed systems it selects larger defaults automatically.
 
 ---
 
@@ -378,11 +357,11 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | `postgres` | PostgreSQL 16 for transactional and application data |
 | `neo4j` | Neo4j 5 Community for graph and relationship-heavy workloads |
 | `qdrant` | Vector store for semantic retrieval, embeddings, and memory-style search |
-| `ollama` | Local AI inference runtime with automatic default-model selection |
+| Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed |
 | `sandbox-image` | Build target for the on-demand sandbox image used by iterative build workflows |
 | `playwright` | Optional tooling image used in the `build-images` profile |
 
-In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres`, `neo4j`, and `ollama` so the app can run locally while the stateful services remain containerized.
+In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres` and `neo4j` so the app can run locally while the stateful services remain containerized.
 
 ```bash
 docker compose up -d       # Start everything
@@ -404,7 +383,7 @@ docker compose down        # Stop
 | EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
 | AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
 | AI Co-worker | Live LLM conversations, automatic failover, context-aware skills dropdown |
-| Docker Deployment | Zero-prerequisites Windows installer, hardware detection, Ollama auto-setup |
+| Docker Deployment | Zero-prerequisites Windows installer, hardware detection, Docker Model Runner auto-setup |
 
 ### What's Coming
 
@@ -413,7 +392,7 @@ docker compose down        # Stop
 | **Agent Task Execution** | Agents propose real actions (create backlog items, modify products, update EA models). Humans approve. Every action audit-logged. |
 | **Platform Self-Development** | Agents write new features in a sandboxed environment. Humans review diffs and approve. The platform extends itself. |
 | **AI-Guided Setup Wizard** | On first install, the AI Co-worker walks you through company setup conversationally — no forms, just a conversation. |
-| **Ollama Management UI** | Pull models, manage containers, detect hardware — all from the platform, no terminal needed. |
+| **In-App PR Workflow** | Submit customizations back to the community directly from the platform UI — no terminal needed. |
 | **Web-Hosted SaaS** | Cloud deployment option for organizations that prefer managed hosting. |
 | **Theme & Branding** | Configurable visual presets. AI-assisted branding from a URL or description. |
 | **Mac & Linux Installers** | Extend the one-click install experience to all platforms. |
