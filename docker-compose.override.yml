@@ -11,15 +11,3 @@ services:
       - "7474:7474"
     volumes:
       - "H:/docker-data/dpf/neo4jdata:/data"
-  ollama:
-    ports:
-      - "11434:11434"
-    volumes:
-      - "H:/docker-data/dpf/ollama_models:/root/.ollama"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]

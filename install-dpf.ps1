@@ -375,31 +375,30 @@ if (-not (Is-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select a chat-optimized model that fits comfortably in VRAM.
-    # Rule: model file size should be ~70% of VRAM or less to avoid CPU spill.
-    # Use llama3.1 for chat (no thinking-mode issues, fast responses).
-    # llama3.1:70b = 40GB, llama3.1:8b = 4.7GB, llama3.2:3b = 2GB, llama3.2:1b = 1.3GB
+    # Select a Docker Model Runner model that fits comfortably in VRAM.
+    # Docker Model Runner uses Docker Desktop's built-in GPU passthrough.
+    # Model IDs use the ai/ namespace: ai/llama3.2:1B-Q8_0, ai/llama3.1:8B-Q8_0, etc.
     if ($gpuVRAM_GB -ge 12) {
-        $selectedModel = "llama3.1:8b"
+        $selectedModel = "ai/llama3.1:8B-Q8_0"
         $modelReason = "fast, high-quality chat -- fits fully in your GPU memory"
     } elseif ($gpuVRAM_GB -ge 6) {
-        $selectedModel = "llama3.1:8b"
+        $selectedModel = "ai/llama3.1:8B-Q4_K_M"
         $modelReason = "good quality chat, GPU-accelerated"
     } elseif ($gpuVRAM_GB -ge 3) {
-        $selectedModel = "llama3.2:3b"
+        $selectedModel = "ai/llama3.2:3B-Q4_K_M"
         $modelReason = "balanced quality, GPU-accelerated"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "llama3.1:8b"
+        $selectedModel = "ai/llama3.1:8B-Q4_K_M"
         $modelReason = "good quality chat, fits your RAM (CPU mode)"
     } elseif ($totalRAM_GB -ge 8) {
-        $selectedModel = "llama3.2:3b"
+        $selectedModel = "ai/llama3.2:3B-Q4_K_M"
         $modelReason = "fast, works well on your hardware"
     } else {
-        $selectedModel = "llama3.2:1b"
+        $selectedModel = "ai/llama3.2:1B-Q8_0"
         $modelReason = "lightweight, optimized for your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
-    Write-Action "Note: The AI model takes about a minute to load on first use after startup."
+    Write-Action "Models are managed by Docker Model Runner (built into Docker Desktop)."
 
     # Check disk space
     if ($diskFree_GB -lt 5) {
@@ -419,21 +418,7 @@ if (-not (Is-StepDone "hardware")) {
         detectedAt = (Get-Date -Format "o")
     } | ConvertTo-Json -Compress
 
-    # Generate GPU override for Docker Compose if NVIDIA detected
-    if ($gpuName) {
-        @"
-services:
-  ollama:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-"@ | Set-Content "$DPF_DIR\docker-compose.override.yml"
-        Write-Action "GPU passthrough configured for AI engine"
-    }
+    # Docker Model Runner uses Docker Desktop's built-in GPU support — no override needed.
 
     # Save for later steps
     $hostProfile | Set-Content "$DPF_DIR\.host-profile.json"
@@ -443,7 +428,7 @@ services:
 } else {
     Write-OK "Already detected"
     $selectedModel = Get-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
-    if (-not $selectedModel) { $selectedModel = "qwen3:1.7b" }
+    if (-not $selectedModel) { $selectedModel = "llama3.2:1b" }
 }
 
 # --- Generate .env -------------------------------------------------------------
@@ -467,7 +452,7 @@ CREDENTIAL_ENCRYPTION_KEY=$encKey
 NEO4J_URI=bolt://neo4j:7687
 ADMIN_PASSWORD=$adminPass
 DPF_HOST_PROFILE=$hostProfileJson
-SELECTED_MODEL=$selectedModel
+LLM_BASE_URL=http://model-runner.docker.internal/v1
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
@@ -529,24 +514,17 @@ if (-not (Is-StepDone "started")) {
 
 Write-Step 7 9 "Setting up your AI Coworker..."
 if (-not (Is-StepDone "model")) {
-    # The entrypoint script detects hardware and pulls the model automatically.
-    # SELECTED_MODEL from .env is passed as OLLAMA_DEFAULT_MODEL to the container.
-    Write-Action "AI engine is downloading $selectedModel in the background..."
+    # Pull model via Docker Model Runner (built into Docker Desktop 4.40+)
+    Write-Action "Pulling AI model $selectedModel via Docker Model Runner..."
     Write-Action "This may take several minutes depending on your internet speed."
-    $attempts = 0
-    $maxAttempts = 120  # 10 minutes
-    while ($attempts -lt $maxAttempts) {
-        $oldEAP = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        $modelList = docker compose exec -T ollama ollama list 2>&1
-        $ErrorActionPreference = $oldEAP
-        if ($modelList -match $selectedModel.Replace(":", "\:")) { break }
-        Start-Sleep -Seconds 5
-        $attempts++
-    }
-    if ($attempts -ge $maxAttempts) {
-        Write-Warn "Model still downloading. It will be ready when the download completes."
-        Write-Warn "Check progress: docker compose logs ollama"
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker model pull $selectedModel 2>&1
+    $pullExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($pullExit -ne 0) {
+        Write-Warn "Model pull may have failed. Check: docker model list"
+        Write-Warn "You can pull manually later: docker model pull $selectedModel"
     } else {
         Write-OK "AI Coworker is ready ($selectedModel)"
     }
@@ -559,7 +537,7 @@ if (-not (Is-StepDone "model")) {
 
 Write-Step 8 9 "Configuring auto-start on logon..."
 if (-not (Is-StepDone "autostart")) {
-    if (Ensure-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\\dpf-start.ps1") {
+    if (Ensure-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\dpf-start.ps1") {
         Save-Progress "autostart"
     }
 } else {
