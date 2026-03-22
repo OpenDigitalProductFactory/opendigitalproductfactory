@@ -16,6 +16,8 @@ const ADAPTERS: Record<string, ProviderAdapter> = {
   anthropic: anthropicAdapter,
   "anthropic-sub": anthropicAdapter,
   openai: openAIAdapter,
+  chatgpt: openAIAdapter,
+  codex: openAIAdapter,
   gemini: geminiAdapter,
   ollama: ollamaAdapter,
 };

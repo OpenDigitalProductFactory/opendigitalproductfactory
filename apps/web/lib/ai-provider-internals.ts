@@ -95,7 +95,9 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
         return { token: credential.cachedToken };
       }
     }
-    return refreshOAuthToken(providerId);
+    // chatgpt shares Codex OAuth — refresh via codex provider (has tokenUrl/clientId)
+    const refreshProviderId = providerId === "chatgpt" ? "codex" : providerId;
+    return refreshOAuthToken(refreshProviderId);
   }
 
   // Existing client_credentials flow

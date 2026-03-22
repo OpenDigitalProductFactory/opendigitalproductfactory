@@ -420,6 +420,35 @@
     "oauthRedirectUri": null
   },
   {
+    "providerId": "chatgpt",
+    "name": "ChatGPT (OpenAI Subscription)",
+    "category": "direct",
+    "baseUrl": "https://api.openai.com/v1",
+    "authMethod": "oauth2_authorization_code",
+    "supportedAuthMethods": ["oauth2_authorization_code"],
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "families": ["gpt-4o", "gpt-4o-mini"],
+    "inputPricePerMToken": 0,
+    "outputPricePerMToken": 0,
+    "docsUrl": "https://platform.openai.com/docs",
+    "consoleUrl": "https://platform.openai.com/settings/organization/billing",
+    "billingLabel": "Included with ChatGPT subscription",
+    "costPerformanceNotes": "GPT chat models accessed via ChatGPT subscription OAuth. Activated automatically when Codex (OpenAI) is connected.",
+    "catalogVisibility": "hidden",
+    "userFacing": {
+      "plainDescription": "ChatGPT conversation models (GPT-4o) accessed through your OpenAI subscription. Activated automatically when you sign in to Codex.",
+      "authExplained": "Uses the same sign-in as Codex — no separate configuration needed.",
+      "costTier": "subscription",
+      "costExplained": "Included with your ChatGPT subscription. No additional per-use charges for standard usage.",
+      "capabilitySummary": "Strong general-purpose conversation, code assistance, document analysis, and creative tasks.",
+      "limitations": "Data processed on OpenAI servers. Rate limits depend on subscription tier.",
+      "dataResidency": "United States (OpenAI servers).",
+      "setupDifficulty": "automatic",
+      "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data."
+    }
+  },
+  {
     "providerId": "openrouter",
     "name": "OpenRouter",
     "category": "router",
