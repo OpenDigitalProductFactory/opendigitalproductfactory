@@ -1,0 +1,22 @@
+Open Digital Product Factory
+Copyright 2026 Mark Bodman
+
+This product includes software developed by third parties.
+See below for attribution notices required by their licenses.
+
+---
+
+City geographic data derived from GeoNames (https://www.geonames.org/)
+Licensed under Creative Commons Attribution 4.0 (CC-BY 4.0)
+
+i18n-iso-countries — Copyright (c) 2016 Timo Mämecke
+Licensed under MIT
+
+Prisma — Copyright (c) 2019 Prisma Data, Inc.
+Licensed under Apache License 2.0
+
+Neo4j JavaScript Driver — Copyright (c) Neo4j Sweden AB
+Licensed under Apache License 2.0
+
+sharp — Copyright (c) 2013 Lovell Fuller and contributors
+Licensed under Apache License 2.0
