@@ -3,8 +3,8 @@
 ## Architecture
 
 - **Next.js 16** monorepo (pnpm workspaces): `apps/web` + `packages/db` (Prisma)
-- **Docker Compose** stack: postgres:16-alpine, neo4j:5-community, qdrant, ollama, portal (Next.js), portal-init (migrations/seed)
-- **Prisma 5.22.0** — pinned version, do NOT use `npx prisma` (it downloads latest, currently v7 which has breaking changes)
+- **Docker Compose** stack: postgres:16-alpine, neo4j:5-community, qdrant, portal (Next.js), portal-init (migrations/seed). Local AI via Docker Model Runner (built into Docker Desktop 4.40+).
+- **Prisma 7.x** — do NOT use `npx prisma` (npx ignores the workspace-pinned version and downloads latest from npm)
 - All inference calls use OpenAI-compatible `/v1/chat/completions` endpoint (see `apps/web/lib/ai-inference.ts`)
 
 ## Shell Script Rules
