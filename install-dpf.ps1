@@ -1,6 +1,7 @@
 ﻿#Requires -Version 5.1
 param(
-    [string]$InstallDir
+    [string]$InstallDir,
+    [string]$Version = "latest"
 )
 $ErrorActionPreference = "Stop"
 
@@ -101,6 +102,10 @@ function Ensure-DPFStartupTask {
     }
 }
 
+$GHCR_PORTAL = "ghcr.io/markdbodman/dpf-portal"
+$GHCR_SANDBOX = "ghcr.io/markdbodman/dpf-sandbox"
+$InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
+
 # --- Banner -------------------------------------------------------------------
 
 Write-Host ""
@@ -112,13 +117,6 @@ Write-Host "========================================================" -Foregroun
 # Create install dir
 if (-not (Test-Path $DPF_DIR)) {
     New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
-}
-
-# Pre-flight: ensure git is installed
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Warn "Git is not installed or not in your PATH."
-    Write-Warn "Please install Git from https://git-scm.com/download/win and try again."
-    exit 1
 }
 
 # --- Step 1: Check Windows ----------------------------------------------------
@@ -248,100 +246,307 @@ if (-not (Is-StepDone "docker")) {
 
     Write-OK "Docker is running"
     Save-Progress "docker"
+
+    # Check Docker Desktop version for Model Runner support
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker model list 2>&1 | Out-Null
+    $modelRunnerAvailable = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $oldEAP
+    if (-not $modelRunnerAvailable) {
+        Write-Warn "Docker Model Runner not available. Docker Desktop 4.40+ is required for AI features."
+        Write-Warn "Please update Docker Desktop: https://docs.docker.com/desktop/release-notes/"
+        Write-Warn "The platform will install but AI features (local models) won't work until you update."
+    }
 } else {
     Write-OK "Already installed"
 }
 
-# --- Step 4: Download / copy DPF project files --------------------------------
+# --- Step 4: Choose install mode and set up files ----------------------------
 
 Write-Step 4 9 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
+
+    # If we already have a compose file, detect mode from prior install
     if (Test-Path "$DPF_DIR\docker-compose.yml") {
-        # Already has project files -- pull latest if it's a git repo
         if (Test-Path "$DPF_DIR\.git") {
+            $InstallMode = "customizer"
             Write-Action "Updating project files..."
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
             git -C "$DPF_DIR" pull --ff-only 2>&1 | Out-Null
             $ErrorActionPreference = $oldEAP
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn "Could not update (exit code $LASTEXITCODE)"
-                Write-Warn "You can update manually with: git -C `"$DPF_DIR`" pull"
-            }
+        } else {
+            $InstallMode = "consumer"
         }
-        Write-OK "Project files already in place"
-    } elseif (
-        (-not (Test-Path "$DPF_DIR")) -or
-        (@(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -notin '.install-progress','.env' }).Count -eq 0)
-    ) {
-        # Directory is empty or has only our progress/env files -- clone directly
-        Write-Action "Cloning project from GitHub..."
-        # Move aside progress/env so git clone can use the directory
-        $stash = @{}
-        foreach ($f in '.install-progress','.env') {
-            if (Test-Path "$DPF_DIR\$f") {
-                $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
-                Remove-Item "$DPF_DIR\$f"
-            }
-        }
-        if ((Test-Path "$DPF_DIR") -and
-            @(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue).Count -eq 0) {
-            Remove-Item "$DPF_DIR"
-        }
-        $oldEAP = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
-        $ErrorActionPreference = $oldEAP
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
-            Write-Warn "Clone the repo manually:"
-            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
-            exit 1
-        }
-        # Restore stashed files
-        foreach ($f in $stash.Keys) {
-            $stash[$f] | Set-Content "$DPF_DIR\$f"
-        }
+        Write-OK "Project files already in place ($InstallMode mode)"
+        Save-Progress "download"
     } else {
-        # Directory has other files (user data, partial install) -- clone to temp and merge
-        Write-Action "Cloning project files from GitHub..."
-        $tempClone = Join-Path $env:TEMP "dpf-clone"
-        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
-        $oldEAP = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
-        $ErrorActionPreference = $oldEAP
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
-            Write-Warn "Clone the repo manually:"
-            Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
-            exit 1
+
+        # --- Mode choice ---
+        Write-Host ""
+        Write-Host "  How do you want to use Digital Product Factory?" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "    [1] Ready to go   - Pre-built, runs in minutes. No source code needed." -ForegroundColor White
+        Write-Host "    [2] Customizable  - Full source code. Build and modify to fit your business." -ForegroundColor White
+        Write-Host ""
+        $modeChoice = Read-Host "  Choose [1/2]"
+
+        if ($modeChoice -eq "2") {
+            # --- Customizer sub-choice ---
+            Write-Host ""
+            Write-Host "  Would you like to contribute improvements back to the project?" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "    [a] Yes - I'll fork on GitHub and submit pull requests" -ForegroundColor White
+            Write-Host "    [b] No  - My changes stay private" -ForegroundColor White
+            Write-Host ""
+            $subChoice = Read-Host "  Choose [a/b]"
+
+            # Pre-flight: git required for customizer
+            if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+                Write-Warn "Git is required for customizable mode."
+                Write-Warn "Install from https://git-scm.com/download/win and re-run."
+                exit 1
+            }
+
+            if (-not (Test-Path $DPF_DIR)) {
+                New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
+            }
+
+            if ($subChoice -eq "a") {
+                $InstallMode = "contributor"
+                $ghUser = Read-Host "  Your GitHub username"
+
+                # Check if fork exists
+                Write-Action "Checking for your fork..."
+                $forkUrl = "https://api.github.com/repos/$ghUser/opendigitalproductfactory"
+                try {
+                    $forkCheck = Invoke-WebRequest -Uri $forkUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction SilentlyContinue
+                } catch { $forkCheck = $null }
+
+                if (-not $forkCheck -or $forkCheck.StatusCode -ne 200) {
+                    Write-Action "No fork found. Opening GitHub to create one..."
+                    Start-Process "https://github.com/markdbodman/opendigitalproductfactory/fork"
+                    Write-Host "  Press Enter after you've created the fork..." -ForegroundColor Yellow
+                    Read-Host | Out-Null
+                }
+
+                Write-Action "Cloning your fork..."
+                $stash = @{}
+                foreach ($f in '.install-progress','.env') {
+                    if (Test-Path "$DPF_DIR\$f") {
+                        $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
+                        Remove-Item "$DPF_DIR\$f"
+                    }
+                }
+                if ((Test-Path $DPF_DIR) -and
+                    @(Get-ChildItem $DPF_DIR -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+                    Remove-Item $DPF_DIR
+                }
+
+                $oldEAP = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                git clone "https://github.com/$ghUser/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
+                $ErrorActionPreference = $oldEAP
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warn "Clone failed. Check your username and try again."
+                    exit 1
+                }
+                git -C "$DPF_DIR" remote add upstream "https://github.com/markdbodman/opendigitalproductfactory.git" 2>$null
+
+                foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
+                Write-OK "Cloned fork with upstream remote configured"
+
+            } else {
+                $InstallMode = "private"
+                Write-Action "Cloning project source..."
+                $stash = @{}
+                foreach ($f in '.install-progress','.env') {
+                    if (Test-Path "$DPF_DIR\$f") {
+                        $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
+                        Remove-Item "$DPF_DIR\$f"
+                    }
+                }
+                if ((Test-Path $DPF_DIR) -and
+                    @(Get-ChildItem $DPF_DIR -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+                    Remove-Item $DPF_DIR
+                }
+
+                $oldEAP = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
+                $ErrorActionPreference = $oldEAP
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warn "Clone failed. Check your internet connection."
+                    exit 1
+                }
+                git -C "$DPF_DIR" remote rename origin upstream 2>$null
+                foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
+                Write-OK "Cloned source (upstream remote is read-only reference)"
+            }
+
+            # Convenience scripts for customizer mode
+            Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
+            Copy-Item "$DPF_DIR\scripts\dpf-stop.ps1" "$DPF_DIR\dpf-stop.ps1" -ErrorAction SilentlyContinue
+            Copy-Item "$DPF_DIR\scripts\dpf-start.bat" "$DPF_DIR\dpf-start.bat" -ErrorAction SilentlyContinue
+            Copy-Item "$DPF_DIR\scripts\dpf-stop.bat" "$DPF_DIR\dpf-stop.bat" -ErrorAction SilentlyContinue
+
+        } else {
+            # --- Consumer path ---
+            $InstallMode = "consumer"
+            Write-Action "Setting up pre-built platform..."
+
+            if (-not (Test-Path $DPF_DIR)) {
+                New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
+            }
+
+            # Write embedded docker-compose.yml
+            @"
+# Generated by DPF installer (consumer mode) -- do not edit manually
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: `${POSTGRES_USER:-dpf}
+      POSTGRES_PASSWORD: `${POSTGRES_PASSWORD}
+      POSTGRES_DB: dpf
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U `${POSTGRES_USER:-dpf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: `${NEO4J_AUTH}
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  portal-init:
+    image: $($GHCR_PORTAL):$Version
+    command: ["/docker-entrypoint.sh"]
+    environment:
+      DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
+      DPF_HOST_PROFILE: `${DPF_HOST_PROFILE:-}
+      ADMIN_PASSWORD: `${ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  portal:
+    image: $($GHCR_PORTAL):$Version
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
+      AUTH_SECRET: `${AUTH_SECRET}
+      CREDENTIAL_ENCRYPTION_KEY: `${CREDENTIAL_ENCRYPTION_KEY}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: `${NEO4J_PASSWORD}
+      QDRANT_INTERNAL_URL: http://qdrant:6333
+      LLM_BASE_URL: `${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  sandbox-image:
+    image: $($GHCR_SANDBOX):$Version
+    container_name: dpf-sandbox-dev
+    profiles: ["build-images"]
+    command: ["echo", "Image ready"]
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    volumes:
+      - playwright_scripts:/scripts
+      - playwright_results:/results
+    network_mode: host
+    profiles: ["build-images"]
+    command: ["sleep", "infinity"]
+
+volumes:
+  pgdata:
+  neo4jdata:
+  qdrant_data:
+  playwright_scripts:
+  playwright_results:
+"@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
+
+            # Write dpf-start.ps1 for consumer (no .git dependency)
+            @'
+param([switch]$NoBrowser)
+Set-Location $PSScriptRoot
+docker compose up -d
+if (-not $NoBrowser) {
+    Start-Sleep -Seconds 5
+    Start-Process "http://localhost:3000"
+    Write-Host "Digital Product Factory is starting at http://localhost:3000" -ForegroundColor Green
+}
+'@ | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
+
+            @'
+Set-Location $PSScriptRoot
+docker compose down
+Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
+'@ | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding UTF8
+
+            Write-OK "Platform files written to $DPF_DIR"
         }
-        Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
-        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
+
+        # Save install mode
+        $InstallMode | Set-Content "$DPF_DIR\.install-mode"
+
+        # Add install directory to user PATH if not already there
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$DPF_DIR*") {
+            [Environment]::SetEnvironmentVariable("Path", "$userPath;$DPF_DIR", "User")
+            $env:Path += ";$DPF_DIR"
+        }
+
+        Save-Progress "download"
     }
-
-    # Write version file
-    "main" | Set-Content "$DPF_DIR\.version"
-
-    # Copy convenience scripts to DPF root
-    Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
-    Copy-Item "$DPF_DIR\scripts\dpf-stop.ps1" "$DPF_DIR\dpf-stop.ps1" -ErrorAction SilentlyContinue
-    Copy-Item "$DPF_DIR\scripts\dpf-start.bat" "$DPF_DIR\dpf-start.bat" -ErrorAction SilentlyContinue
-    Copy-Item "$DPF_DIR\scripts\dpf-stop.bat" "$DPF_DIR\dpf-stop.bat" -ErrorAction SilentlyContinue
-
-    # Add install directory to user PATH if not already there
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*$DPF_DIR*") {
-        [Environment]::SetEnvironmentVariable("Path", "$userPath;$DPF_DIR", "User")
-        $env:Path += ";$DPF_DIR"
-    }
-
-    Write-OK "Set up in $DPF_DIR"
-    Save-Progress "download"
 } else {
-    Write-OK "Already set up"
+    # Resume: read saved mode
+    if (Test-Path "$DPF_DIR\.install-mode") {
+        $InstallMode = (Get-Content "$DPF_DIR\.install-mode").Trim()
+    } elseif (Test-Path "$DPF_DIR\.git") {
+        $InstallMode = "customizer"
+    } else {
+        $InstallMode = "consumer"
+    }
+    Write-OK "Already set up ($InstallMode mode)"
 }
 
 # --- Step 5: Hardware Detection ------------------------------------------------
@@ -447,6 +652,7 @@ POSTGRES_USER=dpf
 POSTGRES_PASSWORD=$pgPass
 DATABASE_URL=postgresql://dpf:$pgPass@postgres:5432/dpf
 NEO4J_AUTH=neo4j/$neoPass
+NEO4J_PASSWORD=$neoPass
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
 NEO4J_URI=bolt://neo4j:7687
@@ -461,25 +667,40 @@ LLM_BASE_URL=http://model-runner.docker.internal/v1
 Write-Step 6 9 "Starting the platform..."
 if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
-    Write-Action "Building the portal (first time takes 3-5 minutes)..."
-    $oldEAP = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    docker compose build --quiet 2>&1 | Out-Null
-    $buildExit = $LASTEXITCODE
-    $ErrorActionPreference = $oldEAP
-    if ($buildExit -ne 0) {
+
+    if ($InstallMode -eq "consumer") {
+        Write-Action "Pulling pre-built images (this may take a few minutes)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose build
+        docker compose pull 2>&1
+        $pullExit = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+        if ($pullExit -ne 0) {
+            Write-Warn "Failed to pull images. Check your internet connection."
+            Write-Warn "You can retry with: docker compose pull"
+            exit 1
+        }
+    } else {
+        Write-Action "Building the portal (first time takes 3-5 minutes)..."
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker compose build --quiet 2>&1 | Out-Null
         $buildExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($buildExit -ne 0) {
-            Write-Warn "Build failed. Check the output above for errors."
-            exit 1
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            docker compose build
+            $buildExit = $LASTEXITCODE
+            $ErrorActionPreference = $oldEAP
+            if ($buildExit -ne 0) {
+                Write-Warn "Build failed. Check the output above for errors."
+                exit 1
+            }
         }
     }
 
-    Write-Action "Starting database, AI engine, and portal..."
+    Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     docker compose up -d
