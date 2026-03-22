@@ -24,11 +24,18 @@ export function generatePKCE(): { codeVerifier: string; codeChallenge: string } 
 const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /** Determine the OAuth redirect URI for a provider.
- *  Uses oauthRedirectUri from the provider record if set (e.g. shared Codex client requires localhost:1455),
- *  otherwise falls back to our app's callback route. */
-function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null }): string {
+ *  1. Explicit override (escape hatch for unusual providers)
+ *  2. Localhost-restricted providers → short /callback path
+ *  3. Default → our full API callback route */
+const LOCALHOST_RESTRICTED_HOSTS = ["claude.ai", "auth.openai.com"];
+
+function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): string {
   if (provider.oauthRedirectUri) return provider.oauthRedirectUri;
   const appUrl = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000";
+  // Providers whose OAuth clients restrict redirect URIs to short localhost/callback paths
+  if (provider.authorizeUrl && LOCALHOST_RESTRICTED_HOSTS.some(h => provider.authorizeUrl!.includes(h))) {
+    return `${appUrl}/callback`;
+  }
   return `${appUrl}/api/v1/auth/provider-oauth/callback`;
 }
 
@@ -51,7 +58,7 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     data: { state, codeVerifier, providerId },
   });
 
-  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null });
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -95,7 +102,7 @@ export async function exchangeOAuthCode(
     return { error: "provider_misconfigured" };
   }
 
-  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null });
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   const params = new URLSearchParams({
     grant_type: "authorization_code",
