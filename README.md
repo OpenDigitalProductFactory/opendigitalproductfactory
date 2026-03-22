@@ -51,24 +51,15 @@ Both modes include the full platform with AI co-workers, Build Studio sandbox, a
 
 ### Quick Start (Windows)
 
-Open PowerShell and paste this:
+Open PowerShell and paste:
 
 ```powershell
-irm https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1; .\install-dpf.ps1
+git clone https://github.com/markdbodman/opendigitalproductfactory.git
+cd opendigitalproductfactory
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
-Or if you prefer a two-step approach:
-
-1. Open PowerShell and download the installer:
-   ```powershell
-   irm https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
-   ```
-2. Run it:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\install-dpf.ps1
-   ```
-3. Choose your mode when prompted
-4. Follow the guided steps (5-10 minutes)
+Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. 5-10 minutes.
 
 That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start configuration.
 
@@ -77,7 +68,7 @@ That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI mo
 **After installation:**
 - **Start:** `dpf-start`
 - **Stop:** `dpf-stop`
-- **Uninstall:** `irm https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/uninstall-dpf.ps1 -OutFile uninstall-dpf.ps1; .\uninstall-dpf.ps1`
+- **Uninstall:** `powershell -ExecutionPolicy Bypass -File uninstall-dpf.ps1` (from your install directory)
 
 #### What each mode installs
 
