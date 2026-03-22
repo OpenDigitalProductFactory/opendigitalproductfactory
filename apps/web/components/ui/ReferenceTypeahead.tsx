@@ -151,7 +151,7 @@ export function ReferenceTypeahead({
         break;
       case "Enter":
         e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < results.length && results[activeIndex]) {
+        if (activeIndex >= 0 && activeIndex < results.length) {
           handleSelectItem(results[activeIndex]);
         } else if (activeIndex === results.length && showAddNew) {
           handleAddNew();
