@@ -174,7 +174,6 @@ export function AgentCoworkerPanel({
         routeContext: pathname,
         coworkerMode: devMode ? "act" as const : coworkerMode,
         externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
-        devMode,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
