@@ -259,10 +259,12 @@ if (-not (Is-StepDone "download")) {
         # Already has project files -- pull latest if it's a git repo
         if (Test-Path "$DPF_DIR\.git") {
             Write-Action "Updating project files..."
-            try {
-                $null = git -C "$DPF_DIR" pull --ff-only 2>&1
-            } catch {
-                Write-Warn "Could not update: $($_.Exception.Message)"
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            git -C "$DPF_DIR" pull --ff-only 2>&1 | Out-Null
+            $ErrorActionPreference = $oldEAP
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn "Could not update (exit code $LASTEXITCODE)"
                 Write-Warn "You can update manually with: git -C `"$DPF_DIR`" pull"
             }
         }
@@ -286,11 +288,12 @@ if (-not (Is-StepDone "download")) {
             @(Get-ChildItem "$DPF_DIR" -Force -ErrorAction SilentlyContinue).Count -eq 0) {
             Remove-Item "$DPF_DIR"
         }
-        try {
-            $null = git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1
-            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
-        } catch {
-            Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
             Write-Warn "Clone the repo manually:"
             Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
             exit 1
@@ -304,17 +307,18 @@ if (-not (Is-StepDone "download")) {
         Write-Action "Cloning project files from GitHub..."
         $tempClone = Join-Path $env:TEMP "dpf-clone"
         Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
-        try {
-            $null = git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1
-            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
-            Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
-            Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
-        } catch {
-            Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not clone from GitHub (exit code $LASTEXITCODE)"
             Write-Warn "Clone the repo manually:"
             Write-Warn "  git clone https://github.com/markdbodman/opendigitalproductfactory.git `"$DPF_DIR`""
             exit 1
         }
+        Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
+        Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
     }
 
     # Write version file
