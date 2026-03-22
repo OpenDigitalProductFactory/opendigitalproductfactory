@@ -61,6 +61,7 @@ export function shouldSkipTable(tableName: string): boolean {
 // ── PostgreSQL Clone Pipeline ────────────────────────────────────────────────
 
 import { PrismaClient } from "../generated/client/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 /** Tables that contain audit/log data — clone only the last N rows with obfuscation */
 const AUDIT_TABLES = new Set([
@@ -84,8 +85,10 @@ export async function runSanitizedClone(): Promise<void> {
   if (!prodUrl) throw new Error("PRODUCTION_DATABASE_URL is not set");
   if (!devUrl) throw new Error("DATABASE_URL is not set");
 
-  const prod = new PrismaClient({ datasourceUrl: prodUrl });
-  const dev = new PrismaClient({ datasourceUrl: devUrl });
+  const prodAdapter = new PrismaPg({ connectionString: prodUrl });
+  const devAdapter = new PrismaPg({ connectionString: devUrl });
+  const prod = new PrismaClient({ adapter: prodAdapter });
+  const dev = new PrismaClient({ adapter: devAdapter });
 
   try {
     console.log("[sanitized-clone] Connecting to production and dev databases...");
