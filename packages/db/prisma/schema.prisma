@@ -618,6 +618,7 @@ model BusinessProfile {
   timezone          String             @default("UTC")
   hasStorefront     Boolean            @default(false)
   lowTrafficWindows Json?
+  hoursConfirmedAt  DateTime?
   deploymentWindows DeploymentWindow[]
   blackoutPeriods   BlackoutPeriod[]
   createdAt         DateTime           @default(now())
