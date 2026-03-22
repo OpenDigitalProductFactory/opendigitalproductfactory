@@ -98,9 +98,32 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 2. Create availability rows — group days by identical hours
+    // 2. Create availability rows — use confirmed BusinessProfile hours if available
+    const profile = await prisma.businessProfile.findFirst({
+      where: { isActive: true, hoursConfirmedAt: { not: null } },
+      select: { businessHours: true },
+    });
+
+    let operatingHours: { day: number; start: string; end: string }[];
+    if (profile?.businessHours) {
+      const bh = profile.businessHours as Record<string, { open: string; close: string } | null>;
+      const dayMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+        thursday: 4, friday: 5, saturday: 6,
+      };
+      operatingHours = Object.entries(bh)
+        .filter(([, hours]) => hours !== null)
+        .map(([day, hours]) => ({
+          day: dayMap[day] ?? 0,
+          start: hours!.open,
+          end: hours!.close,
+        }));
+    } else {
+      operatingHours = defaults.defaultOperatingHours;
+    }
+
     const grouped = new Map<string, number[]>();
-    for (const h of defaults.defaultOperatingHours) {
+    for (const h of operatingHours) {
       const key = `${h.start}-${h.end}`;
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(h.day);
@@ -146,6 +169,12 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    // Update BusinessProfile to reflect storefront existence
+    await prisma.businessProfile.updateMany({
+      where: { isActive: true },
+      data: { hasStorefront: true },
+    });
   }
 
   return NextResponse.json({ success: true, storefrontId: config.id });
