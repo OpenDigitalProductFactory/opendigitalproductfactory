@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition, useCallback } from "react";
 import { RFCDetailPanel } from "./RFCDetailPanel";
+import { StandardChangeCatalog } from "./StandardChangeCatalog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ const TYPE_BADGES: Record<string, string> = {
 
 // ─── Filter Groups ──────────────────────────────────────────────────────────
 
-type FilterGroup = "active" | "completed" | "history";
+type FilterGroup = "active" | "completed" | "history" | "catalog";
 
 const ACTIVE_STATUSES = new Set([
   "draft",
@@ -178,6 +179,7 @@ export default function ChangesClient() {
     active: rfcs.filter((r) => filterGroup(r.status) === "active").length,
     completed: rfcs.filter((r) => filterGroup(r.status) === "completed").length,
     history: rfcs.filter((r) => filterGroup(r.status) === "history").length,
+    catalog: rfcs.filter((r) => filterGroup(r.status) === "catalog").length,
   };
 
   if (loading) {
@@ -209,14 +211,35 @@ export default function ChangesClient() {
             {group.charAt(0).toUpperCase() + group.slice(1)} ({counts[group]})
           </button>
         ))}
+        <button
+          onClick={() => { setFilter("catalog"); setSelectedRfcId(null); }}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            filter === "catalog"
+              ? "bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border-[var(--dpf-accent)]/40"
+              : "bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] border-[var(--dpf-border)] hover:text-[var(--dpf-text)]"
+          }`}
+        >
+          Catalog
+        </button>
       </div>
 
+      {/* Catalog view */}
+      {filter === "catalog" && (
+        <StandardChangeCatalog
+          onRFCCreated={() => {
+            setFilter("active");
+            fetchList();
+          }}
+        />
+      )}
+
       {/* RFC list */}
-      {filtered.length === 0 ? (
+      {filter !== "catalog" && filtered.length === 0 && (
         <div className="text-center py-12 text-[var(--dpf-muted)]">
           No changes with status &quot;{filter}&quot;.
         </div>
-      ) : (
+      )}
+      {filter !== "catalog" && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map((rfc) => (
             <div key={rfc.id}>
