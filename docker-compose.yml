@@ -168,7 +168,7 @@ services:
       context: .
       target: dev
     profiles: ["dev"]
-    command: ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter @dpf/db exec prisma migrate deploy"]
+    command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm --filter @dpf/db exec prisma generate && pnpm --filter @dpf/db exec prisma migrate deploy"]
     environment:
       CI: "true"
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
