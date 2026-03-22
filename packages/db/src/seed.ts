@@ -11,6 +11,7 @@ import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import * as crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 const DATA_DIR = join(__dirname, "..", "data");
 
@@ -930,7 +931,7 @@ async function seedDefaultAdminUser(): Promise<void> {
   }
 
   const password = process.env.ADMIN_PASSWORD ?? "changeme123";
-  const hash = crypto.createHash("sha256").update(password).digest("hex");
+  const hash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: {
       email: "admin@dpf.local",
