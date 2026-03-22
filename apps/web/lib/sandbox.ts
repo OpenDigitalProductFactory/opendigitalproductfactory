@@ -74,6 +74,9 @@ export async function createSandbox(
   hostPort: number,
   options?: { networkName?: string; envVars?: Record<string, string> },
 ): Promise<string> {
+  if (process.env.DPF_ENVIRONMENT === "dev") {
+    throw new Error("Sandbox creation is disabled in the dev environment");
+  }
   const args = buildSandboxCreateArgs(buildId, hostPort, options);
   const { stdout } = await exec(`docker ${args.join(" ")}`);
   return stdout.trim();

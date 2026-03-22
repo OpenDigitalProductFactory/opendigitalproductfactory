@@ -72,6 +72,9 @@ export async function createSandboxDbStack(
   neo4jContainerId: string;
   qdrantContainerId: string;
 }> {
+  if (process.env.DPF_ENVIRONMENT === "dev") {
+    throw new Error("Sandbox database stack creation is disabled in the dev environment");
+  }
   const dbName = buildDbContainerName(buildId);
   const neo4jName = buildNeo4jContainerName(buildId);
   const qdrantName = buildQdrantContainerName(buildId);
