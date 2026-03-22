@@ -152,7 +152,7 @@ export function ReferenceTypeahead({
       case "Enter":
         e.preventDefault();
         if (activeIndex >= 0 && activeIndex < results.length) {
-          handleSelectItem(results[activeIndex]!);
+          handleSelectItem(results[activeIndex]);
         } else if (activeIndex === results.length && showAddNew) {
           handleAddNew();
         }
