@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ReactFlow, Background, Controls, ConnectionMode, MarkerType,
   useNodesState, useEdgesState,
-  type Node, type Edge, type Connection, type OnNodesChange,
+  type Node, type Edge, type Connection, type OnNodesChange, type ReactFlowInstance, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "@/lib/ea-types";
@@ -330,7 +330,7 @@ export function EaCanvas({
 
   // Propagate edgeVariant changes to all existing edges
   useEffect(() => {
-    setEdges((eds) => eds.map((e) => ({
+    setEdges((eds: Edge[]) => eds.map((e) => ({
       ...e,
       data: { ...e.data, edgeVariant },
     })));
@@ -377,7 +377,7 @@ export function EaCanvas({
 
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
     onNodesChange(changes);
-    setNodes((nds) => {
+    setNodes((nds: Node[]) => {
       const updatedNodes: Record<string, { x: number; y: number }> = {};
       nds.forEach((n) => { updatedNodes[n.id] = n.position; });
       scheduleAutoSave({ ...latestCanvasStateRef.current, nodes: updatedNodes });
@@ -609,8 +609,8 @@ export function EaCanvas({
             zoomOnScroll
             zoomOnPinch
             translateExtent={[[-Infinity, -Infinity], [Infinity, Infinity]]}
-            onInit={(rf) => { viewportRef.current = rf.getViewport(); }}
-            onMove={(_evt, vp) => { viewportRef.current = vp; }}
+            onInit={(rf: ReactFlowInstance) => { viewportRef.current = rf.getViewport(); }}
+            onMove={(_evt: unknown, vp: Viewport) => { viewportRef.current = vp; }}
           >
             <Background color="#2a2a40" gap={20} />
             <Controls style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)" }} />
