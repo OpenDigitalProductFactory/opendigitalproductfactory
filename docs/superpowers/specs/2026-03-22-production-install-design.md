@@ -135,6 +135,7 @@ volumes:
 ```yaml
   sandbox-image:
     image: ghcr.io/markdbodman/dpf-sandbox:${DPF_VERSION:-latest}
+    container_name: dpf-sandbox-dev
     profiles: ["build-images"]
     command: ["echo", "Image ready"]
 
