@@ -293,14 +293,7 @@ if (-not (Is-StepDone "download")) {
         $modeChoice = Read-Host "  Choose [1/2]"
 
         if ($modeChoice -eq "2") {
-            # --- Customizer sub-choice ---
-            Write-Host ""
-            Write-Host "  Would you like to contribute improvements back to the project?" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "    [a] Yes - I'll fork on GitHub and submit pull requests" -ForegroundColor White
-            Write-Host "    [b] No  - My changes stay private" -ForegroundColor White
-            Write-Host ""
-            $subChoice = Read-Host "  Choose [a/b]"
+            $InstallMode = "customizer"
 
             # Pre-flight: git required for customizer
             if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -313,77 +306,34 @@ if (-not (Is-StepDone "download")) {
                 New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
             }
 
-            if ($subChoice -eq "a") {
-                $InstallMode = "contributor"
-                $ghUser = Read-Host "  Your GitHub username"
-
-                # Check if fork exists
-                Write-Action "Checking for your fork..."
-                $forkUrl = "https://api.github.com/repos/$ghUser/opendigitalproductfactory"
-                try {
-                    $forkCheck = Invoke-WebRequest -Uri $forkUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction SilentlyContinue
-                } catch { $forkCheck = $null }
-
-                if (-not $forkCheck -or $forkCheck.StatusCode -ne 200) {
-                    Write-Action "No fork found. Opening GitHub to create one..."
-                    Start-Process "https://github.com/markdbodman/opendigitalproductfactory/fork"
-                    Write-Host "  Press Enter after you've created the fork..." -ForegroundColor Yellow
-                    Read-Host | Out-Null
+            Write-Action "Cloning project source..."
+            $stash = @{}
+            foreach ($f in '.install-progress','.env') {
+                if (Test-Path "$DPF_DIR\$f") {
+                    $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
+                    Remove-Item "$DPF_DIR\$f"
                 }
-
-                Write-Action "Cloning your fork..."
-                $stash = @{}
-                foreach ($f in '.install-progress','.env') {
-                    if (Test-Path "$DPF_DIR\$f") {
-                        $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
-                        Remove-Item "$DPF_DIR\$f"
-                    }
-                }
-                if ((Test-Path $DPF_DIR) -and
-                    @(Get-ChildItem $DPF_DIR -Force -ErrorAction SilentlyContinue).Count -eq 0) {
-                    Remove-Item $DPF_DIR
-                }
-
-                $oldEAP = $ErrorActionPreference
-                $ErrorActionPreference = "Continue"
-                git clone "https://github.com/$ghUser/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
-                $ErrorActionPreference = $oldEAP
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Warn "Clone failed. Check your username and try again."
-                    exit 1
-                }
-                git -C "$DPF_DIR" remote add upstream "https://github.com/markdbodman/opendigitalproductfactory.git" 2>$null
-
-                foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
-                Write-OK "Cloned fork with upstream remote configured"
-
-            } else {
-                $InstallMode = "private"
-                Write-Action "Cloning project source..."
-                $stash = @{}
-                foreach ($f in '.install-progress','.env') {
-                    if (Test-Path "$DPF_DIR\$f") {
-                        $stash[$f] = Get-Content "$DPF_DIR\$f" -Raw
-                        Remove-Item "$DPF_DIR\$f"
-                    }
-                }
-                if ((Test-Path $DPF_DIR) -and
-                    @(Get-ChildItem $DPF_DIR -Force -ErrorAction SilentlyContinue).Count -eq 0) {
-                    Remove-Item $DPF_DIR
-                }
-
-                $oldEAP = $ErrorActionPreference
-                $ErrorActionPreference = "Continue"
-                git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
-                $ErrorActionPreference = $oldEAP
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Warn "Clone failed. Check your internet connection."
-                    exit 1
-                }
-                git -C "$DPF_DIR" remote rename origin upstream 2>$null
-                foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
-                Write-OK "Cloned source (upstream remote is read-only reference)"
             }
+            if ((Test-Path $DPF_DIR) -and
+                @(Get-ChildItem $DPF_DIR -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+                Remove-Item $DPF_DIR
+            }
+
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
+            $ErrorActionPreference = $oldEAP
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn "Clone failed. Check your internet connection."
+                exit 1
+            }
+            foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
+
+            # Create a user branch for customizations (main stays clean for upstream pulls)
+            $branchName = "custom/$env:COMPUTERNAME"
+            git -C "$DPF_DIR" checkout -b $branchName 2>$null
+            Write-OK "Cloned source on branch '$branchName'"
+            Write-Action "Your customizations go on this branch. Pull upstream updates with: git pull origin main"
 
             # Convenience scripts for customizer mode
             Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
