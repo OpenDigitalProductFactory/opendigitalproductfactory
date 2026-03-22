@@ -1305,35 +1305,7 @@ async function seedCodexModels(): Promise<void> {
     },
   ];
 
-  // GPT chat models — same OpenAI API + OAuth token as Codex
-  const chatModels = [
-    {
-      modelId: "gpt-4o",
-      friendlyName: "GPT-4o",
-      summary: "OpenAI flagship model — fast, capable, multimodal",
-      modelClass: "chat",
-      costTier: "pay-per-use",
-      bestFor: ["conversation", "general-purpose", "code-review"] as string[],
-      avoidFor: ["local-only-required"] as string[],
-      reasoning: 75, codegen: 70, toolFidelity: 80,
-      instructionFollowingScore: 80, structuredOutputScore: 80,
-      conversational: 80, contextRetention: 75,
-    },
-    {
-      modelId: "gpt-4o-mini",
-      friendlyName: "GPT-4o Mini",
-      summary: "OpenAI lightweight model — fast and cost-efficient for simple tasks",
-      modelClass: "chat",
-      costTier: "pay-per-use",
-      bestFor: ["conversation", "simple-tasks", "summarization"] as string[],
-      avoidFor: ["local-only-required", "complex-reasoning"] as string[],
-      reasoning: 60, codegen: 55, toolFidelity: 70,
-      instructionFollowingScore: 75, structuredOutputScore: 75,
-      conversational: 75, contextRetention: 65,
-    },
-  ];
-
-  const allModels = [...agentModels, ...chatModels];
+  const allModels = [...agentModels];
   let created = 0;
   for (const m of allModels) {
     await prisma.discoveredModel.upsert({
@@ -1374,7 +1346,77 @@ async function seedCodexModels(): Promise<void> {
       created++;
     }
   }
-  if (created > 0) console.log(`  Seeded ${created} Codex/OpenAI model profile(s)`);
+  if (created > 0) console.log(`  Seeded ${created} Codex model profile(s)`);
+}
+
+/**
+ * Seed ChatGPT (GPT-4o) models under the chatgpt provider.
+ * These are chat models accessed via the same OpenAI OAuth as Codex.
+ * The chatgpt provider is auto-activated when Codex OAuth completes.
+ */
+async function seedChatGPTModels(): Promise<void> {
+  const provider = await prisma.modelProvider.findFirst({ where: { providerId: "chatgpt" } });
+  if (!provider) return;
+
+  const models = [
+    {
+      modelId: "gpt-4o",
+      friendlyName: "GPT-4o",
+      summary: "OpenAI flagship model — fast, capable, multimodal",
+      bestFor: ["conversation", "general-purpose", "code-review"] as string[],
+      avoidFor: ["local-only-required"] as string[],
+      reasoning: 75, codegen: 70, toolFidelity: 80,
+      instructionFollowingScore: 80, structuredOutputScore: 80,
+      conversational: 80, contextRetention: 75,
+    },
+    {
+      modelId: "gpt-4o-mini",
+      friendlyName: "GPT-4o Mini",
+      summary: "OpenAI lightweight model — fast and cost-efficient for simple tasks",
+      bestFor: ["conversation", "simple-tasks", "summarization"] as string[],
+      avoidFor: ["local-only-required", "complex-reasoning"] as string[],
+      reasoning: 60, codegen: 55, toolFidelity: 70,
+      instructionFollowingScore: 75, structuredOutputScore: 75,
+      conversational: 75, contextRetention: 65,
+    },
+  ];
+
+  let created = 0;
+  for (const m of models) {
+    const existing = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId: "chatgpt", modelId: m.modelId } },
+    });
+    if (!existing) {
+      await prisma.modelProfile.create({
+        data: {
+          providerId: "chatgpt",
+          modelId: m.modelId,
+          friendlyName: m.friendlyName,
+          summary: m.summary,
+          capabilityTier: "advanced",
+          costTier: "subscription",
+          bestFor: m.bestFor,
+          avoidFor: m.avoidFor,
+          modelClass: "chat",
+          modelStatus: "active",
+          generatedBy: "system:seed",
+          profileSource: "seed",
+          profileConfidence: "medium",
+          maxContextTokens: 128000,
+          maxOutputTokens: 16384,
+          reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
+          instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
+          conversational: m.conversational, contextRetention: m.contextRetention,
+          supportsToolUse: true,
+          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: true } as any,
+          inputModalities: ["text", "image"],
+          outputModalities: ["text"],
+        },
+      });
+      created++;
+    }
+  }
+  if (created > 0) console.log(`  Seeded ${created} ChatGPT model profile(s)`);
 }
 
 async function seedAnthropicSubScope(): Promise<void> {
@@ -1419,6 +1461,7 @@ async function main(): Promise<void> {
   await seedMcpServers();
   await seedAnthropicSubScope();
   await seedCodexModels();
+  await seedChatGPTModels();
   await seedLocalModels();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);

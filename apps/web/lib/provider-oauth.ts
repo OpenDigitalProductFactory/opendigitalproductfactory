@@ -179,6 +179,37 @@ export async function exchangeOAuthCode(
     }
   }
 
+  // Auto-activate ChatGPT provider when Codex OAuth completes — same OpenAI token works for GPT chat models
+  if (flow.providerId === "codex") {
+    const chatgptProvider = await prisma.modelProvider.findUnique({ where: { providerId: "chatgpt" } });
+    if (chatgptProvider) {
+      await prisma.credentialEntry.upsert({
+        where: { providerId: "chatgpt" },
+        create: {
+          providerId: "chatgpt",
+          cachedToken: encryptSecret(tokenResponse.access_token),
+          refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
+          tokenExpiresAt: expiresAt,
+          status: "ok",
+        },
+        update: {
+          cachedToken: encryptSecret(tokenResponse.access_token),
+          refreshToken: tokenResponse.refresh_token ? encryptSecret(tokenResponse.refresh_token) : null,
+          tokenExpiresAt: expiresAt,
+          status: "ok",
+        },
+      });
+      await prisma.modelProvider.update({
+        where: { providerId: "chatgpt" },
+        data: {
+          status: "active",
+          authMethod: "oauth2_authorization_code",
+          sensitivityClearance: ["public", "internal", "confidential"],
+        },
+      });
+    }
+  }
+
   await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
   return { providerId: flow.providerId };
 }
@@ -238,6 +269,22 @@ export async function refreshOAuthToken(
           status: "ok",
         },
       });
+    }
+
+    // Sync refreshed token to chatgpt provider (shares Codex OAuth)
+    if (providerId === "codex") {
+      const chatgptCred = await prisma.credentialEntry.findUnique({ where: { providerId: "chatgpt" } });
+      if (chatgptCred) {
+        await prisma.credentialEntry.update({
+          where: { providerId: "chatgpt" },
+          data: {
+            cachedToken: encryptSecret(body.access_token),
+            refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : chatgptCred.refreshToken,
+            tokenExpiresAt: expiresAt,
+            status: "ok",
+          },
+        });
+      }
     }
 
     return { token: body.access_token };
