@@ -1,0 +1,24 @@
+{
+  "name": "DPF Dev Environment",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "dev-portal",
+  "runServices": ["dev-postgres", "dev-neo4j", "dev-qdrant", "dev-init", "dev-portal"],
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "sh"
+      }
+    }
+  },
+  "initializeCommand": "docker compose --profile dev up -d dev-postgres dev-neo4j dev-qdrant",
+  "forwardPorts": [3001],
+  "postCreateCommand": "pnpm install && pnpm --filter @dpf/db exec prisma generate",
+  "remoteUser": "node"
+}
