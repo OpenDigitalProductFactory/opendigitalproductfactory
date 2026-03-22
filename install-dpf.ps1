@@ -231,10 +231,11 @@ if (-not (Is-StepDone "docker")) {
     $attempts = 0
     $maxAttempts = 36  # 3 minutes
     while ($attempts -lt $maxAttempts) {
-        try {
-            docker info 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { break }
-        } catch {}
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker info 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 5
         $attempts++
     }
@@ -476,17 +477,28 @@ Write-Step 6 9 "Starting the platform..."
 if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
     Write-Action "Building the portal (first time takes 3-5 minutes)..."
-    docker compose build --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker compose build --quiet 2>&1 | Out-Null
+    $buildExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($buildExit -ne 0) {
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         docker compose build
-        if ($LASTEXITCODE -ne 0) {
+        $buildExit = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+        if ($buildExit -ne 0) {
             Write-Warn "Build failed. Check the output above for errors."
             exit 1
         }
     }
 
     Write-Action "Starting database, AI engine, and portal..."
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     docker compose up -d
+    $ErrorActionPreference = $oldEAP
 
     # Wait for portal health
     Write-Action "Waiting for the portal to be ready..."
@@ -524,10 +536,11 @@ if (-not (Is-StepDone "model")) {
     $attempts = 0
     $maxAttempts = 120  # 10 minutes
     while ($attempts -lt $maxAttempts) {
-        try {
-            $modelList = docker compose exec -T ollama ollama list 2>$null
-            if ($modelList -match $selectedModel.Replace(":", "\:")) { break }
-        } catch {}
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $modelList = docker compose exec -T ollama ollama list 2>&1
+        $ErrorActionPreference = $oldEAP
+        if ($modelList -match $selectedModel.Replace(":", "\:")) { break }
         Start-Sleep -Seconds 5
         $attempts++
     }
