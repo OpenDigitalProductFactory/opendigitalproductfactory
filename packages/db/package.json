@@ -25,6 +25,7 @@
     "@dpf/storefront-templates": "workspace:*",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.0",
     "i18n-iso-countries": "^7.14.0",
     "neo4j-driver": "^5.27.0",
@@ -32,6 +33,7 @@
     "xlsx": "0.18.5"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/pg": "^8.11.0",
     "prisma": "^7.5.0",
     "tsx": "^4.15.0",
