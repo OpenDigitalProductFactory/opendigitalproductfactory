@@ -28,6 +28,9 @@ RUN pnpm --filter @dpf/db exec prisma generate
 
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner
+LABEL org.opencontainers.image.title="Open Digital Product Factory"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
