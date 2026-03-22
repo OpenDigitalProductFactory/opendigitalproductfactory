@@ -1289,44 +1289,92 @@ async function seedCodexModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
 
-  const codexModels = ["codex-mini-latest"];
+  // Codex agent model
+  const agentModels = [
+    {
+      modelId: "codex-mini-latest",
+      friendlyName: "Codex Mini",
+      summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
+      modelClass: "agent",
+      costTier: "$$",
+      bestFor: ["coding", "agentic-tasks"] as string[],
+      avoidFor: ["conversation"] as string[],
+      reasoning: 70, codegen: 90, toolFidelity: 85,
+      instructionFollowingScore: 80, structuredOutputScore: 70,
+      conversational: 40, contextRetention: 60,
+    },
+  ];
+
+  // GPT chat models — same OpenAI API + OAuth token as Codex
+  const chatModels = [
+    {
+      modelId: "gpt-4o",
+      friendlyName: "GPT-4o",
+      summary: "OpenAI flagship model — fast, capable, multimodal",
+      modelClass: "chat",
+      costTier: "pay-per-use",
+      bestFor: ["conversation", "general-purpose", "code-review"] as string[],
+      avoidFor: ["local-only-required"] as string[],
+      reasoning: 75, codegen: 70, toolFidelity: 80,
+      instructionFollowingScore: 80, structuredOutputScore: 80,
+      conversational: 80, contextRetention: 75,
+    },
+    {
+      modelId: "gpt-4o-mini",
+      friendlyName: "GPT-4o Mini",
+      summary: "OpenAI lightweight model — fast and cost-efficient for simple tasks",
+      modelClass: "chat",
+      costTier: "pay-per-use",
+      bestFor: ["conversation", "simple-tasks", "summarization"] as string[],
+      avoidFor: ["local-only-required", "complex-reasoning"] as string[],
+      reasoning: 60, codegen: 55, toolFidelity: 70,
+      instructionFollowingScore: 75, structuredOutputScore: 75,
+      conversational: 75, contextRetention: 65,
+    },
+  ];
+
+  const allModels = [...agentModels, ...chatModels];
   let created = 0;
-  for (const modelId of codexModels) {
+  for (const m of allModels) {
     await prisma.discoveredModel.upsert({
-      where: { providerId_modelId: { providerId: "codex", modelId } },
-      create: { providerId: "codex", modelId, rawMetadata: { id: modelId } as any, lastSeenAt: new Date() },
+      where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
+      create: { providerId: "codex", modelId: m.modelId, rawMetadata: { id: m.modelId } as any, lastSeenAt: new Date() },
       update: {},
     });
     const existing = await prisma.modelProfile.findUnique({
-      where: { providerId_modelId: { providerId: "codex", modelId } },
+      where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
     });
     if (!existing) {
       await prisma.modelProfile.create({
         data: {
           providerId: "codex",
-          modelId,
-          friendlyName: "Codex Mini",
-          summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
+          modelId: m.modelId,
+          friendlyName: m.friendlyName,
+          summary: m.summary,
           capabilityTier: "advanced",
-          costTier: "$$",
-          bestFor: ["coding", "agentic-tasks"],
-          avoidFor: ["conversation"],
-          modelClass: "agent",
+          costTier: m.costTier,
+          bestFor: m.bestFor,
+          avoidFor: m.avoidFor,
+          modelClass: m.modelClass,
           modelStatus: "active",
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "medium",
-          reasoning: 70, codegen: 90, toolFidelity: 85,
-          instructionFollowingScore: 80, structuredOutputScore: 70,
-          conversational: 40, contextRetention: 60,
+          maxContextTokens: 128000,
+          maxOutputTokens: 16384,
+          reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
+          instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
+          conversational: m.conversational, contextRetention: m.contextRetention,
           supportsToolUse: true,
-          capabilities: { toolUse: true, streaming: true } as any,
+          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: m.modelClass === "chat" } as any,
+          inputModalities: m.modelClass === "chat" ? ["text", "image"] : ["text"],
+          outputModalities: ["text"],
         },
       });
       created++;
     }
   }
-  if (created > 0) console.log(`  ✓ Seeded ${created} Codex model profile(s)`);
+  if (created > 0) console.log(`  Seeded ${created} Codex/OpenAI model profile(s)`);
 }
 
 async function seedAnthropicSubScope(): Promise<void> {
