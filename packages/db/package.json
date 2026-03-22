@@ -2,6 +2,7 @@
   "name": "@dpf/db",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
@@ -29,7 +30,7 @@
     "i18n-iso-countries": "^7.14.0",
     "neo4j-driver": "^5.27.0",
     "pg": "^8.13.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",
