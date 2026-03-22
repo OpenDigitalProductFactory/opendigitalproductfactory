@@ -1,4 +1,6 @@
 // apps/web/app/(shell)/layout.tsx
+export const dynamic = "force-dynamic";
+
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
@@ -69,7 +71,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           firstName: emailName.charAt(0).toUpperCase() + emailName.slice(1),
           lastName: "",
           displayName: emailName,
-          workEmail: user.email ?? undefined,
+          ...(user.email ? { workEmail: user.email } : {}),
           status: "active",
           startDate: new Date(),
           ...(empType ? { employmentTypeId: empType.id } : {}),
