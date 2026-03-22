@@ -80,6 +80,7 @@ services:
       QDRANT_INTERNAL_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
+      DPF_ENVIRONMENT: production
     depends_on:
       portal-init:
         condition: service_completed_successfully
