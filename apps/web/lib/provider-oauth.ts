@@ -27,7 +27,7 @@ const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
  *  1. Explicit override (escape hatch for unusual providers)
  *  2. Localhost-restricted providers → short /callback path
  *  3. Default → our full API callback route */
-const LOCALHOST_RESTRICTED_HOSTS = ["claude.ai", "auth.openai.com"];
+const LOCALHOST_RESTRICTED_HOSTS = ["claude.ai"];
 
 function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): string {
   if (provider.oauthRedirectUri) return provider.oauthRedirectUri;
