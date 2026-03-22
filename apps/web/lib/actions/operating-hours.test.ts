@@ -41,9 +41,8 @@ import {
   getOperatingHours,
   saveOperatingHours,
   getDefaultHoursForArchetype,
-  GENERIC_DEFAULTS,
-  type WeeklySchedule,
 } from "./operating-hours";
+import { GENERIC_DEFAULTS, type WeeklySchedule } from "../operating-hours-types";
 
 const mockSession = {
   user: { id: "user-1", email: "admin@test.com", platformRole: "HR-000", isSuperuser: true },
