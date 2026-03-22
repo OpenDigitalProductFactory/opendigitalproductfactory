@@ -1,6 +1,7 @@
 {
   "name": "dpf",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",

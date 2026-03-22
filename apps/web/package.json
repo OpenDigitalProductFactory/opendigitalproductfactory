@@ -2,6 +2,7 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -40,7 +41,7 @@
     "react-dom": "^19.2.0",
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^10.1.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
