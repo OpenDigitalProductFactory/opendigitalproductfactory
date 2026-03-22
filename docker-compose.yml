@@ -35,7 +35,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -157,11 +157,63 @@ services:
     ports:
       - "6334:6333"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  dev-init:
+    build:
+      context: .
+      target: dev
+    profiles: ["dev"]
+    command: ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter @dpf/db exec prisma migrate deploy"]
+    environment:
+      CI: "true"
+      DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
+      PRODUCTION_DATABASE_URL: postgresql://dpf:dpf_dev@postgres:5432/dpf
+      NEO4J_URI: bolt://dev-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: dpf_dev_password
+      PRODUCTION_NEO4J_URI: bolt://neo4j:7687
+      DPF_ENVIRONMENT: dev
+    volumes:
+      - .:/workspace
+    depends_on:
+      dev-postgres:
+        condition: service_healthy
+      dev-neo4j:
+        condition: service_healthy
+      dev-qdrant:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  dev-portal:
+    build:
+      context: .
+      target: dev
+    restart: unless-stopped
+    profiles: ["dev"]
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/workspace
+    environment:
+      DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
+      NEO4J_URI: bolt://dev-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: dpf_dev_password
+      QDRANT_INTERNAL_URL: http://dev-qdrant:6333
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+      DPF_ENVIRONMENT: dev
+      AUTH_SECRET: dev_secret_change_me
+      AUTH_TRUST_HOST: "true"
+      CREDENTIAL_ENCRYPTION_KEY: dev_only_key_not_for_production_0000
+    depends_on:
+      dev-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
