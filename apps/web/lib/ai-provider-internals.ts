@@ -665,7 +665,7 @@ export async function seedAllRecipes(): Promise<number> {
       );
 
       const modelCard = {
-        capabilities: (profile.capabilities as import("./routing/model-card-types").ModelCardCapabilities) ?? {},
+        capabilities: (profile.capabilities as unknown as import("./routing/model-card-types").ModelCardCapabilities) ?? {},
         maxOutputTokens: profile.maxOutputTokens,
         modelClass: (profile.modelClass as string) ?? "chat",
       };
@@ -687,9 +687,9 @@ export async function seedAllRecipes(): Promise<number> {
           status: "champion",
           origin: "seed",
           executionAdapter: recipe.executionAdapter,
-          providerSettings: recipe.providerSettings,
-          toolPolicy: recipe.toolPolicy,
-          responsePolicy: recipe.responsePolicy,
+          providerSettings: recipe.providerSettings as object,
+          toolPolicy: recipe.toolPolicy as object,
+          responsePolicy: recipe.responsePolicy as object,
         },
       });
       seeded++;
