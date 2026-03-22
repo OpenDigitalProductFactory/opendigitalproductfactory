@@ -1465,6 +1465,16 @@ async function main(): Promise<void> {
     },
     update: {},
   });
+  await prisma.epic.upsert({
+    where: { epicId: "EP-DEVDATA-AUDIT-001" },
+    create: {
+      epicId: "EP-DEVDATA-AUDIT-001",
+      title: "Data Classification Accuracy Audit",
+      description: "Recurring audit to ensure the sanitized clone pipeline correctly classifies all tables. Covers periodic review of table-to-sensitivity mappings, flagging new tables added without classification, validating that sanitized clone output contains no restricted/confidential data in cleartext, and regression testing when new Prisma models are added.",
+      status: "draft",
+    },
+    update: {},
+  });
   console.log("Seed complete.");
 }
 
