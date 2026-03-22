@@ -128,6 +128,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       body = {
         model: modelId,
         input,
+        store: false,
         ...(systemPrompt ? { instructions: systemPrompt } : {}),
       };
 
