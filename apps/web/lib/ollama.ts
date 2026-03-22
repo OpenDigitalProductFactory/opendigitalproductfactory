@@ -4,7 +4,7 @@
 // OpenAI-compatible local inference endpoint.
 
 import { prisma, syncInfraCI } from "@dpf/db";
-import { discoverModelsInternal } from "./ai-provider-internals";
+import { discoverModelsInternal, profileModelsInternal } from "./ai-provider-internals";
 import { getOllamaBaseUrl } from "./ollama-url";
 export { getOllamaBaseUrl } from "./ollama-url";
 
@@ -87,12 +87,18 @@ export async function checkBundledProviders(): Promise<void> {
       data: { status: "active" },
     });
 
-    await discoverModelsInternal("ollama");
+    const result = await discoverModelsInternal("ollama");
+    if (result.discovered < 20) {
+      await profileModelsInternal("ollama");
+    }
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
     const profileCount = await prisma.modelProfile.count({ where: { providerId: "ollama" } });
     if (profileCount === 0) {
-      await discoverModelsInternal("ollama");
+      const result = await discoverModelsInternal("ollama");
+      if (result.discovered < 20) {
+        await profileModelsInternal("ollama");
+      }
     }
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {

@@ -112,7 +112,11 @@ export async function updateMcpCatalogSchedule(schedule: ScheduleValue): Promise
 
 export async function runMcpCatalogSyncIfDue(): Promise<void> {
   const job = await prisma.scheduledJob.findUnique({ where: { jobId: "mcp-catalog-sync" } });
-  if (!job || job.schedule === "disabled" || !job.nextRunAt || job.nextRunAt > new Date()) return;
+  if (!job || job.schedule === "disabled") return;
+  // Trigger if: never run before OR nextRunAt is in the past
+  const neverRun = !job.lastRunAt;
+  const isDue = job.nextRunAt && job.nextRunAt <= new Date();
+  if (!neverRun && !isDue) return;
   const running = await prisma.mcpCatalogSync.findFirst({ where: { status: "running" } });
   if (running) return;
   const sync = await prisma.mcpCatalogSync.create({ data: { triggeredBy: "schedule" } });
