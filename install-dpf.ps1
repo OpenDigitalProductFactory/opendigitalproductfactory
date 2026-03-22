@@ -260,7 +260,7 @@ if (-not (Is-StepDone "download")) {
         if (Test-Path "$DPF_DIR\.git") {
             Write-Action "Updating project files..."
             try {
-                git -C "$DPF_DIR" pull --ff-only 2>&1 | Out-Null
+                $null = git -C "$DPF_DIR" pull --ff-only 2>&1
             } catch {
                 Write-Warn "Could not update: $($_.Exception.Message)"
                 Write-Warn "You can update manually with: git -C `"$DPF_DIR`" pull"
@@ -287,7 +287,7 @@ if (-not (Is-StepDone "download")) {
             Remove-Item "$DPF_DIR"
         }
         try {
-            git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1 | Out-Null
+            $null = git clone https://github.com/markdbodman/opendigitalproductfactory.git "$DPF_DIR" 2>&1
             if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
         } catch {
             Write-Warn "Could not clone from GitHub: $($_.Exception.Message)"
@@ -305,7 +305,7 @@ if (-not (Is-StepDone "download")) {
         $tempClone = Join-Path $env:TEMP "dpf-clone"
         Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
         try {
-            git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1 | Out-Null
+            $null = git clone https://github.com/markdbodman/opendigitalproductfactory.git "$tempClone" 2>&1
             if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
             Copy-Item -Path "$tempClone\*" -Destination "$DPF_DIR" -Recurse -Force
             Remove-Item "$tempClone" -Recurse -ErrorAction SilentlyContinue
