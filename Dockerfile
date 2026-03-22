@@ -3,6 +3,12 @@ FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
+# ─── Dev stage (parallel branch — not part of production chain) ──────────────
+FROM base AS dev
+WORKDIR /workspace
+RUN apk add --no-cache git
+CMD ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter web dev"]
+
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
