@@ -18,7 +18,6 @@ import {
   getProviderExtraHeaders,
   getProviderBearerToken,
   isAnthropicProvider,
-  isAnthropicOAuthToken,
   ANTHROPIC_OAUTH_BETA_HEADERS,
   backfillModelCards,
   seedAllRecipes,
@@ -280,11 +279,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     const credential = await getDecryptedCredential(providerId);
     if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
 
-    // Anthropic subscription tokens use Bearer auth, not x-api-key
-    if (isAnthropicProvider(providerId) && isAnthropicOAuthToken(credential.secretRef)) {
-      headers["Authorization"] = `Bearer ${credential.secretRef}`;
-      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
-    } else if (provider.authHeader) {
+    if (provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${credential.secretRef}`
         : credential.secretRef;
@@ -297,6 +292,9 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     const tokenResult = await getProviderBearerToken(providerId);
     if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
+    if (isAnthropicProvider(providerId)) {
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    }
   }
   // authMethod === "none" → no headers needed
 
@@ -315,7 +313,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     }
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
-    if (isAnthropicProvider(providerId) && headers["anthropic-beta"]?.includes("oauth")) {
+    if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
       const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
       const messagesUrl = `${baseUrl}/messages`;
       headers["Content-Type"] = "application/json";
