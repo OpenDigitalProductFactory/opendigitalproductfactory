@@ -53,21 +53,24 @@ The client metadata is publicly available at `https://claude.ai/oauth/claude-cod
 
 **Problem:** OAuth providers like Anthropic and OpenAI restrict redirect URIs to short `localhost/callback` paths. Our existing callback route at `/api/v1/auth/provider-oauth/callback` doesn't match. The Codex spec worked around this with a per-provider `oauthRedirectUri` override — this doesn't scale.
 
-**Solution:** Add a single new route at `app/callback/route.ts` that maps to `http://localhost:3000/callback`.
+**Solution:** Add a single new route at `app/callback/route.ts` that maps to `{APP_URL}/callback` (e.g. `http://localhost:3000/callback` in dev).
 
-Per RFC 8252 Section 7.3, OAuth authorization servers must accept any port for loopback redirect URIs. Both Anthropic (`http://localhost/callback`) and OpenAI (`http://localhost/callback`) will accept `http://localhost:3000/callback`.
+RFC 8252 Section 7.3 says authorization servers SHOULD accept any port for loopback redirect URIs. This is a SHOULD, not a MUST. **Validation required:** before implementation, test that Anthropic's OAuth server accepts `http://localhost:3000/callback` when its registered redirect URI is `http://localhost/callback`. If it does not, the fallback is to set an explicit `oauthRedirectUri` override or use a reverse proxy.
 
 **Updated `getOAuthRedirectUri()` logic:**
 
 ```
 1. If provider has explicit oauthRedirectUri set → use it (escape hatch)
-2. If provider's authorizeUrl indicates a localhost-restricted OAuth server → use http://localhost:3000/callback
+2. If provider's authorizeUrl indicates a localhost-restricted OAuth server → use {APP_URL}/callback
+   (APP_URL derived from NEXTAUTH_URL or APP_URL env var, same source as existing logic)
 3. Otherwise → use the existing /api/v1/auth/provider-oauth/callback route
 ```
 
-The step 2 detection is simple: if `authorizeUrl` contains `claude.ai`, `auth.openai.com`, or other known localhost-restricted providers, use the short callback. This is a conservative allowlist, not a blocklist.
+The step 2 detection is simple: if `authorizeUrl` contains `claude.ai`, `auth.openai.com`, or other known localhost-restricted providers, use the short callback. This is a conservative allowlist, not a blocklist. The port is never hardcoded — it is derived from the same `NEXTAUTH_URL` / `APP_URL` environment variable that the existing `getOAuthRedirectUri()` already uses.
 
 The new `/callback` route handler is identical to the existing callback route: verify admin session, extract `code` and `state` params, call `exchangeOAuthCode()`, redirect to provider detail page.
+
+**Redirect URI consistency is load-bearing:** `exchangeOAuthCode()` calls `getOAuthRedirectUri()` to construct the `redirect_uri` for the token exchange, which must exactly match the one used in the authorize request. Since both `createOAuthFlow()` and `exchangeOAuthCode()` use the same `getOAuthRedirectUri()` function, this is guaranteed.
 
 The existing `/api/v1/auth/provider-oauth/callback` route remains for providers that accept arbitrary redirect URIs.
 
@@ -98,9 +101,17 @@ Also update the Codex registry entry: set `oauthRedirectUri` to `null` (remove a
 
 The `createOAuthFlow()` function defaults to `openid profile email offline_access` scopes. Anthropic uses different scopes: `user:inference user:profile`.
 
-The existing flow already supports per-provider scope override: it reads `scope` from the `CredentialEntry` if set. The seed creates a `CredentialEntry` for `anthropic-sub` with `scope: "user:inference user:profile"`.
+The existing flow already supports per-provider scope override: it reads `scope` from the `CredentialEntry` if set (`provider-oauth.ts` line 72-73). The seed upserts a `CredentialEntry` for `anthropic-sub` with only `scope` set and `status: "unconfigured"`:
 
-No schema changes needed.
+```typescript
+await prisma.credentialEntry.upsert({
+  where: { providerId: "anthropic-sub" },
+  create: { providerId: "anthropic-sub", scope: "user:inference user:profile", status: "unconfigured" },
+  update: {},  // preserve existing credentials on re-seed
+});
+```
+
+No schema changes needed — `CredentialEntry.scope` already exists from EP-OAUTH-001.
 
 ### 5. Inference Changes
 
@@ -127,22 +138,38 @@ The `api_key` path currently detects `sk-ant-oat` tokens and switches to Bearer 
 
 The `getClaudeCodeOAuthToken()` function reads Claude Code's credentials file on disk as a fallback token source. With proper OAuth token storage and refresh in the DB, this is unnecessary. Remove it from `ai-provider-internals.ts` and all call sites.
 
-Keep `isAnthropicOAuthToken()` and `ANTHROPIC_OAUTH_BETA_HEADERS` — they're still referenced from `testProviderAuth()` and the inference path.
+Keep `ANTHROPIC_OAUTH_BETA_HEADERS` — still used by both `buildAuthHeaders()` and `testProviderAuth()` for the `oauth2_authorization_code` path.
+
+Remove `isAnthropicOAuthToken()` — after removing the `sk-ant-oat` workaround from both `buildAuthHeaders()` and `testProviderAuth()`, it has zero remaining call sites. Also clean up the corresponding import in `ai-inference.ts` (line 12) to avoid dead imports.
 
 ### 6. Test Path Changes
 
 `testProviderAuth()` in `ai-providers.ts` has a special case: when it detects an `sk-ant-oat` API key for Anthropic providers, it tests via a minimal `/messages` call instead of `/models` (subscription tokens can't list models).
 
-This logic needs to also apply when `authMethod === "oauth2_authorization_code"` and the provider is Anthropic. The condition becomes:
+This logic needs two changes:
+
+**First**, the `oauth2_authorization_code` branch in `testProviderAuth()` must add the `anthropic-beta` header for Anthropic providers (same pattern as Section 5's `buildAuthHeaders` change):
 
 ```typescript
-if (isAnthropicProvider(providerId) && (
-    headers["anthropic-beta"]?.includes("oauth") ||
-    provider.authMethod === "oauth2_authorization_code"
-)) {
-    // Test via /messages instead of /models
+if (provider.authMethod === "oauth2_authorization_code") {
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
+    headers["Authorization"] = `Bearer ${tokenResult.token}`;
+    if (isAnthropicProvider(providerId)) {
+      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
+    }
 }
 ```
+
+**Second**, the condition for routing to `/messages` instead of `/models` expands:
+
+```typescript
+if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
+    // Test via /messages instead of /models — OAuth tokens can't list models
+}
+```
+
+**Also remove** the existing `sk-ant-oat` detection from the `api_key` branch of `testProviderAuth()` (lines 283-286), consistent with the removal from `buildAuthHeaders()` in Section 5. The `anthropic-sub` provider's category is `"direct"`, not `"agent"`, so the agent-provider early return does not apply — the `/messages` test path is used.
 
 ### 7. UI Behavior
 
@@ -161,9 +188,9 @@ The Anthropic-specific guidance block (green "Claude Code / Max Subscription" bo
 | `packages/db/data/providers-registry.json` | Add OAuth fields to `anthropic-sub`; clear `oauthRedirectUri` from Codex |
 | `apps/web/app/callback/route.ts` | **New** — short OAuth callback route for localhost-restricted providers |
 | `apps/web/lib/provider-oauth.ts` | Update `getOAuthRedirectUri()` with localhost-provider allowlist |
-| `apps/web/lib/ai-inference.ts` | Add `anthropic-beta` header in `oauth2_authorization_code` path; remove `sk-ant-oat` workaround |
-| `apps/web/lib/ai-provider-internals.ts` | Remove `getClaudeCodeOAuthToken()` |
-| `apps/web/lib/actions/ai-providers.ts` | Extend `testProviderAuth()` Anthropic special case to cover OAuth auth method |
+| `apps/web/lib/ai-inference.ts` | Add `anthropic-beta` header in `oauth2_authorization_code` path; remove `sk-ant-oat` workaround and dead imports |
+| `apps/web/lib/ai-provider-internals.ts` | Remove `getClaudeCodeOAuthToken()` and `isAnthropicOAuthToken()` |
+| `apps/web/lib/actions/ai-providers.ts` | Add `anthropic-beta` header in `testProviderAuth()` OAuth path; remove `sk-ant-oat` workaround from `api_key` path; extend Anthropic test to `/messages` for OAuth |
 | `packages/db/src/seed.ts` | Seed `CredentialEntry` for `anthropic-sub` with `scope: "user:inference user:profile"` |
 
 ## What Is NOT In Scope
@@ -172,4 +199,4 @@ The Anthropic-specific guidance block (green "Claude Code / Max Subscription" bo
 - **Changing the `anthropic` (API Key) provider** — unaffected by this spec.
 - **Per-user OAuth tokens** — the credential is platform-wide, same as API keys.
 - **Dynamic client registration** — we use the shared Claude Code client ID. If Anthropic later requires per-app registration, the `oauthClientId` field supports admin override.
-- **Removing `isAnthropicOAuthToken()`** — still used by `testProviderAuth()` to handle the case where someone has an existing `sk-ant-oat` token configured as an API key.
+- **Schema migrations** — no new migrations needed. All required fields (`authorizeUrl`, `tokenUrl`, `oauthClientId`, `scope`, `refreshToken`, etc.) already exist from EP-OAUTH-001.
