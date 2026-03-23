@@ -79,7 +79,7 @@
     {
       "label": "DPF: Publish Release",
       "type": "shell",
-      "command": "$tag = Read-Host 'Enter version tag (e.g. v0.2.0)'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\"",
+      "command": "$latest = git tag --sort=-version:refname | Select-Object -First 1; Write-Host \"Last release: $latest\" -ForegroundColor Cyan; $tag = Read-Host 'Enter version tag'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\" -ForegroundColor Green",
       "options": {
         "cwd": "${workspaceFolder}"
       },
