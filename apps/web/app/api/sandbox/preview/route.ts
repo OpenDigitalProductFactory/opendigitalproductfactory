@@ -32,10 +32,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
   targetPath = targetPath.replace(/\/\//g, "/");
 
-  // Use Docker service name for container-to-container communication.
-  // The sandbox container's internal port is 3000, mapped to sandboxPort on the host.
-  // Inside Docker, we reach it via the container/service name, not localhost.
-  const sandboxHost = build.sandboxId?.includes("sandbox") ? build.sandboxId : `localhost`;
+  // Use Docker Compose service name for container-to-container communication.
+  // The service is named "sandbox" in docker-compose.yml, listening on port 3000 internally.
+  const sandboxHost = "sandbox";
   const sandboxInternalPort = 3000;
   const targetUrl = `http://${sandboxHost}:${sandboxInternalPort}${targetPath}`;
 

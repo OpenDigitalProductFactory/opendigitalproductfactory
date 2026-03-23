@@ -1523,7 +1523,16 @@ export async function executeTool(
       }
 
       logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
-      return { success: true, message: `Generated ${files.length} files in sandbox: ${files.map(f => f.path).join(", ")}`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
+
+      // Start the dev server so the Live Preview shows the generated pages
+      try {
+        const { startSandboxDevServer } = await import("@/lib/sandbox");
+        await startSandboxDevServer(build.sandboxId);
+      } catch (devErr) {
+        console.log(`[generate_code] dev server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
+      }
+
+      return { success: true, message: `Generated ${files.length} files in sandbox. Dev server starting on port 3000 — preview will update shortly.`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
     }
 
     case "iterate_sandbox": {
