@@ -1479,8 +1479,20 @@ export async function executeTool(
       if (!build.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
 
       const { buildCodeGenPrompt } = await import("@/lib/coding-agent");
-      const { execInSandbox } = await import("@/lib/sandbox");
+      const { execInSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
       const instruction = String(params.instruction ?? "");
+
+      // Ensure workspace is initialized (has node_modules)
+      try {
+        await execInSandbox(build.sandboxId, "test -d /workspace/node_modules/.pnpm");
+      } catch {
+        console.log("[generate_code] workspace not initialized, running init...");
+        try {
+          await initializeSandboxWorkspace(build.sandboxId);
+        } catch (initErr) {
+          console.log(`[generate_code] init failed: ${(initErr as Error).message?.slice(0, 100)}`);
+        }
+      }
 
       // Build the codegen prompt from brief + plan + instruction
       const prompt = buildCodeGenPrompt(
