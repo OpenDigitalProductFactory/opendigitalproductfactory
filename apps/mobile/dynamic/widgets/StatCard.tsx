@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, type ViewStyle } from "react-native";
 import { Card } from "@/src/components/ui/Card";
 import { colors, spacing } from "@/src/lib/theme";
 import type { WidgetProps } from "./index";
@@ -7,9 +7,13 @@ import type { WidgetProps } from "./index";
 export function StatCard({ definition, data }: WidgetProps) {
   const value = data[definition.dataKey];
   const displayValue = value != null ? String(value) : "--";
+  const cardStyle: ViewStyle = {
+    ...styles.card,
+    ...(definition.color ? { borderLeftColor: definition.color, borderLeftWidth: 3 } : undefined),
+  };
 
   return (
-    <Card style={[styles.card, definition.color ? { borderLeftColor: definition.color, borderLeftWidth: 3 } : null]}>
+    <Card style={cardStyle}>
       <Text style={styles.value} testID={`stat-${definition.dataKey}`}>
         {displayValue}
       </Text>

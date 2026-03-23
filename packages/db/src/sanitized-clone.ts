@@ -313,7 +313,7 @@ export async function runNeo4jClone(): Promise<void> {
       return;
     }
 
-    const exportData = await exportResponse.json();
+    const exportData = await exportResponse.json() as { results?: { data?: { row?: number[] }[] }[] };
     const nodeCount = exportData.results?.[0]?.data?.[0]?.row?.[0] ?? 0;
     const relCount = exportData.results?.[1]?.data?.[0]?.row?.[0] ?? 0;
 
