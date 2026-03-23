@@ -73,6 +73,7 @@ services:
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
     volumes:
       - ./.git:/app/.git:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
