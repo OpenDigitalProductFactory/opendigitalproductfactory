@@ -132,6 +132,9 @@ export async function runAgenticLoop(params: {
     ...(modelRequirements && typeof modelRequirements === "object" && "preferredProviderId" in modelRequirements
       ? { preferredProviderId: modelRequirements.preferredProviderId as string }
       : {}),
+    ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
+      ? { preferredModelId: modelRequirements.preferredModelId as string }
+      : {}),
   };
 
   let messages = [...chatHistory];
