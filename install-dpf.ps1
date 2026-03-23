@@ -439,6 +439,8 @@ services:
     ports:
       - "3000:3000"
       - "1455:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
       AUTH_SECRET: `${AUTH_SECRET}

@@ -38,6 +38,7 @@ LABEL org.opencontainers.image.title="Open Digital Product Factory"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
 WORKDIR /app
+RUN apk add --no-cache docker-cli
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
