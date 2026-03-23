@@ -1,11 +1,13 @@
 import { prisma } from "@dpf/db";
 import { SignJWT, jwtVerify } from "jose";
 
-const authSecret = process.env.AUTH_SECRET;
-if (!authSecret) {
-  throw new Error("AUTH_SECRET environment variable is required for social auth token signing");
+function getTempTokenSecret(): Uint8Array {
+  const authSecret = process.env.AUTH_SECRET;
+  if (!authSecret) {
+    throw new Error("AUTH_SECRET environment variable is required for social auth token signing");
+  }
+  return new TextEncoder().encode(authSecret);
 }
-const TEMP_TOKEN_SECRET = new TextEncoder().encode(authSecret);
 const TEMP_TOKEN_EXPIRY = "5m";
 
 export type SocialProfile = {
@@ -87,11 +89,11 @@ export async function createTempToken(profile: SocialProfile): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(TEMP_TOKEN_EXPIRY)
     .setIssuedAt()
-    .sign(TEMP_TOKEN_SECRET);
+    .sign(getTempTokenSecret());
 }
 
 export async function verifyTempToken(token: string): Promise<SocialProfile> {
-  const { payload } = await jwtVerify(token, TEMP_TOKEN_SECRET);
+  const { payload } = await jwtVerify(token, getTempTokenSecret());
   return {
     provider: payload.provider as string,
     providerAccountId: payload.providerAccountId as string,
