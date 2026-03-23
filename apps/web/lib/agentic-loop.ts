@@ -13,7 +13,8 @@ import type { ChatMessage } from "./ai-inference";
 // Safety nets — the loop exits naturally when the model responds with text-only.
 // These prevent infinite loops from bugs, not from normal workflows.
 const MAX_ITERATIONS = 100;
-const MAX_DURATION_MS = 120_000; // 2 minutes — no single message should take longer
+const MAX_DURATION_MS = 120_000; // 2 minutes for normal conversation
+const MAX_DURATION_BUILD_MS = 600_000; // 10 minutes when sandbox init/code gen may run
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export type AgenticResult = {
   totalInputTokens: number;
   totalOutputTokens: number;
   /** Tool calls executed during the loop */
-  executedTools: Array<{ name: string; result: ToolResult }>;
+  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: ToolResult }>;
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
 };
@@ -147,16 +148,26 @@ export async function runAgenticLoop(params: {
   const startTime = Date.now();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    // Time ceiling — prevent stuck loops from running for minutes
-    if (Date.now() - startTime > MAX_DURATION_MS) {
-      console.warn(`[agentic-loop] hit MAX_DURATION (${MAX_DURATION_MS}ms). executedTools=${executedTools.length}.`);
+    // Time ceiling — use extended duration if build tools (sandbox, codegen) are active
+    const hasBuildTools = executedTools.some(t =>
+      t.name === "launch_sandbox" || t.name === "generate_code" || t.name === "run_sandbox_tests"
+    );
+    const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS : MAX_DURATION_MS;
+    if (Date.now() - startTime > durationLimit) {
+      console.warn(`[agentic-loop] hit MAX_DURATION (${durationLimit}ms). executedTools=${executedTools.length}.`);
       break;
     }
 
-    // Repetition detector — if the same tool has been called 3+ times, the model is stuck
+    // Repetition detector — if the same tool+key has been called 3+ times, the model is stuck.
+    // For tools like saveBuildEvidence, different field arguments are distinct operations
+    // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
     const toolCallCounts = new Map<string, number>();
     for (const t of executedTools) {
-      toolCallCounts.set(t.name, (toolCallCounts.get(t.name) ?? 0) + 1);
+      // Build a signature that includes distinguishing arguments.
+      // For saveBuildEvidence, different "field" values are distinct operations.
+      const field = (t.args as Record<string, unknown> | undefined)?.field;
+      const sig = field ? `${t.name}:${field}` : t.name;
+      toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
     }
     const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
     if (repeatedTool && iteration > 5) {
@@ -301,7 +312,7 @@ export async function runAgenticLoop(params: {
         { routeContext, agentId, threadId },
       );
 
-      executedTools.push({ name: tc.name, result: toolResult });
+      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
     }
