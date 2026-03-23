@@ -344,7 +344,7 @@ if (-not (Is-StepDone "download")) {
         } else {
             # --- Consumer path ---
             $InstallMode = "consumer"
-            Write-Action "Setting up pre-built platform..."
+            Write-Action "Setting up pre-built platform, this will take a few minutes..."
 
             # Authenticate with GitHub Container Registry (images are private during early access)
             $oldEAP = $ErrorActionPreference
