@@ -190,30 +190,23 @@ export async function routeAndCall(
     // Tools stripped — prompt replaced, history trimmed, no nudging
   }
 
-  // 3b. If a preferred provider was requested, check if the decision matches.
-  // If not, and the preferred provider is in the fallback chain, reorder so
-  // it's tried first (soft preference, not a hard pin).
+  // 3b. If a preferred provider was requested, force it as the selected endpoint.
+  // This is a hard override — agents and admin-configured preferences always win
+  // over cost-per-success ranking. The V2-selected endpoint becomes first fallback.
   if (options?.preferredProviderId && decision.selectedEndpoint !== options.preferredProviderId) {
-    const preferredInChain = decision.fallbackChain.includes(options.preferredProviderId);
-    if (preferredInChain) {
-      // Move preferred to front of fallback chain
-      decision.fallbackChain = [
-        options.preferredProviderId,
-        ...decision.fallbackChain.filter(id => id !== options.preferredProviderId),
-      ];
-      // Swap selectedEndpoint to the preferred
+    const preferredCandidate = decision.candidates.find(
+      c => c.endpointId === options.preferredProviderId && !c.excluded,
+    );
+    if (preferredCandidate) {
       const origSelected = decision.selectedEndpoint;
-      const preferredCandidate = decision.candidates.find(
-        c => c.endpointId === options.preferredProviderId && !c.excluded,
-      );
-      if (preferredCandidate) {
-        decision.selectedEndpoint = options.preferredProviderId;
-        decision.selectedModelId = preferredCandidate.modelId;
-        // Keep original as first fallback
-        if (!decision.fallbackChain.includes(origSelected!)) {
-          decision.fallbackChain = [origSelected!, ...decision.fallbackChain];
-        }
-      }
+      decision.selectedEndpoint = options.preferredProviderId;
+      decision.selectedModelId = preferredCandidate.modelId;
+      decision.reason = `Agent preference override: ${options.preferredProviderId} (was: ${origSelected}). ${decision.reason}`;
+      // Keep original + existing chain as fallbacks
+      decision.fallbackChain = [
+        ...(origSelected ? [origSelected] : []),
+        ...decision.fallbackChain.filter(id => id !== options.preferredProviderId && id !== origSelected),
+      ];
     }
   }
 
