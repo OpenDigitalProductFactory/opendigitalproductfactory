@@ -1434,23 +1434,41 @@ export async function executeTool(
     case "launch_sandbox": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const { createSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
-      const port = 3001 + Math.floor(Math.random() * 100);
-      const containerId = await createSandbox(buildId, port);
-      // Save sandbox ID immediately so it's tracked even if init fails
-      await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: containerId, sandboxPort: port } });
-      logBuildActivity(buildId, "launch_sandbox", `Container created on port ${port}. Initializing workspace...`);
-      try {
-        await initializeSandboxWorkspace(containerId);
-      } catch (initErr) {
-        console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
-        // Container is created but not initialized — agent can retry
-        return { success: true, message: `Sandbox container created on port ${port} but workspace init failed. The container exists — retry with generate_code or check Docker logs.`, entityId: buildId, data: { containerId, port, initError: (initErr as Error).message?.slice(0, 100) } };
+
+      // Use the persistent sandbox container (always running in docker-compose)
+      const { isSandboxRunning, initializeSandboxWorkspace } = await import("@/lib/sandbox");
+      const PERSISTENT_SANDBOX = "dpf-sandbox-1";
+      const PERSISTENT_PORT = 3035;
+
+      // Check if persistent sandbox is running
+      const running = await isSandboxRunning(PERSISTENT_SANDBOX).catch(() => false);
+      if (!running) {
+        return { success: false, error: "Sandbox container is not running. Check docker compose.", message: "The sandbox service needs to be running. Run: docker compose up -d sandbox" };
       }
+
+      // Initialize workspace if not already done
+      const { exec: execCb } = await import("child_process");
+      const { promisify } = await import("util");
+      const exec = promisify(execCb);
+      try {
+        const { stdout } = await exec(`docker exec ${PERSISTENT_SANDBOX} ls /workspace/package.json 2>&1`);
+        if (!stdout.includes("package.json")) throw new Error("no files");
+        console.log("[launch_sandbox] workspace already initialized");
+      } catch {
+        console.log("[launch_sandbox] initializing workspace...");
+        try {
+          await initializeSandboxWorkspace(PERSISTENT_SANDBOX);
+          console.log("[launch_sandbox] workspace initialized");
+        } catch (initErr) {
+          console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
+        }
+      }
+
+      await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: PERSISTENT_SANDBOX, sandboxPort: PERSISTENT_PORT } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready on port ${port} with project source.`);
-      return { success: true, message: `Sandbox launched and initialized on port ${port}.`, entityId: buildId, data: { containerId, port } };
+      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready on port ${PERSISTENT_PORT}.`);
+      return { success: true, message: `Sandbox ready on port ${PERSISTENT_PORT}. You can generate code now.`, entityId: buildId, data: { containerId: PERSISTENT_SANDBOX, port: PERSISTENT_PORT } };
     }
 
     case "generate_code": {

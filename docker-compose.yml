@@ -95,14 +95,21 @@ services:
       retries: 10
       start_period: 30s
 
-  # ─── Sandbox (build image only, containers created on-demand) ────────────
-  sandbox-image:
+  # ─── Sandbox (persistent build environment for Build Studio) ────────────
+  sandbox:
     build:
       context: .
       dockerfile: Dockerfile.sandbox
     image: dpf-sandbox
-    profiles: ["build-images"]  # only built when explicitly requested
-    command: ["echo", "Image built successfully"]
+    restart: unless-stopped
+    ports:
+      - "3035:3000"
+    volumes:
+      - sandbox_workspace:/workspace
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
+    command: ["sleep", "infinity"]
 
   # ─── Playwright (UX test runner for Build Studio) ──────────────────────
   playwright:
@@ -231,3 +238,4 @@ volumes:
   dev_neo4jdata:
   dev_qdrant_data:
   dev_node_modules:
+  sandbox_workspace:
