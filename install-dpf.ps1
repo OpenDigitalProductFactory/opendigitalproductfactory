@@ -287,7 +287,7 @@ if (-not (Is-StepDone "download")) {
         Write-Host ""
         Write-Host "  How do you want to use Digital Product Factory?" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "    [1] Ready to go   - Pre-built: Runs in minutes, no source code, develop somply using your AI Coworker." -ForegroundColor White
+        Write-Host "    [1] Ready to go   - Pre-built: Runs in minutes, no source code, develop simply using your AI Co-Worker." -ForegroundColor White
         Write-Host "    [2] Customizable  - Full source code: For power developers wanting to use VS code on your machine." -ForegroundColor White
         Write-Host ""
         $modeChoice = Read-Host "  Choose [1/2]"
