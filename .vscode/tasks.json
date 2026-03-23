@@ -79,11 +79,7 @@
     {
       "label": "DPF: Publish Release",
       "type": "shell",
-      "command": "cmd",
-      "args": [
-        "/c",
-        "echo Enter version tag (e.g. v0.2.0): && set /p TAG= && git tag %TAG% && git push origin main && git push origin %TAG% && echo Published %TAG% to GHCR"
-      ],
+      "command": "$tag = Read-Host 'Enter version tag (e.g. v0.2.0)'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\"",
       "options": {
         "cwd": "${workspaceFolder}"
       },
