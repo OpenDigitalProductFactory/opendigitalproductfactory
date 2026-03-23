@@ -33,6 +33,7 @@ interface RegistryEntry {
   oauthClientId?: string | null;
   oauthRedirectUri?: string | null;
   userFacing?: Record<string, string> | null;
+  supportsToolUse?: boolean;
 }
 
 async function main() {
@@ -74,6 +75,7 @@ async function main() {
           ...(entry.tokenUrl !== undefined && { tokenUrl: entry.tokenUrl }),
           ...(entry.oauthClientId !== undefined && { oauthClientId: entry.oauthClientId }),
           ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: entry.oauthRedirectUri }),
+          ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse }),
           ...(entry.userFacing !== undefined && { userFacingDescription: entry.userFacing }),
         },
       });
@@ -106,6 +108,7 @@ async function main() {
           tokenUrl: entry.tokenUrl ?? null,
           oauthClientId: entry.oauthClientId ?? null,
           oauthRedirectUri: entry.oauthRedirectUri ?? null,
+          supportsToolUse: entry.supportsToolUse ?? false,
           userFacingDescription: entry.userFacing ?? null,
         },
       });

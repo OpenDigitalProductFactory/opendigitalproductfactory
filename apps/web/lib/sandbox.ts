@@ -86,6 +86,56 @@ export async function startSandbox(containerId: string): Promise<void> {
   await exec(`docker start ${containerId}`);
 }
 
+/**
+ * Initialize the sandbox workspace with the project source.
+ * Copies source from the portal container via a shared Docker volume archive,
+ * installs dependencies, and generates the Prisma client.
+ * This runs AFTER startSandbox and typically takes 60-90 seconds.
+ */
+export async function initializeSandboxWorkspace(containerId: string): Promise<void> {
+  const portalContainer = process.env.HOSTNAME ?? "dpf-portal-1";
+
+  // Copy project source from portal to sandbox via docker cp pipe
+  // Portal has full source at /app (from build stage + .git mount)
+  await exec(
+    `docker cp ${portalContainer}:/app/package.json ${containerId}:/workspace/package.json`,
+  );
+  await exec(
+    `docker cp ${portalContainer}:/app/pnpm-workspace.yaml ${containerId}:/workspace/pnpm-workspace.yaml`,
+  );
+  await exec(
+    `docker cp ${portalContainer}:/app/pnpm-lock.yaml ${containerId}:/workspace/pnpm-lock.yaml`,
+  );
+  await exec(
+    `docker cp ${portalContainer}:/app/packages ${containerId}:/workspace/packages`,
+  );
+  await exec(
+    `docker cp ${portalContainer}:/app/apps/web ${containerId}:/workspace/apps/web`,
+    { timeout: 60_000 },
+  );
+
+  // Create apps directory structure first
+  await exec(`docker exec ${containerId} sh -c "mkdir -p /workspace/apps"`);
+
+  // Install dependencies (sandbox has pnpm via corepack)
+  await exec(
+    `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
+    { timeout: 120_000 },
+  );
+
+  // Generate Prisma client
+  await exec(
+    `docker exec ${containerId} sh -c "cd /workspace && pnpm --filter @dpf/db exec prisma generate 2>&1"`,
+    { timeout: 30_000 },
+  );
+
+  // Initialize git repo for diff tracking
+  await exec(
+    `docker exec ${containerId} sh -c "cd /workspace && git init && git add -A && git commit -m 'sandbox baseline' --allow-empty 2>&1"`,
+    { timeout: 15_000 },
+  );
+}
+
 export async function execInSandbox(containerId: string, command: string): Promise<string> {
   const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(command)}`);
   return stdout;
