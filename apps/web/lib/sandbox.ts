@@ -93,47 +93,55 @@ export async function startSandbox(containerId: string): Promise<void> {
  * This runs AFTER startSandbox and typically takes 60-90 seconds.
  */
 export async function initializeSandboxWorkspace(containerId: string): Promise<void> {
-  const portalContainer = process.env.HOSTNAME ?? "dpf-portal-1";
+  // Resolve the portal container name — HOSTNAME is 0.0.0.0 (Next.js bind),
+  // so discover our actual container ID from /etc/hostname (Docker sets this).
+  let portalContainer = "dpf-portal-1";
+  try {
+    const { readFileSync } = await import("fs");
+    const hostname = readFileSync("/etc/hostname", "utf-8").trim();
+    if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
+  } catch { /* fallback to dpf-portal-1 */ }
 
-  // Copy project source from portal to sandbox via docker cp pipe
+  // Create directory structure first
+  await exec(`docker exec ${containerId} sh -c "mkdir -p /workspace/apps /workspace/packages"`);
+
+  // Copy project source from portal to sandbox via docker cp
   // Portal has full source at /app (from build stage + .git mount)
-  await exec(
-    `docker cp ${portalContainer}:/app/package.json ${containerId}:/workspace/package.json`,
-  );
-  await exec(
-    `docker cp ${portalContainer}:/app/pnpm-workspace.yaml ${containerId}:/workspace/pnpm-workspace.yaml`,
-  );
-  await exec(
-    `docker cp ${portalContainer}:/app/pnpm-lock.yaml ${containerId}:/workspace/pnpm-lock.yaml`,
-  );
-  await exec(
-    `docker cp ${portalContainer}:/app/packages ${containerId}:/workspace/packages`,
-  );
-  await exec(
-    `docker cp ${portalContainer}:/app/apps/web ${containerId}:/workspace/apps/web`,
-    { timeout: 60_000 },
-  );
+  const filesToCopy = [
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    "tsconfig.base.json",
+  ];
+  for (const f of filesToCopy) {
+    await exec(`docker cp ${portalContainer}:/app/${f} ${containerId}:/workspace/${f}`).catch(() => {
+      console.log(`[sandbox-init] optional file ${f} not found, skipping`);
+    });
+  }
 
-  // Create apps directory structure first
-  await exec(`docker exec ${containerId} sh -c "mkdir -p /workspace/apps"`);
+  // Copy packages and app source
+  await exec(`docker cp ${portalContainer}:/app/packages ${containerId}:/workspace/packages`, { timeout: 60_000 });
+  await exec(`docker cp ${portalContainer}:/app/apps/web ${containerId}:/workspace/apps/web`, { timeout: 60_000 });
 
   // Install dependencies (sandbox has pnpm via corepack)
   await exec(
     `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
-    { timeout: 120_000 },
+    { timeout: 180_000 },
   );
 
   // Generate Prisma client
   await exec(
     `docker exec ${containerId} sh -c "cd /workspace && pnpm --filter @dpf/db exec prisma generate 2>&1"`,
     { timeout: 30_000 },
-  );
+  ).catch((err) => {
+    console.log(`[sandbox-init] prisma generate failed (non-fatal): ${err.message?.slice(0, 200)}`);
+  });
 
   // Initialize git repo for diff tracking
   await exec(
-    `docker exec ${containerId} sh -c "cd /workspace && git init && git add -A && git commit -m 'sandbox baseline' --allow-empty 2>&1"`,
+    `docker exec ${containerId} sh -c "cd /workspace && git config user.email sandbox@dpf.local && git config user.name sandbox && git init && git add -A && git commit -m 'sandbox baseline' --allow-empty 2>&1"`,
     { timeout: 15_000 },
-  );
+  ).catch(() => {});
 }
 
 export async function execInSandbox(containerId: string, command: string): Promise<string> {
