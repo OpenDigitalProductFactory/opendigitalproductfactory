@@ -28,6 +28,11 @@ interface RegistryEntry {
   costPerformanceNotes?: string | null;
   modelRestrictions?: string[];
   catalogVisibility?: string;
+  authorizeUrl?: string | null;
+  tokenUrl?: string | null;
+  oauthClientId?: string | null;
+  oauthRedirectUri?: string | null;
+  userFacing?: Record<string, string> | null;
 }
 
 async function main() {
@@ -65,6 +70,11 @@ async function main() {
           ...(entry.costPerformanceNotes !== undefined && { costPerformanceNotes: entry.costPerformanceNotes }),
           ...(entry.modelRestrictions !== undefined && { modelRestrictions: entry.modelRestrictions }),
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
+          ...(entry.authorizeUrl !== undefined && { authorizeUrl: entry.authorizeUrl }),
+          ...(entry.tokenUrl !== undefined && { tokenUrl: entry.tokenUrl }),
+          ...(entry.oauthClientId !== undefined && { oauthClientId: entry.oauthClientId }),
+          ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: entry.oauthRedirectUri }),
+          ...(entry.userFacing !== undefined && { userFacingDescription: entry.userFacing }),
         },
       });
       console.log(`  UPDATED  ${entry.providerId.padEnd(20)} → "${entry.name}" (was "${existing.name}", status=${existing.status} preserved)`);
@@ -92,6 +102,11 @@ async function main() {
           costPerformanceNotes: entry.costPerformanceNotes ?? null,
           modelRestrictions: entry.modelRestrictions ?? [],
           catalogVisibility: entry.catalogVisibility ?? "visible",
+          authorizeUrl: entry.authorizeUrl ?? null,
+          tokenUrl: entry.tokenUrl ?? null,
+          oauthClientId: entry.oauthClientId ?? null,
+          oauthRedirectUri: entry.oauthRedirectUri ?? null,
+          userFacingDescription: entry.userFacing ?? null,
         },
       });
       console.log(`  CREATED  ${entry.providerId.padEnd(20)} → "${entry.name}" (status=unconfigured)`);
