@@ -162,12 +162,12 @@ export async function runAgenticLoop(params: {
     // For tools like saveBuildEvidence, different field arguments are distinct operations
     // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
     const toolCallCounts = new Map<string, number>();
+    // Build-phase tools and evidence-saving are part of normal phase progression,
+    // not signs of being stuck. Only count non-phase tools toward repetition.
+    const PHASE_TOOLS = new Set(["saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan", "launch_sandbox", "generate_code", "run_sandbox_tests", "save_build_notes"]);
     for (const t of executedTools) {
-      // Build a signature that includes distinguishing arguments.
-      // For saveBuildEvidence, different "field" values are distinct operations.
-      const field = (t.args as Record<string, unknown> | undefined)?.field;
-      const sig = field ? `${t.name}:${field}` : t.name;
-      toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
+      if (PHASE_TOOLS.has(t.name)) continue; // Don't count phase-progression tools
+      toolCallCounts.set(t.name, (toolCallCounts.get(t.name) ?? 0) + 1);
     }
     const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
     if (repeatedTool && iteration > 5) {
