@@ -1388,10 +1388,9 @@ export async function executeTool(
     case "launch_sandbox": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const { createSandbox, startSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
+      const { createSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
       const port = 3001 + Math.floor(Math.random() * 100);
       const containerId = await createSandbox(buildId, port);
-      await startSandbox(containerId);
       logBuildActivity(buildId, "launch_sandbox", `Container created on port ${port}. Initializing workspace...`);
       await initializeSandboxWorkspace(containerId);
       await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: containerId, sandboxPort: port } });

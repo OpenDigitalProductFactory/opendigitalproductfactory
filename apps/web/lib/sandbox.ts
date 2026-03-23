@@ -102,26 +102,25 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
     if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
   } catch { /* fallback to dpf-portal-1 */ }
 
-  // Create directory structure first
-  await exec(`docker exec ${containerId} sh -c "mkdir -p /workspace/apps /workspace/packages"`);
+  // Start the container first — both docker exec and tar pipe need it running
+  await exec(`docker start ${containerId}`);
 
-  // Copy project source from portal to sandbox via docker cp
-  // Portal has full source at /app (from build stage + .git mount)
-  const filesToCopy = [
-    "package.json",
-    "pnpm-workspace.yaml",
-    "pnpm-lock.yaml",
-    "tsconfig.base.json",
-  ];
-  for (const f of filesToCopy) {
-    await exec(`docker cp ${portalContainer}:/app/${f} ${containerId}:/workspace/${f}`).catch(() => {
-      console.log(`[sandbox-init] optional file ${f} not found, skipping`);
-    });
-  }
+  // Copy project source via tar pipe (docker cp between containers is not supported).
+  // Portal exports tar from /app, sandbox imports to /workspace.
+  await exec(
+    `docker exec ${portalContainer} tar -cf - -C /app package.json pnpm-workspace.yaml pnpm-lock.yaml 2>/dev/null | docker exec -i ${containerId} tar -xf - -C /workspace`,
+    { timeout: 30_000 },
+  ).catch(() => console.log("[sandbox-init] root files copy partial — continuing"));
 
-  // Copy packages and app source
-  await exec(`docker cp ${portalContainer}:/app/packages ${containerId}:/workspace/packages`, { timeout: 60_000 });
-  await exec(`docker cp ${portalContainer}:/app/apps/web ${containerId}:/workspace/apps/web`, { timeout: 60_000 });
+  await exec(
+    `docker exec ${portalContainer} tar -cf - -C /app packages | docker exec -i ${containerId} tar -xf - -C /workspace`,
+    { timeout: 60_000 },
+  );
+
+  await exec(
+    `docker exec ${portalContainer} tar -cf - -C /app apps/web | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
+    { timeout: 60_000 },
+  );
 
   // Install dependencies (sandbox has pnpm via corepack)
   await exec(
