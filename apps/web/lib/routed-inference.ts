@@ -65,8 +65,10 @@ export interface RouteAndCallOptions {
   tools?: Array<Record<string, unknown>>;
   /** Task type override. Defaults to "conversation". */
   taskType?: string;
-  /** Prefer a specific provider (biases ranking, does not hard-pin). */
+  /** Prefer a specific provider (hard override when set by agent config). */
   preferredProviderId?: string;
+  /** Prefer a specific model ID (swaps within provider candidates). */
+  preferredModelId?: string;
   /** Specialized capability requirements. */
   requiresCodeExecution?: boolean;
   requiresWebSearch?: boolean;
@@ -207,6 +209,18 @@ export async function routeAndCall(
         ...(origSelected ? [origSelected] : []),
         ...decision.fallbackChain.filter(id => id !== options.preferredProviderId && id !== origSelected),
       ];
+    }
+  }
+
+  // 3c. If a preferred model was requested, swap within the selected provider's candidates.
+  if (options?.preferredModelId && decision.selectedModelId !== options.preferredModelId) {
+    const modelCandidate = decision.candidates.find(
+      c => c.modelId === options.preferredModelId && !c.excluded,
+    );
+    if (modelCandidate) {
+      decision.selectedEndpoint = modelCandidate.endpointId;
+      decision.selectedModelId = options.preferredModelId;
+      decision.reason = `Model preference override: ${options.preferredModelId}. ${decision.reason}`;
     }
   }
 
