@@ -1437,9 +1437,16 @@ export async function executeTool(
       const { createSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
       const port = 3001 + Math.floor(Math.random() * 100);
       const containerId = await createSandbox(buildId, port);
-      logBuildActivity(buildId, "launch_sandbox", `Container created on port ${port}. Initializing workspace...`);
-      await initializeSandboxWorkspace(containerId);
+      // Save sandbox ID immediately so it's tracked even if init fails
       await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: containerId, sandboxPort: port } });
+      logBuildActivity(buildId, "launch_sandbox", `Container created on port ${port}. Initializing workspace...`);
+      try {
+        await initializeSandboxWorkspace(containerId);
+      } catch (initErr) {
+        console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
+        // Container is created but not initialized — agent can retry
+        return { success: true, message: `Sandbox container created on port ${port} but workspace init failed. The container exists — retry with generate_code or check Docker logs.`, entityId: buildId, data: { containerId, port, initError: (initErr as Error).message?.slice(0, 100) } };
+      }
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
       logBuildActivity(buildId, "launch_sandbox", `Sandbox ready on port ${port} with project source.`);
