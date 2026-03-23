@@ -1284,6 +1284,12 @@ export async function executeTool(
       const field = String(params.field ?? "");
       const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"];
       if (!allowedFields.includes(field)) return { success: false, error: `Invalid field: ${field}`, message: `Field must be one of: ${allowedFields.join(", ")}` };
+
+      // Guide the agent when it saves the wrong field for the current phase
+      const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
+      if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
+        return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
+      }
       const updateData: Record<string, unknown> = { [field]: params.value as import("@dpf/db").Prisma.InputJsonValue };
 
       // Auto-populate brief from designDoc when saving during ideate phase.
