@@ -1477,16 +1477,53 @@ export async function executeTool(
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running. Launch it first.", message: "No sandbox." };
       if (!build.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
+
       const { buildCodeGenPrompt } = await import("@/lib/coding-agent");
       const { execInSandbox } = await import("@/lib/sandbox");
+      const instruction = String(params.instruction ?? "");
+
+      // Build the codegen prompt from brief + plan + instruction
       const prompt = buildCodeGenPrompt(
         build.brief as Parameters<typeof buildCodeGenPrompt>[0],
         (build.buildPlan ?? {}) as Record<string, unknown>,
-        String(params.instruction ?? ""),
+        instruction,
       );
-      const encodedPrompt = Buffer.from(prompt).toString("base64");
-      await execInSandbox(build.sandboxId, `echo ${encodedPrompt} | base64 -d > /tmp/codegen-prompt.txt`);
-      return { success: true, message: "Code generation instruction sent to sandbox.", data: { instruction: String(params.instruction ?? "") } };
+
+      // Call an LLM to generate the actual code files
+      const { routeAndCall } = await import("@/lib/routed-inference");
+      const codeResult = await routeAndCall(
+        [{ role: "user", content: prompt }],
+        "You are a code generation agent. Output ONLY code files in this format:\n### FILE: <path>\n```typescript\n<content>\n```\n\nNo explanations. Just files.",
+        "internal",
+        { taskType: "codegen" },
+      );
+
+      // Parse generated files from the LLM response
+      const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
+      const files: Array<{ path: string; content: string }> = [];
+      let match;
+      while ((match = filePattern.exec(codeResult.content)) !== null) {
+        files.push({ path: match[1].trim(), content: match[2] });
+      }
+
+      if (files.length === 0) {
+        // Save the raw response as a prompt file for manual review
+        const encodedPrompt = Buffer.from(codeResult.content).toString("base64");
+        await execInSandbox(build.sandboxId, `echo ${encodedPrompt} | base64 -d > /tmp/codegen-output.txt`);
+        logBuildActivity(buildId, "generate_code", `LLM responded but no parseable files found. Raw output saved to /tmp/codegen-output.txt`);
+        return { success: true, message: `Code generation produced text but no parseable files. Instruction: ${instruction}. Check /tmp/codegen-output.txt in sandbox.`, data: { instruction, filesGenerated: 0 } };
+      }
+
+      // Write each file to the sandbox
+      for (const file of files) {
+        const dir = file.path.includes("/") ? file.path.substring(0, file.path.lastIndexOf("/")) : "";
+        if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+        const encoded = Buffer.from(file.content).toString("base64");
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${file.path}`);
+      }
+
+      logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
+      return { success: true, message: `Generated ${files.length} files in sandbox: ${files.map(f => f.path).join(", ")}`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
     }
 
     case "iterate_sandbox": {
