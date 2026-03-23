@@ -103,31 +103,38 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   } catch { /* fallback to dpf-portal-1 */ }
 
   // Start the container first — both docker exec and tar pipe need it running
+  console.log(`[sandbox-init] portal=${portalContainer} sandbox=${containerId}`);
   await exec(`docker start ${containerId}`);
+  console.log(`[sandbox-init] container started`);
 
   // Copy project source via tar pipe (docker cp between containers is not supported).
   // Portal exports tar from /app, sandbox imports to /workspace.
   await exec(
     `docker exec ${portalContainer} tar -cf - -C /app package.json pnpm-workspace.yaml pnpm-lock.yaml 2>/dev/null | docker exec -i ${containerId} tar -xf - -C /workspace`,
     { timeout: 30_000 },
-  ).catch(() => console.log("[sandbox-init] root files copy partial — continuing"));
+  ).catch((err) => console.log(`[sandbox-init] root files copy partial: ${err.message?.slice(0, 100)}`));
+  console.log("[sandbox-init] root files done");
 
   await exec(
     `docker exec ${portalContainer} tar -cf - -C /app packages | docker exec -i ${containerId} tar -xf - -C /workspace`,
     { timeout: 60_000 },
   );
+  console.log("[sandbox-init] packages/ copied");
 
   await exec(
     `docker exec ${portalContainer} tar -cf - -C /app apps/web | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
     { timeout: 60_000 },
   );
+  console.log("[sandbox-init] apps/web/ copied");
 
   // Install dependencies (sandbox has pnpm via corepack)
   // This can take 3-5 minutes on a cold cache. Use generous timeout.
+  console.log("[sandbox-init] starting pnpm install...");
   await exec(
     `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
     { timeout: 300_000 },
   );
+  console.log("[sandbox-init] pnpm install complete");
 
   // Generate Prisma client
   await exec(
