@@ -1369,6 +1369,26 @@ export async function executeTool(
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
+
+      // Auto-advance: design review saved → check if we can advance to plan
+      try {
+        const { advanceBuildPhase } = await import("@/lib/actions/build");
+        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+        if (updatedBuild && updatedBuild.phase === "ideate" && canTransitionPhase("ideate", "plan")) {
+          const gate = checkPhaseGate("ideate", "plan", {
+            designDoc: updatedBuild.designDoc, designReview: updatedBuild.designReview,
+          });
+          if (gate.allowed) {
+            await advanceBuildPhase(buildId, "plan");
+            if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
+            logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
+          }
+        }
+      } catch (err) {
+        console.error("[reviewDesignDoc] auto-advance failed:", err);
+      }
+
       return { success: true, message: `Design review: ${review.decision}. ${review.summary}`, data: { review } };
     }
 
@@ -1388,6 +1408,26 @@ export async function executeTool(
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
+
+      // Auto-advance: plan review saved → check if we can advance to build
+      try {
+        const { advanceBuildPhase } = await import("@/lib/actions/build");
+        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+        if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
+          const gate = checkPhaseGate("plan", "build", {
+            buildPlan: updatedBuild.buildPlan, planReview: updatedBuild.planReview,
+          });
+          if (gate.allowed) {
+            await advanceBuildPhase(buildId, "build");
+            if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+            logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build");
+          }
+        }
+      } catch (err) {
+        console.error("[reviewBuildPlan] auto-advance failed:", err);
+      }
+
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
     }
 
