@@ -443,6 +443,7 @@ services:
       DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
       AUTH_SECRET: `${AUTH_SECRET}
       AUTH_TRUST_HOST: "true"
+      APP_URL: http://localhost:3000
       CREDENTIAL_ENCRYPTION_KEY: `${CREDENTIAL_ENCRYPTION_KEY}
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
