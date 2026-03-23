@@ -161,13 +161,19 @@ export async function runAgenticLoop(params: {
     // Repetition detector — if the same tool+key has been called 3+ times, the model is stuck.
     // For tools like saveBuildEvidence, different field arguments are distinct operations
     // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
+    // Repetition = same tool with same key arguments called 3+ times.
+    // Different arguments (e.g., different search queries, different fields) = progress.
     const toolCallCounts = new Map<string, number>();
-    // Build-phase tools and evidence-saving are part of normal phase progression,
-    // not signs of being stuck. Only count non-phase tools toward repetition.
-    const PHASE_TOOLS = new Set(["saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan", "launch_sandbox", "generate_code", "run_sandbox_tests", "save_build_notes"]);
     for (const t of executedTools) {
-      if (PHASE_TOOLS.has(t.name)) continue; // Don't count phase-progression tools
-      toolCallCounts.set(t.name, (toolCallCounts.get(t.name) ?? 0) + 1);
+      const args = t.args as Record<string, unknown> | undefined;
+      // Build a signature from the tool name + distinguishing argument values
+      const keyParts = [t.name];
+      if (args?.field) keyParts.push(String(args.field));
+      if (args?.query) keyParts.push(String(args.query).slice(0, 50));
+      if (args?.path) keyParts.push(String(args.path));
+      if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
+      const sig = keyParts.join(":");
+      toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
     }
     const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
     if (repeatedTool && iteration > 5) {
