@@ -156,6 +156,34 @@ export async function execInSandbox(containerId: string, command: string): Promi
   return stdout;
 }
 
+/**
+ * Start the Next.js dev server inside the sandbox.
+ * Runs in the background (detached) so it persists across tool calls.
+ * The dev server listens on port 3000 inside the container.
+ */
+export async function startSandboxDevServer(containerId: string): Promise<void> {
+  // Check if dev server is already running
+  try {
+    const { stdout } = await exec(
+      `docker exec ${containerId} sh -c "pgrep -f 'next dev' || echo none"`,
+    );
+    if (stdout.trim() !== "none") {
+      console.log("[sandbox] dev server already running");
+      return;
+    }
+  } catch { /* proceed to start */ }
+
+  // Start dev server in background. Use nohup + & to detach from the exec session.
+  // Redirect output to a log file so it doesn't block.
+  await exec(
+    `docker exec -d ${containerId} sh -c "cd /workspace && PORT=3000 pnpm --filter web dev > /tmp/dev-server.log 2>&1"`,
+  );
+  console.log("[sandbox] dev server starting on port 3000");
+
+  // Wait briefly for it to bind
+  await new Promise(resolve => setTimeout(resolve, 3000));
+}
+
 export async function getSandboxLogs(containerId: string, tail: number = 50): Promise<string> {
   const { stdout } = await exec(`docker logs --tail ${tail} ${containerId}`);
   return stdout;
