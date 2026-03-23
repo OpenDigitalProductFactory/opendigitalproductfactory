@@ -123,9 +123,10 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   );
 
   // Install dependencies (sandbox has pnpm via corepack)
+  // This can take 3-5 minutes on a cold cache. Use generous timeout.
   await exec(
     `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
-    { timeout: 180_000 },
+    { timeout: 300_000 },
   );
 
   // Generate Prisma client
