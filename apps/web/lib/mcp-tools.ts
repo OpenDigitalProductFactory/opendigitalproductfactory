@@ -1284,9 +1284,31 @@ export async function executeTool(
       const field = String(params.field ?? "");
       const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"];
       if (!allowedFields.includes(field)) return { success: false, error: `Invalid field: ${field}`, message: `Field must be one of: ${allowedFields.join(", ")}` };
+      const updateData: Record<string, unknown> = { [field]: params.value as import("@dpf/db").Prisma.InputJsonValue };
+
+      // Auto-populate brief from designDoc when saving during ideate phase.
+      // The generate_code tool requires brief to build codegen prompts.
+      if (field === "designDoc") {
+        const currentBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { brief: true, title: true, phase: true } });
+        if (currentBuild && !currentBuild.brief) {
+          const doc = params.value as Record<string, unknown> | null;
+          updateData.brief = {
+            title: currentBuild.title,
+            description: (doc?.problemStatement as string) ?? currentBuild.title,
+            portfolioContext: "manufacturing_and_delivery",
+            targetRoles: ["admin", "customer"],
+            inputs: [],
+            dataNeeds: (doc?.proposedApproach as string) ?? "",
+            acceptanceCriteria: Array.isArray(doc?.acceptanceCriteria)
+              ? (doc.acceptanceCriteria as string[])
+              : ["Feature works as described", "Meets accessibility standards"],
+          };
+        }
+      }
+
       await prisma.featureBuild.update({
         where: { buildId },
-        data: { [field]: params.value as import("@dpf/db").Prisma.InputJsonValue },
+        data: updateData,
       });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field });
@@ -1366,15 +1388,17 @@ export async function executeTool(
     case "launch_sandbox": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const { createSandbox, startSandbox } = await import("@/lib/sandbox");
+      const { createSandbox, startSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
       const port = 3001 + Math.floor(Math.random() * 100);
       const containerId = await createSandbox(buildId, port);
       await startSandbox(containerId);
+      logBuildActivity(buildId, "launch_sandbox", `Container created on port ${port}. Initializing workspace...`);
+      await initializeSandboxWorkspace(containerId);
       await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: containerId, sandboxPort: port } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-      logBuildActivity(buildId, "launch_sandbox", `Sandbox launched on port ${port}.`);
-      return { success: true, message: `Sandbox launched on port ${port}.`, entityId: buildId, data: { containerId, port } };
+      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready on port ${port} with project source.`);
+      return { success: true, message: `Sandbox launched and initialized on port ${port}.`, entityId: buildId, data: { containerId, port } };
     }
 
     case "generate_code": {

@@ -5,12 +5,17 @@
     "category": "direct",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "x-api-key",
     "costModel": "token",
-    "families": ["claude-3-5", "claude-4"],
-    "inputPricePerMToken": 3.00,
-    "outputPricePerMToken": 15.00,
+    "families": [
+      "claude-3-5",
+      "claude-4"
+    ],
+    "inputPricePerMToken": 3,
+    "outputPricePerMToken": 15,
     "docsUrl": "https://docs.anthropic.com",
     "consoleUrl": "https://console.anthropic.com/settings/billing",
     "billingLabel": "Pay-per-token API key",
@@ -26,7 +31,8 @@
       "dataResidency": "United States (Anthropic servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data. Consult compliance team for healthcare/financial PII."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "anthropic-sub",
@@ -34,10 +40,16 @@
     "category": "direct",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key", "oauth2_authorization_code"],
+    "supportedAuthMethods": [
+      "api_key",
+      "oauth2_authorization_code"
+    ],
     "authHeader": "x-api-key",
     "costModel": "token",
-    "families": ["claude-3-5", "claude-4"],
+    "families": [
+      "claude-3-5",
+      "claude-4"
+    ],
     "inputPricePerMToken": 0,
     "outputPricePerMToken": 0,
     "docsUrl": "https://code.claude.com/docs",
@@ -48,7 +60,10 @@
     "tokenUrl": "https://platform.claude.com/v1/oauth/token",
     "oauthClientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     "oauthRedirectUri": null,
-    "modelRestrictions": ["claude-haiku-*", "claude-3-haiku-*"],
+    "modelRestrictions": [
+      "claude-haiku-*",
+      "claude-3-haiku-*"
+    ],
     "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "Anthropic's Claude models accessed through a subscription plan.",
@@ -60,7 +75,8 @@
       "dataResidency": "United States (Anthropic servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Same as Anthropic. SOC 2 Type II certified."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "openai",
@@ -68,12 +84,18 @@
     "category": "direct",
     "baseUrl": "https://api.openai.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini"],
-    "inputPricePerMToken": 2.50,
-    "outputPricePerMToken": 10.00,
+    "families": [
+      "gpt-4o",
+      "gpt-4-turbo",
+      "gpt-4o-mini"
+    ],
+    "inputPricePerMToken": 2.5,
+    "outputPricePerMToken": 10,
     "docsUrl": "https://platform.openai.com/docs",
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": null,
@@ -89,7 +111,8 @@
       "dataResidency": "United States (OpenAI servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Enterprise tier available for stricter data handling."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "azure-openai",
@@ -97,12 +120,18 @@
     "category": "direct",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key", "oauth2_client_credentials"],
+    "supportedAuthMethods": [
+      "api_key",
+      "oauth2_client_credentials"
+    ],
     "authHeader": "api-key",
     "costModel": "token",
-    "families": ["gpt-4o", "gpt-4-turbo"],
-    "inputPricePerMToken": 5.00,
-    "outputPricePerMToken": 15.00,
+    "families": [
+      "gpt-4o",
+      "gpt-4-turbo"
+    ],
+    "inputPricePerMToken": 5,
+    "outputPricePerMToken": 15,
     "docsUrl": "https://learn.microsoft.com/en-us/azure/ai-services/openai/",
     "consoleUrl": "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     "billingLabel": null,
@@ -118,7 +147,8 @@
       "dataResidency": "Your chosen Azure region. Data does not leave your Azure tenancy.",
       "setupDifficulty": "moderate",
       "regulatoryNotes": "Inherits Azure compliance certifications (ISO 27001, SOC 2, HIPAA BAA available). Strong choice for regulated industries."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "gemini",
@@ -126,12 +156,17 @@
     "category": "direct",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "x-goog-api-key",
     "costModel": "token",
-    "families": ["gemini-1.5-pro", "gemini-2.0"],
+    "families": [
+      "gemini-1.5-pro",
+      "gemini-2.0"
+    ],
     "inputPricePerMToken": 1.25,
-    "outputPricePerMToken": 5.00,
+    "outputPricePerMToken": 5,
     "docsUrl": "https://ai.google.dev/docs",
     "consoleUrl": "https://aistudio.google.com/apikey",
     "billingLabel": null,
@@ -147,7 +182,8 @@
       "dataResidency": "United States (Google servers, with some regional options).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Google Workspace customers have additional data processing agreements. Verify terms for sensitive data."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "bedrock",
@@ -155,12 +191,18 @@
     "category": "direct",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["claude", "titan", "llama"],
-    "inputPricePerMToken": 3.00,
-    "outputPricePerMToken": 15.00,
+    "families": [
+      "claude",
+      "titan",
+      "llama"
+    ],
+    "inputPricePerMToken": 3,
+    "outputPricePerMToken": 15,
     "docsUrl": "https://docs.aws.amazon.com/bedrock/",
     "consoleUrl": "https://console.aws.amazon.com/bedrock/",
     "billingLabel": null,
@@ -184,15 +226,23 @@
     "category": "direct",
     "baseUrl": "http://model-runner.docker.internal/v1",
     "authMethod": "none",
-    "supportedAuthMethods": ["none"],
+    "supportedAuthMethods": [
+      "none"
+    ],
     "authHeader": null,
     "costModel": "compute",
-    "families": ["llama3", "llama3.2", "mistral", "phi3", "gemma2"],
+    "families": [
+      "llama3",
+      "llama3.2",
+      "mistral",
+      "phi3",
+      "gemma2"
+    ],
     "computeWatts": 150,
     "electricityRateKwh": 0.12,
     "docsUrl": "https://docs.docker.com/desktop/features/model-runner/",
     "consoleUrl": null,
-    "billingLabel": "Local compute \u00b7 electricity cost only",
+    "billingLabel": "Local compute · electricity cost only",
     "costPerformanceNotes": null,
     "catalogVisibility": "visible",
     "userFacing": {
@@ -205,7 +255,8 @@
       "dataResidency": "Your machine. Nothing leaves.",
       "setupDifficulty": "automatic",
       "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "xai",
@@ -213,10 +264,15 @@
     "category": "direct",
     "baseUrl": "https://api.x.ai/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["grok-2", "grok-3"],
+    "families": [
+      "grok-2",
+      "grok-3"
+    ],
     "docsUrl": "https://docs.x.ai",
     "consoleUrl": "https://console.x.ai",
     "billingLabel": null,
@@ -232,7 +288,8 @@
       "dataResidency": "United States (xAI servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Relatively newer provider. Review their data processing terms before using for sensitive business data."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "mistral",
@@ -240,10 +297,16 @@
     "category": "direct",
     "baseUrl": "https://api.mistral.ai/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["mistral-large", "mistral-small", "codestral"],
+    "families": [
+      "mistral-large",
+      "mistral-small",
+      "codestral"
+    ],
     "docsUrl": "https://docs.mistral.ai",
     "consoleUrl": "https://console.mistral.ai/billing",
     "billingLabel": null,
@@ -259,7 +322,8 @@
       "dataResidency": "European Union (Mistral servers in France).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "GDPR-compliant. EU data residency makes this a strong choice for European businesses or those with EU data obligations."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "cohere",
@@ -267,10 +331,16 @@
     "category": "direct",
     "baseUrl": "https://api.cohere.com/v2",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["command-r-plus", "command-r", "embed"],
+    "families": [
+      "command-r-plus",
+      "command-r",
+      "embed"
+    ],
     "docsUrl": "https://docs.cohere.com",
     "consoleUrl": "https://dashboard.cohere.com/billing",
     "billingLabel": null,
@@ -286,7 +356,8 @@
       "dataResidency": "United States (Cohere servers, with cloud provider options).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 certified. Enterprise agreements available. Well-suited for business document search and knowledge management."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "deepseek",
@@ -294,10 +365,15 @@
     "category": "direct",
     "baseUrl": "https://api.deepseek.com",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["deepseek-chat", "deepseek-coder"],
+    "families": [
+      "deepseek-chat",
+      "deepseek-coder"
+    ],
     "docsUrl": "https://platform.deepseek.com/api-docs",
     "consoleUrl": "https://platform.deepseek.com/top_up",
     "billingLabel": null,
@@ -313,7 +389,8 @@
       "dataResidency": "China (DeepSeek servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Data residency in China creates significant compliance concerns for most regulated industries. Not recommended for business, personal, or sensitive data without legal review."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "groq",
@@ -321,10 +398,16 @@
     "category": "direct",
     "baseUrl": "https://api.groq.com/openai/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mixtral", "gemma"],
+    "families": [
+      "llama3",
+      "mixtral",
+      "gemma"
+    ],
     "docsUrl": "https://console.groq.com/docs",
     "consoleUrl": "https://console.groq.com/settings/billing",
     "billingLabel": null,
@@ -340,7 +423,8 @@
       "dataResidency": "United States (Groq servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Good choice for latency-sensitive applications where open-source models are sufficient."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "together",
@@ -348,10 +432,16 @@
     "category": "direct",
     "baseUrl": "https://api.together.xyz/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mistral", "qwen"],
+    "families": [
+      "llama3",
+      "mistral",
+      "qwen"
+    ],
     "docsUrl": "https://docs.together.ai",
     "consoleUrl": "https://api.together.ai/settings/billing",
     "billingLabel": null,
@@ -375,10 +465,16 @@
     "category": "direct",
     "baseUrl": "https://api.fireworks.ai/inference/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["llama3", "mixtral", "qwen"],
+    "families": [
+      "llama3",
+      "mixtral",
+      "qwen"
+    ],
     "docsUrl": "https://docs.fireworks.ai",
     "consoleUrl": "https://fireworks.ai/account/billing",
     "billingLabel": null,
@@ -402,12 +498,17 @@
     "category": "agent",
     "baseUrl": "https://api.openai.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key", "oauth2_authorization_code"],
+    "supportedAuthMethods": [
+      "api_key",
+      "oauth2_authorization_code"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["codex-mini"],
-    "inputPricePerMToken": 1.50,
-    "outputPricePerMToken": 6.00,
+    "families": [
+      "codex-mini"
+    ],
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6,
     "docsUrl": "https://developers.openai.com/codex/",
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": "Pay-per-use (API key) or Subscription (ChatGPT plan)",
@@ -416,7 +517,8 @@
     "authorizeUrl": "https://auth.openai.com/oauth/authorize",
     "tokenUrl": "https://auth.openai.com/oauth/token",
     "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
-    "oauthRedirectUri": "http://localhost:1455/auth/callback"
+    "oauthRedirectUri": "http://localhost:1455/auth/callback",
+    "supportsToolUse": true
   },
   {
     "providerId": "chatgpt",
@@ -424,10 +526,14 @@
     "category": "direct",
     "baseUrl": "https://chatgpt.com/backend-api",
     "authMethod": "oauth2_authorization_code",
-    "supportedAuthMethods": ["oauth2_authorization_code"],
+    "supportedAuthMethods": [
+      "oauth2_authorization_code"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["gpt-5.4"],
+    "families": [
+      "gpt-5.4"
+    ],
     "authorizeUrl": "https://auth.openai.com/oauth/authorize",
     "tokenUrl": "https://auth.openai.com/oauth/token",
     "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
@@ -449,7 +555,8 @@
       "dataResidency": "United States (OpenAI servers).",
       "setupDifficulty": "automatic",
       "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data."
-    }
+    },
+    "supportsToolUse": true
   },
   {
     "providerId": "openrouter",
@@ -457,13 +564,17 @@
     "category": "router",
     "baseUrl": "https://openrouter.ai/api/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"],
+    "families": [
+      "multi-provider"
+    ],
     "docsUrl": "https://openrouter.ai/docs",
     "consoleUrl": "https://openrouter.ai/credits",
-    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "billingLabel": "Pay-per-use · rates vary by model",
     "costPerformanceNotes": null,
     "catalogVisibility": "visible",
     "userFacing": {
@@ -484,13 +595,17 @@
     "category": "router",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"],
+    "families": [
+      "multi-provider"
+    ],
     "docsUrl": "https://docs.litellm.ai",
     "consoleUrl": null,
-    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "billingLabel": "Pay-per-use · rates vary by model",
     "costPerformanceNotes": null,
     "catalogVisibility": "visible"
   },
@@ -500,13 +615,17 @@
     "category": "router",
     "baseUrl": "https://api.portkey.ai/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "x-portkey-api-key",
     "costModel": "token",
-    "families": ["multi-provider"],
+    "families": [
+      "multi-provider"
+    ],
     "docsUrl": "https://docs.portkey.ai",
     "consoleUrl": "https://app.portkey.ai/organisation/billing",
-    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "billingLabel": "Pay-per-use · rates vary by model",
     "costPerformanceNotes": null,
     "catalogVisibility": "visible"
   },
@@ -516,13 +635,17 @@
     "category": "router",
     "baseUrl": "https://api.withmartian.com/v1",
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": "Authorization",
     "costModel": "token",
-    "families": ["multi-provider"],
+    "families": [
+      "multi-provider"
+    ],
     "docsUrl": "https://docs.withmartian.com",
     "consoleUrl": "https://app.withmartian.com/billing",
-    "billingLabel": "Pay-per-use \u00b7 rates vary by model",
+    "billingLabel": "Pay-per-use · rates vary by model",
     "costPerformanceNotes": null,
     "catalogVisibility": "visible"
   },
@@ -534,7 +657,9 @@
     "category": "mcp-subscribed",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": null,
     "costModel": "token",
     "families": [],
@@ -558,7 +683,9 @@
     "category": "mcp-subscribed",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": null,
     "costModel": "token",
     "families": [],
@@ -582,7 +709,9 @@
     "category": "mcp-subscribed",
     "baseUrl": null,
     "authMethod": "api_key",
-    "supportedAuthMethods": ["api_key"],
+    "supportedAuthMethods": [
+      "api_key"
+    ],
     "authHeader": null,
     "costModel": "token",
     "families": [],
