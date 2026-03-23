@@ -109,10 +109,14 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
 
   // Copy project source via tar pipe (docker cp between containers is not supported).
   // Portal exports tar from /app, sandbox imports to /workspace.
-  await exec(
-    `docker exec ${portalContainer} tar -cf - -C /app package.json pnpm-workspace.yaml pnpm-lock.yaml 2>/dev/null | docker exec -i ${containerId} tar -xf - -C /workspace`,
-    { timeout: 30_000 },
-  ).catch((err) => console.log(`[sandbox-init] root files copy partial: ${err.message?.slice(0, 100)}`));
+  // Copy root config files one at a time (more reliable than multi-file tar which can fail silently)
+  const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
+  for (const f of rootFiles) {
+    await exec(
+      `docker exec ${portalContainer} tar -cf - -C /app ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
+      { timeout: 10_000 },
+    ).catch(() => console.log(`[sandbox-init] ${f} not found, skipping`));
+  }
   console.log("[sandbox-init] root files done");
 
   await exec(
@@ -176,7 +180,7 @@ export async function startSandboxDevServer(containerId: string): Promise<void> 
   // Start dev server in background. Use nohup + & to detach from the exec session.
   // Redirect output to a log file so it doesn't block.
   await exec(
-    `docker exec -d ${containerId} sh -c "cd /workspace && PORT=3000 pnpm --filter web dev > /tmp/dev-server.log 2>&1"`,
+    `docker exec -d ${containerId} sh -c "cd /workspace && HOSTNAME=0.0.0.0 PORT=3000 pnpm --filter web dev > /tmp/dev-server.log 2>&1"`,
   );
   console.log("[sandbox] dev server starting on port 3000");
 
