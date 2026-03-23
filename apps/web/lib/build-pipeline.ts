@@ -162,26 +162,21 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { createSandboxNetwork, createSandbox } = await import("./sandbox");
-  const { createSandboxDbStack, findAvailablePort, buildSandboxDbEnvVars } = await import("./sandbox-db");
+  // Use the persistent sandbox service (dpf-sandbox-1) instead of per-build containers.
+  // The sandbox is always running via docker-compose.yml.
+  const PERSISTENT_SANDBOX = "dpf-sandbox-1";
+  const PERSISTENT_PORT = 3035;
 
-  const networkName = await createSandboxNetwork(buildId);
-  const hostPort = await findAvailablePort(3001, 3100);
-  const envVars = buildSandboxDbEnvVars(buildId);
-  const containerId = await createSandbox(buildId, hostPort, { networkName, envVars });
-  const { dbContainerId, neo4jContainerId, qdrantContainerId } = await createSandboxDbStack(
-    buildId,
-    networkName,
-  );
+  const { isSandboxRunning } = await import("./sandbox");
+  const running = await isSandboxRunning(PERSISTENT_SANDBOX).catch(() => false);
+  if (!running) {
+    console.warn(`[build-pipeline] Persistent sandbox ${PERSISTENT_SANDBOX} not running. Skipping.`);
+  }
 
   return {
     ...state,
-    containerId,
-    dbContainerId,
-    neo4jContainerId,
-    qdrantContainerId,
-    networkId: networkName,
-    hostPort,
+    containerId: PERSISTENT_SANDBOX,
+    hostPort: PERSISTENT_PORT,
   };
 }
 
