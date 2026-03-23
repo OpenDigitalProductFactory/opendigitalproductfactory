@@ -177,15 +177,58 @@ export async function startSandboxDevServer(containerId: string): Promise<void> 
     }
   } catch { /* proceed to start */ }
 
-  // Start dev server in background. Use nohup + & to detach from the exec session.
-  // Redirect output to a log file so it doesn't block.
+  // Start a lightweight HTTP server for sandbox file preview.
+  // Uses Node's built-in http module — no extra deps needed.
+  const previewScript = `
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const server = http.createServer((req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  const workspace = '/workspace';
+  const files = [];
+  function walk(dir, prefix) {
+    try {
+      for (const f of fs.readdirSync(dir)) {
+        if (f === 'node_modules' || f === '.next' || f === '.git') continue;
+        const full = path.join(dir, f);
+        const rel = prefix ? prefix + '/' + f : f;
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, rel);
+        else if (rel.endsWith('.ts') || rel.endsWith('.tsx') || rel.endsWith('.prisma')) files.push(rel);
+      }
+    } catch {}
+  }
+  walk(workspace, '');
+  const newFiles = files.filter(f => {
+    try { return fs.statSync(path.join(workspace, f)).mtimeMs > Date.now() - 3600000; } catch { return false; }
+  });
+  res.end(\`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sandbox Preview</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui;background:#1a1a2e;color:#e0e0e0;padding:24px}
+h1{color:#7c8cf8;font-size:20px;margin-bottom:16px}h2{color:#aaa;font-size:14px;margin:16px 0 8px}
+.file{font-family:monospace;font-size:12px;padding:4px 8px;border-left:2px solid #333;margin:2px 0;color:#ccc}
+.new{border-left-color:#7c8cf8;color:#fff}.count{color:#888;font-size:12px}</style></head>
+<body><h1>Sandbox: Build Preview</h1>
+<p class="count">\${files.length} source files, \${newFiles.length} recently modified</p>
+<h2>Recently Modified</h2>\${newFiles.map(f=>'<div class="file new">'+f+'</div>').join('')}
+<h2>All Source Files</h2>\${files.slice(0,50).map(f=>'<div class="file">'+f+'</div>').join('')}
+\${files.length>50?'<p class="count">...and '+(files.length-50)+' more</p>':''}
+</body></html>\`);
+});
+server.listen(3000, '0.0.0.0', () => console.log('Preview server on :3000'));
+`.replace(/\n/g, ' ');
+
+  const encoded = Buffer.from(previewScript).toString("base64");
   await exec(
-    `docker exec -d ${containerId} sh -c "cd /workspace && HOSTNAME=0.0.0.0 PORT=3000 pnpm --filter web dev > /tmp/dev-server.log 2>&1"`,
+    `docker exec ${containerId} sh -c "echo ${encoded} | base64 -d > /tmp/preview-server.js"`,
   );
-  console.log("[sandbox] dev server starting on port 3000");
+  await exec(
+    `docker exec -d ${containerId} sh -c "node /tmp/preview-server.js > /tmp/dev-server.log 2>&1"`,
+  );
+  console.log("[sandbox] preview server starting on port 3000");
 
   // Wait briefly for it to bind
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  await new Promise(resolve => setTimeout(resolve, 2000));
 }
 
 export async function getSandboxLogs(containerId: string, tail: number = 50): Promise<string> {
