@@ -5,10 +5,6 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# Enable UTF-8 so Docker progress bars render correctly
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001 > $null 2>&1
-
 # Determine a sensible default: if the script already sits in a project
 # directory (has docker-compose.yml), default to that path.
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -95,7 +91,7 @@ function Ensure-DPFStartupTask {
         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NoLogo -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$startScriptPath`" -NoBrowser"
         $trigger = New-ScheduledTaskTrigger -AtLogOn
-        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType InteractiveToken
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive
         $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Start DPF containers on user logon." -Force | Out-Null
         Write-OK "Auto-start task configured: $taskName"
@@ -565,24 +561,22 @@ if (-not (Is-StepDone "hardware")) {
 
     # Select a Docker Model Runner model that fits comfortably in VRAM.
     # Docker Model Runner uses Docker Desktop's built-in GPU passthrough.
-    # Model IDs use the ai/ namespace: ai/llama3.2:1B-Q8_0, ai/llama3.1:8B-Q8_0, etc.
-    if ($gpuVRAM_GB -ge 12) {
-        $selectedModel = "ai/llama3.1:8B-Q8_0"
-        $modelReason = "fast, high-quality chat -- fits fully in your GPU memory"
-    } elseif ($gpuVRAM_GB -ge 6) {
-        $selectedModel = "ai/llama3.1:8B-Q4_K_M"
-        $modelReason = "good quality chat, GPU-accelerated"
+    # Model IDs use the ai/ namespace WITHOUT Ollama-style quantization tags.
+    # Docker Model Runner selects the best quantization internally.
+    if ($gpuVRAM_GB -ge 6) {
+        $selectedModel = "ai/llama3.1"
+        $modelReason = "high-quality chat -- fits in your GPU memory"
     } elseif ($gpuVRAM_GB -ge 3) {
-        $selectedModel = "ai/llama3.2:3B-Q4_K_M"
+        $selectedModel = "ai/llama3.2"
         $modelReason = "balanced quality, GPU-accelerated"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "ai/llama3.1:8B-Q4_K_M"
-        $modelReason = "good quality chat, fits your RAM (CPU mode)"
+        $selectedModel = "ai/llama3.1"
+        $modelReason = "high-quality chat, fits your RAM (CPU mode)"
     } elseif ($totalRAM_GB -ge 8) {
-        $selectedModel = "ai/llama3.2:3B-Q4_K_M"
+        $selectedModel = "ai/llama3.2"
         $modelReason = "fast, works well on your hardware"
     } else {
-        $selectedModel = "ai/llama3.2:1B-Q8_0"
+        $selectedModel = "ai/llama3.2"
         $modelReason = "lightweight, optimized for your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
@@ -616,7 +610,7 @@ if (-not (Is-StepDone "hardware")) {
 } else {
     Write-OK "Already detected"
     $selectedModel = Get-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
-    if (-not $selectedModel) { $selectedModel = "llama3.2:1b" }
+    if (-not $selectedModel) { $selectedModel = "ai/llama3.2" }
 }
 
 # --- Generate .env -------------------------------------------------------------
@@ -655,7 +649,7 @@ if (-not (Is-StepDone "started")) {
         Write-Action "Pulling pre-built images (this may take a few minutes)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose pull 2>&1 | ForEach-Object { "$_" }
+        docker compose --progress plain pull 2>&1 | ForEach-Object { "$_" }
         $pullExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($pullExit -ne 0) {
