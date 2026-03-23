@@ -15,6 +15,7 @@ const LEGACY_REDIRECT_PATHS = ["/customer-login", "/customer-signup"];
 
 export function classifyRoute(pathname: string): RouteClass {
   if (pathname.startsWith("/s/")) return RouteClass.Storefront;
+  if (pathname.startsWith("/courses")) return RouteClass.Storefront;
   if (pathname === "/portal/sign-in" || pathname === "/portal/sign-up") return RouteClass.PublicPage;
   if (pathname.startsWith("/portal")) return RouteClass.Portal;
   if (pathname.startsWith("/api/storefront/")) return RouteClass.PublicApi;
