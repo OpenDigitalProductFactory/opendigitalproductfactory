@@ -646,7 +646,7 @@ if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
 
     if ($InstallMode -eq "consumer") {
-        Write-Action "Pulling pre-built images (this may take a few minutes)..."
+        Write-Action "Pulling pre-built images (this may take a few minutes, be patient)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         docker compose --progress plain pull 2>&1 | ForEach-Object { "$_" }
@@ -713,8 +713,8 @@ if (-not (Is-StepDone "started")) {
 Write-Step 7 9 "Setting up your AI Coworker..."
 if (-not (Is-StepDone "model")) {
     # Pull model via Docker Model Runner (built into Docker Desktop 4.40+)
-    Write-Action "Pulling AI model $selectedModel via Docker Model Runner..."
-    Write-Action "This may take several minutes depending on your internet speed."
+    Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
+    Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     docker model pull $selectedModel 2>&1
