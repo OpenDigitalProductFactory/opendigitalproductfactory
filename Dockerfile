@@ -6,7 +6,7 @@ WORKDIR /app
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
 FROM base AS dev
 WORKDIR /workspace
-RUN apk add --no-cache git postgresql16-client
+RUN apk add --no-cache git
 CMD ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter web dev"]
 
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
