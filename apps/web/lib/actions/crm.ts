@@ -56,6 +56,36 @@ async function logSystemActivity(
   });
 }
 
+// ─── Customer Account Actions ───────────────────────────────────────────────
+
+export async function createCustomerAccount(input: {
+  name: string;
+  website?: string;
+  industry?: string;
+  notes?: string;
+  status?: string;
+}) {
+  const accountId = `ACCT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  const account = await prisma.customerAccount.create({
+    data: {
+      accountId,
+      name: input.name,
+      status: input.status || "prospect",
+      website: input.website || null,
+      industry: input.industry || null,
+      notes: input.notes || null,
+      currency: "USD",
+    },
+  });
+  await logSystemActivity(`Customer account "${account.name}" created`, {
+    type: "account_created",
+    accountId: account.id,
+  });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/customer");
+  return account;
+}
+
 // ─── Engagement Actions ─────────────────────────────────────────────────────
 
 export async function createEngagement(input: {

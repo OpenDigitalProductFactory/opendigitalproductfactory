@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/customer/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
+import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
 
 const STATUS_COLOURS: Record<string, string> = {
   prospect: "#fbbf24",
@@ -65,18 +66,21 @@ export default async function CustomerPage() {
 
   const summaryCards = [
     { label: "Engagements", value: engTotal, sub: `${engNew} new`, color: "#fb923c", href: "/customer/engagements" },
-    { label: "Pipeline", value: pipelineCount, sub: `£${pipelineValue.toLocaleString()}`, color: "var(--dpf-accent)", href: "/customer/opportunities" },
+    { label: "Pipeline", value: pipelineCount, sub: `$${pipelineValue.toLocaleString()}`, color: "var(--dpf-accent)", href: "/customer/opportunities" },
     { label: "Quotes", value: quoteDraft + quoteSent, sub: `${quoteSent} sent`, color: "#38bdf8", href: "/customer/quotes" },
     { label: "Orders", value: ordersActive, sub: "active", color: "#4ade80", href: "/customer/sales-orders" },
   ];
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Customer</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Customer</h1>
+          <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
+            {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <NewCustomerButton />
       </div>
 
       {/* Pipeline summary cards */}

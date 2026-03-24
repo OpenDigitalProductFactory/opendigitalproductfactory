@@ -206,7 +206,7 @@ export function AgentCoworkerPanel({
 
     startTransition(async () => {
       try {
-        const result = await sendMessage({
+        const sendPromise = sendMessage({
           threadId,
           content,
           routeContext: pathname,
@@ -217,6 +217,10 @@ export function AgentCoworkerPanel({
           ...(activeBuildId ? { buildId: activeBuildId } : {}),
           ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
         });
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Request timed out — try again")), 60_000),
+        );
+        const result = await Promise.race([sendPromise, timeout]);
         if ("error" in result) {
           console.warn("sendMessage error:", result.error);
           setMessages((prev) =>
