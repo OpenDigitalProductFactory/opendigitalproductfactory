@@ -145,6 +145,19 @@ $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
 if (-not $SkipDocker) {
     Write-Step "Starting Docker services (PostgreSQL, Neo4j, Qdrant)"
 
+    # Tear down any existing containers and volumes from a previous install
+    # so the database starts clean (required for onboarding to trigger).
+    Write-Host "  Cleaning previous Docker state..."
+    docker compose down -v 2>$null
+
+    # Wipe bind-mount data directories so re-installs get a fresh database
+    foreach ($subdir in @("pgdata", "neo4jdata", "qdrant_data")) {
+        $path = Join-Path $dockerDataDir $subdir
+        if (Test-Path $path) {
+            Remove-Item -Recurse -Force $path 2>$null
+        }
+    }
+
     # Configure Docker volume location on the project's drive
     foreach ($dir in @(
         $dockerDataDir,
