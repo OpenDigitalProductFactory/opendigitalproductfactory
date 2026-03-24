@@ -16,17 +16,25 @@ import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
-/** Decrypt the API key / client secret for a provider (server-only). */
+/** Decrypt the API key / client secret for a provider (server-only).
+ *  Returns null when the credential row is missing OR when decryption fails
+ *  (e.g. the encryption key was rotated after these credentials were stored). */
 export async function getDecryptedCredential(providerId: string) {
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
   if (!cred) return null;
-  return {
-    ...cred,
-    secretRef:    cred.secretRef    ? decryptSecret(cred.secretRef)    : null,
-    clientSecret: cred.clientSecret ? decryptSecret(cred.clientSecret) : null,
-    cachedToken:  cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null,
-    refreshToken: cred.refreshToken ? decryptSecret(cred.refreshToken) : null,
-  };
+  const secretRef    = cred.secretRef    ? decryptSecret(cred.secretRef)    : null;
+  const clientSecret = cred.clientSecret ? decryptSecret(cred.clientSecret) : null;
+  const cachedToken  = cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null;
+  const refreshToken = cred.refreshToken ? decryptSecret(cred.refreshToken) : null;
+  // If every encrypted field failed to decrypt, the key was rotated — treat as no credential.
+  const hadEncrypted = [cred.secretRef, cred.clientSecret, cred.cachedToken, cred.refreshToken]
+    .some(v => v?.startsWith("enc:"));
+  const allFailed = hadEncrypted && !secretRef && !clientSecret && !cachedToken && !refreshToken;
+  if (allFailed) {
+    console.warn(`[credentials] All encrypted fields for "${providerId}" failed to decrypt — re-configure this provider.`);
+    return null;
+  }
+  return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };
 }
 
 /** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
