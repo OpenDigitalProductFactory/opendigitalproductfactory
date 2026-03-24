@@ -68,6 +68,16 @@ export type Notification = Prisma.NotificationGetPayload<{}>;
 
 export type AuthorizationDecisionLog = Prisma.AuthorizationDecisionLogGetPayload<{}>;
 
+export type TaskRun = Prisma.TaskRunGetPayload<{
+  include: { nodes: true };
+}>;
+
+export type TaskNode = Prisma.TaskNodeGetPayload<{
+  include: { childNodes: true };
+}>;
+
+export type TaskNodeEdge = Prisma.TaskNodeEdgeGetPayload<{}>;
+
 export interface BookingConfig {
   durationMinutes: number;
   beforeBufferMinutes?: number;
