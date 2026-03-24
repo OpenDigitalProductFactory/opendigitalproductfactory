@@ -45,12 +45,22 @@
       "problemMatcher": "$tsc"
     },
     {
+      "label": "DPF: Dev Infrastructure",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose up -d postgres neo4j qdrant portal-init sandbox"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Start databases + sandbox only (for local pnpm dev)"
+    },
+    {
       "label": "DPF: Start",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose up -d"],
       "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": []
+      "problemMatcher": [],
+      "detail": "Start full Docker stack including portal"
     },
     {
       "label": "DPF: Stop",
