@@ -13,7 +13,7 @@ describe("createSupplierSchema", () => {
     contactName: "Jane Smith",
     email: "jane@acme.com",
     paymentTerms: "Net 30",
-    defaultCurrency: "GBP",
+    defaultCurrency: "USD",
   };
 
   it("accepts valid supplier input", () => {
@@ -46,7 +46,7 @@ describe("createSupplierSchema", () => {
     const { defaultCurrency, ...rest } = validInput;
     const result = createSupplierSchema.safeParse(rest);
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.defaultCurrency).toBe("GBP");
+    if (result.success) expect(result.data.defaultCurrency).toBe("USD");
   });
 });
 
@@ -55,7 +55,7 @@ describe("createBillSchema", () => {
     supplierId: "sup-001",
     issueDate: "2026-03-01",
     dueDate: "2026-04-01",
-    currency: "GBP",
+    currency: "USD",
     lineItems: [
       { description: "Consulting", quantity: 1, unitPrice: 500 },
     ],
@@ -115,7 +115,7 @@ describe("updateBillSchema", () => {
 describe("createPOSchema", () => {
   const validInput = {
     supplierId: "sup-001",
-    currency: "GBP",
+    currency: "USD",
     lineItems: [
       { description: "Office Supplies", quantity: 10, unitPrice: 25 },
     ],

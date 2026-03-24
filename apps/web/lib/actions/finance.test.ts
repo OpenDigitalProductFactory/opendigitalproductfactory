@@ -46,7 +46,7 @@ const baseInvoiceInput = {
   accountId: "acc-1",
   type: "standard" as const,
   dueDate: "2026-04-30",
-  currency: "GBP",
+  currency: "USD",
   lineItems: [
     {
       description: "Consulting services",
@@ -80,7 +80,7 @@ describe("auth", () => {
   it("recordPayment throws when unauthenticated", async () => {
     mockAuth.mockResolvedValue(null as never);
     await expect(
-      recordPayment({ direction: "inbound", method: "bank_transfer", amount: 500, currency: "GBP" }),
+      recordPayment({ direction: "inbound", method: "bank_transfer", amount: 500, currency: "USD" }),
     ).rejects.toThrow("Unauthorized");
   });
 });
@@ -112,7 +112,7 @@ describe("createInvoice total calculation", () => {
       accountId: "acc-1",
       type: "standard" as const,
       dueDate: "2026-04-30",
-      currency: "GBP",
+      currency: "USD",
       lineItems: [
         { description: "Item A", quantity: 2, unitPrice: 100, taxRate: 20, discountPercent: 10 },
         { description: "Item B", quantity: 5, unitPrice: 50, taxRate: 5, discountPercent: 0 },
@@ -172,7 +172,7 @@ describe("recordPayment", () => {
       direction: "inbound",
       method: "bank_transfer",
       amount: 500,
-      currency: "GBP",
+      currency: "USD",
     });
 
     expect(mockPrisma.payment.create).toHaveBeenCalledOnce();
@@ -195,7 +195,7 @@ describe("recordPayment", () => {
       direction: "inbound",
       method: "bank_transfer",
       amount: 600,
-      currency: "GBP",
+      currency: "USD",
       invoiceId: "inv-1",
     });
 
@@ -222,7 +222,7 @@ describe("recordPayment", () => {
       direction: "inbound",
       method: "card",
       amount: 500,
-      currency: "GBP",
+      currency: "USD",
       invoiceId: "inv-2",
     });
 

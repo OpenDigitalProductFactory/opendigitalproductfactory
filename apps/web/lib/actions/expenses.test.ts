@@ -76,14 +76,14 @@ function managerUser(id = "mgr-001") {
 
 const validInput = {
   title: "March Expenses",
-  currency: "GBP",
+  currency: "USD",
   items: [
     {
       date: "2026-03-01",
       category: "travel" as const,
       description: "Train to London",
       amount: 45.5,
-      currency: "GBP",
+      currency: "USD",
       taxReclaimable: false,
       taxAmount: 0,
     },
@@ -92,7 +92,7 @@ const validInput = {
       category: "meals" as const,
       description: "Team lunch",
       amount: 32.0,
-      currency: "GBP",
+      currency: "USD",
       taxReclaimable: false,
       taxAmount: 0,
     },
@@ -208,7 +208,7 @@ describe("submitExpenseClaim", () => {
       id: "claim-001",
       claimId: "EXP-2026-0001",
       title: "March Expenses",
-      currency: "GBP",
+      currency: "USD",
       totalAmount: 77.5,
       employee: { id: "emp-001", displayName: "Alice Smith", workEmail: "alice@example.com", userId: "user-001" },
     });

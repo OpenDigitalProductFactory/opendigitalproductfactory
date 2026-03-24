@@ -56,7 +56,7 @@ const baseScheduleInput = {
   frequency: "monthly" as const,
   startDate: "2026-04-01",
   autoSend: true,
-  currency: "GBP",
+  currency: "USD",
   lineItems: [
     { description: "Consulting", quantity: 1, unitPrice: 2000, taxRate: 20 },
   ],
@@ -214,7 +214,7 @@ describe("generateDueInvoices", () => {
     id: "sch-1",
     accountId: "acc-1",
     frequency: "monthly",
-    currency: "GBP",
+    currency: "USD",
     nextInvoiceDate: new Date("2026-03-01"), // past
     endDate: null,
     autoSend: true,

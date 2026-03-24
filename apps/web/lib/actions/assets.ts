@@ -97,7 +97,7 @@ export async function createAsset(input: CreateAssetInput) {
       category: input.category,
       purchaseDate: new Date(input.purchaseDate),
       purchaseCost: input.purchaseCost,
-      currency: input.currency ?? "GBP",
+      currency: input.currency ?? "USD",
       depreciationMethod: input.depreciationMethod ?? "straight_line",
       usefulLifeMonths: input.usefulLifeMonths,
       residualValue: input.residualValue ?? 0,

@@ -76,7 +76,7 @@ export async function createRecurringSchedule(
       name: input.name,
       frequency: input.frequency,
       amount,
-      currency: input.currency ?? "GBP",
+      currency: input.currency ?? "USD",
       startDate: new Date(input.startDate),
       endDate: input.endDate ? new Date(input.endDate) : null,
       nextInvoiceDate: new Date(input.startDate),

@@ -206,7 +206,7 @@ export async function createOpportunity(input: {
       assignedToId: input.assignedToId || null,
       engagementId: input.engagementId || null,
       expectedValue: input.expectedValue ?? null,
-      currency: input.currency || "GBP",
+      currency: input.currency || "USD",
       expectedClose: input.expectedClose
         ? new Date(input.expectedClose)
         : null,
@@ -454,7 +454,7 @@ export async function createQuote(input: {
         discountValue,
         taxAmount,
         totalAmount,
-        currency: input.currency || "GBP",
+        currency: input.currency || "USD",
         terms: input.terms?.trim() || null,
         notes: input.notes?.trim() || null,
         createdById: input.userId || null,

@@ -37,7 +37,7 @@ export async function createBankAccount(input: CreateBankAccountInput) {
       sortCode: input.sortCode ?? null,
       iban: input.iban ?? null,
       swift: input.swift ?? null,
-      currency: input.currency ?? "GBP",
+      currency: input.currency ?? "USD",
       accountType: input.accountType ?? "current",
       openingBalance,
       currentBalance: openingBalance,

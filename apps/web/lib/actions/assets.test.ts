@@ -67,7 +67,7 @@ const validInput = {
   category: "IT" as const,
   purchaseDate: "2026-01-15",
   purchaseCost: 1200,
-  currency: "GBP",
+  currency: "USD",
   depreciationMethod: "straight_line" as const,
   usefulLifeMonths: 36,
   residualValue: 200,

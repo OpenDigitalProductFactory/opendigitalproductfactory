@@ -231,6 +231,7 @@ export async function refreshOAuthToken(
   if (!cred?.refreshToken) return { error: "Re-authentication required" };
 
   const decryptedRefresh = decryptSecret(cred.refreshToken);
+  if (!decryptedRefresh) return { error: "Re-authentication required — credential key may have changed" };
 
   const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
   const refreshData: Record<string, string> = {
