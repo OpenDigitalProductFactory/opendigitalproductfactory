@@ -2104,7 +2104,15 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           status,
           ...(typeof params["departmentId"] === "string" ? { departmentId: params["departmentId"] } : {}),
           ...(typeof params["positionId"] === "string" ? { positionId: params["positionId"] } : {}),
-          ...(typeof params["managerEmployeeId"] === "string" ? { managerEmployeeId: params["managerEmployeeId"] } : {}),
+          ...(typeof params["managerEmployeeId"] === "string" ? await (async () => {
+            const mgr = params["managerEmployeeId"] as string;
+            // Try direct ID first, then resolve by employeeId, displayName, or email
+            const found = await prisma.employeeProfile.findFirst({
+              where: { OR: [{ id: mgr }, { employeeId: mgr }, { displayName: mgr }, { workEmail: mgr }] },
+              select: { id: true },
+            });
+            return found ? { managerEmployeeId: found.id } : {};
+          })() : {}),
           ...(typeof params["startDate"] === "string" ? { startDate: new Date(params["startDate"]) } : {}),
           employmentEvents: {
             create: {
