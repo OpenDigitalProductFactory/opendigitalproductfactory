@@ -1422,6 +1422,43 @@ async function seedAnthropicSubScope(): Promise<void> {
   console.log("Seeded anthropic-sub credential scope");
 }
 
+/**
+ * Ensure model profiles are properly configured for Build Studio.
+ * The build-specialist agent requires a tool-capable model (Haiku 4.5+).
+ * Haiku 3.0 cannot orchestrate multi-step tool calls.
+ *
+ * This runs on every seed to fix profiles that may have been incorrectly
+ * set by model discovery or provider sync.
+ */
+async function ensureBuildStudioModelConfig(): Promise<void> {
+  // Prefer Haiku 4.5 over 3.0 for anthropic-sub (subscription tier)
+  const haiku45 = await prisma.modelProfile.findFirst({
+    where: { modelId: "claude-haiku-4-5-20251001", providerId: "anthropic-sub" },
+  });
+  const haiku30 = await prisma.modelProfile.findFirst({
+    where: { modelId: "claude-3-haiku-20240307", providerId: "anthropic-sub" },
+  });
+
+  if (haiku45) {
+    await prisma.modelProfile.update({
+      where: { id: haiku45.id },
+      data: { modelStatus: "active", retiredAt: null },
+    });
+    console.log("  Haiku 4.5 set to active (tool-capable for Build Studio)");
+  }
+
+  if (haiku30 && haiku45) {
+    // Demote 3.0 when 4.5 is available — 3.0 can't orchestrate tools
+    await prisma.modelProfile.update({
+      where: { id: haiku30.id },
+      data: { modelStatus: "degraded" },
+    });
+    console.log("  Haiku 3.0 set to degraded (cannot orchestrate tools)");
+  }
+
+  console.log("Ensured Build Studio model configuration");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedGeographicData(prisma);
@@ -1453,6 +1490,7 @@ async function main(): Promise<void> {
   await seedCodexModels();
   await seedChatGPTModels();
   await seedLocalModels();
+  await ensureBuildStudioModelConfig();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
   await prisma.epic.upsert({

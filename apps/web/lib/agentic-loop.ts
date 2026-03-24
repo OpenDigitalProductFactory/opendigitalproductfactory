@@ -203,6 +203,28 @@ export async function runAgenticLoop(params: {
     // EP-INF-009b: All inference goes through V2 routing pipeline
     const result = await routeAndCall(messages, systemPrompt, sensitivity, routeOptions);
 
+    // First iteration: check if the routed model matches the preferred model.
+    // If not, warn — the agent may not be able to orchestrate tools effectively.
+    if (iteration === 0 && routeOptions.preferredModelId && result.modelId !== routeOptions.preferredModelId) {
+      console.warn(
+        `[agentic-loop] Model mismatch: wanted ${routeOptions.preferredModelId} but got ${result.modelId}. ` +
+        `The agent may not be able to use tools effectively. Check AI Workforce > Providers to ensure ` +
+        `the preferred model is active and not retired.`,
+      );
+      // Inject a system hint so the model knows its limitations
+      if (result.modelId?.includes("claude-3-haiku")) {
+        messages = [
+          ...messages,
+          {
+            role: "user" as const,
+            content: "[System notice: You are running on a limited model that may not support multi-step tool orchestration. " +
+              "Focus on one tool call at a time. If tools aren't working, explain what you would do and ask the user to check " +
+              "AI Workforce > Providers configuration.]",
+          },
+        ];
+      }
+    }
+
     lastResult = result;
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
