@@ -1536,12 +1536,58 @@ export async function executeTool(
 
       logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
 
-      // Start the dev server so the Live Preview shows the generated pages
+      // Generate a visual HTML preview mockup for the Live Preview panel.
+      // This shows the business user what their feature looks like without
+      // needing a full Next.js build.
+      try {
+        const brief = build.brief as { title?: string; description?: string; acceptanceCriteria?: string[] } | null;
+        const previewPrompt = `Generate a single self-contained HTML file that visually previews this feature:
+
+Title: ${brief?.title ?? "Feature Preview"}
+Description: ${brief?.description ?? instruction}
+Files generated: ${files.map(f => f.path).join(", ")}
+
+Requirements:
+- Self-contained HTML with inline CSS (no external dependencies)
+- Use this color scheme: background #1a1a2e, text #e0e0e0, accent #7c8cf8, surface #252540, border #333, muted #888
+- Show a realistic mockup of what the UI pages would look like
+- Include sample data that matches the feature (course names, student info, etc.)
+- Make it look like a real web application, not a wireframe
+- Include navigation, cards, tables, forms as appropriate for the feature
+- Responsive layout
+
+Output ONLY the HTML. No markdown, no explanation. Start with <!DOCTYPE html>.`;
+
+        const previewResult = await routeAndCall(
+          [{ role: "user", content: previewPrompt }],
+          "You generate realistic HTML UI mockups. Output only valid HTML.",
+          "internal",
+          { taskType: "codegen" },
+        );
+
+        // Extract HTML from response (might be wrapped in code blocks)
+        let html = previewResult.content;
+        const htmlMatch = html.match(/<!DOCTYPE html>[\s\S]*/i);
+        if (htmlMatch) html = htmlMatch[0];
+        // Strip trailing markdown code block if present
+        html = html.replace(/```\s*$/, "");
+
+        if (html.includes("<!DOCTYPE") || html.includes("<html")) {
+          await execInSandbox(build.sandboxId, "mkdir -p /workspace/_preview");
+          const previewEncoded = Buffer.from(html).toString("base64");
+          await execInSandbox(build.sandboxId, `echo ${previewEncoded} | base64 -d > /workspace/_preview/index.html`);
+          console.log("[generate_code] visual preview generated");
+        }
+      } catch (previewErr) {
+        console.log(`[generate_code] preview generation failed (non-fatal): ${(previewErr as Error).message?.slice(0, 100)}`);
+      }
+
+      // Start the preview server so the Live Preview shows the mockup
       try {
         const { startSandboxDevServer } = await import("@/lib/sandbox");
         await startSandboxDevServer(build.sandboxId);
       } catch (devErr) {
-        console.log(`[generate_code] dev server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
+        console.log(`[generate_code] preview server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
       }
 
       return { success: true, message: `Generated ${files.length} files in sandbox. Dev server starting on port 3000 — preview will update shortly.`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
