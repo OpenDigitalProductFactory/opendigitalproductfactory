@@ -85,6 +85,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
+      SANDBOX_PREVIEW_URL: http://sandbox:3000
     depends_on:
       portal-init:
         condition: service_completed_successfully
@@ -100,7 +101,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sandbox
-    image: dpf-sandbox
     restart: unless-stopped
     ports:
       - "3035:3000"

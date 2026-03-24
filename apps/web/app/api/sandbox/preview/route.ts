@@ -32,11 +32,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
   targetPath = targetPath.replace(/\/\//g, "/");
 
-  // Use Docker Compose service name for container-to-container communication.
-  // The service is named "sandbox" in docker-compose.yml, listening on port 3000 internally.
-  const sandboxHost = "sandbox";
-  const sandboxInternalPort = 3000;
-  const targetUrl = `http://${sandboxHost}:${sandboxInternalPort}${targetPath}`;
+  // Inside Docker the portal reaches the sandbox via Compose service name (sandbox:3000).
+  // When running locally with `pnpm dev`, the sandbox container is reachable on the
+  // host-mapped port (localhost:3035).  SANDBOX_PREVIEW_URL is set in docker-compose.yml
+  // for the portal service; when absent we fall back to the host-mapped address.
+  const sandboxBase =
+    process.env.SANDBOX_PREVIEW_URL ?? "http://localhost:3035";
+  const targetUrl = `${sandboxBase}${targetPath}`;
 
   try {
     const upstream = await fetch(targetUrl, {
