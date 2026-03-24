@@ -39,21 +39,28 @@ export function encryptSecret(plaintext: string): string {
   return `enc:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
 }
 
-/** Decrypt a stored secret. Handles both encrypted (`enc:…`) and legacy plaintext values. */
-export function decryptSecret(stored: string): string {
+/** Decrypt a stored secret. Handles both encrypted (`enc:…`) and legacy plaintext values.
+ *  Returns `null` when decryption fails (e.g. encryption key was rotated). */
+export function decryptSecret(stored: string): string | null {
   if (!stored.startsWith("enc:")) return stored; // legacy plain text
 
   const key = getEncryptionKey();
   if (!key) throw new Error("CREDENTIAL_ENCRYPTION_KEY required to decrypt stored credentials");
 
   const parts = stored.split(":");
-  if (parts.length !== 4) throw new Error("Malformed encrypted credential");
+  if (parts.length !== 4) return null; // malformed
 
-  const iv = Buffer.from(parts[1]!, "base64");
-  const tag = Buffer.from(parts[2]!, "base64");
-  const ciphertext = Buffer.from(parts[3]!, "base64");
+  try {
+    const iv = Buffer.from(parts[1]!, "base64");
+    const tag = Buffer.from(parts[2]!, "base64");
+    const ciphertext = Buffer.from(parts[3]!, "base64");
 
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  return decipher.update(ciphertext, undefined, "utf8") + decipher.final("utf8");
+    const decipher = createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(ciphertext, undefined, "utf8") + decipher.final("utf8");
+  } catch {
+    // AES-GCM auth failure — encryption key was rotated since this credential was stored.
+    console.warn("[credential-crypto] Cannot decrypt credential — encryption key may have changed. Re-configure the provider.");
+    return null;
+  }
 }
