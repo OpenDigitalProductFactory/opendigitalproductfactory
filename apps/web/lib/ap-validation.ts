@@ -11,7 +11,7 @@ export const createSupplierSchema = z.object({
   phone: z.string().optional(),
   taxId: z.string().optional(),
   paymentTerms: z.string().default("Net 30"),
-  defaultCurrency: z.string().length(3).default("GBP"),
+  defaultCurrency: z.string().length(3).default("USD"),
   notes: z.string().optional(),
 });
 
@@ -28,7 +28,7 @@ export const createBillSchema = z.object({
   invoiceRef: z.string().optional(),
   issueDate: z.string().min(1),
   dueDate: z.string().min(1),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).default("USD"),
   purchaseOrderId: z.string().optional(),
   notes: z.string().optional(),
   lineItems: z.array(billLineItemSchema).min(1),
@@ -48,7 +48,7 @@ const poLineItemSchema = z.object({
 
 export const createPOSchema = z.object({
   supplierId: z.string().min(1),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).default("USD"),
   deliveryDate: z.string().optional(),
   terms: z.string().optional(),
   notes: z.string().optional(),

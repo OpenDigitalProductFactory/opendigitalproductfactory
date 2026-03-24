@@ -30,8 +30,8 @@ export default async function CurrencySettingsPage() {
     return true;
   });
 
-  // Sort: GBP base first, then EUR, then USD
-  const priorityOrder = ["GBP", "EUR", "USD"];
+  // Sort: USD base first, then EUR, then GBP
+  const priorityOrder = ["USD", "EUR", "GBP"];
   const sortedRates = [...deduplicatedRates].sort((a, b) => {
     const ai = priorityOrder.indexOf(a.baseCurrency);
     const bi = priorityOrder.indexOf(b.baseCurrency);

@@ -73,7 +73,7 @@ describe("auth", () => {
     mockAuth.mockResolvedValue(null as never);
     mockCan.mockReturnValue(false);
     await expect(
-      createBankAccount({ name: "HSBC Current", currency: "GBP", accountType: "current", openingBalance: 0 }),
+      createBankAccount({ name: "HSBC Current", currency: "USD", accountType: "current", openingBalance: 0 }),
     ).rejects.toThrow("Unauthorized");
   });
 
@@ -81,7 +81,7 @@ describe("auth", () => {
     mockAuth.mockResolvedValue(authorizedSession as never);
     mockCan.mockReturnValue(false);
     await expect(
-      createBankAccount({ name: "HSBC Current", currency: "GBP", accountType: "current", openingBalance: 0 }),
+      createBankAccount({ name: "HSBC Current", currency: "USD", accountType: "current", openingBalance: 0 }),
     ).rejects.toThrow("Unauthorized");
   });
 });
@@ -100,7 +100,7 @@ describe("createBankAccount", () => {
 
     const result = await createBankAccount({
       name: "HSBC Current",
-      currency: "GBP",
+      currency: "USD",
       accountType: "current",
       openingBalance: 1000,
     });
@@ -122,7 +122,7 @@ describe("createBankAccount", () => {
       currentBalance: 0,
     });
 
-    await createBankAccount({ name: "Savings", currency: "GBP", accountType: "savings", openingBalance: 0 });
+    await createBankAccount({ name: "Savings", currency: "USD", accountType: "savings", openingBalance: 0 });
 
     const callArgs = mockPrisma.bankAccount.create.mock.calls[0][0];
     expect(callArgs.data.currentBalance).toBe(0);

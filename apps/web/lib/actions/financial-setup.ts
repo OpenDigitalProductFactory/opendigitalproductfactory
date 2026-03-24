@@ -47,7 +47,7 @@ export async function getFinancialSetupStatus(): Promise<{
 }> {
   const settings = await prisma.orgSettings.findFirst();
   if (!settings) {
-    return { isConfigured: false, baseCurrency: "GBP", dunningActive: false };
+    return { isConfigured: false, baseCurrency: "USD", dunningActive: false };
   }
 
   const isConfigured = settings.updatedAt > settings.createdAt;

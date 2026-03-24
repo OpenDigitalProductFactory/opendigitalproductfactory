@@ -116,7 +116,7 @@ describe("createSupplier", () => {
     mockAuth.mockResolvedValue(null);
     mockCan.mockReturnValue(false);
     await expect(
-      createSupplier({ name: "Acme Ltd", paymentTerms: "Net 30", defaultCurrency: "GBP" }),
+      createSupplier({ name: "Acme Ltd", paymentTerms: "Net 30", defaultCurrency: "USD" }),
     ).rejects.toThrow("Unauthorized");
   });
 
@@ -128,7 +128,7 @@ describe("createSupplier", () => {
       name: "Acme Ltd",
     });
 
-    const result = await createSupplier({ name: "Acme Ltd", paymentTerms: "Net 30", defaultCurrency: "GBP" });
+    const result = await createSupplier({ name: "Acme Ltd", paymentTerms: "Net 30", defaultCurrency: "USD" });
 
     expect(mockPrisma.supplier.create).toHaveBeenCalledOnce();
     const callArgs = mockPrisma.supplier.create.mock.calls[0][0];
@@ -166,7 +166,7 @@ describe("createBill", () => {
     supplierId: "sup-001",
     issueDate: "2026-03-01",
     dueDate: "2026-04-01",
-    currency: "GBP",
+    currency: "USD",
     lineItems: [
       { description: "Consulting", quantity: 2, unitPrice: 500, taxRate: 20 },
     ],
@@ -212,7 +212,7 @@ describe("submitBillForApproval", () => {
       billRef: "BILL-2026-0001",
       totalAmount: 1200,
       status: "draft",
-      currency: "GBP",
+      currency: "USD",
       supplier: { name: "Acme Ltd", email: "acme@example.com" },
     };
     const fakeRule = {
@@ -303,7 +303,7 @@ describe("respondToBillApproval", () => {
 describe("createPurchaseOrder", () => {
   const validInput = {
     supplierId: "sup-001",
-    currency: "GBP",
+    currency: "USD",
     lineItems: [
       { description: "Office Supplies", quantity: 10, unitPrice: 25, taxRate: 20 },
     ],
@@ -356,7 +356,7 @@ describe("convertPOToBill", () => {
     const fakePO = {
       id: "po-001",
       supplierId: "sup-001",
-      currency: "GBP",
+      currency: "USD",
       totalAmount: 300,
       subtotal: 250,
       taxAmount: 50,
@@ -388,7 +388,7 @@ describe("createPaymentRun", () => {
   it("throws if any bill is not approved", async () => {
     authorizedUser();
     mockPrisma.bill.findMany.mockResolvedValue([
-      { id: "bill-001", status: "awaiting_approval", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
+      { id: "bill-001", status: "awaiting_approval", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "USD", billRef: "BILL-2026-0001" },
     ]);
 
     await expect(
@@ -400,8 +400,8 @@ describe("createPaymentRun", () => {
     authorizedUser();
 
     const approvedBills = [
-      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
-      { id: "bill-002", status: "approved", supplierId: "sup-001", totalAmount: 300, amountDue: 300, currency: "GBP", billRef: "BILL-2026-0002" },
+      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "USD", billRef: "BILL-2026-0001" },
+      { id: "bill-002", status: "approved", supplierId: "sup-001", totalAmount: 300, amountDue: 300, currency: "USD", billRef: "BILL-2026-0002" },
     ];
     mockPrisma.bill.findMany.mockResolvedValue(approvedBills);
     mockPrisma.payment.count.mockResolvedValue(0);
@@ -425,8 +425,8 @@ describe("createPaymentRun", () => {
     authorizedUser();
 
     const approvedBills = [
-      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "GBP", billRef: "BILL-2026-0001" },
-      { id: "bill-002", status: "approved", supplierId: "sup-002", totalAmount: 300, amountDue: 300, currency: "GBP", billRef: "BILL-2026-0002" },
+      { id: "bill-001", status: "approved", supplierId: "sup-001", totalAmount: 500, amountDue: 500, currency: "USD", billRef: "BILL-2026-0001" },
+      { id: "bill-002", status: "approved", supplierId: "sup-002", totalAmount: 300, amountDue: 300, currency: "USD", billRef: "BILL-2026-0002" },
     ];
     mockPrisma.bill.findMany.mockResolvedValue(approvedBills);
     mockPrisma.payment.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);

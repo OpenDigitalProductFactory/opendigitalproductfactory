@@ -51,8 +51,9 @@ const ACT_MODE_BLOCK = `Mode: ACT. You may execute any tool the employee's role 
 export function assembleSystemPrompt(input: PromptInput): string {
   const blocks: string[] = [];
 
-  // Block 1: Identity (static)
-  blocks.push(IDENTITY_BLOCK);
+  // Block 1: Identity (static) + current date for temporal grounding
+  const today = new Date().toISOString().slice(0, 10);
+  blocks.push(IDENTITY_BLOCK + `\n\nToday's date is ${today}.`);
 
   // Block 2: Authority (dynamic)
   const granted = input.grantedCapabilities.join(", ");

@@ -17,7 +17,7 @@ export async function getOrgSettings() {
   if (existing) return existing;
 
   return prisma.orgSettings.create({
-    data: { baseCurrency: "GBP" },
+    data: { baseCurrency: "USD" },
   });
 }
 

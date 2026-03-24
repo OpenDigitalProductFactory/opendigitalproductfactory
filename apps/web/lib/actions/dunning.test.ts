@@ -76,7 +76,7 @@ function makeInvoice(daysPastDue: number, overrides: Record<string, unknown> = {
     status: "sent",
     dueDate,
     amountDue: 1000,
-    currency: "GBP",
+    currency: "USD",
     payToken: "tok123",
     accountId: "acc-1",
     account: { id: "acc-1", name: "Acme Ltd" },
