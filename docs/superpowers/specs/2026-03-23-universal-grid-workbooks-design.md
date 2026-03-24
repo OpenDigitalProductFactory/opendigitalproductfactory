@@ -3,7 +3,7 @@
 **Epic**: Universal Grid & Workbooks — Airtable/Smartsheet Experience for Knowledge Workers
 **Date**: 2026-03-23
 **Status**: Draft
-**Version**: 1.1
+**Version**: 1.2
 
 ## Problem Statement
 
@@ -126,8 +126,8 @@ model WorkbookShare {
   workbookId  String
   workbook    Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
   userId      String
-  user        User     @relation("WorkbookShareUser", fields: [userId], references: [id])
-  role        String   // owner | editor | viewer
+  user        User     @relation("WorkbookShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        String   // owner | editor | viewer — validated by Zod enum at server action layer
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -180,8 +180,8 @@ model WorkbookRow {
   position    Int      @default(0)
   tableId     String
   table       WorkbookTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  createdById String
-  createdBy   User     @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id])
+  createdById String?
+  createdBy   User?    @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   cells       WorkbookCell[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -222,8 +222,8 @@ model WorkbookView {
   viewType    String   @default("grid") // grid | kanban
   config      Json     // see "View Config Schema" below
   isDefault   Boolean  @default(false)
-  createdById String
-  createdBy   User     @relation("WorkbookViewCreatedBy", fields: [createdById], references: [id])
+  createdById String?
+  createdBy   User?    @relation("WorkbookViewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -235,8 +235,10 @@ model WorkbookView {
 
 New capability keys added to the permission system:
 
-- `view_workbooks` — Can view workbooks and their data (all authenticated users by default)
-- `manage_workbooks` — Can create workbooks, add tables/columns, edit/delete (granted to managers+)
+- `view_workbooks` — Can view workbooks and their data. Granted to all platform roles (HR-000 through HR-500).
+- `manage_workbooks` — Can create workbooks, add tables/columns, edit/delete. Granted to HR-300 (Manager) and above.
+
+These must be added to the `CapabilityKey` union type and `PERMISSIONS` record in `apps/web/lib/permissions.ts`, and a workspace tile entry added to `ALL_TILES` for the Workbooks area.
 
 When viewing platform data through a grid (e.g., backlog items), the existing domain permission applies (`manage_backlog`, `manage_customers`, etc.). Workbook-level sharing (via `WorkbookShare`) further restricts access within the workbook permission model: owner > editor > viewer.
 
@@ -480,6 +482,16 @@ When an agent is working in a context that involves workbook data, it can surfac
 
 ## Validation & Error Handling
 
+### Workbook Share Validation
+
+`WorkbookShare.role` is validated at the server action layer using a Zod enum:
+
+```typescript
+const workbookShareRoleSchema = z.enum(["owner", "editor", "viewer"])
+```
+
+Invalid role values return 400. Every workbook must have exactly one `owner` share record (the creator). Ownership transfer requires explicitly setting the new owner before demoting the old one.
+
 ### Cell Write Validation
 
 Every cell write is validated against the column's `fieldType` before persistence:
@@ -512,7 +524,7 @@ Deleting a column cascades to all cells for that column (via Prisma `onDelete: C
 
 ## API Routes
 
-Routes follow the platform's flat pattern (globally unique IDs eliminate need for nested paths):
+Routes are grouped under the `workbooks` domain prefix, consistent with the platform convention of domain-grouped nesting (e.g., `/api/v1/ops/backlog`, `/api/v1/finance/invoices`). Sub-resources (tables, rows, columns, views) use flat paths with globally unique IDs to avoid deep nesting:
 
 ```
 GET    /api/v1/workbooks                     — List workbooks (user has access to)
@@ -549,10 +561,10 @@ POST   /api/v1/grid/[entityType]/query       — Query with filters/sort via ada
 All list/query endpoints use cursor-based pagination consistent with the existing platform pattern:
 
 ```typescript
-{ data: T[], nextCursor: string | null, total: number }
+{ data: T[], nextCursor: string | null }
 ```
 
-Default page size: 50 rows. Maximum: 200.
+Default page size: 50 rows. Maximum: 200. No `total` count is returned — consistent with the existing `buildPaginatedResponse` helper and the cursor-based pattern which avoids expensive `COUNT(*)` queries.
 
 ## Testing Strategy
 
