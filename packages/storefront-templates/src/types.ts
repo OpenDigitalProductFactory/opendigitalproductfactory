@@ -19,7 +19,8 @@ export type ArchetypeCategory =
   | "food-hospitality"
   | "retail-goods"
   | "fitness-recreation"
-  | "nonprofit-community";
+  | "nonprofit-community"
+  | "hoa-property-management";
 
 export interface FormField {
   name: string;
