@@ -269,22 +269,6 @@ pnpm --filter @dpf/db seed
 if ($LASTEXITCODE -ne 0) { Write-Fail "Database seed failed" }
 Write-Ok "Base seed complete"
 
-Write-Step "Restoring epics and backlog"
-
-$backlogSql = "scripts\seed-epics-backlog-2026-03-22.sql"
-$fullPath = Join-Path $InstallRoot $backlogSql
-if (Test-Path $fullPath) {
-    Write-Host "  Applying seed-epics-backlog-2026-03-22.sql (83 epics, 421 backlog items)..."
-    try {
-        pnpm --filter @dpf/db exec prisma db execute --file "../../$backlogSql" 2>$null
-    } catch {
-        Write-Warn "Backlog restore had errors (may be expected if already applied)"
-    }
-    Write-Ok "Epics and backlog restored"
-} else {
-    Write-Warn "Backlog seed file not found -- skipping"
-}
-
 Write-Host "========================================================" 
 
 Write-Host ""

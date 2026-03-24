@@ -453,6 +453,7 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       LLM_BASE_URL: `${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: production
+      SANDBOX_PREVIEW_URL: http://sandbox:3000
     depends_on:
       portal-init:
         condition: service_completed_successfully

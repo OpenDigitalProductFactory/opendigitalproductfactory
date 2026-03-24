@@ -18,6 +18,7 @@
   "pnpm": {
     "overrides": {
       "@types/react": "^19"
-    }
+    },
+    "onlyBuiltDependencies": ["msw", "sharp"]
   }
 }
