@@ -10,3 +10,4 @@ packages/db/generated/
 .worktrees/
 .playwright-mcp/
 .pnpm-store/
+docker-compose.override.yml
