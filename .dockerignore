@@ -11,4 +11,6 @@ node_modules
 .env.local
 *.md
 !README.md
-docs/
+docs/superpowers/
+docs/Reference/
+docs/architecture/

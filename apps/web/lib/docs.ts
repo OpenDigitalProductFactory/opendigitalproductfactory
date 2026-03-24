@@ -65,9 +65,11 @@ export function buildDocsIndex(docs: DocPage[]): DocsIndex {
 
 // ── File system loading ─────────────────────────────────────────────────────
 
-// Next.js runs from apps/web — go up two levels to repo root (same as codebase-tools.ts)
-const PROJECT_ROOT = path.resolve(process.cwd(), "..", "..");
-const USER_GUIDE_DIR = path.join(PROJECT_ROOT, "docs", "user-guide");
+// In production Docker, cwd is /app and docs live at /app/docs/user-guide.
+// In local dev, Next.js cwd is apps/web so we go up two levels to repo root.
+const prodPath = path.join(process.cwd(), "docs", "user-guide");
+const devPath = path.resolve(process.cwd(), "..", "..", "docs", "user-guide");
+const USER_GUIDE_DIR = fs.existsSync(prodPath) ? prodPath : devPath;
 
 /** Load a single doc page by slug (e.g. "getting-started/index"). */
 export function loadDocPage(slug: string): DocPage | null {
