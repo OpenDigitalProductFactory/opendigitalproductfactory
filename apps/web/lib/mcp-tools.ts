@@ -1541,43 +1541,20 @@ export async function executeTool(
       // needing a full Next.js build.
       try {
         const brief = build.brief as { title?: string; description?: string; acceptanceCriteria?: string[] } | null;
-        const criteria = brief?.acceptanceCriteria ?? [];
-        const previewPrompt = `Generate a FULLY INTERACTIVE single-page web application as a self-contained HTML file.
+        const previewPrompt = `Generate a compact self-contained HTML file previewing: ${brief?.title ?? "Feature"}
 
-Feature: ${brief?.title ?? "Feature Preview"}
-Description: ${brief?.description ?? instruction}
-Acceptance criteria: ${criteria.join("; ")}
+KEEP IT UNDER 4000 CHARACTERS TOTAL. Be concise with CSS (use minimal styles).
 
-THIS IS NOT A MOCKUP — it must be a working interactive prototype:
+Show these sections with REAL sample data:
+1. Header with feature name and nav tabs (Catalog | Registrations | Admin)
+2. Course catalog: 4 cards showing TOGAF L1 ($1,195, Apr 23, Virtual), IT4IT Foundation ($1,195, May 12), ArchiMate ($1,295, May 19, London), TOGAF L2 ($1,795, Jun 2)
+3. A registration form with fields: name, email, phone, company, country, role + Register button
+4. A registrations table with 3 sample rows
 
-INTERACTIVE REQUIREMENTS:
-- Multiple pages/views with tab or nav-based switching (no page reloads)
-- Forms that actually validate and show success/error messages when submitted
-- Tables with sortable columns (click header to sort)
-- Sample data pre-populated (at least 5-10 realistic records)
-- Search/filter inputs that filter the displayed data in real-time
-- Modal dialogs for create/edit operations
-- Status badges with text labels (not color-only)
-- Toast notifications on actions (register, save, delete)
-- Responsive — works on mobile and desktop
+Make tabs switch views with simple JS. Form shows "Registration confirmed!" on submit.
+Colors: bg #1a1a2e, surface #252540, text #e0e0e0, accent #7c8cf8, border #333.
 
-STYLING:
-- Background: #1a1a2e, Surface: #252540, Text: #e0e0e0, Accent: #7c8cf8, Border: #333, Muted: #888
-- Font: system-ui, -apple-system, sans-serif
-- Border-radius: 8px for cards, 6px for inputs
-- Transitions on hover/focus states
-
-DATA — pre-populate with realistic sample data:
-- Course catalog with TOGAF, IT4IT, ArchiMate courses
-- Upcoming dates, trainers (Mark Bodman, Rik Burgering), locations (Virtual, London, Singapore)
-- Prices ($1,195 - $1,795 USD), seat availability
-- Sample registrations with real-looking names, companies, countries
-- Exam voucher statuses (pending, issued, used)
-
-USE JavaScript for interactivity. Keep it in a single <script> block at the bottom.
-Use CSS custom properties for the color scheme.
-
-Output ONLY the HTML. No markdown, no explanation. Start with <!DOCTYPE html>.`;
+Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
 
         const previewResult = await routeAndCall(
           [{ role: "user", content: previewPrompt }],
