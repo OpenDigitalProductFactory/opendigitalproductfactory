@@ -101,6 +101,41 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included so the user can verify.
 
+## Release Testing — Platform QA
+
+Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 14 phases across all functional areas.
+
+### When to Run
+
+- **Full suite:** Before any production release or after a fresh install from source
+- **Affected phases:** After completing a feature or fix, run the phases that touch the changed areas
+- **Coworker tests:** Always run Phase 12 (AI Coworker Cross-Cutting) after changes to prompts, tools, or provider configuration
+
+### How to Run
+
+Tests are executed via Playwright against the running platform (Docker or local dev). Use `browser_navigate`, `browser_snapshot`, `browser_click`, and `browser_fill_form` to interact with the UI. For coworker tests, type messages in the chat panel and verify responses.
+
+### Adding Test Cases
+
+When implementing a new feature or fixing a bug:
+1. Add test cases to the relevant phase in `tests/e2e/platform-qa-plan.md`
+2. Use the next available ID in the sequence (e.g., `EMP-08`, `FIN-09`)
+3. Include both **UI path** (button clicks, form fills) and **coworker path** (chat prompts, approve/reject) where applicable
+4. Include an **incomplete information test** — verify the coworker asks for missing required fields instead of guessing
+5. Run the affected phases to verify before marking the backlog item as done
+
+### Failure Handling
+
+When a test fails:
+1. Create a backlog item under the active QA epic, referencing the test ID (e.g., "FAIL: EMP-04 — coworker guesses last name")
+2. Include repro steps, expected vs actual behavior, and fix suggestions in the item body
+3. Prioritize: Blocker > High > Medium > Low based on user impact
+4. Fix the issue, re-run the test, then mark the backlog item as done
+
+### Test Results as Release Evidence
+
+Each test run produces a results summary (pass/fail counts per phase). This is compliance evidence — store it as a backlog epic for traceability. The pattern established in epic "Platform QA: Fresh Install Test Failures (2026-03-24)" should be followed for all future runs.
+
 ## Design Research — Best-of-Breed Benchmarking
 
 Every new feature design MUST include a research phase benchmarking against open source and commercial best-of-breed solutions before finalizing the spec. This is not optional — it prevents reinventing solved problems and ensures the platform adopts proven patterns.
