@@ -52,6 +52,7 @@ model User {
   recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
   expenseApprovals             ExpenseClaim[]           @relation("ExpenseApprovals")
   platformSetupProgress        PlatformSetupProgress?   @relation("UserSetupProgress")
+  taskRuns                     TaskRun[]
 }
 
 model UserGroup {
@@ -1969,6 +1970,88 @@ model PromotionBackup {
   build      FeatureBuild      @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId])
+}
+
+// ─── Task Governance Runtime ──────────────────────────────────────
+
+model TaskRun {
+  id                 String     @id @default(cuid())
+  taskRunId          String     @unique
+  userId             String
+  threadId           String?
+  buildId            String?
+  routeContext       String?
+  title              String
+  objective          String     @db.Text
+  source             String     @default("coworker") // coworker | build | skill | proactive
+  status             String     @default("active") // active | awaiting_human | completed | failed | cancelled | archived
+  authorityScope     Json?
+  repeatedPatternKey String?
+  templateId         String?
+  startedAt          DateTime   @default(now())
+  completedAt        DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes              TaskNode[]
+
+  @@index([userId, status])
+  @@index([threadId])
+  @@index([routeContext, status])
+  @@index([repeatedPatternKey])
+}
+
+model TaskNode {
+  id                  String     @id @default(cuid())
+  taskNodeId          String     @unique
+  taskRunId           String
+  parentNodeId        String?
+  nodeType            String // analyze | plan | execute | review | skeptical_review | activation_proposal | approval_gate | verify | summarize
+  title               String
+  objective           String     @db.Text
+  status              String     @default("queued") // queued | ready | running | blocked | awaiting_human | completed | failed | cancelled | superseded
+  workerRole          String // planner | researcher | executor | reviewer | skeptical_reviewer | verifier | activation_analyst | summarizer
+  dependencyMode      String? // all_of | any_of | after_parent
+  authorityEnvelope   Json?
+  evidenceContract    Json?
+  requestContract     Json?
+  routeDecision       Json?
+  inputSnapshot       Json?
+  outputSnapshot      Json?
+  costUsd             Float?
+  latencyMs           Int?
+  inputTokens         Int?
+  outputTokens        Int?
+  influenceLevel      String? // none | contextual | material
+  supersededByNodeId  String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  taskRun             TaskRun    @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  parentNode          TaskNode?  @relation("TaskNodeTree", fields: [parentNodeId], references: [id])
+  childNodes          TaskNode[] @relation("TaskNodeTree")
+  incomingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeTo")
+  outgoingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeFrom")
+
+  @@index([taskRunId, status])
+  @@index([parentNodeId])
+  @@index([nodeType, status])
+  @@index([workerRole, status])
+}
+
+model TaskNodeEdge {
+  id         String   @id @default(cuid())
+  fromNodeId String
+  toNodeId   String
+  edgeType   String // depends_on | informs | verifies | blocks | supersedes
+  createdAt  DateTime @default(now())
+  fromNode   TaskNode @relation("TaskNodeEdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode     TaskNode @relation("TaskNodeEdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, edgeType])
+  @@index([toNodeId])
 }
 
 model FeaturePack {
@@ -4122,4 +4205,98 @@ model OrgSettings {
   lastRateFetchAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// ─── Course Management ────────────────────────────────────────────
+
+model CourseProduct {
+  id                String           @id @default(cuid())
+  courseProductId    String           @unique
+  name              String
+  description       String?
+  standardPriceUsd  Decimal
+  durationDays      Int
+  certificationBody String?
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  instances         CourseInstance[]
+
+  @@index([isActive])
+  @@index([certificationBody])
+}
+
+model CourseInstance {
+  id                String               @id @default(cuid())
+  jobCode           String               @unique
+  courseProductId    String
+  startDate         DateTime
+  endDate           DateTime
+  trainerName       String?
+  location          String?
+  isPublic          Boolean              @default(true)
+  customerTag       String?
+  maxSeats          Int
+  currentEnrollment Int                  @default(0)
+  pricePerSeatUsd   Decimal?
+  status            String               @default("scheduled")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  courseProduct      CourseProduct        @relation(fields: [courseProductId], references: [id])
+  registrations     CourseRegistration[]
+
+  @@index([courseProductId, status])
+  @@index([startDate])
+  @@index([isPublic, status])
+  @@index([customerTag])
+}
+
+model CourseRegistration {
+  id               String         @id @default(cuid())
+  registrationId   String         @unique
+  courseInstanceId  String
+  firstName        String
+  lastName         String
+  email            String
+  phone            String?
+  company          String?
+  country          String?
+  role             String?
+  netFeeUsd        Decimal        @default(0)
+  vatAmount        Decimal        @default(0)
+  instructorCost   Decimal        @default(0)
+  materialsCost    Decimal        @default(0)
+  voucherCost      Decimal        @default(0)
+  grossProfit      Decimal?
+  paymentStatus    String         @default("pending")
+  paidDate         DateTime?
+  stripeRef        String?
+  b2cInvoice       String?
+  xeroRef          String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  courseInstance    CourseInstance  @relation(fields: [courseInstanceId], references: [id])
+  examVoucher      ExamVoucher?
+
+  @@index([courseInstanceId, paymentStatus])
+  @@index([email])
+  @@index([stripeRef])
+  @@index([xeroRef])
+}
+
+model ExamVoucher {
+  id                String             @id @default(cuid())
+  registrationId    String             @unique
+  ogId              String?
+  voucherType       String?
+  voucherExpiry1    DateTime?
+  voucherExpiry2    DateTime?
+  ogStoreReference  String?
+  status            String             @default("pending")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  registration      CourseRegistration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([ogId])
+  @@index([status])
 }
