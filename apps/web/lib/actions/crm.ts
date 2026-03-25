@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
+import { revalidatePath } from "next/cache";
 import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
@@ -81,7 +82,6 @@ export async function createCustomerAccount(input: {
     type: "account_created",
     accountId: account.id,
   });
-  const { revalidatePath } = await import("next/cache");
   revalidatePath("/customer");
   return account;
 }
