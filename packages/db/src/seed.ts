@@ -1,5 +1,5 @@
 // packages/db/src/seed.ts
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
@@ -702,6 +702,37 @@ async function seedAnthropicSubScope(): Promise<void> {
 
 /**
  * Ensure model profiles are properly configured for Build Studio.
+ * Seed known-good model profiles from exported JSON so fresh installs
+ * start with profiled models immediately (no need to run eval pipeline).
+ * Only creates profiles that don't already exist — won't overwrite
+ * profiles that have been updated by live eval runs.
+ */
+async function seedModelProfiles(): Promise<void> {
+  const profilePath = join(__dirname, "..", "data", "model-profiles.json");
+  if (!existsSync(profilePath)) {
+    console.log("  No model-profiles.json found — skipping profile seed");
+    return;
+  }
+  const profiles = JSON.parse(readFileSync(profilePath, "utf-8")) as Record<string, unknown>[];
+  let created = 0, skipped = 0;
+  for (const p of profiles) {
+    const providerId = p.providerId as string;
+    const modelId = p.modelId as string;
+    const existing = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId } },
+      select: { id: true },
+    });
+    if (existing) { skipped++; continue; }
+    const { providerId: _pid, modelId: _mid, ...rest } = p;
+    try {
+      await prisma.modelProfile.create({ data: { providerId, modelId, ...rest } as never });
+      created++;
+    } catch { skipped++; }
+  }
+  console.log(`  Seeded ${created} model profiles (${skipped} already existed)`);
+}
+
+/**
  * The build-specialist agent requires a tool-capable model (Haiku 4.5+).
  * Haiku 3.0 cannot orchestrate multi-step tool calls.
  *
@@ -762,6 +793,7 @@ async function main(): Promise<void> {
   await seedCodexModels();
   await seedChatGPTModels();
   await seedLocalModels();
+  await seedModelProfiles();
   await ensureBuildStudioModelConfig();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
