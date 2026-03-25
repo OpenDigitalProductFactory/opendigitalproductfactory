@@ -1616,12 +1616,30 @@ export async function executeTool(
       }
 
       // Write each file to the sandbox (strip any leading /workspace/ to avoid double-path)
+      // GUARD: refuse to overwrite existing files — agent must use edit_sandbox_file instead
+      const skippedExisting: string[] = [];
       for (const file of files) {
         const cleanPath = file.path.replace(/^\/?workspace\//, "");
+        try {
+          await execInSandbox(build.sandboxId, `test -f /workspace/${cleanPath}`);
+          // File exists — skip it, tell the agent to use edit_sandbox_file
+          skippedExisting.push(cleanPath);
+          continue;
+        } catch {
+          // File doesn't exist — safe to create
+        }
         const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
         if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
         const encoded = Buffer.from(file.content).toString("base64");
         await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+      }
+      if (skippedExisting.length > 0) {
+        return {
+          success: false,
+          error: `Cannot overwrite existing files with generate_code. Use read_sandbox_file + edit_sandbox_file instead.`,
+          message: `These files already exist and were NOT overwritten: ${skippedExisting.join(", ")}. To modify existing files, first use read_sandbox_file to see the current content, then edit_sandbox_file for surgical changes.`,
+          data: { skippedFiles: skippedExisting, newFilesWritten: files.length - skippedExisting.length },
+        };
       }
 
       logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
