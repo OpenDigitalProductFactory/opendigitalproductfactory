@@ -687,6 +687,20 @@ if (-not (Is-StepDone "started")) {
     docker compose up -d
     $ErrorActionPreference = $oldEAP
 
+    # Sync postgres password — if the volume was reused from a prior install,
+    # the DB user still has the old password. Update it to match the new .env.
+    Write-Action "Syncing database credentials..."
+    $envPgPass = (Get-Content "$DPF_DIR\.env" | Select-String "^POSTGRES_PASSWORD=(.+)$").Matches.Groups[1].Value
+    if ($envPgPass) {
+        $syncAttempts = 0
+        while ($syncAttempts -lt 15) {
+            docker exec dpf-postgres-1 psql -U dpf -d dpf -c "ALTER USER dpf PASSWORD '$envPgPass';" 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { break }
+            $syncAttempts++
+            Start-Sleep -Seconds 2
+        }
+    }
+
     # Wait for portal health
     Write-Action "Waiting for the portal to be ready..."
     $attempts = 0
