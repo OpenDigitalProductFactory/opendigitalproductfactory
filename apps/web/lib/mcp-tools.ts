@@ -1742,98 +1742,103 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     }
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
+    // Shared auto-init: ensure sandbox is initialized before any file tool runs.
+    // Falls through to the specific tool case after initialization.
 
-    case "read_sandbox_file": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
-      try {
-        const content = await execInSandbox(build.sandboxId, `cat -n /workspace/${filePath}`);
-        return { success: true, message: `File: ${filePath}`, data: { path: filePath, content } };
-      } catch {
-        return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
-      }
-    }
-
-    case "edit_sandbox_file": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
-      const oldText = String(params.old_text ?? "");
-      const newText = String(params.new_text ?? "");
-      if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
-      try {
-        // Read current file
-        const current = await execInSandbox(build.sandboxId, `cat /workspace/${filePath}`);
-        const occurrences = current.split(oldText).length - 1;
-        if (occurrences === 0) return { success: false, error: `old_text not found in ${filePath}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
-        if (occurrences > 1) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique.` };
-        const updated = current.replace(oldText, newText);
-        const encoded = Buffer.from(updated).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${filePath}`);
-        logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}`);
-        return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars.`, data: { path: filePath } };
-      } catch (err) {
-        return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${filePath}` };
-      }
-    }
-
-    case "search_sandbox": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const pattern = String(params.pattern ?? "");
-      const glob = params.glob ? `--include='${String(params.glob)}'` : "--include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx'";
-      const max = Number(params.maxResults) || 20;
-      try {
-        const result = await execInSandbox(build.sandboxId, `grep -rn ${glob} '${pattern.replace(/'/g, "'\\''")}' /workspace/apps/ /workspace/packages/ 2>/dev/null | head -${max}`);
-        return { success: true, message: `Search results for "${pattern}"`, data: { pattern, results: result } };
-      } catch {
-        return { success: true, message: `No matches found for "${pattern}"`, data: { pattern, results: "" } };
-      }
-    }
-
-    case "list_sandbox_files": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const pattern = String(params.pattern ?? "**/*");
-      try {
-        const result = await execInSandbox(build.sandboxId, `find /workspace -path '/workspace/node_modules' -prune -o -path '/workspace/.pnpm-store' -prune -o -path '/workspace/.next' -prune -o -path '${pattern.startsWith("/") ? pattern : `/workspace/${pattern}`}' -print 2>/dev/null | head -50`);
-        // Strip /workspace/ prefix for cleaner output
-        const cleaned = result.split("\n").map(l => l.replace("/workspace/", "")).filter(Boolean).join("\n");
-        return { success: true, message: `Files matching "${pattern}"`, data: { pattern, files: cleaned } };
-      } catch {
-        return { success: true, message: `No files matching "${pattern}"`, data: { pattern, files: "" } };
-      }
-    }
-
+    case "read_sandbox_file":
+    case "edit_sandbox_file":
+    case "search_sandbox":
+    case "list_sandbox_files":
     case "run_sandbox_command": {
+      const SANDBOX_ID = "dpf-sandbox-1";
+      const SANDBOX_PT = 3035;
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const command = String(params.command ?? "");
-      if (!command) return { success: false, error: "command is required.", message: "Provide a command to run." };
-      try {
-        const output = await execInSandbox(build.sandboxId, `cd /workspace && ${command} 2>&1`);
-        logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
-        return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 10000) } };
-      } catch (err) {
-        const errMsg = (err as Error).message?.slice(0, 2000) || "Command failed";
-        return { success: false, error: errMsg, message: `Command failed: ${command.slice(0, 100)}`, data: { command, output: errMsg } };
+      let sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+
+      // Auto-init sandbox if not yet launched
+      if (!sbBuild?.sandboxId) {
+        console.log(`[${toolName}] No sandbox — auto-initializing...`);
+        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
+        const running = await isSandboxRunning(SANDBOX_ID).catch(() => false);
+        if (!running) return { success: false, error: "Sandbox container not running. Run: docker compose up -d sandbox", message: "Sandbox container not found." };
+        try { await sbInit(SANDBOX_ID); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
+        await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: SANDBOX_ID, sandboxPort: SANDBOX_PT } });
+        sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+        if (!sbBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
       }
+
+      const { execInSandbox } = await import("@/lib/sandbox");
+      const sandboxId = sbBuild.sandboxId;
+
+      // ── Dispatch to specific tool ──
+      if (toolName === "read_sandbox_file") {
+        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        try {
+          const content = await execInSandbox(sandboxId, `cat -n /workspace/${filePath}`);
+          return { success: true, message: `File: ${filePath}`, data: { path: filePath, content } };
+        } catch {
+          return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
+        }
+      }
+
+      if (toolName === "edit_sandbox_file") {
+        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const oldText = String(params.old_text ?? "");
+        const newText = String(params.new_text ?? "");
+        if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
+        try {
+          const current = await execInSandbox(sandboxId, `cat /workspace/${filePath}`);
+          const occurrences = current.split(oldText).length - 1;
+          if (occurrences === 0) return { success: false, error: `old_text not found in ${filePath}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
+          if (occurrences > 1) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique.` };
+          const updated = current.replace(oldText, newText);
+          const encoded = Buffer.from(updated).toString("base64");
+          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > /workspace/${filePath}`);
+          logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}`);
+          return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars.`, data: { path: filePath } };
+        } catch (err) {
+          return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${filePath}` };
+        }
+      }
+
+      if (toolName === "search_sandbox") {
+        const pattern = String(params.pattern ?? "");
+        const glob = params.glob ? `--include='${String(params.glob)}'` : "--include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx'";
+        const max = Number(params.maxResults) || 20;
+        try {
+          const result = await execInSandbox(sandboxId, `grep -rn ${glob} '${pattern.replace(/'/g, "'\\''")}' /workspace/apps/ /workspace/packages/ 2>/dev/null | head -${max}`);
+          return { success: true, message: `Search results for "${pattern}"`, data: { pattern, results: result } };
+        } catch {
+          return { success: true, message: `No matches found for "${pattern}"`, data: { pattern, results: "" } };
+        }
+      }
+
+      if (toolName === "list_sandbox_files") {
+        const pattern = String(params.pattern ?? "**/*");
+        try {
+          const result = await execInSandbox(sandboxId, `find /workspace -path '/workspace/node_modules' -prune -o -path '/workspace/.pnpm-store' -prune -o -path '/workspace/.next' -prune -o -path '${pattern.startsWith("/") ? pattern : `/workspace/${pattern}`}' -print 2>/dev/null | head -50`);
+          const cleaned = result.split("\n").map((l: string) => l.replace("/workspace/", "")).filter(Boolean).join("\n");
+          return { success: true, message: `Files matching "${pattern}"`, data: { pattern, files: cleaned } };
+        } catch {
+          return { success: true, message: `No files matching "${pattern}"`, data: { pattern, files: "" } };
+        }
+      }
+
+      if (toolName === "run_sandbox_command") {
+        const command = String(params.command ?? "");
+        if (!command) return { success: false, error: "command is required.", message: "Provide a command to run." };
+        try {
+          const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
+          logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
+          return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 10000) } };
+        } catch (err) {
+          const errMsg = (err as Error).message?.slice(0, 2000) || "Command failed";
+          return { success: false, error: errMsg, message: `Command failed: ${command.slice(0, 100)}`, data: { command, output: errMsg } };
+        }
+      }
+
+      return { success: false, error: "Unknown sandbox tool", message: "Internal error." };
     }
 
     case "deploy_feature": {
