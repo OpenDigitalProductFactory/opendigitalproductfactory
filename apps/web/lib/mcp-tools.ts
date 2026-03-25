@@ -1472,11 +1472,26 @@ export async function executeTool(
     }
 
     case "generate_code": {
+      const SANDBOX_NAME = "dpf-sandbox-1";
+      const SANDBOX_PORT = 3035;
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running. Launch it first.", message: "No sandbox." };
-      if (!build.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
+      let build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
+      if (!build?.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
+
+      // Auto-initialize sandbox if not yet launched
+      if (!build.sandboxId) {
+        console.log("[generate_code] No sandbox — auto-initializing...");
+        const { isSandboxRunning, initializeSandboxWorkspace: autoInit } = await import("@/lib/sandbox");
+        const running = await isSandboxRunning(SANDBOX_NAME).catch(() => false);
+        if (!running) return { success: false, error: "Sandbox container is not running. Run: docker compose up -d sandbox", message: "Sandbox container not found." };
+        try { await autoInit(SANDBOX_NAME); } catch (e) { console.error(`[generate_code] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
+        await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: SANDBOX_NAME, sandboxPort: SANDBOX_PORT } });
+        build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
+        if (!build?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+      }
 
       const { buildCodeGenPrompt } = await import("@/lib/coding-agent");
       const { execInSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
@@ -1526,12 +1541,13 @@ export async function executeTool(
         return { success: true, message: `Code generation produced text but no parseable files. Instruction: ${instruction}. Check /tmp/codegen-output.txt in sandbox.`, data: { instruction, filesGenerated: 0 } };
       }
 
-      // Write each file to the sandbox
+      // Write each file to the sandbox (strip any leading /workspace/ to avoid double-path)
       for (const file of files) {
-        const dir = file.path.includes("/") ? file.path.substring(0, file.path.lastIndexOf("/")) : "";
+        const cleanPath = file.path.replace(/^\/?workspace\//, "");
+        const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
         if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
         const encoded = Buffer.from(file.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${file.path}`);
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
       }
 
       logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
