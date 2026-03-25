@@ -1756,10 +1756,20 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
 
-      // Auto-init sandbox if not yet launched
-      if (!sbBuild?.sandboxId) {
-        console.log(`[${toolName}] No sandbox — auto-initializing...`);
-        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
+      // Auto-init sandbox if not launched OR workspace is empty
+      const { isSandboxRunning, initializeSandboxWorkspace: sbInit, execInSandbox: sbExec } = await import("@/lib/sandbox");
+      let needsInit = !sbBuild?.sandboxId;
+      if (!needsInit && sbBuild?.sandboxId) {
+        // sandboxId is set but workspace might be empty (cleared or never copied)
+        try {
+          await sbExec(sbBuild.sandboxId, "test -f /workspace/package.json");
+        } catch {
+          needsInit = true;
+          console.log(`[${toolName}] sandboxId set but workspace empty — re-initializing...`);
+        }
+      }
+      if (needsInit) {
+        console.log(`[${toolName}] Auto-initializing sandbox...`);
         const running = await isSandboxRunning(SANDBOX_ID).catch(() => false);
         if (!running) return { success: false, error: "Sandbox container not running. Run: docker compose up -d sandbox", message: "Sandbox container not found." };
         try { await sbInit(SANDBOX_ID); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
@@ -1768,8 +1778,8 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         if (!sbBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
       }
 
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const sandboxId = sbBuild.sandboxId;
+      const execInSandbox = sbExec;
+      const sandboxId = sbBuild!.sandboxId!;
 
       // ── Dispatch to specific tool ──
       if (toolName === "read_sandbox_file") {
