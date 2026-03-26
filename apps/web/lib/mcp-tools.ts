@@ -559,6 +559,28 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── Hive Mind Contribution Tools (IT4IT §5.5 Release) ───────────────────
+  {
+    name: "assess_contribution",
+    description: "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "contribute_to_hive",
+    description: "Package a shipped feature as a FeaturePack for community contribution. Only call after the user has seen the assessment and explicitly approved. Includes DCO (Developer Certificate of Origin) attestation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        include_migrations: { type: "boolean", description: "Include database migrations in the pack. Default: true." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "proposal",
+    sideEffect: true,
+  },
   {
     name: "evaluate_page",
     description: "Evaluate a live page for UX and accessibility issues using axe-core + Playwright. Returns structured findings with WCAG references, severity, and recommendations. Works on production pages (default) or sandbox pages (if URL provided).",
@@ -2604,6 +2626,189 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
 
       return { success: false, error: "Provide bundle_id or promotion_id.", message: "Specify which release or promotion to check." };
+    }
+
+    // ─── Hive Mind Contribution ──────────────────────────────────────────────
+
+    case "assess_contribution": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: {
+          title: true, brief: true, buildPlan: true, diffPatch: true, diffSummary: true,
+          phase: true, portfolioId: true, digitalProductId: true,
+          verificationOut: true, sandboxId: true,
+        },
+      });
+      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
+
+      const brief = build.brief as Record<string, unknown> | null;
+      const plan = build.buildPlan as Record<string, unknown> | null;
+      const diff = (build.diffPatch ?? build.diffSummary ?? "") as string;
+
+      // Parse diff to understand scope
+      const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
+      const newRoutes = changedFiles.filter((f) => f.includes("/app/") && f.endsWith("/page.tsx"));
+      const schemaChanges = changedFiles.filter((f) => f.includes("schema.prisma"));
+      const migrationFiles = changedFiles.filter((f) => f.startsWith("prisma/migrations/"));
+      const hasNewModels = diff.includes("model ") && diff.includes("@id");
+
+      // ── Criterion 1: Vision Alignment ──
+      const portfolioId = build.portfolioId ?? "unknown";
+      const description = String(brief?.description ?? "");
+      const isPortfolioAligned = !!build.portfolioId;
+      const mentionsDPPM = /product|portfolio|lifecycle|taxonomy|backlog|compliance|operations/i.test(description);
+      const visionScore = isPortfolioAligned && mentionsDPPM ? "high" : isPortfolioAligned ? "medium" : "low";
+      const visionReasoning = visionScore === "high"
+        ? `Aligned with portfolio ${portfolioId} and extends platform capabilities (${mentionsDPPM ? "touches DPPM concepts" : ""}).`
+        : visionScore === "medium"
+          ? `Assigned to portfolio ${portfolioId} but domain alignment is unclear from the description.`
+          : "Not assigned to a portfolio — unclear how this connects to the platform vision.";
+
+      // ── Criterion 2: Community Value ──
+      const targetRoles = Array.isArray(brief?.targetRoles) ? brief.targetRoles : [];
+      const broadRoles = targetRoles.length === 0 || targetRoles.includes("All") || targetRoles.length >= 3;
+      const acceptanceCriteria = Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria : [];
+      const isGeneral = !description.match(/\b(acme|our company|internal|proprietary|specific to)\b/i);
+      const communityScore = broadRoles && isGeneral ? "high" : isGeneral ? "medium" : "low";
+      const communityReasoning = communityScore === "high"
+        ? `Targets ${broadRoles ? "broad roles" : targetRoles.join(", ")} with ${acceptanceCriteria.length} general acceptance criteria.`
+        : communityScore === "medium"
+          ? `Targets specific roles (${targetRoles.join(", ")}) but the functionality appears generalizable.`
+          : "Contains organization-specific language or targets a narrow use case.";
+
+      // ── Criterion 3: Augmentation vs Innovation ──
+      const isAugmentation = newRoutes.length <= 1 && !hasNewModels;
+      const augLevel = isAugmentation ? "augmentation" as const : "innovation" as const;
+      const augReasoning = isAugmentation
+        ? `Modifies ${changedFiles.length} existing files with ${newRoutes.length} new route(s). This augments existing capability — straightforward to merge.`
+        : `Creates ${newRoutes.length} new route(s) and ${hasNewModels ? "new data models" : "significant structural changes"}. This is an innovation — benefits from community review before merging.`;
+
+      // ── Criterion 4: Proprietary Sensitivity ──
+      const concerns: string[] = [];
+      if (/api[_-]?key|secret|password|token/i.test(diff)) concerns.push("Contains references to API keys or secrets");
+      if (/acme|our company|internal use only|confidential/i.test(diff)) concerns.push("Contains organization-specific references");
+      if (/\$\d+[\d,.]*|pricing|rate.*card|margin/i.test(diff)) concerns.push("Contains pricing or financial constants");
+      if (/customer.*name|client.*id|account.*number/i.test(diff)) concerns.push("Contains customer data references");
+      const isSensitive = concerns.length > 0;
+
+      // ── Overall Recommendation ──
+      let recommendation: "contribute" | "contribute_with_mods" | "keep_local" | "user_decides";
+      if (isSensitive) {
+        recommendation = concerns.length > 2 ? "keep_local" : "contribute_with_mods";
+      } else if (visionScore === "high" && communityScore === "high") {
+        recommendation = "contribute";
+      } else if (visionScore === "low" && communityScore === "low") {
+        recommendation = "keep_local";
+      } else {
+        recommendation = "user_decides";
+      }
+
+      const summaryMap = {
+        contribute: `This feature looks great for the community. It extends ${build.title} within the ${portfolioId} portfolio and other organizations would benefit. Would you like to contribute it to the Hive Mind?`,
+        contribute_with_mods: `This feature could benefit others, but I noticed some concerns: ${concerns.join("; ")}. If you'd like to contribute, I'd suggest removing organization-specific references first. Want me to prepare a cleaned version?`,
+        keep_local: `This feature is well-built but it's ${isSensitive ? "contains sensitive content" : "specific to your organization"}. I'd recommend keeping it local. You can always contribute later if you generalize it.`,
+        user_decides: `I see arguments both ways for contributing "${build.title}". Vision alignment: ${visionScore}. Community value: ${communityScore}. ${augLevel === "innovation" ? "This is an innovation that would benefit from review." : "This augments existing capability."} What would you prefer?`,
+      };
+
+      const assessment = {
+        recommendation,
+        criteria: {
+          visionAlignment: { score: visionScore, reasoning: visionReasoning },
+          communityValue: { score: communityScore, reasoning: communityReasoning },
+          augmentationLevel: { level: augLevel, reasoning: augReasoning },
+          proprietarySensitivity: { sensitive: isSensitive, concerns },
+        },
+        summary: summaryMap[recommendation],
+        suggestedMods: isSensitive ? concerns.map((c) => `Remove: ${c}`) : [],
+        filesChanged: changedFiles.length,
+        newRoutes: newRoutes.length,
+        hasSchemaChanges: schemaChanges.length > 0,
+        hasMigrations: migrationFiles.length > 0,
+      };
+
+      // Persist assessment on build record
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { taskResults: { ...(build.verificationOut as Record<string, unknown> ?? {}), contributionAssessment: assessment } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+      });
+
+      logBuildActivity(buildId, "assess_contribution", `Recommendation: ${recommendation}. Vision: ${visionScore}, Community: ${communityScore}, Type: ${augLevel}, Sensitive: ${isSensitive}`);
+
+      return { success: true, message: assessment.summary, data: assessment };
+    }
+
+    case "contribute_to_hive": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: {
+          id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
+          sandboxId: true, portfolioId: true,
+          createdBy: { select: { email: true } },
+        },
+      });
+      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
+
+      const diff = (build.diffPatch ?? "") as string;
+      if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
+
+      const includeMigrations = params.include_migrations !== false;
+      const brief = build.brief as Record<string, unknown> | null;
+
+      // Parse files from diff
+      const allFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
+      const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
+      const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
+      const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
+
+      // Build manifest
+      const manifest = {
+        files: codeFiles,
+        migrations: includeMigrations ? migrationFiles : [],
+        schemaChanges: schemaFiles,
+        totalFiles: includeMigrations ? allFiles.length : codeFiles.length,
+        diffLength: diff.length,
+        portfolioContext: build.portfolioId,
+      };
+
+      // DCO attestation
+      const userEmail = build.createdBy?.email ?? "unknown@dpf.local";
+      const userName = userEmail.split("@")[0] ?? "Contributor";
+      const dcoAttestation = `Signed-off-by: ${userName} <${userEmail}>`;
+
+      // Create FeaturePack
+      const packId = `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await prisma.featurePack.create({
+        data: {
+          packId,
+          title: build.title,
+          description: String(brief?.description ?? ""),
+          portfolioContext: build.portfolioId,
+          version: "1.0.0",
+          manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          buildId: build.id,
+          status: "contributed",
+        },
+      });
+
+      // Update linked ImprovementProposal if exists
+      await prisma.improvementProposal.updateMany({
+        where: { buildId: build.id, contributionStatus: "local" },
+        data: { contributionStatus: "contributed" },
+      }).catch(() => {});
+
+      logBuildActivity(buildId, "contribute_to_hive", `FeaturePack ${packId} created. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`);
+
+      return {
+        success: true,
+        message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation. Thank you for contributing!`,
+        data: { packId, manifest, dcoAttestation },
+      };
     }
 
     case "evaluate_page": {

@@ -35,6 +35,7 @@ const BUILD_TOOL_NAMES = new Set([
   "propose_file_change", "update_feature_brief", "create_backlog_item",
   "check_deployment_windows", "schedule_promotion", "create_release_bundle", "get_release_status",
   "run_release_gate", "schedule_release_bundle",
+  "assess_contribution", "contribute_to_hive",
 ]);
 
 /** Detect when the agent claims completion or narrates code without having called build tools. */
