@@ -1,11 +1,12 @@
 # Framework Mapping Playlist Index
 
-This folder was generated from the YouTube MCP playlist inventory for `PLkGSnjw5y2U7QNr9jL6TAgwQvYBI_LEtK`. The YouTube MCP transcript endpoint failed in this session, but the framework-mapping subset at positions `63` through `69` was partially recovered through pragmatic fallback methods: transcript availability was verified, opening excerpt probes were captured, and chapter landmarks were extracted from the YouTube page.
+This folder was generated from the YouTube MCP playlist inventory for `PLkGSnjw5y2U7QNr9jL6TAgwQvYBI_LEtK`. The YouTube MCP transcript endpoint failed in this session, but the framework-mapping subset at positions `63` through `69` was recovered pragmatically by downloading the audio with `yt-dlp` and transcribing it locally with `faster-whisper`, while keeping the rest of the playlist metadata-only.
 
 - Playlist videos found via MCP: 87
 - Transcript extraction successes via MCP: 0
-- Framework-mapping transcript probes recovered outside MCP: 7 videos (`63`-`69`)
-- Transcript extraction failures observed: MCP returned `401`/`0 items`, then direct fallback extraction later hit YouTube `429`/IP throttling.
+- Local transcript recoveries outside MCP: 7 videos (`63`-`69`)
+- Remaining metadata-only notes: 80 videos
+- Transcript extraction failures observed: MCP returned `401` / `Transport closed`, direct timedtext requests later hit YouTube `429` / IP throttling, but audio download remained available for the seven framework videos.
 
 ## Video Index
 
@@ -73,13 +74,13 @@ This folder was generated from the YouTube MCP playlist inventory for `PLkGSnjw5
 | 60 | CSDM Example Series: Platforms | CSDM | class and relationship discipline | yes | [./060-csdm-example-series-platforms.md](./060-csdm-example-series-platforms.md) |
 | 61 | CSDM Discussion about Assignment, Change, Support and Managed by Groups in CSDM | CSDM | CSDM/CMDB framing | yes | [./061-csdm-discussion-about-assignment-change-support-and-managed-by-groups-in-csdm.md](./061-csdm-discussion-about-assignment-change-support-and-managed-by-groups-in-csdm.md) |
 | 62 | CSDM Use Case Discussion - End to end cloud app creation and management | CSDM | class and relationship discipline | yes | [./062-csdm-use-case-discussion-end-to-end-cloud-app-creation-and-management.md](./062-csdm-use-case-discussion-end-to-end-cloud-app-creation-and-management.md) |
-| 63 | CSDM V3 Framework Mapping: Archimate V3 | CSDM, ArchiMate, TOGAF | cross-framework alignment | partial | [./063-csdm-v3-framework-mapping-archimate-v3.md](./063-csdm-v3-framework-mapping-archimate-v3.md) |
-| 64 | CSDM V3 Framework Mapping: APQC V7.2.1 | CSDM, APQC | cross-framework alignment | partial | [./064-csdm-v3-framework-mapping-apqc-v7-2-1.md](./064-csdm-v3-framework-mapping-apqc-v7-2-1.md) |
-| 65 | CSDM V3 Framework Mapping: IT4IT V3 | CSDM, IT4IT, Digital Product | cross-framework alignment | partial | [./065-csdm-v3-framework-mapping-it4it-v3.md](./065-csdm-v3-framework-mapping-it4it-v3.md) |
-| 66 | CSDM V3 Framework Mapping: IT4IT V2.1 | CSDM, IT4IT | cross-framework alignment | partial | [./066-csdm-v3-framework-mapping-it4it-v2-1.md](./066-csdm-v3-framework-mapping-it4it-v2-1.md) |
-| 67 | CSDM V3 Framework Mapping: TM Forum V20 | CSDM, TM Forum, Open Digital Architecture | cross-framework alignment | partial | [./067-csdm-v3-framework-mapping-tm-forum-v20.md](./067-csdm-v3-framework-mapping-tm-forum-v20.md) |
-| 68 | CSDM V3 Framework Mapping: TBM Council 3.02 | CSDM, TBM | cross-framework alignment | partial | [./068-csdm-v3-framework-mapping-tbm-council-3-02.md](./068-csdm-v3-framework-mapping-tbm-council-3-02.md) |
-| 69 | CSDM V3 Framework Mapping: Bian V8 | CSDM, BIAN | cross-framework alignment | partial | [./069-csdm-v3-framework-mapping-bian-v8.md](./069-csdm-v3-framework-mapping-bian-v8.md) |
+| 63 | CSDM V3 Framework Mapping: Archimate V3 | CSDM, ArchiMate, TOGAF | EA layer semantics, service mapping, technology realization | partial | [./063-csdm-v3-framework-mapping-archimate-v3.md](./063-csdm-v3-framework-mapping-archimate-v3.md) |
+| 64 | CSDM V3 Framework Mapping: APQC V7.2.1 | CSDM, APQC | process taxonomy, capability hierarchy, service portfolio | partial | [./064-csdm-v3-framework-mapping-apqc-v7-2-1.md](./064-csdm-v3-framework-mapping-apqc-v7-2-1.md) |
+| 65 | CSDM V3 Framework Mapping: IT4IT V3 | CSDM, IT4IT, Digital Product | digital product, value streams, service offerings | yes | [./065-csdm-v3-framework-mapping-it4it-v3.md](./065-csdm-v3-framework-mapping-it4it-v3.md) |
+| 66 | CSDM V3 Framework Mapping: IT4IT V2.1 | CSDM, IT4IT | service model backbone, desired service, value streams | partial | [./066-csdm-v3-framework-mapping-it4it-v2-1.md](./066-csdm-v3-framework-mapping-it4it-v2-1.md) |
+| 67 | CSDM V3 Framework Mapping: TM Forum V20 | CSDM, TM Forum, Open Digital Architecture | customer product, technical service, resource layers | partial | [./067-csdm-v3-framework-mapping-tm-forum-v20.md](./067-csdm-v3-framework-mapping-tm-forum-v20.md) |
+| 68 | CSDM V3 Framework Mapping: TBM Council 3.02 | CSDM, TBM, ATUM | cost pools, IT towers, capability-finance mapping | partial | [./068-csdm-v3-framework-mapping-tbm-council-3-02.md](./068-csdm-v3-framework-mapping-tbm-council-3-02.md) |
+| 69 | CSDM V3 Framework Mapping: BIAN V8 | CSDM, BIAN | banking service landscape, capability mapping, service semantics | partial | [./069-csdm-v3-framework-mapping-bian-v8.md](./069-csdm-v3-framework-mapping-bian-v8.md) |
 | 70 | Demo - ITOM Tag Based Service Mapping | ITOM | historical release guidance | partial | [./070-demo-itom-tag-based-service-mapping.md](./070-demo-itom-tag-based-service-mapping.md) |
 | 71 | Tenable integration and configuration: how to get them right first time. | ServiceNow data modeling | governance and reconciliation | partial | [./071-tenable-integration-and-configuration-how-to-get-them-right-first-time.md](./071-tenable-integration-and-configuration-how-to-get-them-right-first-time.md) |
 | 72 | CI Matching for Vulnerability Response - How to get it right. | Vulnerability Response | governance and reconciliation | partial | [./072-ci-matching-for-vulnerability-response-how-to-get-it-right.md](./072-ci-matching-for-vulnerability-response-how-to-get-it-right.md) |
@@ -106,11 +107,11 @@ This folder was generated from the YouTube MCP playlist inventory for `PLkGSnjw5
 - A visible cluster of videos treats mapping as an explicit crosswalk exercise instead of assuming one canonical vocabulary. That is directly aligned with the current ontology goal of precise framework mappings.
 - Digital product, portfolio, value stream, and operating-model topics recur alongside CSDM, suggesting that product-centric language was already pushing against service-only modeling boundaries.
 - Many operational videos focus on reconciliation, freshness, auditability, and queryability. That reinforces that ontology work needs governed analysis paths backed by trustworthy identity and lifecycle data.
-- Within the framework-mapping subset itself, the recovered chapter landmarks show recurring bridge concepts: business capabilities, value streams, service offerings, digital products, taxonomies, meta-models, service landscapes, and technology-layer realization structures.
+- Within the framework-mapping subset itself, the recovered transcripts reinforce recurring bridge concepts: business capabilities, value streams, service offerings, digital products, taxonomies, meta-models, service landscapes, technology-layer realization structures, and finance roll-up paths.
 
 ### Frameworks covered
 - CMDB, CSDM, Service Graph, DPM, Vulnerability Response, Digital Product, Enterprise Architecture, IT4IT, ITOM, Microservices/API, Operating Model, ServiceNow data modeling, TBM, APQC, ArchiMate, BIAN, Discovery, ITIL, ITSM, ServiceNow governance, TM Forum, Value Stream Management
-- Most direct external mapping titles appear at playlist positions 63-69: ArchiMate, APQC, IT4IT, TM Forum, TBM, and BIAN.
+- Most direct external mapping titles appear at playlist positions 63-69: ArchiMate, APQC, IT4IT, TM Forum, TBM / ATUM, and BIAN.
 - Related but less explicit cross-domain topics include Digital Product, DPM, Enterprise Architecture, Operating Model, Value Stream Management, ITSM/ITIL, and Vulnerability Response.
 
 ### Concepts that map well to current ontology work
@@ -119,15 +120,19 @@ This folder was generated from the YouTube MCP playlist inventory for `PLkGSnjw5
 - Lifecycle and value-stream traversal rules that can support precise analysis patterns.
 - Boundary discipline between business service, technical service, application, API, platform, and supporting operational entities.
 - Governance primitives such as reconciliation, freshness, audit evidence, and role/accountability relationships that make the ontology operationally trustworthy.
-- The chapter landmarks in the seven framework videos strengthen specific bridge candidates: TOGAF and ArchiMate technology realization, APQC business capabilities, IT4IT value streams and service offerings, TM Forum Open Digital Architecture, TBM taxonomy, and BIAN service landscape.
+- The transcript-backed framework videos strengthen specific bridge candidates: TOGAF and ArchiMate technology realization, APQC business capabilities and service portfolio structure, IT4IT digital-product value streams and service offerings, TM Forum Open Digital Architecture, TBM finance-to-service roll-ups, and BIAN service landscape taxonomy.
+- IT4IT v3 is the strongest historical evidence in the playlist for treating Digital Product as the central semantic anchor across portfolio, fulfillment, and operations.
+- TBM and BIAN add two important dimensions the rest of the playlist does not cover as directly: finance allocation paths and industry-specific domain taxonomies.
 - The broader pattern also supports the emerging idea of AI coworkers or agents as governed digital products, even though that terminology does not appear explicitly in the playlist metadata retrieved here.
 
 ### Concepts likely outdated due to newer standard evolution
 - Release-specific guidance tied to Rome, San Diego, Tokyo, Utah, Xanadu, or Quebec should be treated as historical implementation context, not current product behavior.
 - Direct framework mappings labeled CSDM v3 or CSDM 4.0 are still useful as historical crosswalk seeds, but they need re-validation against newer CSDM and IT4IT evolutions before reuse.
+- The IT4IT v3 video is explicitly a pre-release snapshot of the standard, so it is particularly important to treat its exact diagram names as historical rather than final.
+- APQC 7.2.1, TM Forum v20, TBM 3.02, and BIAN v8 should all be treated as versioned source material, not current canonical labels.
 - Feature walkthroughs, quick tips, and UI-oriented demos likely have the fastest decay because platform packaging and workflows change more quickly than the underlying conceptual issues.
 - Older analytics and access-control demonstrations may still reveal intended traversals, but not current permissions, screen flows, or exact object names.
 
 ## Transcript Status
 
-Transcript retrieval was not available from the YouTube MCP server in this session. Direct `youtube_get_transcript` calls returned `401`, and a bulk playlist transcript request returned `0` items on 2026-03-26. A pragmatic fallback confirmed transcript availability for the framework-mapping subset (`63`-`69`), but subsequent bulk extraction attempts hit YouTube `429`/IP-throttle responses. Those seven files were therefore upgraded with verified opening excerpts and chapter landmarks rather than fabricated full transcripts.
+Transcript retrieval was not available from the YouTube MCP server in this session. Direct `youtube_get_transcript` calls returned `401`, bulk transcript calls failed with `Transport closed`, and direct timedtext requests later hit YouTube `429` / IP throttling. The pragmatic recovery path that worked was different: the seven framework videos (`63`-`69`) were downloaded as audio with `yt-dlp` and transcribed locally with `faster-whisper`. Those seven notes are now transcript-backed; the other 80 files remain metadata-first stubs.

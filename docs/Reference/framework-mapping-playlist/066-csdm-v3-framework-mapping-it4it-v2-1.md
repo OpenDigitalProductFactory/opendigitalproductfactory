@@ -4,34 +4,41 @@
 - Video URL: https://www.youtube.com/watch?v=pfCcymh2cx4
 - Playlist position: 66
 - Frameworks discussed: CSDM, IT4IT
-- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a local `faster-whisper` transcription recovered from the video audio after MCP transcript calls failed on 2026-03-26.
 
 ## Short summary
-This session maps IT4IT v2.1 into CSDM v3. The chapter structure suggests a comparative opening on CSDM versus IT4IT, followed by a value-stream section and then a component-mapping section. That makes it particularly useful for understanding older lifecycle/value-stream alignment patterns before IT4IT v3.
+This session captures the pre-digital-product-centric IT4IT view. The emphasis is on the four value streams, the service model backbone, desired service, catalog and offering semantics, and the fact that IT4IT does not sharply separate business services from technical services the way CSDM does.
 
 ## Key mapping concepts
-- CSDM versus IT4IT as neighboring but non-identical modeling approaches
-- Value streams as a structuring concept for the mapping
-- Component mapping used to tie lifecycle concepts to model elements
+- Four IT4IT value streams: plan, build, deliver, and run
+- Service model backbone as the lifecycle thread from planning through operation
+- Request-to-fulfill bridging into both business-service and technical-service areas
+- Detect-to-correct mapping into application-service, infrastructure, and managed-technical-service viewpoints
+- Desired service and catalog semantics as strong bridges into service offering and service portfolio concepts
 
 ## Notable terminology used
-- CSDM
 - IT4IT v2.1
+- Value chain
 - Value streams
-- Component mapping
-- Framework mapping
+- Service model backbone
+- Desired service
+- Request to fulfill
+- Detect to correct
+- Functional components
 
 ## What still seems valid
-The useful part here is the value-stream emphasis. Even if the standard version is older, it reinforces that analysis paths should be semantically constrained by lifecycle intent. That is directly relevant to the ontology goal of precise traversal patterns instead of generic graph closure.
+This is still useful as a disciplined lifecycle and offering model. The notion of a service-model backbone, explicit value streams, and a desired-service-to-offering path is highly relevant for ontology work that needs precise traversal rules rather than loose service associations.
 
 ## What appears outdated or version-specific
-IT4IT v2.1 is clearly older than the v3 material and should be treated as historical context. Any component or lifecycle labels from this session need re-validation before reuse, especially where the v3 model or current product-centric ontology thinking diverges.
+This is the older IT4IT v2.1 picture, before the digital-product-centered reframing highlighted in the v3 video. It also inherits the older CSDM v3 baseline, so direct mappings should be treated as historical inputs and compared against newer product-centric semantics.
 
 ## Transcript
-Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+Local transcript recovered on 2026-03-26 by downloading the audio and transcribing it after the YouTube MCP transcript path failed.
 
-Short verified excerpt:
-> "cover the it4it version 2.1 mapping to csdn version 3.0"
+Cleaned transcript excerpt:
+- `0:15-1:20`: IT4IT is introduced as a reference architecture for value streams and functional components, while CSDM is framed as the common ServiceNow model for products and services across the platform.
+- `3:05-5:10`: IT4IT v2.1 is described as four value streams on top of a service model backbone. Planning aligns to CSDM design, request-to-fulfill spans both business and technical services, and detect-to-correct maps into application-service and infrastructure operations.
+- `6:00-7:35`: The speaker highlights the "desired service" as the closest bridge to offerings and catalog entries. That makes the video useful for understanding how conceptual service intent, catalog exposure, and operational service realization relate.
 
 Chapter landmarks recovered from the YouTube page:
 - `0:43` CSDM vs IT4IT
@@ -39,4 +46,4 @@ Chapter landmarks recovered from the YouTube page:
 - `4:50` Component Mapping
 
 ## Relevance to current ontology work
-High relevance as historical context. This is useful for understanding how earlier IT4IT lifecycle and value-stream thinking was being connected to CSDM before later shifts toward stronger digital-product language.
+High relevance as a version contrast. This video shows what the mapping looked like before IT4IT moved harder toward Digital Product, which makes it valuable for distinguishing stable lifecycle and offering semantics from concepts that were later absorbed into a more explicitly product-centric frame.
