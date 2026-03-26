@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
 import { AgentProviderSelect } from "@/components/platform/AgentProviderSelect";
 import { AiTabNav } from "@/components/platform/AiTabNav";
+import { getAgentGrantSummaries } from "@/lib/agent-grants";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Tier 1 - Orchestrators",
@@ -49,6 +50,9 @@ export default async function PlatformAiPage() {
       select: { providerId: true, name: true, status: true },
     }),
   ]);
+
+  const grantSummaries = getAgentGrantSummaries();
+  const grantLookup = new Map(grantSummaries.map(g => [g.agentId, g]));
 
   const tiers = [1, 2, 3] as const;
   const byTier = new Map(tiers.map((tier) => [tier, agents.filter((agent) => agent.tier === tier)]));
@@ -122,6 +126,9 @@ export default async function PlatformAiPage() {
                       autonomyLevel: agent.governanceProfile?.autonomyLevel ?? null,
                       owningTeamName: agent.ownerships[0]?.team.name ?? null,
                       activeGrantCount: agent.delegationGrants.length,
+                      grantCount: grantLookup.get(agent.agentId)?.grantCount ?? 0,
+                      hitlTier: grantLookup.get(agent.agentId)?.hitlTier ?? null,
+                      escalatesTo: grantLookup.get(agent.agentId)?.escalatesTo ?? null,
                     }}
                   />
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

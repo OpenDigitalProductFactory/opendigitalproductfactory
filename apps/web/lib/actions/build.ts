@@ -135,6 +135,53 @@ export async function advanceBuildPhase(
     data: { phase: targetPhase },
   });
 
+  // Create calendar events for milestone visibility
+  if (targetPhase === "build" || targetPhase === "review" || targetPhase === "ship") {
+    try {
+      const fullBuild = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { title: true, createdById: true },
+      });
+      // Find the employee profile for the calendar event owner
+      const employee = await prisma.employeeProfile.findFirst({
+        where: { userId: fullBuild?.createdById },
+        select: { id: true },
+      });
+      if (employee) {
+        const phaseLabels: Record<string, string> = {
+          build: "Building",
+          review: "Review",
+          ship: "Shipping",
+        };
+        const eventId = `BUILD-${buildId}-${targetPhase}`;
+        await prisma.calendarEvent.upsert({
+          where: { eventId },
+          create: {
+            eventId,
+            title: `${phaseLabels[targetPhase] ?? targetPhase}: ${fullBuild?.title ?? buildId}`,
+            startAt: new Date(),
+            eventType: "action",
+            category: "platform",
+            ownerEmployeeId: employee.id,
+            visibility: "team",
+            color: targetPhase === "ship" ? "#22c55e" : "#7c8cf8",
+          },
+          update: {
+            title: `${phaseLabels[targetPhase] ?? targetPhase}: ${fullBuild?.title ?? buildId}`,
+            startAt: new Date(),
+          },
+        });
+        // Link calendar event to the build
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: { calendarEventId: eventId },
+        });
+      }
+    } catch {
+      // Calendar event creation is best-effort — don't block phase transition
+    }
+  }
+
   // Auto-launch sandbox and execute build plan when entering Build phase
   if (targetPhase === "build") {
     // Fire-and-forget: sandbox launch + coding agent execution
@@ -380,6 +427,16 @@ export async function shipBuild(input: {
     }
   } catch (err) {
     console.warn("[shipBuild] git tag error:", err);
+  }
+
+  // Apply IT4IT value stream labels to the DigitalProduct in Neo4j
+  // The product has been through the build pipeline, so it gets the R2D label
+  // (Requirement to Deploy). When it's consumed, it will get R2F.
+  try {
+    const { syncIT4ITLabels } = await import("@dpf/db");
+    await syncIT4ITLabels(result.productId, ["S2P", "R2D"]);
+  } catch (err) {
+    console.warn("[shipBuild] IT4IT label sync failed:", err);
   }
 
   // Create ProductVersion + ChangePromotion + RFC records (best-effort)

@@ -155,6 +155,26 @@ export async function executeMcpServerTool(
 
   try {
     if (config.transport === "stdio") {
+      // SECURITY: Stdio MCP servers spawn as child processes of the current
+      // container. In the portal (production) container, this means they inherit
+      // production credentials, file access, and database connections.
+      //
+      // Servers with executionScope: "sandbox" MUST be routed through
+      // docker exec into the sandbox container instead. This is not yet
+      // implemented — block execution to prevent production bypass.
+      //
+      // Servers with executionScope: "external" (e.g., GitHub) are safe because
+      // they only communicate with external APIs, but are also blocked until
+      // the stdio execution adapter is implemented.
+      const serverConfig = server.config as Record<string, unknown>;
+      const scope = serverConfig.executionScope ?? "unknown";
+      if (scope === "sandbox") {
+        return {
+          success: false,
+          error: "Sandbox-scoped MCP servers cannot run in the portal container",
+          message: `${serverSlug} is marked sandbox-only. Stdio execution inside the sandbox container is not yet implemented. Use the platform's built-in sandbox tools (read_sandbox_file, edit_sandbox_file, run_sandbox_command) instead.`,
+        };
+      }
       return { success: false, error: "stdio tool execution not yet supported", message: "stdio transport requires persistent process — follow-on" };
     }
 

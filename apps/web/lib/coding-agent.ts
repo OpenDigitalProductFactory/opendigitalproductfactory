@@ -112,6 +112,166 @@ export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unk
   return parts.join("\n");
 }
 
+// ─── Context Gathering ──────────────────────────────────────────────────────
+
+/**
+ * Gathers existing code context from the sandbox to inform code generation.
+ * Reads files that are listed in the build plan's fileStructure, so the LLM
+ * has awareness of current patterns before generating/modifying code.
+ */
+export async function gatherCodeContext(
+  containerId: string,
+  plan: Record<string, unknown>,
+): Promise<string> {
+  const MAX_CONTEXT_CHARS = 8000;
+  const parts: string[] = [];
+  let totalChars = 0;
+
+  // Extract fileStructure from plan (array of {path, action, purpose})
+  const fileStructure = Array.isArray(plan.fileStructure) ? plan.fileStructure : [];
+
+  for (const entry of fileStructure) {
+    if (totalChars >= MAX_CONTEXT_CHARS) break;
+
+    const filePath = typeof entry === "string" ? entry : entry?.path;
+    const action = typeof entry === "string" ? "create" : (entry?.action ?? "create");
+    if (!filePath || typeof filePath !== "string") continue;
+
+    // For files being modified, read their current content
+    if (action === "modify" || action === "edit" || action === "update") {
+      try {
+        const content = await execInSandbox(
+          containerId,
+          `cat "${filePath}" 2>/dev/null || echo "[file not found]"`,
+        );
+        if (content && !content.includes("[file not found]")) {
+          const truncated = content.slice(0, 2000);
+          const block = `### EXISTING: ${filePath}\n\`\`\`\n${truncated}\n\`\`\`\n`;
+          parts.push(block);
+          totalChars += block.length;
+        }
+      } catch {
+        // File doesn't exist or can't be read — skip
+      }
+    }
+
+    // For new files, try to find a similar existing file for pattern matching
+    if (action === "create" || action === "new") {
+      try {
+        // Extract directory and extension to find similar files
+        const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+        const ext = filePath.substring(filePath.lastIndexOf("."));
+        if (dir && ext) {
+          const similar = await execInSandbox(
+            containerId,
+            `ls "${dir}"/*${ext} 2>/dev/null | head -1`,
+          );
+          if (similar && similar.trim()) {
+            const similarPath = similar.trim().split("\n")[0]!;
+            const content = await execInSandbox(
+              containerId,
+              `head -50 "${similarPath}" 2>/dev/null || true`,
+            );
+            if (content && content.trim()) {
+              const block = `### PATTERN (similar to ${filePath}): ${similarPath}\n\`\`\`\n${content}\n\`\`\`\n`;
+              parts.push(block);
+              totalChars += block.length;
+            }
+          }
+        }
+      } catch {
+        // Pattern search failed — skip
+      }
+    }
+  }
+
+  if (parts.length === 0) return "";
+
+  return "\n## Existing Code Context\nThese files are currently in the workspace. Match their patterns and conventions.\n\n" + parts.join("\n");
+}
+
+// ─── Test Failure Diagnosis ─────────────────────────────────────────────────
+
+export type TestDiagnosis = {
+  failingTests: Array<{
+    testFile: string;
+    testName: string;
+    error: string;
+    sourceFile?: string;
+  }>;
+  summary: string;
+};
+
+/**
+ * Parses test output and type-check output to produce structured diagnostics.
+ * Identifies failing test files, test names, error messages, and likely source files.
+ */
+export function diagnoseTestFailures(testResult: SandboxTestResult): TestDiagnosis {
+  const failingTests: TestDiagnosis["failingTests"] = [];
+
+  // Parse test failures from Jest/Vitest output
+  const testFailPattern = /FAIL\s+(.+?)(?:\n|$)/g;
+  const testNamePattern = /[x✕×]\s+(.+?)(?:\n|$)/g;
+  const errorPattern = /Error:\s*(.+?)(?:\n|$)/g;
+
+  let match;
+
+  // Extract failing test files
+  const failingFiles: string[] = [];
+  while ((match = testFailPattern.exec(testResult.testOutput)) !== null) {
+    failingFiles.push(match[1]!.trim());
+  }
+
+  // Extract failing test names
+  const failingNames: string[] = [];
+  while ((match = testNamePattern.exec(testResult.testOutput)) !== null) {
+    failingNames.push(match[1]!.trim());
+  }
+
+  // Extract error messages
+  const errors: string[] = [];
+  while ((match = errorPattern.exec(testResult.testOutput)) !== null) {
+    errors.push(match[1]!.trim());
+  }
+
+  // Build structured diagnosis
+  for (let i = 0; i < Math.max(failingFiles.length, failingNames.length); i++) {
+    const testFile = failingFiles[i] ?? failingFiles[0] ?? "unknown";
+    const testName = failingNames[i] ?? "unknown test";
+    const error = errors[i] ?? errors[0] ?? "unknown error";
+
+    // Infer source file from test file path
+    let sourceFile: string | undefined;
+    if (testFile !== "unknown") {
+      sourceFile = testFile
+        .replace(/\.test\.(ts|tsx|js|jsx)$/, ".$1")
+        .replace(/\.spec\.(ts|tsx|js|jsx)$/, ".$1")
+        .replace(/__tests__\//, "");
+    }
+
+    failingTests.push({ testFile, testName, error, sourceFile });
+  }
+
+  // Also parse TypeScript errors
+  if (!testResult.typeCheckPassed) {
+    const tsErrorPattern = /(.+?)\((\d+),\d+\):\s*error TS\d+:\s*(.+?)(?:\n|$)/g;
+    while ((match = tsErrorPattern.exec(testResult.typeCheckOutput)) !== null) {
+      failingTests.push({
+        testFile: match[1]!.trim(),
+        testName: `TypeScript error at line ${match[2]}`,
+        error: match[3]!.trim(),
+        sourceFile: match[1]!.trim(),
+      });
+    }
+  }
+
+  const summary = failingTests.length > 0
+    ? `${failingTests.length} failure(s): ${failingTests.map(f => `${f.testFile}: ${f.error}`).join("; ").slice(0, 500)}`
+    : "No structured failures found in output.";
+
+  return { failingTests, summary };
+}
+
 // ─── Run Tests in Sandbox ────────────────────────────────────────────────────
 
 export type SandboxTestResult = {
@@ -148,9 +308,11 @@ export async function runSandboxTests(containerId: string): Promise<SandboxTestR
   };
 }
 
-// ─── Auto-Execute Build Plan ────────────────────────────────────────────────
-// Called by the system when build phase starts. Runs the coding agent against
-// the sandbox with the approved plan. Does NOT depend on the coworker agent.
+// ─── Auto-Execute Build Plan (DEPRECATED) ──────────────────────────────────
+// @deprecated Use the agentic loop path in build-pipeline.ts instead.
+// This single-shot code generation is kept as a fallback but the pipeline
+// now delegates to runAgenticLoop() which provides iterative tool-use,
+// context gathering, and test-fix recovery.
 
 export type BuildExecutionResult = {
   success: boolean;

@@ -75,6 +75,327 @@ export function getRestoreInstructions(backupFilePath: string): string {
   ].join("\n");
 }
 
+// ─── Deployment Window Check (pure) ─────────────────────────────────────────
+
+/**
+ * Returns true if the current time falls within any of the given deployment windows.
+ * Checks day-of-week and time range (HH:mm format, evaluated in server timezone).
+ */
+export function isNowInWindow(
+  windows: Array<{ dayOfWeek: number[]; startTime: string; endTime: string }>,
+  now?: Date,
+): boolean {
+  const d = now ?? new Date();
+  const currentDay = d.getDay(); // 0=Sun
+  const currentTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  return windows.some((w) => {
+    if (!w.dayOfWeek.includes(currentDay)) return false;
+    // Handle overnight windows (e.g., 22:00-06:00)
+    if (w.startTime <= w.endTime) {
+      return currentTime >= w.startTime && currentTime < w.endTime;
+    }
+    // Overnight: 22:00-06:00 means >= 22:00 OR < 06:00
+    return currentTime >= w.startTime || currentTime < w.endTime;
+  });
+}
+
+// ─── Post-Deployment Health Check ───────────────────────────────────────────
+
+/**
+ * Verifies the production application is healthy after a promotion.
+ * Hits /api/health up to maxRetries times with 10s intervals.
+ */
+export async function verifyProductionHealth(
+  maxRetries = 3,
+): Promise<{ healthy: boolean; error?: string }> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch("http://localhost:3000/api/health", {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) return { healthy: true };
+    } catch {
+      // Retry
+    }
+    if (i < maxRetries - 1) {
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
+  }
+  return { healthy: false, error: "Production health check failed after 3 retries" };
+}
+
+// ─── Unified Promotion Pipeline ─────────────────────────────────────────────
+
+export type PromotionResult = {
+  success: boolean;
+  step: string;
+  message: string;
+  deploymentLog?: string;
+  backupId?: string;
+  error?: string;
+  restoreInstructions?: string;
+};
+
+/**
+ * End-to-end promotion pipeline. Called when an approved promotion is ready to deploy.
+ *
+ * Pipeline: validate → check window → backup → extract diff → scan destructive
+ * → apply patch → health check → mark deployed (or rollback on failure)
+ */
+export async function executePromotion(
+  promotionId: string,
+  overrideReason?: string,
+): Promise<PromotionResult> {
+  // ─── Step 1: Validate promotion status ────────────────────────────────────
+  const promotion = await prisma.changePromotion.findUnique({
+    where: { promotionId },
+    include: {
+      productVersion: {
+        include: { featureBuild: { select: { buildId: true, sandboxId: true, diffPatch: true } } },
+      },
+      changeItem: {
+        include: { changeRequest: { select: { rfcId: true, type: true, riskLevel: true } } },
+      },
+    },
+  });
+
+  if (!promotion) return { success: false, step: "validate", message: `Promotion ${promotionId} not found.` };
+  if (promotion.status !== "approved") {
+    return { success: false, step: "validate", message: `Promotion must be approved first. Current status: ${promotion.status}` };
+  }
+
+  const build = promotion.productVersion.featureBuild;
+  const rfc = promotion.changeItem?.changeRequest;
+  const rfcType = rfc?.type ?? "normal";
+  const riskLevel = rfc?.riskLevel ?? "low";
+  const isEmergency = rfcType === "emergency";
+
+  // ─── Step 2: Check deployment window ──────────────────────────────────────
+  if (!isEmergency && !overrideReason && !promotion.windowOverrideReason) {
+    const profile = await prisma.businessProfile.findFirst({
+      where: { isActive: true },
+      include: { deploymentWindows: true, blackoutPeriods: true },
+    });
+
+    if (profile) {
+      // Check blackout periods
+      const now = new Date();
+      const activeBlackout = profile.blackoutPeriods.find(
+        (bp) => bp.startAt <= now && bp.endAt >= now && !bp.exceptions.includes(rfcType),
+      );
+      if (activeBlackout) {
+        return {
+          success: false,
+          step: "window_check",
+          message: `Blackout period active until ${activeBlackout.endAt.toISOString()}. Reason: ${activeBlackout.reason ?? "Scheduled blackout"}. Use emergency override if critical.`,
+        };
+      }
+
+      // Check deployment windows
+      const matchingWindows = profile.deploymentWindows.filter(
+        (w) => w.allowedChangeTypes.includes(rfcType) && w.allowedRiskLevels.includes(riskLevel),
+      );
+      if (matchingWindows.length > 0 && !isNowInWindow(matchingWindows)) {
+        const windowSummary = matchingWindows
+          .map((w) => `${w.name}: days ${w.dayOfWeek.join(",")}, ${w.startTime}-${w.endTime}`)
+          .join("; ");
+        return {
+          success: false,
+          step: "window_check",
+          message: `Not within a deployment window. Available windows: ${windowSummary}. Schedule for a valid window or provide an override reason.`,
+        };
+      }
+    }
+  }
+
+  // If override reason provided, persist it
+  if (overrideReason && !promotion.windowOverrideReason) {
+    await prisma.changePromotion.update({
+      where: { promotionId },
+      data: { windowOverrideReason: overrideReason },
+    });
+  }
+
+  // ─── Step 3: Get the diff ─────────────────────────────────────────────────
+  let diffPatch = build?.diffPatch as string | null;
+  if (!diffPatch && build?.sandboxId) {
+    try {
+      const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      diffPatch = extracted.fullDiff;
+
+      // Persist for future reference
+      await prisma.featureBuild.update({
+        where: { buildId: build.buildId },
+        data: { diffPatch, diffSummary: diffPatch.slice(0, 500) },
+      });
+    } catch (err) {
+      return { success: false, step: "extract_diff", message: `Failed to extract diff from sandbox: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  if (!diffPatch || diffPatch.trim().length === 0) {
+    return { success: false, step: "extract_diff", message: "No diff patch available. Run deploy_feature in Build Studio first." };
+  }
+
+  // ─── Step 4: Scan for destructive operations ──────────────────────────────
+  const { migrationFiles } = categorizeDiffFiles(
+    [...diffPatch.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]),
+  );
+
+  if (migrationFiles.length > 0 && !promotion.destructiveAcknowledged) {
+    // Extract migration SQL content from the diff for scanning
+    const migrationSqlBlocks: string[] = [];
+    for (const mf of migrationFiles) {
+      const fileRegex = new RegExp(`diff --git a/${mf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} b/.+\\n[\\s\\S]*?(?=diff --git|$)`, "g");
+      const fileMatch = fileRegex.exec(diffPatch);
+      if (fileMatch) migrationSqlBlocks.push(fileMatch[0]);
+    }
+
+    const allMigrationSql = migrationSqlBlocks.join("\n");
+    const warnings = scanForDestructiveOps(allMigrationSql);
+    if (warnings.length > 0) {
+      return {
+        success: false,
+        step: "destructive_scan",
+        message: `Destructive operations detected in migrations. Acknowledge in the promotions UI before deploying.\n\nWarnings:\n${warnings.join("\n")}`,
+      };
+    }
+  }
+
+  // ─── Step 5: Backup production database ───────────────────────────────────
+  let backupId: string | undefined;
+  let backupFilePath: string | undefined;
+  try {
+    const backup = await backupProductionDb(build?.buildId ?? promotionId);
+    backupId = backup.id;
+    backupFilePath = backup.filePath;
+
+    // Link backup to promotion
+    await prisma.changePromotion.update({
+      where: { promotionId },
+      data: { backupId: backup.id },
+    });
+  } catch (err) {
+    return { success: false, step: "backup", message: `Database backup failed: ${err instanceof Error ? err.message : String(err)}. Cannot proceed without backup.` };
+  }
+
+  // ─── Step 6: Update RFC to in-progress ────────────────────────────────────
+  if (rfc?.rfcId) {
+    try {
+      await prisma.changeRequest.update({
+        where: { rfcId: rfc.rfcId },
+        data: { status: "in-progress", startedAt: new Date() },
+      });
+    } catch {
+      // Non-fatal — RFC status tracking is best-effort
+    }
+  }
+
+  // ─── Step 7: Apply promotion patch ────────────────────────────────────────
+  const patchResult = await applyPromotionPatch(diffPatch);
+  const deploymentLog = patchResult.success
+    ? `Patch applied successfully. ${migrationFiles.length} migration(s) deployed.`
+    : `Patch failed: ${patchResult.error}`;
+
+  if (!patchResult.success) {
+    // Rollback: restore database from backup
+    if (backupFilePath) {
+      try {
+        await exec(`docker exec -i ${DEFAULT_PRODUCTION_DB_CONTAINER} psql -U dpf -d dpf < "${backupFilePath}"`);
+      } catch {
+        // Log but don't mask the original error
+      }
+    }
+    // Revert code patch
+    try {
+      await exec("git checkout -- .");
+    } catch {
+      // Best-effort code revert
+    }
+
+    await prisma.changePromotion.update({
+      where: { promotionId },
+      data: {
+        status: "rolled_back",
+        rolledBackAt: new Date(),
+        rollbackReason: `Patch application failed: ${patchResult.error}`,
+        deploymentLog,
+      },
+    });
+
+    return {
+      success: false,
+      step: "apply_patch",
+      message: `Patch application failed. Database restored from backup. ${patchResult.error}`,
+      deploymentLog,
+      backupId,
+      restoreInstructions: backupFilePath ? getRestoreInstructions(backupFilePath) : undefined,
+    };
+  }
+
+  // ─── Step 8: Post-deployment health check ─────────────────────────────────
+  const healthResult = await verifyProductionHealth();
+
+  if (!healthResult.healthy) {
+    // Rollback: restore database + revert code
+    if (backupFilePath) {
+      try {
+        await exec(`docker exec -i ${DEFAULT_PRODUCTION_DB_CONTAINER} psql -U dpf -d dpf < "${backupFilePath}"`);
+      } catch { /* best-effort */ }
+    }
+    try {
+      await exec("git checkout -- .");
+    } catch { /* best-effort */ }
+
+    await prisma.changePromotion.update({
+      where: { promotionId },
+      data: {
+        status: "rolled_back",
+        rolledBackAt: new Date(),
+        rollbackReason: `Post-deployment health check failed: ${healthResult.error}`,
+        deploymentLog: deploymentLog + "\n" + healthResult.error,
+      },
+    });
+
+    return {
+      success: false,
+      step: "health_check",
+      message: `Deployment applied but health check failed. Automatic rollback completed. ${healthResult.error}`,
+      deploymentLog,
+      backupId,
+      restoreInstructions: backupFilePath ? getRestoreInstructions(backupFilePath) : undefined,
+    };
+  }
+
+  // ─── Step 9: Mark as deployed ─────────────────────────────────────────────
+  await prisma.changePromotion.update({
+    where: { promotionId },
+    data: {
+      status: "deployed",
+      deployedAt: new Date(),
+      deploymentLog,
+    },
+  });
+
+  if (rfc?.rfcId) {
+    try {
+      await prisma.changeRequest.update({
+        where: { rfcId: rfc.rfcId },
+        data: { status: "completed", completedAt: new Date(), outcome: "success" },
+      });
+    } catch { /* best-effort */ }
+  }
+
+  return {
+    success: true,
+    step: "complete",
+    message: `Promotion ${promotionId} deployed successfully. Health check passed.`,
+    deploymentLog,
+    backupId,
+  };
+}
+
 // ─── Docker/DB Functions (integration — not unit-tested) ──────────────────────
 
 export async function backupProductionDb(

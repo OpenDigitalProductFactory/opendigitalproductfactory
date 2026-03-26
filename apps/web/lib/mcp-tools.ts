@@ -518,6 +518,34 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "run_release_gate",
+    description: "Run gate checks on a release bundle: combine diffs from all builds, run destructive operation scan, validate all builds passed tests (IT4IT §5.3.5 Accept & Publish Release).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle_id: { type: "string", description: "The release bundle ID (RB-xxx) to check." },
+      },
+      required: ["bundle_id"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "schedule_release_bundle",
+    description: "Schedule an approved release bundle for deployment during a deployment window. Creates an RFC, ChangePromotion, and CalendarEvent for operations calendar visibility.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle_id: { type: "string", description: "The release bundle ID (RB-xxx) to schedule." },
+      },
+      required: ["bundle_id"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "get_release_status",
     description: "Get the current status of a release bundle or promotion, including deployment window availability and gate check results.",
     inputSchema: {
@@ -996,14 +1024,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean },
+  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
 ): Promise<ToolDefinition[]> {
-  const platformTools = PLATFORM_TOOLS.filter(
+  let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
       (options?.unifiedMode || !tool.requiresExternalAccess || options?.externalAccessEnabled === true)
       && (tool.requiredCapability === null || can(userContext, tool.requiredCapability))
       && (options?.mode !== "advise" || !tool.sideEffect),
   );
+
+  // Agent-scoped filtering: intersection of user capabilities and agent tool grants
+  if (options?.agentId) {
+    const { getAgentToolGrants, isToolAllowedByGrants } = await import("./agent-grants");
+    const agentGrants = getAgentToolGrants(options.agentId);
+    if (agentGrants) {
+      platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
+    }
+  }
 
   if (options?.externalAccessEnabled) {
     try {
@@ -2338,6 +2375,192 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         success: true,
         message: `Release bundle ${bundleId} created with ${buildIds.length} build(s): ${builds.map((b) => b.title).join(", ")}. Run gate checks before scheduling deployment.`,
         data: { bundleId, title, buildCount: buildIds.length, builds: builds.map((b) => ({ buildId: b.buildId, title: b.title })) },
+      };
+    }
+
+    case "run_release_gate": {
+      const bundleId = String(params.bundle_id ?? "");
+      if (!bundleId) return { success: false, error: "bundle_id is required.", message: "Provide a release bundle ID." };
+
+      const bundle = await prisma.releaseBundle.findUnique({
+        where: { bundleId },
+        include: {
+          builds: {
+            select: {
+              buildId: true, title: true, phase: true, diffPatch: true,
+              verificationOut: true, sandboxId: true,
+            },
+          },
+        },
+      });
+      if (!bundle) return { success: false, error: "Bundle not found.", message: `No release bundle with ID ${bundleId}.` };
+      if (bundle.status !== "assembling") {
+        return { success: false, error: `Gate check already run. Bundle status: ${bundle.status}`, message: `Bundle is in ${bundle.status} state.` };
+      }
+      if (bundle.builds.length === 0) {
+        return { success: false, error: "Bundle has no builds.", message: "Add builds to the bundle first." };
+      }
+
+      // Check all builds are in review/complete/ship phase
+      const notReady = bundle.builds.filter((b) => !["review", "complete", "ship"].includes(b.phase));
+      if (notReady.length > 0) {
+        return {
+          success: false, error: `Builds not ready: ${notReady.map((b) => `${b.buildId} (${b.phase})`).join(", ")}`,
+          message: "All builds must be in review or complete phase.",
+        };
+      }
+
+      // Check all builds have passing tests
+      const failedTests = bundle.builds.filter((b) => {
+        const v = b.verificationOut as Record<string, unknown> | null;
+        return v && (v.testsPassed === false || v.testsPassed === 0);
+      });
+
+      // Combine diffs from all builds
+      const diffs: string[] = [];
+      for (const build of bundle.builds) {
+        if (build.diffPatch) {
+          diffs.push(build.diffPatch as string);
+        } else if (build.sandboxId) {
+          try {
+            const { extractDiff } = await import("@/lib/sandbox");
+            const diff = await extractDiff(build.sandboxId);
+            diffs.push(diff);
+          } catch {
+            // Build has no extractable diff — may be fine if it's code-only
+          }
+        }
+      }
+
+      const combinedDiff = diffs.join("\n");
+
+      // Scan for destructive operations
+      const { scanForDestructiveOps, categorizeDiffFiles } = await import("@/lib/sandbox-promotion");
+      const allFileMatches = [...combinedDiff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
+      const { migrationFiles } = categorizeDiffFiles(allFileMatches);
+      const destructiveWarnings = migrationFiles.length > 0 ? scanForDestructiveOps(combinedDiff) : [];
+
+      // Build gate check result
+      const gateResult = {
+        buildsChecked: bundle.builds.length,
+        allTestsPass: failedTests.length === 0,
+        failedTestBuilds: failedTests.map((b) => b.buildId),
+        totalFilesChanged: allFileMatches.length,
+        migrationFiles: migrationFiles.length,
+        destructiveWarnings,
+        combinedDiffLength: combinedDiff.length,
+      };
+
+      const passed = failedTests.length === 0 && destructiveWarnings.length === 0;
+
+      // Update bundle
+      await prisma.releaseBundle.update({
+        where: { bundleId },
+        data: {
+          status: passed ? "approved" : "gate_check",
+          combinedDiffPatch: combinedDiff,
+          gateCheckResult: gateResult as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+
+      const messageParts = [
+        `Gate check ${passed ? "PASSED" : "FAILED"} for ${bundleId}.`,
+        `${bundle.builds.length} build(s), ${allFileMatches.length} file(s) changed, ${migrationFiles.length} migration(s).`,
+      ];
+      if (failedTests.length > 0) messageParts.push(`Failing tests in: ${failedTests.map((b) => b.buildId).join(", ")}.`);
+      if (destructiveWarnings.length > 0) messageParts.push(`Destructive ops: ${destructiveWarnings.join("; ")}`);
+      if (passed) messageParts.push("Bundle is approved and ready to schedule for deployment.");
+
+      return { success: true, message: messageParts.join(" "), data: gateResult };
+    }
+
+    case "schedule_release_bundle": {
+      const bundleId = String(params.bundle_id ?? "");
+      if (!bundleId) return { success: false, error: "bundle_id is required.", message: "Provide a release bundle ID." };
+
+      const bundle = await prisma.releaseBundle.findUnique({
+        where: { bundleId },
+        include: { builds: { select: { buildId: true, title: true, createdById: true } } },
+      });
+      if (!bundle) return { success: false, error: "Bundle not found.", message: `No bundle ${bundleId}.` };
+      if (bundle.status !== "approved") {
+        return { success: false, error: `Bundle must be approved first. Current: ${bundle.status}`, message: `Run gate checks first.` };
+      }
+
+      // Find next available deployment window
+      const profile = await prisma.businessProfile.findFirst({
+        where: { isActive: true },
+        include: { deploymentWindows: true },
+      });
+
+      const matchingWindows = profile?.deploymentWindows.filter(
+        (w) => w.allowedChangeTypes.includes("normal") && w.allowedRiskLevels.includes("low"),
+      ) ?? [];
+
+      // Create RFC for the bundle
+      const rfcId = `RFC-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const rfc = await prisma.changeRequest.create({
+        data: {
+          rfcId,
+          title: `Release: ${bundle.title}`,
+          description: `Release bundle ${bundleId} with ${bundle.builds.length} build(s): ${bundle.builds.map((b) => b.title).join(", ")}`,
+          type: "normal",
+          scope: "platform",
+          riskLevel: "low",
+          status: "scheduled",
+          scheduledAt: new Date(),
+          requestedById: bundle.createdBy,
+          ...(matchingWindows.length > 0 ? { deploymentWindowId: matchingWindows[0]!.id } : {}),
+        },
+      });
+
+      // Create CalendarEvent for visibility
+      const employee = await prisma.employeeProfile.findFirst({
+        where: { userId: bundle.createdBy },
+        select: { id: true },
+      });
+
+      let calendarEventId: string | undefined;
+      if (employee) {
+        const eventId = `RELEASE-${bundleId}`;
+        await prisma.calendarEvent.upsert({
+          where: { eventId },
+          create: {
+            eventId,
+            title: `Deployment: ${bundle.title}`,
+            description: `${bundle.builds.length} feature(s): ${bundle.builds.map((b) => b.title).join(", ")}`,
+            startAt: new Date(),
+            eventType: "action",
+            category: "platform",
+            ownerEmployeeId: employee.id,
+            visibility: "team",
+            color: "#f59e0b",
+          },
+          update: { title: `Deployment: ${bundle.title}`, startAt: new Date() },
+        });
+        calendarEventId = eventId;
+      }
+
+      // Update bundle
+      await prisma.releaseBundle.update({
+        where: { bundleId },
+        data: {
+          status: "scheduled",
+          rfcId: rfc.rfcId,
+          calendarEventId,
+          scheduledAt: new Date(),
+          ...(matchingWindows.length > 0 ? { deploymentWindowId: matchingWindows[0]!.id } : {}),
+        },
+      });
+
+      const windowDesc = matchingWindows.length > 0
+        ? matchingWindows.map((w) => `${w.name}: days ${w.dayOfWeek.join(",")}, ${w.startTime}-${w.endTime}`).join("; ")
+        : "No windows configured — deployment unrestricted";
+
+      return {
+        success: true,
+        message: `Release ${bundleId} scheduled. RFC: ${rfcId}. Added to operations calendar. Windows: ${windowDesc}. An operator can deploy via Operations > Promotions.`,
+        data: { bundleId, rfcId, calendarEventId, windows: windowDesc },
       };
     }
 

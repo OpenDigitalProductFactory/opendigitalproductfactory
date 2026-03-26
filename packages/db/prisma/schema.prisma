@@ -1823,6 +1823,26 @@ model ToolEvaluation {
   @@index([reEvaluateAfter])
 }
 
+model ToolExecution {
+  id              String    @id @default(cuid())
+  threadId        String
+  agentId         String
+  userId          String
+  toolName        String
+  parameters      Json
+  result          Json
+  success         Boolean
+  executionMode   String
+  routeContext    String?
+  durationMs      Int?
+  createdAt       DateTime  @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([userId, createdAt])
+  @@index([toolName, createdAt])
+  @@index([threadId])
+}
+
 model AgentAttachment {
   id            String        @id @default(cuid())
   threadId      String

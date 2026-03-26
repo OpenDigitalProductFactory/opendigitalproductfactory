@@ -38,6 +38,7 @@ export {
   type InfraCIExtendedProps,
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
+  syncIT4ITLabels,
 } from "./neo4j-sync";
 export {
   buildDiscoveredKey,

@@ -330,6 +330,35 @@ export async function sendMessage(input: {
       if (buildCtx) {
         promptSections.push(getBuildContextSection(buildCtx));
       }
+
+      // Inject live build execution progress so the user can interact mid-build
+      try {
+        const buildRecord = await prisma.featureBuild.findUnique({
+          where: { buildId: resolvedBuildId },
+          select: { buildExecState: true, verificationOut: true, taskResults: true, phase: true },
+        });
+        if (buildRecord?.phase === "build" && buildRecord.buildExecState) {
+          const execState = buildRecord.buildExecState as Record<string, unknown>;
+          const progressLines = [
+            "",
+            "--- Build Execution Progress ---",
+            `Pipeline step: ${execState.step ?? "unknown"}`,
+          ];
+          if (execState.containerId) progressLines.push(`Sandbox: ${execState.containerId}`);
+          if (execState.error) progressLines.push(`Last error: ${String(execState.error).slice(0, 300)}`);
+          if (buildRecord.taskResults) {
+            const tasks = buildRecord.taskResults as Record<string, unknown>;
+            if (tasks.toolsExecuted) progressLines.push(`Tools executed: ${(tasks.toolsExecuted as string[]).join(", ")}`);
+          }
+          if (buildRecord.verificationOut) {
+            const verify = buildRecord.verificationOut as Record<string, unknown>;
+            progressLines.push(`Tests: ${verify.testsPassed ? "PASS" : "FAIL"}. Typecheck: ${verify.typeCheckPassed ? "PASS" : "FAIL"}.`);
+          }
+          promptSections.push(progressLines.join("\n"));
+        }
+      } catch {
+        // Non-fatal — proceed without progress context
+      }
     }
 
     if (attachmentContext) {
@@ -367,6 +396,7 @@ export async function sendMessage(input: {
     externalAccessEnabled: input.externalAccessEnabled === true,
     // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
+    agentId: agent.agentId,
   });
 
   // Get page-specific actions

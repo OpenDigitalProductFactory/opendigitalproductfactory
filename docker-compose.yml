@@ -96,7 +96,10 @@ services:
       retries: 10
       start_period: 30s
 
-  # ─── Sandbox (persistent build environment for Build Studio) ────────────
+  # ─── Sandbox Pool (concurrent build environments for Build Studio) ──────
+  # Pool of N sandbox containers, each with its own workspace volume.
+  # Pool size configurable via DPF_SANDBOX_POOL_SIZE env (default: 3).
+  # Legacy dpf-sandbox-1 on port 3035 remains as fallback.
   sandbox:
     build:
       context: .
@@ -106,6 +109,34 @@ services:
       - "3035:3000"
     volumes:
       - sandbox_workspace:/workspace
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
+    command: ["sleep", "infinity"]
+
+  sandbox-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    restart: unless-stopped
+    ports:
+      - "3037:3000"
+    volumes:
+      - sandbox_workspace_2:/workspace
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
+    command: ["sleep", "infinity"]
+
+  sandbox-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    restart: unless-stopped
+    ports:
+      - "3038:3000"
+    volumes:
+      - sandbox_workspace_3:/workspace
     depends_on:
       portal-init:
         condition: service_completed_successfully
@@ -239,3 +270,5 @@ volumes:
   dev_qdrant_data:
   dev_node_modules:
   sandbox_workspace:
+  sandbox_workspace_2:
+  sandbox_workspace_3:

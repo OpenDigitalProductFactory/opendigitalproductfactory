@@ -419,32 +419,145 @@ async function seedEaViews(): Promise<void> {
 }
 
 async function seedMcpServers(): Promise<void> {
-  const existing = await prisma.mcpServer.findUnique({
-    where: { serverId: "codex-agent" },
-  });
-
-  if (!existing) {
-    await prisma.mcpServer.create({
-      data: {
-        serverId: "codex-agent",
-        name: "OpenAI Codex Agent",
-        config: {
-          command: "npx",
-          args: ["-y", "codex", "mcp-server"],
-          transport: "stdio",
-          tools: ["codex", "codex-reply"],
-          linkedProviderId: "codex",
-          defaults: {
-            "approval-policy": "on-request",
-            sandbox: "workspace-write",
-          },
+  // Default MCP servers bundled with the platform.
+  // All are free, open-source (MIT license) from the official MCP project.
+  // Status starts as "unconfigured" — admin activates via Platform > Integrations.
+  //
+  // SECURITY: Filesystem and PostgreSQL servers are marked sandbox-only.
+  // They MUST execute inside the sandbox container (via docker exec), never as
+  // child processes of the portal container. The portal container has production
+  // credentials and file access — spawning stdio MCP servers there would bypass
+  // sandbox isolation entirely. The executionScope field enforces this.
+  const defaultServers = [
+    {
+      serverId: "codex-agent",
+      name: "OpenAI Codex Agent",
+      transport: "stdio",
+      category: "coding",
+      tags: ["code-generation", "code-review"],
+      config: {
+        command: "npx",
+        args: ["-y", "codex", "mcp-server"],
+        transport: "stdio",
+        executionScope: "sandbox",
+        tools: ["codex", "codex-reply"],
+        linkedProviderId: "codex",
+        defaults: {
+          "approval-policy": "on-request",
+          sandbox: "workspace-write",
         },
-        status: "unconfigured",
       },
+    },
+    {
+      serverId: "mcp-filesystem",
+      name: "Filesystem (MCP Official)",
+      transport: "stdio",
+      category: "development",
+      tags: ["file-read", "file-write", "file-search", "sandbox"],
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+        transport: "stdio",
+        executionScope: "sandbox",
+        notes: "Free, open-source (MIT). SANDBOX ONLY — runs inside sandbox container scoped to /workspace. Never runs in the portal container.",
+      },
+    },
+    {
+      serverId: "mcp-postgres",
+      name: "PostgreSQL (MCP Official)",
+      transport: "stdio",
+      category: "database",
+      tags: ["sql", "database", "schema-introspection", "query"],
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-postgres"],
+        transport: "stdio",
+        executionScope: "sandbox",
+        env: {
+          // Points to the SANDBOX database, not production.
+          // The sandbox has its own isolated PostgreSQL instance.
+          POSTGRES_CONNECTION_STRING: "postgresql://dpf:dpf_sandbox@localhost:5432/dpf",
+        },
+        notes: "Free, open-source (MIT). SANDBOX ONLY — connects to the sandbox-isolated database, not production. Read-only by default.",
+      },
+    },
+    {
+      serverId: "mcp-github",
+      name: "GitHub (MCP Official)",
+      transport: "stdio",
+      category: "development",
+      tags: ["git", "pull-requests", "issues", "code-review", "repository"],
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-github"],
+        transport: "stdio",
+        executionScope: "external",
+        env: {
+          GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PAT}",
+        },
+        notes: "Free, open-source (MIT). Requires a free GitHub Personal Access Token. Safe for portal execution — communicates with external GitHub API only, no local file or DB access.",
+      },
+    },
+    // Playwright is NOT needed as an MCP server — the platform already has a
+    // dedicated Playwright Docker container (mcr.microsoft.com/playwright) with
+    // built-in tools (generate_ux_test, run_ux_test) that shell into it directly.
+  ];
+
+  for (const server of defaultServers) {
+    const existing = await prisma.mcpServer.findUnique({
+      where: { serverId: server.serverId },
     });
-    console.log("Seeded MCP server: codex-agent");
-  } else {
-    console.log("MCP server codex-agent already exists — skipping (preserving admin config)");
+
+    if (!existing) {
+      await prisma.mcpServer.create({
+        data: {
+          serverId: server.serverId,
+          name: server.name,
+          transport: server.transport,
+          category: server.category,
+          tags: server.tags,
+          config: server.config,
+          status: "unconfigured",
+        },
+      });
+      console.log(`Seeded MCP server: ${server.serverId}`);
+    } else {
+      console.log(`MCP server ${server.serverId} already exists — skipping (preserving admin config)`);
+    }
+  }
+}
+
+async function seedSandboxPool(): Promise<void> {
+  const POOL_SIZE = Number(process.env.DPF_SANDBOX_POOL_SIZE) || 3;
+  const BASE_PORT = 3036;
+
+  // Slot 0 is the legacy dpf-sandbox-1 on port 3035
+  const slots = [
+    { slotIndex: 0, containerId: "dpf-sandbox-1", port: 3035 },
+    ...Array.from({ length: POOL_SIZE - 1 }, (_, i) => ({
+      slotIndex: i + 1,
+      containerId: `dpf-sandbox-${i + 2}`,
+      port: BASE_PORT + i + 1,
+    })),
+  ];
+
+  for (const slot of slots) {
+    const existing = await prisma.sandboxSlot.findUnique({
+      where: { slotIndex: slot.slotIndex },
+    });
+    if (!existing) {
+      await prisma.sandboxSlot.create({
+        data: {
+          slotIndex: slot.slotIndex,
+          containerId: slot.containerId,
+          port: slot.port,
+          status: "available",
+        },
+      });
+      console.log(`Seeded sandbox slot ${slot.slotIndex}: ${slot.containerId}:${slot.port}`);
+    } else {
+      console.log(`Sandbox slot ${slot.slotIndex} already exists — skipping`);
+    }
   }
 }
 
@@ -789,6 +902,7 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   await seedMcpServers();
+  await seedSandboxPool();
   await seedAnthropicSubScope();
   await seedCodexModels();
   await seedChatGPTModels();

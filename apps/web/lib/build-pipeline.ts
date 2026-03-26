@@ -107,7 +107,11 @@ export async function runBuildPipeline(params: {
           const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
           await new Promise<void>((resolve) => setTimeout(resolve, delay));
         } else {
-          // All retries exhausted — persist failure and return.
+          // All retries exhausted — release sandbox slot and persist failure.
+          try {
+            const { releaseSandbox } = await import("./sandbox-pool");
+            await releaseSandbox(buildId);
+          } catch { /* non-fatal */ }
           const failed = buildFailedState(state, step, errorMsg);
           await updateState(failed);
           return failed;
@@ -116,7 +120,14 @@ export async function runBuildPipeline(params: {
     }
   }
 
-  // All steps complete.
+  // All steps complete — release sandbox slot back to pool.
+  try {
+    const { releaseSandbox } = await import("./sandbox-pool");
+    await releaseSandbox(buildId);
+  } catch {
+    // Non-fatal — slot will be cleaned up on next build
+  }
+
   const complete: BuildExecutionState = {
     ...state,
     step: "complete",
@@ -162,21 +173,42 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  // Use the persistent sandbox service (dpf-sandbox-1) instead of per-build containers.
-  // The sandbox is always running via docker-compose.yml.
-  const PERSISTENT_SANDBOX = "dpf-sandbox-1";
-  const PERSISTENT_PORT = 3035;
-
+  const { acquireSandbox } = await import("./sandbox-pool");
   const { isSandboxRunning } = await import("./sandbox");
-  const running = await isSandboxRunning(PERSISTENT_SANDBOX).catch(() => false);
+  const { prisma } = await import("@dpf/db");
+
+  // Resolve the build's creator for pool assignment
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true },
+  });
+  const userId = build?.createdById ?? "system";
+
+  // Acquire a pool slot (or reuse existing assignment)
+  const slot = await acquireSandbox(buildId, userId);
+
+  if (!slot) {
+    // Fallback: all pool slots in use — try legacy persistent sandbox
+    const FALLBACK = "dpf-sandbox-1";
+    const FALLBACK_PORT = 3035;
+    console.warn(`[build-pipeline] All sandbox pool slots in use. Falling back to ${FALLBACK}.`);
+    const running = await isSandboxRunning(FALLBACK).catch(() => false);
+    if (!running) {
+      throw new Error("No sandbox slots available and fallback container is not running.");
+    }
+    return { ...state, containerId: FALLBACK, hostPort: FALLBACK_PORT };
+  }
+
+  // Verify the assigned container is running
+  const running = await isSandboxRunning(slot.containerId).catch(() => false);
   if (!running) {
-    console.warn(`[build-pipeline] Persistent sandbox ${PERSISTENT_SANDBOX} not running. Skipping.`);
+    console.warn(`[build-pipeline] Sandbox ${slot.containerId} not running. Pipeline may fail.`);
   }
 
   return {
     ...state,
-    containerId: PERSISTENT_SANDBOX,
-    hostPort: PERSISTENT_PORT,
+    containerId: slot.containerId,
+    hostPort: slot.port,
   };
 }
 
@@ -236,32 +268,120 @@ async function stepGenerateCode(
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
-  const { executeBuildPlan } = await import("./coding-agent");
+  const { runAgenticLoop } = await import("./agentic-loop");
+  const { getAvailableTools, toolsToOpenAIFormat } = await import("./mcp-tools");
+  const { getBuildPhasePrompt, getBuildContextSection } = await import("./build-agent-prompts");
+  const { agentEventBus } = await import("./agent-event-bus");
 
   const build = await prisma.featureBuild.findUniqueOrThrow({ where: { buildId } });
 
   const brief = build.brief as import("./feature-build-types").FeatureBrief;
   const plan = (build.plan ?? {}) as Record<string, unknown>;
 
-  await executeBuildPlan({
-    containerId: state.containerId!,
+  // Build the system prompt with build context (same as the coworker uses)
+  const buildContext = getBuildContextSection({
+    buildId,
+    phase: "build",
+    title: brief?.title ?? "Feature",
     brief,
+    portfolioId: build.portfolioId,
     plan,
+  });
+  const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
+
+  // Get sandbox tools — use a system-level context with full platform access
+  const adminContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
+  const tools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
+  const toolsForProvider = toolsToOpenAIFormat(tools);
+
+  // Build the initial message from the brief
+  const userMessage = [
+    `Build the following feature in the sandbox:`,
+    `Title: ${brief.title}`,
+    `Description: ${brief.description}`,
+    ``,
+    `Acceptance Criteria:`,
+    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : []),
+    ``,
+    `Follow the approved implementation plan. Start by searching the codebase for existing patterns, then generate new files and edit existing ones as needed. Run tests when done.`,
+  ].join("\n");
+
+  // Find or create a thread for progress tracking
+  const thread = await prisma.agentThread.findFirst({
+    where: { contextKey: `/build/${buildId}` },
+    select: { id: true },
+  });
+  const threadId = thread?.id ?? `build-pipeline-${buildId}`;
+
+  // Run the agentic loop — this gives us iterative tool use with the full
+  // read-edit-test-fix workflow instead of single-shot code generation
+  const result = await runAgenticLoop({
+    chatHistory: [{ role: "user", content: userMessage }],
+    systemPrompt,
+    sensitivity: "internal",
+    tools,
+    toolsForProvider,
+    userId: "system",
+    routeContext: `/build/${buildId}`,
+    agentId: "build-architect",
+    threadId,
+    taskType: "code_generation",
+    onProgress: (event) => {
+      if (thread?.id) agentEventBus.emit(thread.id, event);
+    },
+  });
+
+  // Persist the agentic result summary
+  const executedToolNames = result.executedTools.map(t => t.name);
+  const filesChanged = executedToolNames.filter(n => n === "generate_code" || n === "edit_sandbox_file").length;
+  const ranTests = executedToolNames.includes("run_sandbox_tests");
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      taskResults: {
+        agenticResult: result.content.slice(0, 5000),
+        toolsExecuted: executedToolNames,
+        filesChanged,
+        ranTests,
+        providerId: result.providerId,
+        modelId: result.modelId,
+      } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+    },
   });
 
   return state;
 }
 
 async function stepRunTests(
-  _buildId: string,
+  buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { runSandboxTests } = await import("./coding-agent");
-  try {
-    await runSandboxTests(state.containerId!);
-  } catch {
-    // Tests are informational — a test failure does not fail the pipeline step.
-  }
+  const { prisma } = await import("@dpf/db");
+  const { runSandboxTests, diagnoseTestFailures } = await import("./coding-agent");
+
+  const results = await runSandboxTests(state.containerId!);
+  const diagnosis = results.passed ? null : diagnoseTestFailures(results);
+
+  // Persist test results to the build record
+  const verificationData = {
+    testsPassed: results.passed,
+    typeCheckPassed: results.typeCheckPassed,
+    testOutput: results.testOutput.slice(0, 5000),
+    typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
+    ...(diagnosis ? { diagnosis: diagnosis.summary } : {}),
+  };
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      verificationOut: verificationData as unknown as import("@dpf/db").Prisma.InputJsonValue,
+    },
+  });
+
+  // Test failures are recorded but do not fail the pipeline step —
+  // the agentic loop in stepGenerateCode should have already attempted fixes.
+  // The review phase will evaluate whether failures are acceptable.
   return state;
 }
 
