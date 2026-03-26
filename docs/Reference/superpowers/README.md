@@ -29,6 +29,19 @@ Local copy of the [Superpowers](https://github.com/obra/superpowers) plugin skil
 | [spec-reviewer.md](prompts/spec-reviewer.md) | Verify implementation matches spec |
 | [code-quality-reviewer.md](prompts/code-quality-reviewer.md) | Verify implementation is well-built |
 
+## Installed Claude Code Skills
+
+All skills and prompts above are installed as Claude Code custom commands in `.claude/commands/`. Available via `/project:<name>`:
+
+**Skills (12):**
+`/project:brainstorming`, `/project:writing-plans`, `/project:executing-plans`, `/project:subagent-driven-development`, `/project:test-driven-development`, `/project:systematic-debugging`, `/project:verification-before-completion`, `/project:dispatching-parallel-agents`, `/project:finishing-a-development-branch`, `/project:requesting-code-review`, `/project:receiving-code-review`, `/project:writing-skills`
+
+**Subagent Prompts (5):**
+`/project:spec-document-reviewer`, `/project:plan-document-reviewer`, `/project:implementer`, `/project:spec-reviewer`, `/project:code-quality-reviewer`
+
+**Platform-Specific (1):**
+`/project:tool-evaluation` — Initiates the Tool Evaluation Pipeline (EP-GOVERN-002) for vetting external tools, MCP servers, and dependencies
+
 ## Philosophy
 
 - **Test-Driven Development** — Write tests first, always
