@@ -331,7 +331,10 @@ if (-not (Is-StepDone "download")) {
 
             # Create a user branch for customizations (main stays clean for upstream pulls)
             $branchName = "custom/$env:COMPUTERNAME"
-            git -C "$DPF_DIR" checkout -b $branchName 2>$null
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            git -C "$DPF_DIR" checkout -b $branchName 2>&1 | Out-Null
+            $ErrorActionPreference = $oldEAP
             Write-OK "Cloned source on branch '$branchName'"
             Write-Action "Your customizations go on this branch. Pull upstream updates with: git pull origin main"
 
