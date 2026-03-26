@@ -34,7 +34,7 @@ type Permission = {
   roles: PlatformRoleId[];
 };
 
-const PERMISSIONS: Record<CapabilityKey, Permission> = {
+export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   view_ea_modeler:             { roles: ["HR-000", "HR-300"] },
   view_portfolio:              { roles: ["HR-000", "HR-100", "HR-300", "HR-400"] },
   view_inventory:              { roles: ["HR-000", "HR-300"] },
