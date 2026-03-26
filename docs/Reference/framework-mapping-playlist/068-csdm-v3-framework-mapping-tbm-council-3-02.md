@@ -4,30 +4,38 @@
 - Video URL: https://www.youtube.com/watch?v=I1zjjmh6xt8
 - Playlist position: 68
 - Frameworks discussed: CSDM, TBM
-- Evidence basis: YouTube MCP playlist metadata and title only; transcript retrieval failed in this session.
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
 
 ## Short summary
-Title indicates a direct crosswalk between CSDM v3 and TBM Council 3.02, likely focused on aligning ServiceNow data-model concepts with an external framework vocabulary.
+This session maps TBM Council 3.02 into CSDM v3. The chapter structure is concise: a CSDM-and-TBM comparison, a TBM taxonomy section, and then the mapping itself. That suggests a cost/accounting taxonomy being aligned to service-model structure.
 
 ## Key mapping concepts
-- Entity correspondence between CSDM v3 and TBM Council 3.02
-- Cross-framework vocabulary alignment rather than isolated taxonomy design
-- Use of mapping tables as a bridge for implementation and analysis
+- TBM taxonomy aligned to CSDM entities
+- Cost and portfolio/accounting semantics connected to service-model constructs
+- Crosswalk from financial taxonomy language into operational model language
 
 ## Notable terminology used
 - CSDM
-- TBM
-- Framework Mapping
+- TBM Council 3.02
+- TBM taxonomy
+- Framework mapping
 
 ## What still seems valid
-The mapping mindset still looks valid: explicit crosswalks, named semantic correspondences, and avoiding one-framework-only thinking are still necessary for ontology work.
+The important lesson is that financial and cost-management taxonomies need explicit semantic anchors in the operational model if they are going to support trustworthy analysis. That remains highly relevant to ontology work, especially where digital products need funding, cost, and portfolio traceability.
 
 ## What appears outdated or version-specific
-Version markers in the title suggest partial obsolescence: V3, 3.02. Treat specific product behavior, screenshots, and release claims as historical rather than current guidance.
+The specific TBM Council version is historical and may not align cleanly with current terminology. Any direct mappings should be treated as seeds for re-validation rather than as current authoritative relationships.
 
 ## Transcript
-Transcript retrieval was not available from the YouTube MCP server in this session. Direct `youtube_get_transcript` calls returned `401`, and a bulk playlist transcript request returned `0` items on 2026-03-26.
+Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+
+Short verified excerpt:
+> "cover the tbm council ... version 3.02 and how it maps to csdm"
+
+Chapter landmarks recovered from the YouTube page:
+- `0:46` CSDM and TBM
+- `2:17` TBM taxonomy
+- `3:52` Mapping
 
 ## Relevance to current ontology work
-High relevance. This is directly in the ontology-validation lane because it promises a named mapping between CSDM and TBM Council 3.02. Even without transcript detail, it marks which standards pairs should receive explicit ontology crosswalks and where version drift needs careful handling.
-
+High relevance. TBM is one of the stronger candidates for linking digital-product ontology to portfolio, funding, and cost semantics without losing the operational grounding that CSDM and IT4IT provide.
