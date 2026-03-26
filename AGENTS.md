@@ -103,7 +103,7 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 
 ## Release Testing — Platform QA
 
-Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 14 phases across all functional areas.
+Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 15 phases across all functional areas.
 
 ### When to Run
 
