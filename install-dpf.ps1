@@ -321,7 +321,7 @@ if (-not (Is-StepDone "download")) {
 
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
+            git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1 | ForEach-Object { "$_" }
             $ErrorActionPreference = $oldEAP
             if ($LASTEXITCODE -ne 0) {
                 Write-Warn "Clone failed. Check your internet connection."
@@ -357,6 +357,13 @@ if (-not (Is-StepDone "download")) {
             if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
                 Write-Action "Installing pnpm..."
                 npm install -g pnpm
+            }
+
+            # Ensure pnpm uses hoisted node_modules on Windows (avoids symlink permission issues)
+            $npmrcPath = "$DPF_DIR\.npmrc"
+            if (-not (Test-Path $npmrcPath)) {
+                "node-linker=hoisted" | Set-Content -Path $npmrcPath -Encoding UTF8
+                Write-OK "Created .npmrc (node-linker=hoisted for Windows compatibility)"
             }
 
             Write-Action "Installing project dependencies (this may take a minute)..."
