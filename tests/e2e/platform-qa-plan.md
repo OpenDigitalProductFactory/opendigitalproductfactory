@@ -174,6 +174,27 @@ When a test fails, create a backlog item under the active QA epic referencing th
 
 ---
 
+## Phase 15: Authority & Governance
+
+| ID | Steps | Expected |
+|----|-------|----------|
+| AUTH-GOV-01 | Navigate to `/platform/ai/authority` | Authority & Audit page loads with agent grid and execution log sections |
+| AUTH-GOV-02 | Verify agent authority cards | Each agent card shows tool grant count, HITL tier, escalation path, value stream |
+| AUTH-GOV-03 | Check Tool Execution Log section | Stat cards show Total, Successful, Failed, Agents, Tools counts |
+| AUTH-GOV-04 | Filter execution log by agent | Table filters correctly, shows only selected agent's executions |
+| AUTH-GOV-05 | Filter execution log by tool | Table filters correctly, shows only selected tool's executions |
+| AUTH-GOV-06 | Filter execution log by success/failure | Table filters correctly by outcome |
+| AUTH-GOV-07 | Expand an execution row | Parameters and result JSON displayed in expandable section |
+| AUTH-GOV-08 | Navigate to `/platform/ai/history` | Action History page still works with proposals table |
+| AUTH-GOV-09 | Check "Authority" tab in AI Workforce tab nav | Tab appears and links to `/platform/ai/authority` |
+| AUTH-GOV-10 | **(Coworker)** On `/platform`, ask "Evaluate a tool" | Coworker invokes evaluate_tool skill, creates ToolEvaluation record |
+| AUTH-GOV-11 | **(Coworker)** On `/ops`, ask agent to create a backlog item | Item created, ToolExecution record appears in audit log with correct agentId |
+| AUTH-GOV-12 | **(RBAC)** Log in as HR-400 (ITFM Director), open `/ops` | Coworker tools filtered by both user role AND agent grants — tools outside agent grants not offered |
+| AUTH-GOV-13 | **(RBAC)** Log in as HR-300 (Enterprise Architect), open `/platform` | Coworker offers "Evaluate tool" skill (requires manage_tool_evaluations capability) |
+| AUTH-GOV-14 | **(Incomplete info)** Ask coworker to evaluate a tool without specifying type | Coworker asks for tool type before proceeding |
+
+---
+
 ## Adding New Test Cases
 
 When implementing a new feature or fixing a bug:
