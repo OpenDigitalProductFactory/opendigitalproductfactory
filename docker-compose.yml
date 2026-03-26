@@ -72,12 +72,12 @@ services:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
     volumes:
-      - ./.git:/app/.git:ro
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3000
       APP_URL: http://localhost:3000
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
