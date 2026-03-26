@@ -107,6 +107,8 @@ This framework applies equally to human team members:
 | **AI Workforce Page** | Shows agent assignments with their perspective/heuristic/model — not just names |
 | **Agent Action History** | Records which agents contributed to which decisions — measurable diversity |
 | **Build Studio** | Software Engineer's perspective differs from COO's — both contribute to feature decisions |
+| **Tool Evaluation Pipeline** (EP-GOVERN-002) | Six agents with genuinely different perspectives evaluate external tools: Security Auditor ("what can go wrong?"), Architecture Guardrail ("does this fit?"), Data Governance ("are we compliant?"), SBOM Management ("does it actually work?"), Investment Analysis ("is it worth the risk?"), Gap Analysis ("what fills the need?"). The pipeline validates diversity: if agents always agree, their perspectives aren't diverse enough |
+| **Authority Dashboard** (EP-GOVERN-003) | Effective permissions computed as intersection of user role + agent grants — visualizes how two authority systems combine, not just one |
 
 ---
 

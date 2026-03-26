@@ -31,6 +31,19 @@ Four skills appear on every page:
 - **Add a skill** — Extend the page with a new quick action
 - **Evaluate this page** — Check the page for usability and accessibility issues
 
+## Authority & Approvals
+
+The coworker operates within a two-layer authorization model:
+
+- **Your role determines what's possible** — your platform role (e.g., Portfolio Manager, Enterprise Architect) controls which capabilities are available
+- **The agent's grants determine what's offered** — each agent persona has declared tool grants that scope what it can do. The coworker on the Ops page (Scrum Master) has different grants than the one on the Portfolio page (Portfolio Analyst)
+- **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
+- **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
+
+## Tool Evaluation
+
+When you need to add an external tool (MCP server, npm package, API), the coworker can help evaluate it. On the Platform page, use the "Evaluate tool" skill to initiate a multi-agent review covering security, architecture fit, compliance, and integration testing.
+
 ## Tips
 
 - Be specific. "Show me overdue compliance actions" works better than "what's wrong?"
