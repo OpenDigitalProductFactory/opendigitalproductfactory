@@ -2,6 +2,7 @@
 // Routes observation findings to correct backlog with dedup.
 
 import type { ObservationFinding, Severity } from "./process-observer";
+import { lookupApprovedTool } from "./tool-evaluation-data";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,18 @@ export async function triageAndFile(
   let created = 0;
 
   for (const finding of findings) {
+    // Tool evaluation re-trigger: if an approved tool fails, create re-evaluation instead of generic backlog item
+    if (finding.type === "tool_failure") {
+      const toolNameMatch = finding.description?.match(/tool\s+(\S+)/i);
+      if (toolNameMatch) {
+        const approved = await lookupApprovedTool(toolNameMatch[1]);
+        if (approved) {
+          console.log(`[process-observer] Approved tool failure detected: ${approved.toolName} — flagged for re-evaluation`);
+          continue;
+        }
+      }
+    }
+
     if (isDuplicate(finding.title, existingTitles)) {
       continue;
     }

@@ -226,6 +226,7 @@ ON THIS PAGE: The user sees the AI Workforce (agent cards with provider dropdown
       { label: "Configure provider", description: "Set up a provider connection", capability: "manage_provider_connections", prompt: "Help me configure an AI provider" },
       { label: "Token spend", description: "Review usage and costs", capability: "view_platform", prompt: "Show me a summary of token usage and costs" },
       { label: "Optimize providers", description: "Rebalance provider priorities", capability: "manage_provider_connections", prompt: "Run the provider priority optimization" },
+      { label: "Evaluate tool", description: "Run the tool evaluation pipeline on an external tool or dependency", capability: "manage_tool_evaluations", prompt: "I need to evaluate a tool for adoption. Help me run the evaluation pipeline." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
