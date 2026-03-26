@@ -1,6 +1,6 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.32.0 --activate
 WORKDIR /app
 
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
@@ -20,15 +20,22 @@ RUN pnpm install --frozen-lockfile
 
 # ─── Stage 3: build ───────────────────────────────────────────────────────────
 FROM deps AS build
-COPY . .
-# Ensure dependencies are intact after copying source files (which may include symlinks)
+# Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
+COPY pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/web/ ./apps/web/
+COPY packages/ ./packages/
+COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 RUN pnpm --filter web build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
-COPY . .
+COPY pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/web/ ./apps/web/
+COPY packages/ ./packages/
+COPY docker-entrypoint.sh ./
+COPY docs/user-guide/ ./docs/user-guide/
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 
