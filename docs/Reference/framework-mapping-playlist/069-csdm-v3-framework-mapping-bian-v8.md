@@ -4,30 +4,39 @@
 - Video URL: https://www.youtube.com/watch?v=LJINzbfxiQo
 - Playlist position: 69
 - Frameworks discussed: CSDM, BIAN
-- Evidence basis: YouTube MCP playlist metadata and title only; transcript retrieval failed in this session.
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
 
 ## Short summary
-Title indicates a direct crosswalk between CSDM v3 and Bian V8, likely focused on aligning ServiceNow data-model concepts with an external framework vocabulary.
+This session maps BIAN v8 into CSDM v3. The chapter structure highlights differences and similarities, then a BIAN-to-CSDM meta-model mapping, and finally the BIAN Service Landscape's use within CSDM. That makes it useful for domain-specific service-landscape alignment.
 
 ## Key mapping concepts
-- Entity correspondence between CSDM v3 and Bian V8
-- Cross-framework vocabulary alignment rather than isolated taxonomy design
-- Use of mapping tables as a bridge for implementation and analysis
+- Differences and similarities between BIAN and CSDM
+- BIAN mapping to the CSDM meta-model
+- BIAN Service Landscape used as an input or organizing view inside CSDM
 
 ## Notable terminology used
 - CSDM
-- BIAN
-- Framework Mapping
+- BIAN v8
+- Meta-model
+- Service landscape
+- Framework mapping
 
 ## What still seems valid
-The mapping mindset still looks valid: explicit crosswalks, named semantic correspondences, and avoiding one-framework-only thinking are still necessary for ontology work.
+The most durable idea here is that an industry-specific service landscape can inform a more general operational meta-model if the bridge is explicit and governed. That remains directly relevant to ontology design where domain-specific vocabularies need to map into a common product/service model.
 
 ## What appears outdated or version-specific
-Version markers in the title suggest partial obsolescence: V3, V8. Treat specific product behavior, screenshots, and release claims as historical rather than current guidance.
+The BIAN v8 and CSDM v3 framing is historical. Any exact service-landscape correspondences should be treated as candidates for re-validation rather than as current normative mappings.
 
 ## Transcript
-Transcript retrieval was not available from the YouTube MCP server in this session. Direct `youtube_get_transcript` calls returned `401`, and a bulk playlist transcript request returned `0` items on 2026-03-26.
+Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+
+Short verified excerpt:
+> "cover how bian version 8 maps to csdn version 3.0"
+
+Chapter landmarks recovered from the YouTube page:
+- `0:42` The main differences / similarities
+- `2:22` BIAN mapping to CSDM meta-model
+- `5:09` BIAN Service Landscape use in CSDM
 
 ## Relevance to current ontology work
-High relevance. This is directly in the ontology-validation lane because it promises a named mapping between CSDM and Bian V8. Even without transcript detail, it marks which standards pairs should receive explicit ontology crosswalks and where version drift needs careful handling.
-
+Medium to high relevance. BIAN is domain-specific, but the meta-model and service-landscape angle is useful for ontology work that needs to accommodate specialized industry reference models while keeping a governed common core.

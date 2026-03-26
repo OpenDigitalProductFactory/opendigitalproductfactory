@@ -3,31 +3,43 @@
 - Title: CSDM V3 Framework Mapping: IT4IT V3
 - Video URL: https://www.youtube.com/watch?v=Pged5LYbVKs
 - Playlist position: 65
-- Frameworks discussed: CSDM, IT4IT
-- Evidence basis: YouTube MCP playlist metadata and title only; transcript retrieval failed in this session.
+- Frameworks discussed: CSDM, IT4IT, Digital Product
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
 
 ## Short summary
-Title indicates a direct crosswalk between CSDM v3 and IT4IT V3, likely focused on aligning ServiceNow data-model concepts with an external framework vocabulary.
+This session maps IT4IT v3 into CSDM v3. The chapter structure is especially useful: it starts by defining IT4IT, then covers the v3 standard itself, moves into explicit framework mapping, and ends with sections on service offerings and digital products. That makes it directly relevant to product-centric ontology work.
 
 ## Key mapping concepts
-- Entity correspondence between CSDM v3 and IT4IT V3
-- Cross-framework vocabulary alignment rather than isolated taxonomy design
-- Use of mapping tables as a bridge for implementation and analysis
+- IT4IT v3 concepts aligned to CSDM v3 constructs
+- Service offerings used as one mapping bridge
+- Digital products called out explicitly as a late-session topic
+- Framework mapping framed around lifecycle/value-chain style semantics rather than only table-level equivalence
 
 ## Notable terminology used
 - CSDM
-- IT4IT
-- Framework Mapping
+- IT4IT v3
+- Service offerings
+- Digital products
+- Framework mapping
 
 ## What still seems valid
-The mapping mindset still looks valid: explicit crosswalks, named semantic correspondences, and avoiding one-framework-only thinking are still necessary for ontology work.
+Very strong relevance remains here. The explicit presence of both service offerings and digital products indicates an important transitional moment between service-centric and product-centric thinking. That is directly aligned with current ontology work that wants Digital Product to act as the cross-domain anchor while still keeping service constructs precise and governed.
 
 ## What appears outdated or version-specific
-Version markers in the title suggest partial obsolescence: V3. Treat specific product behavior, screenshots, and release claims as historical rather than current guidance.
+This is still a CSDM v3 to IT4IT v3 crosswalk, so the exact correspondences are historical. It should be treated as a useful source for mapping patterns and terminology rather than as a current normative answer for CSDM 6 or newer IT4IT-aligned ontology design.
 
 ## Transcript
-Transcript retrieval was not available from the YouTube MCP server in this session. Direct `youtube_get_transcript` calls returned `401`, and a bulk playlist transcript request returned `0` items on 2026-03-26.
+Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+
+Short verified excerpt:
+> "cover it4it version 3 mapping to cstm version 3"
+
+Chapter landmarks recovered from the YouTube page:
+- `0:45` What is IT4IT
+- `3:06` IT4IT V3
+- `7:53` Framework Mapping
+- `10:17` Service Offerings
+- `11:09` Digital Products
 
 ## Relevance to current ontology work
-High relevance. This is directly in the ontology-validation lane because it promises a named mapping between CSDM and IT4IT V3. Even without transcript detail, it marks which standards pairs should receive explicit ontology crosswalks and where version drift needs careful handling.
-
+Very high relevance. Of the seven framework videos, this one is closest to the downstream ontology agenda because it directly intersects CSDM, IT4IT, service offerings, and digital products in one flow. It should be treated as a primary historical input when validating product-centric CSDM and IT4IT crosswalks.
