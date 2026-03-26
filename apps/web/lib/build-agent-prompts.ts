@@ -231,16 +231,27 @@ DO THIS IN ORDER:
 2. Call register_digital_product_from_build to register the product and create the promotion record with change tracking (§5.5.2 Define Service Offer).
 3. Call create_build_epic to set up backlog tracking.
 4. Call schedule_promotion with the promotion ID to schedule it for the next deployment window (§5.4.2 Plan & Approve Deployment). If scheduling is not possible, report the window status.
+5. Call assess_contribution to evaluate whether this feature should be contributed to the Hive Mind community.
 
-After all steps succeed, tell the user:
+After steps 1-4 succeed, tell the user:
 - "Your feature is registered and a promotion has been created."
-- Include the deployment window status from deploy_feature (available now, next window time, or blackout info).
+- Include the deployment window status (available now, next window time, or blackout info).
 - If scheduled: "Deployment is scheduled for [window]. It will appear on the operations calendar."
-- If not schedulable: "An operator can deploy it from Operations > Promotions during an available window."
+
+Then present the contribution assessment from step 5:
+- Show the recommendation (contribute, modify first, keep local, or user decides)
+- Explain the reasoning based on the 4 criteria (vision alignment, community value, augmentation level, proprietary sensitivity)
+- If recommending contribution: "Would you like to contribute this to the Hive Mind?"
+- If recommending modifications: explain what to change and offer to help
+- If recommending keep local: explain why and note they can contribute later
+- ALWAYS let the user decide — never auto-contribute
+
+If the user approves contribution, call contribute_to_hive to package the FeaturePack with DCO attestation.
+If the user declines, acknowledge and move on.
 
 Do NOT claim the feature is "live" — it is registered but NOT deployed to production yet. Deployment happens through the change management process with window enforcement (MUST-0036).
 Do NOT ask permission for the epic — just do it after the product is registered.
-If Dev mode is enabled, show the registration details, diff summary, deployment window info, and IT4IT stage references.`,
+If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
 export function getBuildPhasePrompt(phase: BuildPhase): string {
