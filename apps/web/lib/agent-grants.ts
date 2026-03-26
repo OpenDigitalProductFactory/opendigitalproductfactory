@@ -1,26 +1,7 @@
-import * as fs from "fs";
-import * as path from "path";
+// Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
+import agentRegistryData from "../../../packages/db/data/agent_registry.json";
 
-// Load agent registry at module init — file path resolves relative to packages/db
-function loadAgentRegistry(): { agents: Array<Record<string, unknown>> } {
-  try {
-    const registryPath = path.join(process.cwd(), "node_modules", "@dpf", "db", "data", "agent_registry.json");
-    const raw = fs.readFileSync(registryPath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    // Fallback: try relative to monorepo root
-    try {
-      const fallbackPath = path.resolve(__dirname, "../../../packages/db/data/agent_registry.json");
-      const raw = fs.readFileSync(fallbackPath, "utf-8");
-      return JSON.parse(raw);
-    } catch {
-      console.warn("[agent-grants] Could not load agent_registry.json — grant checks will use defaults");
-      return { agents: [] };
-    }
-  }
-}
-
-const agentRegistry = loadAgentRegistry();
+const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 
 /**
  * Maps platform tool names to agent grant categories.
