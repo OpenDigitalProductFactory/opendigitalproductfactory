@@ -4,21 +4,23 @@
 - Video URL: https://www.youtube.com/watch?v=kx8HJ1rumys
 - Playlist position: 63
 - Frameworks discussed: CSDM, ArchiMate, TOGAF
-- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a local `faster-whisper` transcription recovered from the video audio after MCP transcript calls failed on 2026-03-26.
 
 ## Short summary
-This session is a direct CSDM v3 to ArchiMate mapping walkthrough. The chapter structure shows it moving from ArchiMate basics into similarities and differences, then into specific technology-layer mappings such as location hierarchy, equipment, system software, and technology services, with a brief TOGAF perspective included.
+This session is a layer-by-layer crosswalk between ArchiMate 3.1 and CSDM v3. The speaker frames CSDM as a structure-and-dependency model and ArchiMate as a behavior-and-interaction model, then walks through business, application, and technology-layer mappings with repeated cautions about semantic differences behind apparently similar names.
 
 ## Key mapping concepts
-- ArchiMate 3.1 technology-layer concepts aligned to CSDM v3 constructs
-- Similarities and differences between enterprise architecture abstractions and ServiceNow's service data model
-- Location, equipment, system software, and technology service as concrete mapping anchors
-- A lightweight TOGAF viewpoint used to position the ArchiMate crosswalk
+- CSDM emphasizes structural dependency data; ArchiMate emphasizes behavior and interaction semantics
+- Business architecture maps into company, hierarchy, location, and business-service related CSDM domains
+- Application layer concepts map across business applications and application services, but not always one-to-one
+- Technology layer concepts map into technical services, product models, configuration items, and service-mapping relationships
+- Location hierarchy, equipment, system software, and technology service are presented as the clearest concrete bridge points
 
 ## Notable terminology used
-- CSDM
 - ArchiMate 3.1
 - TOGAF
+- Business architecture
+- Application layer
 - Technology layer
 - Location hierarchy
 - Equipment
@@ -26,16 +28,18 @@ This session is a direct CSDM v3 to ArchiMate mapping walkthrough. The chapter s
 - Technology service
 
 ## What still seems valid
-The useful part is the discipline of mapping explicit EA concepts into a constrained operational meta-model instead of treating architecture views and service-model classes as interchangeable. The technology-layer focus is still relevant for ontology work that needs precise realization links from abstract product/service concepts down to managed assets and environments.
+The durable lesson is that enterprise architecture views and operational service-data models are not interchangeable, even when labels overlap. The talk is still useful for ontology work because it insists on mapping by semantic role and analysis purpose, especially when moving from business and application abstractions down into technical-service and CI realization layers.
 
 ## What appears outdated or version-specific
-This is explicitly a CSDM v3 and ArchiMate 3.1-era crosswalk. Any one-to-one mappings should be re-validated against later CSDM evolution and against current product-centric ontology goals, especially where CSDM 6 would likely elevate Digital Product semantics more strongly than the original material did.
+This is explicitly a CSDM v3 and ArchiMate 3.1-era walkthrough, and it reflects ServiceNow's 2018-era origin story for CSDM. Some mappings are clearly experience-based rather than normative, and any direct reuse should be re-validated against newer CSDM, newer ArchiMate guidance, and the stronger digital-product orientation expected in current ontology work.
 
 ## Transcript
-Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+Local transcript recovered on 2026-03-26 by downloading the audio and transcribing it after the YouTube MCP transcript path failed.
 
-Short verified excerpt:
-> "discuss the archimate 3.1 mapping to cstm version 3"
+Cleaned transcript excerpt:
+- `0:14-1:24`: The speaker introduces ArchiMate as an Open Group enterprise architecture standard and immediately contrasts it with CSDM: CSDM "focuses largely on the structure of data" while ArchiMate covers more of the "behavior and interaction between entities."
+- `3:50-5:40`: Business architecture is mapped into company, hierarchy, location, and business-service oriented CSDM structures; application-layer concepts map to business applications and application services; the technology layer maps into technical services and the underlying CIs and stack components.
+- `6:30-9:20`: The speaker warns that semantic and structural differences matter even when names look similar. Business service is not automatically one-to-one, application service is overloaded across models, and technology service maps well but does not naturally carry offering decomposition in the same way CSDM does.
 
 Chapter landmarks recovered from the YouTube page:
 - `0:21` About Archimate
@@ -49,4 +53,4 @@ Chapter landmarks recovered from the YouTube page:
 - `8:42` Technology Service
 
 ## Relevance to current ontology work
-High relevance. This is one of the clearest signals in the playlist that framework mapping needs to connect enterprise-architecture language to operational ontology classes through precise analysis paths. It is especially useful for relating product/service abstractions to technology realization layers without collapsing everything into generic graph edges.
+High relevance. This is one of the clearest sources in the playlist for preserving precise bridge semantics between enterprise-architecture language and operational ontology classes. It is especially useful when defining analysis paths from Digital Product and service abstractions down to business/application/technology realization without collapsing everything into generic graph closure.

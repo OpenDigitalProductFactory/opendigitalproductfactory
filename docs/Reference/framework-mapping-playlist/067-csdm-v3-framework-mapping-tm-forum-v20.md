@@ -4,33 +4,40 @@
 - Video URL: https://www.youtube.com/watch?v=8yaWdmcBTQ4
 - Playlist position: 67
 - Frameworks discussed: CSDM, TM Forum, Open Digital Architecture
-- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a successful transcript-availability probe captured before YouTube later rate-limited bulk extraction.
+- Evidence basis: YouTube MCP playlist metadata, `yt-dlp` chapter metadata, and a local `faster-whisper` transcription recovered from the video audio after MCP transcript calls failed on 2026-03-26.
 
 ## Short summary
-This session maps TM Forum v20 into CSDM v3. The chapter structure moves from a direct CSDM-versus-TM Forum comparison into Open Digital Architecture and then into TM Forum itself, suggesting a telco-oriented architecture and operating-model comparison rather than a purely table-level mapping.
+This session maps a telecom-specific architecture body of work into CSDM. The central move is to keep the TM Forum distinctions intact: business capabilities align to design, customer-facing product maps closer to business service and service offering, service maps to technical service, and resources map to configuration items.
 
 ## Key mapping concepts
-- CSDM versus TM Forum as overlapping but differently centered frameworks
-- Open Digital Architecture as a bridge concept
-- Mapping an industry architecture/reference-model body of work into a service data model
+- TM Forum as a telecom interoperability and enterprise-architecture reference body
+- Open Digital Architecture used as the first comparison viewpoint
+- Business capability correlation into the CSDM design domain
+- Customer-facing product aligned with business service and service offering
+- Service aligned with technical services, and resources aligned with CIs
 
 ## Notable terminology used
-- CSDM
-- TM Forum v20
+- TM Forum
 - Open Digital Architecture
-- Framework mapping
+- Telecom interoperability
+- Business capability
+- Product
+- Service
+- Resource
 
 ## What still seems valid
-The useful part is the explicit recognition that sector-specific reference architectures need disciplined bridge semantics when mapped into a more general operational data model. That lesson still applies to ontology work even outside telecom-heavy scenarios.
+The durable value here is the disciplined separation between customer-facing product, underpinning service, and underlying resources. That separation is directly useful for ontology work because it preserves the difference between what is consumed, what enables it, and what realizes it.
 
 ## What appears outdated or version-specific
-TM Forum v20 and CSDM v3 are both historical anchors. Exact correspondences are likely dated, and any import into current ontology work should focus on mapping patterns and conceptual bridges, not direct inheritance of old version labels.
+The talk is tied to TM Forum v20 and CSDM v3, and the examples are strongly telecom-oriented. The exact labels and diagram structures should be treated as historical crosswalk material, but the layer separation is still worth reusing.
 
 ## Transcript
-Transcript availability was verified outside the failing MCP path before YouTube later started returning `429`/IP-throttle responses for bulk extraction.
+Local transcript recovered on 2026-03-26 by downloading the audio and transcribing it after the YouTube MCP transcript path failed.
 
-Short verified excerpt:
-> "cover the framework mapping of the tm forum version 20"
+Cleaned transcript excerpt:
+- `0:15-1:20`: TM Forum is introduced as a large telecom standards alliance with enterprise-architecture and planning influence, while CSDM is framed as the ServiceNow model for managing digital products and services through their lifecycle.
+- `2:05-2:50`: In the Open Digital Architecture view, the strongest overlap is business capabilities on the design side; much of the systems, IT, and network area corresponds to the broader operational territory that CSDM covers.
+- `4:40-5:20`: The speaker draws the sharpest mappings here: TM Forum product aligns closest to business service and service offering, TM Forum service aligns to technical service, and TM Forum resources align to the CI layer that underpins those services.
 
 Chapter landmarks recovered from the YouTube page:
 - `0:50` CSDM vs TM Forum
@@ -38,4 +45,4 @@ Chapter landmarks recovered from the YouTube page:
 - `2:58` TM Forum
 
 ## Relevance to current ontology work
-Medium to high relevance. This is useful where ontology work needs to connect CSDM-style operational semantics to larger domain reference architectures without flattening the distinctions between architecture viewpoints, products, services, and operating-model constructs.
+High relevance for industry-model bridging. This session is useful when the ontology must absorb sector-specific reference architectures without flattening the distinctions between product, service, and resource semantics or losing the design-to-operations chain.
