@@ -12,6 +12,11 @@ export type AgentEvent =
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
   | { type: "done" }
+  // Robust coding events — emitted during sandbox code generation
+  | { type: "coding:file_written"; buildId: string; path: string; action: "create" | "modify" }
+  | { type: "coding:context_gathered"; buildId: string; filesRead: number }
+  | { type: "coding:test_fix_attempt"; buildId: string; attempt: number; maxAttempts: number }
+  | { type: "coding:build_check"; buildId: string; passed: boolean; errorCount?: number }
   // EP-INF-009d: Async inference events
   | { type: "async:started"; operationId: string; providerId: string; modelId: string }
   | { type: "async:progress"; operationId: string; progressPct: number; message: string }

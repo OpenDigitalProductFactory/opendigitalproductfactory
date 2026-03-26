@@ -45,6 +45,30 @@ export async function syncDigitalProduct(dp: {
   }
 }
 
+/**
+ * Apply IT4IT value stream labels to a DigitalProduct node.
+ * Labels: :S2P (Strategy to Portfolio), :R2D (Requirement to Deploy),
+ *         :R2F (Request to Fulfill), :D2C (Detect to Correct)
+ * See neo4j-schema.ts for label definitions.
+ */
+export async function syncIT4ITLabels(
+  productId: string,
+  labels: Array<"S2P" | "R2D" | "R2F" | "D2C">,
+): Promise<void> {
+  if (labels.length === 0) return;
+  for (const label of labels) {
+    await runCypher(
+      `MATCH (dp:DigitalProduct {productId: $productId})
+       CALL apoc.create.addLabels(dp, [$label]) YIELD node
+       RETURN node`,
+      { productId, label },
+    ).catch((err: unknown) => {
+      // APOC not installed — label skipped
+      console.warn(`[neo4j-sync] IT4IT label ${label} failed for ${productId}:`, err);
+    });
+  }
+}
+
 /** Upsert a TaxonomyNode node and its CHILD_OF parent edge. */
 export async function syncTaxonomyNode(tn: {
   nodeId: string;

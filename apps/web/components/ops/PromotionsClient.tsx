@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { approvePromotion, rejectPromotion, markDeployed } from "@/lib/actions/promotions";
+import {
+  approvePromotion,
+  rejectPromotion,
+  markDeployed,
+  executePromotionAction,
+  acknowledgeDestructiveOps,
+  getPromotionWindowStatus,
+} from "@/lib/actions/promotions";
 
 type Promotion = {
   id: string;
@@ -14,6 +21,9 @@ type Promotion = {
   rejectedBy: string | null;
   rationale: string | null;
   deployedAt: string | null;
+  deploymentLog: string | null;
+  rollbackReason: string | null;
+  destructiveAcknowledged: boolean;
   createdAt: string;
   productVersion: {
     version: string;
@@ -42,6 +52,9 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
   const [filter, setFilter] = useState<string>("all");
   const [actionTarget, setActionTarget] = useState<string | null>(null);
   const [rationale, setRationale] = useState("");
+  const [deployResult, setDeployResult] = useState<{ promotionId: string; success: boolean; message: string } | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [showOverride, setShowOverride] = useState(false);
 
   const filtered = filter === "all" ? promotions : promotions.filter((p) => p.status === filter);
 
@@ -63,9 +76,20 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
     });
   }
 
-  function handleMarkDeployed(promotionId: string) {
+  function handleDeploy(promotionId: string, override?: string) {
+    setDeployResult(null);
     startTransition(async () => {
-      await markDeployed(promotionId);
+      const result = await executePromotionAction(promotionId, override || undefined);
+      setDeployResult({ promotionId, success: result.success, message: result.message });
+      setShowOverride(false);
+      setOverrideReason("");
+      router.refresh();
+    });
+  }
+
+  function handleAcknowledgeDestructive(promotionId: string) {
+    startTransition(async () => {
+      await acknowledgeDestructiveOps(promotionId);
       router.refresh();
     });
   }
@@ -147,15 +171,76 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
                   )}
                   {p.status === "approved" && (
                     <button
-                      onClick={() => handleMarkDeployed(p.promotionId)}
+                      onClick={() => handleDeploy(p.promotionId)}
                       disabled={isPending}
                       className="px-3 py-1.5 text-xs rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
                     >
-                      Mark Deployed
+                      {isPending ? "Deploying..." : "Deploy Now"}
                     </button>
                   )}
                 </div>
               </div>
+
+              {/* Deploy result feedback */}
+              {deployResult?.promotionId === p.promotionId && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${
+                  deployResult.success
+                    ? "bg-green-500/10 text-green-300 border border-green-500/20"
+                    : "bg-red-500/10 text-red-300 border border-red-500/20"
+                }`}>
+                  {deployResult.message}
+                </div>
+              )}
+
+              {/* Rollback info */}
+              {p.status === "rolled_back" && p.rollbackReason && (
+                <div className="mt-3 p-3 rounded-lg bg-orange-500/10 text-orange-300 border border-orange-500/20 text-sm">
+                  Rolled back: {p.rollbackReason}
+                </div>
+              )}
+
+              {/* Deployment log */}
+              {p.deploymentLog && (p.status === "deployed" || p.status === "rolled_back") && (
+                <details className="mt-2">
+                  <summary className="text-xs text-[var(--dpf-muted)] cursor-pointer hover:text-[var(--dpf-text)]">
+                    Deployment log
+                  </summary>
+                  <pre className="mt-1 p-2 rounded bg-[var(--dpf-surface-2)] text-xs text-[var(--dpf-muted)] whitespace-pre-wrap overflow-x-auto">
+                    {p.deploymentLog}
+                  </pre>
+                </details>
+              )}
+
+              {/* Window override panel (shown when Deploy Now is blocked by window) */}
+              {showOverride && actionTarget === p.promotionId && p.status === "approved" && (
+                <div className="mt-3 pt-3 border-t border-[var(--dpf-border)]">
+                  <p className="text-xs text-[var(--dpf-muted)] mb-2">
+                    Not in a deployment window. Provide a reason to override:
+                  </p>
+                  <textarea
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="Emergency override reason (required)..."
+                    className="w-full p-2 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] resize-none"
+                    rows={2}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => handleDeploy(p.promotionId, overrideReason)}
+                      disabled={isPending || !overrideReason.trim()}
+                      className="px-4 py-1.5 text-xs rounded-lg bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {isPending ? "Deploying..." : "Emergency Deploy"}
+                    </button>
+                    <button
+                      onClick={() => { setShowOverride(false); setOverrideReason(""); setActionTarget(null); }}
+                      className="px-4 py-1.5 text-xs rounded-lg text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Approval/Rejection panel */}
               {actionTarget === p.promotionId && p.status === "pending" && (

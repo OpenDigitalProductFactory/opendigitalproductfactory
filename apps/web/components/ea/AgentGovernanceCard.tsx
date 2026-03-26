@@ -12,6 +12,9 @@ type AgentGovernanceCardModel = {
   autonomyLevel: string | null;
   owningTeamName: string | null;
   activeGrantCount: number;
+  grantCount: number;
+  hitlTier: number | null;
+  escalatesTo: string | null;
 };
 
 type Props = {
@@ -60,6 +63,17 @@ export function AgentGovernanceCard({ agent }: Props) {
         <p>
           Owning team: <span className="text-[var(--dpf-text)]">{agent.owningTeamName ?? "Unassigned"}</span>
         </p>
+        <p>
+          Tool grants: <span className="text-[var(--dpf-text)]">{agent.grantCount} granted</span>
+        </p>
+        <p>
+          HITL tier: <span className="text-[var(--dpf-text)]">{agent.hitlTier != null ? `Tier ${agent.hitlTier}` : "Not set"}</span>
+        </p>
+        {agent.escalatesTo ? (
+          <p>
+            Escalates to: <span className="text-[var(--dpf-text)]">{agent.escalatesTo}</span>
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">

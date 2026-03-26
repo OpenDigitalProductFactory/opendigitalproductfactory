@@ -18,6 +18,9 @@ describe("AgentGovernanceCard", () => {
           autonomyLevel: "supervised_execute",
           owningTeamName: "Operations Team",
           activeGrantCount: 2,
+          grantCount: 2,
+          hitlTier: 1,
+          escalatesTo: "HR-500",
         }}
       />,
     );

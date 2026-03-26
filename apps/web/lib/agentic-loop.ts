@@ -5,6 +5,7 @@
 import { routeAndCall, type RoutedInferenceResult } from "./routed-inference";
 import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
 import type { ChatMessage } from "./ai-inference";
+import { prisma } from "@dpf/db";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -28,8 +29,12 @@ const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to 
 const BUILD_TOOL_NAMES = new Set([
   "saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan",
   "launch_sandbox", "generate_code", "iterate_sandbox",
+  "edit_sandbox_file", "read_sandbox_file", "run_sandbox_command",
+  "search_sandbox", "list_sandbox_files",
   "run_sandbox_tests", "deploy_feature", "generate_ux_test", "run_ux_test",
   "propose_file_change", "update_feature_brief", "create_backlog_item",
+  "check_deployment_windows", "schedule_promotion", "create_release_bundle", "get_release_status",
+  "run_release_gate", "schedule_release_bundle",
 ]);
 
 /** Detect when the agent claims completion or narrates code without having called build tools. */
@@ -333,12 +338,29 @@ export async function runAgenticLoop(params: {
       // Immediate tools — execute
       onProgress?.({ type: "tool:start", tool: tc.name, iteration });
 
+      const toolStartMs = Date.now();
       const toolResult = await executeTool(
         tc.name,
         tc.arguments,
         userId,
         { routeContext, agentId, threadId },
       );
+
+      // Audit: record every tool execution (fire-and-forget)
+      prisma.toolExecution.create({
+        data: {
+          threadId: threadId ?? "",
+          agentId: agentId ?? "unknown",
+          userId,
+          toolName: tc.name,
+          parameters: tc.arguments as any,
+          result: toolResult as any,
+          success: toolResult.success,
+          executionMode: "immediate",
+          routeContext: routeContext ?? null,
+          durationMs: Date.now() - toolStartMs,
+        },
+      }).catch(() => {});
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       iterationResults.push({ tc, toolResult });

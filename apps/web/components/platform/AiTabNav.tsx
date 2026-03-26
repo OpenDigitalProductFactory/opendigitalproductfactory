@@ -9,6 +9,7 @@ const TABS = [
   { label: "Route Log", href: "/platform/ai/routing" },
   { label: "Operations", href: "/platform/ai/operations" },
   { label: "Action History", href: "/platform/ai/history" },
+  { label: "Authority", href: "/platform/ai/authority" },
 ];
 
 export function AiTabNav() {
