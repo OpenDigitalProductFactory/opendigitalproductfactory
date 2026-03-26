@@ -521,13 +521,15 @@ model ChangePromotion {
   deploymentLog    String?
   rolledBackAt     DateTime?
   rolledBackBy     String?
-  rollbackReason   String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  backupId         String?
-  backup           PromotionBackup? @relation(fields: [backupId], references: [id])
-  productVersion   ProductVersion   @relation(fields: [productVersionId], references: [id])
-  changeItem       ChangeItem?
+  rollbackReason          String?
+  windowOverrideReason    String?
+  destructiveAcknowledged Boolean          @default(false)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  backupId                String?
+  backup                  PromotionBackup? @relation(fields: [backupId], references: [id])
+  productVersion          ProductVersion   @relation(fields: [productVersionId], references: [id])
+  changeItem              ChangeItem?
 
   @@index([status])
   @@index([productVersionId])
@@ -1106,6 +1108,7 @@ model TaskEvaluation {
   routeContext    String
   createdAt       DateTime @default(now())
   source          String?
+  toolName        String?
 
   @@index([endpointId, taskType, createdAt])
   @@index([threadId])
@@ -1779,12 +1782,45 @@ model AgentActionProposal {
   resultEntityId String?
   resultError    String?
   gitCommitHash  String?
-  decidedBy      User?        @relation("ProposalDecisions", fields: [decidedById], references: [id])
-  message        AgentMessage @relation(fields: [messageId], references: [id])
-  thread         AgentThread  @relation(fields: [threadId], references: [id])
+  toolEvaluationId String?
+  decidedBy      User?            @relation("ProposalDecisions", fields: [decidedById], references: [id])
+  message        AgentMessage     @relation(fields: [messageId], references: [id])
+  thread         AgentThread      @relation(fields: [threadId], references: [id])
+  toolEvaluation ToolEvaluation?  @relation(fields: [toolEvaluationId], references: [id])
 
   @@index([threadId])
   @@index([status])
+}
+
+model ToolEvaluation {
+  id              String    @id @default(cuid())
+  toolName        String
+  toolType        String
+  version         String
+  sourceUrl       String
+  proposedBy      String
+  proposedAt      DateTime  @default(now())
+
+  status          String    @default("proposed")
+  verdict         Json?
+  conditions      Json      @default("[]")
+
+  findings        Json      @default("[]")
+  reviewers       Json      @default("[]")
+  approvedBy      String?
+  approvedAt      DateTime?
+
+  reEvaluateAfter DateTime?
+  supersedes      String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  proposals       AgentActionProposal[]
+
+  @@index([toolName, status])
+  @@index([status])
+  @@index([reEvaluateAfter])
 }
 
 model AgentAttachment {
@@ -1936,16 +1972,57 @@ model FeatureBuild {
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
   buildExecState        Json?
+  releaseBundleId       String?
+  calendarEventId       String?
   activities            BuildActivity[]
   accountableEmployee   EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy             User              @relation(fields: [createdById], references: [id])
   digitalProduct        DigitalProduct?   @relation(fields: [digitalProductId], references: [id])
+  releaseBundle         ReleaseBundle?    @relation(fields: [releaseBundleId], references: [id])
   productVersions       ProductVersion[]
   promotionBackups      PromotionBackup[]
 
   @@index([phase])
   @@index([createdById])
   @@index([digitalProductId])
+  @@index([releaseBundleId])
+}
+
+model SandboxSlot {
+  id          String    @id @default(cuid())
+  slotIndex   Int       @unique
+  containerId String
+  port        Int
+  status      String    @default("available")
+  buildId     String?   @unique
+  userId      String?
+  acquiredAt  DateTime?
+  releasedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model ReleaseBundle {
+  id                 String    @id @default(cuid())
+  bundleId           String    @unique
+  title              String
+  status             String    @default("assembling")
+  createdBy          String
+  combinedDiffPatch  String?   @db.Text
+  gateCheckResult    Json?
+  promotionId        String?   @unique
+  rfcId              String?
+  calendarEventId    String?
+  deploymentWindowId String?
+  scheduledAt        DateTime?
+  deployedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  builds             FeatureBuild[]
+
+  @@index([status])
 }
 
 model BuildActivity {

@@ -380,8 +380,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "run_sandbox_tests",
-    description: "Run unit tests and typecheck inside the sandbox container.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Run unit tests and typecheck inside the sandbox container. Set auto_fix to true to automatically diagnose and fix failures (up to 3 attempts).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        auto_fix: { type: "boolean", description: "When true, automatically diagnose test failures and attempt fixes (max 3 retries). Default: false." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -467,6 +472,64 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_capabilities",
     executionMode: "proposal",
     sideEffect: true,
+  },
+  // ─── Scheduling & Release Tools (IT4IT §5.3-5.4) ───────────────────────
+  {
+    name: "check_deployment_windows",
+    description: "Check available deployment windows for promoting changes to production. Returns current window status, blackout periods, and next available window time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        change_type: { type: "string", description: "RFC type: standard, normal, or emergency. Default: normal." },
+        risk_level: { type: "string", description: "Risk level: low, medium, high, or critical. Default: low." },
+      },
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "schedule_promotion",
+    description: "Schedule an approved promotion for deployment during a specific window. Creates a calendar event for visibility.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        promotion_id: { type: "string", description: "The promotion ID (CP-xxx) to schedule." },
+      },
+      required: ["promotion_id"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "create_release_bundle",
+    description: "Group multiple completed builds into a release bundle for coordinated deployment (IT4IT §5.3.5 Release Package).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Release bundle title, e.g. 'March 2026 Feature Release'." },
+        build_ids: { type: "array", items: { type: "string" }, description: "Array of buildId values to include in the bundle." },
+      },
+      required: ["title", "build_ids"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "get_release_status",
+    description: "Get the current status of a release bundle or promotion, including deployment window availability and gate check results.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle_id: { type: "string", description: "Release bundle ID (RB-xxx) — optional if promotion_id is provided." },
+        promotion_id: { type: "string", description: "Promotion ID (CP-xxx) — optional if bundle_id is provided." },
+      },
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
   },
   {
     name: "evaluate_page",
@@ -909,6 +972,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["name", "shortName", "sourceType"],
     },
     requiredCapability: "manage_compliance",
+    sideEffect: true,
+  },
+  {
+    name: "evaluate_tool",
+    description: "Initiate a tool evaluation pipeline for an external tool, MCP server, or dependency. Creates a ToolEvaluation record for multi-agent security, architecture, compliance, and integration review.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toolName: { type: "string", description: "Name of the tool to evaluate" },
+        toolType: { type: "string", enum: ["mcp_server", "npm_package", "api_integration", "ai_provider", "docker_image"], description: "Type of tool" },
+        version: { type: "string", description: "Version to evaluate (default: latest)" },
+        sourceUrl: { type: "string", description: "Registry URL, GitHub repo, or vendor page" },
+      },
+      required: ["toolName", "toolType"],
+    },
+    requiredCapability: "manage_tool_evaluations",
     sideEffect: true,
   },
 ];
@@ -1509,15 +1588,22 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
-      // Use the persistent sandbox container (always running in docker-compose)
+      // Acquire a sandbox slot from the pool
+      const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
       const { isSandboxRunning, initializeSandboxWorkspace } = await import("@/lib/sandbox");
-      const PERSISTENT_SANDBOX = "dpf-sandbox-1";
-      const PERSISTENT_PORT = 3035;
 
-      // Check if persistent sandbox is running
-      const running = await isSandboxRunning(PERSISTENT_SANDBOX).catch(() => false);
+      // Ensure pool is initialized
+      await initializePool().catch(() => {});
+
+      const slot = await acquireSandbox(buildId, userId);
+      if (!slot) {
+        return { success: false, error: "All sandbox slots are in use. Try again when a slot becomes available.", message: "No sandbox slots available. Other builds are using all slots." };
+      }
+
+      // Check if the assigned container is running
+      const running = await isSandboxRunning(slot.containerId).catch(() => false);
       if (!running) {
-        return { success: false, error: "Sandbox container is not running. Check docker compose.", message: "The sandbox service needs to be running. Run: docker compose up -d sandbox" };
+        return { success: false, error: `Sandbox container ${slot.containerId} is not running. Run: docker compose up -d`, message: `Container ${slot.containerId} not found.` };
       }
 
       // Initialize workspace if not already done
@@ -1525,49 +1611,48 @@ export async function executeTool(
       const { promisify } = await import("util");
       const exec = promisify(execCb);
       try {
-        const { stdout } = await exec(`docker exec ${PERSISTENT_SANDBOX} ls /workspace/package.json 2>&1`);
+        const { stdout } = await exec(`docker exec ${slot.containerId} ls /workspace/package.json 2>&1`);
         if (!stdout.includes("package.json")) throw new Error("no files");
-        console.log("[launch_sandbox] workspace already initialized");
+        console.log(`[launch_sandbox] workspace already initialized in ${slot.containerId}`);
       } catch {
-        console.log("[launch_sandbox] initializing workspace...");
+        console.log(`[launch_sandbox] initializing workspace in ${slot.containerId}...`);
         try {
-          await initializeSandboxWorkspace(PERSISTENT_SANDBOX);
-          console.log("[launch_sandbox] workspace initialized");
+          await initializeSandboxWorkspace(slot.containerId);
         } catch (initErr) {
           console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
         }
       }
 
-      await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: PERSISTENT_SANDBOX, sandboxPort: PERSISTENT_PORT } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready on port ${PERSISTENT_PORT}.`);
-      return { success: true, message: `Sandbox ready on port ${PERSISTENT_PORT}. You can generate code now.`, entityId: buildId, data: { containerId: PERSISTENT_SANDBOX, port: PERSISTENT_PORT } };
+      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready: ${slot.containerId} on port ${slot.port}.`);
+      return { success: true, message: `Sandbox ready on port ${slot.port} (slot ${slot.slotIndex}). You can generate code now.`, entityId: buildId, data: { containerId: slot.containerId, port: slot.port, slotIndex: slot.slotIndex } };
     }
 
     case "generate_code": {
-      const SANDBOX_NAME = "dpf-sandbox-1";
-      const SANDBOX_PORT = 3035;
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
       if (!build?.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
 
-      // Auto-initialize sandbox if not yet launched
+      // Auto-initialize sandbox via pool if not yet launched
       if (!build.sandboxId) {
-        console.log("[generate_code] No sandbox — auto-initializing...");
+        console.log("[generate_code] No sandbox — acquiring pool slot...");
+        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
         const { isSandboxRunning, initializeSandboxWorkspace: autoInit } = await import("@/lib/sandbox");
-        const running = await isSandboxRunning(SANDBOX_NAME).catch(() => false);
-        if (!running) return { success: false, error: "Sandbox container is not running. Run: docker compose up -d sandbox", message: "Sandbox container not found." };
-        try { await autoInit(SANDBOX_NAME); } catch (e) { console.error(`[generate_code] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: SANDBOX_NAME, sandboxPort: SANDBOX_PORT } });
+        await initializePool().catch(() => {});
+        const slot = await acquireSandbox(buildId, userId);
+        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available." };
+        const running = await isSandboxRunning(slot.containerId).catch(() => false);
+        if (!running) return { success: false, error: `Sandbox ${slot.containerId} is not running.`, message: "Sandbox container not found." };
+        try { await autoInit(slot.containerId); } catch (e) { console.error(`[generate_code] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
         build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
         if (!build?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
       }
 
-      const { buildCodeGenPrompt } = await import("@/lib/coding-agent");
+      const { buildCodeGenPrompt, gatherCodeContext } = await import("@/lib/coding-agent");
       const { execInSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
       const instruction = String(params.instruction ?? "");
 
@@ -1583,12 +1668,21 @@ export async function executeTool(
         }
       }
 
-      // Build the codegen prompt from brief + plan + instruction
+      // Gather existing code context before generating
+      const plan = (build.buildPlan ?? {}) as Record<string, unknown>;
+      let codeContext = "";
+      try {
+        codeContext = await gatherCodeContext(build.sandboxId, plan);
+      } catch (ctxErr) {
+        console.log(`[generate_code] context gathering failed (non-fatal): ${(ctxErr as Error).message?.slice(0, 100)}`);
+      }
+
+      // Build the codegen prompt from brief + plan + instruction + context
       const prompt = buildCodeGenPrompt(
         build.brief as Parameters<typeof buildCodeGenPrompt>[0],
-        (build.buildPlan ?? {}) as Record<string, unknown>,
+        plan,
         instruction,
-      );
+      ) + codeContext;
 
       // Call an LLM to generate the actual code files
       const { routeAndCall } = await import("@/lib/routed-inference");
@@ -1702,13 +1796,82 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "iterate_sandbox": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+
       const { execInSandbox } = await import("@/lib/sandbox");
+      const { buildCodeGenPrompt, gatherCodeContext } = await import("@/lib/coding-agent");
+      const { routeAndCall } = await import("@/lib/routed-inference");
+
       const instruction = String(params.instruction ?? "");
-      const encodedInstruction = Buffer.from(instruction).toString("base64");
-      await execInSandbox(build.sandboxId, `echo ${encodedInstruction} | base64 -d > /tmp/codegen-prompt.txt`);
-      return { success: true, message: "Refinement instruction sent to sandbox.", data: { instruction } };
+      if (!instruction.trim()) return { success: false, error: "No instruction provided.", message: "Provide a refinement instruction." };
+
+      // Gather current code context from sandbox
+      const plan = (build.buildPlan ?? {}) as Record<string, unknown>;
+      let codeContext = "";
+      try {
+        codeContext = await gatherCodeContext(build.sandboxId, plan);
+      } catch {
+        // Non-fatal — proceed without context
+      }
+
+      // Also get the current git diff to show what's already been changed
+      let currentDiff = "";
+      try {
+        currentDiff = await execInSandbox(build.sandboxId, "cd /workspace && git diff --stat 2>/dev/null || true");
+        if (currentDiff.trim()) {
+          codeContext += `\n## Current Changes\n\`\`\`\n${currentDiff.slice(0, 2000)}\n\`\`\`\n`;
+        }
+      } catch {
+        // Non-fatal
+      }
+
+      // Build prompt with refinement instruction + context
+      const brief = build.brief as Parameters<typeof buildCodeGenPrompt>[0] | null;
+      const promptParts = [
+        brief ? buildCodeGenPrompt(brief, plan, instruction) : `## Refinement Instruction\n${instruction}`,
+        codeContext,
+      ];
+
+      // Call LLM with full context for the refinement
+      const result = await routeAndCall(
+        [{ role: "user", content: promptParts.join("\n") }],
+        "You are a code generation agent. Apply the refinement instruction to the existing code. Output ONLY the changed files in this format:\n### FILE: <path>\n```typescript\n<content>\n```\n\nNo explanations. Just files.",
+        "internal",
+        { taskType: "codegen" },
+      );
+
+      // Parse and write files (same pattern as generate_code)
+      const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
+      const files: Array<{ path: string; content: string }> = [];
+      let match;
+      while ((match = filePattern.exec(result.content)) !== null) {
+        files.push({ path: match[1]!.trim(), content: match[2]! });
+      }
+
+      if (files.length === 0) {
+        const encoded = Buffer.from(result.content).toString("base64");
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /tmp/iterate-output.txt`);
+        logBuildActivity(buildId, "iterate_sandbox", `Refinement produced no parseable files. Raw output saved to /tmp/iterate-output.txt`);
+        return { success: true, message: `Refinement produced text but no parseable files. Check /tmp/iterate-output.txt in sandbox.`, data: { instruction, filesChanged: 0 } };
+      }
+
+      // Write refined files to sandbox
+      for (const file of files) {
+        const cleanPath = file.path.replace(/^\/?workspace\//, "");
+        const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
+        if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+        const encoded = Buffer.from(file.content).toString("base64");
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+      }
+
+      logBuildActivity(buildId, "iterate_sandbox", `Refinement applied to ${files.length} files: ${files.map(f => f.path).join(", ")}. Instruction: ${instruction.slice(0, 200)}`);
+
+      return {
+        success: true,
+        message: `Refinement applied to ${files.length} file(s): ${files.map(f => f.path).join(", ")}. Run run_sandbox_tests to verify.`,
+        data: { instruction, filesChanged: files.length, files: files.map(f => f.path) },
+      };
     }
 
     case "run_sandbox_tests": {
@@ -1716,29 +1879,127 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { runSandboxTests } = await import("@/lib/coding-agent");
-      const results = await runSandboxTests(build.sandboxId);
+      const { runSandboxTests, diagnoseTestFailures } = await import("@/lib/coding-agent");
+      const autoFix = params.auto_fix === true;
+      const MAX_FIX_ATTEMPTS = 3;
+
+      let results = await runSandboxTests(build.sandboxId);
+      let fixAttempts = 0;
+
+      // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test
+      if (autoFix && !results.passed) {
+        const { execInSandbox } = await import("@/lib/sandbox");
+        const { routeAndCall } = await import("@/lib/routed-inference");
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+
+        while (!results.passed && fixAttempts < MAX_FIX_ATTEMPTS) {
+          fixAttempts++;
+          if (context?.threadId) {
+            agentEventBus.emit(context.threadId, {
+              type: "coding:test_fix_attempt" as "evidence:update",
+              buildId,
+              field: `attempt_${fixAttempts}_of_${MAX_FIX_ATTEMPTS}`,
+            });
+          }
+
+          const diagnosis = diagnoseTestFailures(results);
+          if (diagnosis.failingTests.length === 0) break;
+
+          // Read failing source files for context
+          const fileContents: string[] = [];
+          const readFiles = new Set<string>();
+          for (const failure of diagnosis.failingTests.slice(0, 3)) {
+            for (const filePath of [failure.testFile, failure.sourceFile].filter(Boolean)) {
+              if (readFiles.has(filePath!)) continue;
+              readFiles.add(filePath!);
+              try {
+                const content = await execInSandbox(
+                  build.sandboxId,
+                  `cat "/workspace/${filePath}" 2>/dev/null | head -100 || echo "[not found]"`,
+                );
+                if (!content.includes("[not found]")) {
+                  fileContents.push(`### ${filePath}\n\`\`\`\n${content}\n\`\`\``);
+                }
+              } catch { /* skip */ }
+            }
+          }
+
+          // Ask LLM to produce a fix
+          const fixPrompt = [
+            "The following tests are failing. Diagnose and fix the SOURCE files (not the tests).",
+            "",
+            "## Test Output",
+            "```",
+            results.testOutput.slice(0, 3000),
+            "```",
+            "",
+            results.typeCheckPassed ? "" : `## Type Check Errors\n\`\`\`\n${results.typeCheckOutput.slice(0, 2000)}\n\`\`\`\n`,
+            "## Diagnosis",
+            diagnosis.summary,
+            "",
+            "## Relevant Files",
+            ...fileContents,
+            "",
+            "Output ONLY the fixed files in this format:",
+            "### FILE: <path>",
+            "```typescript",
+            "<full file content>",
+            "```",
+          ].join("\n");
+
+          try {
+            const fixResult = await routeAndCall(
+              [{ role: "user", content: fixPrompt }],
+              "You are a debugging agent. Fix the failing code. Output only changed files.",
+              "internal",
+              { taskType: "code_generation" },
+            );
+
+            // Parse and write fixed files
+            const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
+            let fixMatch;
+            let filesFixed = 0;
+            while ((fixMatch = filePattern.exec(fixResult.content)) !== null) {
+              const cleanPath = fixMatch[1]!.trim().replace(/^\/?workspace\//, "");
+              const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
+              if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+              const encoded = Buffer.from(fixMatch[2]!).toString("base64");
+              await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+              filesFixed++;
+            }
+
+            if (filesFixed === 0) break; // LLM couldn't produce a fix
+
+            logBuildActivity(buildId, "run_sandbox_tests", `Auto-fix attempt ${fixAttempts}: applied fixes to ${filesFixed} file(s).`);
+          } catch {
+            break; // LLM call failed — stop retrying
+          }
+
+          // Re-run tests
+          results = await runSandboxTests(build.sandboxId);
+        }
+      }
+
       const verificationData = {
         testsPassed: results.passed ? 1 : 0,
         testsFailed: results.passed ? 0 : 1,
         typecheckPassed: results.typeCheckPassed,
         testOutput: results.testOutput.slice(0, 5000),
         typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
+        autoFixAttempts: fixAttempts,
+        autoFixEnabled: autoFix,
       };
       await prisma.featureBuild.update({
         where: { buildId },
         data: { verificationOut: verificationData as unknown as import("@dpf/db").Prisma.InputJsonValue },
       });
-      const { agentEventBus } = await import("@/lib/agent-event-bus");
-      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
-      logBuildActivity(buildId, "run_sandbox_tests", `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.`);
-      return {
-        success: true,
-        message: results.passed && results.typeCheckPassed
-          ? "All tests pass, typecheck clean."
-          : `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.`,
-        data: verificationData,
-      };
+      const { agentEventBus: eventBus } = await import("@/lib/agent-event-bus");
+      if (context?.threadId) eventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
+      const statusMsg = results.passed && results.typeCheckPassed
+        ? `All tests pass, typecheck clean.${fixAttempts > 0 ? ` Fixed after ${fixAttempts} attempt(s).` : ""}`
+        : `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
+      logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
+      return { success: true, message: statusMsg, data: verificationData };
     }
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
@@ -1750,17 +2011,14 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "search_sandbox":
     case "list_sandbox_files":
     case "run_sandbox_command": {
-      const SANDBOX_ID = "dpf-sandbox-1";
-      const SANDBOX_PT = 3035;
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
 
-      // Auto-init sandbox if not launched OR workspace is empty
+      // Auto-init sandbox via pool if not launched OR workspace is empty
       const { isSandboxRunning, initializeSandboxWorkspace: sbInit, execInSandbox: sbExec } = await import("@/lib/sandbox");
       let needsInit = !sbBuild?.sandboxId;
       if (!needsInit && sbBuild?.sandboxId) {
-        // sandboxId is set but workspace might be empty (cleared or never copied)
         try {
           await sbExec(sbBuild.sandboxId, "test -f /workspace/package.json");
         } catch {
@@ -1769,11 +2027,14 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         }
       }
       if (needsInit) {
-        console.log(`[${toolName}] Auto-initializing sandbox...`);
-        const running = await isSandboxRunning(SANDBOX_ID).catch(() => false);
-        if (!running) return { success: false, error: "Sandbox container not running. Run: docker compose up -d sandbox", message: "Sandbox container not found." };
-        try { await sbInit(SANDBOX_ID); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        await prisma.featureBuild.update({ where: { buildId }, data: { sandboxId: SANDBOX_ID, sandboxPort: SANDBOX_PT } });
+        console.log(`[${toolName}] Auto-initializing sandbox via pool...`);
+        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
+        await initializePool().catch(() => {});
+        const slot = await acquireSandbox(buildId, userId);
+        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available." };
+        const running = await isSandboxRunning(slot.containerId).catch(() => false);
+        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
+        try { await sbInit(slot.containerId); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
         sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
         if (!sbBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
       }
@@ -1856,10 +2117,270 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-      const { extractDiff } = await import("@/lib/sandbox");
-      const diff = await extractDiff(build.sandboxId);
-      await prisma.featureBuild.update({ where: { buildId }, data: { diffPatch: diff, diffSummary: diff.slice(0, 500) } });
-      return { success: true, message: "Diff extracted. Ready for approval.", data: { diffLength: diff.length, summary: diff.slice(0, 500) } };
+
+      // Extract diff from sandbox
+      const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/sandbox-promotion");
+      const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { diffPatch: extracted.fullDiff, diffSummary: extracted.fullDiff.slice(0, 500) },
+      });
+
+      // Scan migrations for destructive operations
+      let destructiveWarnings: string[] = [];
+      if (extracted.hasMigrations) {
+        destructiveWarnings = scanForDestructiveOps(extracted.fullDiff);
+      }
+
+      // Check deployment window availability
+      let windowStatus = "No business profile configured — deployment unrestricted.";
+      try {
+        const profile = await prisma.businessProfile.findFirst({
+          where: { isActive: true },
+          include: { deploymentWindows: true, blackoutPeriods: true },
+        });
+        if (profile) {
+          const now = new Date();
+          const activeBlackout = profile.blackoutPeriods.find(
+            (bp) => bp.startAt <= now && bp.endAt >= now,
+          );
+          if (activeBlackout) {
+            windowStatus = `Blackout active until ${activeBlackout.endAt.toISOString()}.`;
+          } else {
+            const matchingWindows = profile.deploymentWindows.filter(
+              (w) => w.allowedChangeTypes.includes("normal") && w.allowedRiskLevels.includes("low"),
+            );
+            if (matchingWindows.length > 0) {
+              windowStatus = isNowInWindow(matchingWindows)
+                ? "Deployment window is open now."
+                : `Not in a deployment window. Available: ${matchingWindows.map((w) => `${w.name}: ${w.startTime}-${w.endTime}`).join("; ")}`;
+            } else {
+              windowStatus = "No deployment windows configured — deployment unrestricted.";
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — window check is advisory at this stage
+      }
+
+      const messageParts = [
+        `Diff extracted: ${extracted.codeFiles.length} code file(s), ${extracted.migrationFiles.length} migration(s).`,
+        windowStatus,
+      ];
+      if (destructiveWarnings.length > 0) {
+        messageParts.push(`WARNING: ${destructiveWarnings.length} destructive operation(s) detected: ${destructiveWarnings.join("; ")}`);
+      }
+
+      logBuildActivity(buildId, "deploy_feature", messageParts.join(" "));
+
+      return {
+        success: true,
+        message: messageParts.join(" "),
+        data: {
+          diffLength: extracted.fullDiff.length,
+          summary: extracted.fullDiff.slice(0, 500),
+          codeFiles: extracted.codeFiles.length,
+          migrationFiles: extracted.migrationFiles.length,
+          destructiveWarnings,
+          windowStatus,
+        },
+      };
+    }
+
+    // ─── Scheduling & Release Tools ──────────────────────────────────────────
+
+    case "check_deployment_windows": {
+      const changeType = String(params.change_type ?? "normal");
+      const riskLevel = String(params.risk_level ?? "low");
+      const profile = await prisma.businessProfile.findFirst({
+        where: { isActive: true },
+        include: { deploymentWindows: true, blackoutPeriods: true },
+      });
+
+      if (!profile) {
+        return { success: true, message: "No business profile configured — deployment is unrestricted. Set up operating hours in Admin to enable deployment windows.", data: { available: true, unrestricted: true } };
+      }
+
+      const now = new Date();
+      const activeBlackout = profile.blackoutPeriods.find(
+        (bp) => bp.startAt <= now && bp.endAt >= now && !bp.exceptions.includes(changeType),
+      );
+      if (activeBlackout) {
+        return {
+          success: true,
+          message: `Blackout period active until ${activeBlackout.endAt.toISOString()}. Reason: ${activeBlackout.reason ?? "Scheduled blackout"}. Emergency changes may override.`,
+          data: { available: false, blackout: true, blackoutEnd: activeBlackout.endAt.toISOString(), reason: activeBlackout.reason },
+        };
+      }
+
+      const { isNowInWindow } = await import("@/lib/sandbox-promotion");
+      const matchingWindows = profile.deploymentWindows.filter(
+        (w) => w.allowedChangeTypes.includes(changeType) && w.allowedRiskLevels.includes(riskLevel),
+      );
+
+      if (matchingWindows.length === 0) {
+        return { success: true, message: "No deployment windows configured for this change type and risk level — deployment is unrestricted.", data: { available: true, unrestricted: true } };
+      }
+
+      const windowOpen = isNowInWindow(matchingWindows);
+      const windowSummary = matchingWindows.map((w) => ({
+        name: w.name,
+        days: w.dayOfWeek,
+        startTime: w.startTime,
+        endTime: w.endTime,
+      }));
+
+      return {
+        success: true,
+        message: windowOpen
+          ? `Deployment window is OPEN now. ${matchingWindows.length} matching window(s) available.`
+          : `Not in a deployment window. Available windows: ${matchingWindows.map((w) => `${w.name}: days ${w.dayOfWeek.join(",")}, ${w.startTime}-${w.endTime}`).join("; ")}`,
+        data: { available: windowOpen, windows: windowSummary },
+      };
+    }
+
+    case "schedule_promotion": {
+      const promotionId = String(params.promotion_id ?? "");
+      if (!promotionId) return { success: false, error: "promotion_id is required.", message: "Provide a promotion ID." };
+
+      const promotion = await prisma.changePromotion.findUnique({
+        where: { promotionId },
+        include: { changeItem: { include: { changeRequest: true } } },
+      });
+      if (!promotion) return { success: false, error: "Promotion not found.", message: `No promotion with ID ${promotionId}.` };
+      if (promotion.status !== "approved") return { success: false, error: "Promotion must be approved first.", message: `Current status: ${promotion.status}` };
+
+      // Find next available window
+      const profile = await prisma.businessProfile.findFirst({
+        where: { isActive: true },
+        include: { deploymentWindows: true },
+      });
+
+      if (!profile || profile.deploymentWindows.length === 0) {
+        return { success: true, message: "No deployment windows configured. Promotion can be deployed anytime via Operations > Promotions.", data: { scheduled: false } };
+      }
+
+      const rfcType = promotion.changeItem?.changeRequest?.type ?? "normal";
+      const riskLevel = promotion.changeItem?.changeRequest?.riskLevel ?? "low";
+      const matchingWindows = profile.deploymentWindows.filter(
+        (w) => w.allowedChangeTypes.includes(rfcType) && w.allowedRiskLevels.includes(riskLevel),
+      );
+
+      if (matchingWindows.length === 0) {
+        return { success: true, message: "No windows match this change type and risk level. Ask an admin to configure appropriate deployment windows.", data: { scheduled: false } };
+      }
+
+      // Update RFC with deployment window info
+      const rfc = promotion.changeItem?.changeRequest;
+      if (rfc) {
+        await prisma.changeRequest.update({
+          where: { id: rfc.id },
+          data: {
+            status: "scheduled",
+            scheduledAt: new Date(),
+            deploymentWindowId: matchingWindows[0]!.id,
+          },
+        });
+      }
+
+      const windowDesc = matchingWindows.map((w) => `${w.name}: days ${w.dayOfWeek.join(",")}, ${w.startTime}-${w.endTime}`).join("; ");
+      logBuildActivity(promotionId, "schedule_promotion", `Scheduled for window: ${windowDesc}`);
+
+      return {
+        success: true,
+        message: `Promotion ${promotionId} scheduled. Deployment windows: ${windowDesc}. An operator can deploy via Operations > Promotions during an open window.`,
+        data: { scheduled: true, windows: windowDesc },
+      };
+    }
+
+    case "create_release_bundle": {
+      const title = String(params.title ?? "");
+      const buildIds = Array.isArray(params.build_ids) ? params.build_ids.map(String) : [];
+      if (!title) return { success: false, error: "title is required.", message: "Provide a release bundle title." };
+      if (buildIds.length === 0) return { success: false, error: "build_ids is required.", message: "Provide at least one build ID." };
+
+      // Validate all builds exist and are in review/complete phase
+      const builds = await prisma.featureBuild.findMany({
+        where: { buildId: { in: buildIds } },
+        select: { buildId: true, title: true, phase: true, releaseBundleId: true },
+      });
+      const missing = buildIds.filter((id) => !builds.some((b) => b.buildId === id));
+      if (missing.length > 0) return { success: false, error: `Builds not found: ${missing.join(", ")}`, message: `Could not find builds: ${missing.join(", ")}` };
+
+      const notReady = builds.filter((b) => !["review", "complete", "ship"].includes(b.phase));
+      if (notReady.length > 0) {
+        return { success: false, error: `Builds not ready: ${notReady.map((b) => `${b.buildId} (${b.phase})`).join(", ")}`, message: `All builds must be in review or complete phase.` };
+      }
+
+      const alreadyBundled = builds.filter((b) => b.releaseBundleId);
+      if (alreadyBundled.length > 0) {
+        return { success: false, error: `Builds already in a bundle: ${alreadyBundled.map((b) => b.buildId).join(", ")}`, message: `Remove from existing bundle first.` };
+      }
+
+      // Create the bundle
+      const bundleId = `RB-${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+      const bundle = await prisma.releaseBundle.create({
+        data: {
+          bundleId,
+          title,
+          status: "assembling",
+          createdBy: userId,
+        },
+      });
+
+      // Link builds to the bundle
+      await prisma.featureBuild.updateMany({
+        where: { buildId: { in: buildIds } },
+        data: { releaseBundleId: bundle.id },
+      });
+
+      return {
+        success: true,
+        message: `Release bundle ${bundleId} created with ${buildIds.length} build(s): ${builds.map((b) => b.title).join(", ")}. Run gate checks before scheduling deployment.`,
+        data: { bundleId, title, buildCount: buildIds.length, builds: builds.map((b) => ({ buildId: b.buildId, title: b.title })) },
+      };
+    }
+
+    case "get_release_status": {
+      const bundleId = params.bundle_id ? String(params.bundle_id) : null;
+      const promotionId = params.promotion_id ? String(params.promotion_id) : null;
+
+      if (bundleId) {
+        const bundle = await prisma.releaseBundle.findUnique({
+          where: { bundleId },
+          include: { builds: { select: { buildId: true, title: true, phase: true } } },
+        });
+        if (!bundle) return { success: false, error: "Bundle not found.", message: `No release bundle with ID ${bundleId}.` };
+        return {
+          success: true,
+          message: `Release ${bundle.bundleId}: ${bundle.status}. ${bundle.builds.length} build(s).`,
+          data: {
+            bundleId: bundle.bundleId,
+            title: bundle.title,
+            status: bundle.status,
+            builds: bundle.builds,
+            scheduledAt: bundle.scheduledAt?.toISOString() ?? null,
+            deployedAt: bundle.deployedAt?.toISOString() ?? null,
+          },
+        };
+      }
+
+      if (promotionId) {
+        const { getPromotionWindowStatus } = await import("@/lib/actions/promotions");
+        const windowStatus = await getPromotionWindowStatus(promotionId).catch(() => ({ available: false, message: "Could not check window status" }));
+        const promotion = await prisma.changePromotion.findUnique({
+          where: { promotionId },
+          select: { status: true, deployedAt: true, rationale: true, rollbackReason: true },
+        });
+        if (!promotion) return { success: false, error: "Promotion not found.", message: `No promotion with ID ${promotionId}.` };
+        return {
+          success: true,
+          message: `Promotion ${promotionId}: ${promotion.status}. Window: ${windowStatus.message}`,
+          data: { promotionId, ...promotion, windowStatus },
+        };
+      }
+
+      return { success: false, error: "Provide bundle_id or promotion_id.", message: "Specify which release or promotion to check." };
     }
 
     case "evaluate_page": {
@@ -2552,6 +3073,18 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         message: `Onboarding draft created. Navigate to ${wizardUrl} to review and commit.`,
         data: { wizardUrl, draftId: draft.id },
       };
+    }
+
+    case "evaluate_tool": {
+      const { createToolEvaluation } = await import("./tool-evaluation-data");
+      const evalId = await createToolEvaluation({
+        toolName: String(params["toolName"] ?? ""),
+        toolType: String(params["toolType"] ?? "npm_package"),
+        version: String(params["version"] ?? "latest"),
+        sourceUrl: String(params["sourceUrl"] ?? ""),
+        proposedBy: userId,
+      });
+      return { success: true, entityId: evalId, message: `Tool evaluation created: ${evalId}. The evaluation pipeline will review this tool for security, architecture fit, compliance, and integration.` };
     }
 
     default: {

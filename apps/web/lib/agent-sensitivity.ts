@@ -26,6 +26,14 @@ function isLocalProvider(provider: ProviderPolicyInfo): boolean {
   return provider.providerId === "ollama" || provider.costModel === "compute";
 }
 
+const AGENT_SENSITIVITY: Record<string, RouteSensitivity> = {
+  "AGT-190": "confidential",
+};
+
+export function getAgentSensitivity(agentId: string): RouteSensitivity | undefined {
+  return AGENT_SENSITIVITY[agentId];
+}
+
 export function getRouteSensitivity(pathname: string): RouteSensitivity {
   let best: RouteSensitivity = "internal";
   let bestLen = 0;

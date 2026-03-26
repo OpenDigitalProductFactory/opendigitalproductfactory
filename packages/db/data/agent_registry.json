@@ -68,7 +68,8 @@
         "AGT-110",
         "AGT-111",
         "AGT-112",
-        "AGT-113"
+        "AGT-113",
+        "AGT-190"
       ],
       "escalates_to": "HR-100",
       "it4it_sections": [
@@ -680,7 +681,7 @@
       "agent_name": "investment-analysis-agent",
       "tier": "specialist",
       "value_stream": "evaluate",
-      "capability_domain": "Scores Portfolio Backlog Items by business value, risk, cost, time (SHOULD-0017/0018); produces prioritized investment proposals for Portfolio Manager review; §5.1.4 Propose Investments",
+      "capability_domain": "Scores Portfolio Backlog Items by business value, risk, cost, time (SHOULD-0017/0018); produces prioritized investment proposals for Portfolio Manager review; weighs tool evaluation findings (security, compliance, architecture, integration) to produce GO/CONDITIONAL/NO-GO verdicts for external dependency adoption; §5.1.4 Propose Investments",
       "human_supervisor_id": "HR-100",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -712,7 +713,10 @@
           "registry_read",
           "backlog_read",
           "investment_proposal_create",
-          "financial_read"
+          "financial_read",
+          "tool_evaluation_read",
+          "tool_verdict_create",
+          "risk_score_create"
         ],
         "memory": {
           "type": "session",
@@ -726,7 +730,7 @@
       "agent_name": "gap-analysis-agent",
       "tier": "specialist",
       "value_stream": "evaluate",
-      "capability_domain": "Reads IT4IT criteria against maturity backlog; identifies gap heat maps; surfaces environmental scan inputs (SHOULD-0016); §5.1.3 Identify Gaps",
+      "capability_domain": "Reads IT4IT criteria against maturity backlog; identifies gap heat maps; surfaces environmental scan inputs (SHOULD-0016); searches external registries (npm, Smithery, GitHub) to discover candidate tools/dependencies that fill identified gaps; §5.1.3 Identify Gaps",
       "human_supervisor_id": "HR-100",
       "hitl_tier_default": 3,
       "delegates_to": [],
@@ -757,7 +761,9 @@
           "registry_read",
           "backlog_read",
           "criteria_read",
-          "gap_analysis_create"
+          "gap_analysis_create",
+          "external_registry_search",
+          "tool_evaluation_create"
         ],
         "memory": {
           "type": "session",
@@ -808,6 +814,56 @@
           "backend": null
         },
         "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-190",
+      "agent_name": "security-auditor-agent",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Evaluates external tools, MCP servers, npm packages, API integrations, and Docker images against the CoSAI 12-category threat model; performs credential detection, CVE scanning, dependency audit, supply chain verification, and attack surface analysis; produces machine-readable security findings with severity, evidence, and mitigation recommendations; EP-GOVERN-002 Tool Evaluation Pipeline",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "5.1 Evaluate Value Stream",
+        "6.1.3 Enterprise Architecture FC"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.1,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 300000,
+          "per_task_limit": 30000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "tool_evaluation_read",
+          "tool_evaluation_write",
+          "vulnerability_scan",
+          "credential_scan",
+          "dependency_audit",
+          "supply_chain_verify",
+          "finding_create"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
       }
     },
     {
@@ -997,7 +1053,7 @@
       "agent_name": "sbom-management-agent",
       "tier": "specialist",
       "value_stream": "integrate",
-      "capability_domain": "Manages SBOM composition (CycloneDX); validates sbom_component nodes; tracks dependency lifecycle (MUST-0022/0023); §5.3.3 Design & Develop",
+      "capability_domain": "Manages SBOM composition (CycloneDX); validates sbom_component nodes; tracks dependency lifecycle (MUST-0022/0023); runs sandboxed integration trials for candidate external dependencies (install, smoke test, conflict check, performance baseline, rollback verification); §5.3.3 Design & Develop",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 3,
       "delegates_to": [],
@@ -1030,7 +1086,10 @@
           "backlog_read",
           "sbom_read",
           "sbom_write",
-          "dependency_graph_read"
+          "dependency_graph_read",
+          "sandbox_execute",
+          "tool_evaluation_read",
+          "integration_test_create"
         ],
         "memory": {
           "type": "session",
@@ -1680,7 +1739,7 @@
       "agent_name": "architecture-guardrail-agent",
       "tier": "specialist",
       "value_stream": "governance",
-      "capability_domain": "Validates architecture_roadmap_item alignment; checks Architecture Blueprint conformance (MUST-0047-0053); Enterprise Architecture FC §6.1.3",
+      "capability_domain": "Validates architecture_roadmap_item alignment; checks Architecture Blueprint conformance (MUST-0047-0053); evaluates external tool/dependency architecture fit (data flow, trust boundaries, coupling, API surface compatibility); Enterprise Architecture FC §6.1.3",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -1713,7 +1772,9 @@
           "backlog_read",
           "architecture_read",
           "guardrail_validate",
-          "decision_record_create"
+          "decision_record_create",
+          "tool_evaluation_read",
+          "trust_boundary_map"
         ],
         "memory": {
           "type": "session",
@@ -1907,7 +1968,7 @@
       "agent_name": "data-governance-agent",
       "tier": "cross-cutting",
       "value_stream": "cross-cutting",
-      "capability_domain": "Enforces data governance across product lifecycle (MUST-0024); manages data retention records; validates SBOM data lineage; flags privacy compliance triggers",
+      "capability_domain": "Enforces data governance across product lifecycle (MUST-0024); manages data retention records; validates SBOM data lineage; flags privacy compliance triggers; evaluates license compatibility (SPDX), data residency, and regulatory compliance (EU AI Act, ISO 42001) for external tool/dependency adoption",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -1938,7 +1999,10 @@
           "backlog_read",
           "data_governance_validate",
           "retention_record_write",
-          "sbom_read"
+          "sbom_read",
+          "license_check",
+          "regulatory_compliance_check",
+          "tool_evaluation_read"
         ],
         "memory": {
           "type": "none",
