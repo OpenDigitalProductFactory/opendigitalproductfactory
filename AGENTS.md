@@ -256,6 +256,40 @@ If the local dev DB has drifted despite the hook (e.g. SQL was applied directly 
 - Sandbox-only iteration: use `prisma db push` — no migration files needed in the sandbox
 - Large datasets (millions of rows): use a separate background job with batching; do not block the migration transaction
 
+## Agent Tool Grants & Authorization
+
+Agent `tool_grants` in `agent_registry.json` are enforced at runtime. When the AI coworker resolves an agent for a page, `getAvailableTools()` filters by the intersection of:
+
+1. **User role capabilities** — what `PERMISSIONS[capability].roles` allows for the user's `platformRole`
+2. **Agent tool grants** — what the agent's `config_profile.tool_grants` array permits
+
+An agent can only invoke a tool if BOTH the user AND the agent are authorized. This is computed by `agent-grants.ts`, which maps platform tool names to grant categories (e.g., `create_backlog_item` requires grant `backlog_write`).
+
+- The grant mapping lives in `apps/web/lib/agent-grants.ts` (`TOOL_TO_GRANTS` record)
+- Tools not in the mapping are allowed by default (backward-compatible)
+- Agent identity is passed via `agentId` parameter in `getAvailableTools()`
+
+## Action Audit Trail
+
+Every tool call is recorded in the `ToolExecution` table — not just proposals. The insert happens fire-and-forget in `agentic-loop.ts` immediately after `executeTool()` returns.
+
+Each record captures: `agentId`, `userId`, `toolName`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `createdAt`.
+
+This enables queries like:
+- "What did AGT-190 do last week?" — filter `ToolExecution` by `agentId`
+- "Who created backlog items via agents?" — filter by `toolName = create_backlog_item`
+- "What actions were approved by HR-300?" — join `AgentActionProposal` with `decidedById`
+
+The audit log is visible at `/platform/ai/authority` (Tool Execution Log section).
+
+## Tool Evaluation Pipeline
+
+External tools (MCP servers, npm packages, APIs) must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption. The pipeline runs 6 agents (1 new Security Auditor + 5 extended existing agents) through security, architecture, compliance, and integration checks. Approved tools are version-pinned with conditions and scheduled for re-evaluation.
+
+- Spec: `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md`
+- Skill: `/project:tool-evaluation` initiates an evaluation
+- Approved tools tracked in `packages/db/data/approved_tools_registry.json`
+
 ## Design Principles
 
 > **FOR SUBAGENT DISPATCHERS:** When dispatching any subagent that creates or modifies UI components, you MUST include the Theme-Aware Styling rules below in the subagent prompt. Subagents do not read AGENTS.md — they only know what you tell them. Failure to include theming context results in components that ignore the platform's branding system.
