@@ -11,6 +11,9 @@ node_modules
 .env.local
 *.md
 !README.md
+!docs/user-guide/**/*.md
+!docs/user-guide/**/index.md
 docs/superpowers/
 docs/Reference/
 docs/architecture/
+apps/mobile/
