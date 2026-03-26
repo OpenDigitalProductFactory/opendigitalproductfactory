@@ -2012,6 +2012,48 @@
       }
     },
     {
+      "agent_id": "AGT-903",
+      "agent_name": "ux-accessibility-agent",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Reviews UI code and live pages for WCAG 2.2 AA compliance, contrast ratios, font sizing, dark-theme usability, CSS variable usage, keyboard navigation, and semantic HTML. Invokable during code review and Build Studio review phase to flag accessibility regressions. References docs/platform-usability-standards.md and docs/dark-theme-development-guidelines.md.",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 120
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 10000
+        },
+        "tool_grants": [
+          "file_read",
+          "registry_read",
+          "backlog_write",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
       "agent_id": "AGT-S2P-PFB",
       "agent_name": "portfolio-backlog-specialist",
       "tier": "specialist",
