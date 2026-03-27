@@ -34,7 +34,7 @@ export type ToolResult = {
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "create_backlog_item",
-    description: "Create a new backlog item in the ops backlog",
+    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet.",
     inputSchema: {
       type: "object",
       properties: {
@@ -43,6 +43,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         status: { type: "string", enum: ["open", "in-progress"], description: "Initial status" },
         body: { type: "string", description: "Detailed description" },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
+        itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
       required: ["title", "type"],
     },
@@ -855,6 +856,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── HR Lifecycle Tools ─────────────────────────────────────────────────────
   {
+    name: "query_employees",
+    description: "Search and list employee profiles. Use this to find employees by name, email, department, or status. Returns a summary list with employee IDs, names, and departments. Use before create_employee to check if someone already exists.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "Search by name or email (partial match, optional)" },
+        department: { type: "string", description: "Filter by department name or ID (optional)" },
+        status: { type: "string", enum: ["offer", "onboarding", "active", "leave", "suspended", "offboarding", "inactive"], description: "Filter by employment status (optional)" },
+        limit: { type: "number", description: "Max results to return (default 20)" },
+      },
+    },
+    requiredCapability: "view_employee" as CapabilityKey,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "list_departments",
     description: "List all active departments with their IDs and names. Call this before create_employee to find valid department IDs or to present the user with choices.",
     inputSchema: { type: "object", properties: {} },
@@ -1062,6 +1079,127 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_tool_evaluations",
     sideEffect: true,
   },
+
+  // ── EA / Ontology Graph ─────────────────────────────────────────────────────
+  {
+    name: "create_ea_element",
+    description: "Create a new element in the ontology graph. Use when a user describes a new architectural entity (product, component, actor, service, etc). Defaults to refinementLevel=conceptual.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name:             { type: "string", description: "Element name" },
+        elementTypeSlug:  { type: "string", description: "Element type slug (e.g. digital_product, application_component, business_actor, ai_coworker)" },
+        description:      { type: "string", description: "Optional description" },
+        refinementLevel:  { type: "string", enum: ["conceptual", "logical", "actual"], description: "Defaults to conceptual" },
+        itValueStream:    { type: "string", enum: ["evaluate", "explore", "integrate", "deploy", "release", "consume", "operate"] },
+        ontologyRole:     { type: "string", enum: ["governed_thing", "actor", "control", "event_evidence", "information_object", "resource", "offer"] },
+        digitalProductId: { type: "string" },
+        portfolioId:      { type: "string" },
+        properties:       { type: "object" },
+      },
+      required: ["name", "elementTypeSlug"],
+    },
+    requiredCapability: "manage_ea_model",
+    sideEffect: true,
+  },
+  {
+    name: "create_ea_relationship",
+    description: "Connect two ontology graph elements with a typed relationship. Validates against EaRelationshipRule before creating.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fromElementId:        { type: "string" },
+        toElementId:          { type: "string" },
+        relationshipTypeSlug: { type: "string", enum: ["realizes", "depends_on", "assigned_to", "composed_of", "associated_with", "influences", "triggers", "flows_to", "serves", "accesses"] },
+        properties:           { type: "object" },
+      },
+      required: ["fromElementId", "toElementId", "relationshipTypeSlug"],
+    },
+    requiredCapability: "manage_ea_model",
+    sideEffect: true,
+  },
+  {
+    name: "classify_ea_element",
+    description: "Advance an element's IT4IT value stream stage and/or refinement level. Call after the user confirms what stage their architecture work is in.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        elementId:       { type: "string" },
+        itValueStream:   { type: "string", enum: ["evaluate", "explore", "integrate", "deploy", "release", "consume", "operate"] },
+        refinementLevel: { type: "string", enum: ["conceptual", "logical", "actual"] },
+        ontologyRole:    { type: "string", enum: ["governed_thing", "actor", "control", "event_evidence", "information_object", "resource", "offer"] },
+      },
+      required: ["elementId"],
+    },
+    requiredCapability: "manage_ea_model",
+    sideEffect: true,
+  },
+  {
+    name: "query_ontology_graph",
+    description: "Query ontology graph elements with filters. Use before creating elements to avoid duplicates. Returns element IDs, names, types, and refinement levels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        elementTypeSlugs:     { type: "array", items: { type: "string" }, description: "Filter by element type slugs" },
+        refinementLevel:      { type: "string", enum: ["conceptual", "logical", "actual"] },
+        itValueStream:        { type: "string" },
+        ontologyRole:         { type: "string" },
+        digitalProductId:     { type: "string" },
+        portfolioId:          { type: "string" },
+        nameContains:         { type: "string" },
+        includeRelationships: { type: "boolean" },
+        limit:                { type: "number", description: "Max results, default 20" },
+      },
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
+  {
+    name: "run_traversal_pattern",
+    description: "Run a named bounded analysis pattern (e.g. blast_radius, governance_audit, ma_separation) from one or more starting elements. Returns traversal paths and summary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        patternSlug:     { type: "string", enum: ["blast_radius", "governance_audit", "architecture_traceability", "ai_oversight", "cost_rollup", "ma_separation", "service_customer_impact"] },
+        startElementIds: { type: "array", items: { type: "string" } },
+        maxDepth:        { type: "number" },
+      },
+      required: ["patternSlug", "startElementIds"],
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
+  {
+    name: "import_archimate",
+    description: "Import a .archimate XML file from the Archi tool into the ontology graph. All elements are created as draft/conceptual. Max file size: 1 MB base64.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileContentBase64:      { type: "string", description: "Base64-encoded .archimate XML content" },
+        fileName:               { type: "string" },
+        targetPortfolioId:      { type: "string" },
+        targetDigitalProductId: { type: "string" },
+      },
+      required: ["fileContentBase64", "fileName"],
+    },
+    requiredCapability: "manage_ea_model",
+    sideEffect: true,
+  },
+  {
+    name: "export_archimate",
+    description: "Export elements scoped to a portfolio, digital product, or view as a .archimate XML file. Extension types are mapped to standard ArchiMate types with dpf: properties for round-trip fidelity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scopeType: { type: "string", enum: ["view", "portfolio", "digital_product"] },
+        scopeRef:  { type: "string", description: "ID of the view, portfolio, or digital product" },
+        fileName:  { type: "string", description: "Output filename (optional)" },
+      },
+      required: ["scopeType", "scopeRef"],
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -1127,7 +1265,9 @@ export async function executeTool(
 ): Promise<ToolResult> {
   switch (toolName) {
     case "create_backlog_item": {
-      const itemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
+        ? params["itemId"].trim()
+        : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = String(params["status"] ?? "open");
       const item = await prisma.backlogItem.create({
         data: {
@@ -3278,6 +3418,75 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       };
     }
 
+    case "query_employees": {
+      const searchTerm = typeof params["search"] === "string" ? params["search"].trim() : undefined;
+      const deptFilter = typeof params["department"] === "string" ? params["department"].trim() : undefined;
+      const statusFilter = typeof params["status"] === "string" ? params["status"] : undefined;
+      const resultLimit = typeof params["limit"] === "number" ? Math.min(params["limit"], 50) : 20;
+
+      // Resolve department filter to an ID
+      let deptId: string | undefined;
+      if (deptFilter) {
+        const dept = await prisma.department.findFirst({
+          where: {
+            OR: [
+              { id: deptFilter },
+              { departmentId: deptFilter },
+              { name: { contains: deptFilter, mode: "insensitive" } },
+            ],
+          },
+          select: { id: true },
+        });
+        deptId = dept?.id;
+      }
+
+      const employees = await prisma.employeeProfile.findMany({
+        where: {
+          ...(searchTerm ? {
+            OR: [
+              { displayName: { contains: searchTerm, mode: "insensitive" } },
+              { workEmail: { contains: searchTerm, mode: "insensitive" } },
+            ],
+          } : {}),
+          ...(deptId ? { departmentId: deptId } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+        },
+        select: {
+          employeeId: true,
+          displayName: true,
+          workEmail: true,
+          status: true,
+          department: { select: { name: true } },
+          position: { select: { title: true } },
+        },
+        orderBy: { displayName: "asc" },
+        take: resultLimit,
+      });
+
+      if (employees.length === 0) {
+        return { success: true, message: "No employees found matching your criteria.", data: { employees: [] } };
+      }
+
+      const list = employees.map((e) =>
+        `${e.displayName} (${e.employeeId}) — ${e.department?.name ?? "No dept"}, ${e.position?.title ?? "No position"}, ${e.status}${e.workEmail ? ` <${e.workEmail}>` : ""}`
+      ).join("\n");
+
+      return {
+        success: true,
+        message: `${employees.length} employee${employees.length !== 1 ? "s" : ""} found:\n${list}`,
+        data: {
+          employees: employees.map((e) => ({
+            employeeId: e.employeeId,
+            displayName: e.displayName,
+            workEmail: e.workEmail ?? null,
+            status: e.status,
+            department: e.department?.name ?? null,
+            position: e.position?.title ?? null,
+          })),
+        },
+      };
+    }
+
     case "list_departments": {
       const departments = await prisma.department.findMany({
         where: { status: "active" },
@@ -3621,6 +3830,152 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         proposedBy: userId,
       });
       return { success: true, entityId: evalId, message: `Tool evaluation created: ${evalId}. The evaluation pipeline will review this tool for security, architecture fit, compliance, and integration.` };
+    }
+
+    // ── EA / Ontology Graph write tools ──────────────────────────────────────
+
+    case "create_ea_element": {
+      const notation = await prisma.eaNotation.findUnique({ where: { slug: "archimate4" } });
+      if (!notation) return { success: false, message: "ArchiMate 4 notation not seeded", error: "Notation not found" };
+      const et = await prisma.eaElementType.findUnique({
+        where: { notationId_slug: { notationId: notation.id, slug: String(params["elementTypeSlug"] ?? "") } },
+      });
+      if (!et) return { success: false, message: `Element type "${String(params["elementTypeSlug"])}" not found`, error: "Element type not found" };
+      const el = await prisma.eaElement.create({
+        data: {
+          elementTypeId: et.id,
+          name: String(params["name"]),
+          description: typeof params["description"] === "string" ? params["description"] : null,
+          refinementLevel: typeof params["refinementLevel"] === "string" ? params["refinementLevel"] : "conceptual",
+          itValueStream: typeof params["itValueStream"] === "string" ? params["itValueStream"] : null,
+          ontologyRole: typeof params["ontologyRole"] === "string" ? params["ontologyRole"] : null,
+          digitalProductId: typeof params["digitalProductId"] === "string" ? params["digitalProductId"] : null,
+          portfolioId: typeof params["portfolioId"] === "string" ? params["portfolioId"] : null,
+          createdById: userId,
+          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as Record<string, unknown> : {},
+        },
+      });
+      return { success: true, entityId: el.id, message: `Created ${et.name} element "${String(params["name"])}"`, data: { elementId: el.id, elementTypeName: et.name, refinementLevel: el.refinementLevel } };
+    }
+
+    case "create_ea_relationship": {
+      const notation = await prisma.eaNotation.findUnique({ where: { slug: "archimate4" } });
+      if (!notation) return { success: false, message: "ArchiMate 4 notation not seeded", error: "Notation not found" };
+      const relSlug = String(params["relationshipTypeSlug"] ?? "");
+      const rt = await prisma.eaRelationshipType.findUnique({ where: { notationId_slug: { notationId: notation.id, slug: relSlug } } });
+      if (!rt) return { success: false, message: `Relationship type "${relSlug}" not found`, error: "Relationship type not found" };
+      const fromEl = await prisma.eaElement.findUnique({ where: { id: String(params["fromElementId"]) }, select: { elementTypeId: true, name: true } });
+      const toEl   = await prisma.eaElement.findUnique({ where: { id: String(params["toElementId"])   }, select: { elementTypeId: true, name: true } });
+      if (!fromEl || !toEl) return { success: false, message: "One or both elements not found", error: "Element not found" };
+      const rule = await prisma.eaRelationshipRule.findFirst({
+        where: { fromElementTypeId: fromEl.elementTypeId, toElementTypeId: toEl.elementTypeId, relationshipTypeId: rt.id },
+      });
+      if (!rule) return { success: false, message: `Relationship "${relSlug}" not permitted between these element types`, error: "Rule not permitted", data: { validationResult: "blocked" } };
+      const rel = await prisma.eaRelationship.create({
+        data: {
+          fromElementId: String(params["fromElementId"]),
+          toElementId: String(params["toElementId"]),
+          relationshipTypeId: rt.id,
+          notationSlug: "archimate4",
+          createdById: userId,
+          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as Record<string, unknown> : {},
+        },
+      });
+      return { success: true, entityId: rel.id, message: `Created "${relSlug}" relationship`, data: { relationshipId: rel.id, fromElementName: fromEl.name, toElementName: toEl.name, validationResult: "allowed" } };
+    }
+
+    case "classify_ea_element": {
+      const data: Record<string, unknown> = {};
+      if (typeof params["itValueStream"] === "string")   data["itValueStream"]   = params["itValueStream"];
+      if (typeof params["refinementLevel"] === "string") data["refinementLevel"] = params["refinementLevel"];
+      if (typeof params["ontologyRole"] === "string")    data["ontologyRole"]    = params["ontologyRole"];
+      if (Object.keys(data).length === 0) return { success: false, message: "No classification fields provided", error: "Nothing to update" };
+      const updated = await prisma.eaElement.update({ where: { id: String(params["elementId"]) }, data });
+      return { success: true, entityId: updated.id, message: `Classified element ${updated.id}`, data: { elementId: updated.id, refinementLevel: updated.refinementLevel, itValueStream: updated.itValueStream } };
+    }
+
+    // ── EA / Ontology Graph read tools ───────────────────────────────────────
+
+    case "query_ontology_graph": {
+      const notation = await prisma.eaNotation.findUnique({ where: { slug: "archimate4" } });
+      if (!notation) return { success: false, message: "ArchiMate 4 notation not seeded", error: "Notation not found" };
+      const where: Record<string, unknown> = {};
+      const slugs = Array.isArray(params["elementTypeSlugs"]) ? params["elementTypeSlugs"] as string[] : [];
+      if (slugs.length > 0) {
+        const ets = await prisma.eaElementType.findMany({ where: { notationId: notation.id, slug: { in: slugs } }, select: { id: true } });
+        where["elementTypeId"] = { in: ets.map(et => et.id) };
+      }
+      if (typeof params["refinementLevel"] === "string") where["refinementLevel"] = params["refinementLevel"];
+      if (typeof params["itValueStream"] === "string") where["itValueStream"] = params["itValueStream"];
+      if (typeof params["ontologyRole"] === "string") where["ontologyRole"] = params["ontologyRole"];
+      if (typeof params["digitalProductId"] === "string") where["digitalProductId"] = params["digitalProductId"];
+      if (typeof params["portfolioId"] === "string") where["portfolioId"] = params["portfolioId"];
+      if (typeof params["nameContains"] === "string") where["name"] = { contains: params["nameContains"], mode: "insensitive" };
+      const limit = typeof params["limit"] === "number" ? Math.min(params["limit"], 50) : 20;
+      const includeRels = params["includeRelationships"] === true;
+      const elements = await prisma.eaElement.findMany({
+        where,
+        take: limit,
+        include: {
+          elementType: { select: { slug: true, name: true } },
+          ...(includeRels ? { fromRelationships: { include: { relationshipType: { select: { slug: true } }, toElement: { select: { id: true, name: true } } } } } : {}),
+        },
+      });
+      const total = await prisma.eaElement.count({ where });
+      return {
+        success: true,
+        message: `Found ${elements.length} elements (${total} total)`,
+        data: {
+          elements: elements.map(el => ({
+            elementId: el.id,
+            name: el.name,
+            elementTypeName: el.elementType.name,
+            refinementLevel: el.refinementLevel,
+            itValueStream: el.itValueStream,
+            ontologyRole: el.ontologyRole,
+          })),
+          totalCount: total,
+        },
+      };
+    }
+
+    case "run_traversal_pattern": {
+      const { runTraversalPattern } = await import("@/lib/ea/traversal-executor");
+      const result = await runTraversalPattern({
+        patternSlug: String(params["patternSlug"] ?? ""),
+        startElementIds: Array.isArray(params["startElementIds"]) ? params["startElementIds"] as string[] : [],
+        maxDepth: typeof params["maxDepth"] === "number" ? params["maxDepth"] : 6,
+      });
+      if (!result.ok) return { success: false, message: result.error ?? "Traversal failed", error: result.error };
+      return { success: true, message: `Traversal complete: ${result.data!.summary.nodesTraversed} nodes`, data: result.data as Record<string, unknown> };
+    }
+
+    // ── EA file tools ─────────────────────────────────────────────────────────
+
+    case "import_archimate": {
+      const { importArchimateFile } = await import("@/lib/actions/ea-archimate");
+      const fileContent = String(params["fileContentBase64"] ?? "");
+      const result = await importArchimateFile({
+        fileContentBase64: fileContent,
+        fileName: String(params["fileName"] ?? "import.archimate"),
+        userId,
+        targetPortfolioId: typeof params["targetPortfolioId"] === "string" ? params["targetPortfolioId"] : undefined,
+        targetDigitalProductId: typeof params["targetDigitalProductId"] === "string" ? params["targetDigitalProductId"] : undefined,
+      });
+      if (!result.ok) return { success: false, message: result.error ?? "Import failed", error: result.error };
+      return { success: true, message: `Imported ${result.data!.elementsCreated} elements, ${result.data!.relationshipsCreated} relationships`, data: result.data as Record<string, unknown> };
+    }
+
+    case "export_archimate": {
+      const { exportArchimateFile } = await import("@/lib/actions/ea-archimate");
+      const result = await exportArchimateFile({
+        scopeType: String(params["scopeType"] ?? "") as "view" | "portfolio" | "digital_product",
+        scopeRef: String(params["scopeRef"] ?? ""),
+        fileName: typeof params["fileName"] === "string" ? params["fileName"] : undefined,
+        userId,
+      });
+      if (!result.ok) return { success: false, message: result.error ?? "Export failed", error: result.error };
+      return { success: true, message: `Exported ${result.data!.elementCount} elements to ${result.data!.fileName}`, data: result.data as Record<string, unknown> };
     }
 
     default: {
