@@ -3852,7 +3852,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           digitalProductId: typeof params["digitalProductId"] === "string" ? params["digitalProductId"] : null,
           portfolioId: typeof params["portfolioId"] === "string" ? params["portfolioId"] : null,
           createdById: userId,
-          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as Record<string, unknown> : {},
+          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as import("@dpf/db").Prisma.InputJsonValue : {},
         },
       });
       return { success: true, entityId: el.id, message: `Created ${et.name} element "${String(params["name"])}"`, data: { elementId: el.id, elementTypeName: et.name, refinementLevel: el.refinementLevel } };
@@ -3878,7 +3878,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           relationshipTypeId: rt.id,
           notationSlug: "archimate4",
           createdById: userId,
-          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as Record<string, unknown> : {},
+          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as import("@dpf/db").Prisma.InputJsonValue : {},
         },
       });
       return { success: true, entityId: rel.id, message: `Created "${relSlug}" relationship`, data: { relationshipId: rel.id, fromElementName: fromEl.name, toElementName: toEl.name, validationResult: "allowed" } };
