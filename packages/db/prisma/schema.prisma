@@ -51,8 +51,9 @@ model User {
   billApprovals                BillApproval[]           @relation("BillApprovalResponses")
   recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
   expenseApprovals             ExpenseClaim[]           @relation("ExpenseApprovals")
-  platformSetupProgress        PlatformSetupProgress?   @relation("UserSetupProgress")
+  platformSetupProgress        PlatformSetupProgress?        @relation("UserSetupProgress")
   taskRuns                     TaskRun[]
+  businessModelRoleAssignments BusinessModelRoleAssignment[]
 }
 
 model UserGroup {
@@ -459,30 +460,90 @@ model Portfolio {
 }
 
 model DigitalProduct {
-  id                     String                  @id @default(cuid())
-  productId              String                  @unique
-  name                   String
-  portfolioId            String?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  taxonomyNodeId         String?
-  lifecycleStage         String                  @default("plan")
-  lifecycleStatus        String                  @default("draft")
-  version                String                  @default("1.0.0")
-  description            String?
-  observationConfig      Json?
-  backlogItems           BacklogItem[]
-  manifests              CodebaseManifest[]
-  portfolio              Portfolio?              @relation(fields: [portfolioId], references: [id])
-  taxonomyNode           TaxonomyNode?           @relation(fields: [taxonomyNodeId], references: [id])
-  eaElements             EaElement[]
-  featureBuilds          FeatureBuild[]
-  inventoryEntities      InventoryEntity[]
-  portfolioQualityIssues PortfolioQualityIssue[]
-  versions               ProductVersion[]
-  serviceOfferings       ServiceOffering[]
-  quoteLineItems         QuoteLineItem[]
-  changeItems            ChangeItem[]            @relation("ChangeItemProduct")
+  id                           String                        @id @default(cuid())
+  productId                    String                        @unique
+  name                         String
+  portfolioId                  String?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  taxonomyNodeId               String?
+  lifecycleStage               String                        @default("plan")
+  lifecycleStatus              String                        @default("draft")
+  version                      String                        @default("1.0.0")
+  description                  String?
+  observationConfig            Json?
+  backlogItems                 BacklogItem[]
+  manifests                    CodebaseManifest[]
+  portfolio                    Portfolio?                    @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                 TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
+  eaElements                   EaElement[]
+  featureBuilds                FeatureBuild[]
+  inventoryEntities            InventoryEntity[]
+  portfolioQualityIssues       PortfolioQualityIssue[]
+  versions                     ProductVersion[]
+  serviceOfferings             ServiceOffering[]
+  quoteLineItems               QuoteLineItem[]
+  changeItems                  ChangeItem[]                  @relation("ChangeItemProduct")
+  businessModels               ProductBusinessModel[]
+  businessModelRoleAssignments BusinessModelRoleAssignment[]
+}
+
+model BusinessModel {
+  id          String                 @id @default(cuid())
+  modelId     String                 @unique
+  name        String
+  description String?
+  isBuiltIn   Boolean                @default(false)
+  status      String                 @default("active")
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  roles       BusinessModelRole[]
+  products    ProductBusinessModel[]
+}
+
+model BusinessModelRole {
+  id              String                        @id @default(cuid())
+  roleId          String                        @unique
+  name            String
+  authorityDomain String?
+  it4itAlignment  String?
+  hitlTierDefault Int                           @default(2)
+  escalatesTo     String?
+  isBuiltIn       Boolean                       @default(false)
+  status          String                        @default("active")
+  businessModelId String
+  businessModel   BusinessModel                 @relation(fields: [businessModelId], references: [id], onDelete: Cascade)
+  assignments     BusinessModelRoleAssignment[]
+
+  @@index([businessModelId])
+}
+
+model ProductBusinessModel {
+  id              String        @id @default(cuid())
+  productId       String
+  businessModelId String
+  assignedAt      DateTime      @default(now())
+  product         DigitalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessModel   BusinessModel  @relation(fields: [businessModelId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, businessModelId])
+  @@index([businessModelId])
+}
+
+model BusinessModelRoleAssignment {
+  id                  String            @id @default(cuid())
+  userId              String
+  businessModelRoleId String
+  productId           String
+  assignedAt          DateTime          @default(now())
+  revokedAt           DateTime?
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessModelRole   BusinessModelRole @relation(fields: [businessModelRoleId], references: [id], onDelete: Cascade)
+  product             DigitalProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessModelRoleId, productId])
+  @@index([productId])
+  @@index([userId])
 }
 
 model ProductVersion {
@@ -2174,15 +2235,16 @@ model PlatformConfig {
 }
 
 model EaNotation {
-  id             String               @id @default(cuid())
-  slug           String               @unique
-  name           String
-  version        String
-  dqRules        EaDqRule[]
-  elementTypes   EaElementType[]
-  relTypes       EaRelationshipType[]
-  structureRules EaStructureRule[]
-  views          EaView[]
+  id               String               @id @default(cuid())
+  slug             String               @unique
+  name             String
+  version          String
+  dqRules          EaDqRule[]
+  elementTypes     EaElementType[]
+  relTypes         EaRelationshipType[]
+  structureRules   EaStructureRule[]
+  traversalPatterns EaTraversalPattern[]
+  views            EaView[]
 }
 
 model EaReferenceModel {
@@ -2305,8 +2367,12 @@ model EaElementType {
   description            String?
   validLifecycleStages   String[]
   validLifecycleStatuses String[]
+  isExtension            Boolean              @default(false)
+  archimateExportSlug    String?
+  ontologyCategory       String?
   dqRules                EaDqRule[]
   elements               EaElement[]
+  frameworkMappings      EaFrameworkMapping[]
   notation               EaNotation           @relation(fields: [notationId], references: [id])
   fromRules              EaRelationshipRule[] @relation("FromType")
   toRules                EaRelationshipRule[] @relation("ToType")
@@ -2369,6 +2435,9 @@ model EaElement {
   portfolioId       String?
   taxonomyNodeId    String?
   syncedAt          DateTime?
+  refinementLevel   String?
+  itValueStream     String?
+  ontologyRole      String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   conformanceIssues EaConformanceIssue[]
@@ -2512,6 +2581,42 @@ model EaSnapshot {
   relationshipCount Int
   graphJson         Json
   view              EaView    @relation(fields: [viewId], references: [id])
+}
+
+model EaTraversalPattern {
+  id                 String     @id @default(cuid())
+  notationId         String
+  slug               String
+  name               String
+  description        String?
+  patternType        String
+  steps              Json
+  forbiddenShortcuts Json       @default("[]")
+  status             String     @default("active")
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  notation           EaNotation @relation(fields: [notationId], references: [id])
+
+  @@unique([notationId, slug])
+  @@index([notationId, patternType])
+}
+
+model EaFrameworkMapping {
+  id                   String        @id @default(cuid())
+  elementTypeId        String
+  frameworkSlug        String
+  nativeConceptName    String
+  mappingType          String
+  semanticDisparity    String?
+  influenceOpportunity String?
+  exchangeOpportunity  Boolean       @default(false)
+  notes                String?
+  createdAt            DateTime      @default(now())
+  elementType          EaElementType @relation(fields: [elementTypeId], references: [id])
+
+  @@unique([elementTypeId, frameworkSlug])
+  @@index([frameworkSlug])
+  @@index([elementTypeId])
 }
 
 model OnboardingChecklist {
