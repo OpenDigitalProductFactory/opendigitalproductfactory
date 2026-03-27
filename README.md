@@ -263,7 +263,16 @@ The platform has two deployment models and one shared architectural core:
 - **Native developer mode** - the databases and local AI run in Docker, while the app runs locally via `pnpm dev`
 - **Sandbox build loop** - isolated, on-demand containers support governed feature generation, preview, and testing
 
-For a deeper architecture walkthrough, see [docs/architecture/platform-overview.md](h:\OpenDigitalProductFactory\docs\architecture\platform-overview.md).
+### Trusted AI Kernel (TAK)
+
+The platform's AI governance layer is formally documented as the **Trusted AI Kernel** -- the layered enforcement, routing, audit, and immutable directive architecture that makes it safe to let AI agents act on behalf of humans.
+
+- **[TAK Architecture Document (Word)](docs/architecture/Trusted-AI-Kernel-Architecture.docx)** -- full architecture reference with diagrams, tables, and end-to-end flow documentation
+- **[TAK Architecture (Markdown)](docs/architecture/trusted-ai-kernel.md)** -- same content in markdown for in-repo reading
+
+Regenerate the Word document after edits: `pnpm docs:tak`
+
+For the platform runtime and deployment architecture, see [docs/architecture/platform-overview.md](docs/architecture/platform-overview.md).
 
 ### Platform Overview
 
