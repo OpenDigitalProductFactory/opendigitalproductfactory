@@ -2,6 +2,18 @@
 
 import { useState } from "react";
 
+export type BmrRoleRow = {
+  productId: string;
+  productName: string;
+  modelName: string;
+  isBuiltIn: boolean;
+  roleName: string;
+  authorityDomain: string | null;
+  hitlTierDefault: number;
+  escalatesTo: string | null;
+  assignee: string | null;
+};
+
 type AuthorityMatrixProps = {
   agents: Array<{
     agentId: string;
@@ -10,6 +22,7 @@ type AuthorityMatrixProps = {
     valueStream: string;
     grants: string[];
   }>;
+  bmrRows?: BmrRoleRow[];
 };
 
 const GRANT_CATEGORIES: Record<string, string[]> = {
@@ -39,7 +52,23 @@ function getMatchingGrants(grants: string[], category: string): string[] {
   return categoryGrants.filter((g) => grants.includes(g));
 }
 
-export function AuthorityMatrixPanel({ agents }: AuthorityMatrixProps) {
+const HITL_COLOURS: Record<number, string> = {
+  0: "#ef4444",
+  1: "#f97316",
+  2: "#38bdf8",
+  3: "#4ade80",
+};
+
+const ESCALATION_LABELS: Record<string, string> = {
+  "HR-000": "CDIO",
+  "HR-100": "Portfolio Mgr",
+  "HR-200": "Product Mgr",
+  "HR-300": "Architect",
+  "HR-400": "ITFM Dir",
+  "HR-500": "Ops Mgr",
+};
+
+export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
 
   if (agents.length === 0) {
@@ -304,6 +333,105 @@ export function AuthorityMatrixPanel({ agents }: AuthorityMatrixProps) {
         </div>
         <span style={{ marginLeft: "auto" }}>Click a row to expand grant details</span>
       </div>
+
+      {/* BMR Role Coverage section */}
+      {bmrRows && bmrRows.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--dpf-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            marginBottom: 8,
+          }}>
+            Business Model Role Coverage
+          </div>
+
+          {/* Header */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr 1fr 60px 80px 1fr",
+            gap: 8,
+            padding: "5px 8px",
+            fontSize: 9,
+            fontWeight: 600,
+            color: "var(--dpf-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            borderBottom: "1px solid var(--dpf-border)",
+          }}>
+            <span>Product</span>
+            <span>Business Model</span>
+            <span>Role</span>
+            <span>Authority Domain</span>
+            <span>HITL</span>
+            <span>Escalates To</span>
+            <span>Assigned To</span>
+          </div>
+
+          {/* Rows */}
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {bmrRows.map((row, i) => {
+              const tierColour = HITL_COLOURS[row.hitlTierDefault] ?? "#8888a0";
+              const escLabel = row.escalatesTo
+                ? (ESCALATION_LABELS[row.escalatesTo] ?? row.escalatesTo)
+                : "—";
+              return (
+                <div
+                  key={`${row.productId}-${row.roleName}-${i}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr 1fr 60px 80px 1fr",
+                    gap: 8,
+                    padding: "5px 8px",
+                    fontSize: 10,
+                    color: "var(--dpf-text)",
+                    borderBottom: "1px solid var(--dpf-border)",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.productName}
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {row.modelName}
+                    </span>
+                    {row.isBuiltIn && (
+                      <span style={{ fontSize: 8, color: "#7c8cf8", background: "#7c8cf820", borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
+                        built-in
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.roleName}
+                  </span>
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.authorityDomain ?? "—"}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      background: `${tierColour}20`,
+                      color: tierColour,
+                      borderRadius: 3,
+                      padding: "1px 5px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {row.hitlTierDefault}
+                  </span>
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escLabel}</span>
+                  <span style={{ fontSize: 9, color: row.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: row.assignee ? "normal" : "italic" }}>
+                    {row.assignee ?? "unassigned"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

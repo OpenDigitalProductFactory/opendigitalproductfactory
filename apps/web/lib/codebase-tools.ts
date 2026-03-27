@@ -19,6 +19,7 @@ const DEV_ONLY_ERROR = "Codebase access is only available on dev instances. Prod
 
 async function getProjectRoot(): Promise<string> {
   const { resolve } = await import(/* turbopackIgnore: true */ "path");
+  if (process.env.PROJECT_ROOT) return resolve(process.env.PROJECT_ROOT);
   return resolve(process.cwd(), "..", "..");
 }
 
@@ -208,7 +209,14 @@ export async function writeProjectFile(
 
   try {
     const { writeFileSync, existsSync, mkdirSync } = await import(/* turbopackIgnore: true */ "fs");
-    const { dirname } = await import(/* turbopackIgnore: true */ "path");
+    const { dirname, join } = await import(/* turbopackIgnore: true */ "path");
+
+    // Verify the project root has source code — prevents silently writing to ephemeral container storage
+    const projectRoot = await getProjectRoot();
+    if (!existsSync(join(projectRoot, "package.json"))) {
+      return { error: "Source code is not accessible from this environment. Mount the project source into the container (PROJECT_ROOT env var) or run the portal outside Docker." };
+    }
+
     const dir = dirname(resolved.path);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });

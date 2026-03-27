@@ -31,6 +31,11 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AUTH-02 | Click Employee & Admin, submit login form | Redirected to `/workspace`, HR-000 role shown |
 | AUTH-03 | Fresh install (no Organization in DB) | Redirected to `/setup` onboarding wizard |
 | AUTH-04 | Sign out and sign back in | Session restored, workspace loads |
+| SETUP-01 | During branding step, enter a `.co.uk` URL and click Analyze | `importBrandFromUrl` writes `suggestedCurrency: "GBP"` and `suggestedCountryCode: "GB"` to setup context |
+| SETUP-02 | During branding step, enter a `.de` URL and click Analyze | `suggestedCurrency: "EUR"`, `suggestedCountryCode: "DE"` written to context |
+| SETUP-03 | During branding step, enter a dental clinic URL and click Analyze | `suggestedArchetypeId: "dental-practice"` written to context (verify in DB or via storefront setup banner) |
+| SETUP-04 | During branding step, enter a generic `.com` corporate URL with no industry/location signals | No suggestion fields written to context; storefront wizard renders with no banner |
+| SETUP-05 | **Incomplete information test (AI coworker path):** Ask COO to analyze branding without providing a URL | Agent asks for the URL rather than proceeding |
 
 ## Phase 2: Workspace Dashboard
 
@@ -138,6 +143,11 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | STORE-04 | Select date and time slot | Slot selection shows provider and times |
 | STORE-05 | Fill booking form and confirm | Booking confirmed with reference number |
 | STORE-06 | Check timezone shown | Should match org timezone (America/Chicago default) |
+| STORE-07 | Navigate to `/admin/storefront/setup` after a `.de` branding URL was analyzed | Suggestion banner visible above archetype grid; detected archetype card has accent border and "Suggested for you" label |
+| STORE-08 | Proceed to Step 3 (identity) after URL branding | Business name field pre-filled with detected company name; "Pre-filled from your branding URL" hint shown |
+| STORE-09 | Proceed to Step 4 (financial setup) after `.de` branding URL | Currency selector pre-set to EUR; "Pre-selected based on your website location" note shown |
+| STORE-10 | Change the currency in Step 4 away from the suggestion | Selection updates freely; no error; the changed value is saved |
+| STORE-11 | Navigate to `/admin/storefront/setup` without having used a branding URL | No suggestion banner shown; no pre-fills; archetype grid renders normally |
 
 ## Phase 12: AI Coworker Cross-Cutting
 

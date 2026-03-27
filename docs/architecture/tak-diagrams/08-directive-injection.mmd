@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart TB
+    subgraph SOURCES["Directive Sources"]
+        PD["Platform Directives\nNever fabricate\nNever exceed grants\nAlways propose side-effects"]
+        RDC["Route Domain Context\nDomain-specific guidance\nRequired fields\nBehavioral boundaries"]
+        SC["Sensitivity Constraints\npublic | internal\nconfidential | restricted"]
+        AI_ID["Agent Identity\nName, role, value stream\nCanonical greeting"]
+        DPC["Directive Policy Class\nApproval mode\nRisk band\nConfig constraints"]
+    end
+
+    ASM["System Prompt\nAssembly"]
+
+    subgraph IMMUTABLE["Immutable at Runtime"]
+        SP["Injected System Prompt\nAgent cannot override\nUser cannot override\nConversation cannot override"]
+    end
+
+    LOOP["Agentic Loop\nBegins"]
+
+    PD --> ASM
+    RDC --> ASM
+    SC --> ASM
+    AI_ID --> ASM
+    DPC --> ASM
+    ASM --> SP --> LOOP
+
+    subgraph DELEGATION["On Delegation to Agent B"]
+        RECOMPUTE["Recompute directives\nfrom Agent B's own:\n- Identity\n- Grants\n- Inherited sensitivity"]
+        FRESH["Fresh system prompt\nNo delegator context\nNo prompt leakage"]
+        RECOMPUTE --> FRESH
+    end
+
+    LOOP -.->|delegates| RECOMPUTE
+
+    style PD fill:#b71c1c,color:#fff
+    style RDC fill:#1565c0,color:#fff
+    style SC fill:#e65100,color:#fff
+    style AI_ID fill:#2e7d32,color:#fff
+    style DPC fill:#6a1b9a,color:#fff
+    style SP fill:#0d47a1,color:#fff
+    style RECOMPUTE fill:#f57f17,color:#000

@@ -28,7 +28,8 @@ export type CapabilityKey =
   | "view_finance"
   | "manage_finance"
   | "manage_tool_evaluations"
-  | "approve_tool_evaluations";
+  | "approve_tool_evaluations"
+  | "manage_business_models";
 
 type Permission = {
   roles: PlatformRoleId[];
@@ -59,6 +60,7 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_finance:              { roles: ["HR-000", "HR-200"] },
   manage_tool_evaluations:     { roles: ["HR-000", "HR-300"] },
   approve_tool_evaluations:    { roles: ["HR-000", "HR-300"] },
+  manage_business_models:      { roles: ["HR-000", "HR-200", "HR-300"] },
 };
 
 export type UserContext = {

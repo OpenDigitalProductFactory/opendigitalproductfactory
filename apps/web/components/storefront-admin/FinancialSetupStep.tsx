@@ -9,17 +9,18 @@ import { applyFinancialProfile } from "@/lib/actions/financial-setup";
 type Props = {
   archetypeSlug: string;
   archetypeName: string;
+  suggestedCurrency?: string | null;
   onComplete: () => void;
 };
 
 // ─── FinancialSetupStep ────────────────────────────────────────────────────────
 
-export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }: Props) {
+export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurrency, onComplete }: Props) {
   // Load profile defaults (client-safe: pure function, no DB call)
   const profile = getFinancialProfile(archetypeSlug);
 
   const [vatRegistered, setVatRegistered] = useState<boolean>(profile?.vatRegistered ?? false);
-  const [baseCurrency, setBaseCurrency] = useState<string>(profile?.defaultCurrency ?? "GBP");
+  const [baseCurrency, setBaseCurrency] = useState<string>(suggestedCurrency ?? profile?.defaultCurrency ?? "GBP");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -158,6 +159,10 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
               minWidth: 160,
             }}
           >
+            {/* Ensure the suggested currency appears even if not in the standard list */}
+            {suggestedCurrency && !["GBP","USD","EUR","CAD","AUD","NZD","CHF","SEK","NOK","DKK","JPY","SGD","HKD","ZAR","AED","INR","BRL","MXN","PLN","CZK"].includes(suggestedCurrency) && (
+              <option value={suggestedCurrency}>{suggestedCurrency}</option>
+            )}
             <option value="GBP">GBP — British Pound</option>
             <option value="USD">USD — US Dollar</option>
             <option value="EUR">EUR — Euro</option>
@@ -179,6 +184,11 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, onComplete }:
             <option value="PLN">PLN — Polish Zloty</option>
             <option value="CZK">CZK — Czech Koruna</option>
           </select>
+          {suggestedCurrency && (
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+              Pre-selected based on your website location — change if needed
+            </div>
+          )}
         </label>
 
         {error && (

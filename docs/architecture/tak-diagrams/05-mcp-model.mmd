@@ -1,0 +1,48 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart LR
+    subgraph EXTERNAL_CLIENTS["External MCP Clients"]
+        CLI["CLI Tool"]
+        IDE["IDE Extension"]
+        OTHER["Other Agent"]
+    end
+
+    subgraph PLATFORM["DPF Platform (TAK Kernel)"]
+        direction TB
+        SERVER["MCP Server\nPOST /api/mcp/tools\nPOST /api/mcp/call"]
+        TOOLS["100+ Platform Tools\nBacklog | Portfolio | Build\nDeploy | HR | Compliance"]
+        CLIENT["MCP Client\nNamespace router"]
+        AUTH_CHECK["TAK Authority\nCheck"]
+
+        SERVER --> AUTH_CHECK --> TOOLS
+        CLIENT --> AUTH_CHECK
+    end
+
+    subgraph EXTERNAL_SERVERS["External MCP Servers"]
+        SLACK["slack:\nsend_message"]
+        JIRA["jira:\ncreate_issue"]
+        GH["github:\ncreate_pr"]
+    end
+
+    subgraph EVAL["Tool Evaluation\nPipeline"]
+        SEC["Security\nAuditor"]
+        ARCH["Architecture\nReviewer"]
+        COMP["Compliance\nChecker"]
+        VERDICT["Verdict"]
+        SEC --> VERDICT
+        ARCH --> VERDICT
+        COMP --> VERDICT
+    end
+
+    CLI --> SERVER
+    IDE --> SERVER
+    OTHER --> SERVER
+    CLIENT --> SLACK
+    CLIENT --> JIRA
+    CLIENT --> GH
+    EVAL -.->|"must pass\nbefore connect"| EXTERNAL_SERVERS
+
+    style SERVER fill:#1565c0,color:#fff
+    style TOOLS fill:#2e7d32,color:#fff
+    style CLIENT fill:#1976d2,color:#fff
+    style AUTH_CHECK fill:#f57f17,color:#000
+    style VERDICT fill:#6a1b9a,color:#fff

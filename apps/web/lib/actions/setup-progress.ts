@@ -128,3 +128,30 @@ export async function linkSetupToOrg(progressId: string, orgId: string) {
     data: { organizationId: orgId },
   });
 }
+
+/** Read the setup context from the active (incomplete) setup record. Returns null if no active setup. */
+export async function getSetupContext(): Promise<SetupContext | null> {
+  const progress = await prisma.platformSetupProgress.findFirst({
+    where: { completedAt: null },
+    orderBy: { createdAt: "desc" },
+    select: { context: true },
+  });
+  if (!progress) return null;
+  return (progress.context as SetupContext) ?? null;
+}
+
+/** Merge a partial context update into the active (incomplete) setup record. No-op if no active setup. */
+export async function updateSetupContext(patch: Partial<SetupContext>): Promise<void> {
+  const progress = await prisma.platformSetupProgress.findFirst({
+    where: { completedAt: null },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, context: true },
+  });
+  if (!progress) return;
+
+  const merged = { ...(progress.context as SetupContext), ...patch };
+  await prisma.platformSetupProgress.update({
+    where: { id: progress.id },
+    data: { context: merged },
+  });
+}

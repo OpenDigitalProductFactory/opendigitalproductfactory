@@ -1,0 +1,373 @@
+npm warn Unknown project config "node-linker". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[global-setup] Login successful, auth state saved
+
+Running 43 tests using 1 worker
+
+[1A[2K[1/43] [chromium] › e2e\01-teamlogicit.spec.ts:36:7 › Suite 1: TeamLogicIT › 1.1 Login as admin
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:36:7 › Suite 1: TeamLogicIT › 1.1 Login as admin
+[reset] Test data cleared
+
+[1A[2K[seed] Test products seeded (15 attempted)
+
+[1A[2K[2/43] [chromium] › e2e\01-teamlogicit.spec.ts:42:7 › Suite 1: TeamLogicIT › 1.2 Workspace loads
+[1A[2K[3/43] [chromium] › e2e\01-teamlogicit.spec.ts:50:7 › Suite 1: TeamLogicIT › 1.3 AI Coworker: service delivery roles for managed IT
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:50:7 › Suite 1: TeamLogicIT › 1.3 AI Coworker: service delivery roles for managed IT
+[coworker] Prompt: "What service delivery roles does a managed IT service provid..."
+[coworker] Response: "COOA managed IT service provider typically needs the following service delivery roles:
+
+Service Desk (Help Desk) Technic..."
+
+[1A[2K[4/43] [chromium] › e2e\01-teamlogicit.spec.ts:63:7 › Suite 1: TeamLogicIT › 1.4 Create product: TLI-IT Support Services
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:63:7 › Suite 1: TeamLogicIT › 1.4 Create product: TLI-IT Support Services
+[products] No create button found on /portfolio/products_and_services_sold for "TLI-IT Support Services" — using SQL fallback
+
+[1A[2K[products] SQL created "TLI-IT Support Services" in portfolio "products_and_services_sold"
+
+[1A[2K[5/43] [chromium] › e2e\01-teamlogicit.spec.ts:70:7 › Suite 1: TeamLogicIT › 1.5 Create product: TLI-Network Infrastructure Management
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:70:7 › Suite 1: TeamLogicIT › 1.5 Create product: TLI-Network Infrastructure Management
+[products] No create button found on /portfolio/products_and_services_sold for "TLI-Network Infrastructure Management" — using SQL fallback
+
+[1A[2K[products] SQL created "TLI-Network Infrastructure Management" in portfolio "products_and_services_sold"
+
+[1A[2K[6/43] [chromium] › e2e\01-teamlogicit.spec.ts:76:7 › Suite 1: TeamLogicIT › 1.6 Create product: TLI-Cybersecurity Advisory
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:76:7 › Suite 1: TeamLogicIT › 1.6 Create product: TLI-Cybersecurity Advisory
+[products] No create button found on /portfolio/products_and_services_sold for "TLI-Cybersecurity Advisory" — using SQL fallback
+
+[1A[2K[products] SQL created "TLI-Cybersecurity Advisory" in portfolio "products_and_services_sold"
+
+[1A[2K[7/43] [chromium] › e2e\01-teamlogicit.spec.ts:82:7 › Suite 1: TeamLogicIT › 1.7 Navigate to portfolio: Products & Services Sold
+[1A[2K[8/43] [chromium] › e2e\01-teamlogicit.spec.ts:90:7 › Suite 1: TeamLogicIT › 1.8 Navigate to TLI product detail page
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:90:7 › Suite 1: TeamLogicIT › 1.8 Navigate to TLI product detail page
+[products] Product detail URL: http://localhost:3000/portfolio/product/42bcd3a4-8099-4516-a756-df7b87f7b416
+
+[1A[2K[9/43] [chromium] › e2e\01-teamlogicit.spec.ts:97:7 › Suite 1: TeamLogicIT › 1.9 Assign bm-services to TLI-IT Support Services
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:97:7 › Suite 1: TeamLogicIT › 1.9 Assign bm-services to TLI-IT Support Services
+[products] Product detail URL: http://localhost:3000/portfolio/product/42bcd3a4-8099-4516-a756-df7b87f7b416
+
+[1A[2K[10/43] [chromium] › e2e\01-teamlogicit.spec.ts:109:7 › Suite 1: TeamLogicIT › 1.10 Role Assignments panel visible after bm-services assignment
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:109:7 › Suite 1: TeamLogicIT › 1.10 Role Assignments panel visible after bm-services assignment
+[products] Product detail URL: http://localhost:3000/portfolio/product/42bcd3a4-8099-4516-a756-df7b87f7b416
+
+[1A[2K[roles] "Engagement Manager" visible: true
+
+[1A[2K[roles] "Service Delivery Manager" visible: true
+
+[1A[2K[roles] "Resource & Capacity Planner" visible: true
+
+[1A[2K[roles] "Knowledge Manager" visible: true
+
+[1A[2K[11/43] [chromium] › e2e\01-teamlogicit.spec.ts:126:7 › Suite 1: TeamLogicIT › 1.11 API: GET /api/v1/business-models returns bm-services
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:126:7 › Suite 1: TeamLogicIT › 1.11 API: GET /api/v1/business-models returns bm-services
+[api] Found 8 models; bm-services: {"id":"cmn8930a507lm6ypg3qrhzx81","modelId":"bm-services","name":"Professional Services / Consulting","description":"Time-and-materials or fixed-scope delivery of expert knowledge and outcomes","isBuiltIn":true,"status":"active","roleCount":4,"productCount":1,"createdAt":"2026-03-27T01:56:30.125Z","updatedAt":"2026-03-27T01:56:30.125Z"}
+
+[1A[2K[12/43] [chromium] › e2e\01-teamlogicit.spec.ts:136:7 › Suite 1: TeamLogicIT › 1.12 AI Coworker: SLA framework for IT engagement model
+[1A[2K[chromium] › e2e\01-teamlogicit.spec.ts:136:7 › Suite 1: TeamLogicIT › 1.12 AI Coworker: SLA framework for IT engagement model
+[coworker] Prompt: "What SLA framework suits a managed IT engagement model?..."
+[coworker] Response: "COOA Service Level Agreement (SLA) framework that suits a managed IT engagement model is the ITIL (Information Technolog..."
+
+[1A[2K[13/43] [chromium] › e2e\01-teamlogicit.spec.ts:148:7 › Suite 1: TeamLogicIT › 1.13 Authority Matrix page loads
+[1A[2K[14/43] [chromium] › e2e\01-teamlogicit.spec.ts:156:7 › Suite 1: TeamLogicIT › 1.14 EP-BIZ-ROLES epic present in backlog
+[1A[2K[15/43] [chromium] › e2e\02-managingdigital.spec.ts:35:7 › Suite 2: ManagingDigital › 2.1 Auth session valid
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:35:7 › Suite 2: ManagingDigital › 2.1 Auth session valid
+[reset] Test data cleared
+
+[1A[2K[seed] Test products seeded (15 attempted)
+
+[1A[2K[16/43] [chromium] › e2e\02-managingdigital.spec.ts:40:7 › Suite 2: ManagingDigital › 2.2 Navigate to For Employees portfolio
+[1A[2K[17/43] [chromium] › e2e\02-managingdigital.spec.ts:48:7 › Suite 2: ManagingDigital › 2.3 AI Coworker: roles for digital training content products
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:48:7 › Suite 2: ManagingDigital › 2.3 AI Coworker: roles for digital training content products
+[coworker] Prompt: "What roles does a digital training organization need to mana..."
+[coworker] Response: "COOA digital training organization needs to manage content products by handling the following roles:
+
+Content Creator: D..."
+
+[1A[2K[18/43] [chromium] › e2e\02-managingdigital.spec.ts:61:7 › Suite 2: ManagingDigital › 2.4 Create product: MD-Digital Leadership Programme
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:61:7 › Suite 2: ManagingDigital › 2.4 Create product: MD-Digital Leadership Programme
+[products] No create button found on /portfolio/for_employees for "MD-Digital Leadership Programme" — using SQL fallback
+
+[1A[2K[products] SQL created "MD-Digital Leadership Programme" in portfolio "for_employees"
+
+[1A[2K[19/43] [chromium] › e2e\02-managingdigital.spec.ts:67:7 › Suite 2: ManagingDigital › 2.5 Create product: MD-AI Readiness Assessment
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:67:7 › Suite 2: ManagingDigital › 2.5 Create product: MD-AI Readiness Assessment
+[products] No create button found on /portfolio/for_employees for "MD-AI Readiness Assessment" — using SQL fallback
+
+[1A[2K[products] SQL created "MD-AI Readiness Assessment" in portfolio "for_employees"
+
+[1A[2K[20/43] [chromium] › e2e\02-managingdigital.spec.ts:73:7 › Suite 2: ManagingDigital › 2.6 Create product: MD-Executive Coaching
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:73:7 › Suite 2: ManagingDigital › 2.6 Create product: MD-Executive Coaching
+[products] No create button found on /portfolio/for_employees for "MD-Executive Coaching" — using SQL fallback
+
+[1A[2K[products] SQL created "MD-Executive Coaching" in portfolio "for_employees"
+
+[1A[2K[21/43] [chromium] › e2e\02-managingdigital.spec.ts:79:7 › Suite 2: ManagingDigital › 2.7 Navigate to MD-Digital Leadership Programme detail
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:79:7 › Suite 2: ManagingDigital › 2.7 Navigate to MD-Digital Leadership Programme detail
+[products] Product detail URL: http://localhost:3000/portfolio/product/15641661-e495-4ab4-86b2-49507a5176aa
+
+[1A[2K[22/43] [chromium] › e2e\02-managingdigital.spec.ts:86:7 › Suite 2: ManagingDigital › 2.8 Assign bm-media to MD-Digital Leadership Programme
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:86:7 › Suite 2: ManagingDigital › 2.8 Assign bm-media to MD-Digital Leadership Programme
+[products] Product detail URL: http://localhost:3000/portfolio/product/15641661-e495-4ab4-86b2-49507a5176aa
+
+[1A[2K[23/43] [chromium] › e2e\02-managingdigital.spec.ts:98:7 › Suite 2: ManagingDigital › 2.9 Role panel shows bm-media roles
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:98:7 › Suite 2: ManagingDigital › 2.9 Role panel shows bm-media roles
+[products] Product detail URL: http://localhost:3000/portfolio/product/15641661-e495-4ab4-86b2-49507a5176aa
+
+[1A[2K[roles] "Content Strategy Manager" visible: true
+
+[1A[2K[roles] "Audience Development Manager" visible: true
+
+[1A[2K[roles] "Rights & Licensing Manager" visible: true
+
+[1A[2K[roles] "Editorial Operations Manager" visible: true
+
+[1A[2K[24/43] [chromium] › e2e\02-managingdigital.spec.ts:119:7 › Suite 2: ManagingDigital › 2.10 AI Coworker: audience development for leadership programme
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:119:7 › Suite 2: ManagingDigital › 2.10 AI Coworker: audience development for leadership programme
+[coworker] Prompt: "How should we structure audience development for a digital l..."
+[coworker] Response: "COOFor a digital leadership programme, consider the following audience development structure:
+
+Target Audience Identific..."
+
+[1A[2K[25/43] [chromium] › e2e\02-managingdigital.spec.ts:131:7 › Suite 2: ManagingDigital › 2.11 Assign bm-media to MD-AI Readiness Assessment
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:131:7 › Suite 2: ManagingDigital › 2.11 Assign bm-media to MD-AI Readiness Assessment
+[products] Product detail URL: http://localhost:3000/portfolio/product/ca8ee340-15a0-46ed-b257-a6e40b16c9e8
+
+[1A[2K[26/43] [chromium] › e2e\02-managingdigital.spec.ts:139:7 › Suite 2: ManagingDigital › 2.12 Assign bm-media to MD-Executive Coaching
+[1A[2K[chromium] › e2e\02-managingdigital.spec.ts:139:7 › Suite 2: ManagingDigital › 2.12 Assign bm-media to MD-Executive Coaching
+[products] Product detail URL: http://localhost:3000/portfolio/product/bf0bedbc-3a5e-45e1-9757-9ba07c962c79
+
+[1A[2K[27/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:106:7 › Suite 6: Exploratory — varied inputs › 6.A1 Single word: 'saas'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:106:7 › Suite 6: Exploratory — varied inputs › 6.A1 Single word: 'saas'
+
+[score] prompt: "saas"
+
+[1A[2K[score] response: "COOSoftware as a Service (SaaS). A cloud-based software model where users access applications over the internet, often o"
+
+[1A[2K[score] relevance=2/3  helpful=2/3  length=2/2  format=0/2  TOTAL=6/10
+
+[1A[2K[28/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:123:7 › Suite 6: Exploratory — varied inputs › 6.A2 Single word: 'roles'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:123:7 › Suite 6: Exploratory — varied inputs › 6.A2 Single word: 'roles'
+
+[score] prompt: "roles"
+
+[1A[2K[score] response: "I'm the COO. I can help you get oriented across the platform — from portfolio health to backlog priorities to workforce "
+
+[1A[2K[score] relevance=2/3  helpful=2/3  length=2/2  format=0/2  TOTAL=6/10
+
+[1A[2K[29/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:139:7 › Suite 6: Exploratory — varied inputs › 6.A3 Vague question: 'what can you do'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:139:7 › Suite 6: Exploratory — varied inputs › 6.A3 Vague question: 'what can you do'
+
+[score] prompt: "what can you do"
+
+[1A[2K[score] response: "COOI can:
+
+Answer questions on various topics
+Provide definitions and explanations
+Offer suggestions and ideas
+Translate"
+
+[1A[2K[score] relevance=2/3  helpful=2/3  length=2/2  format=2/2  TOTAL=8/10
+
+[1A[2K[30/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:157:7 › Suite 6: Exploratory — varied inputs › 6.B1 Typo-heavy: 'wat buisness modl shoud i use fr a car warsh'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:157:7 › Suite 6: Exploratory — varied inputs › 6.B1 Typo-heavy: 'wat buisness modl shoud i use fr a car warsh'
+[OPT-001] Typo handling: did agent understand? response: "COOFor a car wash business, consider the following models:
+
+Subscription-based model: Offer customers a monthly subscription for regular washes.
+Tiered pricing model: Provide different levels of servi"
+
+[1A[2K
+[score] prompt: "wat buisness modl shoud i use fr a car warsh"
+
+[1A[2K[score] response: "COOFor a car wash business, consider the following models:
+
+Subscription-based model: Offer customers a monthly subscrip"
+
+[1A[2K[score] relevance=3/3  helpful=2/3  length=2/2  format=1/2  TOTAL=8/10
+
+[1A[2K[31/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:176:7 › Suite 6: Exploratory — varied inputs › 6.B2 Casual phrasing: 'help me set up my pool company stuff'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:176:7 › Suite 6: Exploratory — varied inputs › 6.B2 Casual phrasing: 'help me set up my pool company stuff'
+[OPT-002] Casual input handling: "COOTo get started, I'll need to know more about your pool company. Can you tell me:
+
+What services will you offer (pool cleaning, maintenance, repairs, etc.)?
+Do you have a business name and logo?
+Do "
+
+[1A[2K
+[score] prompt: "help me set up my pool company stuff"
+
+[1A[2K[score] response: "COOTo get started, I'll need to know more about your pool company. Can you tell me:
+
+What services will you offer (pool "
+
+[1A[2K[score] relevance=3/3  helpful=1/3  length=2/2  format=2/2  TOTAL=8/10
+
+[1A[2K[32/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:194:7 › Suite 6: Exploratory — varied inputs › 6.B3 Mid-sentence cut-off: 'what roles does a nonprofit need when they'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:194:7 › Suite 6: Exploratory — varied inputs › 6.B3 Mid-sentence cut-off: 'what roles does a nonprofit need when they'
+[OPT-003] Incomplete sentence: "COOWhen a nonprofit grows, it typically needs the following roles:
+
+Executive Director/CEO: Oversees the organization.
+Development Director: Fundraising and donor relations.
+Program Director: Oversees"
+
+[1A[2K[OPT-003] Asked clarification: false, answered anyway: true
+
+[1A[2K
+[score] prompt: "what roles does a nonprofit need when they"
+
+[1A[2K[score] response: "COOWhen a nonprofit grows, it typically needs the following roles:
+
+Executive Director/CEO: Oversees the organization.
+D"
+
+[1A[2K[score] relevance=2/3  helpful=2/3  length=2/2  format=1/2  TOTAL=7/10
+
+[1A[2K[33/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:218:7 › Suite 6: Exploratory — varied inputs › 6.C1 Wrong term: 'add a department to my product'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:218:7 › Suite 6: Exploratory — varied inputs › 6.C1 Wrong term: 'add a department to my product'
+[OPT-004] Wrong terminology (department=role?): "COOTo add a department to your product, I'll need more information about the product and the department you want to add.
+Please provide the following details:
+
+Product name
+Department name (e.g., Sale"
+
+[1A[2K[OPT-004] Redirected to roles: false, went to HR dept: true
+
+[1A[2K
+[score] prompt: "add a department to my product"
+
+[1A[2K[score] response: "COOTo add a department to your product, I'll need more information about the product and the department you want to add."
+
+[1A[2K[score] relevance=1/3  helpful=1/3  length=2/2  format=1/2  TOTAL=5/10
+
+[1A[2K[34/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:240:7 › Suite 6: Exploratory — varied inputs › 6.C2 Wrong term: 'create a new app in the system'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:240:7 › Suite 6: Exploratory — varied inputs › 6.C2 Wrong term: 'create a new app in the system'
+[OPT-005] Wrong term (app=digital product?): "COOI'll create a new app in the system.
+App Name: Task Manager
+Description: A task management app to track and manage tasks efficiently.
+What features would you like to include in the app?"
+
+[1A[2K
+[score] prompt: "create a new app in the system"
+
+[1A[2K[score] response: "COOI'll create a new app in the system.
+App Name: Task Manager
+Description: A task management app to track and manage ta"
+
+[1A[2K[score] relevance=3/3  helpful=3/3  length=2/2  format=1/2  TOTAL=9/10
+
+[1A[2K[35/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:260:7 › Suite 6: Exploratory — varied inputs › 6.C3 Platform jargon confusion: 'how do i set the hitl tier'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:260:7 › Suite 6: Exploratory — varied inputs › 6.C3 Platform jargon confusion: 'how do i set the hitl tier'
+[OPT-006] HITL tier query: "COOTo set the Hitl Tier for your business model roles, you'll need to define a framework for evaluating and categorizing your roles. Here's a general outline:
+
+Identify key roles: Determine the critic"
+
+[1A[2K
+[score] prompt: "how do i set the hitl tier for my business model roles"
+
+[1A[2K[score] response: "COOTo set the Hitl Tier for your business model roles, you'll need to define a framework for evaluating and categorizing"
+
+[1A[2K[score] relevance=3/3  helpful=3/3  length=2/2  format=2/2  TOTAL=10/10
+
+[1A[2K[36/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:282:7 › Suite 6: Exploratory — varied inputs › 6.D1 Follow-up without context: first ask then vague follow-up
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:282:7 › Suite 6: Exploratory — varied inputs › 6.D1 Follow-up without context: first ask then vague follow-up
+[D1] Turn 1: "COOThat's great! Taylor, TX is a lovely city. How can I help with the animal shelter? Need assistance with fundraising, adopting out animals, or somet"
+
+[1A[2K[D1] Turn 2 (context-dependent): "COOBased on our current project, we'll need the following roles:
+
+Project Manager
+Software Developer
+Quality Assurance (QA) Engineer
+Designer
+Content "
+
+[1A[2K[OPT-007] Multi-turn context retained: false
+
+[1A[2K
+[score] prompt: "what roles do we need (after shelter context)"
+
+[1A[2K[score] response: "COOBased on our current project, we'll need the following roles:
+
+Project Manager
+Software Developer
+Quality Assurance ("
+
+[1A[2K[score] relevance=1/3  helpful=2/3  length=2/2  format=2/2  TOTAL=7/10
+
+[1A[2K[37/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:308:7 › Suite 6: Exploratory — varied inputs › 6.D2 Context switch mid-conversation
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:308:7 › Suite 6: Exploratory — varied inputs › 6.D2 Context switch mid-conversation
+[OPT-008] Context switch: "COOWhat's up with pools?"
+
+[1A[2K[OPT-008] Handled context switch to pool: true
+
+[1A[2K
+[score] prompt: "context switch HOA→pool"
+
+[1A[2K[score] response: "COOWhat's up with pools?"
+
+[1A[2K[score] relevance=3/3  helpful=1/3  length=1/2  format=1/2  TOTAL=6/10
+
+[1A[2K[38/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:333:7 › Suite 6: Exploratory — varied inputs › 6.E1 Ask about unlisted industry: 'business model for a food truck'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:333:7 › Suite 6: Exploratory — varied inputs › 6.E1 Ask about unlisted industry: 'business model for a food truck'
+[OPT-009] Unlisted industry (food truck): "COOFor a food truck business, consider using the following business model template:
+
+Customer Segments:
+
+Demographics (age, location, preferences)
+Psychographics (values, lifestyle)
+Event-based custom"
+
+[1A[2K[OPT-009] Suggested custom model: true, suggested built-in: true
+
+[1A[2K
+[score] prompt: "what business model template should i use for a food truck"
+
+[1A[2K[score] response: "COOFor a food truck business, consider using the following business model template:
+
+Customer Segments:
+
+Demographics (a"
+
+[1A[2K[score] relevance=3/3  helpful=3/3  length=2/2  format=2/2  TOTAL=10/10
+
+[1A[2K[39/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:354:7 › Suite 6: Exploratory — varied inputs › 6.E2 Contradictory request: 'assign all business models to one product'
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:354:7 › Suite 6: Exploratory — varied inputs › 6.E2 Contradictory request: 'assign all business models to one product'
+[OPT-010] Mass-assign request: "COOYou can use a dictionary to assign multiple business models to a single product at once. Here's an example:
+product = {
+    'name': 'Product A',
+    'business_models': [
+        'Freemium',
+       "
+
+[1A[2K[OPT-010] Explained process: true, gave recommendation: true
+
+[1A[2K
+[score] prompt: "how do i assign all 8 business models to a single product at"
+
+[1A[2K[score] response: "COOYou can use a dictionary to assign multiple business models to a single product at once. Here's an example:
+product ="
+
+[1A[2K[score] relevance=3/3  helpful=3/3  length=2/2  format=1/2  TOTAL=9/10
+
+[1A[2K[40/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:375:7 › Suite 6: Exploratory — varied inputs › 6.E3 Nonsense input: random characters
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:375:7 › Suite 6: Exploratory — varied inputs › 6.E3 Nonsense input: random characters
+[OPT-011] Nonsense input handling: "COOIt looks like you just typed some random characters. Is there something I can help you with?"
+
+[1A[2K[OPT-011] Asked clarification: false, graceful: true
+
+[1A[2K
+[score] prompt: "asdkjh qwerty 12345 !!@@##"
+
+[1A[2K[score] response: "COOIt looks like you just typed some random characters. Is there something I can help you with?"
+
+[1A[2K[score] relevance=1/3  helpful=1/3  length=2/2  format=1/2  TOTAL=5/10
+
+[1A[2K[41/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:398:7 › Suite 6: Exploratory — varied inputs › 6.F1 Navigate to non-existent product detail
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:398:7 › Suite 6: Exploratory — varied inputs › 6.F1 Navigate to non-existent product detail
+[OPT-012] 404 for nonexistent product: url=http://localhost:3000/portfolio/product/nonexistent-id-12345, notFoundText=true
+
+[1A[2K[42/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:416:7 › Suite 6: Exploratory — varied inputs › 6.F2 Admin business models page loads quickly
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:416:7 › Suite 6: Exploratory — varied inputs › 6.F2 Admin business models page loads quickly
+[OPT-013] Admin BM page load time: 757ms
+
+[1A[2K[43/43] [chromium] › e2e\06-exploratory-varied-inputs.spec.ts:430:7 › Suite 6: Exploratory — varied inputs › 6.F3 Ops backlog page handles no search results gracefully
+[1A[2K[chromium] › e2e\06-exploratory-varied-inputs.spec.ts:430:7 › Suite 6: Exploratory — varied inputs › 6.F3 Ops backlog page handles no search results gracefully
+[OPT-014] No search input on /ops — search not implemented
+
+[1A[2K  43 passed (2.5m)

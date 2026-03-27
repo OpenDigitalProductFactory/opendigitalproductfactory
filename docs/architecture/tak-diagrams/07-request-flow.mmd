@@ -1,0 +1,35 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '12px'}}}%%
+sequenceDiagram
+    participant U as User (HR-200)
+    participant RC as Route Context
+    participant TAK as TAK Kernel
+    participant AI as Inference Provider
+    participant T as Tool Handler
+    participant DB as Audit DB
+
+    U->>RC: Navigate to /ops
+    RC-->>TAK: domain tools, sensitivity, agent ID
+
+    U->>TAK: "Create backlog item for login bug"
+    TAK->>TAK: Filter tools by role + agent grants
+    TAK->>TAK: Assemble system prompt + directives
+
+    TAK->>AI: Messages + filtered tools
+    AI-->>TAK: tool_call: create_backlog_item
+
+    TAK->>TAK: Check execution mode = proposal
+    TAK-->>U: Approval card (tool, params, rationale)
+
+    U->>TAK: Approve
+
+    TAK->>T: Execute create_backlog_item
+    T-->>TAK: Result: BLI-00123 created
+
+    par Audit Recording
+        TAK->>DB: ToolExecution record
+        TAK->>DB: AgentActionProposal -> executed
+        TAK->>DB: AuthorizationDecisionLog -> allow
+        TAK->>DB: TokenUsage record
+    end
+
+    TAK-->>U: "Created BLI-00123: Fix login bug"

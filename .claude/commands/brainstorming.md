@@ -18,13 +18,14 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer visual companion** (if topic will involve visual questions)
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec review loop** — dispatch spec-document-reviewer subagent; fix issues and re-dispatch until approved (max 3 iterations)
-8. **User reviews written spec** — ask user to review before proceeding
-9. **Transition to implementation** — invoke writing-plans skill
+3. **Search first** — look external for examples, practices, opensource and commercial solutions to leverage
+4. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+5. **Propose 2-3 approaches** — with trade-offs and your recommendation
+6. **Present design** — in sections scaled to their complexity, get user approval after each section
+7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+8. **Spec review loop** — dispatch spec-document-reviewer subagent; fix issues and re-dispatch until approved (max 3 iterations)
+9. **User reviews written spec** — ask user to review before proceeding
+10. **Transition to implementation** — invoke writing-plans skill
 
 ## Key Principles
 
@@ -33,6 +34,8 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 - **YAGNI ruthlessly** — Remove unnecessary features from all designs
 - **Explore alternatives** — Always propose 2-3 approaches before settling
 - **Incremental validation** — Present design, get approval before moving on
+- **Research always before invent** — Don't re-invent things, research first
+- **Standardize over invention** — Seek to conform to standards where possible
 
 ## Design for Isolation and Clarity
 

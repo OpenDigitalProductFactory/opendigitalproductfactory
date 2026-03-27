@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart LR
+    ACTION["Agent\nAction"]
+
+    subgraph AUDIT["Three Audit Surfaces"]
+        direction TB
+        TE["ToolExecution\nagentId, userId, toolName\nparameters, result, success\ndurationMs, routeContext"]
+        AAP["AgentActionProposal\nproposalId, status lifecycle\ndecidedById, executedAt\nresultEntityId, gitCommitHash"]
+        ADL["AuthorizationDecisionLog\nactorType, actorRef\ndelegationGrantId\ndecision: allow/deny\nrationale JSON"]
+    end
+
+    subgraph METRICS["Operational Metrics"]
+        direction TB
+        TU["TokenUsage\nagentId, providerId\ninputTokens, outputTokens\ncostUsd"]
+        AM["AgentMessage\nrole, content, tone\nrouteContext, providerId"]
+    end
+
+    subgraph ANALYTICS["Continuous Improvement"]
+        direction TB
+        DASH["Authority\nDashboard"]
+        PATTERNS["Pattern\nAnalysis"]
+        ADJUST["Grant & Prompt\nTuning"]
+    end
+
+    ACTION -->|every tool call| TE
+    ACTION -->|side-effect proposals| AAP
+    ACTION -->|auth decisions| ADL
+    ACTION -->|inference calls| TU
+    ACTION -->|all messages| AM
+
+    TE --> DASH
+    AAP --> DASH
+    ADL --> DASH
+    TU --> PATTERNS
+    PATTERNS --> ADJUST
+
+    style ACTION fill:#1565c0,color:#fff
+    style TE fill:#2e7d32,color:#fff
+    style AAP fill:#f57f17,color:#000
+    style ADL fill:#6a1b9a,color:#fff
+    style TU fill:#0d47a1,color:#fff
+    style DASH fill:#b71c1c,color:#fff
+    style ADJUST fill:#e65100,color:#fff

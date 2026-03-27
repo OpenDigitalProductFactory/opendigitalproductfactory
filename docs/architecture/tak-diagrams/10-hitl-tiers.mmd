@@ -1,0 +1,35 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart TB
+    REQ["Agent wants\nto act"]
+    CHECK{"HITL\nTier?"}
+
+    T0["Tier 0: BLOCKED\nAgent cannot act\nHuman decides directly"]
+    T1["Tier 1: APPROVE BEFORE\nAgent proposes action\nHuman must approve first"]
+    T2["Tier 2: REVIEW AFTER\nAgent acts immediately\nHuman reviews async"]
+    T3["Tier 3: AUTONOMOUS\nAgent acts and logs\nNo mandatory review"]
+
+    HUMAN["Human\ndecides"]
+    APPROVE{"Human\napproves?"}
+    EXEC_T1["Execute\n+ Audit"]
+    REJECT["Reject\n+ Log reason"]
+    EXEC_T2["Execute immediately\n+ Audit + Queue review"]
+    EXEC_T3["Execute immediately\n+ Audit only"]
+
+    REQ --> CHECK
+    CHECK -->|0| T0 --> HUMAN
+    CHECK -->|1| T1 --> APPROVE
+    CHECK -->|2| T2 --> EXEC_T2
+    CHECK -->|3| T3 --> EXEC_T3
+
+    APPROVE -->|yes| EXEC_T1
+    APPROVE -->|no| REJECT
+
+    style T0 fill:#c62828,color:#fff
+    style T1 fill:#e65100,color:#fff
+    style T2 fill:#1565c0,color:#fff
+    style T3 fill:#2e7d32,color:#fff
+    style EXEC_T1 fill:#2e7d32,color:#fff
+    style EXEC_T2 fill:#2e7d32,color:#fff
+    style EXEC_T3 fill:#2e7d32,color:#fff
+    style REJECT fill:#c62828,color:#fff
+    style HUMAN fill:#b71c1c,color:#fff

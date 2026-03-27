@@ -34,3 +34,28 @@
 - `Dockerfile` is a multi-stage build: `base` > `deps` > `build` (Next.js) / `init` (migrations+seed) > `runner`
 - The `portal-init` container runs once (migrations, seed, hardware detect) then exits.
 - `.dockerignore` excludes `node_modules`, `.next`, `.git`, `.env`, `docs/` — keep it maintained.
+
+## Strongly-Typed String Enums — MANDATORY COMPLIANCE
+
+String fields that carry a fixed set of valid values are **canonical enums** even though the DB column is `String`. Using non-canonical values causes silent data corruption, broken filters, and UI display failures downstream.
+
+**Source of truth: `apps/web/lib/backlog.ts` exports `EPIC_STATUSES` and the TypeScript union types. The MCP tool definitions in `apps/web/lib/mcp-tools.ts` carry the `enum:` arrays. These are the authority — match them exactly.**
+
+### Canonical values — do not deviate
+
+| Model | Field | Valid values |
+| ----- | ----- | ------------ |
+| `Epic` | `status` | `"open"` `"in-progress"` `"done"` |
+| `BacklogItem` | `status` | `"open"` `"in-progress"` `"done"` `"deferred"` |
+| `BacklogItem` | `type` | `"portfolio"` `"product"` |
+
+### Rules for all agents and seed scripts
+
+1. **Use only the values in the table above.** Never invent synonyms (`todo`, `complete`, `in_progress`, `archived`, `story`, `feature`, `task`, `backlog`, `epic`). These have all been found in the DB and required mass normalization.
+2. **Hyphens, not underscores.** Multi-word statuses use hyphens: `"in-progress"` not `"in_progress"`.
+3. **Adding a new value requires two changes in the same commit:**
+   - Update the TypeScript union type / `as const` array in `backlog.ts`
+   - Add it to the `enum:` array in the relevant MCP tool definition in `mcp-tools.ts`
+   - Only then use it in data or seed scripts.
+4. **Seed scripts must declare the type explicitly.** Do not rely on defaults for `type` or `status` — write the value out so it is reviewable.
+5. **When writing SQL directly** (migrations, seed SQL, backfill scripts), copy-paste the value from this table. Do not paraphrase.

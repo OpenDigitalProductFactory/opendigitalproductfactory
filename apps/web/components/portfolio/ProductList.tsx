@@ -1,4 +1,6 @@
 // apps/web/components/portfolio/ProductList.tsx
+import Link from "next/link";
+
 type Product = {
   id: string;
   productId: string;
@@ -28,9 +30,10 @@ export function ProductList({ products, colour, className = "" }: Props) {
         {products.map((product) => {
           const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#8888a0";
           return (
-            <div
+            <Link
               key={product.id}
-              className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg px-3 py-2.5"
+              href={`/portfolio/product/${product.id}`}
+              className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg px-3 py-2.5 block hover:border-[var(--dpf-text)] transition-colors"
             >
               <div className="flex items-center justify-between mb-0.5">
                 <span className="text-sm font-medium text-[var(--dpf-text)]">{product.name}</span>
@@ -42,7 +45,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
                 </span>
               </div>
               <p className="text-[10px] text-[var(--dpf-muted)]">{product.productId}</p>
-            </div>
+            </Link>
           );
         })}
       </div>

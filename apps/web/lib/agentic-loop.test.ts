@@ -40,6 +40,32 @@ describe("shouldNudge", () => {
     expect(shouldNudge({
       continuationNudges: 0, iteration: 0, maxIterations: 40,
       hasTools: true, executedToolCount: 0, responseLength: 44,
+      responseText: "I can help with that.",
+    })).toBe(true);
+  });
+
+  it("does not nudge when response is a short clarifying question", () => {
+    // HR case: "add John as employee" → agent correctly asks for last name
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true, executedToolCount: 0, responseLength: 35,
+      responseText: "What is John's last name?",
+    })).toBe(false);
+  });
+
+  it("does not nudge when response is a multi-field clarifying question", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true, executedToolCount: 0, responseLength: 70,
+      responseText: "To add this employee I need their last name and department — could you provide those?",
+    })).toBe(false);
+  });
+
+  it("nudges when response is a long non-question text (model stalled)", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true, executedToolCount: 0, responseLength: 120,
+      responseText: "I can help you add an employee. The system has several tools available including create_employee and list_departments that you can use.",
     })).toBe(true);
   });
 

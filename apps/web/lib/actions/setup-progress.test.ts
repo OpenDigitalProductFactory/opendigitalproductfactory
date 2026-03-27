@@ -23,6 +23,8 @@ import {
   skipStep,
   pauseSetup,
   completeSetup,
+  getSetupContext,
+  updateSetupContext,
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
@@ -113,6 +115,47 @@ describe("setup-progress", () => {
 
       const updateCall = (prisma.platformSetupProgress.update as any).mock.calls[0][0];
       expect(updateCall.data.steps.branding).toBe("skipped");
+    });
+  });
+
+  describe("getSetupContext", () => {
+    it("returns null when no active setup record exists", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue(null);
+      expect(await getSetupContext()).toBeNull();
+    });
+
+    it("returns the context object from the active setup record", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd", suggestedCurrency: "EUR" },
+      });
+      const ctx = await getSetupContext();
+      expect(ctx?.orgName).toBe("Acme Ltd");
+      expect(ctx?.suggestedCurrency).toBe("EUR");
+    });
+  });
+
+  describe("updateSetupContext", () => {
+    it("is a no-op when no active setup record exists", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue(null);
+      await updateSetupContext({ suggestedCurrency: "AUD" });
+      expect(prisma.platformSetupProgress.update).not.toHaveBeenCalled();
+    });
+
+    it("merges the patch into the existing context without overwriting other keys", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        id: "test-id",
+        context: { orgName: "Acme Ltd", suggestedCurrency: "GBP" },
+      });
+      (prisma.platformSetupProgress.update as any).mockResolvedValue({});
+
+      await updateSetupContext({ suggestedCurrency: "EUR", suggestedCountryCode: "DE" });
+
+      const updateCall = (prisma.platformSetupProgress.update as any).mock.calls[0][0];
+      expect(updateCall.data.context).toEqual({
+        orgName: "Acme Ltd",
+        suggestedCurrency: "EUR",
+        suggestedCountryCode: "DE",
+      });
     });
   });
 });

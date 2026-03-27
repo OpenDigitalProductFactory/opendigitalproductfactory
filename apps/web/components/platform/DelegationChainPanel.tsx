@@ -13,8 +13,19 @@ type AgentNode = {
   delegatesTo: string[];
 };
 
+export type BmrNode = {
+  productName: string;
+  modelName: string;
+  roleName: string;
+  authorityDomain: string | null;
+  hitlTierDefault: number;
+  escalatesTo: string;
+  assignee: string | null;
+};
+
 type DelegationChainProps = {
   agents: AgentNode[];
+  bmrNodes?: BmrNode[];
 };
 
 const HITL_COLORS: Record<number, string> = {
@@ -250,7 +261,7 @@ const SUPERVISOR_LABELS: Record<string, string> = {
   "HR-500": "Operations Manager",
 };
 
-export function DelegationChainPanel({ agents }: DelegationChainProps) {
+export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps) {
   const [expandedSet, setExpandedSet] = useState<Set<string>>(() => {
     // Start with all nodes expanded
     return new Set(agents.map((a) => a.agentId));
@@ -397,6 +408,50 @@ export function DelegationChainPanel({ agents }: DelegationChainProps) {
                     toggleExpanded={toggleExpanded}
                   />
                 ))}
+
+                {/* BMR role nodes escalating to this supervisor */}
+                {bmrNodes
+                  ?.filter((n) => n.escalatesTo === group.supervisorId)
+                  .map((n, i) => {
+                    const tierColour = HITL_COLORS[n.hitlTierDefault] ?? "#8888a0";
+                    return (
+                      <div
+                        key={`bmr-${group.supervisorId}-${i}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 8px",
+                          paddingLeft: 28,
+                          fontSize: 10,
+                          color: "var(--dpf-muted)",
+                          borderTop: i === 0 ? "1px dashed var(--dpf-border)" : undefined,
+                        }}
+                      >
+                        <span style={{ display: "inline-block", width: 12, fontSize: 9, textAlign: "center", color: "var(--dpf-muted)" }}>
+                          ◈
+                        </span>
+                        <span style={{ fontFamily: "monospace", fontSize: 9, color: "#38bdf8", minWidth: 90 }}>
+                          BMR
+                        </span>
+                        <span style={{ flex: 1 }}>
+                          {n.roleName}
+                          {n.authorityDomain && (
+                            <span style={{ color: "var(--dpf-muted)", marginLeft: 4 }}>
+                              · {n.authorityDomain}
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>
+                          {n.productName} · {n.modelName}
+                        </span>
+                        <HitlBadge tier={n.hitlTierDefault} />
+                        <span style={{ fontSize: 9, color: n.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: n.assignee ? "normal" : "italic", minWidth: 80, textAlign: "right" }}>
+                          {n.assignee ?? "unassigned"}
+                        </span>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           );

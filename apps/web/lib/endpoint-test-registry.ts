@@ -50,6 +50,20 @@ export const TEST_PROMPT_DEFAULTS: PromptInput = {
   attachmentContext: null,
 };
 
+// ─── HR Prompt Defaults ──────────────────────────────────────────────────────
+
+export const HR_PROMPT_DEFAULTS: PromptInput = {
+  hrRole: "HR-200",
+  grantedCapabilities: ["view_employee", "manage_user_lifecycle"],
+  deniedCapabilities: ["manage_capabilities", "manage_users"],
+  mode: "act",
+  sensitivity: "confidential",
+  domainContext: "Domain: People & HR. You are on the employee management page. You can look up employees, add new employees, update their status, and manage leave policies.",
+  domainTools: ["query_employees", "create_employee", "list_departments", "list_positions", "transition_employee_status", "submit_feedback"],
+  routeData: null,
+  attachmentContext: null,
+};
+
 // ─── Tool Stubs (minimal definitions for tool-calling probes) ────────────────
 
 const STUB_BACKLOG_TOOL: ToolDefinition = {
@@ -79,6 +93,39 @@ const STUB_REPORT_TOOL: ToolDefinition = {
     required: ["type", "title"],
   },
   requiredCapability: null,
+};
+
+const STUB_CREATE_EMPLOYEE_TOOL: ToolDefinition = {
+  name: "create_employee",
+  description: "Create a new employee record. Only firstName and lastName are required. Department, position, email, and start date are optional.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      firstName: { type: "string", description: "First name" },
+      lastName: { type: "string", description: "Last name" },
+      workEmail: { type: "string", description: "Work email address (optional)" },
+      status: { type: "string", enum: ["offer", "onboarding", "active"], description: "Initial status (default: offer)" },
+      departmentId: { type: "string", description: "Department ID or name (optional)" },
+      positionId: { type: "string", description: "Position ID or title (optional)" },
+      startDate: { type: "string", description: "Start date ISO string (optional)" },
+    },
+    required: ["firstName", "lastName"],
+  },
+  requiredCapability: "manage_user_lifecycle",
+};
+
+const STUB_QUERY_EMPLOYEES_TOOL: ToolDefinition = {
+  name: "query_employees",
+  description: "Search and list employee profiles by name, email, department, or status.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      search: { type: "string", description: "Search by name or email" },
+      department: { type: "string", description: "Filter by department" },
+      status: { type: "string", description: "Filter by status" },
+    },
+  },
+  requiredCapability: "view_employee",
 };
 
 // ─── Capability Probes ───────────────────────────────────────────────────────
@@ -231,6 +278,74 @@ export const CAPABILITY_PROBES: CapabilityProbe[] = [
       return { pass: true, reason: "Did not falsely claim to have created the item." };
     },
   },
+
+  // ── Probe 7: HR — create employee with sufficient info → calls tool immediately
+  {
+    id: "hr-create-employee-full-info",
+    category: "hr-tool-calling",
+    name: "Creates employee immediately when first and last name are provided",
+    promptOverrides: {
+      ...HR_PROMPT_DEFAULTS,
+      mode: "act",
+    },
+    userMessage: "Add Sarah Johnson as a new employee in the Engineering department.",
+    tools: [STUB_CREATE_EMPLOYEE_TOOL, STUB_QUERY_EMPLOYEES_TOOL],
+    assert: (_response, toolCalls) => {
+      if (!toolCalls || toolCalls.length === 0) {
+        return { pass: false, reason: "Did not call any tool — should have called create_employee immediately." };
+      }
+      const called = toolCalls.some((tc) => {
+        const t = tc as Record<string, unknown>;
+        return t.name === "create_employee";
+      });
+      if (!called) {
+        return { pass: false, reason: `Tool calls present but create_employee not among them.` };
+      }
+      // Verify it used the right field names (firstName/lastName, not name)
+      const createCall = toolCalls.find((tc) => (tc as Record<string, unknown>).name === "create_employee") as Record<string, unknown> | undefined;
+      const args = createCall?.arguments as Record<string, unknown> | undefined;
+      if (args && args["name"] && !args["firstName"]) {
+        return { pass: false, reason: "Called create_employee but used 'name' instead of 'firstName'/'lastName' — schema mismatch." };
+      }
+      return { pass: true, reason: "Called create_employee with correct field names." };
+    },
+  },
+
+  // ── Probe 8: HR — partial info → asks one clarifying question, does not refuse
+  {
+    id: "hr-create-employee-partial-info",
+    category: "hr-tool-calling",
+    name: "Asks for missing required field instead of refusing when given only first name",
+    promptOverrides: {
+      ...HR_PROMPT_DEFAULTS,
+      mode: "act",
+    },
+    userMessage: "Add John as a new employee.",
+    tools: [STUB_CREATE_EMPLOYEE_TOOL, STUB_QUERY_EMPLOYEES_TOOL],
+    assert: (response, toolCalls) => {
+      // The model should ask for the last name, not refuse outright
+      const refused = /can't|cannot|unable|not possible|insufficient|not enough|more information needed/i.test(response) &&
+        !/last name|surname|family name/i.test(response);
+      if (refused) {
+        return { pass: false, reason: "Refused without asking for the missing last name. Should ask for last name in one message." };
+      }
+      // If it called the tool with only "John", that's wrong (missing lastName)
+      if (toolCalls && toolCalls.length > 0) {
+        const createCall = toolCalls.find((tc) => (tc as Record<string, unknown>).name === "create_employee") as Record<string, unknown> | undefined;
+        if (createCall) {
+          const args = createCall.arguments as Record<string, unknown> | undefined;
+          if (args && !args["lastName"] && !args["last_name"]) {
+            return { pass: false, reason: "Called create_employee without a last name — should have asked for it first." };
+          }
+        }
+      }
+      // Should mention last name or surname
+      if (/last name|surname|family name/i.test(response)) {
+        return { pass: true, reason: "Correctly asked for the missing last name." };
+      }
+      return { pass: true, reason: "Did not refuse outright — acceptable response to partial info." };
+    },
+  },
 ];
 
 // ─── Task Scenarios ──────────────────────────────────────────────────────────
@@ -287,6 +402,55 @@ export const TASK_SCENARIOS: TestScenario[] = [
       { type: "orchestrator_score_gte", value: 3, description: "Orchestrator grades >= 3" },
     ],
     requiredProbes: ["brevity-simple-question"],
+  },
+
+  // ── HR scenarios ──────────────────────────────────────────────────────────
+
+  {
+    id: "hr-create-employee-full-name",
+    taskType: "hr-tool-action",
+    name: "Create employee when full name is given",
+    routeContext: "/employee",
+    promptOverrides: { ...HR_PROMPT_DEFAULTS, mode: "act" },
+    userMessage: "Please add Maria Silva as a new employee starting next Monday in the Sales team.",
+    tools: [STUB_CREATE_EMPLOYEE_TOOL, STUB_QUERY_EMPLOYEES_TOOL],
+    assertions: [
+      { type: "tool_called", value: "create_employee", description: "Must call create_employee" },
+      { type: "not_contains", value: "I will now", description: "Must not narrate plan" },
+      { type: "tool_not_called", value: "query_employees", description: "Should not search before creating when name is clear" },
+    ],
+    requiredProbes: ["hr-create-employee-full-info", "tool-calling-basic"],
+  },
+
+  {
+    id: "hr-create-employee-partial-clarify",
+    taskType: "hr-tool-action",
+    name: "Ask for last name rather than refuse when only first name given",
+    routeContext: "/employee",
+    promptOverrides: { ...HR_PROMPT_DEFAULTS, mode: "act" },
+    userMessage: "Add James as a new employee.",
+    tools: [STUB_CREATE_EMPLOYEE_TOOL, STUB_QUERY_EMPLOYEES_TOOL],
+    assertions: [
+      { type: "tool_not_called", value: "create_employee", description: "Should NOT call create_employee without a last name" },
+      { type: "not_contains", value: "cannot", description: "Should not flatly refuse" },
+      { type: "not_contains", value: "unable to", description: "Should not flatly refuse" },
+    ],
+    requiredProbes: ["hr-create-employee-partial-info"],
+  },
+
+  {
+    id: "hr-search-employees",
+    taskType: "hr-tool-action",
+    name: "Search employees by name",
+    routeContext: "/employee",
+    promptOverrides: { ...HR_PROMPT_DEFAULTS, mode: "act" },
+    userMessage: "Show me all employees in the Engineering department.",
+    tools: [STUB_QUERY_EMPLOYEES_TOOL, STUB_CREATE_EMPLOYEE_TOOL],
+    assertions: [
+      { type: "tool_called", value: "query_employees", description: "Must call query_employees" },
+      { type: "not_contains", value: "I will now", description: "Must not narrate" },
+    ],
+    requiredProbes: ["tool-calling-basic"],
   },
 ];
 

@@ -106,6 +106,60 @@ const PORTFOLIO_BUDGETS: Record<string, number> = {
   products_and_services_sold: 3500,
 };
 
+async function seedBusinessModels(): Promise<void> {
+  const registry = readJson<{
+    business_models: Array<{
+      model_id: string;
+      name: string;
+      description?: string;
+      is_built_in: boolean;
+      roles: Array<{
+        role_id: string;
+        name: string;
+        authority_domain?: string;
+        it4it_alignment?: string;
+        hitl_tier_default?: number;
+        escalates_to?: string;
+      }>;
+    }>;
+  }>("business_model_registry.json");
+
+  let roleCount = 0;
+  for (const m of registry.business_models) {
+    const model = await prisma.businessModel.upsert({
+      where: { modelId: m.model_id },
+      update: { name: m.name, description: m.description ?? null, isBuiltIn: m.is_built_in },
+      create: { modelId: m.model_id, name: m.name, description: m.description ?? null, isBuiltIn: m.is_built_in, status: "active" },
+    });
+    for (const r of m.roles) {
+      await prisma.businessModelRole.upsert({
+        where: { roleId: r.role_id },
+        update: {
+          name: r.name,
+          authorityDomain: r.authority_domain ?? null,
+          it4itAlignment: r.it4it_alignment ?? null,
+          hitlTierDefault: r.hitl_tier_default ?? 2,
+          escalatesTo: r.escalates_to ?? null,
+          isBuiltIn: m.is_built_in,
+        },
+        create: {
+          roleId: r.role_id,
+          name: r.name,
+          authorityDomain: r.authority_domain ?? null,
+          it4itAlignment: r.it4it_alignment ?? null,
+          hitlTierDefault: r.hitl_tier_default ?? 2,
+          escalatesTo: r.escalates_to ?? null,
+          isBuiltIn: m.is_built_in,
+          status: "active",
+          businessModelId: model.id,
+        },
+      });
+      roleCount++;
+    }
+  }
+  console.log(`Seeded ${registry.business_models.length} business models with ${roleCount} roles`);
+}
+
 async function seedPortfolios(): Promise<void> {
   const registry = readJson<{
     portfolios: Array<{
@@ -888,6 +942,7 @@ async function main(): Promise<void> {
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
   await seedPortfolios();
+  await seedBusinessModels();
   await seedAgents();
   await seedCoworkerAgents();
   await seedTaxonomyNodes();
