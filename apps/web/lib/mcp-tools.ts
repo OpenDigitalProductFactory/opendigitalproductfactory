@@ -855,8 +855,24 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── HR Lifecycle Tools ─────────────────────────────────────────────────────
   {
+    name: "list_departments",
+    description: "List all active departments with their IDs and names. Call this before create_employee to find valid department IDs or to present the user with choices.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_employee",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "list_positions",
+    description: "List all active positions with their IDs and titles. Call this before create_employee to find valid position IDs or to present the user with choices.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_employee",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "create_employee",
-    description: "Create a new employee record (starts in offer or onboarding status). Provide name, email, department, position, manager, and start date.",
+    description: "Create a new employee record. Department and position can be supplied as an ID or a name/title — the system resolves names automatically. Call list_departments and list_positions first if you need to show the user their options.",
     inputSchema: {
       type: "object",
       properties: {
@@ -864,14 +880,16 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         lastName: { type: "string", description: "Last name" },
         workEmail: { type: "string", description: "Work email address" },
         status: { type: "string", enum: ["offer", "onboarding", "active"], description: "Initial status (default: offer)" },
-        departmentId: { type: "string", description: "Department ID (optional)" },
-        positionId: { type: "string", description: "Position ID (optional)" },
-        managerEmployeeId: { type: "string", description: "Manager employee profile ID (optional)" },
+        departmentId: { type: "string", description: "Department ID or department name (optional)" },
+        positionId: { type: "string", description: "Position ID or position title (optional)" },
+        managerEmployeeId: { type: "string", description: "Manager employee ID, display name, or email (optional)" },
         startDate: { type: "string", description: "Start date ISO string (optional)" },
       },
       required: ["firstName", "lastName"],
     },
     requiredCapability: "manage_user_lifecycle",
+    executionMode: "immediate",
+    sideEffect: true,
   },
   {
     name: "transition_employee_status",
@@ -886,6 +904,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["employeeId", "newStatus"],
     },
     requiredCapability: "manage_user_lifecycle",
+    executionMode: "immediate",
+    sideEffect: true,
   },
   {
     name: "propose_leave_policy",
@@ -911,6 +931,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["locationContext", "policies"],
     },
     requiredCapability: "manage_user_lifecycle",
+    executionMode: "immediate",
+    sideEffect: true,
   },
   {
     name: "submit_feedback",
@@ -3256,7 +3278,101 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       };
     }
 
+    case "list_departments": {
+      const departments = await prisma.department.findMany({
+        where: { status: "active" },
+        select: { departmentId: true, name: true },
+        orderBy: { name: "asc" },
+      });
+      if (departments.length === 0) {
+        return { success: true, message: "No departments have been set up yet.", data: { departments: [] } };
+      }
+      const list = departments.map((d) => `${d.name} (${d.departmentId})`).join("\n");
+      return {
+        success: true,
+        message: `${departments.length} active department${departments.length !== 1 ? "s" : ""}:\n${list}`,
+        data: { departments: departments.map((d) => ({ id: d.departmentId, name: d.name })) },
+      };
+    }
+
+    case "list_positions": {
+      const positions = await prisma.position.findMany({
+        where: { status: "active" },
+        select: { positionId: true, title: true, jobFamily: true },
+        orderBy: { title: "asc" },
+      });
+      if (positions.length === 0) {
+        return { success: true, message: "No positions have been set up yet.", data: { positions: [] } };
+      }
+      const list = positions.map((p) => `${p.title}${p.jobFamily ? ` — ${p.jobFamily}` : ""} (${p.positionId})`).join("\n");
+      return {
+        success: true,
+        message: `${positions.length} active position${positions.length !== 1 ? "s" : ""}:\n${list}`,
+        data: { positions: positions.map((p) => ({ id: p.positionId, title: p.title, jobFamily: p.jobFamily ?? null })) },
+      };
+    }
+
     case "create_employee": {
+      // Email uniqueness check
+      if (typeof params["workEmail"] === "string") {
+        const existing = await prisma.employeeProfile.findFirst({
+          where: { workEmail: params["workEmail"] },
+          select: { displayName: true, employeeId: true },
+        });
+        if (existing) {
+          return {
+            success: false,
+            error: "duplicate_email",
+            message: `An employee with email "${params["workEmail"]}" already exists: ${existing.displayName} (${existing.employeeId}).`,
+          };
+        }
+      }
+
+      // Resolve department: match by cuid, departmentId, or name (case-insensitive)
+      let resolvedDepartmentId: string | undefined;
+      if (typeof params["departmentId"] === "string") {
+        const dept = await prisma.department.findFirst({
+          where: {
+            OR: [
+              { id: params["departmentId"] },
+              { departmentId: params["departmentId"] },
+              { name: { equals: params["departmentId"], mode: "insensitive" } },
+            ],
+            status: "active",
+          },
+          select: { id: true },
+        });
+        resolvedDepartmentId = dept?.id;
+      }
+
+      // Resolve position: match by cuid, positionId, or title (case-insensitive)
+      let resolvedPositionId: string | undefined;
+      if (typeof params["positionId"] === "string") {
+        const pos = await prisma.position.findFirst({
+          where: {
+            OR: [
+              { id: params["positionId"] },
+              { positionId: params["positionId"] },
+              { title: { equals: params["positionId"], mode: "insensitive" } },
+            ],
+            status: "active",
+          },
+          select: { id: true },
+        });
+        resolvedPositionId = pos?.id;
+      }
+
+      // Resolve manager: match by cuid, employeeId, displayName, or email
+      let resolvedManagerId: string | undefined;
+      if (typeof params["managerEmployeeId"] === "string") {
+        const mgr = params["managerEmployeeId"] as string;
+        const found = await prisma.employeeProfile.findFirst({
+          where: { OR: [{ id: mgr }, { employeeId: mgr }, { displayName: mgr }, { workEmail: mgr }] },
+          select: { id: true },
+        });
+        resolvedManagerId = found?.id;
+      }
+
       const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = String(params["status"] ?? "offer");
       const eventType = status === "offer" ? "offer_created" : status === "active" ? "hired" : "onboarding_started";
@@ -3269,17 +3385,9 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           displayName: `${String(params["firstName"] ?? "")} ${String(params["lastName"] ?? "")}`.trim(),
           workEmail: typeof params["workEmail"] === "string" ? params["workEmail"] : undefined,
           status,
-          ...(typeof params["departmentId"] === "string" ? { departmentId: params["departmentId"] } : {}),
-          ...(typeof params["positionId"] === "string" ? { positionId: params["positionId"] } : {}),
-          ...(typeof params["managerEmployeeId"] === "string" ? await (async () => {
-            const mgr = params["managerEmployeeId"] as string;
-            // Try direct ID first, then resolve by employeeId, displayName, or email
-            const found = await prisma.employeeProfile.findFirst({
-              where: { OR: [{ id: mgr }, { employeeId: mgr }, { displayName: mgr }, { workEmail: mgr }] },
-              select: { id: true },
-            });
-            return found ? { managerEmployeeId: found.id } : {};
-          })() : {}),
+          ...(resolvedDepartmentId ? { departmentId: resolvedDepartmentId } : {}),
+          ...(resolvedPositionId ? { positionId: resolvedPositionId } : {}),
+          ...(resolvedManagerId ? { managerEmployeeId: resolvedManagerId } : {}),
           ...(typeof params["startDate"] === "string" ? { startDate: new Date(params["startDate"]) } : {}),
           employmentEvents: {
             create: {
