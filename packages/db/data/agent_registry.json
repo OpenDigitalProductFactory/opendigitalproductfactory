@@ -948,7 +948,9 @@
           "backlog_read",
           "architecture_read",
           "architecture_write",
-          "decision_record_create"
+          "decision_record_create",
+          "ea_graph_write",
+          "ea_graph_read"
         ],
         "memory": {
           "type": "session",
@@ -1954,7 +1956,8 @@
           "backlog_read",
           "architecture_read",
           "adr_create",
-          "conway_validate"
+          "conway_validate",
+          "ea_graph_read"
         ],
         "memory": {
           "type": "none",

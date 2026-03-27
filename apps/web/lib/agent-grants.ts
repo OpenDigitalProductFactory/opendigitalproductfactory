@@ -82,6 +82,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_endpoint_tests: ["agent_control_read"],
 
   // Employee / HR
+  list_departments: ["registry_read"],
+  list_positions: ["registry_read"],
   create_employee: ["consumer_write"],
   transition_employee_status: ["consumer_write"],
   propose_leave_policy: ["policy_write"],
@@ -97,6 +99,15 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Tool evaluation (EP-GOVERN-002)
   evaluate_tool: ["tool_evaluation_create"],
+
+  // EA / Ontology Graph
+  create_ea_element:      ["ea_graph_write"],
+  create_ea_relationship: ["ea_graph_write"],
+  classify_ea_element:    ["ea_graph_write"],
+  import_archimate:       ["ea_graph_write"],
+  query_ontology_graph:   ["ea_graph_read"],
+  run_traversal_pattern:  ["ea_graph_read"],
+  export_archimate:       ["ea_graph_read"],
 };
 
 const grantCache = new Map<string, string[]>();
