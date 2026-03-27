@@ -1,4 +1,0 @@
-# Database backups — not committed to git
-*.sql
-!.gitkeep
-!.gitignore

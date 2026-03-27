@@ -1,0 +1,343 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: PB
+          - generic [ref=e8]: Pops Barbers
+        - navigation [ref=e9]:
+          - link "My Workspace" [ref=e10] [cursor=pointer]:
+            - /url: /workspace
+          - link "Portfolio" [ref=e11] [cursor=pointer]:
+            - /url: /portfolio
+          - link "Backlog" [ref=e12] [cursor=pointer]:
+            - /url: /ops
+          - link "Inventory" [ref=e13] [cursor=pointer]:
+            - /url: /inventory
+          - link "EA Modeler" [ref=e14] [cursor=pointer]:
+            - /url: /ea
+          - link "AI Workforce" [ref=e15] [cursor=pointer]:
+            - /url: /platform/ai
+          - link "Build" [ref=e16] [cursor=pointer]:
+            - /url: /build
+          - link "Docs" [ref=e17] [cursor=pointer]:
+            - /url: /docs
+      - generic [ref=e18]:
+        - button "Feedback" [ref=e20] [cursor=pointer]
+        - generic [ref=e21]: HR-000
+        - button "Sign out" [ref=e23] [cursor=pointer]
+    - main [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - link "← External Services" [ref=e27] [cursor=pointer]:
+            - /url: /platform/ai/providers
+          - heading "Google Gemini" [level=1] [ref=e28]
+          - generic [ref=e29]:
+            - generic [ref=e30]: gemini
+            - link "Docs" [ref=e31] [cursor=pointer]:
+              - /url: https://ai.google.dev/docs
+            - link "Console" [ref=e32] [cursor=pointer]:
+              - /url: https://aistudio.google.com/apikey
+          - generic [ref=e33]:
+            - text: "Capabilities:"
+            - generic [ref=e34]: Chat (45)
+        - generic [ref=e36]:
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - generic [ref=e40]:
+                - generic [ref=e41]: ✓
+                - generic [ref=e42]: Credentials
+              - generic [ref=e45]:
+                - generic [ref=e46]: ✓
+                - generic [ref=e47]: Connect
+              - generic [ref=e50]:
+                - generic [ref=e51]: ✓
+                - generic [ref=e52]: Discover
+              - generic [ref=e55]:
+                - generic [ref=e56]: ✓
+                - generic [ref=e57]: Profile
+              - generic [ref=e60]:
+                - generic [ref=e61]: ✓
+                - generic [ref=e62]: Ready
+            - generic [ref=e63]:
+              - button "active" [ref=e64] [cursor=pointer]
+              - generic [ref=e65]: token-priced
+            - group [ref=e66]:
+              - 'generic "Advanced: model families (0/2 enabled)" [ref=e67] [cursor=pointer]'
+            - generic [ref=e68]:
+              - generic [ref=e69]: Authentication method
+              - text: API Key
+            - generic [ref=e70]:
+              - generic [ref=e71]: API Key••••••••
+              - textbox "Enter new key to replace" [ref=e72]
+            - generic [ref=e73]:
+              - button "Save" [ref=e74] [cursor=pointer]
+              - button "Test connection" [ref=e75] [cursor=pointer]
+            - generic [ref=e76]:
+              - button "Sync Models & Profiles" [ref=e77] [cursor=pointer]
+              - text: 45 models discovered (0 new)31 profiled, 0 failed
+            - paragraph [ref=e78]: 45 models discovered
+          - generic [ref=e79]:
+            - generic [ref=e80]: Discovered Models
+            - generic [ref=e81]:
+              - generic [ref=e82]:
+                - searchbox "Search models…" [ref=e83]
+                - generic [ref=e84]: 45 models
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - generic [ref=e87]:
+                    - generic [ref=e88]:
+                      - generic [ref=e89]: Model that performs Attributed Question Answering.
+                      - generic [ref=e90]: aqa
+                    - 'generic "Metadata confidence: low" [ref=e92]'
+                  - generic [ref=e94]: Pricing unknown
+                  - button "Routing Scores ▸" [ref=e96] [cursor=pointer]
+                - generic [ref=e97]:
+                  - generic [ref=e98]:
+                    - generic [ref=e99]:
+                      - generic [ref=e100]: Deep Research Pro Preview (Dec-12-2025)
+                      - generic [ref=e101]: deep-research-pro-preview-12-2025
+                    - 'generic "Metadata confidence: medium" [ref=e103]'
+                  - generic [ref=e105]: Pricing unknown
+                  - generic [ref=e106]: "Context: 131.1K tokens"
+                  - generic [ref=e108]: Tools
+                  - button "Routing Scores ▸" [ref=e110] [cursor=pointer]
+                - generic [ref=e111]:
+                  - generic [ref=e112]:
+                    - generic [ref=e113]:
+                      - generic [ref=e114]: Gemini 2.0 Flash
+                      - generic [ref=e115]: gemini-2.0-flash
+                    - 'generic "Metadata confidence: medium" [ref=e117]'
+                  - generic [ref=e119]: Pricing unknown
+                  - generic [ref=e120]: "Context: 1.0M tokens"
+                  - generic [ref=e121]:
+                    - generic [ref=e122]: Tools
+                    - generic [ref=e123]: Code Exec
+                  - button "Routing Scores ▸" [ref=e125] [cursor=pointer]
+                - generic [ref=e126]:
+                  - generic [ref=e127]:
+                    - generic [ref=e128]:
+                      - generic [ref=e129]: Gemini 2.0 Flash 001
+                      - generic [ref=e130]: gemini-2.0-flash-001
+                    - 'generic "Metadata confidence: medium" [ref=e132]'
+                  - generic [ref=e134]: Pricing unknown
+                  - generic [ref=e135]: "Context: 1.0M tokens"
+                  - generic [ref=e136]:
+                    - generic [ref=e137]: Tools
+                    - generic [ref=e138]: Code Exec
+                  - button "Routing Scores ▸" [ref=e140] [cursor=pointer]
+                - generic [ref=e141]:
+                  - generic [ref=e142]:
+                    - generic [ref=e143]:
+                      - generic [ref=e144]: Gemini 2.0 Flash-Lite
+                      - generic [ref=e145]: gemini-2.0-flash-lite
+                    - 'generic "Metadata confidence: medium" [ref=e147]'
+                  - generic [ref=e149]: Pricing unknown
+                  - generic [ref=e150]: "Context: 1.0M tokens"
+                  - generic [ref=e151]:
+                    - generic [ref=e152]: Tools
+                    - generic [ref=e153]: Code Exec
+                  - button "Routing Scores ▸" [ref=e155] [cursor=pointer]
+                - generic [ref=e156]:
+                  - generic [ref=e157]:
+                    - generic [ref=e158]:
+                      - generic [ref=e159]: Gemini 2.0 Flash-Lite 001
+                      - generic [ref=e160]: gemini-2.0-flash-lite-001
+                    - 'generic "Metadata confidence: medium" [ref=e162]'
+                  - generic [ref=e164]: Pricing unknown
+                  - generic [ref=e165]: "Context: 1.0M tokens"
+                  - generic [ref=e166]:
+                    - generic [ref=e167]: Tools
+                    - generic [ref=e168]: Code Exec
+                  - button "Routing Scores ▸" [ref=e170] [cursor=pointer]
+                - generic [ref=e171]:
+                  - generic [ref=e172]:
+                    - generic [ref=e173]:
+                      - generic [ref=e174]: Gemini 2.5 Computer Use Preview 10-2025
+                      - generic [ref=e175]: gemini-2.5-computer-use-preview-10-2025
+                    - 'generic "Metadata confidence: medium" [ref=e177]'
+                  - generic [ref=e179]: Pricing unknown
+                  - generic [ref=e180]: "Context: 131.1K tokens"
+                  - generic [ref=e181]:
+                    - generic [ref=e182]: Tools
+                    - generic [ref=e183]: Code Exec
+                  - button "Routing Scores ▸" [ref=e185] [cursor=pointer]
+                - generic [ref=e186]:
+                  - generic [ref=e187]:
+                    - generic [ref=e188]:
+                      - generic [ref=e189]: Gemini 2.5 Flash
+                      - generic [ref=e190]: gemini-2.5-flash
+                    - 'generic "Metadata confidence: medium" [ref=e192]'
+                  - generic [ref=e194]: Pricing unknown
+                  - generic [ref=e195]: "Context: 1.0M tokens"
+                  - generic [ref=e196]:
+                    - generic [ref=e197]: Tools
+                    - generic [ref=e198]: Code Exec
+                  - button "Routing Scores ▸" [ref=e200] [cursor=pointer]
+                - generic [ref=e201]:
+                  - generic [ref=e202]:
+                    - generic [ref=e203]:
+                      - generic [ref=e204]: Nano Banana
+                      - generic [ref=e205]: gemini-2.5-flash-image
+                    - 'generic "Metadata confidence: medium" [ref=e207]'
+                  - generic [ref=e209]: Pricing unknown
+                  - generic [ref=e210]: "Context: 32.8K tokens"
+                  - generic [ref=e211]:
+                    - generic [ref=e212]: Tools
+                    - generic [ref=e213]: Code Exec
+                  - button "Routing Scores ▸" [ref=e215] [cursor=pointer]
+                - generic [ref=e216]:
+                  - generic [ref=e217]:
+                    - generic [ref=e218]:
+                      - generic [ref=e219]: Gemini 2.5 Flash-Lite
+                      - generic [ref=e220]: gemini-2.5-flash-lite
+                    - 'generic "Metadata confidence: medium" [ref=e222]'
+                  - generic [ref=e224]: Pricing unknown
+                  - generic [ref=e225]: "Context: 1.0M tokens"
+                  - generic [ref=e226]:
+                    - generic [ref=e227]: Tools
+                    - generic [ref=e228]: Code Exec
+                  - button "Routing Scores ▸" [ref=e230] [cursor=pointer]
+                - generic [ref=e231]:
+                  - generic [ref=e232]:
+                    - generic [ref=e233]:
+                      - generic [ref=e234]: Gemini 2.5 Flash-Lite Preview Sep 2025
+                      - generic [ref=e235]: gemini-2.5-flash-lite-preview-09-2025
+                    - 'generic "Metadata confidence: medium" [ref=e237]'
+                  - generic [ref=e239]: Pricing unknown
+                  - generic [ref=e240]: "Context: 1.0M tokens"
+                  - generic [ref=e241]:
+                    - generic [ref=e242]: Tools
+                    - generic [ref=e243]: Code Exec
+                  - button "Routing Scores ▸" [ref=e245] [cursor=pointer]
+                - generic [ref=e246]:
+                  - generic [ref=e247]:
+                    - generic [ref=e248]:
+                      - generic [ref=e249]: Gemini 2.5 Flash Native Audio Latest
+                      - generic [ref=e250]: gemini-2.5-flash-native-audio-latest
+                    - 'generic "Metadata confidence: low" [ref=e252]'
+                  - generic [ref=e254]: Pricing unknown
+                  - button "Routing Scores ▸" [ref=e256] [cursor=pointer]
+                - generic [ref=e257]:
+                  - generic [ref=e258]:
+                    - generic [ref=e259]:
+                      - generic [ref=e260]: Gemini 2.5 Flash Native Audio Preview 09-2025
+                      - generic [ref=e261]: gemini-2.5-flash-native-audio-preview-09-2025
+                    - 'generic "Metadata confidence: low" [ref=e263]'
+                  - generic [ref=e265]: Pricing unknown
+                  - button "Routing Scores ▸" [ref=e267] [cursor=pointer]
+                - generic [ref=e268]:
+                  - generic [ref=e269]:
+                    - generic [ref=e270]:
+                      - generic [ref=e271]: Gemini 2.5 Flash Native Audio Preview 12-2025
+                      - generic [ref=e272]: gemini-2.5-flash-native-audio-preview-12-2025
+                    - 'generic "Metadata confidence: low" [ref=e274]'
+                  - generic [ref=e276]: Pricing unknown
+                  - button "Routing Scores ▸" [ref=e278] [cursor=pointer]
+                - generic [ref=e279]:
+                  - generic [ref=e280]:
+                    - generic [ref=e281]:
+                      - generic [ref=e282]: Gemini 2.5 Flash Preview TTS
+                      - generic [ref=e283]: gemini-2.5-flash-preview-tts
+                    - 'generic "Metadata confidence: medium" [ref=e285]'
+                  - generic [ref=e287]: Pricing unknown
+                  - generic [ref=e288]: "Context: 8.2K tokens"
+                  - generic [ref=e289]:
+                    - generic [ref=e290]: Tools
+                    - generic [ref=e291]: Code Exec
+                  - button "Routing Scores ▸" [ref=e293] [cursor=pointer]
+                - generic [ref=e294]:
+                  - generic [ref=e295]:
+                    - generic [ref=e296]:
+                      - generic [ref=e297]: Gemini 2.5 Pro
+                      - generic [ref=e298]: gemini-2.5-pro
+                    - 'generic "Metadata confidence: medium" [ref=e300]'
+                  - generic [ref=e302]: Pricing unknown
+                  - generic [ref=e303]: "Context: 1.0M tokens"
+                  - generic [ref=e304]:
+                    - generic [ref=e305]: Tools
+                    - generic [ref=e306]: Code Exec
+                  - button "Routing Scores ▸" [ref=e308] [cursor=pointer]
+                - generic [ref=e309]:
+                  - generic [ref=e310]:
+                    - generic [ref=e311]:
+                      - generic [ref=e312]: Gemini 2.5 Pro Preview TTS
+                      - generic [ref=e313]: gemini-2.5-pro-preview-tts
+                    - 'generic "Metadata confidence: medium" [ref=e315]'
+                  - generic [ref=e317]: Pricing unknown
+                  - generic [ref=e318]: "Context: 8.2K tokens"
+                  - generic [ref=e319]:
+                    - generic [ref=e320]: Tools
+                    - generic [ref=e321]: Code Exec
+                  - button "Routing Scores ▸" [ref=e323] [cursor=pointer]
+                - generic [ref=e324]:
+                  - generic [ref=e325]:
+                    - generic [ref=e326]:
+                      - generic [ref=e327]: Gemini 3 Flash Preview
+                      - generic [ref=e328]: gemini-3-flash-preview
+                    - 'generic "Metadata confidence: medium" [ref=e330]'
+                  - generic [ref=e332]: Pricing unknown
+                  - generic [ref=e333]: "Context: 1.0M tokens"
+                  - generic [ref=e335]: Tools
+                  - button "Routing Scores ▸" [ref=e337] [cursor=pointer]
+                - generic [ref=e338]:
+                  - generic [ref=e339]:
+                    - generic [ref=e340]:
+                      - generic [ref=e341]: Nano Banana Pro
+                      - generic [ref=e342]: gemini-3-pro-image-preview
+                    - 'generic "Metadata confidence: medium" [ref=e344]'
+                  - generic [ref=e346]: Pricing unknown
+                  - generic [ref=e347]: "Context: 131.1K tokens"
+                  - generic [ref=e349]: Tools
+                  - button "Routing Scores ▸" [ref=e351] [cursor=pointer]
+                - generic [ref=e352]:
+                  - generic [ref=e353]:
+                    - generic [ref=e354]:
+                      - generic [ref=e355]: Gemini 3 Pro Preview
+                      - generic [ref=e356]: gemini-3-pro-preview
+                    - 'generic "Metadata confidence: medium" [ref=e358]'
+                  - generic [ref=e360]: Pricing unknown
+                  - generic [ref=e361]: "Context: 1.0M tokens"
+                  - generic [ref=e363]: Tools
+                  - button "Routing Scores ▸" [ref=e365] [cursor=pointer]
+              - generic [ref=e366]:
+                - button "Prev" [disabled] [ref=e367]
+                - generic [ref=e368]: Page 1 of 3
+                - button "Next" [ref=e369] [cursor=pointer]
+        - generic [ref=e370]:
+          - generic [ref=e371]:
+            - generic [ref=e372]:
+              - heading "Endpoint Performance" [level=2] [ref=e373]
+              - generic [ref=e375]: "Tier: deprecated"
+            - generic [ref=e376]:
+              - button "Running..." [disabled] [ref=e413]
+              - button "Running..." [disabled] [ref=e414]
+          - generic [ref=e379]:
+            - button "By Task Type" [ref=e380] [cursor=pointer]
+            - button "Recent Evaluations" [ref=e381] [cursor=pointer]
+            - button "Test Runs(5)" [ref=e382] [cursor=pointer]:
+              - text: Test Runs
+              - generic [ref=e383]: (5)
+          - generic [ref=e385]: No performance data yet. Run tests or wait for conversation evaluations.
+    - generic [ref=e386]:
+      - generic [ref=e387]:
+        - generic [ref=e388]:
+          - generic [ref=e389]:
+            - generic [ref=e391]: AI Ops Engineer
+            - button "Skills ▼" [ref=e393] [cursor=pointer]
+          - generic [ref=e394]:
+            - generic [ref=e395]: Confidential
+            - button "Hands Off" [ref=e396] [cursor=pointer]
+            - button "External Access Off" [ref=e397] [cursor=pointer]
+            - button "Dev" [ref=e398] [cursor=pointer]
+            - 'generic "Page sensitivity: confidential" [ref=e399]': confidential
+          - generic [ref=e400]: AI infrastructure, provider management, and cost optimization
+        - generic [ref=e401]:
+          - button "Erase" [disabled] [ref=e402]
+          - button "x" [ref=e403] [cursor=pointer]
+      - generic [ref=e406]:
+        - textbox "Ask your co-worker..." [ref=e412]
+        - button "📎" [ref=e408] [cursor=pointer]
+        - button "Send" [disabled] [ref=e409]
+      - generic "Resize coworker panel" [ref=e410]
+  - alert [ref=e411]

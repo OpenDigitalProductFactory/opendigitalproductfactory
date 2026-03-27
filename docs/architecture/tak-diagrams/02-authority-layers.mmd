@@ -1,0 +1,26 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart TB
+    L1["Layer 1: Authentication\nWho is this person?\nAuth.js session or API token"]
+    L2["Layer 2: Identity & Role\nPlatform role: HR-000 to HR-500\nBusiness model roles: product-scoped"]
+    L3["Layer 3: Capability Resolution\n32 capabilities mapped to roles\ncan(user, capability) -> boolean"]
+    L4["Layer 4: Agent Grant Intersection\nTool-to-grant mapping\nEffective = user capabilities AND agent grants"]
+    L5["Layer 5: Execution Mode\nImmediate: execute now\nProposal: human approval required"]
+
+    L1 -->|narrows| L2
+    L2 -->|narrows| L3
+    L3 -->|narrows| L4
+    L4 -->|narrows| L5
+
+    L5 -->|immediate| EXEC["Tool Executes\nResult recorded"]
+    L5 -->|proposal| APPROVE["Human Approves\nor Rejects"]
+    APPROVE -->|approved| EXEC
+    APPROVE -->|rejected| LOG["Rejection\nLogged"]
+
+    style L1 fill:#0d47a1,color:#fff
+    style L2 fill:#1565c0,color:#fff
+    style L3 fill:#1976d2,color:#fff
+    style L4 fill:#1e88e5,color:#fff
+    style L5 fill:#2196f3,color:#fff
+    style EXEC fill:#2e7d32,color:#fff
+    style APPROVE fill:#f57f17,color:#fff
+    style LOG fill:#c62828,color:#fff

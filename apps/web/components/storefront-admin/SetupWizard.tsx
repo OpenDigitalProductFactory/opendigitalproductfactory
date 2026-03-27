@@ -14,6 +14,15 @@ type Archetype = {
 
 type Step = 1 | 2 | 3 | 4;
 
+type SetupWizardProps = {
+  archetypes: Archetype[];
+  suggestedArchetypeId?: string | null;
+  suggestedArchetypeName?: string | null;
+  archetypeConfidence?: "high" | "medium" | null;
+  suggestedCompanyName?: string | null;
+  suggestedCurrency?: string | null;
+};
+
 // Map storefront archetype category to finance profile slug
 function financeSlugFromCategory(category: string): string {
   const map: Record<string, string> = {
@@ -31,11 +40,18 @@ function financeSlugFromCategory(category: string): string {
   return map[category] ?? "professional_services";
 }
 
-export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
+export function SetupWizard({
+  archetypes,
+  suggestedArchetypeId,
+  suggestedArchetypeName,
+  archetypeConfidence,
+  suggestedCompanyName,
+  suggestedCurrency,
+}: SetupWizardProps) {
   const [step, setStep] = useState<Step>(1);
   const [selected, setSelected] = useState<Archetype | null>(null);
   const [search, setSearch] = useState("");
-  const [orgName, setOrgName] = useState("");
+  const [orgName, setOrgName] = useState(suggestedCompanyName ?? "");
   const [orgSlug, setOrgSlug] = useState("store");
   const [tagline, setTagline] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
@@ -78,6 +94,30 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
     return (
       <div style={{ color: "var(--dpf-text)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Choose your business type</h2>
+
+        {suggestedArchetypeId && suggestedArchetypeName && (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-accent)",
+            background: "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
+            marginBottom: 16,
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}>
+            <span style={{ fontWeight: 600 }}>Suggested:</span>
+            <span>{suggestedArchetypeName}</span>
+            {archetypeConfidence === "high" && (
+              <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>(high confidence)</span>
+            )}
+            <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--dpf-muted)" }}>
+              Detected from your branding URL — scroll down to find it highlighted
+            </span>
+          </div>
+        )}
+
         <input
           type="search"
           placeholder="Search archetypes..."
@@ -94,12 +134,27 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
                 {cat.replace(/-/g, " ")}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
-                {items.map((a) => (
-                  <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
-                    style={{ padding: "12px 16px", textAlign: "left", borderRadius: 8, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", cursor: "pointer", fontSize: 13, color: "var(--dpf-text)" }}>
-                    <div style={{ fontWeight: 600 }}>{a.name}</div>
-                  </button>
-                ))}
+                {items.map((a) => {
+                  const isSuggested = a.archetypeId === suggestedArchetypeId;
+                  return (
+                    <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                      style={{
+                        padding: "12px 16px",
+                        textAlign: "left",
+                        borderRadius: 8,
+                        border: isSuggested ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                        background: isSuggested ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        color: "var(--dpf-text)",
+                      }}>
+                      <div style={{ fontWeight: 600 }}>{a.name}</div>
+                      {isSuggested && (
+                        <div style={{ fontSize: 11, color: "var(--dpf-accent)", marginTop: 2 }}>Suggested for you</div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -139,6 +194,7 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
       <FinancialSetupStep
         archetypeSlug={financeSlugFromCategory(selected?.category ?? "")}
         archetypeName={selected?.name ?? "your business"}
+        suggestedCurrency={suggestedCurrency ?? null}
         onComplete={() => { window.location.href = "/admin/storefront"; }}
       />
     );
@@ -153,6 +209,11 @@ export function SetupWizard({ archetypes }: { archetypes: Archetype[] }) {
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Business name *</div>
           <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)}
             required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+          {suggestedCompanyName && (
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+              Pre-filled from your branding URL — edit if needed
+            </div>
+          )}
         </label>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>URL slug *</div>

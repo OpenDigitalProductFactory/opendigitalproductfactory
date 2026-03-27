@@ -1,0 +1,35 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart TD
+    MSG["User sends message"]
+    SYS["Assemble system prompt\n+ route context\n+ directives\n+ available tools"]
+    CALL["Call inference provider"]
+    RESP{"Model\nresponse?"}
+    TEXT["Return text\nto user"]
+    TOOL{"Execution\nmode?"}
+    IMM["Execute tool\nimmediately"]
+    PROP["Return proposal\ncard to user"]
+    AUDIT["Record in\nToolExecution"]
+    APPEND["Append result\nto conversation"]
+    GUARD{"Safety\nchecks?"}
+    STALL["Stall detected\nBreak loop"]
+    FAB["Fabrication detected\nRetry with nudge"]
+
+    MSG --> SYS --> CALL --> RESP
+    RESP -->|text only| GUARD
+    RESP -->|tool calls| TOOL
+    TOOL -->|immediate| IMM --> AUDIT --> APPEND --> CALL
+    TOOL -->|proposal| PROP
+    GUARD -->|clean| TEXT
+    GUARD -->|"repetition\n(3x same call)"| STALL
+    GUARD -->|"claims done\nwithout tools"| FAB
+    FAB -->|retry| CALL
+
+    style MSG fill:#0d47a1,color:#fff
+    style SYS fill:#1565c0,color:#fff
+    style CALL fill:#1976d2,color:#fff
+    style TEXT fill:#2e7d32,color:#fff
+    style IMM fill:#2e7d32,color:#fff
+    style PROP fill:#f57f17,color:#fff
+    style AUDIT fill:#6a1b9a,color:#fff
+    style STALL fill:#c62828,color:#fff
+    style FAB fill:#c62828,color:#fff

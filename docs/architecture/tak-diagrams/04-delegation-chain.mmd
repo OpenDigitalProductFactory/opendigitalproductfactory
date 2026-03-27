@@ -1,0 +1,49 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '13px'}}}%%
+flowchart TB
+    HR000["HR-000 CDIO\n(Human Supervisor)"]
+    HR200["HR-200 Product Mgr\n(Human Supervisor)"]
+    HR300["HR-300 Enterprise Arch\n(Human Supervisor)"]
+    HR500["HR-500 Ops Manager\n(Human Supervisor)"]
+
+    ORCH000["AGT-ORCH-000\nCOO Orchestrator\nTier 1 | HITL-1"]
+    ORCH200["AGT-ORCH-200\nEvaluate/Explore\nTier 2 | HITL-1"]
+    ORCH300["AGT-ORCH-300\nIntegrate\nTier 2 | HITL-1"]
+    ORCH400["AGT-ORCH-400\nDeploy\nTier 2 | HITL-1"]
+
+    AGT110["AGT-110\nCapability Mapper\nTier 3 | HITL-2"]
+    AGT120["AGT-120\nService Designer\nTier 3 | HITL-2"]
+    AGT130["AGT-130\nBuild Coordinator\nTier 3 | HITL-2"]
+    AGT131["AGT-131\nTest Orchestrator\nTier 3 | HITL-2"]
+    AGT140["AGT-140\nIaC Executor\nTier 3 | HITL-1"]
+    AGT190["AGT-190\nSecurity Auditor\nTier 3 | HITL-1"]
+
+    HR000 ==> ORCH000
+    ORCH000 --> ORCH200
+    ORCH000 --> ORCH300
+    ORCH000 --> ORCH400
+
+    ORCH200 --> AGT110
+    ORCH200 --> AGT120
+    ORCH300 --> AGT130
+    ORCH300 --> AGT131
+    ORCH400 --> AGT140
+
+    HR300 -.->|escalation| AGT190
+    HR200 -.->|escalation| ORCH200
+    HR200 -.->|escalation| ORCH300
+    HR500 -.->|escalation| ORCH400
+
+    style HR000 fill:#b71c1c,color:#fff
+    style HR200 fill:#b71c1c,color:#fff
+    style HR300 fill:#b71c1c,color:#fff
+    style HR500 fill:#b71c1c,color:#fff
+    style ORCH000 fill:#e65100,color:#fff
+    style ORCH200 fill:#1565c0,color:#fff
+    style ORCH300 fill:#1565c0,color:#fff
+    style ORCH400 fill:#1565c0,color:#fff
+    style AGT110 fill:#2e7d32,color:#fff
+    style AGT120 fill:#2e7d32,color:#fff
+    style AGT130 fill:#2e7d32,color:#fff
+    style AGT131 fill:#2e7d32,color:#fff
+    style AGT140 fill:#2e7d32,color:#fff
+    style AGT190 fill:#6a1b9a,color:#fff

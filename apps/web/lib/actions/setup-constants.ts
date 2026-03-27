@@ -44,4 +44,12 @@ export type SetupContext = {
   industry?: string;
   hasCloudProvider?: boolean;
   skippedSteps?: string[];
+  // Populated by importBrandFromUrl during the branding step
+  suggestedCompanyName?: string;
+  suggestedArchetypeId?: string;
+  suggestedArchetypeName?: string;
+  archetypeConfidence?: "high" | "medium";
+  suggestedCurrency?: string;
+  suggestedCountryCode?: string;
+  brandingSourceUrl?: string;
 };

@@ -20,11 +20,24 @@ type ToolInfo = {
   sideEffect: boolean;
 };
 
+export type ProductBmr = {
+  productId: string;
+  productName: string;
+  roles: Array<{
+    roleName: string;
+    authorityDomain: string | null;
+    hitlTierDefault: number;
+    escalatesTo: string | null;
+    assignee: string | null;
+  }>;
+};
+
 type EffectivePermissionsProps = {
   agents: AgentInfo[];
   roles: RoleInfo[];
   tools: ToolInfo[];
   permissions: Record<string, string[]>; // capability -> roles that have it
+  products?: ProductBmr[];
 };
 
 /**
@@ -143,14 +156,32 @@ function isUserAllowed(
   return allowedRoles.includes(roleId);
 }
 
+const HITL_COLOURS_EP: Record<number, string> = {
+  0: "#ef4444",
+  1: "#f97316",
+  2: "#38bdf8",
+  3: "#4ade80",
+};
+
+const ESCALATION_LABELS_EP: Record<string, string> = {
+  "HR-000": "CDIO",
+  "HR-100": "Portfolio Mgr",
+  "HR-200": "Product Mgr",
+  "HR-300": "Architect",
+  "HR-400": "ITFM Dir",
+  "HR-500": "Ops Mgr",
+};
+
 export function EffectivePermissionsPanel({
   agents,
   roles,
   tools,
   permissions,
+  products,
 }: EffectivePermissionsProps) {
   const [selectedRole, setSelectedRole] = useState(roles[0]?.roleId ?? "");
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.agentId ?? "");
+  const [selectedProduct, setSelectedProduct] = useState(products?.[0]?.productId ?? "");
 
   const selectedAgentData = useMemo(
     () => agents.find((a) => a.agentId === selectedAgent),
@@ -248,6 +279,32 @@ export function EffectivePermissionsPanel({
             ))}
           </select>
         </div>
+
+        {products && products.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <label style={{ fontSize: 9, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Product (BMR)
+            </label>
+            <select
+              value={selectedProduct}
+              onChange={(e) => setSelectedProduct(e.target.value)}
+              className={selectClass}
+              style={{
+                border: "1px solid var(--dpf-border)",
+                fontSize: 11,
+                padding: "5px 8px",
+                borderRadius: 4,
+              }}
+            >
+              <option value="" className={optionClass}>— none —</option>
+              {products.map((p) => (
+                <option key={p.productId} value={p.productId} className={optionClass}>
+                  {p.productName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Summary stats */}
@@ -403,6 +460,88 @@ export function EffectivePermissionsPanel({
           Blocked by grants: {evaluatedTools.filter((t) => !t.agentAllowed && !!TOOL_TO_GRANTS[t.toolName]).length}
         </span>
       </div>
+
+      {/* BMR authority domain section */}
+      {products && selectedProduct && (() => {
+        const product = products.find((p) => p.productId === selectedProduct);
+        if (!product || product.roles.length === 0) return null;
+        return (
+          <div style={{ marginTop: 16 }}>
+            <div style={{
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--dpf-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 8,
+            }}>
+              BMR Authority Domains — {product.productName}
+            </div>
+
+            {/* Header */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 60px 80px 1fr",
+              gap: 8,
+              padding: "5px 10px",
+              fontSize: 9,
+              fontWeight: 600,
+              color: "var(--dpf-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              borderBottom: "1px solid var(--dpf-border)",
+            }}>
+              <span>Role</span>
+              <span>Authority Domain</span>
+              <span style={{ textAlign: "center" }}>HITL</span>
+              <span>Escalates To</span>
+              <span>Assigned To</span>
+            </div>
+
+            {product.roles.map((r, i) => {
+              const tierColour = HITL_COLOURS_EP[r.hitlTierDefault] ?? "#8888a0";
+              const escLabel = r.escalatesTo
+                ? (ESCALATION_LABELS_EP[r.escalatesTo] ?? r.escalatesTo)
+                : "—";
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 60px 80px 1fr",
+                    gap: 8,
+                    padding: "5px 10px",
+                    fontSize: 10,
+                    color: "var(--dpf-text)",
+                    borderBottom: "1px solid var(--dpf-border)",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>{r.roleName}</span>
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>
+                    {r.authorityDomain ?? "—"}
+                  </span>
+                  <span style={{ textAlign: "center" }}>
+                    <span style={{
+                      fontSize: 9,
+                      background: `${tierColour}20`,
+                      color: tierColour,
+                      borderRadius: 3,
+                      padding: "1px 5px",
+                    }}>
+                      {r.hitlTierDefault}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escLabel}</span>
+                  <span style={{ fontSize: 9, color: r.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: r.assignee ? "normal" : "italic" }}>
+                    {r.assignee ?? "unassigned"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

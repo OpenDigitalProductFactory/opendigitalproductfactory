@@ -1,0 +1,326 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-03-26",
+  "business_models": [
+    {
+      "model_id": "bm-saas",
+      "name": "SaaS / Subscription",
+      "description": "Recurring-revenue software products delivered as a hosted service",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-SAAS-010",
+          "name": "Customer Success Manager",
+          "authority_domain": "Retention strategy, renewal management, health scoring",
+          "it4it_alignment": "Consume (SS5.6), Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-SAAS-020",
+          "name": "Growth & Acquisition Manager",
+          "authority_domain": "Acquisition funnels, trial conversion, expansion revenue",
+          "it4it_alignment": "Release (SS5.5), Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-SAAS-030",
+          "name": "Subscription Revenue Analyst",
+          "authority_domain": "MRR/ARR tracking, churn analysis, pricing optimization",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-400"
+        },
+        {
+          "role_id": "BMR-SAAS-040",
+          "name": "Technical Account Manager",
+          "authority_domain": "Enterprise customer technical advisory, integration support",
+          "it4it_alignment": "Consume (SS5.6), Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-marketplace",
+      "name": "Marketplace / Platform",
+      "description": "Two-sided platforms connecting buyers and sellers or providers and consumers",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-MKT-010",
+          "name": "Vendor Relations Manager",
+          "authority_domain": "Supplier onboarding, partner quality, vendor lifecycle",
+          "it4it_alignment": "Evaluate (SS5.1), Release (SS5.5)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-MKT-020",
+          "name": "Trust & Safety Manager",
+          "authority_domain": "Content moderation, fraud prevention, dispute resolution",
+          "it4it_alignment": "Operate (SS5.7)",
+          "hitl_tier_default": 1,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-MKT-030",
+          "name": "Marketplace Operations Analyst",
+          "authority_domain": "GMV tracking, take-rate optimization, liquidity metrics",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-400"
+        },
+        {
+          "role_id": "BMR-MKT-040",
+          "name": "Community Manager",
+          "authority_domain": "Buyer/seller community engagement, feedback loops",
+          "it4it_alignment": "Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-ecommerce",
+      "name": "E-commerce / Retail",
+      "description": "Direct-to-consumer product sales via digital storefronts",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-ECOM-010",
+          "name": "Merchandising Manager",
+          "authority_domain": "Product catalog curation, category management, assortment",
+          "it4it_alignment": "Explore (SS5.2), Release (SS5.5)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-ECOM-020",
+          "name": "Fulfillment Operations Manager",
+          "authority_domain": "Order fulfillment, logistics coordination, returns",
+          "it4it_alignment": "Deploy (SS5.4), Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-ECOM-030",
+          "name": "Customer Experience Manager",
+          "authority_domain": "Shopping journey optimization, support escalation",
+          "it4it_alignment": "Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-ECOM-040",
+          "name": "Pricing & Promotions Analyst",
+          "authority_domain": "Dynamic pricing, campaign management, margin analysis",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-400"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-services",
+      "name": "Professional Services / Consulting",
+      "description": "Time-and-materials or fixed-scope delivery of expert knowledge and outcomes",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-SVC-010",
+          "name": "Engagement Manager",
+          "authority_domain": "Client delivery ownership, scope management, satisfaction",
+          "it4it_alignment": "Consume (SS5.6), Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-SVC-020",
+          "name": "Resource & Capacity Planner",
+          "authority_domain": "Staffing allocation, utilization tracking, bench management",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-400"
+        },
+        {
+          "role_id": "BMR-SVC-030",
+          "name": "Service Delivery Manager",
+          "authority_domain": "Milestone tracking, quality assurance, SLA adherence",
+          "it4it_alignment": "Integrate (SS5.3), Deploy (SS5.4)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-SVC-040",
+          "name": "Knowledge Manager",
+          "authority_domain": "IP capture, methodology governance, reuse library",
+          "it4it_alignment": "Explore (SS5.2)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-media",
+      "name": "Media / Content / Publishing",
+      "description": "Content creation, curation, and distribution products with audience-based revenue",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-MED-010",
+          "name": "Content Strategy Manager",
+          "authority_domain": "Editorial calendar, content-market fit, format decisions",
+          "it4it_alignment": "Explore (SS5.2)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-MED-020",
+          "name": "Audience Development Manager",
+          "authority_domain": "Distribution channels, SEO/discovery, subscriber growth",
+          "it4it_alignment": "Release (SS5.5), Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-MED-030",
+          "name": "Rights & Licensing Manager",
+          "authority_domain": "IP rights, syndication agreements, usage compliance",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 1,
+          "escalates_to": "HR-400"
+        },
+        {
+          "role_id": "BMR-MED-040",
+          "name": "Editorial Operations Manager",
+          "authority_domain": "Production workflow, quality review, publishing cadence",
+          "it4it_alignment": "Integrate (SS5.3), Deploy (SS5.4)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-iot",
+      "name": "Hardware + Software / IoT",
+      "description": "Connected physical products combining firmware, hardware, and cloud services",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-IOT-010",
+          "name": "Hardware Program Manager",
+          "authority_domain": "BOM management, manufacturing coordination, certifications",
+          "it4it_alignment": "Integrate (SS5.3)",
+          "hitl_tier_default": 1,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-IOT-020",
+          "name": "Firmware & OTA Release Manager",
+          "authority_domain": "Firmware lifecycle, OTA deployment strategy, rollback",
+          "it4it_alignment": "Deploy (SS5.4), Release (SS5.5)",
+          "hitl_tier_default": 1,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-IOT-030",
+          "name": "Field Service Manager",
+          "authority_domain": "Device fleet health, warranty, on-site repair coordination",
+          "it4it_alignment": "Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-IOT-040",
+          "name": "Supply Chain Coordinator",
+          "authority_domain": "Supplier management, lead time optimization, inventory",
+          "it4it_alignment": "Evaluate (SS5.1)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-400"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-devplatform",
+      "name": "Internal Platform / Developer Tools",
+      "description": "Internal developer platforms and toolchains consumed by engineering teams",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-DEV-010",
+          "name": "Developer Experience Lead",
+          "authority_domain": "DX metrics, onboarding friction, tooling decisions",
+          "it4it_alignment": "Explore (SS5.2), Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-DEV-020",
+          "name": "Platform Reliability Engineer",
+          "authority_domain": "SLO definition, incident response, capacity planning",
+          "it4it_alignment": "Operate (SS5.7)",
+          "hitl_tier_default": 1,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-DEV-030",
+          "name": "Internal Adoption Manager",
+          "authority_domain": "Migration planning, rollout communication, feedback",
+          "it4it_alignment": "Release (SS5.5), Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-DEV-040",
+          "name": "Documentation Lead",
+          "authority_domain": "API docs, runbooks, architecture decision records",
+          "it4it_alignment": "Explore (SS5.2)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    },
+    {
+      "model_id": "bm-api",
+      "name": "API / Data-as-a-Service",
+      "description": "Productized APIs and data feeds consumed by developers and partner systems",
+      "is_built_in": true,
+      "roles": [
+        {
+          "role_id": "BMR-API-010",
+          "name": "API Product Manager",
+          "authority_domain": "API versioning strategy, deprecation policy, roadmap",
+          "it4it_alignment": "Explore (SS5.2), Release (SS5.5)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-API-020",
+          "name": "Developer Relations Manager",
+          "authority_domain": "SDK maintenance, partner integrations, developer community",
+          "it4it_alignment": "Consume (SS5.6)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        },
+        {
+          "role_id": "BMR-API-030",
+          "name": "Usage Analytics Analyst",
+          "authority_domain": "Consumption metering, rate-limit tuning, abuse detection",
+          "it4it_alignment": "Operate (SS5.7)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-500"
+        },
+        {
+          "role_id": "BMR-API-040",
+          "name": "Integration Partner Manager",
+          "authority_domain": "Partner certification, co-development, ecosystem strategy",
+          "it4it_alignment": "Evaluate (SS5.1), Release (SS5.5)",
+          "hitl_tier_default": 2,
+          "escalates_to": "HR-200"
+        }
+      ]
+    }
+  ]
+}

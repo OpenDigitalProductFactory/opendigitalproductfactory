@@ -64,6 +64,8 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "search_portfolio_context",
       "create_digital_product",
       "update_lifecycle",
+      "query_version_history",
+      "search_knowledge",
     ],
     docsPath: "/docs/portfolios/index",
     skills: [
@@ -101,7 +103,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "internal",
     domainContext:
       "This page shows the digital product inventory with lifecycle stages (plan, design, build, production, retirement) and statuses (draft, active, inactive). Users manage individual product records, stage-gate readiness, and portfolio attribution.",
-    domainTools: ["create_digital_product", "update_lifecycle"],
+    domainTools: [
+      "create_digital_product",
+      "update_lifecycle",
+      "query_version_history",
+      "search_knowledge",
+    ],
     docsPath: "/docs/products/index",
     skills: [
       {
@@ -138,7 +145,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Enterprise Architecture",
     sensitivity: "internal",
     domainContext:
-      "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative.",
+      "This page hosts the EA modelling canvas using ArchiMate 4 notation. Users create views, add elements across business/application/technology layers, and map relationships. Models here are implementable, not illustrative. Note: EA canvas actions (create view, add element, link relationships) do not yet have agent tools — advise on structure and create backlog items to track modelling work.",
     domainTools: [],
     docsPath: "/docs/architecture/index",
     skills: [
@@ -146,13 +153,13 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         label: "Create a view",
         description: "Start a new EA view",
         capability: "manage_ea_model",
-        prompt: "Help me create a new EA view",
+        prompt: "The user wants to create a new EA view. Agent tools for direct EA canvas manipulation are not yet available. Ask what view they want to create (name, layer, purpose), advise on the ArchiMate elements that belong in it, then create a backlog item to track the modelling work so it isn't lost.",
       },
       {
         label: "Impact analysis",
         description: "Trace what changes if a component changes",
         capability: "view_ea_modeler",
-        prompt: "If I change this component, what else is affected?",
+        prompt: "The user wants to know what is affected if a component changes. Use the PAGE DATA to reason about the visible model. Describe the dependency chain in plain language. Do not call any tools — this is a read-and-reason task on what is already shown.",
       },
       {
         label: "Report an issue",
@@ -168,8 +175,16 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Employee Management",
     sensitivity: "confidential",
     domainContext:
-      "This page manages role assignments, team structures, HITL tier commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified human in the loop.",
-    domainTools: [],
+      "This page manages employee profiles, role assignments, team structures, HITL tier commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified human in the loop. Only firstName and lastName are required to add an employee — all other fields (email, department, position, start date) are optional. Use query_employees to search before creating. Use list_departments and list_positions when the user doesn't know the exact department or position name.",
+    domainTools: [
+      "query_employees",
+      "create_employee",
+      "list_departments",
+      "list_positions",
+      "transition_employee_status",
+      "propose_leave_policy",
+      "submit_feedback",
+    ],
     docsPath: "/docs/hr/index",
     skills: [
       {
@@ -205,14 +220,17 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "confidential",
     domainContext:
       "This page displays customer accounts and service relationships. Data here is classified as confidential — it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, and friction points.",
-    domainTools: [],
+    domainTools: [
+      "create_backlog_item",
+      "search_knowledge",
+    ],
     docsPath: "/docs/customers/index",
     skills: [
       {
         label: "Add a customer",
         description: "Register a new customer account",
         capability: "view_customer",
-        prompt: "Help me register a new customer account. Ask me for the details, then create it.",
+        prompt: "The user wants to register a new customer account. Direct customer creation is not yet available as an agent action — explain this briefly, then ask what details they have and create a backlog item titled 'Add customer: [name]' so the request is tracked. Do not pretend to create the account.",
       },
       {
         label: "Account overview",
@@ -272,6 +290,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainContext:
       "This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ship. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.",
     domainTools: [
+      // Feature brief and backlog
       "update_feature_brief",
       "create_build_epic",
       "register_digital_product_from_build",
@@ -284,18 +303,35 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "saveBuildEvidence",
       "reviewDesignDoc",
       "reviewBuildPlan",
+      // Sandbox — all ops needed during Build phase
       "launch_sandbox",
       "generate_code",
       "iterate_sandbox",
+      "edit_sandbox_file",
+      "read_sandbox_file",
+      "search_sandbox",
+      "list_sandbox_files",
+      "run_sandbox_command",
       "run_sandbox_tests",
-      "deploy_feature",
+      // Review and UX testing
       "generate_ux_test",
       "run_ux_test",
-      // Codebase access (needed for Ideate phase search + Build fallback)
+      // Ship and release pipeline
+      "deploy_feature",
+      "check_deployment_windows",
+      "schedule_promotion",
+      "create_release_bundle",
+      "get_release_status",
+      "run_release_gate",
+      "schedule_release_bundle",
+      "assess_contribution",
+      "contribute_to_hive",
+      // Codebase access (Ideate phase search + Build fallback)
       "read_project_file",
       "search_project_files",
       "list_project_directory",
       "propose_file_change",
+      "search_knowledge",
     ],
     docsPath: "/docs/build-studio/index",
     skills: [
@@ -326,7 +362,13 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "confidential",
     domainContext:
       "This page manages AI providers, model profiles, token spend, and agent-to-provider assignments. Data here is classified as confidential — it includes API keys, cost data, and infrastructure configuration. Users configure failover chains and optimise capability-per-dollar.",
-    domainTools: ["add_provider", "update_provider_category"],
+    domainTools: [
+      "add_provider",
+      "update_provider_category",
+      "run_endpoint_tests",
+      "evaluate_tool",
+      "search_integrations",
+    ],
     docsPath: "/docs/ai-workforce/index",
     skills: [
       {
@@ -368,14 +410,18 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "restricted",
     domainContext:
       "This page handles user management, role assignments, branding configuration, and platform settings. Data here is classified as restricted — it includes access control rules, credentials, and security configuration. All changes are auditable.",
-    domainTools: [],
+    domainTools: [
+      "analyze_brand_document",
+      "analyze_public_website_branding",
+      "fetch_public_website",
+    ],
     docsPath: "/docs/admin/index",
     skills: [
       {
         label: "Manage users",
         description: "User accounts and roles",
         capability: "manage_users",
-        prompt: "Help me manage user accounts",
+        prompt: "The user wants to manage user accounts. Direct user management agent tools are not yet available — employee lifecycle tools are on the /employee page instead. Ask what they want to do (create, deactivate, change role), then either redirect them to the right page or create a backlog item to track the request. Do not claim to have updated any account.",
       },
       {
         label: "Set up branding",
@@ -403,20 +449,24 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "Key workflows: register regulations and their obligations, map controls to obligations for coverage, collect evidence, manage incidents with regulatory notification deadlines, " +
       "track corrective actions, run audits, manage internal policies with employee acknowledgments, and submit regulatory reports. " +
       "The agent should understand the regulation currently being viewed and its obligations when on a regulation detail page.",
-    domainTools: [],
+    domainTools: [
+      "prefill_onboarding_wizard",
+      "search_knowledge",
+      "search_public_web",
+    ],
     docsPath: "/docs/compliance/index",
     skills: [
       {
         label: "Add a regulation",
         description: "Register a new regulation to track",
         capability: "manage_compliance",
-        prompt: "Help me register a new regulation. Ask me for the name, jurisdiction, and key details, then create it with its obligations.",
+        prompt: "The user wants to register a new regulation. Direct compliance record creation is not yet an agent action — for full onboarding use the 'Onboard a regulation' skill which calls the wizard. For a quick request: ask for the name and jurisdiction, then create a backlog item titled 'Register regulation: [name]' so it is tracked. Do not claim to have created the record.",
       },
       {
         label: "Map a control",
         description: "Link a control to an obligation for coverage",
         capability: "manage_compliance",
-        prompt: "Help me map a control to an obligation. Show me which obligations have gaps and let me pick one to address.",
+        prompt: "The user wants to map a control to an obligation. Direct control mapping is not yet an agent action. Ask which obligation has the gap and which control addresses it, then create a backlog item to track the mapping. Do not claim to have updated any control.",
       },
       {
         label: "Gap assessment",
@@ -434,7 +484,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         label: "Add obligation",
         description: "Create a new regulatory obligation",
         capability: "manage_compliance",
-        prompt: "Help me add a new obligation to this regulation",
+        prompt: "The user wants to add a new obligation to a regulation. Direct obligation creation is not yet an agent action. Ask for the obligation title, reference (article/clause), and category. Then create a backlog item to track the addition. Do not claim to have created the obligation record.",
       },
       {
         label: "Onboard a regulation or standard",
@@ -476,6 +526,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "read_project_file",
       "search_project_files",
       "propose_file_change",
+      "search_knowledge",
     ],
     docsPath: "/docs/workspace/index",
     skills: [
@@ -507,7 +558,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     sensitivity: "internal",
     domainContext:
       "This page displays the platform user documentation. Users can browse guides for all platform areas, search for topics, and read how-to content.",
-    domainTools: [],
+    domainTools: ["search_knowledge"],
     docsPath: "/docs",
     skills: [
       {

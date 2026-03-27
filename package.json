@@ -14,11 +14,22 @@
     "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
     "test:endpoints": "tsx scripts/test-endpoints.ts"
   },
-  "engines": { "node": ">=20", "pnpm": ">=9" },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
   "pnpm": {
     "overrides": {
       "@types/react": "^19"
     },
-    "onlyBuiltDependencies": ["msw", "sharp"]
+    "onlyBuiltDependencies": [
+      "msw",
+      "sharp"
+    ]
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@playwright/test": "^1.58.2",
+    "docx": "^9.6.1"
   }
 }

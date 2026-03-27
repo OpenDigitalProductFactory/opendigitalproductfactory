@@ -8,6 +8,7 @@ import {
   analyzePublicWebsiteBranding,
   type BrandingAnalysisResult,
 } from "@/lib/public-web-tools";
+import { updateSetupContext } from "@/lib/actions/setup-progress";
 
 function readString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
@@ -175,6 +176,11 @@ export type BrandImportResult = {
   logoUrl: string | null;       // best logo for dark theme (white/light variant)
   logoUrlLight: string | null;  // best logo for light theme (dark variant)
   accentColor: string | null;
+  suggestedArchetypeId: string | null;
+  suggestedArchetypeName: string | null;
+  archetypeConfidence: "high" | "medium" | null;
+  suggestedCurrency: string | null;
+  suggestedCountryCode: string | null;
 } | {
   ok: false;
   error: string;
@@ -216,12 +222,28 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
       logoForDarkBg = logoForLightBg;
     }
 
+    // Write suggestions to the active setup progress context (fire-and-forget, no throw on error)
+    const contextPatch: Record<string, string> = {};
+    if (analysis.companyName) contextPatch.suggestedCompanyName = analysis.companyName;
+    if (analysis.suggestedArchetypeId) contextPatch.suggestedArchetypeId = analysis.suggestedArchetypeId;
+    if (analysis.suggestedArchetypeName) contextPatch.suggestedArchetypeName = analysis.suggestedArchetypeName;
+    if (analysis.archetypeConfidence) contextPatch.archetypeConfidence = analysis.archetypeConfidence;
+    if (analysis.suggestedCurrency) contextPatch.suggestedCurrency = analysis.suggestedCurrency;
+    if (analysis.suggestedCountryCode) contextPatch.suggestedCountryCode = analysis.suggestedCountryCode;
+    contextPatch.brandingSourceUrl = url;
+    await updateSetupContext(contextPatch).catch(() => undefined);
+
     return {
       ok: true,
       companyName: analysis.companyName,
       logoUrl: logoForDarkBg,
       logoUrlLight: logoForLightBg,
       accentColor: analysis.paletteAccent,
+      suggestedArchetypeId: analysis.suggestedArchetypeId,
+      suggestedArchetypeName: analysis.suggestedArchetypeName,
+      archetypeConfidence: analysis.archetypeConfidence,
+      suggestedCurrency: analysis.suggestedCurrency,
+      suggestedCountryCode: analysis.suggestedCountryCode,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to analyze URL";

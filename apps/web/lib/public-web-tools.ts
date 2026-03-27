@@ -30,6 +30,11 @@ export type BrandingAnalysisResult = {
   logoUrl: string | null;
   paletteAccent: string | null;
   notes: string[];
+  suggestedArchetypeId: string | null;
+  suggestedArchetypeName: string | null;
+  archetypeConfidence: "high" | "medium" | null;
+  suggestedCountryCode: string | null;
+  suggestedCurrency: string | null;
 };
 
 const PRIVATE_HOST_PATTERNS = [
@@ -394,6 +399,185 @@ function extractColorCandidates(html: string): string[] {
   return candidates;
 }
 
+/**
+ * Keyword catalog: maps archetype slug → display name + keywords to match in page text/title/description.
+ * Ordered so more specific archetypes appear before generic ones.
+ */
+const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[] }> = [
+  { id: "dental-practice", name: "Dental Practice", keywords: ["dentist", "dental", "orthodont", "teeth whitening", "oral health", "cosmetic dentistry"] },
+  { id: "optician", name: "Optician", keywords: ["optician", "optometry", "optometrist", "eyewear", "glasses", "contact lens", "vision care", "spectacles"] },
+  { id: "physiotherapy-clinic", name: "Physiotherapy Clinic", keywords: ["physiotherapy", "physiotherapist", "physical therapy", "rehab clinic", "rehabilitation"] },
+  { id: "gp-surgery", name: "GP Surgery", keywords: ["gp surgery", "general practice", "family doctor", "primary care", "medical centre"] },
+  { id: "pharmacy", name: "Pharmacy", keywords: ["pharmacy", "chemist", "dispensary", "prescriptions", "over the counter"] },
+  { id: "hair-salon", name: "Hair Salon", keywords: ["hair salon", "hairdresser", "haircut", "hairstylist", "blow dry", "colouring", "barbershop", "barber shop"] },
+  { id: "beauty-salon", name: "Beauty Salon", keywords: ["beauty salon", "nail salon", "spa treatments", "facials", "waxing", "eyelash", "eyebrow threading", "beauty clinic"] },
+  { id: "tattoo-studio", name: "Tattoo Studio", keywords: ["tattoo", "piercing studio", "body art", "ink studio"] },
+  { id: "fitness-gym", name: "Fitness Gym", keywords: ["gym", "fitness centre", "fitness center", "crossfit", "weightlifting", "personal training", "workout", "health club"] },
+  { id: "yoga-pilates-studio", name: "Yoga / Pilates Studio", keywords: ["yoga", "pilates", "mindfulness", "meditation studio", "barre"] },
+  { id: "restaurant", name: "Restaurant", keywords: ["restaurant", "bistro", "brasserie", "dining", "cuisine", "fine dining", "casual dining", "eatery"] },
+  { id: "cafe-coffeeshop", name: "Café / Coffee Shop", keywords: ["cafe", "café", "coffee shop", "coffee house", "espresso bar", "bakery cafe", "brunch"] },
+  { id: "bakery", name: "Bakery", keywords: ["bakery", "patisserie", "artisan bread", "pastries", "cake shop", "sourdough"] },
+  { id: "bar-pub", name: "Bar / Pub", keywords: ["bar ", "pub ", "tavern", "cocktail bar", "wine bar", "brewery", "craft beer"] },
+  { id: "fast-food", name: "Fast Food", keywords: ["fast food", "takeaway", "takeout", "burger joint", "fried chicken", "pizza delivery", "fish and chips"] },
+  { id: "hotel", name: "Hotel", keywords: ["hotel", "boutique hotel", "inn", "lodge", "resort", "bed and breakfast", "accommodation", "rooms from"] },
+  { id: "holiday-lettings", name: "Holiday Lettings", keywords: ["holiday let", "holiday rental", "vacation rental", "self catering", "airbnb", "serviced apartment"] },
+  { id: "estate-agent", name: "Estate Agent", keywords: ["estate agent", "real estate", "property for sale", "property to let", "letting agent", "homes for sale"] },
+  { id: "law-firm", name: "Law Firm", keywords: ["solicitor", "law firm", "legal services", "barrister", "attorney", "conveyancing", "legal advice"] },
+  { id: "accountancy-firm", name: "Accountancy Firm", keywords: ["accountant", "accountancy", "chartered accountant", "bookkeeping", "tax advice", "tax return", "payroll services"] },
+  { id: "financial-adviser", name: "Financial Adviser", keywords: ["financial adviser", "financial advisor", "independent financial", "ifa", "wealth management", "pensions", "investment advice"] },
+  { id: "mortgage-broker", name: "Mortgage Broker", keywords: ["mortgage broker", "mortgage adviser", "home loans", "remortgage", "first time buyer"] },
+  { id: "insurance-broker", name: "Insurance Broker", keywords: ["insurance broker", "insurance adviser", "life insurance", "business insurance", "car insurance", "home insurance quote"] },
+  { id: "recruitment-agency", name: "Recruitment Agency", keywords: ["recruitment agency", "staffing agency", "executive search", "talent acquisition", "job placement", "headhunter"] },
+  { id: "marketing-agency", name: "Marketing Agency", keywords: ["marketing agency", "digital marketing", "seo agency", "social media agency", "advertising agency", "brand agency"] },
+  { id: "web-design-agency", name: "Web Design Agency", keywords: ["web design", "web development", "ux design", "app development", "software agency", "digital agency"] },
+  { id: "it-managed-services", name: "IT Managed Services", keywords: ["it support", "managed it", "it services", "helpdesk", "network support", "cyber security", "it managed"] },
+  { id: "consulting-firm", name: "Consulting Firm", keywords: ["consulting", "management consulting", "strategy consulting", "business consulting", "advisory services"] },
+  { id: "architecture-firm", name: "Architecture Firm", keywords: ["architect", "architectural", "urban design", "interior architecture", "building design"] },
+  { id: "interior-design", name: "Interior Design", keywords: ["interior design", "interior designer", "home staging", "space planning", "decor studio"] },
+  { id: "photography-studio", name: "Photography Studio", keywords: ["photography", "photographer", "portrait studio", "wedding photographer", "commercial photography"] },
+  { id: "events-venue", name: "Events Venue", keywords: ["events venue", "event space", "conference centre", "wedding venue", "function room", "banqueting"] },
+  { id: "childcare-nursery", name: "Childcare / Nursery", keywords: ["nursery", "childcare", "day care", "pre-school", "preschool", "early years", "childminder"] },
+  { id: "tutoring-centre", name: "Tutoring Centre", keywords: ["tutor", "tutoring", "private lessons", "learning centre", "exam prep", "gcse tutor", "a-level tutor"] },
+  { id: "retail-fashion", name: "Retail — Fashion", keywords: ["clothing store", "fashion boutique", "menswear", "womenswear", "apparel", "streetwear", "online fashion"] },
+  { id: "retail-homeware", name: "Retail — Homeware", keywords: ["homeware", "home furnishings", "furniture store", "kitchenware", "home decor shop"] },
+  { id: "ecommerce-general", name: "E-commerce", keywords: ["shop now", "add to cart", "add to basket", "free delivery", "free shipping", "buy online", "online store", "online shop"] },
+  { id: "nonprofit", name: "Non-Profit / Charity", keywords: ["charity", "nonprofit", "non-profit", "donation", "fundraising", "volunteer", "community interest"] },
+];
+
+type ArchetypeMatch = { id: string; name: string; score: number };
+
+/** Detect business archetype from concatenated page text using keyword scoring. */
+function detectArchetype(text: string): { id: string; name: string; confidence: "high" | "medium" } | null {
+  const lower = text.toLowerCase();
+  const scored: ArchetypeMatch[] = [];
+
+  for (const entry of ARCHETYPE_CATALOG) {
+    let score = 0;
+    for (const kw of entry.keywords) {
+      if (lower.includes(kw)) score++;
+    }
+    if (score > 0) scored.push({ id: entry.id, name: entry.name, score });
+  }
+
+  if (scored.length === 0) return null;
+
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+
+  // High confidence: clear winner (score ≥ 2 and at least 2× the runner-up)
+  const runnerUp = scored[1]?.score ?? 0;
+  const confidence = top.score >= 2 && top.score >= runnerUp * 2 ? "high" : "medium";
+
+  return { id: top.id, name: top.name, confidence };
+}
+
+/** TLD → (ISO 3166-1 alpha-2 country code, ISO 4217 currency code) */
+const TLD_TO_COUNTRY: Record<string, { countryCode: string; currency: string }> = {
+  uk: { countryCode: "GB", currency: "GBP" },
+  co: { countryCode: "GB", currency: "GBP" }, // .co.uk — only used if hostname ends with .co.uk
+  ie: { countryCode: "IE", currency: "EUR" },
+  de: { countryCode: "DE", currency: "EUR" },
+  fr: { countryCode: "FR", currency: "EUR" },
+  es: { countryCode: "ES", currency: "EUR" },
+  it: { countryCode: "IT", currency: "EUR" },
+  nl: { countryCode: "NL", currency: "EUR" },
+  be: { countryCode: "BE", currency: "EUR" },
+  at: { countryCode: "AT", currency: "EUR" },
+  pt: { countryCode: "PT", currency: "EUR" },
+  ch: { countryCode: "CH", currency: "CHF" },
+  se: { countryCode: "SE", currency: "SEK" },
+  no: { countryCode: "NO", currency: "NOK" },
+  dk: { countryCode: "DK", currency: "DKK" },
+  fi: { countryCode: "FI", currency: "EUR" },
+  pl: { countryCode: "PL", currency: "PLN" },
+  cz: { countryCode: "CZ", currency: "CZK" },
+  au: { countryCode: "AU", currency: "AUD" },
+  nz: { countryCode: "NZ", currency: "NZD" },
+  ca: { countryCode: "CA", currency: "CAD" },
+  jp: { countryCode: "JP", currency: "JPY" },
+  cn: { countryCode: "CN", currency: "CNY" },
+  in: { countryCode: "IN", currency: "INR" },
+  sg: { countryCode: "SG", currency: "SGD" },
+  za: { countryCode: "ZA", currency: "ZAR" },
+  ae: { countryCode: "AE", currency: "AED" },
+  br: { countryCode: "BR", currency: "BRL" },
+  mx: { countryCode: "MX", currency: "MXN" },
+};
+
+/** Phone number pattern → country/currency (fallback when TLD is .com/.org etc.) */
+const PHONE_PATTERNS: Array<{ pattern: RegExp; countryCode: string; currency: string }> = [
+  { pattern: /\+44[\s\d]{9,12}|\b0[1-9]\d{8,9}\b/, countryCode: "GB", currency: "GBP" },
+  { pattern: /\+353[\s\d]{8,12}/, countryCode: "IE", currency: "EUR" },
+  { pattern: /\+49[\s\d]{9,13}/, countryCode: "DE", currency: "EUR" },
+  { pattern: /\+33[\s\d]{9,11}/, countryCode: "FR", currency: "EUR" },
+  { pattern: /\+34[\s\d]{9}/, countryCode: "ES", currency: "EUR" },
+  { pattern: /\+39[\s\d]{9,11}/, countryCode: "IT", currency: "EUR" },
+  { pattern: /\+61[\s\d]{9,12}/, countryCode: "AU", currency: "AUD" },
+  { pattern: /\+64[\s\d]{8,11}/, countryCode: "NZ", currency: "NZD" },
+  { pattern: /\+1[\s\(]\d{3}[\s\-\)]\d{3}[\s\-]\d{4}/, countryCode: "US", currency: "USD" },
+  { pattern: /\+1[\s\(]\d{3}[\s\-\)]\d{3}[\s\-]\d{4}.*canada|canada.*\+1/, countryCode: "CA", currency: "CAD" },
+  { pattern: /\+81[\s\d]{9,12}/, countryCode: "JP", currency: "JPY" },
+  { pattern: /\+91[\s\d]{10}/, countryCode: "IN", currency: "INR" },
+  { pattern: /\+65[\s\d]{8}/, countryCode: "SG", currency: "SGD" },
+];
+
+/** Currency symbol patterns in body text → ISO 4217 */
+const CURRENCY_SYMBOL_PATTERNS: Array<{ pattern: RegExp; currency: string }> = [
+  { pattern: /£\s*\d/, currency: "GBP" },
+  { pattern: /€\s*\d|\d\s*€/, currency: "EUR" },
+  { pattern: /A\$\s*\d|\$\s*\d.*australia/i, currency: "AUD" },
+  { pattern: /NZ\$\s*\d/, currency: "NZD" },
+  { pattern: /C\$\s*\d/, currency: "CAD" },
+  { pattern: /¥\s*\d|￥\s*\d/, currency: "JPY" },
+  { pattern: /₹\s*\d/, currency: "INR" },
+  { pattern: /S\$\s*\d/, currency: "SGD" },
+  { pattern: /R\s*\d.*south africa|south africa.*R\s*\d/i, currency: "ZAR" },
+  { pattern: /AED\s*\d|\d\s*AED/, currency: "AED" },
+];
+
+/** Detect country and currency from URL TLD, phone numbers, and currency symbols. */
+function detectCountryAndCurrency(
+  url: string,
+  textExcerpt: string | null,
+): { countryCode: string; currency: string } | null {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
+
+    // .co.uk special case
+    if (hostname.endsWith(".co.uk")) {
+      return { countryCode: "GB", currency: "GBP" };
+    }
+
+    // Extract the rightmost TLD segment (e.g., "co.uk" → already handled above; "example.de" → "de")
+    const parts = hostname.split(".");
+    const tld = parts[parts.length - 1];
+    if (tld && tld !== "com" && tld !== "org" && tld !== "net" && tld !== "io" && tld !== "app" && TLD_TO_COUNTRY[tld]) {
+      return TLD_TO_COUNTRY[tld];
+    }
+  } catch { /* invalid URL */ }
+
+  // Fallback: scan text excerpt for phone patterns and currency symbols
+  const text = textExcerpt ?? "";
+
+  for (const { pattern, countryCode, currency } of PHONE_PATTERNS) {
+    if (pattern.test(text)) return { countryCode, currency };
+  }
+
+  for (const { pattern, currency } of CURRENCY_SYMBOL_PATTERNS) {
+    if (pattern.test(text)) {
+      // Derive a plausible country from the currency
+      const currencyToCountry: Record<string, string> = {
+        GBP: "GB", EUR: "EU", AUD: "AU", NZD: "NZ", CAD: "CA",
+        JPY: "JP", INR: "IN", SGD: "SG", ZAR: "ZA", AED: "AE",
+      };
+      return { countryCode: currencyToCountry[currency] ?? "US", currency };
+    }
+  }
+
+  return null;
+}
+
 export function analyzePublicWebsiteBranding(
   evidence: PublicWebsiteEvidence,
 ): BrandingAnalysisResult {
@@ -407,10 +591,26 @@ export function analyzePublicWebsiteBranding(
     evidence.textExcerpt ? `Excerpt: ${evidence.textExcerpt}` : null,
   ].filter((value): value is string => value !== null);
 
+  // Archetype detection: score against title + description + text excerpt
+  const textForDetection = [
+    evidence.title ?? "",
+    evidence.description ?? "",
+    evidence.textExcerpt ?? "",
+  ].join(" ");
+  const archetypeMatch = detectArchetype(textForDetection);
+
+  // Country/currency detection: TLD first, then text signals
+  const locationMatch = detectCountryAndCurrency(evidence.finalUrl, evidence.textExcerpt);
+
   return {
     companyName,
     logoUrl,
     paletteAccent,
     notes,
+    suggestedArchetypeId: archetypeMatch?.id ?? null,
+    suggestedArchetypeName: archetypeMatch?.name ?? null,
+    archetypeConfidence: archetypeMatch?.confidence ?? null,
+    suggestedCountryCode: locationMatch?.countryCode ?? null,
+    suggestedCurrency: locationMatch?.currency ?? null,
   };
 }

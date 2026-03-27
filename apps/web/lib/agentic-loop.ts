@@ -58,6 +58,12 @@ export function detectFabrication(
   return false;
 }
 
+// Pattern: response is a short clarifying question asking for a required field.
+// System prompt rule 13 allows ONE round of "I need X and Y" before acting.
+// Nudging these responses toward tools breaks legitimate HR / data-entry flows
+// (e.g. "What's the employee's last name?" after "add John as employee").
+const CLARIFYING_QUESTION_PATTERN = /^[^.!]*\?[\s]*$/;
+
 export function shouldNudge(params: {
   continuationNudges: number;
   iteration: number;
@@ -71,8 +77,17 @@ export function shouldNudge(params: {
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
 
-  // First iteration with no tools called — always nudge
-  if (params.executedToolCount === 0 && params.iteration === 0) return true;
+  // First iteration with no tools called — nudge UNLESS the response is a
+  // clarifying question. A short question ending in "?" means the model is
+  // correctly asking for a required field it can't reasonably assume (per rule 13).
+  // Nudging those toward tool calls produces irrelevant build-tool prompts.
+  if (params.executedToolCount === 0 && params.iteration === 0) {
+    const isAskingClarification =
+      params.responseText !== undefined &&
+      params.responseText.trim().length < 250 &&
+      CLARIFYING_QUESTION_PATTERN.test(params.responseText.trim());
+    return !isAskingClarification;
+  }
 
   // Short response after using tools — model may have stalled
   if (params.executedToolCount > 0 && params.responseLength < 200) return true;
@@ -272,7 +287,7 @@ export async function runAgenticLoop(params: {
             : []),
           {
             role: "user" as const,
-            content: `Do NOT describe code. Use your tools to make changes directly. Your build tools include: ${toolNames}. Call the most relevant one NOW — saveBuildEvidence to save evidence, launch_sandbox to start a sandbox, propose_file_change to modify files directly, or generate_code to write code in the sandbox.`,
+            content: `You have tools available — use them directly instead of responding with text. Your available tools include: ${toolNames}. Call the most relevant one now to complete the task.`,
           },
         ];
         continue;

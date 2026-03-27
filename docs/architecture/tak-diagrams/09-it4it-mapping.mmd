@@ -1,0 +1,46 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '12px'}}}%%
+flowchart LR
+    subgraph VS["IT4IT Value Streams"]
+        direction TB
+        E1["SS5.1 Evaluate"]
+        E2["SS5.2 Explore"]
+        I["SS5.3 Integrate"]
+        D["SS5.4 Deploy"]
+        R["SS5.5 Release"]
+        C["SS5.6 Consume"]
+        O["SS5.7 Operate"]
+    end
+
+    subgraph TAK_COMP["TAK Components"]
+        direction TB
+        T1["Portfolio Route\nHR-100 Authority\nInvestment Gates"]
+        T2["EA Route\nHR-300 Authority\nArchitecture Tools"]
+        T3["Build Studio\nAGT-ORCH-300\nSandbox Tools"]
+        T4["Deploy Tools\nAGT-ORCH-400\nRelease Gates"]
+        T5["Service Catalog\nRelease Bundling\nPromotion Scheduling"]
+        T6["Customer Route\nAGT-ORCH-600\nUsage Analytics"]
+        T7["Ops Route\nHR-500 Authority\nAGT-ORCH-700"]
+    end
+
+    E1 --- T1
+    E2 --- T2
+    I --- T3
+    D --- T4
+    R --- T5
+    C --- T6
+    O --- T7
+
+    style E1 fill:#0d47a1,color:#fff
+    style E2 fill:#1565c0,color:#fff
+    style I fill:#1976d2,color:#fff
+    style D fill:#1e88e5,color:#fff
+    style R fill:#2196f3,color:#fff
+    style C fill:#42a5f5,color:#fff
+    style O fill:#64b5f6,color:#000
+    style T1 fill:#2e7d32,color:#fff
+    style T2 fill:#2e7d32,color:#fff
+    style T3 fill:#2e7d32,color:#fff
+    style T4 fill:#2e7d32,color:#fff
+    style T5 fill:#2e7d32,color:#fff
+    style T6 fill:#2e7d32,color:#fff
+    style T7 fill:#2e7d32,color:#fff
