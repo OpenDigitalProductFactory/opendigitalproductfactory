@@ -1,6 +1,5 @@
 flowchart TB
     subgraph HUMANS["HUMAN AUTHORITY LAYER"]
-        direction LR
         HR000["HR-000\nCDIO"]
         HR100["HR-100\nPortfolio Mgr"]
         HR200["HR-200\nProduct Mgr"]
@@ -10,7 +9,6 @@ flowchart TB
     end
 
     subgraph TAK["TRUSTED AI KERNEL"]
-        direction TB
         AUTH["Authentication\n& Session"]
         ROLE["Role & Capability\nResolution"]
         ROUTE["Route Context\nResolution"]
@@ -25,14 +23,12 @@ flowchart TB
     end
 
     subgraph AGENTS["AGENT EXECUTION LAYER"]
-        direction LR
         ORCH["Orchestrators\nTier 1-2"]
         SPEC["Specialists\nTier 3+"]
         ORCH -->|delegates| SPEC
     end
 
     subgraph PROVIDERS["INFERENCE PROVIDERS"]
-        direction LR
         LOCAL["Local\nOllama / Docker MR"]
         CLOUD["Cloud\nAnthropic / OpenAI"]
         MCP["External MCP\nServers"]
