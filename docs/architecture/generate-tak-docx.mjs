@@ -48,6 +48,7 @@ const ROOT = resolve(import.meta.dirname, "..", "..");
 const ARCH_DIR = resolve(import.meta.dirname);
 const DIAGRAMS_DIR = join(ARCH_DIR, "tak-diagrams");
 const PNG_DIR = join(DIAGRAMS_DIR, "png");
+const MMD_CONFIG = join(DIAGRAMS_DIR, "mermaid-config.json");
 const OUTPUT = join(ARCH_DIR, "Trusted-AI-Kernel-Architecture.docx");
 
 // ── Colours ────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ function renderDiagrams() {
     console.log(`  ${file} -> png`);
     try {
       execSync(
-        `pnpm exec mmdc -i "${input}" -o "${output}" -t neutral -b white -w 1200 -s 2`,
+        `pnpm exec mmdc -i "${input}" -o "${output}" -c "${MMD_CONFIG}" -b white -w 1200 -s 2`,
         { cwd: ROOT, stdio: "pipe", timeout: 60_000, env },
       );
     } catch (err) {
