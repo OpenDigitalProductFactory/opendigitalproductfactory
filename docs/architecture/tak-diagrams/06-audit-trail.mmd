@@ -2,20 +2,17 @@ flowchart LR
     ACTION["Agent\nAction"]
 
     subgraph AUDIT["Three Audit Surfaces"]
-        direction TB
         TE["ToolExecution\nagentId, userId, toolName\nparameters, result, success\ndurationMs, routeContext"]
         AAP["AgentActionProposal\nproposalId, status lifecycle\ndecidedById, executedAt\nresultEntityId, gitCommitHash"]
         ADL["AuthorizationDecisionLog\nactorType, actorRef\ndelegationGrantId\ndecision: allow/deny\nrationale JSON"]
     end
 
     subgraph METRICS["Operational Metrics"]
-        direction TB
         TU["TokenUsage\nagentId, providerId\ninputTokens, outputTokens\ncostUsd"]
         AM["AgentMessage\nrole, content, tone\nrouteContext, providerId"]
     end
 
     subgraph ANALYTICS["Continuous Improvement"]
-        direction TB
         DASH["Authority\nDashboard"]
         PATTERNS["Pattern\nAnalysis"]
         ADJUST["Grant & Prompt\nTuning"]
