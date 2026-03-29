@@ -1,0 +1,14 @@
+FROM node:20-alpine
+LABEL org.opencontainers.image.title="DPF Promoter"
+LABEL org.opencontainers.image.description="One-shot container that executes sandbox-to-production promotions"
+RUN apk add --no-cache docker-cli postgresql16-client git curl jq
+WORKDIR /promoter
+
+# Copy Dockerfile for portal rebuilds (baked in at promoter build time)
+COPY Dockerfile /promoter/portal.Dockerfile
+
+# Copy promotion script
+COPY scripts/promote.sh /promoter/promote.sh
+RUN chmod +x /promoter/promote.sh
+
+ENTRYPOINT ["/promoter/promote.sh"]

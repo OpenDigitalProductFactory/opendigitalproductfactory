@@ -84,6 +84,14 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
       setShowOverride(false);
       setOverrideReason("");
       router.refresh();
+
+      // If promoter started, poll for status updates every 5s
+      if (result.success && result.step === "started") {
+        setDeployResult({ promotionId, success: true, message: "Deployment in progress..." });
+        const poll = setInterval(() => { router.refresh(); }, 5_000);
+        // Stop polling after 10 minutes (promoter timeout)
+        setTimeout(() => clearInterval(poll), 10 * 60 * 1000);
+      }
     });
   }
 

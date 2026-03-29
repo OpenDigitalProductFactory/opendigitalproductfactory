@@ -142,6 +142,29 @@ services:
         condition: service_completed_successfully
     command: ["sleep", "infinity"]
 
+  # ─── Promoter (autonomous deployment pipeline) ─────────────────────────
+  # One-shot container that builds new portal images from sandbox source.
+  # Triggered by: execute_promotion MCP tool or operator "Deploy" button.
+  # Not started by default (profiles: promote).
+  promoter:
+    build:
+      context: .
+      dockerfile: Dockerfile.promoter
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backups:/backups
+    environment:
+      DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
+      DPF_PORTAL_CONTAINER: dpf-portal-1
+      DPF_COMPOSE_PROJECT: dpf
+      POSTGRES_USER: ${POSTGRES_USER:-dpf}
+      POSTGRES_DB: dpf
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["promote"]
+    restart: "no"
+
   # ─── Playwright (UX test runner for Build Studio) ──────────────────────
   playwright:
     image: mcr.microsoft.com/playwright:v1.52.0-noble

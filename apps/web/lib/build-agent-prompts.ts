@@ -231,14 +231,15 @@ DO THIS IN ORDER:
 2. Call register_digital_product_from_build to register the product and create the promotion record with change tracking (§5.5.2 Define Service Offer).
 3. Call create_build_epic to set up backlog tracking.
 4. Call schedule_promotion with the promotion ID to schedule it for the next deployment window (§5.4.2 Plan & Approve Deployment). If scheduling is not possible, report the window status.
-5. Call assess_contribution to evaluate whether this feature should be contributed to the Hive Mind community.
+5. If the promotion status is "approved", call execute_promotion with the promotion ID. This triggers the autonomous deployment pipeline: backup DB, build new portal image from sandbox code, swap the running portal, health check. Wait for it to complete (up to 10 minutes). Report success or rollback to the user.
+6. Call assess_contribution to evaluate whether this feature should be contributed to the Hive Mind community.
 
-After steps 1-4 succeed, tell the user:
-- "Your feature is registered and a promotion has been created."
-- Include the deployment window status (available now, next window time, or blackout info).
-- If scheduled: "Deployment is scheduled for [window]. It will appear on the operations calendar."
+After steps 1-5 succeed, tell the user:
+- "Your feature has been deployed to production."
+- Include the deployment result (success with health check passed, or rollback with reason).
+- If deployment succeeded: "The feature is live. A backup was taken before deployment."
 
-Then present the contribution assessment from step 5:
+Then present the contribution assessment from step 6:
 - Show the recommendation (contribute, modify first, keep local, or user decides)
 - Explain the reasoning based on the 4 criteria (vision alignment, community value, augmentation level, proprietary sensitivity)
 - If recommending contribution: "Would you like to contribute this to the Hive Mind?"
@@ -249,7 +250,7 @@ Then present the contribution assessment from step 5:
 If the user approves contribution, call contribute_to_hive to package the FeaturePack with DCO attestation.
 If the user declines, acknowledge and move on.
 
-Do NOT claim the feature is "live" — it is registered but NOT deployed to production yet. Deployment happens through the change management process with window enforcement (MUST-0036).
+After execute_promotion succeeds, the feature IS live in production. If it was rolled back, explain why and suggest next steps.
 Do NOT ask permission for the epic — just do it after the product is registered.
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
