@@ -774,6 +774,18 @@ if (-not (Is-StepDone "started")) {
         }
     }
 
+    # Build the promoter image (for autonomous feature deployments)
+    Write-Action "Building promoter image..."
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker compose --profile promote build promoter --quiet 2>&1 | Out-Null
+    $ErrorActionPreference = $oldEAP
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "Promoter image built"
+    } else {
+        Write-Warn "Promoter image build failed (non-fatal -- can be built later with: docker compose --profile promote build promoter)"
+    }
+
     Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
