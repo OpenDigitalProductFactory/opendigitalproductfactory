@@ -85,6 +85,13 @@ fi
 step "Starting services (PostgreSQL + Neo4j + Ollama)"
 docker compose up -d
 
+echo "  Building promoter image (for autonomous deployments)..."
+if docker compose --profile promote build promoter >/dev/null 2>&1; then
+  ok "Promoter image built"
+else
+  warn "Promoter image build failed (non-fatal -- can be built later)"
+fi
+
 echo "  Waiting for PostgreSQL to be ready..."
 RETRIES=30
 until docker compose exec -T postgres pg_isready -U dpf -q 2>/dev/null; do
