@@ -25,7 +25,7 @@ import { prisma } from "@dpf/db";
 import { importArchimateFile, exportArchimateFile } from "./ea-archimate";
 
 describe("importArchimateFile", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error when archimate4 notation not found", async () => {
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue(null);
@@ -87,7 +87,7 @@ describe("importArchimateFile", () => {
 });
 
 describe("exportArchimateFile", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error for unknown scopeType", async () => {
     const result = await exportArchimateFile({ scopeType: "invalid" as never, scopeRef: "x", userId: "u-1" });

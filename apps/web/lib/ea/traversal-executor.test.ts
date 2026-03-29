@@ -13,7 +13,7 @@ import { prisma } from "@dpf/db";
 import { runTraversalPattern } from "./traversal-executor";
 
 describe("runTraversalPattern", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error when notation not found", async () => {
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue(null);
