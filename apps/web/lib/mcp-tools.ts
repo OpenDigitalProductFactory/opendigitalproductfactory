@@ -504,6 +504,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "execute_promotion",
+    description: "Execute an approved promotion. Starts the autonomous promoter: backup DB, build new portal image from sandbox, swap containers, health check. Rolls back automatically on failure.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        promotion_id: { type: "string", description: "The promotion ID to execute (e.g. CP-xxxx)." },
+        override_reason: { type: "string", description: "Reason for deploying outside a deployment window (optional, for emergency changes)." },
+      },
+      required: ["promotion_id"],
+    },
+    requiredCapability: "view_operations" as const,
+    executionMode: "immediate" as const,
+    sideEffect: true,
+  },
+  {
     name: "create_release_bundle",
     description: "Group multiple completed builds into a release bundle for coordinated deployment (IT4IT §5.3.5 Release Package).",
     inputSchema: {
@@ -2516,6 +2531,91 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         success: true,
         message: `Promotion ${promotionId} scheduled. Deployment windows: ${windowDesc}. An operator can deploy via Operations > Promotions during an open window.`,
         data: { scheduled: true, windows: windowDesc },
+      };
+    }
+
+    case "execute_promotion": {
+      const promotionId = String(params.promotion_id ?? "");
+      if (!promotionId || !/^[a-zA-Z0-9_-]+$/.test(promotionId)) {
+        return { success: false, error: "Invalid promotion_id", message: "Provide a valid promotion ID." };
+      }
+
+      // Validate promotion exists and is approved
+      const promo = await prisma.changePromotion.findFirst({ where: { promotionId } });
+      if (!promo) return { success: false, error: "Not found", message: `Promotion ${promotionId} not found.` };
+      if (promo.status === "deployed") return { success: true, message: "Already deployed.", data: { status: "deployed" } };
+      if (promo.status !== "approved") return { success: false, error: `Status is ${promo.status}`, message: "Must be approved first." };
+
+      // Resolve sandbox and build ID
+      const promoDetail = await prisma.changePromotion.findFirst({
+        where: { promotionId },
+        include: { productVersion: { include: { featureBuild: { select: { sandboxId: true, buildId: true } } } } },
+      });
+      const sandboxId = promoDetail?.productVersion?.featureBuild?.sandboxId;
+      const promoBuildId = promoDetail?.productVersion?.featureBuild?.buildId;
+      if (!sandboxId) return { success: false, error: "No sandbox", message: "No sandbox linked to this promotion." };
+
+      const { execFile: execFileCb } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFileCb);
+      const execAsync = promisify((await import("child_process")).exec);
+
+      // Start promoter container (array form — no shell injection)
+      try {
+        await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
+        await execFileAsync("docker", [
+          "run", "-d",
+          "--name", "dpf-promoter-1",
+          "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
+          "-v", "/var/run/docker.sock:/var/run/docker.sock",
+          "-v", "dpf_backups:/backups",
+          "-e", `PROMOTION_ID=${promotionId}`,
+          "-e", `DPF_PRODUCTION_DB_CONTAINER=${process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1"}`,
+          "-e", "DPF_PORTAL_CONTAINER=dpf-portal-1",
+          "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
+          "-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`,
+          "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
+          "dpf-promoter",
+        ]);
+      } catch (err) {
+        return { success: false, error: `Failed to start promoter: ${(err as Error).message?.slice(0, 200)}`, message: "Could not start the promoter container." };
+      }
+
+      // Poll for completion (max 10 minutes)
+      const maxWaitMs = 10 * 60 * 1000;
+      const pollIntervalMs = 10_000;
+      const startTime = Date.now();
+      let exitCode: number | null = null;
+
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+        try {
+          const { stdout } = await execAsync("docker inspect dpf-promoter-1 --format='{{.State.Status}} {{.State.ExitCode}}'");
+          const parts = stdout.trim().replace(/'/g, "").split(" ");
+          if (parts[0] === "exited") {
+            exitCode = parseInt(parts[1] ?? "1", 10);
+            break;
+          }
+        } catch { /* container may not exist yet */ }
+      }
+
+      if (exitCode === null) {
+        await execAsync("docker stop dpf-promoter-1 2>/dev/null || true").catch(() => {});
+        return { success: false, error: "Timeout (10 min)", message: "Promoter did not complete. Check ops dashboard." };
+      }
+
+      const finalPromo = await prisma.changePromotion.findFirst({ where: { promotionId } });
+      const promoSuccess = exitCode === 0 && finalPromo?.status === "deployed";
+
+      await execAsync("docker rm dpf-promoter-1 2>/dev/null || true").catch(() => {});
+      logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", promoSuccess ? "Deployed successfully" : `Rolled back: ${finalPromo?.rollbackReason ?? "unknown"}`);
+
+      return {
+        success: promoSuccess,
+        message: promoSuccess
+          ? `Promotion ${promotionId} deployed. Health check passed.`
+          : `Rolled back. ${finalPromo?.rollbackReason ?? "Check deployment log."}`,
+        data: { promotionId, status: finalPromo?.status, deploymentLog: finalPromo?.deploymentLog?.slice(0, 1000) },
       };
     }
 

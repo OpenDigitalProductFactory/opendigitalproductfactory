@@ -84,16 +84,62 @@ export async function markDeployed(promotionId: string, deploymentLog?: string) 
 }
 
 /**
- * Execute an approved promotion through the full pipeline:
- * validate → check window → backup → extract diff → scan destructive → apply → health check
+ * Execute an approved promotion. Tries the Docker promoter service first
+ * (autonomous pipeline: backup, build, swap, health check). Falls back to
+ * in-portal execution if Docker is not available.
  */
 export async function executePromotionAction(
   promotionId: string,
   overrideReason?: string,
 ) {
   await requireOpsAccess();
-  const { executePromotion } = await import("@/lib/sandbox-promotion");
-  return executePromotion(promotionId, overrideReason);
+
+  if (!promotionId || !/^[a-zA-Z0-9_-]+$/.test(promotionId)) {
+    return { success: false, step: "validate", message: "Invalid promotion ID." };
+  }
+
+  const promo = await prisma.changePromotion.findFirst({
+    where: { promotionId },
+    include: { productVersion: { include: { featureBuild: { select: { sandboxId: true } } } } },
+  });
+  if (!promo) return { success: false, step: "validate", message: "Promotion not found." };
+  if (promo.status !== "approved") return { success: false, step: "validate", message: `Status is ${promo.status}, not approved.` };
+
+  const sandboxId = promo.productVersion?.featureBuild?.sandboxId;
+
+  // Try Docker promoter first (production path)
+  try {
+    const { execFile: execFileCb } = await import("child_process");
+    const { promisify } = await import("util");
+    const execFileAsync = promisify(execFileCb);
+    const execAsync = promisify((await import("child_process")).exec);
+
+    await execAsync("docker info", { timeout: 5_000 });
+    await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
+
+    const envArgs: string[] = [
+      "run", "-d",
+      "--name", "dpf-promoter-1",
+      "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
+      "-v", "/var/run/docker.sock:/var/run/docker.sock",
+      "-v", "dpf_backups:/backups",
+      "-e", `PROMOTION_ID=${promotionId}`,
+      "-e", `DPF_PRODUCTION_DB_CONTAINER=${process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1"}`,
+      "-e", "DPF_PORTAL_CONTAINER=dpf-portal-1",
+      "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
+      "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
+    ];
+    if (sandboxId) envArgs.push("-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`);
+    if (overrideReason) envArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
+    envArgs.push("dpf-promoter");
+
+    await execFileAsync("docker", envArgs);
+    return { success: true, step: "started", message: "Promoter started. Deployment in progress -- monitor in promotions list." };
+  } catch {
+    // Docker not available -- fall back to in-portal execution
+    const { executePromotion } = await import("@/lib/sandbox-promotion");
+    return executePromotion(promotionId, overrideReason);
+  }
 }
 
 /**
