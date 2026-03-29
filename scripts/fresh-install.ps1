@@ -196,6 +196,9 @@ services:
       - "6333:6333"
     volumes:
       - "${dockerDataDirForCompose}/qdrant_data:/qdrant/storage"
+  portal:
+    environment:
+      INSTANCE_TYPE: dev
 "@
     $overridePath = Join-Path $InstallRoot "docker-compose.override.yml"
     $overrideContent | Set-Content -Path $overridePath -Encoding UTF8
@@ -204,6 +207,14 @@ services:
     docker compose up -d
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "docker compose up failed. Check: docker compose logs"
+    }
+
+    Write-Host "  Building promoter image (for autonomous deployments)..."
+    docker compose --profile promote build promoter 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Promoter image built"
+    } else {
+        Write-Warn "Promoter image build failed (non-fatal -- can be built later)"
     }
 
     Write-Host "  Waiting for PostgreSQL container to start..."
