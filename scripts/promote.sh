@@ -14,7 +14,7 @@ PORTAL_CONTAINER="${DPF_PORTAL_CONTAINER:-dpf-portal-1}"
 COMPOSE_PROJECT="${DPF_COMPOSE_PROJECT:-dpf}"
 DB_USER="${POSTGRES_USER:-dpf}"
 DB_NAME="${POSTGRES_DB:-dpf}"
-HEALTH_RETRIES=6
+HEALTH_RETRIES=12
 HEALTH_INTERVAL=10
 BUILD_CONTEXT=""
 BACKUP_FILE=""
@@ -61,11 +61,27 @@ rollback() {
   docker stop "${PORTAL_CONTAINER}-new" 2>/dev/null || true
   docker rm "${PORTAL_CONTAINER}-new" 2>/dev/null || true
 
-  # Restore old portal (renamed to -old in step 7, NOT removed until step 11)
+  # Restore old portal
   if [ "$ROLLBACK_NEEDED" = "true" ]; then
-    log "Restoring old portal from ${PORTAL_CONTAINER}-old"
-    docker rename "${PORTAL_CONTAINER}-old" "$PORTAL_CONTAINER" 2>/dev/null || true
-    docker start "$PORTAL_CONTAINER" 2>/dev/null || true
+    log "Restoring old portal..."
+    # Stop any new portal that might be running
+    docker stop "$PORTAL_CONTAINER" 2>/dev/null || true
+    docker rm "$PORTAL_CONTAINER" 2>/dev/null || true
+    # If old container still exists (renamed), restore it
+    if docker inspect "${PORTAL_CONTAINER}-old" > /dev/null 2>&1; then
+      docker rename "${PORTAL_CONTAINER}-old" "$PORTAL_CONTAINER" 2>/dev/null || true
+      docker start "$PORTAL_CONTAINER" 2>/dev/null || true
+    else
+      # Old container was removed (step 8 removes it for compose) — use compose to restart
+      # Restore the old image tag first
+      if [ -n "$OLD_IMAGE" ]; then
+        docker tag "$OLD_IMAGE" dpf-portal:latest 2>/dev/null || true
+      fi
+      # Start ONLY the portal container (--no-deps skips postgres/portal-init recreation).
+# Postgres is already running and healthy — don't touch it.
+# --no-build: use the tagged dpf-portal:latest image, don't rebuild from Dockerfile.
+docker compose -p "$COMPOSE_PROJECT" -f /host-source/docker-compose.yml up -d --no-build --no-deps portal 2>&1 || true
+    fi
   fi
 
   # Restore DB from backup if we have one
@@ -82,8 +98,8 @@ rollback() {
   log "Rollback complete"
 }
 
-# Trap any unhandled error — ensures rollback runs even if we miss a check
-trap 'rollback "Unexpected failure at line $LINENO"' ERR
+# Trap any unhandled error — ensures rollback runs AND script exits
+trap 'rollback "Unexpected failure at line $LINENO"; exit 1' ERR
 
 # ─── Step 1: Validate ──────────────────────────────────────────────────────
 log "Step 1/11: Validating promotion $PROMOTION_ID"
@@ -156,13 +172,54 @@ docker inspect "$SANDBOX_CONTAINER" --format='{{.State.Running}}' 2>/dev/null | 
 BUILD_CONTEXT=$(mktemp -d)
 log "Build context: $BUILD_CONTEXT"
 
-docker cp "${SANDBOX_CONTAINER}:/workspace/." "$BUILD_CONTEXT/"
+# Strategy: start from host source (/host-source, mounted read-only), overlay sandbox changes.
+# The host source is what the current production image was built from — guaranteed to compile.
+
+# Step 4a: Copy ONLY build-essential files from host (the Dockerfile only needs these).
+# This copies ~1,500 files instead of ~60,000, avoiding the slow WSL2 9p bottleneck.
+log "  Copying build-essential source from host..."
+cd /host-source
+
+# Root config files
+for f in pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json docker-entrypoint.sh; do
+  [ -f "$f" ] && cp "$f" "$BUILD_CONTEXT/" 2>/dev/null
+done
+
+# App source and packages (what the Dockerfile COPY stages need)
+tar -cf - \
+  --exclude='node_modules' \
+  --exclude='.next' \
+  apps/web packages \
+  | tar -xf - -C "$BUILD_CONTEXT/"
+
+# User guide docs (copied into runner image)
+if [ -d docs/user-guide ]; then
+  mkdir -p "$BUILD_CONTEXT/docs"
+  cp -r docs/user-guide "$BUILD_CONTEXT/docs/" 2>/dev/null || true
+fi
+
+cd /promoter
+
+# Step 4b: Overlay ONLY the changed files from the sandbox (git diff against baseline)
+log "  Extracting changed files from sandbox..."
+CHANGED_FILES=$(docker exec "$SANDBOX_CONTAINER" sh -c "cd /workspace && git diff --name-only HEAD~1 HEAD 2>/dev/null" || echo "")
+if [ -n "$CHANGED_FILES" ]; then
+  log "  Changed files: $(echo "$CHANGED_FILES" | wc -l) file(s)"
+  # Copy each changed file from sandbox to build context
+  echo "$CHANGED_FILES" | while IFS= read -r filepath; do
+    [ -z "$filepath" ] && continue
+    # Create parent directory in build context
+    dirpath=$(dirname "$filepath")
+    mkdir -p "$BUILD_CONTEXT/$dirpath"
+    # Copy from sandbox
+    docker cp "${SANDBOX_CONTAINER}:/workspace/${filepath}" "$BUILD_CONTEXT/${filepath}" 2>/dev/null || true
+  done
+else
+  log "  Warning: no changed files detected in sandbox git history"
+fi
 
 # Copy the portal Dockerfile (baked into promoter at build time)
 cp /promoter/portal.Dockerfile "$BUILD_CONTEXT/Dockerfile"
-
-# Copy docker-entrypoint.sh from current portal
-docker cp "${PORTAL_CONTAINER}:/docker-entrypoint.sh" "$BUILD_CONTEXT/docker-entrypoint.sh" 2>/dev/null || true
 
 log "Source extracted: $(find "$BUILD_CONTEXT" -type f | wc -l) files"
 
@@ -181,37 +238,28 @@ log "Old image: $OLD_IMAGE"
 # ─── Step 7: Stop old portal ──────────────────────────────────────────────
 log "Step 7/11: Stopping old portal"
 
-# Capture old container's full env for recreation
-docker inspect "$PORTAL_CONTAINER" --format='{{range .Config.Env}}{{println .}}{{end}}' > /tmp/portal-env-backup.txt 2>/dev/null || true
-
-docker stop "$PORTAL_CONTAINER"
-docker rename "$PORTAL_CONTAINER" "${PORTAL_CONTAINER}-old"
+docker stop "$PORTAL_CONTAINER" 2>/dev/null || true
+docker rename "$PORTAL_CONTAINER" "${PORTAL_CONTAINER}-old" 2>/dev/null || true
 ROLLBACK_NEEDED=true
 log "Old portal stopped and renamed to ${PORTAL_CONTAINER}-old"
 
 # ─── Step 8: Start new portal ─────────────────────────────────────────────
 log "Step 8/11: Starting new portal with $NEW_IMAGE"
 
-# Build env flags from old container's environment
-OLD_ENV_ARGS=""
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  # Use printf to safely handle values with special characters
-  OLD_ENV_ARGS="$OLD_ENV_ARGS -e "
-  OLD_ENV_ARGS="${OLD_ENV_ARGS}$(printf '%s' "$line")"
-done < /tmp/portal-env-backup.txt
+# Tag the new image as dpf-portal:latest so docker compose uses it
+docker tag "$NEW_IMAGE" dpf-portal:latest
 
-docker run -d \
-  --name "$PORTAL_CONTAINER" \
-  --restart unless-stopped \
-  --network "${COMPOSE_PROJECT}_default" \
-  -p 3000:3000 \
-  -p 1455:3000 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  $OLD_ENV_ARGS \
-  "$NEW_IMAGE"
+# Remove the old stopped container so compose can recreate it
+docker rm "${PORTAL_CONTAINER}-old" 2>/dev/null || true
+# Note: if we need to rollback after this, we use the rollback image tag
 
-log "New portal starting..."
+# Use docker compose to start portal (preserves ALL config: env, ports, volumes, networks)
+# Start ONLY the portal container (--no-deps skips postgres/portal-init recreation).
+# Postgres is already running and healthy — don't touch it.
+# --no-build: use the tagged dpf-portal:latest image, don't rebuild from Dockerfile.
+docker compose -p "$COMPOSE_PROJECT" -f /host-source/docker-compose.yml up -d --no-build --no-deps portal 2>&1
+
+log "New portal starting via compose..."
 
 # Wait for container to be running
 STATE="unknown"
@@ -226,12 +274,14 @@ if [ "$STATE" != "running" ]; then
 fi
 
 # ─── Step 9: Health check ─────────────────────────────────────────────────
-log "Step 9/11: Health check ($HEALTH_RETRIES retries, ${HEALTH_INTERVAL}s interval)"
+# Wait for portal-init to complete first (migrations + seed)
+log "Step 9/11: Waiting for portal-init, then health check ($HEALTH_RETRIES retries, ${HEALTH_INTERVAL}s interval)"
+sleep 30
 
 HEALTHY=false
 for i in $(seq 1 "$HEALTH_RETRIES"); do
   log "  Health check attempt $i/$HEALTH_RETRIES..."
-  if docker exec "$PORTAL_CONTAINER" wget -qO /dev/null -T 10 http://localhost:3000/api/health 2>/dev/null; then
+  if docker exec "$PORTAL_CONTAINER" wget -qO /dev/null -T 10 http://127.0.0.1:3000/api/health 2>/dev/null; then
     HEALTHY=true
     break
   fi
@@ -263,12 +313,8 @@ db_exec "
 # ─── Step 11: Cleanup ────────────────────────────────────────────────────
 log "Step 11/11: Cleanup"
 
-# NOW safe to remove old container (health check passed)
-docker rm "${PORTAL_CONTAINER}-old" 2>/dev/null || true
 ROLLBACK_NEEDED=false
-
 rm -rf "$BUILD_CONTEXT" 2>/dev/null || true
-rm -f /tmp/portal-env-backup.txt 2>/dev/null || true
 
 # Disable the ERR trap (we succeeded)
 trap - ERR
