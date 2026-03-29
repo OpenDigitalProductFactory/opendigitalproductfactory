@@ -15,7 +15,7 @@ import { prisma } from "@dpf/db";
 import { executeTool } from "./mcp-tools";
 
 describe("create_ea_element", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns error when element type slug not found", async () => {
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
@@ -39,7 +39,7 @@ describe("create_ea_element", () => {
 });
 
 describe("create_ea_relationship", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("blocks relationship not permitted by EaRelationshipRule", async () => {
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
@@ -55,7 +55,7 @@ describe("create_ea_relationship", () => {
 });
 
 describe("classify_ea_element", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("updates refinementLevel and itValueStream", async () => {
     vi.mocked(prisma.eaElement.update).mockResolvedValue({ id: "el-1", refinementLevel: "actual", itValueStream: "operate" } as never);
@@ -75,7 +75,7 @@ describe("classify_ea_element", () => {
 });
 
 describe("query_ontology_graph", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("returns elements filtered by elementTypeSlugs", async () => {
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
