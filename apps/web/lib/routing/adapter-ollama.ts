@@ -30,6 +30,30 @@ function extractModelFamily(modelId: string): string | null {
 }
 
 /**
+ * Known model families that support tool/function calling via the
+ * OpenAI-compatible API. These models return proper `tool_calls` in
+ * their responses when tools are provided in the request.
+ *
+ * This is necessary because Docker Model Runner and Ollama don't
+ * advertise per-model capabilities — we must infer from the model name.
+ */
+const TOOL_CAPABLE_FAMILIES = new Set([
+  "llama3.1", "llama3.2", "llama3.3", "llama4",
+  "qwen2.5", "qwen3",
+  "mistral", "mixtral", "mistral-small", "mistral-nemo",
+  "gemma2", "gemma3",
+  "phi4",
+  "command-r",
+  "deepseek-v2", "deepseek-v3",
+]);
+
+function isToolCapableFamily(modelId: string): boolean {
+  const family = extractModelFamily(modelId);
+  if (!family) return false;
+  return TOOL_CAPABLE_FAMILIES.has(family.toLowerCase());
+}
+
+/**
  * Local models are free.
  */
 const LOCAL_FREE_PRICING: ModelCardPricing = {
@@ -97,7 +121,10 @@ export const ollamaAdapter: ProviderAdapter = {
       inputModalities: ["text"],
       outputModalities: ["text"],
 
-      capabilities: { ...EMPTY_CAPABILITIES },
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        ...(isToolCapableFamily(modelId) ? { toolUse: true, structuredOutput: true } : {}),
+      },
       pricing: { ...LOCAL_FREE_PRICING },
 
       supportedParameters: [],

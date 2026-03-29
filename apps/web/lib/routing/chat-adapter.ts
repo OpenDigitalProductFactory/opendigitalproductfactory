@@ -112,6 +112,23 @@ export const chatAdapter: ExecutionAdapterHandler = {
         };
       }
 
+      // Convert OpenAI-format function tools to Gemini functionDeclarations format
+      if (tools && tools.length > 0) {
+        const functionDeclarations = tools
+          .filter((t: Record<string, unknown>) => t.type === "function" && t.function)
+          .map((t: Record<string, unknown>) => {
+            const fn = t.function as Record<string, unknown>;
+            return {
+              name: fn.name,
+              description: fn.description,
+              parameters: fn.parameters,
+            };
+          });
+        if (functionDeclarations.length > 0) {
+          body.tools = [...((body.tools as Array<Record<string, unknown>>) ?? []), { functionDeclarations }];
+        }
+      }
+
       // Merge providerTools (e.g. code_execution, google_search_retrieval)
       const providerTools = plan.providerSettings?.providerTools as Array<Record<string, unknown>> | undefined;
       if (providerTools && providerTools.length > 0) {
@@ -136,6 +153,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // Apply temperature
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
+      }
+      // Convert OpenAI Chat Completions format tools to Responses API format
+      // Responses API expects: tools: [{ type: "function", name, description, parameters }]
+      if (tools && tools.length > 0) {
+        body.tools = tools.map((t: Record<string, unknown>) => {
+          if (t.type === "function" && t.function) {
+            const fn = t.function as Record<string, unknown>;
+            return { type: "function", name: fn.name, description: fn.description, parameters: fn.parameters };
+          }
+          return t;
+        });
       }
 
     } else {

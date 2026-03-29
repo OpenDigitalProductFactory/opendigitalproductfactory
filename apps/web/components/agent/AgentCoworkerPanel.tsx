@@ -97,7 +97,10 @@ export function AgentCoworkerPanel({
   const [isClearing, startClearing] = useTransition();
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
-  const [coworkerMode, setCoworkerMode] = useState<CoworkerMode>("advise");
+  // Build Studio defaults to Act mode — its purpose is building, not advising
+  const [coworkerMode, setCoworkerMode] = useState<CoworkerMode>(() =>
+    pathname.startsWith("/build") ? "act" : "advise"
+  );
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);

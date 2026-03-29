@@ -67,7 +67,8 @@ function extractCapabilities(raw: GeminiModel): ModelCardCapabilities {
   const supportsGenerate = methods.includes("generateContent");
 
   const toolUse = supportsGenerate ? true : null;
-  const streaming = methods.includes("streamGenerateContent") ? true : null;
+  // All generateContent-capable models also support streaming
+  const streaming = supportsGenerate || methods.includes("streamGenerateContent") ? true : null;
 
   // Code execution: Gemini 2.0+ models that support generateContent
   const codeExecution = supportsGenerate && /^gemini-2/.test(modelId) ? true : null;
