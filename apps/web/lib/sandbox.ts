@@ -193,6 +193,7 @@ const server = http.createServer((req, res) => {
     }
   } catch {}
   res.end('<!DOCTYPE html><html><head><meta charset=utf-8><title>Preview</title>' +
+    '<meta http-equiv="refresh" content="5">' +
     '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh}' +
     '.card{text-align:center;padding:40px;border:1px solid #333;border-radius:12px;max-width:420px}' +
     'h2{color:#7c8cf8;margin:0 0 12px;font-size:20px}p{font-size:13px;color:#999;line-height:1.6}' +
@@ -201,7 +202,7 @@ const server = http.createServer((req, res) => {
     '<body><div class=card><div class=spinner></div>' +
     '<h2>Building Your Feature</h2>' +
     '<p>Your AI coworker is generating the pages and components. The preview will appear here automatically when ready.</p>' +
-    '<p style="margin-top:16px;font-size:11px;color:#555">Refresh to check for updates</p>' +
+    '<p style="margin-top:16px;font-size:11px;color:#555">Auto-refreshing every 5 seconds</p>' +
     '</div></body></html>');
 });
 server.listen(3000, '0.0.0.0', () => console.log('Preview server on :3000'));

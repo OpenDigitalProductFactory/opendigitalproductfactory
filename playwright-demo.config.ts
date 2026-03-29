@@ -6,7 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 600_000, // 10 minutes — AI inference is slow
+  timeout: 900_000, // 15 minutes — AI-driven tests need room for inference + sandbox
   retries: 0,
   workers: 1,
   reporter: [["list"], ["html", { outputFolder: "e2e-report", open: "never" }]],

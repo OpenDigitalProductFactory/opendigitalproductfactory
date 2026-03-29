@@ -35,21 +35,38 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
     };
   }, [activeBuild?.buildId]);
 
-  // SSE subscription for live refresh when agent updates the build
+  // SSE subscription for live refresh when agent updates the build.
+  // Debounced: refetches on any event type (not just phase changes) so that
+  // sandbox port allocation and file generation are picked up promptly.
   useEffect(() => {
     if (!activeBuild?.threadId) return;
     const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
-    es.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (["brief:update", "phase:change", "evidence:update"].includes(data.type)) {
-          const fresh = await getFeatureBuild(activeBuild.buildId);
-          if (fresh) setActiveBuild(fresh);
-        }
-      } catch { /* ignore parse errors */ }
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    es.onmessage = async () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        const fresh = await getFeatureBuild(activeBuild.buildId);
+        if (fresh) setActiveBuild(fresh);
+      }, 2_000);
     };
-    return () => es.close();
+    return () => {
+      es.close();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
   }, [activeBuild?.threadId, activeBuild?.buildId]);
+
+  // Poll for sandbox port when phase is "build" or "review" but port is unknown.
+  // This covers the gap between phase transition and sandbox allocation.
+  useEffect(() => {
+    if (!activeBuild) return;
+    if (activeBuild.phase !== "build" && activeBuild.phase !== "review") return;
+    if (activeBuild.sandboxPort !== null) return;
+    const interval = setInterval(async () => {
+      const fresh = await getFeatureBuild(activeBuild.buildId);
+      if (fresh) setActiveBuild(fresh);
+    }, 3_000);
+    return () => clearInterval(interval);
+  }, [activeBuild?.buildId, activeBuild?.phase, activeBuild?.sandboxPort]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;

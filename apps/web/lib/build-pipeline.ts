@@ -243,7 +243,7 @@ async function stepInitDb(
   // Run prisma migrate deploy inside the app container.
   await execInSandbox(
     state.containerId!,
-    "cd /workspace && npx prisma migrate deploy",
+    "cd /workspace && pnpm --filter @dpf/db exec prisma migrate deploy",
   );
 
   // Seed with a copy of production data.
@@ -363,10 +363,13 @@ async function stepRunTests(
   const results = await runSandboxTests(state.containerId!);
   const diagnosis = results.passed ? null : diagnoseTestFailures(results);
 
-  // Persist test results to the build record
+  // Persist test results to the build record.
+  // Property names must match what the gate in feature-build-types.ts checks:
+  //   testsFailed (number), typecheckPassed (lowercase c)
   const verificationData = {
-    testsPassed: results.passed,
-    typeCheckPassed: results.typeCheckPassed,
+    testsPassed: results.passed ? 1 : 0,
+    testsFailed: results.passed ? 0 : 1,
+    typecheckPassed: results.typeCheckPassed,
     testOutput: results.testOutput.slice(0, 5000),
     typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
     ...(diagnosis ? { diagnosis: diagnosis.summary } : {}),
