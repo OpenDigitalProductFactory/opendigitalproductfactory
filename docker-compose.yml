@@ -153,6 +153,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./backups:/backups
+      - .:/host-source:ro  # Host project source for building new portal images
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
       DPF_PORTAL_CONTAINER: dpf-portal-1
