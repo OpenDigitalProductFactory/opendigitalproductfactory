@@ -12,6 +12,8 @@ export type AgentEvent =
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
   | { type: "done" }
+  // Sandbox lifecycle events
+  | { type: "sandbox:ready"; buildId: string; port: number }
   // Robust coding events — emitted during sandbox code generation
   | { type: "coding:file_written"; buildId: string; path: string; action: "create" | "modify" }
   | { type: "coding:context_gathered"; buildId: string; filesRead: number }

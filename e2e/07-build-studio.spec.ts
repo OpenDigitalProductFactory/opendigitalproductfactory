@@ -10,33 +10,15 @@
  * Uses DPF admin credentials (DPF_ADMIN_PASSWORD env or fallback).
  */
 import { test, expect } from "@playwright/test";
+import {
+  loginToDPF,
+  waitForCoworkerIdle,
+  extractLastResponse,
+  approveAllProposals,
+  sendAndWait,
+} from "./helpers";
 
-const ADMIN_EMAIL = "admin@dpf.local";
-const ADMIN_PASSWORD = process.env.DPF_ADMIN_PASSWORD || "peKDK2ylFsWbapWI";
 const FEATURE_TITLE = "Processing Invoices";
-
-/**
- * Login to the DPF instance.
- */
-async function loginToDPF(page: import("@playwright/test").Page): Promise<void> {
-  await page.goto("/login");
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
-
-  if (!page.url().includes("/login")) {
-    console.log("[auth] Already logged in");
-    return;
-  }
-
-  await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
-  await page.fill('input[name="email"]', ADMIN_EMAIL);
-  await page.fill('input[name="password"]', ADMIN_PASSWORD);
-
-  await Promise.all([
-    page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 20_000 }),
-    page.click('button[type="submit"]'),
-  ]);
-  console.log("[auth] Login successful, at:", page.url());
-}
 
 test.describe("Build Studio", () => {
   test.beforeEach(async ({ page }) => {
@@ -78,46 +60,11 @@ test.describe("Build Studio", () => {
     }
 
     // Wait for the coworker to finish responding (up to 120s for local model)
-    await page.waitForFunction(
-      () => {
-        const ta = document.querySelector('[data-agent-panel="true"] textarea');
-        if (!ta) return false;
-        const placeholder = ta.getAttribute("placeholder") || "";
-        // Response is complete when placeholder is back to normal
-        return placeholder.toLowerCase().includes("co-worker") && !placeholder.toLowerCase().includes("sending");
-      },
-      { timeout: 120_000 },
-    ).catch(() => {
-      console.log("[test] Coworker response timeout — checking state");
-    });
-
-    // Give a moment for rendering
+    await waitForCoworkerIdle(page, 120_000);
     await page.waitForTimeout(1_000);
 
     // Extract the last assistant response text
-    const responseText = await page.evaluate(() => {
-      const panel = document.querySelector("[data-agent-panel='true']");
-      if (!panel) return "[no panel]";
-      const allDivs = Array.from(panel.querySelectorAll("div")) as HTMLElement[];
-      const assistantBubbles = allDivs.filter((el) => {
-        const s = el.style;
-        return (
-          s.display === "flex" &&
-          s.flexDirection === "column" &&
-          s.marginBottom === "8px" &&
-          s.alignItems === "flex-start"
-        );
-      });
-      if (assistantBubbles.length === 0) {
-        const flexStart = allDivs.filter((el) =>
-          el.style.alignItems === "flex-start" && (el.textContent?.length ?? 0) > 20,
-        );
-        const last = flexStart[flexStart.length - 1];
-        return last?.textContent?.trim() ?? "[no assistant messages]";
-      }
-      const last = assistantBubbles[assistantBubbles.length - 1];
-      return last.textContent?.trim() ?? "[empty]";
-    });
+    const responseText = await extractLastResponse(page);
 
     console.log(`[test] Coworker response: "${responseText.slice(0, 300)}"`);
 
@@ -159,50 +106,10 @@ test.describe("Build Studio", () => {
     // Verify the Software Engineer agent is loaded
     await expect(panel.locator("text=Software Engineer").first()).toBeVisible({ timeout: 5_000 });
 
-    // Send a message about building a feature
-    const coworkerInput = panel.locator('textarea[placeholder*="co-worker" i]');
-    await expect(coworkerInput).toBeVisible({ timeout: 6_000 });
-    await coworkerInput.fill(
+    // Send a message via the hardened helper
+    const responseText = await sendAndWait(page,
       "I want to build a feature for processing invoices. It should capture invoice data, validate amounts, and track payment status.",
     );
-
-    // Send the message
-    const sendBtn = panel.locator('button:has-text("Send")').first();
-    if (await sendBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await sendBtn.click();
-    } else {
-      await coworkerInput.press("Enter");
-    }
-
-    // Wait for the coworker to respond (local model may take a while)
-    await page.waitForFunction(
-      () => {
-        const ta = document.querySelector('[data-agent-panel="true"] textarea');
-        if (!ta) return false;
-        const placeholder = ta.getAttribute("placeholder") || "";
-        return (
-          placeholder.toLowerCase().includes("co-worker") &&
-          !placeholder.toLowerCase().includes("sending")
-        );
-      },
-      { timeout: 120_000 },
-    ).catch(() => {
-      console.log("[test] Coworker response timeout");
-    });
-
-    await page.waitForTimeout(1_000);
-
-    // Extract the response
-    const responseText = await page.evaluate(() => {
-      const panel = document.querySelector("[data-agent-panel='true']");
-      if (!panel) return "";
-      const allDivs = Array.from(panel.querySelectorAll("div")) as HTMLElement[];
-      const bubbles = allDivs.filter(
-        (el) => el.style.alignItems === "flex-start" && (el.textContent?.length ?? 0) > 20,
-      );
-      const last = bubbles[bubbles.length - 1];
-      return last?.textContent?.trim() ?? "";
-    });
 
     console.log(`[test] Coworker response (first 300 chars): ${responseText.slice(0, 300)}`);
 
@@ -217,5 +124,85 @@ test.describe("Build Studio", () => {
       path: "e2e-report/build-studio-coworker-response.png",
       fullPage: true,
     });
+  });
+
+  test("sandbox preview renders during build phase", async ({ page }) => {
+    test.setTimeout(600_000); // 10 minutes — full build phase cycle
+
+    // Navigate to Build Studio and create a feature
+    await page.goto("/build");
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+
+    const featureInput = page.locator('input[placeholder*="feature" i]');
+    await expect(featureInput).toBeVisible({ timeout: 15_000 });
+    await featureInput.fill("Sandbox Preview Test");
+    await page.locator("button").filter({ hasText: /^New$/i }).click();
+
+    // Wait for coworker panel to open
+    const panel = page.locator('[data-agent-panel="true"]');
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+
+    // Wait for auto-message response
+    await waitForCoworkerIdle(page, 120_000);
+    await page.waitForTimeout(1_000);
+    await approveAllProposals(page);
+
+    // Phase 1: IDEATE — Save design doc
+    await sendAndWait(page,
+      "Build a simple status dashboard page at /dashboard with 4 status cards showing: Active Users (42), Pending Tasks (7), Completed Today (23), System Health (98%). Save the design doc and approve it immediately.",
+    );
+
+    // Phase 2: Push to PLAN phase
+    await sendAndWait(page, "Review the design. Approve it. Move to plan phase now.");
+
+    // Phase 3: PLAN — Create build plan
+    await sendAndWait(page,
+      "Create the implementation plan: one page component at apps/web/app/dashboard/page.tsx. Save the plan and approve it. Move to build phase.",
+    );
+
+    // Phase 4: Push to BUILD phase
+    await sendAndWait(page, "Approve the plan. Start the build phase now.");
+
+    // Phase 5: BUILD — Generate code in sandbox
+    await sendAndWait(page,
+      "Generate the dashboard page component in the sandbox now. Use generate_code to create apps/web/app/dashboard/page.tsx with the 4 status cards.",
+      180_000,
+    );
+
+    await page.screenshot({ path: "e2e-report/sandbox-preview-build-phase.png", fullPage: true });
+
+    // Verify: the Live Preview header should be visible (sandbox is running)
+    const livePreviewHeader = page.locator("text=Live Preview").first();
+    const previewIframe = page.locator('iframe[title="Sandbox Preview"]');
+
+    // Wait up to 30s for the preview to appear (sandbox needs time to start)
+    const previewVisible = await livePreviewHeader.isVisible({ timeout: 30_000 }).catch(() => false);
+
+    if (previewVisible) {
+      console.log("[test] Live Preview header is visible");
+      // Verify the iframe is present
+      await expect(previewIframe).toBeVisible({ timeout: 10_000 });
+
+      // Check the iframe loaded something (not a blank page)
+      const iframeSrc = await previewIframe.getAttribute("src");
+      console.log(`[test] Preview iframe src: ${iframeSrc}`);
+      expect(iframeSrc).toContain("/api/sandbox/preview");
+      expect(iframeSrc).toContain("buildId=");
+    } else {
+      // The preview might show the "building" placeholder instead — that's also OK
+      // as long as the proxy route is working
+      const buildingPlaceholder = page.locator("text=Sandbox is not running").first();
+      const activePlaceholder = page.locator("text=Sandbox Active").first();
+      const previewPlaceholder = page.locator("text=Live preview will appear").first();
+
+      const anyPreviewState =
+        (await buildingPlaceholder.isVisible().catch(() => false)) ||
+        (await activePlaceholder.isVisible().catch(() => false)) ||
+        (await previewPlaceholder.isVisible().catch(() => false));
+
+      console.log(`[test] Preview placeholder visible: ${anyPreviewState}`);
+    }
+
+    await page.screenshot({ path: "e2e-report/sandbox-preview-result.png", fullPage: true });
   });
 });

@@ -2256,6 +2256,11 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         const running = await isSandboxRunning(slot.containerId).catch(() => false);
         if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
         try { await sbInit(slot.containerId); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
+        // Start preview server so the Live Preview pane has something to show
+        try {
+          const { startSandboxDevServer } = await import("@/lib/sandbox");
+          await startSandboxDevServer(slot.containerId);
+        } catch { /* non-fatal — preview will show "building" spinner */ }
         sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
         if (!sbBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
       }

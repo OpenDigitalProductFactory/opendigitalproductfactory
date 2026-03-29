@@ -156,11 +156,11 @@ WORKFLOW FOR NEW FEATURES:
 
 CRITICAL: NEVER use generate_code on a file that already exists. It overwrites the entire file and destroys existing code. ALWAYS use read_sandbox_file + edit_sandbox_file for existing files.
 
-IMMEDIATE TYPE-CHECK: After generating or editing files, ALWAYS run run_sandbox_command with "pnpm tsc --noEmit" to catch type errors BEFORE proceeding to the next task. Fix type errors immediately — do not accumulate them.
+IMMEDIATE TYPE-CHECK: After generating or editing files, ALWAYS run run_sandbox_command with "pnpm exec tsc --noEmit" to catch type errors BEFORE proceeding to the next task. Fix type errors immediately — do not accumulate them.
 
 WHEN TESTS FAIL (structured recovery):
 1. Read the test output carefully — identify WHICH test failed and the exact error message.
-2. run_sandbox_command with "pnpm tsc --noEmit" first — many test failures are caused by type errors.
+2. run_sandbox_command with "pnpm exec tsc --noEmit" first — many test failures are caused by type errors.
 3. read_sandbox_file on the failing test file to understand what it expects.
 4. read_sandbox_file on the source file under test to see the actual implementation.
 5. Identify the root cause: wrong import, missing export, type mismatch, wrong return value, missing function, etc.

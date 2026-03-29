@@ -294,7 +294,7 @@ export async function runSandboxTests(containerId: string): Promise<SandboxTestR
   let typeCheckOutput = "";
   let typeCheckPassed = false;
   try {
-    typeCheckOutput = await execInSandbox(containerId, "cd /workspace && npx tsc --noEmit 2>&1 || true");
+    typeCheckOutput = await execInSandbox(containerId, "cd /workspace && pnpm exec tsc --noEmit 2>&1 || true");
     typeCheckPassed = !typeCheckOutput.includes("error TS");
   } catch (e) {
     typeCheckOutput = e instanceof Error ? e.message : String(e);
