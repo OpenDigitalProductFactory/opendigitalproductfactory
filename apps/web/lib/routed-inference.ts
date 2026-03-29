@@ -196,12 +196,15 @@ export async function routeAndCall(
   // This is a hard override — agents and admin-configured preferences always win
   // over cost-per-success ranking. The V2-selected endpoint becomes first fallback.
   if (options?.preferredProviderId && decision.selectedEndpoint !== options.preferredProviderId) {
+    // Match by endpointId (CUID) OR providerId (slug like "gemini", "chatgpt")
     const preferredCandidate = decision.candidates.find(
-      c => c.endpointId === options.preferredProviderId && !c.excluded,
+      c => (c.endpointId === options.preferredProviderId || c.providerId === options.preferredProviderId) && !c.excluded,
     );
+    const excludedGemini = decision.candidates.filter(c => c.providerId === options.preferredProviderId && c.excluded);
+    console.log(`[routing] Preferred provider override: wanted=${options.preferredProviderId}, found=${preferredCandidate?.providerId ?? "NONE"}, excludedReasons=${excludedGemini.map(c => `${c.modelId}:${c.excludedReason}`).slice(0, 3).join("; ")}`);
     if (preferredCandidate) {
       const origSelected = decision.selectedEndpoint;
-      decision.selectedEndpoint = options.preferredProviderId;
+      decision.selectedEndpoint = preferredCandidate.endpointId;
       decision.selectedModelId = preferredCandidate.modelId;
       decision.reason = `Agent preference override: ${options.preferredProviderId} (was: ${origSelected}). ${decision.reason}`;
       // Keep original + existing chain as fallbacks

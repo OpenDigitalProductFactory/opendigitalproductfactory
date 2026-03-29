@@ -245,13 +245,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        taxonomySpan: { type: "number", enum: [1, 2, 3] },
-        dataEntities: { type: "number", enum: [1, 2, 3] },
-        integrations: { type: "number", enum: [1, 2, 3] },
-        novelty: { type: "number", enum: [1, 2, 3] },
-        regulatory: { type: "number", enum: [1, 2, 3] },
-        costEstimate: { type: "number", enum: [1, 2, 3] },
-        techDebt: { type: "number", enum: [1, 2, 3] },
+        taxonomySpan: { type: "number", description: "Score 1-3: 1=single node, 2=multi-node, 3=cross-portfolio" },
+        dataEntities: { type: "number", description: "Score 1-3: 1=read-only, 2=CRUD on existing, 3=new schema" },
+        integrations: { type: "number", description: "Score 1-3: 1=none, 2=internal, 3=external" },
+        novelty: { type: "number", description: "Score 1-3: 1=pattern exists, 2=variation, 3=novel" },
+        regulatory: { type: "number", description: "Score 1-3: 1=none, 2=moderate, 3=regulated" },
+        costEstimate: { type: "number", description: "Score 1-3: 1=small, 2=medium, 3=large" },
+        techDebt: { type: "number", description: "Score 1-3: 1=low, 2=moderate, 3=high" },
       },
       required: ["taxonomySpan", "dataEntities", "integrations", "novelty", "regulatory", "costEstimate", "techDebt"],
     },
@@ -319,7 +319,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update" },
-        value: { description: "JSON value to store" },
+        value: { type: "object", description: "JSON value to store" },
       },
       required: ["field", "value"],
     },
@@ -349,7 +349,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate", // Sandbox is isolated — no HITL needed
-    sideEffect: true,
+    sideEffect: false, // Sandbox is isolated from production — safe in any mode
   },
   {
     name: "generate_code",
@@ -464,7 +464,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    sideEffect: false, // Sandbox is isolated from production — safe in any mode
   },
   {
     name: "deploy_feature",
@@ -1936,7 +1936,7 @@ export async function executeTool(
       for (const file of files) {
         const cleanPath = file.path.replace(/^\/?workspace\//, "");
         try {
-          await execInSandbox(build.sandboxId, `test -f /workspace/${cleanPath}`);
+          await execInSandbox(build.sandboxId, `test -f '/workspace/${cleanPath}'`);
           // File exists — skip it, tell the agent to use edit_sandbox_file
           skippedExisting.push(cleanPath);
           continue;
@@ -1944,9 +1944,9 @@ export async function executeTool(
           // File doesn't exist — safe to create
         }
         const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-        if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+        if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
         const encoded = Buffer.from(file.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
       }
       if (skippedExisting.length > 0) {
         return {
@@ -2081,9 +2081,9 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       for (const file of files) {
         const cleanPath = file.path.replace(/^\/?workspace\//, "");
         const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-        if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+        if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
         const encoded = Buffer.from(file.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
       }
 
       logBuildActivity(buildId, "iterate_sandbox", `Refinement applied to ${files.length} files: ${files.map(f => f.path).join(", ")}. Instruction: ${instruction.slice(0, 200)}`);
@@ -2183,9 +2183,9 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
             while ((fixMatch = filePattern.exec(fixResult.content)) !== null) {
               const cleanPath = fixMatch[1]!.trim().replace(/^\/?workspace\//, "");
               const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-              if (dir) await execInSandbox(build.sandboxId, `mkdir -p /workspace/${dir}`);
+              if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
               const encoded = Buffer.from(fixMatch[2]!).toString("base64");
-              await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /workspace/${cleanPath}`);
+              await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
               filesFixed++;
             }
 
@@ -2267,7 +2267,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (toolName === "read_sandbox_file") {
         const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
         try {
-          const content = await execInSandbox(sandboxId, `cat -n /workspace/${filePath}`);
+          const content = await execInSandbox(sandboxId, `cat -n '/workspace/${filePath}'`);
           return { success: true, message: `File: ${filePath}`, data: { path: filePath, content } };
         } catch {
           return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
@@ -2280,13 +2280,13 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         const newText = String(params.new_text ?? "");
         if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
         try {
-          const current = await execInSandbox(sandboxId, `cat /workspace/${filePath}`);
+          const current = await execInSandbox(sandboxId, `cat '/workspace/${filePath}'`);
           const occurrences = current.split(oldText).length - 1;
           if (occurrences === 0) return { success: false, error: `old_text not found in ${filePath}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
           if (occurrences > 1) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique.` };
           const updated = current.replace(oldText, newText);
           const encoded = Buffer.from(updated).toString("base64");
-          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > /workspace/${filePath}`);
+          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > '/workspace/${filePath}'`);
           logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}`);
           return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars.`, data: { path: filePath } };
         } catch (err) {

@@ -8,16 +8,28 @@ import { prisma } from "@dpf/db";
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 const POOL_SIZE = Number(process.env.DPF_SANDBOX_POOL_SIZE) || 3;
-const BASE_PORT = 3036; // slots use ports 3036, 3037, 3038, ...
+
+/**
+ * Docker Compose container names and ports for the sandbox pool.
+ * These must match docker-compose.yml service definitions:
+ *   sandbox   → dpf-sandbox-1   (port 3035)
+ *   sandbox-2 → dpf-sandbox-2-1 (port 3037)
+ *   sandbox-3 → dpf-sandbox-3-1 (port 3038)
+ */
+const SANDBOX_SLOTS = [
+  { containerId: "dpf-sandbox-1", port: 3035 },
+  { containerId: "dpf-sandbox-2-1", port: 3037 },
+  { containerId: "dpf-sandbox-3-1", port: 3038 },
+];
 
 export function getPoolConfig() {
   return {
     size: POOL_SIZE,
-    basePort: BASE_PORT,
-    slots: Array.from({ length: POOL_SIZE }, (_, i) => ({
+    basePort: SANDBOX_SLOTS[0].port,
+    slots: SANDBOX_SLOTS.slice(0, POOL_SIZE).map((s, i) => ({
       slotIndex: i,
-      containerId: `dpf-sandbox-${i + 1}`,
-      port: BASE_PORT + i,
+      containerId: s.containerId,
+      port: s.port,
     })),
   };
 }
