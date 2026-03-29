@@ -237,11 +237,11 @@ export function AgentCoworkerShell({ userContext }: Props) {
             width: size.width,
             height: size.height,
             borderRadius: 12,
-            background: "rgba(26, 26, 46, 0.7)",
+            background: "color-mix(in srgb, var(--dpf-surface-1) 85%, transparent)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid rgba(42, 42, 64, 0.6)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            border: "1px solid var(--dpf-border)",
+            boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 40%, transparent)",
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
@@ -268,7 +268,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
               height: 18,
               cursor: "nwse-resize",
               background:
-                "linear-gradient(135deg, transparent 0 40%, rgba(124, 140, 248, 0.2) 40% 60%, rgba(124, 140, 248, 0.55) 60% 100%)",
+                "linear-gradient(135deg, transparent 0 40%, color-mix(in srgb, var(--dpf-accent) 20%, transparent) 40% 60%, color-mix(in srgb, var(--dpf-accent) 55%, transparent) 60% 100%)",
             }}
           />
         </div>

@@ -53,7 +53,7 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
 
   return (
-    <div style={{ borderTop: "1px solid rgba(42, 42, 64, 0.6)" }}>
+    <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
       {pendingFile && (
         <div style={{
           display: "flex",
@@ -113,8 +113,8 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
           rows={1}
           style={{
             flex: 1,
-            background: "rgba(15, 15, 26, 0.8)",
-            border: `1px solid ${overLimit ? "#ef4444" : "rgba(42, 42, 64, 0.6)"}`,
+            background: "color-mix(in srgb, var(--dpf-bg) 80%, transparent)",
+            border: `1px solid ${overLimit ? "#ef4444" : "var(--dpf-border)"}`,
             borderRadius: 6,
             padding: "6px 10px",
             fontSize: 12,

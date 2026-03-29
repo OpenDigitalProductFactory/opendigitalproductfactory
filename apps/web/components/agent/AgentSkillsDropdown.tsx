@@ -30,7 +30,7 @@ const sectionHeaderStyle: React.CSSProperties = {
   fontWeight: 600,
   textTransform: "uppercase",
   letterSpacing: "0.08em",
-  color: "rgba(224, 224, 255, 0.45)",
+  color: "var(--dpf-muted)",
   padding: "6px 12px 2px",
 };
 
@@ -181,10 +181,10 @@ export function AgentSkillsDropdown({
             left: 0,
             minWidth: 220,
             maxWidth: 280,
-            background: "rgba(26, 26, 46, 0.95)",
+            background: "color-mix(in srgb, var(--dpf-surface-1) 95%, transparent)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid rgba(42, 42, 64, 0.6)",
+            border: "1px solid var(--dpf-border)",
             borderRadius: 8,
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             zIndex: 60,
@@ -251,7 +251,7 @@ export function AgentSkillsDropdown({
           {/* Create a skill action */}
           <div
             style={{
-              borderTop: "1px solid rgba(42, 42, 64, 0.5)",
+              borderTop: "1px solid var(--dpf-border)",
               marginTop: 4,
               paddingTop: 4,
             }}
