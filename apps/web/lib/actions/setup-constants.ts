@@ -10,6 +10,7 @@ export const SETUP_STEPS = [
   "org-settings",        // /admin/settings — org details, location, timezone
   "operating-hours",     // /admin/operating-hours — business hours
   "storefront",          // /admin/storefront — customer-facing portal setup
+  "platform-development",// /admin/platform-development — contribution mode
   "build-studio",        // /build — show the self-development capability
   "workspace",           // /workspace — see the workspace, meet the COO
 ] as const;
@@ -21,6 +22,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "org-settings": "/admin/settings",
   "operating-hours": "/admin/operating-hours",
   "storefront": "/admin/storefront",
+  "platform-development": "/admin/platform-development",
   "build-studio": "/build",
   "workspace": "/workspace",
 };
@@ -32,6 +34,7 @@ export const STEP_LABELS: Record<string, string> = {
   "org-settings": "Settings",
   "operating-hours": "Operating Hours",
   "storefront": "Storefront",
+  "platform-development": "Platform Dev",
   "build-studio": "Build",
   "workspace": "Workspace",
 };

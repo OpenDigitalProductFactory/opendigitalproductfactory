@@ -33,6 +33,10 @@ const STEP_WELCOME: Record<string, string> = {
     "This is your Storefront — a customer-facing portal where your clients can access services, book appointments, view their account, and interact with your business online.\n\n" +
     "If your business serves customers directly, you can configure the storefront here. If not, you can skip this and come back if you need it later.\n\n" +
     "When enabled, the welcome page will show a Customer Portal login option alongside the Employee & Admin login.",
+  "platform-development":
+    "This is the Platform Development configuration. Here you decide how customisations made in Build Studio are handled after they're shipped.\n\n" +
+    "You have three choices: keep everything private on your platform, share selectively when the AI suggests it, or contribute everything back to the community by default.\n\n" +
+    "Pick whichever feels right — you can change this at any time from Admin > Platform Development.",
   "build-studio":
     "This is the Build Studio — one of the most powerful features of the platform.\n\n" +
     "If you need something the platform doesn't have out of the box, you can describe what you need and the AI workforce will help build it: new workflows, reports, integrations, custom pages — whatever your business requires.\n\n" +
