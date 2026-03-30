@@ -189,6 +189,16 @@ export async function getFeatureBuildForContext(
 
   if (!r || r.createdById !== userId) return null;
 
+  // Load contribution mode for ship phase context injection
+  let contributionMode: string | undefined;
+  if (r.phase === "ship") {
+    const devConfig = await prisma.platformDevConfig.findUnique({
+      where: { id: "singleton" },
+      select: { contributionMode: true },
+    });
+    contributionMode = devConfig?.contributionMode ?? "selective";
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -196,6 +206,7 @@ export async function getFeatureBuildForContext(
     brief: r.brief as FeatureBrief | null,
     plan: r.plan as Record<string, unknown> | null,
     portfolioId: r.portfolioId,
+    contributionMode,
   };
 }
 

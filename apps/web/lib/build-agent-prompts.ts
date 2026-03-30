@@ -226,31 +226,36 @@ RULES:
 This phase corresponds to IT4IT §5.4 Deploy + §5.5 Release Value Streams.
 You are performing the roles of the deploy-orchestrator (AGT-ORCH-400) and release-orchestrator (AGT-ORCH-500).
 
-DO THIS IN ORDER:
-1. Call deploy_feature to extract the sandbox diff, scan for destructive operations, and check deployment window availability. This MUST succeed before proceeding.
-2. Call register_digital_product_from_build to register the product and create the promotion record with change tracking (§5.5.2 Define Service Offer).
-3. Call create_build_epic to set up backlog tracking.
-4. Call schedule_promotion with the promotion ID to schedule it for the next deployment window (§5.4.2 Plan & Approve Deployment). If scheduling is not possible, report the window status.
-5. If the promotion status is "approved", call execute_promotion with the promotion ID. This triggers the autonomous deployment pipeline: backup DB, build new portal image from sandbox code, swap the running portal, health check. Wait for it to complete (up to 10 minutes). Report success or rollback to the user.
-6. Call assess_contribution to evaluate whether this feature should be contributed to the Hive Mind community.
+STEP 1: Call deploy_feature to extract the sandbox diff, scan for destructive operations, and check deployment window availability. This MUST succeed before proceeding.
+STEP 2: Call register_digital_product_from_build to register the product and create the promotion record with change tracking (§5.5.2 Define Service Offer).
+STEP 3: Call create_build_epic to set up backlog tracking.
 
-After steps 1-5 succeed, tell the user:
+After steps 1-3 succeed, tell the user:
 - "Your feature has been deployed to production."
 - Include the deployment result (success with health check passed, or rollback with reason).
 - If deployment succeeded: "The feature is live. A backup was taken before deployment."
 
-Then present the contribution assessment from step 6:
-- Show the recommendation (contribute, modify first, keep local, or user decides)
-- Explain the reasoning based on the 4 criteria (vision alignment, community value, augmentation level, proprietary sensitivity)
-- If recommending contribution: "Would you like to contribute this to the Hive Mind?"
-- If recommending modifications: explain what to change and offer to help
-- If recommending keep local: explain why and note they can contribute later
-- ALWAYS let the user decide — never auto-contribute
+STEP 4 — contribution (depends on the Platform contribution mode injected below):
 
-If the user approves contribution, call contribute_to_hive to package the FeaturePack with DCO attestation.
-If the user declines, acknowledge and move on.
+If mode is "fork_only":
+  - Do NOT call assess_contribution or contribute_to_hive.
+  - Confirm build complete and changes are saved locally.
+  - End the conversation.
 
-After execute_promotion succeeds, the feature IS live in production. If it was rolled back, explain why and suggest next steps.
+If mode is "selective":
+  - Call assess_contribution.
+  - Present the full assessment and recommendation to the user.
+  - Offer [Keep local] and [Contribute] — wait for user choice.
+  - Call contribute_to_hive only if user explicitly chooses to contribute.
+  - End the conversation.
+
+If mode is "contribute_all":
+  - Call assess_contribution.
+  - Present the assessment — indicate contribution is the default.
+  - Offer [Contribute] as primary and [Keep this one local] as secondary.
+  - Call contribute_to_hive unless user explicitly chooses to keep local.
+  - End the conversation.
+
 Do NOT ask permission for the epic — just do it after the product is registered.
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
@@ -266,6 +271,7 @@ export type BuildContext = {
   brief: FeatureBrief | null;
   portfolioId: string | null;
   plan: Record<string, unknown> | null;
+  contributionMode?: string;
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -299,6 +305,12 @@ export function getBuildContextSection(ctx: BuildContext): string {
 
   lines.push("");
   lines.push(getBuildPhasePrompt(ctx.phase));
+
+  // Inject contribution mode for ship phase
+  if (ctx.phase === "ship" && ctx.contributionMode) {
+    lines.push("");
+    lines.push(`Platform contribution mode: ${ctx.contributionMode}`);
+  }
 
   // Inject IT4IT value stream context for governance alignment
   const it4itContext = getIT4ITContext(ctx.phase);
