@@ -397,6 +397,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   neo4j:
     image: neo4j:5-community
@@ -456,6 +457,7 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       LLM_BASE_URL: `${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: production
+      DPF_HOST_INSTALL_PATH: `${DPF_HOST_INSTALL_PATH:-}
       SANDBOX_PREVIEW_URL: http://sandbox:3000
     depends_on:
       portal-init:
@@ -488,6 +490,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - backups:/backups
+      - ./docker-compose.yml:/host-source/docker-compose.yml:ro
+      - ./.env:/host-source/.env:ro
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
       DPF_PORTAL_CONTAINER: dpf-portal-1
@@ -750,6 +754,7 @@ CREDENTIAL_ENCRYPTION_KEY=$encKey
 NEO4J_URI=bolt://neo4j:7687
 ADMIN_PASSWORD=$adminPass
 DPF_HOST_PROFILE=$hostProfileJson
+DPF_HOST_INSTALL_PATH=$DPF_DIR
 LLM_BASE_URL=http://model-runner.docker.internal/v1
 "@ | Set-Content "$DPF_DIR\.env"
 }
@@ -792,7 +797,8 @@ if (-not (Is-StepDone "started")) {
         }
     }
 
-    # Build the promoter image (customizer mode only — consumer mode has no sandbox/promoter)
+    # Build the promoter image (customizer mode only — consumer mode uses the portal image
+    # which already includes /promoter/promote.sh and all required tools)
     if ($InstallMode -eq "customizer") {
         Write-Action "Building promoter image (for autonomous feature deployments)..."
         $oldEAP = $ErrorActionPreference

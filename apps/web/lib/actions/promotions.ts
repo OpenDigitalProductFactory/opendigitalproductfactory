@@ -117,18 +117,37 @@ export async function executePromotionAction(
     await execAsync("docker info", { timeout: 5_000 });
     await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
 
+    // Resolve the host path where docker-compose.yml and .env live.
+    // DPF_HOST_INSTALL_PATH is the host-side path of the install directory
+    // (e.g. "D:/DPF" on Windows, "/opt/dpf" on Linux). The promoter needs
+    // these mounted at /host-source/ to restart the portal via compose.
+    const hostPath = process.env.DPF_HOST_INSTALL_PATH ?? "";
+    if (!hostPath) {
+      return {
+        success: false,
+        step: "validate",
+        message: "DPF_HOST_INSTALL_PATH is not configured. Set it in .env to the host-side install directory (e.g. D:/DPF) and restart the portal.",
+      };
+    }
+
     const envArgs: string[] = [
       "run", "-d",
       "--name", "dpf-promoter-1",
       "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
       "-v", "/var/run/docker.sock:/var/run/docker.sock",
       "-v", "dpf_backups:/backups",
+    ];
+    if (hostPath) {
+      envArgs.push("-v", `${hostPath}/docker-compose.yml:/host-source/docker-compose.yml:ro`);
+      envArgs.push("-v", `${hostPath}/.env:/host-source/.env:ro`);
+    }
+    envArgs.push(
       "-e", `PROMOTION_ID=${promotionId}`,
       "-e", `DPF_PRODUCTION_DB_CONTAINER=${process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1"}`,
       "-e", "DPF_PORTAL_CONTAINER=dpf-portal-1",
       "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
       "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
-    ];
+    );
     if (sandboxId) envArgs.push("-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`);
     if (overrideReason) envArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
     envArgs.push("dpf-promoter");

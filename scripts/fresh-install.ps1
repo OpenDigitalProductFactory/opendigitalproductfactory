@@ -97,6 +97,7 @@ NEO4J_AUTH=neo4j/dpf_dev_password
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
 ADMIN_PASSWORD=changeme123
+DPF_HOST_INSTALL_PATH=$InstallRoot
 "@ | Set-Content -Path $envFile -Encoding UTF8
     Write-Ok "Created .env with generated secrets"
 } else {

@@ -15,6 +15,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   neo4j:
     image: neo4j:5-community
@@ -88,6 +89,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
+      DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
