@@ -467,27 +467,45 @@ services:
       retries: 10
       start_period: 30s
 
-  sandbox-image:
+  # ─── Sandbox (isolated build environment for Build Studio) ──────────
+  sandbox:
     image: $($GHCR_SANDBOX):$Version
-    container_name: dpf-sandbox-dev
-    profiles: ["build-images"]
-    command: ["echo", "Image ready"]
-
-  playwright:
-    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    restart: unless-stopped
+    ports:
+      - "3035:3000"
     volumes:
-      - playwright_scripts:/scripts
-      - playwright_results:/results
-    network_mode: host
-    profiles: ["build-images"]
+      - sandbox_workspace:/workspace
+    depends_on:
+      portal-init:
+        condition: service_completed_successfully
     command: ["sleep", "infinity"]
+
+  # ─── Promoter (autonomous deployment pipeline) ─────────────────────
+  # One-shot container — triggered by Build Studio ship phase or ops UI.
+  promoter:
+    image: $($GHCR_PORTAL):$Version
+    entrypoint: ["/promoter/promote.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - backups:/backups
+    environment:
+      DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
+      DPF_PORTAL_CONTAINER: dpf-portal-1
+      DPF_COMPOSE_PROJECT: dpf
+      POSTGRES_USER: `${POSTGRES_USER:-dpf}
+      POSTGRES_DB: dpf
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["promote"]
+    restart: "no"
 
 volumes:
   pgdata:
   neo4jdata:
   qdrant_data:
-  playwright_scripts:
-  playwright_results:
+  sandbox_workspace:
+  backups:
 "@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
 
             # Write dpf-start.ps1 for consumer (no .git dependency)

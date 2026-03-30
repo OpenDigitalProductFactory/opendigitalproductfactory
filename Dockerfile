@@ -45,7 +45,7 @@ LABEL org.opencontainers.image.title="Open Digital Product Factory"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
 WORKDIR /app
-RUN apk add --no-cache docker-cli
+RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -62,6 +62,11 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+
+# Promoter script (autonomous deployment pipeline — used by promoter service)
+COPY scripts/promote.sh /promoter/promote.sh
+COPY Dockerfile /promoter/portal.Dockerfile
+RUN chmod +x /promoter/promote.sh
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
