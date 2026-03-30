@@ -935,6 +935,59 @@ async function ensureBuildStudioModelConfig(): Promise<void> {
   console.log("Ensured Build Studio model configuration");
 }
 
+/**
+ * EP-INF-012: Seed factory-default agent model configuration.
+ *
+ * Every agent gets an explicit row in AgentModelConfig so the admin UI at
+ * /platform/ai/model-assignment shows real values instead of implied
+ * code-level defaults.  Admins can change any row without touching code.
+ *
+ * Uses upsert — existing admin overrides are NOT clobbered.
+ */
+async function seedAgentModelDefaults(): Promise<void> {
+  const defaults: Array<{
+    agentId: string;
+    minimumTier: string;
+    budgetClass: string;
+  }> = [
+    { agentId: "build-specialist",    minimumTier: "frontier", budgetClass: "quality_first" },
+    { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
+    { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
+    { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
+    { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "onboarding-coo",     minimumTier: "basic",    budgetClass: "minimize_cost" },
+  ];
+
+  let seeded = 0;
+  let existed = 0;
+  for (const d of defaults) {
+    const existing = await prisma.agentModelConfig.findUnique({
+      where: { agentId: d.agentId },
+    });
+    if (existing) {
+      // Admin has already configured this agent — don't overwrite
+      existed++;
+      continue;
+    }
+    await prisma.agentModelConfig.create({
+      data: {
+        agentId: d.agentId,
+        minimumTier: d.minimumTier,
+        budgetClass: d.budgetClass,
+        configuredAt: new Date(),
+        // configuredById left null — system seed, not a user action
+      },
+    });
+    seeded++;
+  }
+  console.log(`  Seeded ${seeded} agent model defaults (${existed} already configured)`);
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedGeographicData(prisma);
@@ -964,6 +1017,7 @@ async function main(): Promise<void> {
   await seedLocalModels();
   await seedModelProfiles();
   await ensureBuildStudioModelConfig();
+  await seedAgentModelDefaults();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
   console.log("Seed complete.");
