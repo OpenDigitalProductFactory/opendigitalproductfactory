@@ -42,6 +42,7 @@ RUN pnpm --filter @dpf/db exec prisma generate
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner
 LABEL org.opencontainers.image.title="Open Digital Product Factory"
+LABEL org.opencontainers.image.description="Self-developing digital product management platform"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
 WORKDIR /app
@@ -62,6 +63,16 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+
+# Source for Build Studio — copied to -src paths to avoid collision with standalone output
+# Note: /app/apps/web/ and /app/packages/ are occupied by the standalone NFT output.
+# The -src suffix paths are guaranteed free.
+COPY --from=build /app/apps/web/ ./apps/web-src/
+COPY --from=build /app/packages/ ./packages-src/
+
+# Version file baked in at build time
+ARG DPF_VERSION=dev
+RUN echo "$DPF_VERSION" > /app/.dpf-image-version
 
 # Promoter script (autonomous deployment pipeline — used by promoter service)
 COPY scripts/promote.sh /promoter/promote.sh

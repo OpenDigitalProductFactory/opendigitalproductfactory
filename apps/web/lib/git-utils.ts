@@ -7,8 +7,14 @@ import { resolve } from "path";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
 const exec = promisify(execCb);
-const PROJECT_ROOT = resolve(process.cwd(), "..", "..");
 const GIT_TIMEOUT_MS = 10_000;
+
+/** Resolve git root at call time — respects PROJECT_ROOT env var set by Docker. */
+function getGitRoot(): string {
+  return process.env.PROJECT_ROOT
+    ? resolve(process.env.PROJECT_ROOT)
+    : resolve(process.cwd(), "..", "..");
+}
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -70,7 +76,7 @@ export function formatCommitMessage(opts: {
 
 export async function isGitAvailable(): Promise<boolean> {
   try {
-    await exec("git rev-parse --git-dir", { cwd: PROJECT_ROOT, timeout: 2000 });
+    await exec("git rev-parse --git-dir", { cwd: getGitRoot(), timeout: 2000 });
     return true;
   } catch {
     return false;
@@ -88,9 +94,9 @@ export async function commitFile(opts: {
     return { error: `Path not allowed for commit: ${opts.filePath}` };
   }
   try {
-    await exec(`git add ${JSON.stringify(opts.filePath)}`, { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS });
-    await exec(`git commit -m ${JSON.stringify(opts.message)}`, { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS });
-    const { stdout } = await exec("git rev-parse HEAD", { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS });
+    await exec(`git add ${JSON.stringify(opts.filePath)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
+    await exec(`git commit -m ${JSON.stringify(opts.message)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
+    const { stdout } = await exec("git rev-parse HEAD", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     return { hash: stdout.trim() };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git commit failed" };
@@ -104,7 +110,7 @@ export async function createTag(opts: {
   if (!isDevInstance()) return { error: "Git tags are only available on dev instances." };
   if (!isSafeRef(opts.tag)) return { error: `Invalid tag name: ${opts.tag}` };
   try {
-    await exec(`git tag -a ${JSON.stringify(opts.tag)} -m ${JSON.stringify(opts.message)}`, { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS });
+    await exec(`git tag -a ${JSON.stringify(opts.tag)} -m ${JSON.stringify(opts.message)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     return { ok: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git tag failed" };
@@ -113,7 +119,7 @@ export async function createTag(opts: {
 
 export async function getCurrentCommitHash(): Promise<string | null> {
   try {
-    const { stdout } = await exec("git rev-parse HEAD", { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS });
+    const { stdout } = await exec("git rev-parse HEAD", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     return stdout.trim() || null;
   } catch {
     return null;
@@ -136,7 +142,7 @@ export async function gitLog(opts?: {
     const format = "--format=%H%x00%s%x00%aI";
     const { stdout } = await exec(
       `git log ${limit} ${format} ${range}`.trim(),
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
     );
     const commits: Array<{ hash: string; message: string; date: string }> = [];
     for (const line of stdout.trim().split("\n")) {
@@ -157,7 +163,7 @@ export async function getCommitCount(from: string, to: string = "HEAD"): Promise
   try {
     const { stdout } = await exec(
       `git rev-list --count ${from}..${to}`,
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
     );
     return parseInt(stdout.trim(), 10) || 0;
   } catch {
@@ -169,7 +175,7 @@ export async function getLatestTag(): Promise<string | null> {
   try {
     const { stdout } = await exec(
       "git describe --tags --abbrev=0",
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
     );
     return stdout.trim() || null;
   } catch {
@@ -190,7 +196,7 @@ export async function gitShow(opts: {
   try {
     const { stdout } = await exec(
       `git show ${JSON.stringify(opts.ref + ":" + opts.path)}`,
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     );
     return { content: stdout };
   } catch (err) {
@@ -206,11 +212,11 @@ export async function gitDiffStat(opts: {
   try {
     const { stdout: stat } = await exec(
       `git diff --stat ${opts.from}..${opts.to}`,
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     );
     const { stdout: shortlog } = await exec(
       `git log --oneline ${opts.from}..${opts.to}`,
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     );
     const filesChanged = (stat.match(/\d+ files? changed/) || ["0"])[0]
       .replace(/ files? changed/, "")
@@ -236,7 +242,7 @@ export async function gitGrep(opts: {
     const globArg = opts.glob ? `-- ${JSON.stringify(opts.glob)}` : "";
     const { stdout } = await exec(
       `git grep -n --max-count=${max} ${JSON.stringify(opts.query)} ${opts.ref} ${globArg}`.trim(),
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     );
     const results: Array<{ path: string; line: number; text: string }> = [];
     for (const line of stdout.split("\n").slice(0, max)) {
@@ -266,7 +272,7 @@ export async function gitLsTree(opts: {
     const pathArg = safePath ? ` -- ${JSON.stringify(safePath)}` : "";
     const { stdout } = await exec(
       `git ls-tree --name-only ${opts.ref}${pathArg}`,
-      { cwd: PROJECT_ROOT, timeout: GIT_TIMEOUT_MS },
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
     );
     const entries: Array<{ name: string; type: "file" | "dir"; path: string }> = [];
     for (const name of stdout.trim().split("\n")) {
