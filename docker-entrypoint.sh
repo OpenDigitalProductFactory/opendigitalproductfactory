@@ -5,7 +5,22 @@ echo "=== DPF Portal Init ==="
 
 echo "[1/5] Running database migrations..."
 cd /app
-pnpm --filter @dpf/db exec prisma migrate deploy
+# Retry migrations — on first-ever init, pg_isready passes before the dpf user
+# is fully created, causing P1000 auth failures for 1-2 seconds.
+migrate_attempts=0
+while [ $migrate_attempts -lt 5 ]; do
+  if pnpm --filter @dpf/db exec prisma migrate deploy 2>&1; then
+    break
+  fi
+  migrate_attempts=$((migrate_attempts + 1))
+  if [ $migrate_attempts -lt 5 ]; then
+    echo "  Retrying migrations in 3s (attempt $((migrate_attempts + 1))/5)..."
+    sleep 3
+  else
+    echo "  FATAL: Migrations failed after 5 attempts"
+    exit 1
+  fi
+done
 echo "  OK Migrations complete"
 
 echo "[2/5] Syncing provider registry..."

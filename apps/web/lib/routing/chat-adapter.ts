@@ -234,10 +234,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
       const lines = rawText.split("\n");
       let lastCompleted: Record<string, unknown> | null = null;
       let lastDelta = "";
+      let parsedEventCount = 0;
+      const eventTypes = new Set<string>();
       for (const line of lines) {
         if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
         try {
           const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
+          parsedEventCount++;
+          if (typeof parsed.type === "string") eventTypes.add(parsed.type);
           if (parsed.type === "response.completed" && parsed.response) {
             lastCompleted = parsed.response as Record<string, unknown>;
           }
@@ -246,6 +250,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
             lastDelta += parsed.delta;
           }
         } catch { /* skip malformed lines */ }
+      }
+      if (!lastCompleted && !lastDelta) {
+        console.warn(`[chat-adapter] ChatGPT SSE: ${lines.length} lines, ${parsedEventCount} parsed events, types=[${[...eventTypes].join(",")}], rawLen=${rawText.length}, first200=${rawText.slice(0, 200)}`);
       }
       data = lastCompleted ?? { output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }] };
     } else {

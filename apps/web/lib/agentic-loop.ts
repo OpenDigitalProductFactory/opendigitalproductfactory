@@ -79,15 +79,17 @@ export function shouldNudge(params: {
   if (!params.hasTools) return false;
 
   // First iteration with no tools called — nudge UNLESS the response is a
-  // clarifying question. A short question ending in "?" means the model is
-  // correctly asking for a required field it can't reasonably assume (per rule 13).
-  // Nudging those toward tool calls produces irrelevant build-tool prompts.
+  // clarifying question or a substantive conversational reply. Short questions
+  // ending in "?" mean the model is asking for a required field it can't
+  // reasonably assume (per rule 13). Conversational replies (>100 chars,
+  // no completion claim or narration) are also valid — nudging those toward
+  // tool calls causes empty second responses that trigger quality-gate failures.
   if (params.executedToolCount === 0 && params.iteration === 0) {
-    const isAskingClarification =
-      params.responseText !== undefined &&
-      params.responseText.trim().length < 250 &&
-      CLARIFYING_QUESTION_PATTERN.test(params.responseText.trim());
-    return !isAskingClarification;
+    const text = params.responseText?.trim() ?? "";
+    const isAskingClarification = text.length < 250 && CLARIFYING_QUESTION_PATTERN.test(text);
+    const isSubstantiveReply = text.length >= 100 && !COMPLETION_CLAIM_PATTERN.test(text) && !NARRATION_PATTERN.test(text);
+    if (isAskingClarification || isSubstantiveReply) return false;
+    return true;
   }
 
   // Short response after using tools — model may have stalled
@@ -194,6 +196,7 @@ export async function runAgenticLoop(params: {
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   let fabricationRetried = false;
+  let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
@@ -305,6 +308,11 @@ export async function runAgenticLoop(params: {
       });
 
       if (shouldNudgeNow) {
+        // Preserve the best text-only response before nudging, in case the
+        // nudge produces an empty response (common with ChatGPT/gpt-5.4).
+        if (trimmed.length > bestPreNudgeContent.length) {
+          bestPreNudgeContent = trimmed;
+        }
         continuationNudges++;
         const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
         console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response)`);
@@ -338,8 +346,16 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
+      // If the final response is empty but we had a good pre-nudge response,
+      // use that instead of returning nothing. This prevents quality-gate
+      // failures when the nudge causes the model to return empty.
+      const finalContent = trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content);
+      if (trimmed.length === 0 && bestPreNudgeContent.length > 0) {
+        console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
+      }
+
       return {
-        content: result.content,
+        content: finalContent,
         providerId: result.providerId,
         modelId: result.modelId,
         downgraded: result.downgraded,
