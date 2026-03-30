@@ -1098,6 +1098,9 @@ model ModelProfile {
   structuredOutputScore     Int           @default(50)
   supportedModalities       Json          @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
   toolFidelity              Int           @default(50)
+  // EP-INF-012: Quality tier (frontier / strong / adequate / basic)
+  qualityTier               String?
+  qualityTierSource         String        @default("auto") // "auto" | "admin"
   // EP-INF-003: ModelCard fields
   modelFamily               String?
   modelClass                String        @default("chat")
@@ -4515,3 +4518,4 @@ model ExamVoucher {
   @@index([ogId])
   @@index([status])
 }
+
