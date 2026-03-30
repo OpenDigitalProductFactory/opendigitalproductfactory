@@ -55,6 +55,8 @@ services:
       context: .
       target: runner
     command: ["/docker-entrypoint.sh"]
+    volumes:
+      - dpf-source-code:/workspace
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
@@ -73,6 +75,7 @@ services:
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - dpf-source-code:/workspace
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
@@ -85,6 +88,8 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
+      INSTANCE_TYPE: dev
+      PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
     depends_on:
       portal-init:
@@ -287,6 +292,7 @@ volumes:
   pgdata:
   neo4jdata:
   qdrant_data:
+  dpf-source-code:
   playwright_scripts:
   playwright_results:
   dev_pgdata:
