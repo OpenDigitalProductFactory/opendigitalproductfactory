@@ -10,6 +10,7 @@ const TABS = [
   { label: "Storefront", href: "/admin/storefront" },
   { label: "Reference Data", href: "/admin/reference-data" },
   { label: "Settings", href: "/admin/settings" },
+  { label: "Platform Development", href: "/admin/platform-development" },
 ];
 
 export function AdminTabNav() {
