@@ -598,6 +598,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "apply_platform_update",
+    description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "manage_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "evaluate_page",
     description: "Evaluate a live page for UX and accessibility issues using axe-core + Playwright. Returns structured findings with WCAG references, severity, and recommendations. Works on production pages (default) or sandbox pages (if URL provided).",
     inputSchema: {
@@ -4081,6 +4089,126 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       });
       if (!result.ok) return { success: false, message: result.error ?? "Export failed", error: result.error };
       return { success: true, message: `Exported ${result.data!.elementCount} elements to ${result.data!.fileName}`, data: result.data as Record<string, unknown> };
+    }
+
+    case "apply_platform_update": {
+      const { exec: execCbUpdate } = await import("child_process");
+      const { promisify: promisifyUpdate } = await import("util");
+      const execUpdate = promisifyUpdate(execCbUpdate);
+
+      const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
+      if (!devConfig?.updatePending) {
+        return { success: false, message: "No platform update is pending.", error: "No update pending" };
+      }
+
+      const pendingVersion = devConfig.pendingVersion;
+      if (!pendingVersion || !/^[0-9a-zA-Z._-]+$/.test(pendingVersion)) {
+        return { success: false, message: "Invalid pending version string.", error: "Invalid version" };
+      }
+
+      const workspace = process.env.PROJECT_ROOT ?? "/workspace";
+      const gitOpts = { cwd: workspace, timeout: 30_000 };
+
+      try {
+        // Check for in-progress merge from a previous interrupted run
+        const { existsSync } = await import("fs");
+        const { resolve: resolvePath } = await import("path");
+        if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
+          // Return existing conflict list
+          const { stdout: conflicted } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
+          const conflicts = [];
+          for (const file of conflicted.trim().split("\n").filter(Boolean)) {
+            const { readFileSync } = await import("fs");
+            const content = readFileSync(resolvePath(workspace, file), "utf-8");
+            const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
+            const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+            conflicts.push({
+              file,
+              upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
+              localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
+            });
+          }
+          return {
+            success: true,
+            message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
+            data: { clean: false, resumedMerge: true, conflicts } as unknown as Record<string, unknown>,
+          };
+        }
+
+        // Step 1-3: Update dpf-upstream branch with new source
+        await execUpdate("git checkout dpf-upstream", gitOpts);
+        await execUpdate("rm -rf apps/web packages", gitOpts);
+        await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
+        await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
+        await execUpdate("git add -A", gitOpts);
+
+        // Check if there are actually changes
+        const { stdout: diffCheck } = await execUpdate("git diff --cached --stat", gitOpts);
+        if (diffCheck.trim()) {
+          await execUpdate(`git commit -m "chore: dpf-upstream v${pendingVersion}"`, gitOpts);
+        }
+
+        // Step 4: Merge into my-changes
+        await execUpdate("git checkout my-changes", gitOpts);
+        try {
+          await execUpdate("git merge dpf-upstream --no-commit --no-ff", gitOpts);
+        } catch {
+          // Merge conflicts — expected, not an error
+        }
+
+        // Check for conflicts
+        const { stdout: conflictedFiles } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts).catch(() => ({ stdout: "" }));
+        if (conflictedFiles.trim()) {
+          const conflicts = [];
+          const { readFileSync } = await import("fs");
+          const { resolve: rp } = await import("path");
+          for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
+            const content = readFileSync(rp(workspace, file), "utf-8");
+            const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
+            const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+            conflicts.push({
+              file,
+              upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
+              localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
+            });
+          }
+          return {
+            success: true,
+            message: `Merge has conflicts. ${conflicts.length} file(s) need resolution.`,
+            data: { clean: false, conflicts } as unknown as Record<string, unknown>,
+          };
+        }
+
+        // Clean merge — commit and update
+        const { stdout: filesChanged } = await execUpdate("git diff --cached --stat", gitOpts);
+        const fileCount = (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1];
+        await execUpdate(`git commit -m "chore: merge dpf v${pendingVersion}"`, gitOpts);
+
+        // Update version sentinel
+        const { writeFileSync } = await import("fs");
+        const { resolve: rp2 } = await import("path");
+        writeFileSync(rp2(workspace, ".dpf-version"), pendingVersion, "utf-8");
+
+        // Clear update pending flag
+        await prisma.platformDevConfig.update({
+          where: { id: "singleton" },
+          data: { updatePending: false, pendingVersion: null },
+        });
+
+        return {
+          success: true,
+          message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
+          data: { clean: true, filesUpdated: parseInt(fileCount ?? "0", 10), version: pendingVersion },
+        };
+      } catch (err) {
+        // Attempt to return to my-changes branch on error
+        try { await execUpdate("git checkout my-changes", gitOpts); } catch { /* best effort */ }
+        return {
+          success: false,
+          message: `Platform update failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+          error: err instanceof Error ? err.message : "Unknown error",
+        };
+      }
     }
 
     default: {
