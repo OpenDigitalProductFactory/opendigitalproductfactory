@@ -157,6 +157,12 @@ export async function runAgenticLoop(params: {
     ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
       ? { preferredModelId: modelRequirements.preferredModelId as string }
       : {}),
+    ...(modelRequirements && typeof modelRequirements === "object" && "minimumDimensions" in modelRequirements
+      ? { minimumDimensions: modelRequirements.minimumDimensions as Record<string, number> }
+      : {}),
+    ...(modelRequirements && typeof modelRequirements === "object" && "budgetClass" in modelRequirements
+      ? { budgetClass: modelRequirements.budgetClass as "minimize_cost" | "balanced" | "quality_first" }
+      : {}),
   };
 
   let messages = [...chatHistory];

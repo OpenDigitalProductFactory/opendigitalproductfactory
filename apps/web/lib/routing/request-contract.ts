@@ -57,6 +57,11 @@ export interface RequestContract {
   /** When set, only endpoints with this modelClass are eligible.
    *  When absent, defaults to chat/reasoning filter. */
   requiredModelClass?: ModelClass;
+
+  // ── EP-SELF-DEV-005: Per-agent minimum dimension thresholds ──
+  /** Minimum dimension scores (0-100) the model must meet.
+   *  Models below any threshold get successProbability = 0. */
+  minimumDimensions?: Record<string, number>;
 }
 
 // ── Reasoning depth defaults per task type ──────────────────────────────────

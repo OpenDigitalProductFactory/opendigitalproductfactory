@@ -55,6 +55,10 @@ export type AgentModelRequirements = {
   preferredProviderId?: string;
   preferredModelId?: string;
   requiredCapabilities?: Array<"codeExecution" | "webSearch" | "computerUse">;
+  /** Minimum dimension scores (0-100). Models below any threshold are excluded from routing. */
+  minimumDimensions?: Record<string, number>;
+  /** Budget posture for this agent. Overrides the default "balanced". */
+  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
 };
 
 /** Entry in the route-to-agent map. */

@@ -263,7 +263,10 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       { label: "Ship feature", description: "Deploy the completed feature", capability: "view_platform", prompt: "I'm ready to ship this feature" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
-    modelRequirements: { preferredProviderId: "anthropic-sub", preferredModelId: "claude-sonnet-4-20250514" },
+    modelRequirements: {
+      minimumDimensions: { codegen: 75, toolFidelity: 80 },
+      budgetClass: "quality_first",
+    },
   },
   "/admin": {
     agentId: "admin-assistant",
