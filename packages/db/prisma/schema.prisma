@@ -55,6 +55,7 @@ model User {
   taskRuns                     TaskRun[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
   platformDevConfigs           PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
+  agentModelConfigs            AgentModelConfig[]            @relation("AgentModelConfiguredBy")
 }
 
 model UserGroup {
@@ -4517,5 +4518,17 @@ model ExamVoucher {
 
   @@index([ogId])
   @@index([status])
+}
+
+// EP-INF-012: Per-agent model assignment configuration (admin-overridable)
+model AgentModelConfig {
+  agentId          String    @id       // e.g. "build-specialist", "coo"
+  minimumTier      String    @default("adequate") // "frontier" | "strong" | "adequate" | "basic"
+  pinnedProviderId String?
+  pinnedModelId    String?
+  budgetClass      String    @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  configuredAt     DateTime  @default(now())
+  configuredById   String?
+  configuredBy     User?     @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
 }
 
