@@ -175,30 +175,34 @@ log "Build context: $BUILD_CONTEXT"
 # Strategy: start from host source (/host-source, mounted read-only), overlay sandbox changes.
 # The host source is what the current production image was built from — guaranteed to compile.
 
-# Step 4a: Copy ONLY build-essential files from host (the Dockerfile only needs these).
-# This copies ~1,500 files instead of ~60,000, avoiding the slow WSL2 9p bottleneck.
-log "  Copying build-essential source from host..."
-cd /host-source
-
-# Root config files
-for f in pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json docker-entrypoint.sh; do
-  [ -f "$f" ] && cp "$f" "$BUILD_CONTEXT/" 2>/dev/null
-done
-
-# App source and packages (what the Dockerfile COPY stages need)
-tar -cf - \
-  --exclude='node_modules' \
-  --exclude='.next' \
-  apps/web packages \
-  | tar -xf - -C "$BUILD_CONTEXT/"
-
-# User guide docs (copied into runner image)
-if [ -d docs/user-guide ]; then
-  mkdir -p "$BUILD_CONTEXT/docs"
-  cp -r docs/user-guide "$BUILD_CONTEXT/docs/" 2>/dev/null || true
+# Step 4a: Copy build-essential source.
+# Customizer mode: /host-source is mounted (host project directory).
+# Consumer mode: no host source — copy from the portal container instead.
+if [ -d /host-source/apps/web ]; then
+  log "  Copying build-essential source from host..."
+  cd /host-source
+  for f in pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json docker-entrypoint.sh; do
+    [ -f "$f" ] && cp "$f" "$BUILD_CONTEXT/" 2>/dev/null
+  done
+  tar -cf - --exclude='node_modules' --exclude='.next' apps/web packages \
+    | tar -xf - -C "$BUILD_CONTEXT/"
+  if [ -d docs/user-guide ]; then
+    mkdir -p "$BUILD_CONTEXT/docs"
+    cp -r docs/user-guide "$BUILD_CONTEXT/docs/" 2>/dev/null || true
+  fi
+  cd /promoter
+else
+  log "  No host source — copying from portal container..."
+  docker cp "${PORTAL_CONTAINER}:/app/packages" "$BUILD_CONTEXT/packages" 2>/dev/null || true
+  docker cp "${PORTAL_CONTAINER}:/app/node_modules" "$BUILD_CONTEXT/node_modules" 2>/dev/null || true
+  for f in pnpm-workspace.yaml pnpm-lock.yaml package.json; do
+    docker cp "${PORTAL_CONTAINER}:/app/$f" "$BUILD_CONTEXT/$f" 2>/dev/null || true
+  done
+  docker cp "${PORTAL_CONTAINER}:/docker-entrypoint.sh" "$BUILD_CONTEXT/docker-entrypoint.sh" 2>/dev/null || true
+  docker cp "${PORTAL_CONTAINER}:/app/docs" "$BUILD_CONTEXT/docs" 2>/dev/null || true
+  # Get the standalone app output (consumer mode — no source to rebuild from)
+  docker cp "${PORTAL_CONTAINER}:/app/apps" "$BUILD_CONTEXT/apps" 2>/dev/null || true
 fi
-
-cd /promoter
 
 # Step 4b: Overlay ONLY the changed files from the sandbox (git diff against baseline)
 log "  Extracting changed files from sandbox..."
