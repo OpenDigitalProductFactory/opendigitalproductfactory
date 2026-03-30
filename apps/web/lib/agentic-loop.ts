@@ -6,6 +6,7 @@ import { routeAndCall, type RoutedInferenceResult } from "./routed-inference";
 import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
 import type { ChatMessage } from "./ai-inference";
 import { prisma } from "@dpf/db";
+import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "./routing/quality-tiers";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -147,22 +148,46 @@ export async function runAgenticLoop(params: {
     onProgress,
   } = params;
 
+  // EP-INF-012: Load admin-configured model assignment for this agent.
+  // DB config takes precedence over code defaults in modelRequirements.
+  // NOTE: AgentModelConfig table not yet created (EP-INF-012 pending).
+  // When the migration lands, replace this with:
+  //   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
+  const agentModelConfig = null as { minimumTier: string; budgetClass: string; pinnedProviderId: string | null; pinnedModelId: string | null } | null;
+
+  // Resolve effective config: DB row > code defaults > nothing
+  const effectiveConfig = agentModelConfig
+    ? {
+        minimumDimensions: TIER_MINIMUM_DIMENSIONS[agentModelConfig.minimumTier as QualityTier] ?? {},
+        budgetClass: agentModelConfig.budgetClass as "minimize_cost" | "balanced" | "quality_first",
+        preferredProviderId: agentModelConfig.pinnedProviderId ?? undefined,
+        preferredModelId: agentModelConfig.pinnedModelId ?? undefined,
+      }
+    : {
+        // Fall back to code-level modelRequirements (defaultMinimumTier / legacy)
+        ...(modelRequirements && typeof modelRequirements === "object" && "defaultMinimumTier" in modelRequirements
+          ? { minimumDimensions: TIER_MINIMUM_DIMENSIONS[modelRequirements.defaultMinimumTier as QualityTier] ?? {} }
+          : modelRequirements && typeof modelRequirements === "object" && "minimumDimensions" in modelRequirements
+            ? { minimumDimensions: modelRequirements.minimumDimensions as Record<string, number> }
+            : {}),
+        ...(modelRequirements && typeof modelRequirements === "object" && "defaultBudgetClass" in modelRequirements
+          ? { budgetClass: modelRequirements.defaultBudgetClass as "minimize_cost" | "balanced" | "quality_first" }
+          : modelRequirements && typeof modelRequirements === "object" && "budgetClass" in modelRequirements
+            ? { budgetClass: modelRequirements.budgetClass as "minimize_cost" | "balanced" | "quality_first" }
+            : {}),
+        ...(modelRequirements && typeof modelRequirements === "object" && "preferredProviderId" in modelRequirements
+          ? { preferredProviderId: modelRequirements.preferredProviderId as string }
+          : {}),
+        ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
+          ? { preferredModelId: modelRequirements.preferredModelId as string }
+          : {}),
+      };
+
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     taskType: taskType ?? "conversation",
-    ...(modelRequirements && typeof modelRequirements === "object" && "preferredProviderId" in modelRequirements
-      ? { preferredProviderId: modelRequirements.preferredProviderId as string }
-      : {}),
-    ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
-      ? { preferredModelId: modelRequirements.preferredModelId as string }
-      : {}),
-    ...(modelRequirements && typeof modelRequirements === "object" && "minimumDimensions" in modelRequirements
-      ? { minimumDimensions: modelRequirements.minimumDimensions as Record<string, number> }
-      : {}),
-    ...(modelRequirements && typeof modelRequirements === "object" && "budgetClass" in modelRequirements
-      ? { budgetClass: modelRequirements.budgetClass as "minimize_cost" | "balanced" | "quality_first" }
-      : {}),
+    ...effectiveConfig,
   };
 
   let messages = [...chatHistory];
