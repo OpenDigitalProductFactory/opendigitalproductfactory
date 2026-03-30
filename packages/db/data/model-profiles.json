@@ -1,35 +1,2763 @@
-[{"providerId":"anthropic-sub","modelId":"claude-3-haiku-20240307","friendlyName":"Claude Haiku 3","modelStatus":"degraded","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":200000,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": true, "toolUse": true, "pdfInput": false, "thinking": false, "citations": false, "streaming": true, "webSearch": null, "imageInput": true, "computerUse": null, "effortLevels": null, "codeExecution": false, "promptCaching": true, "adaptiveThinking": false, "structuredOutput": false, "contextManagement": false},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":67,"toolFidelity":100,"maxContextTokens":200000,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"anthropic-sub","modelId":"claude-haiku-4-5-20251001","friendlyName":"Claude Haiku 4.5","modelStatus":"degraded","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":"claude-haiku-4","modelClass":"chat","maxInputTokens":200000,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": true, "toolUse": true, "pdfInput": true, "thinking": true, "citations": true, "streaming": true, "webSearch": null, "imageInput": true, "computerUse": null, "effortLevels": null, "codeExecution": false, "promptCaching": true, "adaptiveThinking": false, "structuredOutput": true, "contextManagement": true},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":100,"maxContextTokens":200000,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"chatgpt","modelId":"gpt-5.4","friendlyName":"GPT-5.4 (ChatGPT Subscription)","modelStatus":"active","capabilityTier":"advanced","costTier":"subscription","bestFor":["conversation", "coding", "general-purpose", "reasoning"],"avoidFor":["local-only-required"],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":null,"inputModalities":["text", "image"],"outputModalities":["text"],"capabilities":{"toolUse": true, "streaming": true, "imageInput": true, "structuredOutput": true},"pricing":{},"instructType":null,"trainingDataCutoff":null,"codegen":90,"contextRetention":75,"conversational":80,"reasoning":85,"structuredOutputScore":80,"toolFidelity":85,"maxContextTokens":128000,"maxOutputTokens":16384,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"codex","modelId":"codex-mini-latest","friendlyName":"Codex Mini","modelStatus":"active","capabilityTier":"advanced","costTier":"$$","bestFor":["coding", "agentic-tasks"],"avoidFor":["conversation"],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"agent","maxInputTokens":null,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"toolUse": true, "streaming": true, "imageInput": false, "structuredOutput": true},"pricing":{},"instructType":null,"trainingDataCutoff":null,"codegen":90,"contextRetention":60,"conversational":40,"reasoning":70,"structuredOutputScore":70,"toolFidelity":85,"maxContextTokens":128000,"maxOutputTokens":16384,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"deep-research-pro-preview-12-2025","friendlyName":"Deep Research Pro Preview (Dec-12-2025)","modelStatus":"retired","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":131072,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":131072,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.0-flash","friendlyName":"Gemini 2.0 Flash","modelStatus":"retired","capabilityTier":"strong","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":72,"contextRetention":68,"conversational":72,"reasoning":75,"structuredOutputScore":70,"toolFidelity":70,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.0-flash-001","friendlyName":"Gemini 2.0 Flash 001","modelStatus":"active","capabilityTier":"strong","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":72,"contextRetention":68,"conversational":72,"reasoning":75,"structuredOutputScore":70,"toolFidelity":70,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.0-flash-lite","friendlyName":"Gemini 2.0 Flash-Lite","modelStatus":"retired","capabilityTier":"strong","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":72,"contextRetention":68,"conversational":72,"reasoning":75,"structuredOutputScore":70,"toolFidelity":70,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.0-flash-lite-001","friendlyName":"Gemini 2.0 Flash-Lite 001","modelStatus":"retired","capabilityTier":"strong","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":72,"contextRetention":68,"conversational":72,"reasoning":75,"structuredOutputScore":70,"toolFidelity":70,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-computer-use-preview-10-2025","friendlyName":"Gemini 2.5 Computer Use Preview 10-2025","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":131072,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":131072,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-flash","friendlyName":"Gemini 2.5 Flash","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":83,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-flash-image","friendlyName":"Nano Banana","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":32768,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":32768,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-flash-lite","friendlyName":"Gemini 2.5 Flash-Lite","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-flash-lite-preview-09-2025","friendlyName":"Gemini 2.5 Flash-Lite Preview Sep 2025","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-flash-preview-tts","friendlyName":"Gemini 2.5 Flash Preview TTS","modelStatus":"retired","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":8192,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":8192,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-pro","friendlyName":"Gemini 2.5 Pro","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-2.5-pro-preview-tts","friendlyName":"Gemini 2.5 Pro Preview TTS","modelStatus":"retired","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":8192,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": true, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": true, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":8192,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3-flash-preview","friendlyName":"Gemini 3 Flash Preview","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3-pro-image-preview","friendlyName":"Nano Banana Pro","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":131072,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":131072,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3-pro-preview","friendlyName":"Gemini 3 Pro Preview","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3.1-flash-image-preview","friendlyName":"Nano Banana 2","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":65536,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":65536,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3.1-flash-lite-preview","friendlyName":"Gemini 3.1 Flash Lite Preview","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3.1-pro-preview","friendlyName":"Gemini 3.1 Pro Preview","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-3.1-pro-preview-customtools","friendlyName":"Gemini 3.1 Pro Preview Custom Tools","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-flash-latest","friendlyName":"Gemini Flash Latest","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-flash-lite-latest","friendlyName":"Gemini Flash-Lite Latest","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-pro-latest","friendlyName":"Gemini Pro Latest","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemini-robotics-er-1.5-preview","friendlyName":"Gemini Robotics-ER 1.5 Preview","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":1048576,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":1048576,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3-12b-it","friendlyName":"Gemma 3 12B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":32768,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":32768,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3-1b-it","friendlyName":"Gemma 3 1B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":32768,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":32768,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3-27b-it","friendlyName":"Gemma 3 27B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":131072,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":131072,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3-4b-it","friendlyName":"Gemma 3 4B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":32768,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":80,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":32768,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3n-e2b-it","friendlyName":"Gemma 3n E2B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":8192,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":8192,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"gemma-3n-e4b-it","friendlyName":"Gemma 3n E4B","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":8192,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":100,"contextRetention":50,"conversational":50,"reasoning":90,"structuredOutputScore":100,"toolFidelity":33,"maxContextTokens":8192,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"evaluated","supportedModalities":{"input": ["text"], "output": ["text"]}}, 
- {"providerId":"gemini","modelId":"nano-banana-pro-preview","friendlyName":"Nano Banana Pro","modelStatus":"active","capabilityTier":"moderate","costTier":"$","bestFor":["general purpose tasks"],"avoidFor":[],"contextWindow":null,"speedRating":null,"supportsToolUse":true,"codingCapability":null,"instructionFollowing":null,"modelFamily":null,"modelClass":"chat","maxInputTokens":131072,"inputModalities":["text"],"outputModalities":["text"],"capabilities":{"batch": null, "toolUse": true, "pdfInput": null, "thinking": null, "citations": null, "streaming": null, "webSearch": null, "imageInput": null, "computerUse": null, "effortLevels": null, "codeExecution": null, "promptCaching": null, "adaptiveThinking": null, "structuredOutput": null, "contextManagement": null},"pricing":{"discount": null, "requestFixed": null, "inputPerMToken": null, "outputPerMToken": null, "cacheReadPerMToken": null, "imageOutputPerUnit": null, "reasoningPerMToken": null, "audioInputPerMToken": null, "cacheWritePerMToken": null, "imageInputPerMToken": null, "webSearchPerRequest": null, "audioOutputPerMToken": null},"instructType":null,"trainingDataCutoff":null,"codegen":50,"contextRetention":50,"conversational":50,"reasoning":50,"structuredOutputScore":50,"toolFidelity":50,"maxContextTokens":131072,"maxOutputTokens":null,"inputPricePerMToken":null,"outputPricePerMToken":null,"profileConfidence":"medium","profileSource":"seed","supportedModalities":{"input": ["text"], "output": ["text"]}}]
+[
+  {
+    "providerId": "anthropic-sub",
+    "modelId": "claude-3-haiku-20240307",
+    "friendlyName": "Claude Haiku 3",
+    "modelStatus": "degraded",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 200000,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": true,
+      "toolUse": true,
+      "pdfInput": false,
+      "thinking": false,
+      "citations": false,
+      "streaming": true,
+      "webSearch": null,
+      "imageInput": true,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": false,
+      "promptCaching": true,
+      "adaptiveThinking": false,
+      "structuredOutput": false,
+      "contextManagement": false
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 67,
+    "toolFidelity": 100,
+    "maxContextTokens": 200000,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Claude Haiku 3 by Anthropic - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "anthropic-sub",
+    "modelId": "claude-haiku-4-5-20251001",
+    "friendlyName": "Claude Haiku 4.5",
+    "modelStatus": "degraded",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": "claude-haiku-4",
+    "modelClass": "chat",
+    "maxInputTokens": 200000,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": true,
+      "toolUse": true,
+      "pdfInput": true,
+      "thinking": true,
+      "citations": true,
+      "streaming": true,
+      "webSearch": null,
+      "imageInput": true,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": false,
+      "promptCaching": true,
+      "adaptiveThinking": false,
+      "structuredOutput": true,
+      "contextManagement": true
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 100,
+    "maxContextTokens": 200000,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Claude Haiku 4.5 by Anthropic - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "chatgpt",
+    "modelId": "gpt-5.4",
+    "friendlyName": "GPT-5.4 (ChatGPT Subscription)",
+    "modelStatus": "active",
+    "capabilityTier": "advanced",
+    "costTier": "subscription",
+    "bestFor": [
+      "conversation",
+      "coding",
+      "general-purpose",
+      "reasoning"
+    ],
+    "avoidFor": [
+      "local-only-required"
+    ],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": null,
+    "inputModalities": [
+      "text",
+      "image"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "toolUse": true,
+      "streaming": true,
+      "imageInput": true,
+      "structuredOutput": true
+    },
+    "pricing": {},
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 90,
+    "contextRetention": 75,
+    "conversational": 80,
+    "reasoning": 85,
+    "structuredOutputScore": 80,
+    "toolFidelity": 85,
+    "maxContextTokens": 128000,
+    "maxOutputTokens": 16384,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "GPT-5.4 (ChatGPT Subscription) by ChatGPT - optimized for conversation"
+  },
+  {
+    "providerId": "codex",
+    "modelId": "codex-mini-latest",
+    "friendlyName": "Codex Mini",
+    "modelStatus": "active",
+    "capabilityTier": "advanced",
+    "costTier": "$$",
+    "bestFor": [
+      "coding",
+      "agentic-tasks"
+    ],
+    "avoidFor": [
+      "conversation"
+    ],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "agent",
+    "maxInputTokens": null,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "toolUse": true,
+      "streaming": true,
+      "imageInput": false,
+      "structuredOutput": true
+    },
+    "pricing": {},
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 90,
+    "contextRetention": 60,
+    "conversational": 40,
+    "reasoning": 70,
+    "structuredOutputScore": 70,
+    "toolFidelity": 85,
+    "maxContextTokens": 128000,
+    "maxOutputTokens": 16384,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Codex Mini by OpenAI Codex - optimized for coding"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "deep-research-pro-preview-12-2025",
+    "friendlyName": "Deep Research Pro Preview (Dec-12-2025)",
+    "modelStatus": "retired",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 131072,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 131072,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Deep Research Pro Preview (Dec-12-2025) by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.0-flash",
+    "friendlyName": "Gemini 2.0 Flash",
+    "modelStatus": "retired",
+    "capabilityTier": "strong",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 72,
+    "contextRetention": 68,
+    "conversational": 72,
+    "reasoning": 75,
+    "structuredOutputScore": 70,
+    "toolFidelity": 70,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.0 Flash by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.0-flash-001",
+    "friendlyName": "Gemini 2.0 Flash 001",
+    "modelStatus": "active",
+    "capabilityTier": "strong",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 72,
+    "contextRetention": 68,
+    "conversational": 72,
+    "reasoning": 75,
+    "structuredOutputScore": 70,
+    "toolFidelity": 70,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.0 Flash 001 by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.0-flash-lite",
+    "friendlyName": "Gemini 2.0 Flash-Lite",
+    "modelStatus": "retired",
+    "capabilityTier": "strong",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 72,
+    "contextRetention": 68,
+    "conversational": 72,
+    "reasoning": 75,
+    "structuredOutputScore": 70,
+    "toolFidelity": 70,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.0 Flash-Lite by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.0-flash-lite-001",
+    "friendlyName": "Gemini 2.0 Flash-Lite 001",
+    "modelStatus": "retired",
+    "capabilityTier": "strong",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 72,
+    "contextRetention": 68,
+    "conversational": 72,
+    "reasoning": 75,
+    "structuredOutputScore": 70,
+    "toolFidelity": 70,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.0 Flash-Lite 001 by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-computer-use-preview-10-2025",
+    "friendlyName": "Gemini 2.5 Computer Use Preview 10-2025",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 131072,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 131072,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Computer Use Preview 10-2025 by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-flash",
+    "friendlyName": "Gemini 2.5 Flash",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 83,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Flash by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-flash-image",
+    "friendlyName": "Nano Banana",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 32768,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 32768,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Nano Banana by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-flash-lite",
+    "friendlyName": "Gemini 2.5 Flash-Lite",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Flash-Lite by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-flash-lite-preview-09-2025",
+    "friendlyName": "Gemini 2.5 Flash-Lite Preview Sep 2025",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Flash-Lite Preview Sep 2025 by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-flash-preview-tts",
+    "friendlyName": "Gemini 2.5 Flash Preview TTS",
+    "modelStatus": "retired",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 8192,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 8192,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Flash Preview TTS by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-pro",
+    "friendlyName": "Gemini 2.5 Pro",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Pro by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-2.5-pro-preview-tts",
+    "friendlyName": "Gemini 2.5 Pro Preview TTS",
+    "modelStatus": "retired",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 8192,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": true,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": true,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 8192,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 2.5 Pro Preview TTS by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3-flash-preview",
+    "friendlyName": "Gemini 3 Flash Preview",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 3 Flash Preview by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3-pro-image-preview",
+    "friendlyName": "Nano Banana Pro",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 131072,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 131072,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Nano Banana Pro by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3-pro-preview",
+    "friendlyName": "Gemini 3 Pro Preview",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 3 Pro Preview by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3.1-flash-image-preview",
+    "friendlyName": "Nano Banana 2",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 65536,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 65536,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Nano Banana 2 by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3.1-flash-lite-preview",
+    "friendlyName": "Gemini 3.1 Flash Lite Preview",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 3.1 Flash Lite Preview by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3.1-pro-preview",
+    "friendlyName": "Gemini 3.1 Pro Preview",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 3.1 Pro Preview by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-3.1-pro-preview-customtools",
+    "friendlyName": "Gemini 3.1 Pro Preview Custom Tools",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini 3.1 Pro Preview Custom Tools by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-flash-latest",
+    "friendlyName": "Gemini Flash Latest",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini Flash Latest by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-flash-lite-latest",
+    "friendlyName": "Gemini Flash-Lite Latest",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini Flash-Lite Latest by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-pro-latest",
+    "friendlyName": "Gemini Pro Latest",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini Pro Latest by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemini-robotics-er-1.5-preview",
+    "friendlyName": "Gemini Robotics-ER 1.5 Preview",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 1048576,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 1048576,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemini Robotics-ER 1.5 Preview by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3-12b-it",
+    "friendlyName": "Gemma 3 12B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 32768,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 32768,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3 12B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3-1b-it",
+    "friendlyName": "Gemma 3 1B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 32768,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 32768,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3 1B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3-27b-it",
+    "friendlyName": "Gemma 3 27B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 131072,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 131072,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3 27B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3-4b-it",
+    "friendlyName": "Gemma 3 4B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 32768,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 80,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 32768,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3 4B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3n-e2b-it",
+    "friendlyName": "Gemma 3n E2B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 8192,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 8192,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3n E2B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "gemma-3n-e4b-it",
+    "friendlyName": "Gemma 3n E4B",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 8192,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 100,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 90,
+    "structuredOutputScore": 100,
+    "toolFidelity": 33,
+    "maxContextTokens": 8192,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "evaluated",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Gemma 3n E4B by gemini - optimized for general purpose tasks"
+  },
+  {
+    "providerId": "gemini",
+    "modelId": "nano-banana-pro-preview",
+    "friendlyName": "Nano Banana Pro",
+    "modelStatus": "active",
+    "capabilityTier": "moderate",
+    "costTier": "$",
+    "bestFor": [
+      "general purpose tasks"
+    ],
+    "avoidFor": [],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": null,
+    "modelClass": "chat",
+    "maxInputTokens": 131072,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "batch": null,
+      "toolUse": true,
+      "pdfInput": null,
+      "thinking": null,
+      "citations": null,
+      "streaming": null,
+      "webSearch": null,
+      "imageInput": null,
+      "computerUse": null,
+      "effortLevels": null,
+      "codeExecution": null,
+      "promptCaching": null,
+      "adaptiveThinking": null,
+      "structuredOutput": null,
+      "contextManagement": null
+    },
+    "pricing": {
+      "discount": null,
+      "requestFixed": null,
+      "inputPerMToken": null,
+      "outputPerMToken": null,
+      "cacheReadPerMToken": null,
+      "imageOutputPerUnit": null,
+      "reasoningPerMToken": null,
+      "audioInputPerMToken": null,
+      "cacheWritePerMToken": null,
+      "imageInputPerMToken": null,
+      "webSearchPerRequest": null,
+      "audioOutputPerMToken": null
+    },
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 50,
+    "contextRetention": 50,
+    "conversational": 50,
+    "reasoning": 50,
+    "structuredOutputScore": 50,
+    "toolFidelity": 50,
+    "maxContextTokens": 131072,
+    "maxOutputTokens": null,
+    "inputPricePerMToken": null,
+    "outputPricePerMToken": null,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "Nano Banana Pro by gemini - optimized for general purpose tasks"
+  }
+]

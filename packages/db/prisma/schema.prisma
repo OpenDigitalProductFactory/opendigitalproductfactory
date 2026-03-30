@@ -1689,6 +1689,29 @@ model DiscoveredItem {
   @@index([attributionStatus])
 }
 
+model DiscoveredSoftwareEvidence {
+  id                       String           @id @default(cuid())
+  evidenceKey              String           @unique
+  inventoryEntityId        String
+  evidenceSource           String
+  packageManager           String?
+  rawVendor                String?
+  rawProductName           String?
+  rawPackageName           String?
+  rawVersion               String?
+  installLocation          String?
+  rawMetadata              Json?
+  normalizationStatus      String           @default("pending")
+  normalizationConfidence  Float?
+  softwareIdentityId       String?
+  firstSeenAt              DateTime         @default(now())
+  lastSeenAt               DateTime         @default(now())
+  inventoryEntity          InventoryEntity  @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryEntityId])
+  @@index([normalizationStatus])
+}
+
 model DiscoveredRelationship {
   id                      String                 @id @default(cuid())
   discoveryRunId          String
@@ -1737,6 +1760,7 @@ model InventoryEntity {
   toRelationships       InventoryRelationship[] @relation("InventoryRelationshipToEntity")
   qualityIssues         PortfolioQualityIssue[]
   changeItems           ChangeItem[]
+  softwareEvidence      DiscoveredSoftwareEvidence[]
 
   @@index([entityType])
   @@index([attributionStatus])
@@ -1882,7 +1906,8 @@ model ToolEvaluation {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  proposals       AgentActionProposal[]
+  proposals         AgentActionProposal[]
+  skillDefinitions  SkillDefinition[]
 
   @@index([toolName, status])
   @@index([status])
@@ -4530,5 +4555,71 @@ model AgentModelConfig {
   configuredAt     DateTime  @default(now())
   configuredById   String?
   configuredBy     User?     @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
+}
+
+// EP-SKILL-001: AI Coworker Skills Marketplace
+model SkillDefinition {
+  id              String            @id @default(cuid())
+  skillId         String            @unique // e.g. "code-runner", "pr-summary"
+  name            String
+  description     String
+  version         String            @default("1.0.0")
+  sourceType      String            // "marketplace" | "github" | "internal" | "community"
+  sourceUrl       String?
+  sourceRegistry  String?           // "skillsmp" | "skillsllm" | "anthropics" | "internal"
+  skillMdContent  String            // Full SKILL.md content
+  category        String            // "ai-agents" | "mcp-servers" | "cli-tools" | etc.
+  tags            String[]          @default([])
+  author          String?
+  license         String?
+  riskBand        String            @default("low") // "low" | "medium" | "high" | "critical"
+  status          String            @default("discovered") // "discovered" | "evaluated" | "approved" | "installed" | "active" | "deprecated"
+  evaluationId    String?
+  installedAt     DateTime?
+  lastTestedAt    DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  evaluation      ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
+  assignments     SkillAssignment[]
+  metrics         SkillMetric[]
+
+  @@index([status])
+  @@index([category])
+  @@index([sourceType])
+}
+
+model SkillAssignment {
+  id              String            @id @default(cuid())
+  skillId         String
+  agentId         String            // Which coworker gets this skill
+  priority        Int               @default(0) // Higher = loaded first
+  enabled         Boolean           @default(true)
+  assignedBy      String            // User who approved
+  assignedAt      DateTime          @default(now())
+
+  skill           SkillDefinition   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([skillId, agentId])
+  @@index([agentId])
+}
+
+model SkillMetric {
+  id              String            @id @default(cuid())
+  skillId         String
+  agentId         String
+  period          String            // "2026-W13", "2026-03"
+  invocationCount Int               @default(0)
+  successCount    Int               @default(0)
+  userRating      Float?            // 1-5 average
+  avgLatencyMs    Int?
+  feedbackNotes   String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  skill           SkillDefinition   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([skillId, agentId, period])
+  @@index([skillId])
 }
 
