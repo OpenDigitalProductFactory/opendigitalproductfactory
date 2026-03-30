@@ -54,6 +54,7 @@ model User {
   platformSetupProgress        PlatformSetupProgress?        @relation("UserSetupProgress")
   taskRuns                     TaskRun[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
+  platformDevConfigs           PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
 }
 
 model UserGroup {
@@ -2232,6 +2233,18 @@ model PlatformConfig {
   key       String   @unique
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+model PlatformDevConfig {
+  id               String   @id @default("singleton")
+  contributionMode String   @default("selective")
+  // Values: "fork_only" | "selective" | "contribute_all"
+  gitRemoteUrl     String?  // Reserved for future git push capability
+  updatePending    Boolean  @default(false)
+  pendingVersion   String?
+  configuredAt     DateTime @default(now())
+  configuredById   String?
+  configuredBy     User?    @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
 }
 
 model EaNotation {
