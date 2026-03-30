@@ -14,7 +14,7 @@ export default async function globalSetup(_config: FullConfig) {
   await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
 
   await page.fill('input[name="email"]', "admin@dpf.local");
-  await page.fill('input[name="password"]', "changeme123");
+  await page.fill('input[name="password"]', process.env.DPF_ADMIN_PASSWORD || "changeme123");
 
   // Click the Sign in button and wait for navigation away from /login
   await Promise.all([

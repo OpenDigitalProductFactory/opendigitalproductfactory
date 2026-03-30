@@ -75,6 +75,8 @@ export interface RouteAndCallOptions {
   requiresComputerUse?: boolean;
   /** Budget posture override. */
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  /** Minimum dimension scores (0-100) models must meet. Models below any threshold are excluded. */
+  minimumDimensions?: Record<string, number>;
   /** EP-INF-009c: Route to a specific model class (e.g., "image_gen", "embedding"). */
   requiredModelClass?: ModelClass;
   /** EP-INF-009d: "background" starts async operation, returns immediately with asyncOperationId. */
@@ -126,6 +128,11 @@ export async function routeAndCall(
       requiredModelClass: options?.requiredModelClass,
     },
   );
+
+  // Inject minimum dimension thresholds into contract
+  if (options?.minimumDimensions) {
+    contract.minimumDimensions = options.minimumDimensions;
+  }
 
   // 2. Load routing data
   const [manifests, policies, overrides] = await Promise.all([

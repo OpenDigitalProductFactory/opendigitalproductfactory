@@ -90,6 +90,13 @@ export function estimateSuccessProbability(
   if (contract.requiresStrictSchema && endpoint.capabilities.structuredOutput !== true) return 0;
   if (contract.requiresStreaming && endpoint.capabilities.streaming !== true) return 0;
 
+  // Per-dimension minimum thresholds — hard exclude models below any threshold
+  if (contract.minimumDimensions) {
+    for (const [dim, min] of Object.entries(contract.minimumDimensions)) {
+      if (getDimensionScore(endpoint, dim) < min) return 0;
+    }
+  }
+
   // Quality floor based on reasoning depth
   const qualityFloor = REASONING_DEPTH_FLOORS[contract.reasoningDepth] ?? 45;
   const avgScore = averageRelevantDimensions(endpoint, contract.taskType);
