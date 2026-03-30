@@ -57,7 +57,23 @@ if [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   echo "$IMAGE_VERSION" > "$WORKSPACE/.dpf-version"
   echo "  OK Source volume bootstrapped"
 elif [ -f "$WORKSPACE/.dpf-version" ]; then
-  echo "  -- Source volume already bootstrapped ($(cat "$WORKSPACE/.dpf-version"))"
+  VOLUME_VERSION=$(cat "$WORKSPACE/.dpf-version" 2>/dev/null || echo "unknown")
+  if [ "$IMAGE_VERSION" != "$VOLUME_VERSION" ]; then
+    echo "  Platform update detected: $VOLUME_VERSION -> $IMAGE_VERSION"
+    cd /app
+    pnpm --filter @dpf/db exec tsx -e "
+      const { PrismaClient } = require('./generated/client');
+      const p = new PrismaClient();
+      p.platformDevConfig.upsert({
+        where: { id: 'singleton' },
+        update: { updatePending: true, pendingVersion: '$IMAGE_VERSION' },
+        create: { id: 'singleton', updatePending: true, pendingVersion: '$IMAGE_VERSION' }
+      }).then(() => p.\$disconnect());
+    " || echo "  WARN Update detection had warnings (non-fatal)"
+    echo "  OK Update pending flag set"
+  else
+    echo "  -- Source volume already bootstrapped ($VOLUME_VERSION)"
+  fi
 else
   echo "  -- /workspace not mounted, skipping"
 fi

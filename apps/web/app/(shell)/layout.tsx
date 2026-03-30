@@ -10,6 +10,7 @@ import { Header } from "@/components/shell/Header";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
+import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
 
@@ -111,6 +112,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           />
         )}
         <StatusBanner />
+        <UpdatePendingBanner />
         <Header
           platformRole={user.platformRole}
           isSuperuser={user.isSuperuser}
