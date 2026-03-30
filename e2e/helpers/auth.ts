@@ -1,7 +1,7 @@
 import { Page } from "@playwright/test";
 
 export const ADMIN_EMAIL = "admin@dpf.local";
-export const ADMIN_PASSWORD = "changeme123";
+export const ADMIN_PASSWORD = process.env.DPF_ADMIN_PASSWORD || "changeme123";
 export const BASE_URL = "http://localhost:3000";
 
 export async function login(page: Page): Promise<void> {
