@@ -59,6 +59,10 @@ export type AgentModelRequirements = {
   minimumDimensions?: Record<string, number>;
   /** Budget posture for this agent. Overrides the default "balanced". */
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  /** EP-INF-012: Default minimum quality tier (fallback when no DB config exists). */
+  defaultMinimumTier?: "frontier" | "strong" | "adequate" | "basic";
+  /** EP-INF-012: Default budget class (fallback when no DB config exists). */
+  defaultBudgetClass?: "minimize_cost" | "balanced" | "quality_first";
 };
 
 /** Entry in the route-to-agent map. */

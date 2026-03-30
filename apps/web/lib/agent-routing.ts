@@ -229,6 +229,10 @@ ON THIS PAGE: The user sees the AI Workforce (agent cards with provider dropdown
       { label: "Evaluate tool", description: "Run the tool evaluation pipeline on an external tool or dependency", capability: "manage_tool_evaluations", prompt: "I need to evaluate a tool for adoption. Help me run the evaluation pipeline." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+    },
   },
   "/build": {
     agentId: "build-specialist",
@@ -264,8 +268,8 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
     modelRequirements: {
-      minimumDimensions: { codegen: 75, toolFidelity: 80 },
-      budgetClass: "quality_first",
+      defaultMinimumTier: "frontier",
+      defaultBudgetClass: "quality_first",
     },
   },
   "/admin": {
@@ -297,6 +301,10 @@ BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (pa
       { label: "Access review", description: "Who has access to what?", capability: "view_admin", prompt: "Show me who has access to what capabilities" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+    },
   },
   "/setup": {
     agentId: "onboarding-coo",
@@ -306,7 +314,10 @@ BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (pa
     sensitivity: "internal",
     systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup. This is a CONVERSATION request. You have no tools.",
     skills: [],
-    modelRequirements: { preferredProviderId: "ollama" },
+    modelRequirements: {
+      defaultMinimumTier: "basic",
+      defaultBudgetClass: "minimize_cost",
+    },
   },
   "/workspace": {
     agentId: "coo",
@@ -361,7 +372,10 @@ WHAT YOU DO NOT DO:
       { label: "Create task", description: "Create a backlog item", capability: "manage_backlog", prompt: "Create a new task" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback." },
     ],
-    modelRequirements: {},
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+    },
   },
 };
 

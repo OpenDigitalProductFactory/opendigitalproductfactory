@@ -150,10 +150,7 @@ export async function runAgenticLoop(params: {
 
   // EP-INF-012: Load admin-configured model assignment for this agent.
   // DB config takes precedence over code defaults in modelRequirements.
-  // NOTE: AgentModelConfig table not yet created (EP-INF-012 pending).
-  // When the migration lands, replace this with:
-  //   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
-  const agentModelConfig = null as { minimumTier: string; budgetClass: string; pinnedProviderId: string | null; pinnedModelId: string | null } | null;
+  const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
 
   // Resolve effective config: DB row > code defaults > nothing
   const effectiveConfig = agentModelConfig

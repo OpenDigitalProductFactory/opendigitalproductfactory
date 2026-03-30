@@ -207,6 +207,9 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
     metadataConfidence: p.metadataConfidence,
     inputModalities: p.inputModalities as string[],
     outputModalities: p.outputModalities as string[],
+    // EP-INF-012: Quality tier
+    qualityTier: p.qualityTier,
+    qualityTierSource: p.qualityTierSource,
   }));
 });
 
