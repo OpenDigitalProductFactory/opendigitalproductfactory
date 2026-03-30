@@ -60,15 +60,11 @@ elif [ -f "$WORKSPACE/.dpf-version" ]; then
   VOLUME_VERSION=$(cat "$WORKSPACE/.dpf-version" 2>/dev/null || echo "unknown")
   if [ "$IMAGE_VERSION" != "$VOLUME_VERSION" ]; then
     echo "  Platform update detected: $VOLUME_VERSION -> $IMAGE_VERSION"
-    cd /app
-    pnpm --filter @dpf/db exec tsx -e "
-      const { PrismaClient } = require('./generated/client');
-      const p = new PrismaClient();
-      p.platformDevConfig.upsert({
-        where: { id: 'singleton' },
-        update: { updatePending: true, pendingVersion: '$IMAGE_VERSION' },
-        create: { id: 'singleton', updatePending: true, pendingVersion: '$IMAGE_VERSION' }
-      }).then(() => p.\$disconnect());
+    # Use psql to upsert — available via postgresql16-client in the image
+    psql "$DATABASE_URL" -c "
+      INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
+      VALUES ('singleton', true, '$IMAGE_VERSION', NOW())
+      ON CONFLICT (id) DO UPDATE SET \"updatePending\" = true, \"pendingVersion\" = '$IMAGE_VERSION';
     " || echo "  WARN Update detection had warnings (non-fatal)"
     echo "  OK Update pending flag set"
   else
