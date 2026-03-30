@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { triggerDimensionEval } from "@/lib/actions/endpoint-performance";
 import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelClassBadge } from "./ModelClassBadge";
+import { overrideModelTier } from "@/lib/actions/agent-model-config";
 
 // EP-INF-006: Routing profile data merged into ModelCard
 type RoutingProfileData = {
@@ -43,6 +44,43 @@ const CONFIDENCE_COLOURS: Record<string, string> = {
   medium: "#fbbf24",
   low:    "#f87171",
 };
+
+// ── EP-INF-012: Tier badge colours ──────────────────────────────────────────
+
+const TIER_COLOURS: Record<string, string> = {
+  frontier: "#a78bfa",
+  strong:   "#38bdf8",
+  adequate: "#4ade80",
+  basic:    "#94a3b8",
+};
+
+const TIER_LABELS: Record<string, string> = {
+  frontier: "Frontier",
+  strong:   "Strong",
+  adequate: "Adequate",
+  basic:    "Basic",
+};
+
+function TierBadge({ tier, isAdmin }: { tier: string; isAdmin?: boolean }) {
+  const colour = TIER_COLOURS[tier] ?? "#94a3b8";
+  const label = TIER_LABELS[tier] ?? tier;
+  return (
+    <span
+      style={{
+        background: `${colour}20`,
+        color: colour,
+        fontSize: 10,
+        padding: "2px 6px",
+        borderRadius: 3,
+        whiteSpace: "nowrap",
+        border: isAdmin ? `1px solid ${colour}` : "none",
+      }}
+      title={isAdmin ? "Admin override" : "Auto-assigned from model family"}
+    >
+      {label}{isAdmin ? " *" : ""}
+    </span>
+  );
+}
 
 // ── Token formatting ─────────────────────────────────────────────────────────
 
@@ -196,6 +234,9 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
   const [showScores, setShowScores] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [evalMessage, setEvalMessage] = useState<string | null>(null);
+  const [tierOverride, setTierOverride] = useState(profile?.qualityTier ?? "");
+  const [tierSaving, setTierSaving] = useState(false);
+  const [tierSaved, setTierSaved] = useState(false);
 
   const cardStyle: React.CSSProperties = {
     background: "var(--dpf-surface-1)",
@@ -287,9 +328,12 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           </div>
         </div>
 
-        {/* Model class + pricing row */}
+        {/* Model class + tier + pricing row */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
           <ModelClassBadge modelClass={profile.modelClass ?? "chat"} />
+          {profile.qualityTier && (
+            <TierBadge tier={profile.qualityTier} isAdmin={profile.qualityTierSource === "admin"} />
+          )}
           <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>
             {pricingStr ?? "Pricing unknown"}
           </span>
@@ -393,6 +437,65 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                     borderRadius: 4,
                   }}>
                     {evalMessage}
+                  </div>
+                )}
+
+                {/* EP-INF-012: Admin tier override */}
+                {canWrite && (
+                  <div style={{
+                    marginTop: 10,
+                    paddingTop: 8,
+                    borderTop: "1px solid var(--dpf-border)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}>
+                    <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>Override Tier:</span>
+                    <select
+                      value={tierOverride}
+                      onChange={(e) => setTierOverride(e.target.value)}
+                      style={{
+                        padding: "2px 6px",
+                        fontSize: 10,
+                        borderRadius: 4,
+                        border: "1px solid var(--dpf-border)",
+                        background: "var(--dpf-surface-1)",
+                        color: "var(--dpf-text)",
+                      }}
+                    >
+                      <option value="">Auto</option>
+                      <option value="frontier">Frontier</option>
+                      <option value="strong">Strong</option>
+                      <option value="adequate">Adequate</option>
+                      <option value="basic">Basic</option>
+                    </select>
+                    <button
+                      disabled={tierSaving || !tierOverride}
+                      onClick={async () => {
+                        if (!tierOverride) return;
+                        setTierSaving(true);
+                        const result = await overrideModelTier(profile.providerId, model.modelId, tierOverride);
+                        setTierSaving(false);
+                        if (result.ok) {
+                          setTierSaved(true);
+                          setTimeout(() => setTierSaved(false), 2000);
+                          router.refresh();
+                        }
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        fontSize: 10,
+                        borderRadius: 4,
+                        border: "1px solid var(--dpf-accent)",
+                        background: "transparent",
+                        color: "var(--dpf-accent)",
+                        cursor: tierSaving || !tierOverride ? "not-allowed" : "pointer",
+                        opacity: tierSaving || !tierOverride ? 0.5 : 1,
+                      }}
+                    >
+                      {tierSaving ? "..." : "Set"}
+                    </button>
+                    {tierSaved && <span style={{ fontSize: 10, color: "#4ade80" }}>Saved</span>}
                   </div>
                 )}
               </div>

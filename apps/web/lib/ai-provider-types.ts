@@ -162,6 +162,9 @@ export type ModelProfileRow = {
   metadataConfidence?: string;
   inputModalities?: string[];
   outputModalities?: string[];
+  // EP-INF-012: Quality tier
+  qualityTier?: string | null;
+  qualityTierSource?: string;
 };
 
 // ─── Registry JSON shape ──────────────────────────────────────────────────────

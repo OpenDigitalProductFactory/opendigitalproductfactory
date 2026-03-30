@@ -13,6 +13,7 @@ import {
   parseModelsResponse,
 } from "@/lib/ai-provider-types";
 import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
+import { assignTierFromModelId, TIER_DIMENSION_BASELINES } from "@/lib/routing/quality-tiers";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
@@ -493,31 +494,42 @@ export async function profileModelsInternal(
       supportsToolUse: card.capabilities.toolUse ?? false,
     };
 
+    // EP-INF-012: Assign quality tier from model family
+    const qualityTier = assignTierFromModelId(m.modelId);
+    const tierBaseline = TIER_DIMENSION_BASELINES[qualityTier];
+
     // Dimension scores — only write on CREATE or when profileSource is still "seed".
     // Never overwrite evaluated or production scores with family baselines.
-    const existingSource = existingProfile
-      ? (await prisma.modelProfile.findUnique({
+    const existingFull = existingProfile
+      ? await prisma.modelProfile.findUnique({
           where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          select: { profileSource: true },
-        }))?.profileSource
+          select: { profileSource: true, qualityTierSource: true },
+        })
       : null;
 
-    const shouldWriteScores = !existingSource || existingSource === "seed";
+    const shouldWriteScores = !existingFull?.profileSource || existingFull.profileSource === "seed";
+    // Don't overwrite admin-set tier on re-sync
+    const shouldWriteTier = !existingFull?.qualityTierSource || existingFull.qualityTierSource !== "admin";
 
     const scoreFields = shouldWriteScores ? {
-      reasoning: card.dimensionScores.reasoning,
-      codegen: card.dimensionScores.codegen,
-      toolFidelity: card.dimensionScores.toolFidelity,
-      instructionFollowingScore: card.dimensionScores.instructionFollowing,
-      structuredOutputScore: card.dimensionScores.structuredOutput,
-      conversational: card.dimensionScores.conversational,
-      contextRetention: card.dimensionScores.contextRetention,
+      reasoning: tierBaseline.reasoning,
+      codegen: tierBaseline.codegen,
+      toolFidelity: tierBaseline.toolFidelity,
+      instructionFollowingScore: tierBaseline.instructionFollowing,
+      structuredOutputScore: tierBaseline.structuredOutput,
+      conversational: tierBaseline.conversational,
+      contextRetention: tierBaseline.contextRetention,
       profileSource: "seed" as const,
       profileConfidence: card.metadataConfidence,
     } : {
       // Only update confidence from metadata, don't touch scores or source
       profileConfidence: card.metadataConfidence,
     };
+
+    const tierFields = shouldWriteTier ? {
+      qualityTier,
+      qualityTierSource: "auto" as const,
+    } : {};
 
     await prisma.modelProfile.upsert({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
@@ -531,14 +543,16 @@ export async function profileModelsInternal(
         bestFor:       ["general purpose tasks"],
         avoidFor:      [],
         ...metadataFields,
-        // Always write scores on create (first time)
-        reasoning: card.dimensionScores.reasoning,
-        codegen: card.dimensionScores.codegen,
-        toolFidelity: card.dimensionScores.toolFidelity,
-        instructionFollowingScore: card.dimensionScores.instructionFollowing,
-        structuredOutputScore: card.dimensionScores.structuredOutput,
-        conversational: card.dimensionScores.conversational,
-        contextRetention: card.dimensionScores.contextRetention,
+        qualityTier,
+        qualityTierSource: "auto",
+        // EP-INF-012: Derive dimension scores from tier baseline
+        reasoning: tierBaseline.reasoning,
+        codegen: tierBaseline.codegen,
+        toolFidelity: tierBaseline.toolFidelity,
+        instructionFollowingScore: tierBaseline.instructionFollowing,
+        structuredOutputScore: tierBaseline.structuredOutput,
+        conversational: tierBaseline.conversational,
+        contextRetention: tierBaseline.contextRetention,
         profileSource: "seed",
         profileConfidence: card.metadataConfidence,
         generatedBy:          "system:metadata-sync",
@@ -546,6 +560,7 @@ export async function profileModelsInternal(
       update: {
         ...metadataFields,
         ...scoreFields,
+        ...tierFields,
         capabilityTier,
         costTier,
         generatedBy:          "system:metadata-sync",
