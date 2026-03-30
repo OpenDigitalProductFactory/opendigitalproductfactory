@@ -193,20 +193,31 @@ if [ -d /host-source/apps/web ]; then
   cd /promoter
 else
   log "  No host source — copying from portal container..."
-  docker cp "${PORTAL_CONTAINER}:/app/packages" "$BUILD_CONTEXT/packages" 2>/dev/null || true
-  docker cp "${PORTAL_CONTAINER}:/app/node_modules" "$BUILD_CONTEXT/node_modules" 2>/dev/null || true
-  for f in pnpm-workspace.yaml pnpm-lock.yaml package.json; do
+  # Copy workspace config files
+  for f in pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json; do
     docker cp "${PORTAL_CONTAINER}:/app/$f" "$BUILD_CONTEXT/$f" 2>/dev/null || true
   done
   docker cp "${PORTAL_CONTAINER}:/docker-entrypoint.sh" "$BUILD_CONTEXT/docker-entrypoint.sh" 2>/dev/null || true
   docker cp "${PORTAL_CONTAINER}:/app/docs" "$BUILD_CONTEXT/docs" 2>/dev/null || true
-  # Get the standalone app output (consumer mode — no source to rebuild from)
-  docker cp "${PORTAL_CONTAINER}:/app/apps" "$BUILD_CONTEXT/apps" 2>/dev/null || true
+  docker cp "${PORTAL_CONTAINER}:/app/node_modules" "$BUILD_CONTEXT/node_modules" 2>/dev/null || true
+  # Use bundled TypeScript source (-src paths) if available (EP-SELF-DEV-005)
+  if docker exec "${PORTAL_CONTAINER}" test -d /app/apps/web-src 2>/dev/null; then
+    log "  Using bundled source from image (-src paths)..."
+    mkdir -p "$BUILD_CONTEXT/apps/web" "$BUILD_CONTEXT/packages"
+    docker exec "${PORTAL_CONTAINER}" tar -cf - -C /app/apps/web-src . | tar -xf - -C "$BUILD_CONTEXT/apps/web"
+    docker exec "${PORTAL_CONTAINER}" tar -cf - -C /app/packages-src . | tar -xf - -C "$BUILD_CONTEXT/packages"
+  else
+    # Legacy fallback: standalone app output (pre EP-SELF-DEV-005 images)
+    docker cp "${PORTAL_CONTAINER}:/app/packages" "$BUILD_CONTEXT/packages" 2>/dev/null || true
+    docker cp "${PORTAL_CONTAINER}:/app/apps" "$BUILD_CONTEXT/apps" 2>/dev/null || true
+  fi
 fi
 
 # Step 4b: Overlay ONLY the changed files from the sandbox (git diff against baseline)
 log "  Extracting changed files from sandbox..."
-CHANGED_FILES=$(docker exec "$SANDBOX_CONTAINER" sh -c "cd /workspace && git diff --name-only HEAD~1 HEAD 2>/dev/null" || echo "")
+# Diff against the initial baseline commit (first commit), not just HEAD~1
+# This captures ALL changes made during the build, not just the last commit
+CHANGED_FILES=$(docker exec "$SANDBOX_CONTAINER" sh -c 'cd /workspace && BASELINE=$(git rev-list --max-parents=0 HEAD 2>/dev/null | tail -1) && git diff --name-only "$BASELINE" HEAD 2>/dev/null' || echo "")
 if [ -n "$CHANGED_FILES" ]; then
   log "  Changed files: $(echo "$CHANGED_FILES" | wc -l) file(s)"
   # Copy each changed file from sandbox to build context
@@ -222,8 +233,10 @@ else
   log "  Warning: no changed files detected in sandbox git history"
 fi
 
-# Copy the portal Dockerfile (baked into promoter at build time)
+# Copy the portal Dockerfile and scripts (baked into promoter at build time)
 cp /promoter/portal.Dockerfile "$BUILD_CONTEXT/Dockerfile"
+mkdir -p "$BUILD_CONTEXT/scripts"
+cp /promoter/promote.sh "$BUILD_CONTEXT/scripts/promote.sh"
 
 log "Source extracted: $(find "$BUILD_CONTEXT" -type f | wc -l) files"
 
@@ -250,8 +263,10 @@ log "Old portal stopped and renamed to ${PORTAL_CONTAINER}-old"
 # ─── Step 8: Start new portal ─────────────────────────────────────────────
 log "Step 8/11: Starting new portal with $NEW_IMAGE"
 
-# Tag the new image as dpf-portal:latest so docker compose uses it
+# Tag the new image so docker compose uses it (match whatever tag compose references)
 docker tag "$NEW_IMAGE" dpf-portal:latest
+# Also tag as :local for consumer-mode installs that reference dpf-portal:local
+docker tag "$NEW_IMAGE" dpf-portal:local
 
 # Remove the old stopped container so compose can recreate it
 docker rm "${PORTAL_CONTAINER}-old" 2>/dev/null || true
