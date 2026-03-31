@@ -1,0 +1,186 @@
+# EP-BUILD-HANDOFF: Build Studio Multi-Agent Handoff
+
+| Field | Value |
+|-------|-------|
+| **Epic** | EP-BUILD-HANDOFF |
+| **IT4IT Alignment** | §5.2 Explore → §5.3 Integrate → §5.4 Deploy → §5.5 Release |
+| **Status** | Draft |
+| **Created** | 2026-03-31 |
+| **Author** | Claude (Software Engineer) + Mark Bodman |
+
+## Problem Statement
+
+The Build Studio currently routes all five phases (ideate, plan, build, review, ship) through a single AI Coworker agent (`build-specialist` / "Software Engineer"). This creates three problems:
+
+1. **Tool overload** — The agent receives 40+ tools but only needs 5-8 per phase. Smaller models get confused by irrelevant tools and call the wrong ones or fail to find the right ones.
+2. **Prompt overload** — Each phase has a different system prompt, but the conversation history from earlier phases stays in context, consuming tokens and confusing the model about its current role.
+3. **Capability mismatch** — Code generation (build phase) requires a strong coding model. Design review (ideate) needs analytical reasoning. Deployment (ship) needs operational tool calling. One model size does not fit all.
+
+### Evidence from Testing
+
+- Haiku (`claude-haiku-4-5-20251001`) successfully generated code using `write_sandbox_file` in the build phase, but entered tool repetition loops during phase transitions and could not call ship tools (`deploy_feature`, `execute_promotion`).
+- The AI repeatedly called `update_lifecycle` with build IDs instead of product IDs — confusing build-phase context with ship-phase operations.
+- Ship tools were invisible because the coworker mode defaulted to "advise" (now fixed), but even with "act" mode, the model said "I don't have deploy_feature" because it was overwhelmed by the tool list.
+- Opus and Sonnet via API key hit rate limits (30K input tokens/minute on Tier 1) because the full tool list + conversation history consumed ~15K tokens per call.
+
+## Proposed Architecture: Phase-Specific Agent Handoff
+
+### Design Principle
+
+Each build phase is handled by a **specialist agent** with:
+- A **focused tool set** (only the tools needed for that phase)
+- A **phase-specific system prompt** (no carryover confusion)
+- A **model appropriate to the task** (Haiku for simple phases, Sonnet for code generation)
+- A **handoff protocol** that passes structured context between phases (not raw conversation history)
+
+### Agent Assignments
+
+| Phase | Agent | IT4IT Role | Model | Tools (count) |
+|-------|-------|-----------|-------|---------------|
+| **Ideate** | `build-specialist` (Software Engineer) | AGT-ORCH-200 Explore | Haiku | search_project_files, read_project_file, saveBuildEvidence, reviewDesignDoc, save_build_notes (5) |
+| **Plan** | `ea-architect` (Enterprise Architect) | AGT-121/130 Architecture + Release Planning | Haiku | saveBuildEvidence, reviewBuildPlan, read_sandbox_file, list_sandbox_files, search_sandbox (5) |
+| **Build** | `build-specialist` (Software Engineer) | AGT-131 Design & Develop | Sonnet | write_sandbox_file, read_sandbox_file, edit_sandbox_file, search_sandbox, list_sandbox_files, run_sandbox_command, run_sandbox_tests, generate_code, iterate_sandbox (9) |
+| **Review** | `ops-coordinator` (Scrum Master) | AGT-132 Release Acceptance | Haiku | run_sandbox_tests, generate_ux_test, run_ux_test, saveBuildEvidence, check_deployment_windows, read_sandbox_file (6) |
+| **Ship** | `platform-engineer` (AI Ops Engineer) | AGT-ORCH-400/500 Deploy + Release | Haiku | deploy_feature, register_digital_product_from_build, create_build_epic, check_deployment_windows, execute_promotion, schedule_promotion (6) |
+
+### Handoff Protocol
+
+When a phase completes, the current agent produces a **structured handoff document** stored on the `FeatureBuild` record. The next agent reads only this document — not the previous conversation.
+
+```typescript
+interface PhaseHandoff {
+  fromPhase: BuildPhase;
+  toPhase: BuildPhase;
+  fromAgent: string;
+  summary: string;           // 2-3 sentence plain language summary
+  evidence: Record<string, unknown>;  // Phase-specific evidence (designDoc, buildPlan, etc.)
+  openIssues: string[];      // Anything the next agent should know
+  userPreferences: string[]; // Decisions the user made during this phase
+}
+```
+
+#### Ideate → Plan Handoff
+```
+summary: "Customer Complaint Tracker — list view with status badges, submit form, in-memory state. Design approved."
+evidence: { designDoc: {...}, designReview: {...} }
+openIssues: []
+userPreferences: ["No database changes", "In-memory state for demo"]
+```
+
+#### Plan → Build Handoff
+```
+summary: "Single file implementation: apps/web/app/(shell)/complaints/page.tsx. Client component with useState."
+evidence: { buildPlan: {...}, planReview: {...} }
+openIssues: []
+userPreferences: []
+```
+
+#### Build → Review Handoff
+```
+summary: "Complaints page created. ComplaintsClient.tsx (11KB). No schema changes. Typecheck passes."
+evidence: { taskResults: {...}, verificationOut: {...} }
+openIssues: ["Typecheck warning on unused import"]
+userPreferences: []
+```
+
+#### Review → Ship Handoff
+```
+summary: "All tests pass. 3 UX tests pass. Acceptance criteria met. Deployment window open."
+evidence: { acceptanceMet: [...], verificationOut: {...} }
+openIssues: []
+userPreferences: []
+```
+
+### Implementation Steps
+
+#### Phase 1: Tool Filtering (Low Risk)
+Filter the tool list per phase before sending to the model. No new agents needed — same `build-specialist` but with phase-appropriate tools.
+
+**Changes:**
+- `mcp-tools.ts`: Add `phases?: BuildPhase[]` to `ToolDefinition`. Tag each tool with which phases it belongs to.
+- `agent-coworker.ts`: Filter tools by current build phase before passing to the model.
+
+**Result:** Smaller tool lists per phase. Haiku sees 5-9 tools instead of 40+. Immediate improvement.
+
+#### Phase 2: Handoff Document (Medium Risk)
+Add structured handoff to phase transitions. Each phase writes a handoff before advancing.
+
+**Changes:**
+- `feature-build-types.ts`: Add `PhaseHandoff` type and `phaseHandoffs` field to `FeatureBuild`.
+- `build-agent-prompts.ts`: Each phase prompt ends with "save a handoff summary before advancing."
+- `agent-coworker.ts`: When phase changes, start new agent context with handoff document instead of full conversation history.
+
+**Result:** Clean context per phase. No token waste on irrelevant history.
+
+#### Phase 3: Agent Routing (Higher Risk)
+Route each phase to a different agent with phase-appropriate model.
+
+**Changes:**
+- `build-pipeline.ts` or `agent-coworker.ts`: Map phase → agentId. Use `AgentModelConfig` to pick the right model per agent.
+- `AgentModelConfig` seeds: Set build-specialist to Sonnet, others to Haiku.
+- UI: Show which agent is active per phase (avatar/name changes in the coworker panel).
+
+**Result:** Full specialization. Each agent is an expert in its phase.
+
+### Token Budget Analysis
+
+Current (single agent, all tools):
+- System prompt: ~3,000 tokens
+- Tool definitions (40+ tools): ~8,000 tokens
+- Conversation history (multi-phase): ~5,000+ tokens
+- **Total per call: ~16,000+ input tokens**
+
+Proposed (phase-specific agent, filtered tools):
+- System prompt: ~1,500 tokens (phase-specific only)
+- Tool definitions (5-9 tools): ~1,500-3,000 tokens
+- Handoff document: ~500 tokens
+- **Total per call: ~3,500-5,000 input tokens**
+
+This is a **3-4x reduction** in input tokens per call, which means:
+- 3-4x more calls before hitting rate limits
+- 3-4x lower API costs
+- Faster response times (less to process)
+- More room for actual code content in `write_sandbox_file` calls
+
+### Model Selection Per Phase
+
+| Phase | Why this model |
+|-------|---------------|
+| Ideate (Haiku) | Simple: search codebase, write design doc. No complex tool reasoning needed. |
+| Plan (Haiku) | Simple: structure a plan from the design doc. Read-only sandbox access. |
+| Build (Sonnet) | Complex: multi-step tool reasoning, code generation, test-fix loops. Needs strongest model. |
+| Review (Haiku) | Simple: run tests, check results, report. Deterministic workflow. |
+| Ship (Haiku) | Simple: call 4 tools in sequence. Deterministic workflow. But needs "act" mode for side-effect tools. |
+
+### User Experience
+
+The user sees the same conversation panel but the agent name/avatar changes per phase:
+
+- Ideate: "Software Engineer" (designing)
+- Plan: "Enterprise Architect" (planning)
+- Build: "Software Engineer" (building)
+- Review: "Scrum Master" (reviewing)
+- Ship: "AI Ops Engineer" (deploying)
+
+The handoff is transparent: "Handing off to the Enterprise Architect for planning..." The user can still talk to any agent — the routing just changes the default.
+
+### Risk Assessment
+
+| Risk | Mitigation |
+|------|-----------|
+| Handoff loses context | Structured handoff document captures everything; user preferences preserved |
+| User confused by agent switch | Clear UI indication; handoff message in conversation |
+| Phase 1 alone doesn't fix Haiku | Phase 1 reduces tool count significantly, which is the primary confusion source |
+| Multiple agent configs to maintain | Each agent's tools are tagged in one place (`mcp-tools.ts`) |
+
+### Recommendation
+
+**Start with Phase 1 (tool filtering).** This is the highest-value, lowest-risk change. It can be done in one commit and tested immediately. If Haiku works well with 5-9 tools per phase, Phase 2 and 3 become nice-to-haves rather than blockers.
+
+### Backlog Items
+
+1. **EP-BUILD-HANDOFF-001**: Add `phases` tag to ToolDefinition, filter tools by current build phase
+2. **EP-BUILD-HANDOFF-002**: Add PhaseHandoff type and generation to phase transitions
+3. **EP-BUILD-HANDOFF-003**: Route phases to different agents with per-agent model config
+4. **EP-BUILD-HANDOFF-004**: UI agent name/avatar switch per phase
+5. **EP-BUILD-HANDOFF-005**: Token budget monitoring and alerting
