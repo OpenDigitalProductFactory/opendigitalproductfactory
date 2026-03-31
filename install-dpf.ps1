@@ -470,6 +470,36 @@ services:
       retries: 10
       start_period: 30s
 
+  # ─── Sandbox Database (isolated from production) ────────────────────
+  sandbox-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dpf
+      POSTGRES_PASSWORD: dpf_sandbox
+      POSTGRES_DB: dpf
+    volumes:
+      - sandbox_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─── Sandbox Init (migrations on sandbox DB) ──────────────────────
+  sandbox-init:
+    image: $($GHCR_PORTAL):$Version
+    command: ["/docker-entrypoint.sh"]
+    environment:
+      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
+      ADMIN_PASSWORD: `${ADMIN_PASSWORD}
+    volumes:
+      - sandbox_workspace:/workspace
+    depends_on:
+      sandbox-postgres:
+        condition: service_healthy
+
   # ─── Sandbox (isolated build environment for Build Studio) ──────────
   sandbox:
     image: $($GHCR_SANDBOX):$Version
@@ -478,8 +508,18 @@ services:
       - "3035:3000"
     volumes:
       - sandbox_workspace:/workspace
+    environment:
+      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
+      AUTH_SECRET: `${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      APP_URL: http://localhost:3035
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: `${NEO4J_PASSWORD}
+      QDRANT_INTERNAL_URL: http://qdrant:6333
+      NODE_ENV: development
     depends_on:
-      portal-init:
+      sandbox-init:
         condition: service_completed_successfully
     command: ["sleep", "infinity"]
 
@@ -509,6 +549,7 @@ volumes:
   pgdata:
   neo4jdata:
   qdrant_data:
+  sandbox_pgdata:
   sandbox_workspace:
   backups:
 "@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
