@@ -407,6 +407,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "write_sandbox_file",
+    description: "Create or overwrite a file in the sandbox workspace. Use this to create new files. For modifying existing files, prefer edit_sandbox_file for surgical edits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path relative to workspace root, e.g. apps/web/app/(shell)/complaints/page.tsx" },
+        content: { type: "string", description: "The full file content to write" },
+      },
+      required: ["path", "content"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false, // Sandbox only
+  },
+  {
     name: "edit_sandbox_file",
     description: "Make a surgical edit to an existing file in the sandbox. Provide the exact old text and the new replacement text. The old text must match exactly one location in the file.",
     inputSchema: {
@@ -2251,6 +2266,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     // Falls through to the specific tool case after initialization.
 
     case "read_sandbox_file":
+    case "write_sandbox_file":
     case "edit_sandbox_file":
     case "search_sandbox":
     case "list_sandbox_files":
@@ -2299,6 +2315,25 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           return { success: true, message: `File: ${filePath}`, data: { path: filePath, content } };
         } catch {
           return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
+        }
+      }
+
+      if (toolName === "write_sandbox_file") {
+        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const content = String(params.content ?? "");
+        if (!content) return { success: false, error: "content is required.", message: "Provide the file content." };
+        try {
+          // Ensure parent directory exists
+          const dir = filePath.includes("/") ? filePath.substring(0, filePath.lastIndexOf("/")) : "";
+          if (dir) {
+            await execInSandbox(sandboxId, `mkdir -p '/workspace/${dir}'`);
+          }
+          const encoded = Buffer.from(content).toString("base64");
+          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > '/workspace/${filePath}'`);
+          logBuildActivity(buildId, "write_sandbox_file", `Created ${filePath} (${content.length} chars)`);
+          return { success: true, message: `Created ${filePath} (${content.length} chars).`, data: { path: filePath } };
+        } catch (err) {
+          return { success: false, error: `Write failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not write ${filePath}` };
         }
       }
 
