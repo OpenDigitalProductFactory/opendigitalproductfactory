@@ -44,16 +44,29 @@ export async function waitForCoworkerIdle(
   page: Page,
   timeoutMs = 120_000,
 ): Promise<void> {
-  await page.waitForFunction(
-    () => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    // Check if textarea is enabled (coworker idle)
+    const isIdle = await page.evaluate(() => {
       const ta = document.querySelector(
         '[data-agent-panel="true"] textarea',
       ) as HTMLTextAreaElement | null;
-      // Textarea must exist AND be enabled (not disabled = not processing)
       return ta !== null && !ta.disabled;
-    },
-    { timeout: timeoutMs },
-  );
+    });
+    if (isIdle) return;
+
+    // While waiting, auto-approve any pending proposals that block the coworker
+    const approveBtn = page.locator('[data-agent-panel="true"] button:has-text("Approve")').first();
+    if (await approveBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+      console.log("[helper] Auto-approving proposal while waiting for idle...");
+      await approveBtn.click();
+      await page.waitForTimeout(1_000);
+      continue;
+    }
+
+    await page.waitForTimeout(1_000);
+  }
+  throw new Error(`waitForCoworkerIdle timed out after ${timeoutMs}ms`);
 }
 
 /**
