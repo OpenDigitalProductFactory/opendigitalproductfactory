@@ -328,7 +328,7 @@ export async function shipBuild(input: {
   name: string;
   portfolioSlug: string;
   versionBump?: VersionBump;
-}): Promise<{ productId: string; productInternalId: string; portfolioInternalId: string | null; message: string }> {
+}): Promise<{ productId: string; productInternalId: string; portfolioInternalId: string | null; promotionId: string | null; message: string }> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId: input.buildId } });
@@ -404,6 +404,7 @@ export async function shipBuild(input: {
   let previousTag: string | null = null;
   let gitCommitHash: string | null = null;
   let changeCount = 0;
+  let promotionId: string | null = null;
 
   try {
     const { createTag, isGitAvailable, getLatestTag, getCommitCount, getCurrentCommitHash } = await import("@/lib/git-utils");
@@ -443,7 +444,7 @@ export async function shipBuild(input: {
   try {
     const { createProductVersionWithRFC } = await import("@/lib/version-tracking");
 
-    await createProductVersionWithRFC({
+    const versionResult = await createProductVersionWithRFC({
       digitalProductId: result.id,
       version: result.version,
       gitTag: `v${result.version}`,
@@ -452,6 +453,20 @@ export async function shipBuild(input: {
       shippedBy: userId,
       ...(build.diffSummary ? { changeSummary: build.diffSummary } : {}),
     });
+
+    // Auto-approve the promotion — the user already approved deploy_feature
+    // which is the HITL gate for the ship sequence.
+    await prisma.changePromotion.update({
+      where: { promotionId: versionResult.promotion.promotionId },
+      data: {
+        status: "approved",
+        approvedBy: userId,
+        approvedAt: new Date(),
+        rationale: "Auto-approved via Build Studio ship phase",
+      },
+    });
+
+    promotionId = versionResult.promotion.promotionId;
   } catch (err) {
     console.warn("[shipBuild] version tracking failed:", err);
   }
@@ -496,7 +511,8 @@ export async function shipBuild(input: {
     productId: result.productId,
     productInternalId: result.id,
     portfolioInternalId: portfolio?.id ?? null,
-    message: `Registered ${input.name} as ${result.productId} v${result.version} in the ${input.portfolioSlug} portfolio.`,
+    promotionId,
+    message: `Registered ${input.name} as ${result.productId} v${result.version} in the ${input.portfolioSlug} portfolio.${promotionId ? ` Promotion ${promotionId} approved and ready to execute.` : ""}`,
   };
 }
 
