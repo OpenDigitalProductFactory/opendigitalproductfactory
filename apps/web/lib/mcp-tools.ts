@@ -2607,6 +2607,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
 
     case "execute_promotion": {
       const promotionId = String(params.promotion_id ?? "");
+      const overrideReason = params.override_reason ? String(params.override_reason) : undefined;
       if (!promotionId || !/^[a-zA-Z0-9_-]+$/.test(promotionId)) {
         return { success: false, error: "Invalid promotion_id", message: "Provide a valid promotion ID." };
       }
@@ -2616,6 +2617,19 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (!promo) return { success: false, error: "Not found", message: `Promotion ${promotionId} not found.` };
       if (promo.status === "deployed") return { success: true, message: "Already deployed.", data: { status: "deployed" } };
       if (promo.status !== "approved") return { success: false, error: `Status is ${promo.status}`, message: "Must be approved first." };
+
+      // Enforce deployment window — block execution outside windows unless emergency override
+      if (!overrideReason) {
+        const { getPromotionWindowStatus } = await import("@/lib/actions/promotions");
+        const windowStatus = await getPromotionWindowStatus(promotionId);
+        if (!windowStatus.available) {
+          return {
+            success: false,
+            error: "Outside deployment window",
+            message: `${windowStatus.message} Use schedule_promotion to queue for the next window, or provide override_reason for emergency deployment.`,
+          };
+        }
+      }
 
       // Resolve sandbox and build ID
       const promoDetail = await prisma.changePromotion.findFirst({
@@ -2634,7 +2648,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       // Start promoter container (array form — no shell injection)
       try {
         await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
-        await execFileAsync("docker", [
+        const dockerArgs = [
           "run", "-d",
           "--name", "dpf-promoter-1",
           "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
@@ -2646,8 +2660,12 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
           "-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`,
           "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
-          "dpf-promoter",
-        ]);
+        ];
+        if (overrideReason) {
+          dockerArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
+        }
+        dockerArgs.push("dpf-promoter");
+        await execFileAsync("docker", dockerArgs);
       } catch (err) {
         return { success: false, error: `Failed to start promoter: ${(err as Error).message?.slice(0, 200)}`, message: "Could not start the promoter container." };
       }
