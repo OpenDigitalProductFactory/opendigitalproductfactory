@@ -406,11 +406,30 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   });
 
-  // Merge and apply mode filtering once to the combined set
+  // Merge and apply mode + build phase filtering
   const mergedTools = [...allPlatformTools, ...pageActions];
-  const availableTools = input.coworkerMode === "advise"
-    ? mergedTools.filter((t) => !t.sideEffect)
-    : mergedTools;
+
+  // Resolve the active build phase for tool filtering
+  let activeBuildPhase: string | null = null;
+  if (input.routeContext.startsWith("/build")) {
+    const activeBuild = await prisma.featureBuild.findFirst({
+      where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
+      orderBy: { updatedAt: "desc" },
+      select: { phase: true },
+    }).catch(() => null);
+    activeBuildPhase = activeBuild?.phase ?? null;
+  }
+
+  const availableTools = mergedTools.filter((t) => {
+    // Advise mode: exclude side-effect tools
+    if (input.coworkerMode === "advise" && t.sideEffect) return false;
+    // Build phase filtering: if tool has buildPhases and we're in a build,
+    // only include it if the current phase matches
+    if (activeBuildPhase && t.buildPhases) {
+      return t.buildPhases.includes(activeBuildPhase as import("@/lib/mcp-tools").BuildPhaseTag);
+    }
+    return true;
+  });
 
   // Conversation-only detection: if the message is a conversational skill (analyze, advise),
   // strip tools entirely so the model responds with text instead of trying to call tools.
