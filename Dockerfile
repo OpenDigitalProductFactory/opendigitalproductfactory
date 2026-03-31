@@ -74,7 +74,9 @@ COPY --from=build /app/packages/ ./packages-src/
 ARG DPF_VERSION=dev
 RUN echo "$DPF_VERSION" > /app/.dpf-image-version
 
-# Promoter script (autonomous deployment pipeline — used by promoter service)
+# Promoter build context (autonomous deployment pipeline)
+# These files let the portal build the dpf-promoter image on first use.
+COPY Dockerfile.promoter /promoter/Dockerfile.promoter
 COPY scripts/promote.sh /promoter/promote.sh
 COPY Dockerfile /promoter/portal.Dockerfile
 RUN chmod +x /promoter/promote.sh

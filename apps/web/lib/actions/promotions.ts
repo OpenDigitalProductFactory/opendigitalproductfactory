@@ -117,6 +117,28 @@ export async function executePromotionAction(
     await execAsync("docker info", { timeout: 5_000 });
     await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
 
+    // Build the promoter image just-in-time if it doesn't exist.
+    // The build files are baked into the portal image at /promoter/.
+    // Layout mirrors the repo root: Dockerfile (portal), Dockerfile.promoter,
+    // scripts/promote.sh — so the same Dockerfile.promoter works for both
+    // repo-root builds and JIT builds from the portal container.
+    try {
+      await execAsync("docker image inspect dpf-promoter", { timeout: 5_000 });
+    } catch {
+      await execAsync(
+        "sh -c '" +
+          "BDIR=$(mktemp -d) && " +
+          "cp /promoter/portal.Dockerfile $BDIR/Dockerfile && " +
+          "cp /promoter/Dockerfile.promoter $BDIR/Dockerfile.promoter && " +
+          "mkdir -p $BDIR/scripts && " +
+          "cp /promoter/promote.sh $BDIR/scripts/promote.sh && " +
+          "tar -C $BDIR -c . | docker build -t dpf-promoter -f Dockerfile.promoter - && " +
+          "rm -rf $BDIR" +
+          "'",
+        { timeout: 120_000 },
+      );
+    }
+
     // Resolve the host path where docker-compose.yml and .env live.
     // DPF_HOST_INSTALL_PATH is the host-side path of the install directory
     // (e.g. "D:/DPF" on Windows, "/opt/dpf" on Linux). The promoter needs
