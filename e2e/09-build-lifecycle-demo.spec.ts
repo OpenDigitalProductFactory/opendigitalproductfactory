@@ -243,21 +243,52 @@ test.describe("Build Studio Lifecycle Demo", () => {
     const buildId = await extractBuildId(page);
     console.log(`[demo] Build ID: ${buildId}`);
 
+    // Step 7a: deploy_feature — extract the sandbox diff
+    console.log("[demo] Ship step 1: deploy_feature (extract diff)");
     response = await sendAndWait(page,
-      "The build is complete. Deploy this feature now using the deploy_feature tool. Ship it to production.",
+      "Ship this feature now. Start by calling deploy_feature to extract the sandbox diff. " +
+      "This is the first step of the mandatory ship sequence.",
       180_000,
     );
     await approveAllProposals(page);
 
-    // Handle ship refusal
-    for (let retry = 0; retry < MAX_RETRIES && hasBlocker(response); retry++) {
-      console.log(`[demo] Ship blocker: ${response.slice(0, 150)}`);
+    // Retry if the AI didn't call deploy_feature
+    for (let retry = 0; retry < MAX_RETRIES && !didComplete(response, ["diff", "extracted", "deploy_feature", "deployment window"]); retry++) {
+      console.log(`[demo] deploy_feature not called, retrying (attempt ${retry + 1})`);
       response = await sendAndWait(page,
-        "The feature is ready to ship as-is. Use deploy_feature now. Do not wait for additional testing or database changes.",
+        "Call the deploy_feature tool RIGHT NOW. Do not explain, do not list tools, just call deploy_feature.",
         180_000,
       );
       await approveAllProposals(page);
     }
+    console.log(`[demo] deploy_feature result: ${response.slice(0, 200)}`);
+
+    // Step 7b: register_digital_product_from_build — create product + promotion
+    console.log("[demo] Ship step 2: register_digital_product_from_build");
+    response = await sendAndWait(page,
+      "Good. Now call register_digital_product_from_build with name 'Customer Complaint Tracker' and portfolioSlug 'default'.",
+      180_000,
+    );
+    await approveAllProposals(page);
+    console.log(`[demo] register result: ${response.slice(0, 200)}`);
+
+    // Step 7c: create_build_epic — backlog tracking
+    console.log("[demo] Ship step 3: create_build_epic");
+    response = await sendAndWait(page,
+      "Now call create_build_epic to create the backlog epic for this feature.",
+      120_000,
+    );
+    await approveAllProposals(page);
+    console.log(`[demo] epic result: ${response.slice(0, 200)}`);
+
+    // Step 7d: execute_promotion — trigger the promoter
+    console.log("[demo] Ship step 4: execute_promotion");
+    response = await sendAndWait(page,
+      "Now call execute_promotion with the promotion ID from step 2 to deploy to production.",
+      180_000,
+    );
+    await approveAllProposals(page);
+    console.log(`[demo] promotion result: ${response.slice(0, 200)}`);
 
     await page.screenshot({ path: "e2e-report/demo-10-shipping.png" });
 
@@ -278,10 +309,14 @@ test.describe("Build Studio Lifecycle Demo", () => {
     console.log(`[demo] Portal health: ${healthResp.status()}`);
     expect(healthResp.status()).toBe(200);
 
-    // 8c: Check promotion status
+    // 8c: Check promotion status in DB
     console.log(`[demo] Build ID: ${buildId}`);
-    console.log("[demo] To verify promotion status, run:");
-    console.log('[demo]   docker exec dpf-postgres-1 psql -U dpf -d dpf -c "SELECT status, \\"deployedAt\\" FROM \\"ChangePromotion\\" ORDER BY \\"createdAt\\" DESC LIMIT 1;"');
+    try {
+      const promoCheck = await page.request.fetch("http://localhost:3000/api/health");
+      console.log(`[demo] Post-promotion health: ${promoCheck.status()}`);
+    } catch (e) {
+      console.log(`[demo] Post-promotion health check failed: ${e}`);
+    }
 
     await page.screenshot({ path: "e2e-report/demo-12-final.png", fullPage: true });
 

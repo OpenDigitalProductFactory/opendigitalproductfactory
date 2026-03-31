@@ -1543,9 +1543,17 @@ export async function executeTool(
         const latestBuild = await prisma.featureBuild.findFirst({
           where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
           orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
+          select: { buildId: true, diffPatch: true },
         });
         if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        // Pre-flight: deploy_feature must have run first to extract the diff
+        if (!latestBuild.diffPatch) {
+          return {
+            success: false,
+            error: "deploy_feature must be called first",
+            message: "The sandbox diff has not been extracted yet. Call deploy_feature first to extract the diff, then call register_digital_product_from_build.",
+          };
+        }
         buildId = latestBuild.buildId;
       }
       const { shipBuild } = await import("@/lib/actions/build");
@@ -1562,6 +1570,7 @@ export async function executeTool(
         data: {
           productInternalId: result.productInternalId,
           portfolioInternalId: result.portfolioInternalId,
+          promotionId: result.promotionId,
         },
       };
     }

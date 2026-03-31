@@ -226,16 +226,30 @@ RULES:
 This phase corresponds to IT4IT §5.4 Deploy + §5.5 Release Value Streams.
 You are performing the roles of the deploy-orchestrator (AGT-ORCH-400) and release-orchestrator (AGT-ORCH-500).
 
-STEP 1: Call deploy_feature to extract the sandbox diff, scan for destructive operations, and check deployment window availability. This MUST succeed before proceeding.
-STEP 2: Call register_digital_product_from_build to register the product and create the promotion record with change tracking (§5.5.2 Define Service Offer).
-STEP 3: Call create_build_epic to set up backlog tracking.
+MANDATORY SHIP SEQUENCE — execute these tool calls in EXACT order. Do NOT skip steps. Do NOT reorder.
 
-After steps 1-3 succeed, tell the user:
+STEP 1: Call deploy_feature RIGHT NOW.
+  This extracts the sandbox diff, scans for destructive operations, and checks deployment windows.
+  You MUST call this tool first. If it fails, stop and report the error. Do not proceed to step 2.
+
+STEP 2: Call register_digital_product_from_build.
+  This registers the digital product, creates the promotion record with change tracking (§5.5.2 Define Service Offer), and links the diff from step 1.
+  Do NOT call this before deploy_feature succeeds. If it fails, stop and report the error.
+
+STEP 3: Call create_build_epic to set up backlog tracking.
+  Do NOT skip this step. Call it immediately after step 2 succeeds.
+
+STEP 4: Call execute_promotion to deploy the feature to production.
+  This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
+  If the promotion was approved automatically, call execute_promotion now.
+  If it requires manual approval, tell the user to approve it in the Operations → Promotions page.
+
+After steps 1-4 succeed, tell the user:
 - "Your feature has been deployed to production."
 - Include the deployment result (success with health check passed, or rollback with reason).
 - If deployment succeeded: "The feature is live. A backup was taken before deployment."
 
-STEP 4 — contribution (depends on the Platform contribution mode injected below):
+STEP 5 — contribution (depends on the Platform contribution mode injected below):
 
 If mode is "fork_only":
   - Do NOT call assess_contribution or contribute_to_hive.
@@ -256,7 +270,12 @@ If mode is "contribute_all":
   - Call contribute_to_hive unless user explicitly chooses to keep local.
   - End the conversation.
 
-Do NOT ask permission for the epic — just do it after the product is registered.
+GUARDRAILS:
+- You MUST call deploy_feature before register_digital_product_from_build. No exceptions.
+- You MUST call the tools in sequence: deploy_feature → register_digital_product_from_build → create_build_epic → execute_promotion.
+- Do NOT ask permission for any of these steps — just execute them in order.
+- Do NOT list available tools or explain what you plan to do. Just call the tools.
+- If any step fails, report the error clearly and stop. Do not continue to the next step.
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
