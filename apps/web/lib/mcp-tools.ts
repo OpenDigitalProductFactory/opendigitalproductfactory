@@ -2368,11 +2368,11 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         try {
           let cmd = `cat -n '/workspace/${filePath}'`;
           if (offset && limit) {
+            // sed works reliably in Alpine/busybox; cat -n adds line numbers from 1
+            // so we note the offset in the response message instead
             cmd = `sed -n '${offset},${offset + limit - 1}p' '/workspace/${filePath}' | cat -n`;
-            // Adjust line numbers to reflect actual file position
-            cmd = `awk 'NR>=${offset} && NR<${offset + limit} { printf "%6d\\t%s\\n", NR, $0 }' '/workspace/${filePath}'`;
           } else if (offset) {
-            cmd = `awk 'NR>=${offset} { printf "%6d\\t%s\\n", NR, $0 }' '/workspace/${filePath}'`;
+            cmd = `sed -n '${offset},\$p' '/workspace/${filePath}' | cat -n`;
           } else if (limit) {
             cmd = `head -${limit} '/workspace/${filePath}' | cat -n`;
           }
