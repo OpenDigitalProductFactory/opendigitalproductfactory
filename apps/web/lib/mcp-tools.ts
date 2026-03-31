@@ -11,6 +11,8 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -19,6 +21,9 @@ export type ToolDefinition = {
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
+  /** When set, tool is only available during these build phases.
+   *  Null/undefined = available in all phases (non-build tools). */
+  buildPhases?: BuildPhaseTag[] | null;
 };
 
 export type ToolResult = {
@@ -113,6 +118,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "report_quality_issue",
@@ -197,6 +203,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
+    buildPhases: ["ideate"],
   },
   {
     name: "register_digital_product_from_build",
@@ -211,6 +218,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_capabilities",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   {
     name: "create_build_epic",
@@ -225,6 +233,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   // ─── Intake Tools ─────────────────────────────────────────────────────────
   {
@@ -238,6 +247,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "assess_complexity",
@@ -258,6 +268,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "propose_decomposition",
@@ -274,6 +285,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "register_tech_debt",
@@ -310,6 +322,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
+    buildPhases: ["ideate", "plan"],
   },
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
@@ -326,6 +339,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
     name: "reviewDesignDoc",
@@ -334,6 +348,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
+    buildPhases: ["ideate"],
   },
   {
     name: "reviewBuildPlan",
@@ -342,6 +357,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
+    buildPhases: ["plan"],
   },
   {
     name: "launch_sandbox",
@@ -350,6 +366,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate", // Sandbox is isolated — no HITL needed
     sideEffect: false, // Sandbox is isolated from production — safe in any mode
+    buildPhases: ["build"],
   },
   {
     name: "generate_code",
@@ -364,6 +381,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Writes to sandbox only, not production — available in advise mode
+    buildPhases: ["build"],
   },
   {
     name: "iterate_sandbox",
@@ -378,6 +396,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Writes to sandbox only, not production — available in advise mode
+    buildPhases: ["build"],
   },
   {
     name: "run_sandbox_tests",
@@ -391,6 +410,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["build", "review"],
   },
   {
     name: "read_sandbox_file",
@@ -407,6 +427,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["plan", "build", "review"],
   },
   {
     name: "write_sandbox_file",
@@ -422,6 +443,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
+    buildPhases: ["build"],
   },
   {
     name: "edit_sandbox_file",
@@ -439,6 +461,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
+    buildPhases: ["build"],
   },
   {
     name: "search_sandbox",
@@ -455,6 +478,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["plan", "build"],
   },
   {
     name: "list_sandbox_files",
@@ -469,6 +493,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["plan", "build"],
   },
   {
     name: "run_sandbox_command",
@@ -483,6 +508,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox is isolated from production — safe in any mode
+    buildPhases: ["build"],
   },
   {
     name: "deploy_feature",
@@ -491,6 +517,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_capabilities",
     executionMode: "proposal",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   // ─── Scheduling & Release Tools (IT4IT §5.3-5.4) ───────────────────────
   {
@@ -506,6 +533,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["review", "ship"],
   },
   {
     name: "schedule_promotion",
@@ -520,6 +548,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   {
     name: "execute_promotion",
@@ -535,6 +564,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations" as const,
     executionMode: "immediate" as const,
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   {
     name: "create_release_bundle",
@@ -550,6 +580,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   {
     name: "run_release_gate",
@@ -592,6 +623,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ship"],
   },
   // ─── Hive Mind Contribution Tools (IT4IT §5.5 Release) ───────────────────
   {
@@ -601,6 +633,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ship"],
   },
   {
     name: "contribute_to_hive",
@@ -614,6 +647,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,
+    buildPhases: ["ship"],
   },
   {
     name: "apply_platform_update",
@@ -635,6 +669,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["review"],
   },
   {
     name: "generate_ux_test",
@@ -643,6 +678,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Writes test script to sandbox — available in advise mode
+    buildPhases: ["review"],
   },
   {
     name: "run_ux_test",
@@ -651,6 +687,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["review"],
   },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
@@ -666,6 +703,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate", "plan"],
   },
   {
     name: "read_project_file",
@@ -682,6 +720,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate", "plan"],
   },
   {
     name: "search_project_files",
@@ -698,6 +737,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate", "plan"],
   },
   // ─── Version Tracking Tools ────────────────────────────────────────────────
   {
@@ -817,6 +857,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_capabilities",
     sideEffect: true,
+    buildPhases: ["build"],
   },
   // ─── Feedback Loop ──────────────────────────────────────────────────────────
   {
