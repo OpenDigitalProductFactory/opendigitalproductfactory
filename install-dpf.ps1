@@ -446,6 +446,7 @@ services:
       - "1455:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - sandbox_workspace:/sandbox-workspace
     environment:
       DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
       AUTH_SECRET: `${AUTH_SECRET}
