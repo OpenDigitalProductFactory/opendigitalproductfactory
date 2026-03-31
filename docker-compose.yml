@@ -162,7 +162,6 @@ services:
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
-    command: ["sleep", "infinity"]
 
   sandbox-2:
     build:
@@ -186,7 +185,6 @@ services:
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
-    command: ["sleep", "infinity"]
 
   sandbox-3:
     build:
@@ -210,7 +208,6 @@ services:
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
-    command: ["sleep", "infinity"]
 
   # ─── Promoter (autonomous deployment pipeline) ─────────────────────────
   # One-shot container that builds new portal images from sandbox source.

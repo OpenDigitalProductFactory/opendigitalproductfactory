@@ -7,5 +7,7 @@ WORKDIR /workspace
 # No secrets, no Docker socket
 # Resource limits applied at container creation
 
-# Keep container alive — coding agent executes commands via docker exec
-CMD ["sleep", "infinity"]
+# Start the Next.js dev server if workspace is bootstrapped,
+# otherwise wait for it. The dev server keeps the container alive
+# and serves the app on port 3000 for the Build Studio preview.
+CMD ["sh", "-c", "while [ ! -f /workspace/.dpf-version ]; do echo 'Waiting for workspace bootstrap...'; sleep 5; done; cd /workspace && pnpm --filter web dev 2>&1 || sleep infinity"]
