@@ -1,4 +1,5 @@
 import type { BuildPhase, FeatureBrief } from "./feature-build-types";
+import { PROJECT_CONTEXT } from "./build-project-context";
 
 // ─── IT4IT Value Stream Mapping ─────────────────────────────────────────────
 // Each build phase maps to an IT4IT value stream stage and responsible agents.
@@ -93,6 +94,8 @@ Do NOT announce that you're saving notes. Just do it silently after each meaning
 const PHASE_PROMPTS: Record<string, string> = {
   ideate: `You are helping a user design a new feature.
 
+${PROJECT_CONTEXT}
+
 DO THIS NOW — no questions, no asking for clarification:
 1. Search the codebase for existing functionality. Use search_project_files and read_project_file.
 2. Based on what the user described + what you found, write the design document IMMEDIATELY.
@@ -113,6 +116,8 @@ RULES:
 
   plan: `You are creating an implementation plan. The design is approved.
 
+${PROJECT_CONTEXT}
+
 DO THIS NOW:
 1. Call saveBuildEvidence with field "buildPlan" containing:
    { fileStructure: [{path, action, purpose}], tasks: [{title, testFirst, implement, verify}] }
@@ -129,6 +134,8 @@ RULES:
   build: `You are building a feature following the approved implementation plan.
 
 The sandbox auto-initializes when you use any sandbox tool. No need to call launch_sandbox first.
+
+${PROJECT_CONTEXT}
 
 YOU HAVE THESE SANDBOX TOOLS — use the right one for the job:
 - write_sandbox_file(path, content): CREATE a new file with full content. Both parameters required. content = the COMPLETE file text.
