@@ -32,23 +32,38 @@ export function buildTarExcludeFlags(): string[] {
 // ─── LocalSourceStrategy ──────────────────────────────────────────────────────
 
 export class LocalSourceStrategy implements SandboxSourceStrategy {
-  private projectRoot: string;
-
-  constructor(projectRoot?: string) {
-    this.projectRoot = projectRoot ?? process.cwd();
-  }
-
   async initializeWorkspace(containerId: string, _buildId: string): Promise<void> {
-    // 1. Copy source via tar pipe
-    const excludes = buildTarExcludeFlags().join(" ");
+    // Resolve the portal container to copy source from.
+    let portalContainer = "dpf-portal-1";
+    try {
+      const { readFileSync } = await import("fs");
+      const hostname = readFileSync("/etc/hostname", "utf-8").trim();
+      if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
+    } catch { /* fallback */ }
+
+    // 1. Copy root config files from portal image
+    const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
+    for (const f of rootFiles) {
+      await exec(
+        `docker exec ${portalContainer} tar -cf - -C /app ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
+        { timeout: 10_000 },
+      ).catch(() => console.log(`[source-strategy] ${f} not found, skipping`));
+    }
+
+    // 2. Copy full source from -src paths (not standalone output)
     await exec(
-      `tar cf - ${excludes} -C "${this.projectRoot}" . | docker exec -i ${containerId} tar xf - -C /workspace`,
+      `docker exec ${portalContainer} tar -cf - -C /app/packages-src . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`,
+      { timeout: 60_000 },
+    );
+    await exec(
+      `docker exec ${portalContainer} tar -cf - -C /app/apps/web-src . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
+      { timeout: 60_000 },
     );
 
-    // 2. Git baseline so coding agent can produce a clean diff
+    // 3. Git baseline so coding agent can produce a clean diff
     await execInSandbox(
       containerId,
-      "cd /workspace && git init && git add -A && git commit -m 'sandbox baseline'",
+      "cd /workspace && git config user.email sandbox@dpf.local && git config user.name 'DPF Sandbox' && git init && git add -A && git commit -m 'sandbox baseline'",
     );
   }
 }

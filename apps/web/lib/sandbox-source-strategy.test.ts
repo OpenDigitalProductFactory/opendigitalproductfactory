@@ -57,7 +57,7 @@ describe("LocalSourceStrategy", () => {
   });
 
   it("implements SandboxSourceStrategy — has initializeWorkspace method", () => {
-    const strategy = new LocalSourceStrategy("/tmp/fake-root");
+    const strategy = new LocalSourceStrategy();
     expect(typeof strategy.initializeWorkspace).toBe("function");
   });
 
@@ -65,7 +65,7 @@ describe("LocalSourceStrategy", () => {
     // We do not actually call Docker here — just verify the shape.
     // Pass a no-op mock via subclass would require extra plumbing,
     // so we verify the method signature is async (returns a thenable).
-    const strategy = new LocalSourceStrategy("/tmp/fake-root");
+    const strategy = new LocalSourceStrategy();
     // Calling with obviously bad args — it will reject, but must be a Promise
     const result = strategy.initializeWorkspace("fake-id", "fake-build");
     expect(result).toBeInstanceOf(Promise);
