@@ -239,15 +239,25 @@ STEP 2: Call register_digital_product_from_build.
 STEP 3: Call create_build_epic to set up backlog tracking.
   Do NOT skip this step. Call it immediately after step 2 succeeds.
 
-STEP 4: Call execute_promotion to deploy the feature to production.
-  This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
-  If the promotion was approved automatically, call execute_promotion now.
-  If it requires manual approval, tell the user to approve it in the Operations → Promotions page.
+STEP 4: Check the deployment window and deploy.
+  a) Call check_deployment_windows with change_type "normal" and risk_level "low".
+  b) If the window is OPEN: call execute_promotion with the promotion_id from step 2.
+     This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
+     Wait for it to complete and report the result.
+  c) If the window is CLOSED or a blackout is active:
+     - Call schedule_promotion with the promotion_id to schedule it for the next open window.
+     - Tell the user: "Your feature is ready but cannot deploy now — [reason]. It has been scheduled for the next deployment window."
+     - Tell the user: "The Operations team will be notified when the window opens."
+     - Do NOT call execute_promotion. The operations agent will handle deployment during the window.
+  d) If the user says this is an EMERGENCY:
+     - Call execute_promotion with override_reason set to the user's stated reason.
+     - Emergency deployments bypass window restrictions but are logged for audit.
 
-After steps 1-4 succeed, tell the user:
+After a successful deployment, tell the user:
 - "Your feature has been deployed to production."
 - Include the deployment result (success with health check passed, or rollback with reason).
 - If deployment succeeded: "The feature is live. A backup was taken before deployment."
+- If scheduled: "The promotion is queued. You can monitor it in Operations → Promotions."
 
 STEP 5 — contribution (depends on the Platform contribution mode injected below):
 
