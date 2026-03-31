@@ -55,10 +55,20 @@ if [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   cp -r /app/apps/web-src/. "$WORKSPACE/apps/web/"
   cp -r /app/packages-src/. "$WORKSPACE/packages/"
   cp /app/pnpm-workspace.yaml "$WORKSPACE/" 2>/dev/null || true
+  cp /app/pnpm-lock.yaml "$WORKSPACE/" 2>/dev/null || true
   cp /app/package.json "$WORKSPACE/" 2>/dev/null || true
+  cp /app/tsconfig.base.json "$WORKSPACE/" 2>/dev/null || true
+
+  # Install dependencies so the sandbox is ready immediately
+  echo "  Installing dependencies (this takes 1-2 minutes on first run)..."
+  cd "$WORKSPACE"
+  pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1
+  echo "  Dependencies installed"
+
+  # Generate Prisma client
+  pnpm --filter @dpf/db exec prisma generate 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
 
   # Initialise git — force-create branches to be idempotent on partial failure
-  cd "$WORKSPACE"
   git init -b dpf-upstream
   git config user.email "build-studio@dpf.local"
   git config user.name "DPF Build Studio"
@@ -70,7 +80,7 @@ if [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   # Write version sentinel last — if anything above failed, this file is absent
   # and the entire block re-runs on next start (idempotent due to -B and git init)
   echo "$IMAGE_VERSION" > "$WORKSPACE/.dpf-version"
-  echo "  OK Source volume bootstrapped"
+  echo "  OK Source volume bootstrapped (with dependencies)"
 elif [ -f "$WORKSPACE/.dpf-version" ]; then
   VOLUME_VERSION=$(cat "$WORKSPACE/.dpf-version" 2>/dev/null || echo "unknown")
   if [ "$IMAGE_VERSION" != "$VOLUME_VERSION" ]; then
