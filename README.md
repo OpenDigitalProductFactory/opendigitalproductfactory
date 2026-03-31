@@ -164,6 +164,12 @@ pnpm --filter @dpf/db exec prisma migrate deploy  # Apply all migrations
 pnpm --filter @dpf/db seed                        # Seed roles, agents, taxonomy, admin user
 ```
 
+**Build the promoter image** (required for Build Studio feature deployment):
+
+```bash
+docker build -f Dockerfile.promoter -t dpf-promoter .
+```
+
 **Start the dev server:**
 
 ```bash
@@ -428,6 +434,7 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | `qdrant` | Vector store for semantic retrieval, embeddings, and memory-style search |
 | Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed |
 | `sandbox-image` | Build target for the on-demand sandbox image used by iterative build workflows |
+| `promoter` | One-shot container that builds new portal images from sandbox source, backs up the database, and deploys promoted features. Triggered by Build Studio ship phase or ops UI. Uses the `promote` profile. |
 | `playwright` | Optional tooling image used in the `build-images` profile |
 
 In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres` and `neo4j` so the app can run locally while the stateful services remain containerized.
@@ -485,6 +492,7 @@ opendigitalproductfactory/
 ├── uninstall-dpf.bat            # User uninstaller launcher
 ├── uninstall-dpf.ps1            # User uninstaller (PowerShell)
 ├── Dockerfile                   # Multi-stage (init + runner)
+├── Dockerfile.promoter          # Promoter image (docker-cli, pg_dump, promote.sh)
 ├── docker-compose.yml           # Full stack — self-contained (no exposed ports)
 ├── docker-compose.dev.yml       # Developer overlay — exposes ports to host
 ├── .env.docker.example          # Template: Docker Compose credentials

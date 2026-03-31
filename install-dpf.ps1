@@ -104,6 +104,7 @@ function Ensure-DPFStartupTask {
 
 $GHCR_PORTAL = "ghcr.io/markdbodman/dpf-portal"
 $GHCR_SANDBOX = "ghcr.io/markdbodman/dpf-sandbox"
+$GHCR_PROMOTER = "ghcr.io/markdbodman/dpf-promoter"
 $InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
 
 # --- Banner -------------------------------------------------------------------
@@ -485,7 +486,7 @@ services:
   # ─── Promoter (autonomous deployment pipeline) ─────────────────────
   # One-shot container — triggered by Build Studio ship phase or ops UI.
   promoter:
-    image: $($GHCR_PORTAL):$Version
+    image: $($GHCR_PROMOTER):$Version
     entrypoint: ["/promoter/promote.sh"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -797,8 +798,7 @@ if (-not (Is-StepDone "started")) {
         }
     }
 
-    # Build the promoter image (customizer mode only — consumer mode uses the portal image
-    # which already includes /promoter/promote.sh and all required tools)
+    # Build/pull the promoter image (required for Build Studio feature deployment)
     if ($InstallMode -eq "customizer") {
         Write-Action "Building promoter image (for autonomous feature deployments)..."
         $oldEAP = $ErrorActionPreference
@@ -809,6 +809,17 @@ if (-not (Is-StepDone "started")) {
             Write-OK "Promoter image built"
         } else {
             Write-Warn "Promoter image build failed (non-fatal -- build later with: docker compose --profile promote build promoter)"
+        }
+    } else {
+        Write-Action "Pulling promoter image..."
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker pull "$($GHCR_PROMOTER):$Version" 2>&1 | Out-Null
+        $ErrorActionPreference = $oldEAP
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Promoter image pulled"
+        } else {
+            Write-Warn "Promoter image not yet published -- Build Studio deploy will not work until image is available"
         }
     }
 

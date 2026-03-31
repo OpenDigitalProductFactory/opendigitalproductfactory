@@ -949,8 +949,10 @@ async function seedAgentModelDefaults(): Promise<void> {
     agentId: string;
     minimumTier: string;
     budgetClass: string;
+    pinnedProviderId?: string;
+    pinnedModelId?: string;
   }> = [
-    { agentId: "build-specialist",    minimumTier: "frontier", budgetClass: "quality_first" },
+    { agentId: "build-specialist",    minimumTier: "frontier", budgetClass: "quality_first", pinnedProviderId: "anthropic-sub", pinnedModelId: "claude-haiku-4-5-20251001" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
@@ -979,6 +981,8 @@ async function seedAgentModelDefaults(): Promise<void> {
         agentId: d.agentId,
         minimumTier: d.minimumTier,
         budgetClass: d.budgetClass,
+        pinnedProviderId: d.pinnedProviderId ?? null,
+        pinnedModelId: d.pinnedModelId ?? null,
         configuredAt: new Date(),
         // configuredById left null — system seed, not a user action
       },
