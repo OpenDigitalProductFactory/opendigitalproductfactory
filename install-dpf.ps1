@@ -522,7 +522,6 @@ services:
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
-    command: ["sleep", "infinity"]
 
   # ─── Promoter (autonomous deployment pipeline) ─────────────────────
   # One-shot container — triggered by Build Studio ship phase or ops UI.
