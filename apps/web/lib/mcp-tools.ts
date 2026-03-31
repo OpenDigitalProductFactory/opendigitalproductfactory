@@ -2361,78 +2361,88 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       const sandboxId = sbBuild!.sandboxId!;
 
       // ── Dispatch to specific tool ──
+      // ── Direct filesystem tools (via shared Docker volume at /sandbox-workspace) ──
+      // These use Node.js fs operations — no docker exec, no shell escaping.
+      const { readFile, writeFile, mkdir, stat } = await import("fs/promises");
+      const { join, dirname } = await import("path");
+      const SANDBOX_MOUNT = "/sandbox-workspace";
+
+      const resolveSandboxPath = (p: string) => {
+        const cleaned = p.replace(/^\/?workspace\//, "");
+        const resolved = join(SANDBOX_MOUNT, cleaned);
+        // Prevent path traversal
+        if (!resolved.startsWith(SANDBOX_MOUNT)) throw new Error("Path traversal blocked");
+        return { resolved, relative: cleaned };
+      };
+
       if (toolName === "read_sandbox_file") {
-        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const { resolved, relative } = resolveSandboxPath(String(params.path ?? ""));
         const offset = params.offset ? Number(params.offset) : undefined;
         const limit = params.limit ? Number(params.limit) : undefined;
         try {
-          let cmd = `cat -n '/workspace/${filePath}'`;
-          if (offset && limit) {
-            // sed works reliably in Alpine/busybox; cat -n adds line numbers from 1
-            // so we note the offset in the response message instead
-            cmd = `sed -n '${offset},${offset + limit - 1}p' '/workspace/${filePath}' | cat -n`;
-          } else if (offset) {
-            cmd = `sed -n '${offset},\$p' '/workspace/${filePath}' | cat -n`;
-          } else if (limit) {
-            cmd = `head -${limit} '/workspace/${filePath}' | cat -n`;
-          }
-          const content = await execInSandbox(sandboxId, cmd);
-          const lineCount = content.split("\n").filter(Boolean).length;
-          const rangeMsg = offset || limit ? ` (lines ${offset ?? 1}–${(offset ?? 1) + lineCount - 1})` : "";
-          return { success: true, message: `File: ${filePath}${rangeMsg}`, data: { path: filePath, content } };
+          const raw = await readFile(resolved, "utf-8");
+          const allLines = raw.split("\n");
+          const startLine = (offset ?? 1) - 1;
+          const endLine = limit ? startLine + limit : allLines.length;
+          const slice = allLines.slice(startLine, endLine);
+          const numbered = slice.map((line, i) => `${String(startLine + i + 1).padStart(6)}\t${line}`).join("\n");
+          const rangeMsg = offset || limit ? ` (lines ${startLine + 1}–${startLine + slice.length})` : "";
+          return { success: true, message: `File: ${relative}${rangeMsg}`, data: { path: relative, content: numbered } };
         } catch {
-          return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
+          return { success: false, error: `File not found: ${relative}`, message: `Could not read ${relative}` };
         }
       }
 
       if (toolName === "write_sandbox_file") {
-        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const { resolved, relative } = resolveSandboxPath(String(params.path ?? ""));
         const content = String(params.content ?? "");
         if (!content) return { success: false, error: "content is required.", message: "Provide the file content." };
         try {
-          // Ensure parent directory exists
-          const dir = filePath.includes("/") ? filePath.substring(0, filePath.lastIndexOf("/")) : "";
-          if (dir) {
-            await execInSandbox(sandboxId, `mkdir -p '/workspace/${dir}'`);
-          }
-          const encoded = Buffer.from(content).toString("base64");
-          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > '/workspace/${filePath}'`);
-          logBuildActivity(buildId, "write_sandbox_file", `Created ${filePath} (${content.length} chars)`);
-          return { success: true, message: `Created ${filePath} (${content.length} chars).`, data: { path: filePath } };
+          await mkdir(dirname(resolved), { recursive: true });
+          await writeFile(resolved, content, "utf-8");
+          logBuildActivity(buildId, "write_sandbox_file", `Created ${relative} (${content.length} chars)`);
+          return { success: true, message: `Created ${relative} (${content.length} chars).`, data: { path: relative } };
         } catch (err) {
-          return { success: false, error: `Write failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not write ${filePath}` };
+          return { success: false, error: `Write failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not write ${relative}` };
         }
       }
 
       if (toolName === "edit_sandbox_file") {
-        const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const { resolved, relative } = resolveSandboxPath(String(params.path ?? ""));
         const oldText = String(params.old_text ?? "");
         const newText = String(params.new_text ?? "");
         const replaceAll = params.replace_all === true;
         if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
         try {
-          const current = await execInSandbox(sandboxId, `cat '/workspace/${filePath}'`);
+          const current = await readFile(resolved, "utf-8");
           const occurrences = current.split(oldText).length - 1;
-          if (occurrences === 0) return { success: false, error: `old_text not found in ${filePath}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
-          if (occurrences > 1 && !replaceAll) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique, or set replace_all: true.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique, or use replace_all.` };
+          if (occurrences === 0) return { success: false, error: `old_text not found in ${relative}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
+          if (occurrences > 1 && !replaceAll) return { success: false, error: `old_text matches ${occurrences} locations in ${relative}. Provide more context to make it unique, or set replace_all: true.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique, or use replace_all.` };
           const updated = replaceAll ? current.split(oldText).join(newText) : current.replace(oldText, newText);
-          const encoded = Buffer.from(updated).toString("base64");
-          await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > '/workspace/${filePath}'`);
+          await writeFile(resolved, updated, "utf-8");
           const countMsg = replaceAll ? ` (${occurrences} occurrences)` : "";
-          logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}${countMsg}`);
-          return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars${countMsg}.`, data: { path: filePath, replacements: replaceAll ? occurrences : 1 } };
+          logBuildActivity(buildId, "edit_sandbox_file", `Edited ${relative}${countMsg}`);
+          return { success: true, message: `Edited ${relative}: replaced ${oldText.length} chars with ${newText.length} chars${countMsg}.`, data: { path: relative, replacements: replaceAll ? occurrences : 1 } };
         } catch (err) {
-          return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${filePath}` };
+          return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${relative}` };
         }
       }
 
       if (toolName === "search_sandbox") {
         const pattern = String(params.pattern ?? "");
-        const glob = params.glob ? `--include='${String(params.glob)}'` : "--include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx'";
+        const globFilter = params.glob ? String(params.glob) : "*.{ts,tsx,js,jsx}";
         const max = Number(params.maxResults) || 20;
         try {
-          const result = await execInSandbox(sandboxId, `grep -rn ${glob} '${pattern.replace(/'/g, "'\\''")}' /workspace/apps/ /workspace/packages/ 2>/dev/null | head -${max}`);
-          return { success: true, message: `Search results for "${pattern}"`, data: { pattern, results: result } };
+          // Use grep on the mounted volume — runs in portal, not sandbox container
+          const { exec: execCb } = await import("child_process");
+          const { promisify } = await import("util");
+          const execAsync = promisify(execCb);
+          const { stdout } = await execAsync(
+            `grep -rn --include='${globFilter}' '${pattern.replace(/'/g, "'\\''")}' ${SANDBOX_MOUNT}/apps/ ${SANDBOX_MOUNT}/packages/ 2>/dev/null | head -${max}`,
+            { timeout: 15_000 },
+          );
+          const cleaned = stdout.replace(new RegExp(SANDBOX_MOUNT + "/", "g"), "");
+          return { success: true, message: `Search results for "${pattern}"`, data: { pattern, results: cleaned } };
         } catch {
           return { success: true, message: `No matches found for "${pattern}"`, data: { pattern, results: "" } };
         }
@@ -2441,8 +2451,15 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (toolName === "list_sandbox_files") {
         const pattern = String(params.pattern ?? "**/*");
         try {
-          const result = await execInSandbox(sandboxId, `find /workspace -path '/workspace/node_modules' -prune -o -path '/workspace/.pnpm-store' -prune -o -path '/workspace/.next' -prune -o -path '${pattern.startsWith("/") ? pattern : `/workspace/${pattern}`}' -print 2>/dev/null | head -50`);
-          const cleaned = result.split("\n").map((l: string) => l.replace("/workspace/", "")).filter(Boolean).join("\n");
+          const { exec: execCb } = await import("child_process");
+          const { promisify } = await import("util");
+          const execAsync = promisify(execCb);
+          const findPattern = pattern.startsWith("/") ? pattern : `${SANDBOX_MOUNT}/${pattern}`;
+          const { stdout } = await execAsync(
+            `find ${SANDBOX_MOUNT} -path '${SANDBOX_MOUNT}/node_modules' -prune -o -path '${SANDBOX_MOUNT}/.pnpm-store' -prune -o -path '${SANDBOX_MOUNT}/.next' -prune -o -path '${findPattern}' -print 2>/dev/null | head -50`,
+            { timeout: 10_000 },
+          );
+          const cleaned = stdout.split("\n").map((l: string) => l.replace(`${SANDBOX_MOUNT}/`, "")).filter(Boolean).join("\n");
           return { success: true, message: `Files matching "${pattern}"`, data: { pattern, files: cleaned } };
         } catch {
           return { success: true, message: `No files matching "${pattern}"`, data: { pattern, files: "" } };
