@@ -67,6 +67,7 @@ export async function callWithFallbackChain(
   });
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
+  let rateLimitRetried = false;
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
@@ -140,6 +141,21 @@ export async function callWithFallbackChain(
           // EP-INF-004: Learn from response headers if available
           learnFromRateLimitResponse(entry.providerId, entry.modelId, e.headers);
 
+          // Wait-and-retry: if this is the selected (pinned) endpoint,
+          // wait for the rate limit to clear instead of falling through
+          // to an incompatible provider. Max 2 retries with backoff.
+          const retryMs = extractRetryAfterMs(e.headers) ?? 30_000;
+          const isSelectedEndpoint = i === 0;
+          if (isSelectedEndpoint && !rateLimitRetried) {
+            rateLimitRetried = true;
+            const waitMs = Math.min(retryMs, 60_000);
+            console.log(`[callWithFallbackChain] Rate limited on pinned provider ${entry.providerId}. Waiting ${waitMs / 1000}s before retry...`);
+            await new Promise(r => setTimeout(r, waitMs));
+            // Retry the same entry by decrementing i
+            i--;
+            continue;
+          }
+
           // EP-INF-004: Degrade the specific MODEL, not the provider
           await prisma.modelProfile
             .updateMany({
@@ -154,7 +170,6 @@ export async function callWithFallbackChain(
             );
 
           // EP-INF-004: Schedule auto-recovery
-          const retryMs = extractRetryAfterMs(e.headers) ?? 60_000;
           scheduleRecovery(entry.providerId, entry.modelId, retryMs);
 
         } else if (e.code === "model_not_found") {
