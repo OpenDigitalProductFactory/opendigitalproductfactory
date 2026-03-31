@@ -394,11 +394,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "read_sandbox_file",
-    description: "Read a file from the sandbox workspace. Returns contents with line numbers. Always read a file before editing it.",
+    description: "Read a file from the sandbox workspace. Returns contents with line numbers. Use offset and limit for large files. Always read a file before editing it.",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string", description: "File path relative to workspace root, e.g. apps/web/lib/actions/crm.ts" },
+        offset: { type: "number", description: "Start reading from this line number (1-based). Omit to read from beginning." },
+        limit: { type: "number", description: "Maximum number of lines to read. Omit to read entire file. Use for large files." },
       },
       required: ["path"],
     },
@@ -423,13 +425,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "edit_sandbox_file",
-    description: "Make a surgical edit to an existing file in the sandbox. Provide the exact old text and the new replacement text. The old text must match exactly one location in the file.",
+    description: "Make a surgical edit to an existing file in the sandbox. Provide the exact old text and the new replacement text. By default old_text must match exactly one location. Set replace_all to true to replace every occurrence (useful for renaming).",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string", description: "File path relative to workspace root" },
-        old_text: { type: "string", description: "The exact text to find and replace (must be unique in the file)" },
+        old_text: { type: "string", description: "The exact text to find and replace" },
         new_text: { type: "string", description: "The replacement text" },
+        replace_all: { type: "boolean", description: "Replace all occurrences instead of requiring a unique match. Default: false." },
       },
       required: ["path", "old_text", "new_text"],
     },
@@ -2310,9 +2313,23 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       // ── Dispatch to specific tool ──
       if (toolName === "read_sandbox_file") {
         const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
+        const offset = params.offset ? Number(params.offset) : undefined;
+        const limit = params.limit ? Number(params.limit) : undefined;
         try {
-          const content = await execInSandbox(sandboxId, `cat -n '/workspace/${filePath}'`);
-          return { success: true, message: `File: ${filePath}`, data: { path: filePath, content } };
+          let cmd = `cat -n '/workspace/${filePath}'`;
+          if (offset && limit) {
+            cmd = `sed -n '${offset},${offset + limit - 1}p' '/workspace/${filePath}' | cat -n`;
+            // Adjust line numbers to reflect actual file position
+            cmd = `awk 'NR>=${offset} && NR<${offset + limit} { printf "%6d\\t%s\\n", NR, $0 }' '/workspace/${filePath}'`;
+          } else if (offset) {
+            cmd = `awk 'NR>=${offset} { printf "%6d\\t%s\\n", NR, $0 }' '/workspace/${filePath}'`;
+          } else if (limit) {
+            cmd = `head -${limit} '/workspace/${filePath}' | cat -n`;
+          }
+          const content = await execInSandbox(sandboxId, cmd);
+          const lineCount = content.split("\n").filter(Boolean).length;
+          const rangeMsg = offset || limit ? ` (lines ${offset ?? 1}–${(offset ?? 1) + lineCount - 1})` : "";
+          return { success: true, message: `File: ${filePath}${rangeMsg}`, data: { path: filePath, content } };
         } catch {
           return { success: false, error: `File not found: ${filePath}`, message: `Could not read ${filePath}` };
         }
@@ -2341,17 +2358,19 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         const filePath = String(params.path ?? "").replace(/^\/?workspace\//, "");
         const oldText = String(params.old_text ?? "");
         const newText = String(params.new_text ?? "");
+        const replaceAll = params.replace_all === true;
         if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
         try {
           const current = await execInSandbox(sandboxId, `cat '/workspace/${filePath}'`);
           const occurrences = current.split(oldText).length - 1;
           if (occurrences === 0) return { success: false, error: `old_text not found in ${filePath}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
-          if (occurrences > 1) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique.` };
-          const updated = current.replace(oldText, newText);
+          if (occurrences > 1 && !replaceAll) return { success: false, error: `old_text matches ${occurrences} locations in ${filePath}. Provide more context to make it unique, or set replace_all: true.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique, or use replace_all.` };
+          const updated = replaceAll ? current.split(oldText).join(newText) : current.replace(oldText, newText);
           const encoded = Buffer.from(updated).toString("base64");
           await execInSandbox(sandboxId, `echo ${encoded} | base64 -d > '/workspace/${filePath}'`);
-          logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}`);
-          return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars.`, data: { path: filePath } };
+          const countMsg = replaceAll ? ` (${occurrences} occurrences)` : "";
+          logBuildActivity(buildId, "edit_sandbox_file", `Edited ${filePath}${countMsg}`);
+          return { success: true, message: `Edited ${filePath}: replaced ${oldText.length} chars with ${newText.length} chars${countMsg}.`, data: { path: filePath, replacements: replaceAll ? occurrences : 1 } };
         } catch (err) {
           return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${filePath}` };
         }
