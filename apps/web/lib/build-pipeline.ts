@@ -233,23 +233,30 @@ async function stepInitDb(
   } = await import("./sandbox-db");
   const { execInSandbox } = await import("./sandbox");
 
-  // Wait for all three databases to become ready in parallel.
+  // Pool sandboxes use a shared sandbox-postgres managed by compose.
+  // Per-build DB containers are only created for dynamic sandboxes.
+  const dbContainer = state.dbContainerId ?? "dpf-sandbox-postgres-1";
+  const neo4jContainer = state.neo4jContainerId ?? "dpf-neo4j-1";
+  const qdrantContainer = state.qdrantContainerId ?? "dpf-qdrant-1";
+
+  // Wait for databases to become ready in parallel.
   await Promise.all([
-    waitForSandboxDb(state.dbContainerId!),
-    waitForSandboxNeo4j(state.neo4jContainerId!),
-    waitForSandboxQdrant(state.qdrantContainerId!),
+    waitForSandboxDb(dbContainer),
+    waitForSandboxNeo4j(neo4jContainer),
+    waitForSandboxQdrant(qdrantContainer),
   ]);
 
-  // Run prisma migrate deploy inside the app container.
+  // Run prisma migrate deploy inside the sandbox container.
+  // The sandbox has DATABASE_URL pointing to its own postgres.
   await execInSandbox(
     state.containerId!,
     "cd /workspace && pnpm --filter @dpf/db exec prisma migrate deploy",
   );
 
-  // Seed with a copy of production data.
+  // Seed sandbox DB with a copy of production data.
   const productionDbContainer =
-    process.env.DPF_PRODUCTION_DB_CONTAINER ?? "opendigitalproductfactory-postgres-1";
-  await seedSandboxDb(productionDbContainer, state.dbContainerId!);
+    process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1";
+  await seedSandboxDb(productionDbContainer, dbContainer);
 
   return state;
 }
