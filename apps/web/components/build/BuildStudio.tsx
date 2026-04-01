@@ -25,6 +25,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [buildView, setBuildView] = useState<"preview" | "docs">("preview");
   const isDevEnvironment = dpfEnvironment === "dev";
 
   useEffect(() => {
@@ -223,23 +224,52 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 </div>
               </div>
 
-              <div className="flex-1 flex p-4 gap-4">
-                {activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship" ? (
-                  <SandboxPreview
-                    buildId={activeBuild.buildId}
-                    phase={activeBuild.phase}
-                    sandboxPort={activeBuild.sandboxPort}
-                  />
-                ) : (
-                  <div className="flex-1">
-                    <FeatureBriefPanel
-                      brief={activeBuild.brief}
-                      phase={activeBuild.phase}
-                      diffSummary={activeBuild.diffSummary}
-                      build={activeBuild}
-                    />
+              <div className="flex-1 flex flex-col">
+                {/* Tab selector — only show when sandbox is available */}
+                {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
+                  <div className="flex gap-1 px-4 pt-3 pb-0">
+                    <button
+                      onClick={() => setBuildView("preview")}
+                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors"
+                      style={{
+                        background: buildView === "preview" ? "var(--dpf-surface-2)" : "transparent",
+                        color: buildView === "preview" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                        borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                      }}
+                    >
+                      Live Preview
+                    </button>
+                    <button
+                      onClick={() => setBuildView("docs")}
+                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors"
+                      style={{
+                        background: buildView === "docs" ? "var(--dpf-surface-2)" : "transparent",
+                        color: buildView === "docs" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                        borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                      }}
+                    >
+                      Build Details
+                    </button>
                   </div>
                 )}
+                <div className="flex-1 flex p-4 gap-4">
+                  {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
+                    <SandboxPreview
+                      buildId={activeBuild.buildId}
+                      phase={activeBuild.phase}
+                      sandboxPort={activeBuild.sandboxPort}
+                    />
+                  ) : (
+                    <div className="flex-1">
+                      <FeatureBriefPanel
+                        brief={activeBuild.brief}
+                        phase={activeBuild.phase}
+                        diffSummary={activeBuild.diffSummary}
+                        build={activeBuild}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           ) : (
