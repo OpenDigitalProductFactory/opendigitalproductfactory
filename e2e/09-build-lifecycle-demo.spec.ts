@@ -14,6 +14,7 @@ import {
   approveAllProposals,
   waitForCoworkerIdle,
   extractBuildId,
+  extractLastResponse,
 } from "./helpers";
 
 const FEATURE_TITLE = "Customer Complaint Tracker";
@@ -137,7 +138,7 @@ async function waitForPhase(
 
 test.describe("Build Studio Lifecycle Demo", () => {
   test("full feature build: create, design, plan, build, deploy, verify", async ({ page }) => {
-    test.setTimeout(1_500_000); // 25 minutes — AI interactions + sandbox ops take time
+    test.setTimeout(2_100_000); // 35 minutes — AI interactions + ship phase tool chain
 
     // ━━━ Step 1: Login & Navigate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("\n=== STEP 1: Login ===");
@@ -339,42 +340,43 @@ test.describe("Build Studio Lifecycle Demo", () => {
     // ━━━ Step 7: Ship ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("\n=== SHIP PHASE ===");
 
-    // Step 7a: deploy_feature
+    // Ship phase: tell the AI to run the full ship sequence.
+    // The AI will propose deploy_feature → register_digital_product → create_build_epic → execute_promotion.
+    // Each proposal gets auto-approved, and the auto-follow-up "I approved X. What's next?" drives the chain.
     response = await sendAndRead(page,
-      "Ship this feature. Start by calling deploy_feature to extract the sandbox diff.",
-      "ship:deploy",
-      180_000,
+      "Ship this feature now. Run the full ship sequence: " +
+      "1) deploy_feature to extract the diff, " +
+      "2) register_digital_product_from_build with name 'Customer Complaint Tracker' and portfolioSlug 'default', " +
+      "3) create_build_epic for backlog tracking, " +
+      "4) execute_promotion to deploy to production. " +
+      "Start with deploy_feature now.",
+      "ship:start",
+      300_000,
     );
 
-    if (!didComplete(response, ["diff", "extracted", "deploy_feature", "deployment window", "deploy"])) {
-      console.log("[ship] deploy_feature not confirmed, retrying...");
-      response = await sendAndRead(page,
-        "Call the deploy_feature tool now.",
-        "ship:deploy-retry",
-        180_000,
-      );
+    // The AI may need multiple turns to complete the ship sequence.
+    // Keep approving proposals and reading responses until done or timeout.
+    for (let shipStep = 0; shipStep < 8; shipStep++) {
+      const approved = await approveAllProposals(page, 300_000);
+      if (approved === 0) {
+        // No proposals — AI may have finished or need prompting
+        if (didComplete(response, ["promoted", "deployed", "promotion complete", "production"])) {
+          console.log("[ship] Ship sequence complete!");
+          break;
+        }
+        // Ask AI to continue
+        response = await sendAndRead(page,
+          "Continue the ship sequence. What's the next step?",
+          `ship:step${shipStep}`,
+          300_000,
+        );
+      } else {
+        // Proposals approved — wait for follow-up response
+        await waitForCoworkerIdle(page, 300_000);
+        response = await extractLastResponse(page);
+        console.log(`[ship:step${shipStep}] Approved ${approved}, response: ${response.slice(0, 200)}`);
+      }
     }
-
-    // Step 7b: register_digital_product_from_build
-    response = await sendAndRead(page,
-      "Now call register_digital_product_from_build with name 'Customer Complaint Tracker' and portfolioSlug 'default'.",
-      "ship:register",
-      180_000,
-    );
-
-    // Step 7c: create_build_epic
-    response = await sendAndRead(page,
-      "Now call create_build_epic to create the backlog epic for this feature.",
-      "ship:epic",
-      120_000,
-    );
-
-    // Step 7d: execute_promotion
-    response = await sendAndRead(page,
-      "Now call execute_promotion with the promotion ID to deploy to production.",
-      "ship:promote",
-      180_000,
-    );
 
     await page.screenshot({ path: "e2e-report/demo-10-shipped.png" });
 
