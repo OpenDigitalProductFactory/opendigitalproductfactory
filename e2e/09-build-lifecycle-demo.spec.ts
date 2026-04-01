@@ -43,6 +43,18 @@ function didComplete(response: string, keywords: string[]): boolean {
 }
 
 async function getCurrentPhase(page: import("@playwright/test").Page): Promise<string> {
+  // The server-side agentic loop may auto-advance phases without the UI knowing.
+  // Reload to get fresh phase data, then re-select the active build.
+  await page.reload({ waitUntil: "networkidle", timeout: 15_000 }).catch(() => {});
+  await page.waitForTimeout(1_000);
+
+  // After reload, click the build tab to re-enter the build (shows phase indicator)
+  const buildTab = page.locator('button').filter({ hasText: /FB-/ }).first();
+  if (await buildTab.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await buildTab.click();
+    await page.waitForTimeout(1_500);
+  }
+
   return page.evaluate(() => {
     const indicator = document.querySelector('[data-testid="phase-indicator"]');
     return indicator?.getAttribute("data-current-phase") ?? "unknown";
