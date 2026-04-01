@@ -924,12 +924,12 @@ async function ensureBuildStudioModelConfig(): Promise<void> {
   }
 
   if (haiku30 && haiku45) {
-    // Demote 3.0 when 4.5 is available — 3.0 can't orchestrate tools
+    // Disable 3.0 when 4.5 is available — 3.0 returns empty via OAuth subscription
     await prisma.modelProfile.update({
       where: { id: haiku30.id },
-      data: { modelStatus: "degraded" },
+      data: { modelStatus: "disabled" },
     });
-    console.log("  Haiku 3.0 set to degraded (cannot orchestrate tools)");
+    console.log("  Haiku 3.0 disabled (returns empty via OAuth subscription)");
   }
 
   console.log("Ensured Build Studio model configuration");
