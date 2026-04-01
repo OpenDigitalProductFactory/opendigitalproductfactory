@@ -156,7 +156,9 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
 }
 
 export async function execInSandbox(containerId: string, command: string): Promise<string> {
-  const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(command)}`);
+  const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(command)}`, {
+    maxBuffer: 10 * 1024 * 1024, // 10MB — git diffs can be large
+  });
   return stdout;
 }
 
