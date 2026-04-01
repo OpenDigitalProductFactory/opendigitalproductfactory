@@ -137,26 +137,20 @@ CREATE INDEX "PhaseHandoff_buildId_idx" ON "PhaseHandoff"("buildId");
 
 #### Authority Resolution
 
-When an AI Coworker proposes an action that requires human approval, the system must resolve **who** needs to approve it. The resolution follows this chain:
+**Design Decision (2026-04-01):** The platform targets small businesses where the highest authority is easily identifiable — typically the business owner or CEO. Approval routes to that person, not through a multi-level chain.
+
+When an AI Coworker needs human approval, the system resolves **who** by finding the highest-authority employee on the platform:
 
 ```
-1. Tool → required grant → authority domain
-2. Authority domain → responsible role (BusinessModelRole with matching authorityDomain)
-3. Responsible role → assigned employee (EmployeeProfile with matching position/department)
-4. If no employee assigned → escalate to role.escalatesTo
-5. If escalation target also unassigned → escalate to HR-000 (CEO)
+1. Find the platform's highest authority:
+   - EmployeeProfile with platformRole = "HR-000" (CEO/Owner)
+   - If multiple: the one who set up the platform (first admin)
+   - If none configured: the currently logged-in user (self-approval)
+2. For domain-specific actions, prefer the domain authority if one exists:
+   - Deployment → HR-500 if assigned, else fall back to HR-000
+   - Finance → by ApprovalRule threshold, else fall back to HR-000
+3. Emergency: always HR-000 directly
 ```
-
-##### Authority Domain Mapping
-
-| Action Category | Authority Domain | Default HR Role | Agent Escalation |
-|----------------|-----------------|-----------------|------------------|
-| Code promotion (deploy_feature, execute_promotion) | `deployment` | HR-500 | AGT-ORCH-400 → HR-500 |
-| Release management (create_release_bundle, schedule_promotion) | `release` | HR-100 | AGT-ORCH-500 → HR-100 |
-| Backlog changes (create_backlog_item, update_backlog_item) | `operations` | HR-200 | AGT-ORCH-300 → HR-200 |
-| Policy changes (propose_leave_policy) | `policy` | HR-000 | AGT-ORCH-000 → HR-000 |
-| Financial approvals (bill approval, expense claims) | `finance` | By ApprovalRule threshold | Manager chain |
-| Emergency changes | `deployment` + `emergency` | HR-500, CC HR-000 | Immediate escalation |
 
 ##### Implementation: `resolveApprovalAuthority()`
 
@@ -169,11 +163,10 @@ interface ApprovalAuthority {
   authorityDomain: string;         // Why they're the authority
   reachability: {
     onPlatform: boolean;           // Logged in within last 30 minutes
-    workEmail: string | null;      // For email notification
-    personalEmail: string | null;  // For urgent/emergency fallback
-    phoneNumber: string | null;    // For emergency escalation
+    workEmail: string | null;
+    personalEmail: string | null;
+    phoneNumber: string | null;
   };
-  escalationChain: string[];       // Ordered list of fallback employee IDs
   urgencyLevel: "standard" | "urgent" | "emergency";
 }
 
@@ -184,19 +177,85 @@ async function resolveApprovalAuthority(
 ): Promise<ApprovalAuthority>
 ```
 
-#### Engagement Channels (Escalating Urgency)
+#### Change Impact Analysis
 
-When the AI needs human approval, it doesn't just create a database record — it actively reaches out through escalating channels:
+**Design Decision (2026-04-01):** Every promotion requires a change impact analysis before approval. This is standard ITSM practice and must be part of the RFC lifecycle.
+
+The impact analysis is generated automatically when `deploy_feature` extracts the diff:
 
 ```
-Tier 1 (Standard) — In-app notification + deepLink
-  ↓ No response in 15 minutes
-Tier 2 (Urgent) — Email to work address
-  ↓ No response in 30 minutes
-Tier 3 (Emergency) — Email to personal address + SMS/webhook
-  ↓ No response in 15 minutes
-Tier 4 (Critical) — Phone call trigger + escalate to next authority
+1. Parse the diff to identify:
+   - New routes (pages users will see)
+   - Modified routes (existing pages that change)
+   - Schema changes (database migrations)
+   - Deleted files (features being removed)
+
+2. Resolve impacted users:
+   - New routes → no existing users impacted (net new functionality)
+   - Modified routes → query which user roles access those routes
+   - Schema changes → identify which features depend on changed models
+   - Deleted files → identify users of removed functionality
+
+3. Generate impact report:
+   - Blast radius: number of impacted users/roles
+   - Risk assessment: low (new only) / medium (modifications) / high (deletions + schema)
+   - Rollback complexity: simple (code only) / complex (schema migration)
+
+4. Notify impacted users:
+   - In-app notification: "A change to [feature] is scheduled for deployment"
+   - For high-impact changes: AI Coworker relays the impact summary to the authority
 ```
+
+The impact report is stored on the RFC (`ChangeRequest.impactReport`) and presented to the approving authority alongside the approval request.
+
+#### The AI Chat as Primary Communication Channel
+
+**Design Decision (2026-04-01):** The AI Coworker chat panel is the primary interface between humans and the AI workforce. There is no separate agent panel or avatar switch when a different specialist agent is involved.
+
+When the operations agent needs human approval, the flow is:
+
+```
+1. Build-specialist (Software Engineer) completes the build
+2. Operations agent determines approval is needed
+3. The CURRENT AI Coworker relays the message to the user:
+
+   "The Customer Complaint Tracker is ready to ship. I've prepared the
+   deployment with the operations team. Here's what needs approval:
+
+   Impact Analysis:
+   - 1 new page: /complaints (customer case management)
+   - 0 schema changes, 0 migrations
+   - Risk: low (new functionality only, no existing features affected)
+   - Rollback: simple (remove one file)
+
+   This needs approval from [CEO Name] before I can deploy.
+   [Approve] [Reject] [Schedule for Later]"
+
+4. If the approver IS the current user → they approve right in the chat
+5. If the approver is someone ELSE → the AI Coworker explains:
+
+   "I need [CEO Name] to approve this deployment. They're not currently
+   on the platform. I'll reach out to them now.
+   
+   Priority: on-platform notification first, then [configured channel]."
+```
+
+No new avatar, no agent switching visible to the user. The AI Coworker is the single voice that coordinates between specialist agents internally.
+
+#### Engagement Channels (Priority Order)
+
+**Design Decision (2026-04-01):** Channel priority follows: on-platform first, real-time messaging second, asynchronous third.
+
+```
+Priority 1 (On-Platform) — AI Coworker chat message + in-app notification with deepLink
+  ↓ Authority not on platform (no session in last 30 min)
+Priority 2 (Real-Time) — Slack/Teams message or SMS
+  ↓ No real-time channel configured or no response in 15 min
+Priority 3 (Async) — Email to work address
+  ↓ Emergency only: email to personal address
+```
+
+For emergency changes, all configured channels fire simultaneously.
 
 ##### Channel Configuration
 
@@ -206,8 +265,8 @@ New model `NotificationChannel` to configure per-employee outbound channels:
 NotificationChannel {
   id: cuid
   employeeId: FK to EmployeeProfile
-  channelType: "email" | "sms" | "slack" | "teams" | "webhook" | "phone"
-  address: String              // email address, phone number, webhook URL, Slack user ID
+  channelType: "slack" | "teams" | "sms" | "email" | "webhook"
+  address: String              // Slack user ID, phone number, email, webhook URL
   priority: Int                // 1 = primary, 2 = fallback
   enabledForUrgency: String[]  // ["standard", "urgent", "emergency"]
   verified: Boolean            // Has the channel been confirmed working?
@@ -220,14 +279,14 @@ NotificationChannel {
 
 Each channel type has an adapter in `apps/web/lib/notification-channels/`:
 
-| Channel | Adapter | Dependencies | Config |
-|---------|---------|-------------|--------|
-| **Email** | `email-adapter.ts` | nodemailer (existing) | SMTP settings in .env |
-| **SMS** | `sms-adapter.ts` | Twilio SDK or generic HTTP webhook | `TWILIO_SID`, `TWILIO_TOKEN` in .env |
-| **Slack** | `slack-adapter.ts` | Slack Web API or incoming webhook | `SLACK_WEBHOOK_URL` in .env |
-| **Teams** | `teams-adapter.ts` | Microsoft Teams incoming webhook | `TEAMS_WEBHOOK_URL` in .env |
-| **Webhook** | `webhook-adapter.ts` | Generic HTTP POST | Per-employee webhook URL |
-| **Phone** | `phone-adapter.ts` | Twilio Voice or PagerDuty | `TWILIO_SID` or `PAGERDUTY_KEY` |
+| Priority | Channel | Adapter | Dependencies |
+| -------- | ------- | ------- | ------------ |
+| 1 | **On-platform** | Built-in (Notification model + AI Coworker relay) | None |
+| 2 | **Slack** | `slack-adapter.ts` | Incoming webhook URL |
+| 2 | **Teams** | `teams-adapter.ts` | Incoming webhook URL |
+| 2 | **SMS** | `sms-adapter.ts` | Twilio or webhook |
+| 3 | **Email** | `email-adapter.ts` | nodemailer (existing) |
+| 3 | **Webhook** | `webhook-adapter.ts` | Generic HTTP POST |
 
 Each adapter implements:
 
@@ -239,7 +298,7 @@ interface NotificationChannelAdapter {
     body: string;
     urgency: "standard" | "urgent" | "emergency";
     deepLink: string;          // URL to approve/reject in the platform
-    replyOptions?: string[];   // For channels that support quick replies (Slack buttons, etc.)
+    impactSummary: string;     // One-line blast radius summary
   }): Promise<{ sent: boolean; messageId?: string; error?: string }>;
 }
 ```
@@ -251,32 +310,46 @@ When an AI Coworker proposes an action requiring human approval:
 ```
 1. AI calls tool (e.g., execute_promotion)
 2. Tool handler checks: does this require human approval?
-   - Check DelegationGrant: does the agent have a valid, unexpired grant for this action?
-   - Check HITL tier: is the agent's tier ≥ the action's required tier?
+   - Check DelegationGrant: does the agent have a valid, unexpired grant?
    - If grant exists and valid → proceed (delegated authority)
    - If no grant → create ApprovalRequest
 
-3. Create ApprovalRequest:
-   a. resolveApprovalAuthority() → finds the right human
-   b. Create Notification (in-app) with deepLink to approval page
-   c. Check reachability:
-      - If onPlatform → done (notification visible)
-      - If not onPlatform → send via configured channels (email, Slack, etc.)
-   d. Start escalation timer
+3. Run change impact analysis:
+   a. Parse diff for new/modified/deleted routes and schema changes
+   b. Resolve impacted users by role
+   c. Generate impact report (blast radius, risk, rollback complexity)
+   d. Store on RFC (ChangeRequest.impactReport)
 
-4. AI responds to user: "I've requested approval from [Name] ([Role]).
-   They've been notified via [channel]. Expected response time: [based on urgency]."
+4. Resolve approval authority:
+   a. resolveApprovalAuthority() → finds highest authority (typically CEO/Owner)
+   b. Check: is the authority the CURRENT user?
+      - YES → present approval card in the AI chat with impact analysis
+      - NO → continue to notification
 
-5. Approval arrives:
-   - Human clicks deepLink → reviews action → approves/rejects
-   - Or: human replies via channel (Slack button, email reply) → webhook processes response
+5. Notify authority (priority order):
+   a. In-app notification + AI Coworker relay message
+   b. Check reachability (session active in last 30 min?)
+      - On platform → done (they'll see it in their AI chat)
+      - Off platform → send via real-time channel (Slack/Teams/SMS)
+      - No real-time configured → send email
+   c. For emergencies → all channels simultaneously
+
+6. Notify impacted users:
+   a. All users whose routes/features are affected get an in-app notification
+   b. "A change to [feature] is scheduled — you may see brief downtime"
+
+7. AI Coworker tells the requesting user:
+   "[CEO Name] needs to approve this. They're [on the platform / being
+   notified via Slack]. Here's the impact analysis while we wait: ..."
+
+8. Approval arrives:
+   - Authority approves in AI chat or via deepLink
    - ApprovalRequest status updated
-   - AI is notified → continues or aborts based on decision
+   - AI Coworker continues the ship sequence
 
-6. Escalation (if no response):
-   - Timer fires → escalate to next authority in chain
-   - Repeat notification via higher-urgency channels
-   - After full chain exhausted → notify AI of timeout, suggest retry or manual intervention
+9. Escalation (if no response in configured timeframe):
+   - AI Coworker informs user: "Still waiting for approval. Want me to
+     try another channel or mark this as urgent?"
 ```
 
 #### Emergency Path
@@ -285,13 +358,12 @@ For emergency changes (production outage, security incident):
 
 1. AI detects urgency from user context ("production is down", "security breach")
 2. `changeType` set to `emergency`
-3. Authority resolution uses emergency escalation:
-   - Primary: HR-500 (Deploy/Ops Lead)
-   - CC: HR-000 (CEO)
-   - Channels: ALL configured channels simultaneously (not tiered)
-4. RFC enters at `in-progress` — execution begins immediately
-5. Retrospective approval required within 24 hours
-6. If not retrospectively approved → auto-created incident report for governance review
+3. Authority resolution: HR-000 (CEO/Owner) directly
+4. ALL configured notification channels fire simultaneously
+5. AI Coworker in chat: "Emergency deployment initiated. [CEO Name] notified on all channels. Executing now — retrospective approval required within 24 hours."
+6. RFC enters at `in-progress` — execution begins immediately
+7. Retrospective approval required within 24 hours
+8. If not retrospectively approved → auto-created incident report for governance review
 
 ### Part 3: Build Studio Integration
 
@@ -300,20 +372,20 @@ For emergency changes (production outage, security incident):
 When `advanceBuildPhase()` is called for review → ship:
 
 ```
-1. Write PhaseHandoff document (from review agent to ship agent)
-2. Check: does this transition require human approval?
-   - review → ship with risk > low → YES
-   - review → ship with standard change catalog match → NO (pre-approved)
-3. If approval required:
-   a. resolveApprovalAuthority("deployment", changeType, riskLevel)
-   b. Create ApprovalRequest
-   c. Notify authority via configured channels
-   d. Phase stays at review until approved
-   e. AI tells user: "Waiting for [Name] to approve the deployment"
-4. If approved (or pre-approved):
+1. Write PhaseHandoff document (structured summary of review phase)
+2. Run change impact analysis on the extracted diff
+3. Check: does this transition require human approval?
+   - ALL promotions require approval (the platform authority must sign off)
+   - Standard change catalog match → present for acknowledgment, not full review
+4. The AI Coworker presents the impact analysis and approval request:
+   - If approver is the current user → approval card in chat
+   - If approver is someone else → notify via configured channels
+5. Phase stays at review until approved
+6. On approval:
    a. Phase advances to ship
-   b. Ship agent receives PhaseHandoff context
-   c. Ship agent has focused tool set (deploy, register, promote)
+   b. Impacted users notified
+   c. Ship tools become available
+   d. AI Coworker continues with deployment sequence
 ```
 
 #### UX Surface for New Functionality
@@ -322,7 +394,7 @@ When a build creates new pages or UI components, the ship phase must surface thi
 
 1. Parse new route files from the diff (e.g., `app/(shell)/complaints/page.tsx`)
 2. Register them as navigation candidates in the platform menu system
-3. The ship agent proposes menu placement to the user: "This feature adds a /complaints page. Where should it appear in navigation? Under Customer? As a top-level item?"
+3. The AI Coworker proposes menu placement to the user: "This feature adds a /complaints page. Where should it appear in navigation? Under Customer? As a top-level item?"
 4. User approves placement → menu updated as part of the promotion
 
 This ensures no feature ships without being discoverable in the UX.
@@ -339,25 +411,26 @@ This ensures no feature ships without being discoverable in the UX.
 | 4 | Read PhaseHandoff in agentic loop, inject into system prompt | `apps/web/lib/agentic-loop.ts` |
 | 5 | Add PhaseHandoff to Build Studio evidence panel | `apps/web/components/build/EvidenceSummary.tsx` |
 
-### Phase 2b: Human Authority Resolution (Medium Risk)
+### Phase 2b: Change Impact Analysis + Authority Resolution (Medium Risk)
 
 | Step | Task | Files |
 |------|------|-------|
-| 1 | Create `resolveApprovalAuthority()` | `apps/web/lib/approval-authority.ts` (new) |
-| 2 | Add NotificationChannel model to schema | `packages/db/prisma/schema.prisma` |
-| 3 | Create migration | `packages/db/prisma/migrations/` |
-| 4 | Implement channel adapters (email first, then webhook) | `apps/web/lib/notification-channels/` (new) |
-| 5 | Wire approval check into `advanceBuildPhase()` for review→ship | `apps/web/lib/actions/build.ts` |
-| 6 | Create approval request UI (approve/reject via deepLink) | `apps/web/app/(shell)/ops/approvals/` (new) |
+| 1 | Create `analyzeChangeImpact()` — parse diff, resolve impacted users | `apps/web/lib/change-impact.ts` (new) |
+| 2 | Create `resolveApprovalAuthority()` — find highest platform authority | `apps/web/lib/approval-authority.ts` (new) |
+| 3 | Wire impact analysis into `deploy_feature` tool handler | `apps/web/lib/mcp-tools.ts` |
+| 4 | Present approval card in AI Coworker chat with impact summary | `apps/web/lib/actions/agent-coworker.ts` |
+| 5 | Store impact report on RFC | `apps/web/lib/actions/change-management.ts` |
 
-### Phase 2c: Engagement Escalation (Medium Risk)
+### Phase 2c: Notification Channels (Medium Risk)
 
 | Step | Task | Files |
 |------|------|-------|
-| 1 | Implement escalation timer (cron or setTimeout in server action) | `apps/web/lib/approval-escalation.ts` (new) |
-| 2 | Wire escalation into notification flow | `apps/web/lib/notification-channels/dispatcher.ts` (new) |
-| 3 | Add emergency path (simultaneous all-channel notification) | Same dispatcher |
-| 4 | Retrospective approval enforcement | `apps/web/lib/actions/change-management.ts` |
+| 1 | Add NotificationChannel model to schema + migration | `packages/db/prisma/schema.prisma` |
+| 2 | Implement on-platform relay (AI Coworker message to authority's chat) | `apps/web/lib/notification-channels/platform-relay.ts` (new) |
+| 3 | Implement Slack/Teams webhook adapter | `apps/web/lib/notification-channels/realtime-adapter.ts` (new) |
+| 4 | Implement email adapter (extend existing nodemailer) | `apps/web/lib/notification-channels/email-adapter.ts` (new) |
+| 5 | Implement channel dispatcher with priority logic | `apps/web/lib/notification-channels/dispatcher.ts` (new) |
+| 6 | Add impacted-user notification on promotion approval | `apps/web/lib/actions/promotions.ts` |
 
 ### Phase 2d: UX Surface Discovery (Low Risk)
 
@@ -371,16 +444,23 @@ This ensures no feature ships without being discoverable in the UX.
 
 1. Phase transitions produce a PhaseHandoff document visible in the Build Studio evidence panel
 2. Next-phase agents receive structured context instead of full chat history
-3. Promotion requests notify the designated authority via at least one out-of-band channel
-4. Emergency promotions trigger simultaneous all-channel notification
-5. Approvals can be completed via deepLink without logging into the full platform
-6. No feature ships without a proposed UX navigation placement
-7. Full audit trail in AuthorizationDecisionLog for every approval decision
+3. Every promotion includes a change impact analysis (blast radius, impacted users, risk level)
+4. Impacted users are notified before deployment
+5. The AI Coworker presents approval requests with impact summaries — no separate approval UI needed
+6. Off-platform authorities are reached via real-time channels first, async second
+7. Emergency changes trigger simultaneous all-channel notification with retrospective approval
+8. No feature ships without a proposed UX navigation placement
+9. Full audit trail in AuthorizationDecisionLog for every approval decision
+
+## Resolved Design Decisions
+
+1. **Approval authority** — Routes to the highest authority on the platform (CEO/Owner for small businesses). Domain-specific authorities (HR-500 for deploy) are preferred when assigned, but fall back to HR-000. No multi-level chain for small business context.
+2. **Agent-to-agent handoff UX** — No avatar switch. The current AI Coworker relays messages from specialist agents. The chat panel is the single interface between the human world and the AI workforce.
+3. **Channel priority** — On-platform first (AI chat + notification), real-time messaging second (Slack/Teams/SMS), asynchronous third (email). Emergency = all simultaneously.
+4. **Change impact analysis** — Required for every promotion. Standard ITSM practice. Impacted users notified.
 
 ## Open Questions
 
-1. **Multi-approver CAB** — should critical/high-risk changes require quorum approval (2 of 3 authorities)? The ChangeApproval junction model was planned but not built.
-2. **Channel verification** — how do we verify a Slack webhook or phone number is correct before relying on it for emergencies?
-3. **Offline approval** — can a human approve via email reply (e.g., reply "APPROVE" to an email)? This requires inbound email parsing or a reply-to webhook.
-4. **Agent-to-agent handoff UX** — should the chat panel visually indicate when a different agent takes over? (New avatar, name, introduction message?)
-5. **Token budget tracking** — should each phase have a token budget limit that triggers escalation if exceeded?
+1. **Channel verification** — how do we verify a Slack webhook or phone number is correct before relying on it for emergencies?
+2. **Retrospective approval timeout** — if emergency approval isn't received within 24 hours, should the change auto-rollback or just flag for governance review?
+3. **Token budget tracking** — should each phase have a token budget limit that triggers escalation if exceeded?
