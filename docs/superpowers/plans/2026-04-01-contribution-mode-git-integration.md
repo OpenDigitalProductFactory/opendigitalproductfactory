@@ -300,7 +300,7 @@ feat(admin): add DCO acceptance, untracked count, and git remote URL actions
 
 - [ ] **Step 1: Add targetRemoteUrl to submitBuildAsPR**
 
-In `apps/web/lib/contribution-pipeline.ts`, update the `SubmitBuildAsPRInput` interface to add an optional `targetRemoteUrl`:
+In `apps/web/lib/contribution-pipeline.ts`, update the `SubmitBuildAsPRInput` interface to add fork-based PR support:
 
 ```typescript
 interface SubmitBuildAsPRInput {
@@ -311,16 +311,41 @@ interface SubmitBuildAsPRInput {
   impactReport: ChangeImpactReport | null;
   authorUserId: string;
   authorName: string;
-  targetRemoteUrl?: string;    // Override: use this URL instead of origin
+  forkRemoteUrl?: string;      // Push to this fork repo (user's gitRemoteUrl)
+  upstreamRemoteUrl?: string;  // Create PR targeting this upstream repo
   dcoSignoff?: string;         // Signed-off-by line for DCO
 }
 ```
 
-In the `submitBuildAsPR` function body, where it calls `parseGitHubRepo(remoteUrl)`, update to prefer `input.targetRemoteUrl` when provided:
+In the `submitBuildAsPR` function body, where it calls `parseGitHubRepo(remoteUrl)`, update to support fork-based cross-repo PRs:
 
 ```typescript
-    const remoteUrl = input.targetRemoteUrl ?? await getRemoteUrl();
-    const repo = remoteUrl ? parseGitHubRepo(remoteUrl) : null;
+    // Fork-based workflow: push to fork, PR targets upstream
+    const forkUrl = input.forkRemoteUrl ?? await getRemoteUrl();
+    const forkRepo = forkUrl ? parseGitHubRepo(forkUrl) : null;
+    const upstreamUrl = input.upstreamRemoteUrl;
+    const upstreamRepo = upstreamUrl ? parseGitHubRepo(upstreamUrl) : null;
+
+    // Use upstream for PR creation if both are configured (cross-fork PR)
+    // Otherwise fall back to same-repo PR on the fork
+    const prTargetRepo = upstreamRepo ?? forkRepo;
+    const repo = forkRepo; // Always push to fork
+```
+
+Update the `createGitHubPR` call to use `prTargetRepo` for the API call and set the `head` to reference the fork:
+
+```typescript
+    const prResult = await createGitHubPR({
+      owner: prTargetRepo!.owner,
+      repo: prTargetRepo!.repo,
+      title: prTitle,
+      body: prBody,
+      head: upstreamRepo
+        ? `${forkRepo!.owner}:${branchName}`  // Cross-fork: "fork-owner:branch"
+        : branchName,                          // Same-repo: just branch name
+      base: "main",
+      labels,
+    });
 ```
 
 And in the `generateCommitMessage` function, append the DCO signoff if provided:
@@ -378,7 +403,9 @@ In `apps/web/lib/mcp-tools.ts`, find the `contribute_to_hive` handler. After the
             impactReport: null,
             authorUserId: userId,
             authorName: displayName,
-            targetRemoteUrl: devConfig?.gitRemoteUrl ?? upstreamUrl,
+            // Fork-based: push to user's fork, PR targets upstream
+            forkRemoteUrl: devConfig?.gitRemoteUrl ?? undefined,
+            upstreamRemoteUrl: upstreamUrl,
             dcoSignoff,
           });
 
@@ -421,10 +448,11 @@ feat(build): extend contribute_to_hive to create upstream PRs with DCO attestati
 
 ---
 
-### Task 6: Git Backup for fork_only — isDevInstance Guard Relaxation
+### Task 6: Git Backup for fork_only
+
+**Note:** Rather than relaxing `isDevInstance()` guards across all git-utils.ts functions (which would weaken the safety barrier for all operations), this task creates a standalone `git-backup.ts` module that manages its own git operations specifically for the backup use case. This is a deliberate deviation from the spec's `isGitBackupAllowed()` approach — a dedicated module is safer than conditionally bypassing guards.
 
 **Files:**
-- Modify: `apps/web/lib/git-utils.ts` (lines 7, 304, 354, 372, 391 — isDevInstance guards)
 - Create: `apps/web/lib/git-backup.ts` (new — backup push logic)
 
 - [ ] **Step 1: Add isGitBackupAllowed function to git-utils.ts**
@@ -485,13 +513,18 @@ export async function backupPromotionToGit(input: {
     return { pushed: false, error: "No git remote URL configured" };
   }
 
-  // Look up the git credential
+  // Look up and decrypt the git credential (same pattern as ai-provider-internals.ts)
   const credential = await prisma.credentialEntry.findUnique({
     where: { providerId: "git-backup" },
     select: { secretRef: true, status: true },
   });
 
-  const token = credential?.secretRef ?? process.env.GITHUB_TOKEN;
+  let token: string | null = null;
+  if (credential?.secretRef) {
+    const { decryptSecret } = await import("@/lib/credential-crypto");
+    token = decryptSecret(credential.secretRef);
+  }
+  token = token ?? process.env.GITHUB_TOKEN ?? null;
   if (!token) {
     return { pushed: false, error: "No git credential configured for backup" };
   }
@@ -530,12 +563,17 @@ export async function backupPromotionToGit(input: {
       await exec("git add -A", { cwd: gitRoot, timeout });
       await exec(`git commit -m ${JSON.stringify(commitMsg)}`, { cwd: gitRoot, timeout });
 
-      // Push with token auth
-      const remoteUrl = config.gitRemoteUrl.replace(
-        /^https:\/\//,
-        `https://${token}@`,
-      );
-      await exec(`git push ${JSON.stringify(remoteUrl)} HEAD:main`, { cwd: gitRoot, timeout });
+      // Push with token auth via GIT_ASKPASS to avoid token in URLs/error messages
+      const askpassScript = `/tmp/dpf-askpass-${Date.now()}.sh`;
+      await writeFile(askpassScript, `#!/bin/sh\necho "${token}"`, { mode: 0o700 });
+      try {
+        await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {
+          cwd: gitRoot, timeout,
+          env: { ...process.env, GIT_ASKPASS: askpassScript, GIT_TERMINAL_PROMPT: "0" },
+        });
+      } finally {
+        try { await unlink(askpassScript); } catch { /* cleanup */ }
+      }
 
       // Record the commit hash on the build
       const { stdout } = await exec("git rev-parse HEAD", { cwd: gitRoot, timeout: 5000 });
@@ -643,6 +681,7 @@ Add state variables for git URL and DCO:
 
 ```typescript
 const [gitUrl, setGitUrl] = useState(props.gitRemoteUrl ?? "");
+const [gitToken, setGitToken] = useState("");
 const [showDcoDialog, setShowDcoDialog] = useState(false);
 ```
 
@@ -666,6 +705,23 @@ After the existing radio buttons section and before the Save button, add:
       Paste the URL of your git repository to back up customizations.
       See the setup guide for instructions on creating a repository and access token.
     </p>
+    {gitUrl && (
+      <>
+        <label className="block text-sm font-medium text-zinc-700 mt-3">
+          Access Token
+        </label>
+        <input
+          type="password"
+          value={gitToken}
+          onChange={(e) => setGitToken(e.target.value)}
+          placeholder="ghp_xxxxxxxxxxxx or personal access token"
+          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
+        />
+        <p className="text-xs text-zinc-500">
+          A personal access token with repo scope. This is stored encrypted.
+        </p>
+      </>
+    )}
     {props.untrackedFeatureCount != null && props.untrackedFeatureCount > 0 && !gitUrl && (
       <p className="text-sm text-amber-600">
         {props.untrackedFeatureCount} feature(s) deployed without version control backup.
@@ -794,7 +850,8 @@ export async function saveGitBackupCredential(token: string): Promise<void> {
   if (!session?.user?.id) throw new Error("Not authenticated");
 
   // Encrypt using the same mechanism as AI provider credentials
-  const { encryptSecret } = await import("@/lib/credential-encryption");
+  // Module: @/lib/credential-crypto (same as apps/web/lib/actions/ai-providers.ts)
+  const { encryptSecret } = await import("@/lib/credential-crypto");
   const encrypted = encryptSecret(token);
 
   await prisma.credentialEntry.upsert({
@@ -820,12 +877,6 @@ export async function hasGitBackupCredential(): Promise<boolean> {
   });
   return cred?.status === "active";
 }
-```
-
-Note: Check that `encryptSecret` exists in `@/lib/credential-encryption`. If a different encryption function is used for AI provider credentials, use that instead. Search for the existing pattern with:
-
-```bash
-grep -r "encryptSecret\|encrypt.*credential\|secretRef" apps/web/lib/ --include="*.ts" -l
 ```
 
 - [ ] **Step 2: Commit**
