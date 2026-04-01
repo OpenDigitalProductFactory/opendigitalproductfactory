@@ -388,6 +388,53 @@ When `advanceBuildPhase()` is called for review → ship:
    d. AI Coworker continues with deployment sequence
 ```
 
+#### PR-Based Contribution (Not Direct-to-Main)
+
+**Design Decision (2026-04-01):** No code goes directly to main. Every contribution — whether from a human developer or the Build Studio AI — must go through a pull request. This is non-negotiable for security, code quality, and architectural review.
+
+The current `promote.sh` pipeline extracts code from the sandbox and builds a new image directly. This must change to a PR-based flow:
+
+```
+Ship Phase (PR-Based):
+
+1. deploy_feature → extract diff from sandbox
+2. Create a feature branch:
+   - Branch name: build/{buildId}/{slugified-title}
+   - Commit the diff with structured commit message:
+     "feat({area}): {title}\n\nBuild: {buildId}\nProduct: {productId}\nAgent: {agentId}"
+3. Push branch to the git remote (origin)
+4. Create a Pull Request via git hosting API (GitHub, GitLab, etc.):
+   - Title: "feat: {feature title} (Build {buildId})"
+   - Body: impact analysis, acceptance criteria, evidence chain
+   - Labels: auto-generated (e.g., "ai-contributed", risk level)
+   - Reviewers: resolved authority from approval chain
+5. Security scan runs as PR check:
+   - Static analysis for injection vulnerabilities (SQL, XSS, command injection)
+   - Dependency audit (no new unvetted packages)
+   - Secret detection (no API keys, passwords in diff)
+   - Schema migration review (destructive ops flagged)
+6. Human authority reviews the PR:
+   - Code quality, architectural fit, security findings
+   - Can request changes → AI Coworker addresses them in sandbox, pushes update
+   - Approves → PR merged to main
+7. On merge:
+   - execute_promotion builds from the merged main branch
+   - Production image built from reviewed, merged code
+   - No unreviewed code reaches production
+```
+
+##### Why This Matters
+
+- **Security**: AI-generated code may have injection vulnerabilities, insecure patterns, or accidental secret exposure. PR review catches these.
+- **Architecture**: AI may create patterns that conflict with existing conventions. A human reviewer ensures consistency.
+- **Accountability**: Every line of production code has a human reviewer on record.
+- **Audit trail**: The PR is the change record — who wrote it, who reviewed it, what was discussed.
+
+##### Consumer Mode vs Development Mode
+
+- **Development mode** (H:\repo): PRs go to the project's GitHub/GitLab remote. Standard open-source contribution flow.
+- **Consumer mode** (D:\DPF): PRs go to a local git repo or a configured remote. If no remote is configured, the PR is "local-only" — the diff is presented to the authority in the AI Coworker chat for review, and the promotion applies the approved diff directly.
+
 #### UX Surface for New Functionality
 
 When a build creates new pages or UI components, the ship phase must surface this in the platform UX. The `deploy_feature` tool already extracts the diff — it should also:
@@ -401,15 +448,15 @@ This ensures no feature ships without being discoverable in the UX.
 
 ## Implementation Plan
 
-### Phase 2a: PhaseHandoff Document (Low Risk)
+### Phase 2a: PhaseHandoff Document (Low Risk) — IMPLEMENTED
 
-| Step | Task | Files |
-|------|------|-------|
-| 1 | Add PhaseHandoff model to Prisma schema | `packages/db/prisma/schema.prisma` |
-| 2 | Create migration | `packages/db/prisma/migrations/` |
-| 3 | Write PhaseHandoff on phase advance | `apps/web/lib/actions/build.ts` |
-| 4 | Read PhaseHandoff in agentic loop, inject into system prompt | `apps/web/lib/agentic-loop.ts` |
-| 5 | Add PhaseHandoff to Build Studio evidence panel | `apps/web/components/build/EvidenceSummary.tsx` |
+| Step | Task | Status |
+|------|------|--------|
+| 1 | Add PhaseHandoff model to Prisma schema | Done |
+| 2 | Create migration | Done |
+| 3 | Write PhaseHandoff on phase advance | Done |
+| 4 | Read PhaseHandoff in agentic loop, inject into system prompt | Done |
+| 5 | Add PhaseHandoff to Build Studio evidence panel | Done |
 
 ### Phase 2b: Change Impact Analysis + Authority Resolution (Medium Risk)
 
@@ -440,6 +487,18 @@ This ensures no feature ships without being discoverable in the UX.
 | 2 | Propose navigation placement as part of ship phase | `apps/web/lib/mcp-tools.ts` |
 | 3 | Register approved placement in menu configuration | `apps/web/lib/navigation-registry.ts` (new or existing) |
 
+### Phase 2e: PR-Based Contribution Pipeline (High Risk)
+
+| Step | Task | Files |
+|------|------|-------|
+| 1 | Create `submitBuildAsPR()` — branch, commit, push, open PR | `apps/web/lib/contribution-pipeline.ts` (new) |
+| 2 | Generate structured PR body (impact analysis, evidence, acceptance criteria) | Same file |
+| 3 | Add security scan as PR check (injection, secrets, deps) | `apps/web/lib/security-scan.ts` (new) |
+| 4 | Wire `deploy_feature` to create PR instead of direct promotion | `apps/web/lib/mcp-tools.ts` |
+| 5 | Handle PR review feedback loop (AI Coworker relays review comments, pushes fixes) | `apps/web/lib/actions/agent-coworker.ts` |
+| 6 | On merge: trigger `execute_promotion` from merged main branch | `apps/web/lib/actions/promotions.ts` |
+| 7 | Consumer mode fallback: local-only PR review in AI chat | `apps/web/lib/contribution-pipeline.ts` |
+
 ## Success Criteria
 
 1. Phase transitions produce a PhaseHandoff document visible in the Build Studio evidence panel
@@ -451,6 +510,8 @@ This ensures no feature ships without being discoverable in the UX.
 7. Emergency changes trigger simultaneous all-channel notification with retrospective approval
 8. No feature ships without a proposed UX navigation placement
 9. Full audit trail in AuthorizationDecisionLog for every approval decision
+10. **No code reaches production without a reviewed PR** — AI contributions go through the same review process as human contributions
+11. Security scan results are attached to every PR (injection, secrets, dependency audit)
 
 ## Resolved Design Decisions
 
@@ -458,6 +519,7 @@ This ensures no feature ships without being discoverable in the UX.
 2. **Agent-to-agent handoff UX** — No avatar switch. The current AI Coworker relays messages from specialist agents. The chat panel is the single interface between the human world and the AI workforce.
 3. **Channel priority** — On-platform first (AI chat + notification), real-time messaging second (Slack/Teams/SMS), asynchronous third (email). Emergency = all simultaneously.
 4. **Change impact analysis** — Required for every promotion. Standard ITSM practice. Impacted users notified.
+5. **PR-based contribution** — Every code change goes through a PR, never direct to main. Applies to AI-generated code and human contributions equally. Security scan mandatory. Consumer mode uses local-only review when no git remote is configured.
 
 ## Open Questions
 
