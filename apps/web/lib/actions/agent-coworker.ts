@@ -444,6 +444,43 @@ export async function sendMessage(input: {
   // Log tools available for this build phase (helps diagnose missing tool issues)
   if (activeBuildPhase) {
     console.log(`[tools] Phase: ${activeBuildPhase} | ${availableTools.length} tools: ${availableTools.map(t => t.name).join(", ")}`);
+
+    // Inject PhaseHandoff context — structured summary from the previous phase
+    // replaces raw chat history for focused, token-efficient context
+    try {
+      const activeBuild = await prisma.featureBuild.findFirst({
+        where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+      });
+      if (activeBuild) {
+        const latestHandoff = await prisma.phaseHandoff.findFirst({
+          where: { buildId: activeBuild.buildId, toPhase: activeBuildPhase },
+          orderBy: { createdAt: "desc" },
+        });
+        if (latestHandoff) {
+          const handoffContext = [
+            "",
+            "## Context from Previous Phase",
+            "",
+            `Phase: ${latestHandoff.fromPhase} -> ${latestHandoff.toPhase} (handed off by ${latestHandoff.fromAgentId})`,
+            `Summary: ${latestHandoff.summary}`,
+            latestHandoff.decisionsMade.length > 0 ? `Decisions: ${latestHandoff.decisionsMade.join("; ")}` : null,
+            latestHandoff.openIssues.length > 0 ? `Open Issues: ${latestHandoff.openIssues.join("; ")}` : null,
+            latestHandoff.userPreferences.length > 0 ? `User Preferences: ${latestHandoff.userPreferences.join("; ")}` : null,
+            "",
+            "Evidence:",
+            ...Object.entries(latestHandoff.evidenceDigest as Record<string, string>).map(
+              ([field, digest]) => `- ${field}: ${digest}`,
+            ),
+          ].filter(Boolean).join("\n");
+          populatedPrompt += handoffContext;
+          console.log(`[handoff] Injected PhaseHandoff context for ${activeBuildPhase} (${handoffContext.length} chars)`);
+        }
+      }
+    } catch (err) {
+      console.error("[handoff] Failed to load PhaseHandoff:", err);
+    }
   }
 
   // When external access is enabled, tell the agent about its web tools

@@ -135,6 +135,63 @@ export async function advanceBuildPhase(
     data: { phase: targetPhase },
   });
 
+  // Write PhaseHandoff document — structured context for the next phase's agent
+  try {
+    const PHASE_AGENT: Record<string, string> = {
+      ideate: "build-specialist",
+      plan: "ea-architect",
+      build: "build-specialist",
+      review: "ops-coordinator",
+      ship: "platform-engineer",
+    };
+    const fromAgent = PHASE_AGENT[currentPhase] ?? "build-specialist";
+    const toAgent = PHASE_AGENT[targetPhase] ?? "build-specialist";
+
+    // Build evidence digest — one-line summary per populated field
+    const evidenceFields: string[] = [];
+    const evidenceDigest: Record<string, string> = {};
+    if (build.designDoc) { evidenceFields.push("designDoc"); evidenceDigest.designDoc = "Design document saved"; }
+    if (build.designReview) {
+      evidenceFields.push("designReview");
+      const review = build.designReview as Record<string, unknown>;
+      evidenceDigest.designReview = `${review.decision ?? "reviewed"} — ${String(review.summary ?? "").slice(0, 100)}`;
+    }
+    if (build.buildPlan) { evidenceFields.push("buildPlan"); evidenceDigest.buildPlan = "Implementation plan saved"; }
+    if (build.planReview) {
+      evidenceFields.push("planReview");
+      const review = build.planReview as Record<string, unknown>;
+      evidenceDigest.planReview = `${review.decision ?? "reviewed"} — ${String(review.summary ?? "").slice(0, 100)}`;
+    }
+    if (build.verificationOut) {
+      evidenceFields.push("verificationOut");
+      const v = build.verificationOut as Record<string, unknown>;
+      evidenceDigest.verificationOut = `typecheck: ${v.typecheckPassed ? "pass" : "fail"}`;
+    }
+    if (build.acceptanceMet) {
+      evidenceFields.push("acceptanceMet");
+      evidenceDigest.acceptanceMet = Array.isArray(build.acceptanceMet)
+        ? `${(build.acceptanceMet as Array<{ met?: boolean }>).filter(c => c.met).length}/${(build.acceptanceMet as unknown[]).length} criteria met`
+        : "Evaluated";
+    }
+
+    await prisma.phaseHandoff.create({
+      data: {
+        buildId,
+        fromPhase: currentPhase,
+        toPhase: targetPhase,
+        fromAgentId: fromAgent,
+        toAgentId: toAgent,
+        summary: `Phase ${currentPhase} complete. Advancing to ${targetPhase}.`,
+        evidenceFields,
+        evidenceDigest,
+        gateResult: { allowed: gate.allowed, reason: gate.reason ?? "ok" },
+      },
+    });
+  } catch (err) {
+    // PhaseHandoff creation is best-effort — don't block phase transition
+    console.error("[advanceBuildPhase] PhaseHandoff creation failed:", err);
+  }
+
   // Create calendar events for milestone visibility
   if (targetPhase === "build" || targetPhase === "review" || targetPhase === "ship") {
     try {

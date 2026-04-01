@@ -13,6 +13,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     include: {
       digitalProduct: { select: { productId: true, version: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 50 },
+      phaseHandoffs: { orderBy: { createdAt: "asc" }, select: { fromPhase: true, toPhase: true, fromAgentId: true, toAgentId: true, summary: true, evidenceDigest: true, createdAt: true } },
     },
   });
 
@@ -33,5 +34,9 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     product: build.digitalProduct
       ? { productId: build.digitalProduct.productId, version: build.digitalProduct.version, backlogCount: 0 }
       : null,
+    phaseHandoffs: build.phaseHandoffs.map(h => ({
+      ...h,
+      evidenceDigest: h.evidenceDigest as Record<string, string>,
+    })),
   } as FeatureBuildRow;
 }

@@ -106,6 +106,15 @@ export type FeatureBuildRow = {
   claimedAt: Date | null;
   claimStatus: string | null;
   buildExecState: BuildExecutionState | null;
+  phaseHandoffs: Array<{
+    fromPhase: string;
+    toPhase: string;
+    fromAgentId: string;
+    toAgentId: string;
+    summary: string;
+    evidenceDigest: Record<string, string>;
+    createdAt: Date;
+  }> | null;
 };
 
 export type FeaturePackRow = {

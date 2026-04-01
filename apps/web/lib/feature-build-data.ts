@@ -68,6 +68,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
+    phaseHandoffs: null,
   }));
 });
 
@@ -135,6 +136,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
+    phaseHandoffs: null,
   };
 });
 

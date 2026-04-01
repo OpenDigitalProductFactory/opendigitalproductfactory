@@ -79,6 +79,22 @@ export function EvidenceSummary({ build }: Props) {
           <span className="text-[10px] text-[var(--dpf-muted)]">{item.detail}</span>
         </div>
       ))}
+
+      {/* Phase Handoff Trail */}
+      {build.phaseHandoffs && build.phaseHandoffs.length > 0 && (
+        <>
+          <h3 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest mt-4">Phase Handoffs</h3>
+          {build.phaseHandoffs.map((h) => (
+            <div key={`${h.fromPhase}-${h.toPhase}`} className="px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-medium text-[var(--dpf-text)]">{h.fromPhase} &rarr; {h.toPhase}</span>
+                <span className="text-[10px] text-[var(--dpf-muted)]">{h.fromAgentId} &rarr; {h.toAgentId}</span>
+              </div>
+              <p className="text-[10px] text-[var(--dpf-muted)] mt-1 leading-relaxed">{h.summary}</p>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
