@@ -17,7 +17,7 @@ import {
 } from "./helpers";
 
 const FEATURE_TITLE = "Customer Complaint Tracker";
-const MAX_PHASE_ATTEMPTS = 8;
+const MAX_PHASE_ATTEMPTS = 12;
 const MIN_RESPONSE_LENGTH = 50;
 
 // ─── Response Analysis ─────────────────────────────────────────────────────
@@ -281,19 +281,24 @@ test.describe("Build Studio Lifecycle Demo", () => {
 
     // Drive to review phase — may need to fix typecheck errors first
     await waitForPhase(page, "review", (attempt, phase, lastResp) => {
-      if (phase === "build" && (lastResp.includes("error TS") || lastResp.includes("typecheck") || lastResp.includes("TypeScript"))) {
-        return "The typecheck has errors. Fix them: remove any 'ringColor' CSS properties (use outline instead), " +
-          "remove any API routes (this is client-side only, no @prisma/client), " +
-          "then run the typecheck again with run_sandbox_command.";
-      }
-      if (phase === "build" && attempt < 3) {
+      if (phase !== "build") return "Advance to review phase.";
+
+      // First few attempts: run typecheck and fix errors
+      if (attempt === 0) {
         return "Run the typecheck with run_sandbox_command: 'cd /workspace/apps/web && npx tsc --noEmit'. " +
-          "If there are errors, fix them. The phase cannot advance until typecheck passes.";
+          "If there are errors, fix them. Do NOT create API routes or use @prisma/client.";
       }
-      if (phase === "build") {
-        return "Fix any remaining typecheck errors and save the verification evidence with typecheckPassed: true.";
+      // If AI reports specific errors, let it fix them
+      if (lastResp.includes("Fixed") || lastResp.includes("fixed") || lastResp.includes("Let me fix")) {
+        return "Good progress. Run the typecheck again to see if more errors remain. Keep fixing until it passes clean.";
       }
-      return "Advance to review phase.";
+      if (lastResp.includes("blocker") || lastResp.includes("not responding")) {
+        return "Try running the typecheck directly: run_sandbox_command with command 'cd /workspace/apps/web && npx tsc --noEmit 2>&1 | head -20'. " +
+          "Read the output and fix the errors shown.";
+      }
+      // Generic: keep trying
+      return "Run the typecheck and fix any errors. Use run_sandbox_command with 'cd /workspace/apps/web && npx tsc --noEmit 2>&1 | head -20' " +
+        "to see the errors, then fix them with edit_sandbox_file or write_sandbox_file.";
     }, "build→review", 300_000);
 
     await page.screenshot({ path: "e2e-report/demo-08-review.png" });
