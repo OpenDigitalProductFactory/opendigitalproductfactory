@@ -184,6 +184,7 @@ export async function sendAndWait(
   await page.waitForTimeout(1_500);
 
   // 5b. Handle "Not sent" — auto-retry if the client-side timeout fired
+  let retriedSuccessfully = false;
   for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
     const retryBtn = panel.locator('button:has-text("Retry")').first();
     const hasRetry = await retryBtn.isVisible({ timeout: 1_000 }).catch(() => false);
@@ -196,6 +197,7 @@ export async function sendAndWait(
     if (retryAccepted) {
       await waitForCoworkerIdle(page, timeoutMs);
       await page.waitForTimeout(1_500);
+      retriedSuccessfully = true;
     } else {
       console.log("[helper] Retry did not trigger processing");
       break;
@@ -203,7 +205,15 @@ export async function sendAndWait(
   }
 
   // 6. Read the NEW assistant message(s) that appeared after our send
+  //    After a retry, the baseline count may be stale — always read the latest message.
   const countAfter = await countAssistantMessages(page);
+  if (retriedSuccessfully) {
+    // After retry, just read the very last assistant message (most reliable)
+    const response = await extractLastResponse(page);
+    console.log(`\n[send] >>> ${message.slice(0, 80)}`);
+    console.log(`[recv] <<< ${response.slice(0, 200)}`);
+    return response;
+  }
   let response: string;
 
   if (countAfter > countBefore) {

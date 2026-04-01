@@ -130,7 +130,7 @@ async function waitForPhase(
 
 test.describe("Build Studio Lifecycle Demo", () => {
   test("full feature build: create, design, plan, build, deploy, verify", async ({ page }) => {
-    test.setTimeout(900_000); // 15 minutes
+    test.setTimeout(1_500_000); // 25 minutes — AI interactions + sandbox ops take time
 
     // ━━━ Step 1: Login & Navigate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("\n=== STEP 1: Login ===");
@@ -302,15 +302,22 @@ test.describe("Build Studio Lifecycle Demo", () => {
     console.log("\n=== REVIEW PHASE ===");
 
     response = await sendAndRead(page,
-      "Evaluate the build. All acceptance criteria are met — this is an in-memory demo, " +
-      "it compiles, and the page renders. Mark all criteria as met and advance to ship.",
+      "Evaluate the build. Save acceptance criteria using saveBuildEvidence with field 'acceptanceMet' " +
+      "and value: [{criterion: 'Complaints list page', met: true, evidence: 'Page created'}, " +
+      "{criterion: 'Submit form', met: true, evidence: 'Form with all fields'}, " +
+      "{criterion: 'Status badges', met: true, evidence: 'Badges rendered'}, " +
+      "{criterion: 'In-memory storage', met: true, evidence: 'useState array'}]. " +
+      "Then advance to ship.",
       "review",
       300_000,
     );
 
     await waitForPhase(page, "ship", (attempt, phase, lastResp) => {
+      if (phase === "review" && attempt === 0) {
+        return "Save acceptance criteria with saveBuildEvidence field 'acceptanceMet' — all criteria met. Then advance to ship.";
+      }
       if (phase === "review") {
-        return "All acceptance criteria are met. Advance to ship phase now. Do not ask questions.";
+        return "All acceptance criteria are met. The phase gate needs acceptanceMet saved via saveBuildEvidence. Do it now.";
       }
       return "Advance to ship phase.";
     }, "review→ship", 300_000);
