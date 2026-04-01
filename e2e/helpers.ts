@@ -150,6 +150,27 @@ export async function sendAndWait(
   // 5. Brief pause for DOM rendering
   await page.waitForTimeout(1_500);
 
+  // 5b. Check for "Not sent" state — the client-side timeout may have fired
+  //     before the server action completed. Auto-click Retry if visible.
+  for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
+    const retryBtn = panel.locator('button:has-text("Retry")').first();
+    const hasRetry = await retryBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+    if (!hasRetry) break;
+
+    console.log(`[helper] Message shows "Not sent" — clicking Retry (attempt ${retryAttempt + 1})`);
+    await retryBtn.click();
+
+    // Wait for the retry to be accepted and complete
+    const retryAccepted = await waitForCoworkerBusy(page, 10_000);
+    if (retryAccepted) {
+      await waitForCoworkerIdle(page, timeoutMs);
+      await page.waitForTimeout(1_500);
+    } else {
+      console.log("[helper] Retry did not trigger processing");
+      break;
+    }
+  }
+
   // 6. Extract and return the last assistant response
   const response = await extractLastResponse(page);
   console.log(`\n[demo] >>> ${message.slice(0, 80)}`);
@@ -194,37 +215,40 @@ export async function approveAllProposals(
 
 /**
  * Extracts the last assistant message text from the coworker panel.
+ *
+ * Uses data-testid="agent-message" and data-message-role="assistant" attributes
+ * on AgentMessageBubble components for reliable selection.
  */
 export async function extractLastResponse(page: Page): Promise<string> {
   return page.evaluate(() => {
     const panel = document.querySelector("[data-agent-panel='true']");
     if (!panel) return "[no panel]";
 
-    // Assistant bubbles are left-aligned flex columns
-    const allDivs = Array.from(panel.querySelectorAll("div")) as HTMLElement[];
-    const assistantBubbles = allDivs.filter((el) => {
-      const s = el.style;
-      return (
-        s.display === "flex" &&
-        s.flexDirection === "column" &&
-        s.marginBottom === "8px" &&
-        s.alignItems === "flex-start"
-      );
-    });
+    // Use data-testid attributes for reliable selection
+    const assistantMessages = Array.from(
+      panel.querySelectorAll('[data-testid="agent-message"][data-message-role="assistant"]'),
+    ) as HTMLElement[];
 
-    if (assistantBubbles.length > 0) {
-      const last = assistantBubbles[assistantBubbles.length - 1];
+    if (assistantMessages.length > 0) {
+      const last = assistantMessages[assistantMessages.length - 1];
+      // Prefer the content sub-element if present
+      const content = last.querySelector('[data-testid="agent-message-content"]') as HTMLElement | null;
+      return (content ?? last)?.textContent?.trim() ?? "[empty]";
+    }
+
+    // Fallback: any element with the data attribute (handles older DOM states)
+    const allMessages = Array.from(
+      panel.querySelectorAll('[data-testid="agent-message"]'),
+    ) as HTMLElement[];
+    const assistantFallback = allMessages.filter(
+      (el) => el.getAttribute("data-message-role") !== "user",
+    );
+    if (assistantFallback.length > 0) {
+      const last = assistantFallback[assistantFallback.length - 1];
       return last?.textContent?.trim() ?? "[empty]";
     }
 
-    // Fallback: find any left-aligned div with substantial text
-    const flexStart = allDivs.filter(
-      (el) =>
-        el.style.alignItems === "flex-start" &&
-        (el.textContent?.length ?? 0) > 20,
-    );
-    const last = flexStart[flexStart.length - 1];
-    return last?.textContent?.trim() ?? "[no assistant messages]";
+    return "[no assistant messages]";
   });
 }
 

@@ -11,7 +11,7 @@ export function PhaseIndicator({ currentPhase }: Props) {
   const currentIndex = VISIBLE_PHASES.indexOf(currentPhase);
 
   return (
-    <div className="flex items-center gap-0.5 px-4 py-2 bg-[var(--dpf-surface-2)] border-t border-[var(--dpf-border)]">
+    <div data-testid="phase-indicator" data-current-phase={currentPhase} className="flex items-center gap-0.5 px-4 py-2 bg-[var(--dpf-surface-2)] border-t border-[var(--dpf-border)]">
       {VISIBLE_PHASES.map((phase, i) => {
         const isActive = phase === currentPhase;
         const isDone = currentIndex > i;

@@ -220,8 +220,11 @@ export function AgentCoworkerPanel({
           ...(activeBuildId ? { buildId: activeBuildId } : {}),
           ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
         });
+        // Build Studio interactions involve sandbox operations that can take minutes.
+        // Use a longer timeout for /build routes to avoid premature "Not sent" failures.
+        const timeoutMs = pathname.startsWith("/build") ? 600_000 : 60_000;
         const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out — try again")), 60_000),
+          setTimeout(() => reject(new Error("Request timed out — try again")), timeoutMs),
         );
         const result = await Promise.race([sendPromise, timeout]);
         if ("error" in result) {

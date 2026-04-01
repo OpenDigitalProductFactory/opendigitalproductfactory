@@ -5,6 +5,7 @@ import { type FeatureBrief, type BuildPhase, type FeatureBuildRow } from "@/lib/
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
 import { EvidenceSummary } from "./EvidenceSummary";
+import { safeRenderValue } from "@/lib/safe-render";
 
 type Props = {
   brief: FeatureBrief | null;
@@ -48,19 +49,19 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   return (
     <div className="p-4 flex flex-col gap-3">
       <h3 className="text-sm font-bold text-[var(--dpf-text)]">Feature Brief</h3>
-      <Section label="Title" value={brief.title} />
-      <Section label="Description" value={brief.description} />
-      <Section label="Portfolio" value={brief.portfolioContext || "Not set"} />
-      <Section label="Target Roles" value={brief.targetRoles.join(", ") || "Not set"} />
-      <Section label="Data Needs" value={brief.dataNeeds || "Not set"} />
-      {brief.acceptanceCriteria.length > 0 && (
+      <Section label="Title" value={safeRenderValue(brief.title)} />
+      <Section label="Description" value={safeRenderValue(brief.description)} />
+      <Section label="Portfolio" value={safeRenderValue(brief.portfolioContext) || "Not set"} />
+      <Section label="Target Roles" value={safeRenderValue(brief.targetRoles) || "Not set"} />
+      <Section label="Data Needs" value={safeRenderValue(brief.dataNeeds) || "Not set"} />
+      {Array.isArray(brief.acceptanceCriteria) && brief.acceptanceCriteria.length > 0 && (
         <div>
           <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">
             Acceptance Criteria
           </span>
           <ul className="mt-1 pl-4 list-disc">
             {brief.acceptanceCriteria.map((c, i) => (
-              <li key={i} className="text-[13px] text-[#ccc] leading-relaxed">{c}</li>
+              <li key={i} className="text-[13px] text-[#ccc] leading-relaxed">{safeRenderValue(c)}</li>
             ))}
           </ul>
         </div>
