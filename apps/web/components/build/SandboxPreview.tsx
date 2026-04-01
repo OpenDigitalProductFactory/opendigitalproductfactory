@@ -12,7 +12,7 @@ type Props = {
 
 export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
-  const isRunning = sandboxPort !== null && (phase === "build" || phase === "review");
+  const isRunning = sandboxPort !== null && (phase === "build" || phase === "review" || phase === "ship");
 
   const handleRefresh = useCallback(() => {
     setRefreshKey(k => k + 1);
@@ -26,8 +26,8 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
           <p className="text-sm text-[var(--dpf-muted)] leading-relaxed">
             {phase === "ideate" || phase === "plan"
               ? "Live preview will appear here once the Build phase starts."
-              : phase === "ship" || phase === "complete"
-              ? "Feature has been shipped. Sandbox was destroyed."
+              : phase === "complete"
+              ? "Feature has been shipped."
               : "Sandbox is not running."}
           </p>
         </div>
