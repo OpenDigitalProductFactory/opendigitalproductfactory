@@ -229,7 +229,9 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 }
 
 export async function extractDiff(containerId: string): Promise<string> {
-  return execInSandbox(containerId, "cd /workspace && git diff");
+  // Only diff source code directories — the sandbox baseline includes node_modules
+  // and .next which produce a 200MB+ diff that crashes the buffer.
+  return execInSandbox(containerId, "cd /workspace && git diff -- apps/ packages/ prisma/ 2>/dev/null || git diff -- apps/ packages/ 2>/dev/null || echo ''");
 }
 
 export async function destroySandbox(containerId: string): Promise<void> {
