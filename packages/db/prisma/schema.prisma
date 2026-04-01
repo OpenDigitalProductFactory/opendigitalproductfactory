@@ -2086,6 +2086,7 @@ model FeatureBuild {
   releaseBundleId       String?
   calendarEventId       String?
   activities            BuildActivity[]
+  phaseHandoffs         PhaseHandoff[]
   accountableEmployee   EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy             User              @relation(fields: [createdById], references: [id])
   digitalProduct        DigitalProduct?   @relation(fields: [digitalProductId], references: [id])
@@ -2145,6 +2146,32 @@ model BuildActivity {
   build     FeatureBuild @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId, createdAt])
+}
+
+/// Structured context passed between build phases. Written on phase advance,
+/// read by the next phase's agent as system prompt context instead of raw chat history.
+model PhaseHandoff {
+  id               String   @id @default(cuid())
+  buildId          String
+  fromPhase        String
+  toPhase          String
+  fromAgentId      String
+  toAgentId        String
+  summary          String   /// 2-3 sentence plain language summary of what the phase accomplished
+  decisionsMade    String[] @default([])
+  openIssues       String[] @default([])
+  userPreferences  String[] @default([])
+  evidenceFields   String[] @default([]) /// Which evidence fields were populated (e.g., ["designDoc", "designReview"])
+  evidenceDigest   Json     @default("{}") /// One-line summary per evidence field
+  gateResult       Json     @default("{}") /// The gate check that allowed advancement
+  tokenBudgetUsed  Int      @default(0)
+  toolsUsed        String[] @default([])
+  iterationCount   Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  build FeatureBuild @relation(fields: [buildId], references: [buildId])
+
+  @@index([buildId])
 }
 
 model PromotionBackup {

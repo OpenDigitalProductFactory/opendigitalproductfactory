@@ -108,6 +108,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
         claimStatus: null,
         uxTestResults: null,
         buildExecState: null,
+        phaseHandoffs: null,
       });
       setNewTitle("");
       router.refresh();
