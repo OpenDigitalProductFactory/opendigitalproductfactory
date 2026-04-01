@@ -202,7 +202,9 @@ export async function runAgenticLoop(params: {
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // Time ceiling — use extended duration if build tools (sandbox, codegen) are active
     const hasBuildTools = executedTools.some(t =>
-      t.name === "launch_sandbox" || t.name === "generate_code" || t.name === "run_sandbox_tests"
+      t.name === "launch_sandbox" || t.name === "generate_code" || t.name === "run_sandbox_tests" ||
+      t.name === "write_sandbox_file" || t.name === "edit_sandbox_file" ||
+      t.name === "read_sandbox_file" || t.name === "run_sandbox_command"
     );
     const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS : MAX_DURATION_MS;
     if (Date.now() - startTime > durationLimit) {
