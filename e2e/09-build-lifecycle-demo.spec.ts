@@ -86,13 +86,18 @@ async function waitForPhase(
   targetPhase: string,
   promptFn: (attempt: number, currentPhase: string, lastResponse: string) => string,
   label: string,
-  timeoutMs = 180_000,
+  timeoutMs = 300_000,
 ): Promise<string> {
   const phaseOrder = ["ideate", "plan", "build", "review", "ship", "complete"];
   const targetIdx = phaseOrder.indexOf(targetPhase);
 
   let lastResponse = "";
   for (let attempt = 0; attempt < MAX_PHASE_ATTEMPTS; attempt++) {
+    // Wait for the AI to finish any in-progress work before checking phase.
+    // The AI may be auto-advancing from a previous message's tool calls.
+    await waitForCoworkerIdle(page, timeoutMs);
+    await page.waitForTimeout(2_000); // Let DOM settle after phase change
+
     const currentPhase = await getCurrentPhase(page);
     const currentIdx = phaseOrder.indexOf(currentPhase);
 
