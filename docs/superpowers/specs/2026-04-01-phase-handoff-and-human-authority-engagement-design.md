@@ -458,15 +458,15 @@ This ensures no feature ships without being discoverable in the UX.
 | 4 | Read PhaseHandoff in agentic loop, inject into system prompt | Done |
 | 5 | Add PhaseHandoff to Build Studio evidence panel | Done |
 
-### Phase 2b: Change Impact Analysis + Authority Resolution (Medium Risk)
+### Phase 2b: Change Impact Analysis + Authority Resolution (Medium Risk) — IMPLEMENTED
 
-| Step | Task | Files |
-|------|------|-------|
-| 1 | Create `analyzeChangeImpact()` — parse diff, resolve impacted users | `apps/web/lib/change-impact.ts` (new) |
-| 2 | Create `resolveApprovalAuthority()` — find highest platform authority | `apps/web/lib/approval-authority.ts` (new) |
-| 3 | Wire impact analysis into `deploy_feature` tool handler | `apps/web/lib/mcp-tools.ts` |
-| 4 | Present approval card in AI Coworker chat with impact summary | `apps/web/lib/actions/agent-coworker.ts` |
-| 5 | Store impact report on RFC | `apps/web/lib/actions/change-management.ts` |
+| Step | Task | Files | Status |
+|------|------|-------|--------|
+| 1 | Create `analyzeChangeImpact()` — parse diff, resolve impacted users | `apps/web/lib/change-impact.ts` (new) | Done |
+| 2 | Create `resolveApprovalAuthority()` — find highest platform authority | `apps/web/lib/approval-authority.ts` (new) | Done |
+| 3 | Wire impact analysis into `deploy_feature` tool handler | `apps/web/lib/mcp-tools.ts` | Done |
+| 4 | Present approval card in AI Coworker chat with impact summary | `apps/web/lib/actions/agent-coworker.ts` | Done |
+| 5 | Store impact report on RFC | `apps/web/lib/actions/build.ts` (shipBuild) | Done |
 
 ### Phase 2c: Notification Channels (Medium Risk)
 
@@ -487,17 +487,18 @@ This ensures no feature ships without being discoverable in the UX.
 | 2 | Propose navigation placement as part of ship phase | `apps/web/lib/mcp-tools.ts` |
 | 3 | Register approved placement in menu configuration | `apps/web/lib/navigation-registry.ts` (new or existing) |
 
-### Phase 2e: PR-Based Contribution Pipeline (High Risk)
+### Phase 2e: PR-Based Contribution Pipeline (High Risk) — IMPLEMENTED
 
-| Step | Task | Files |
-|------|------|-------|
-| 1 | Create `submitBuildAsPR()` — branch, commit, push, open PR | `apps/web/lib/contribution-pipeline.ts` (new) |
-| 2 | Generate structured PR body (impact analysis, evidence, acceptance criteria) | Same file |
-| 3 | Add security scan as PR check (injection, secrets, deps) | `apps/web/lib/security-scan.ts` (new) |
-| 4 | Wire `deploy_feature` to create PR instead of direct promotion | `apps/web/lib/mcp-tools.ts` |
-| 5 | Handle PR review feedback loop (AI Coworker relays review comments, pushes fixes) | `apps/web/lib/actions/agent-coworker.ts` |
-| 6 | On merge: trigger `execute_promotion` from merged main branch | `apps/web/lib/actions/promotions.ts` |
-| 7 | Consumer mode fallback: local-only PR review in AI chat | `apps/web/lib/contribution-pipeline.ts` |
+| Step | Task | Files | Status |
+|------|------|-------|--------|
+| 1 | Create `submitBuildAsPR()` — branch, commit, push, open PR | `apps/web/lib/contribution-pipeline.ts` (new) | Done |
+| 2 | Generate structured PR body (impact analysis, evidence, acceptance criteria) | Same file | Done |
+| 3 | Add security scan as PR check (injection, secrets, deps) | `apps/web/lib/security-scan.ts` (new) | Done |
+| 4 | Wire `deploy_feature` to create PR instead of direct promotion | `apps/web/lib/mcp-tools.ts` | Done |
+| 5 | Handle PR review feedback loop (AI Coworker relays review comments, pushes fixes) | `apps/web/lib/actions/agent-coworker.ts` | Deferred |
+| 6 | On merge: trigger `execute_promotion` from merged main branch | `apps/web/lib/actions/promotions.ts` | Deferred |
+| 7 | Consumer mode fallback: local-only PR review in AI chat | `apps/web/lib/contribution-pipeline.ts` | Done |
+| 8 | Add git remote operations (branch, push, apply patch) | `apps/web/lib/git-utils.ts` | Done |
 
 ## Success Criteria
 

@@ -261,6 +261,150 @@ export async function gitGrep(opts: {
   }
 }
 
+// ─── Remote Git Operations (EP-BUILD-HANDOFF-002 Phase 2e) ──────────────────
+// These are used by the PR-based contribution pipeline to push feature branches
+// and interact with the git remote. They require isDevInstance().
+
+/**
+ * Check if a git remote is configured (typically "origin").
+ */
+export async function hasGitRemote(remote: string = "origin"): Promise<boolean> {
+  if (!isSafeRef(remote)) return false;
+  try {
+    const { stdout } = await exec(
+      `git remote get-url ${remote}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the URL of a git remote.
+ */
+export async function getRemoteUrl(remote: string = "origin"): Promise<string | null> {
+  if (!isSafeRef(remote)) return null;
+  try {
+    const { stdout } = await exec(
+      `git remote get-url ${remote}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a new git branch from the current HEAD.
+ */
+export async function createBranch(branchName: string): Promise<{ ok: true } | { error: string }> {
+  if (!isDevInstance()) return { error: "Git branches are only available on dev instances." };
+  if (!isSafeRef(branchName)) return { error: `Invalid branch name: ${branchName}` };
+  try {
+    await exec(
+      `git checkout -b ${JSON.stringify(branchName)}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Git branch creation failed" };
+  }
+}
+
+/**
+ * Switch to an existing git branch.
+ */
+export async function checkoutBranch(branchName: string): Promise<{ ok: true } | { error: string }> {
+  if (!isDevInstance()) return { error: "Git checkout is only available on dev instances." };
+  if (!isSafeRef(branchName)) return { error: `Invalid branch name: ${branchName}` };
+  try {
+    await exec(
+      `git checkout ${JSON.stringify(branchName)}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Git checkout failed" };
+  }
+}
+
+/**
+ * Get the current branch name.
+ */
+export async function getCurrentBranch(): Promise<string | null> {
+  try {
+    const { stdout } = await exec(
+      "git rev-parse --abbrev-ref HEAD",
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stage all changes and create a commit. Unlike commitFile(), this stages
+ * all tracked changes (not a single file).
+ */
+export async function commitAll(message: string): Promise<{ hash: string } | { error: string }> {
+  if (!isDevInstance()) return { error: "Git commits are only available on dev instances." };
+  try {
+    await exec("git add -A", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
+    await exec(`git commit -m ${JSON.stringify(message)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
+    const { stdout } = await exec("git rev-parse HEAD", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
+    return { hash: stdout.trim() };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Git commit failed" };
+  }
+}
+
+/**
+ * Push a branch to a remote. Timeout extended to 30s for network operations.
+ */
+export async function pushBranch(
+  branchName: string,
+  remote: string = "origin",
+): Promise<{ ok: true } | { error: string }> {
+  if (!isDevInstance()) return { error: "Git push is only available on dev instances." };
+  if (!isSafeRef(branchName)) return { error: `Invalid branch name: ${branchName}` };
+  if (!isSafeRef(remote)) return { error: `Invalid remote name: ${remote}` };
+  try {
+    await exec(
+      `git push -u ${remote} ${branchName}`,
+      { cwd: getGitRoot(), timeout: 30_000 },
+    );
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Git push failed" };
+  }
+}
+
+/**
+ * Apply a unified diff patch to the working tree. Used by the contribution
+ * pipeline to apply sandbox diff to the feature branch.
+ */
+export async function applyPatch(patch: string): Promise<{ ok: true } | { error: string }> {
+  if (!isDevInstance()) return { error: "Git apply is only available on dev instances." };
+  const { writeFile, unlink } = await import("fs/promises");
+  const tmpFile = `/tmp/dpf-pr-${Date.now()}.patch`;
+  try {
+    await writeFile(tmpFile, patch, "utf-8");
+    await exec(
+      `git apply ${JSON.stringify(tmpFile)}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 },
+    );
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Git apply failed" };
+  } finally {
+    try { await unlink(tmpFile); } catch { /* cleanup best-effort */ }
+  }
+}
+
 export async function gitLsTree(opts: {
   ref: string;
   path: string;
