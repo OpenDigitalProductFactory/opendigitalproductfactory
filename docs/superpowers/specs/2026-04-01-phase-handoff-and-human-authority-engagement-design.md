@@ -461,6 +461,6 @@ This ensures no feature ships without being discoverable in the UX.
 
 ## Open Questions
 
-1. **Channel verification** — how do we verify a Slack webhook or phone number is correct before relying on it for emergencies?
-2. **Retrospective approval timeout** — if emergency approval isn't received within 24 hours, should the change auto-rollback or just flag for governance review?
-3. **Token budget tracking** — should each phase have a token budget limit that triggers escalation if exceeded?
+1. **Channel verification** — RESOLVED: Added to backlog as EP-NOTIFY-CHANNELS / BI-NOTIFY-002. Verify channels on setup and periodically. Mobile client (EP-MOBILE-CLIENT) will add push notification as an additional real-time channel.
+2. **Retrospective approval timeout** — RESOLVED: If emergency approval lapses after 24 hours, escalate to second-in-command (next in management chain via `managerEmployeeId` or `escalatesTo`). If second also lapses, auto-create incident report and notify HR-000. No auto-rollback — the change is live and may be critical.
+3. **Token budget tracking** — RESOLVED: Token spend is centrally tracked and attributed to the activity that consumed them (build phase, agent, tool call). This is a budgetary and operational concern — exhausting the token budget for a class of task means that class of AI Coworker work stops until the budget resets or is increased. Budget enforcement is per-agent-class, not per-phase.
