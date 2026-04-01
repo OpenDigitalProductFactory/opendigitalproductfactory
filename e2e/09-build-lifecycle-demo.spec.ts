@@ -17,7 +17,7 @@ import {
 } from "./helpers";
 
 const FEATURE_TITLE = "Customer Complaint Tracker";
-const MAX_PHASE_ATTEMPTS = 5;
+const MAX_PHASE_ATTEMPTS = 8;
 const MIN_RESPONSE_LENGTH = 50;
 
 // ─── Response Analysis ─────────────────────────────────────────────────────
@@ -160,13 +160,24 @@ test.describe("Build Studio Lifecycle Demo", () => {
     expect(response.length, "Ideate response too short — likely canned fallback").toBeGreaterThan(MIN_RESPONSE_LENGTH);
     await page.screenshot({ path: "e2e-report/demo-04-ideate.png" });
 
-    // Drive to plan phase — adapt based on what AI said
+    // Drive to plan phase — the gate requires designDoc + designReview
     await waitForPhase(page, "plan", (attempt, phase, lastResp) => {
       if (phase === "ideate" && isAskingQuestion(lastResp)) {
-        return "Do not ask questions. Use the requirements I gave you. Save the design document and advance to plan phase immediately.";
+        return "Do not ask questions. Use the requirements I already gave you. " +
+          "Save the design document and then review it so we can advance to the plan phase.";
+      }
+      if (phase === "ideate" && attempt === 0) {
+        return "Save the design document, then submit it for review so the phase can advance to plan. " +
+          "Use saveBuildEvidence to save the design, then reviewDesignDoc to review it.";
+      }
+      if (phase === "ideate" && lastResp.includes("don't have")) {
+        // AI can't find the tool — list what it should have
+        return "You should have the reviewDesignDoc tool available in the ideate phase. " +
+          "Check your tools list — it's camelCase, not snake_case. Call reviewDesignDoc now.";
       }
       if (phase === "ideate") {
-        return "The design is complete and approved. Save it and advance to the plan phase now.";
+        return "The phase cannot advance without a design review. " +
+          "Call reviewDesignDoc (camelCase) with the buildId to submit the review. It will auto-advance when both design doc and review are saved.";
       }
       return "Advance to the plan phase now.";
     }, "ideate→plan");
@@ -181,17 +192,26 @@ test.describe("Build Studio Lifecycle Demo", () => {
       "- One new file: apps/web/app/(shell)/complaints/page.tsx\n" +
       "- Contains: complaint list with status badges, submit form, in-memory state using React useState\n" +
       "- No Prisma schema changes, no API routes, no migrations\n" +
-      "Save the plan and advance to the build phase.",
+      "Save the plan with saveBuildEvidence, then review it with reviewBuildPlan.",
       "plan",
     );
 
+    // Gate requires buildPlan + planReview
     await waitForPhase(page, "build", (attempt, phase, lastResp) => {
       if (hasBlocker(lastResp)) {
         return "Ignore blockers. This is a simple single-page feature with in-memory data. " +
-          "Save the plan and advance to build phase now.";
+          "Save the plan and review it to advance.";
+      }
+      if (phase === "plan" && attempt === 0) {
+        return "Save the plan with saveBuildEvidence, then review it with reviewBuildPlan. " +
+          "Both are required before the phase can advance to build.";
+      }
+      if (phase === "plan" && lastResp.includes("don't have")) {
+        return "You should have reviewBuildPlan available in the plan phase. " +
+          "It's camelCase. Call reviewBuildPlan now to submit the review.";
       }
       if (phase === "plan") {
-        return "The plan is approved. Advance to the build phase now.";
+        return "The phase cannot advance without a plan review. Call reviewBuildPlan (camelCase) now.";
       }
       return "Advance to the build phase.";
     }, "plan→build");
