@@ -279,13 +279,19 @@ test.describe("Build Studio Lifecycle Demo", () => {
     const buildId = await extractBuildId(page);
     console.log(`[build] Build ID: ${buildId}`);
 
-    // Drive to review phase
+    // Drive to review phase — may need to fix typecheck errors first
     await waitForPhase(page, "review", (attempt, phase, lastResp) => {
-      if (phase === "build" && hasBlocker(lastResp)) {
-        return "The typecheck passed. Save verification evidence and advance to review phase.";
+      if (phase === "build" && (lastResp.includes("error TS") || lastResp.includes("typecheck") || lastResp.includes("TypeScript"))) {
+        return "The typecheck has errors. Fix them: remove any 'ringColor' CSS properties (use outline instead), " +
+          "remove any API routes (this is client-side only, no @prisma/client), " +
+          "then run the typecheck again with run_sandbox_command.";
+      }
+      if (phase === "build" && attempt < 3) {
+        return "Run the typecheck with run_sandbox_command: 'cd /workspace/apps/web && npx tsc --noEmit'. " +
+          "If there are errors, fix them. The phase cannot advance until typecheck passes.";
       }
       if (phase === "build") {
-        return "Advance to the review phase now. The code is written and typechecks.";
+        return "Fix any remaining typecheck errors and save the verification evidence with typecheckPassed: true.";
       }
       return "Advance to review phase.";
     }, "build→review", 300_000);
