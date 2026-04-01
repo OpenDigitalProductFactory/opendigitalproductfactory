@@ -231,14 +231,15 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 export async function extractDiff(containerId: string): Promise<string> {
   // Get only the feature's changed source files — node_modules, .next, lock files
   // produce a 200MB+ diff that crashes the buffer. Filter to source-only files first,
-  // then diff just those files.
+  // then diff just those files. Quote each path to handle (shell) parentheses.
   const changedFiles = await execInSandbox(containerId,
     "cd /workspace && git diff --name-only | grep -v node_modules | grep -v '.next/' | grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
   );
   const files = changedFiles.trim().split("\n").filter(Boolean);
   if (files.length === 0) return "";
-  // Diff only the source files
-  return execInSandbox(containerId, `cd /workspace && git diff -- ${files.join(" ")}`);
+  // Quote each file path to handle shell metacharacters like (parentheses)
+  const quotedFiles = files.map((f) => `'${f}'`).join(" ");
+  return execInSandbox(containerId, `cd /workspace && git diff -- ${quotedFiles}`);
 }
 
 export async function destroySandbox(containerId: string): Promise<void> {
