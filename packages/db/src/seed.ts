@@ -833,7 +833,7 @@ async function seedChatGPTModels(): Promise<void> {
           bestFor: m.bestFor,
           avoidFor: m.avoidFor,
           modelClass: "chat",
-          modelStatus: "active",
+          modelStatus: "degraded",  // ChatGPT SSE adapter returns empty; mark degraded until fixed
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "medium",
