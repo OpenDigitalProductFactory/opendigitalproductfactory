@@ -224,7 +224,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
               </div>
 
               <div className="flex-1 flex p-4 gap-4">
-                {activeBuild.phase === "build" || activeBuild.phase === "review" ? (
+                {activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship" ? (
                   <SandboxPreview
                     buildId={activeBuild.buildId}
                     phase={activeBuild.phase}
