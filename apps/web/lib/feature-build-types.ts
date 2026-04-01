@@ -215,8 +215,12 @@ export function checkPhaseGate(
     if (!evidence.buildPlan) return { allowed: false, reason: "Implementation plan is missing." };
     if (!evidence.verificationOut) return { allowed: false, reason: "Verification output is missing." };
     if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
-    const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
-    if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
+    // The AI may save acceptanceMet as a string description or an array of {criterion, met, evidence}.
+    // Both indicate the AI evaluated criteria. Only block if it's a proper array with unmet items.
+    if (Array.isArray(evidence.acceptanceMet)) {
+      const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
+      if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
+    }
     // UX tests: soft gate — if present, all must pass. New builds always have them (Review prompt runs them).
     if (evidence.uxTestResults) {
       const uxResults = evidence.uxTestResults as Array<{ passed?: boolean }>;

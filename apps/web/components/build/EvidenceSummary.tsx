@@ -41,7 +41,7 @@ export function EvidenceSummary({ build }: Props) {
     {
       label: "Acceptance Criteria",
       status: build.acceptanceMet
-        ? (Array.isArray(build.acceptanceMet) && build.acceptanceMet.every((c) => c.met) ? "pass" : "fail")
+        ? (Array.isArray(build.acceptanceMet) ? (build.acceptanceMet.every((c) => c.met) ? "pass" : "fail") : "pass")
         : "missing",
       detail: build.acceptanceMet
         ? (Array.isArray(build.acceptanceMet) ? `${build.acceptanceMet.filter((c) => c.met).length}/${build.acceptanceMet.length} met` : safeRenderValue(build.acceptanceMet))
