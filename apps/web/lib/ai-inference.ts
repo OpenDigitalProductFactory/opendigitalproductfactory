@@ -5,6 +5,12 @@
 import { prisma } from "@dpf/db";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
+  aiInferenceDuration,
+  aiInferenceTokens,
+  aiInferenceErrors,
+  aiInferenceCostUsd,
+} from "@/lib/metrics";
+import {
   getDecryptedCredential,
   getProviderExtraHeaders,
   getProviderBearerToken,
@@ -231,19 +237,33 @@ export async function callProvider(
     responsePolicy: {},
   };
 
-  // 3. Dispatch to adapter
+  // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
-  const result = await adapter.execute({
-    providerId,
-    modelId,
-    plan: effectivePlan,
-    provider: { baseUrl, headers },
-    messages,
-    systemPrompt,
-    tools,
-  });
+  const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
+  let result;
+  try {
+    result = await adapter.execute({
+      providerId,
+      modelId,
+      plan: effectivePlan,
+      provider: { baseUrl, headers },
+      messages,
+      systemPrompt,
+      tools,
+    });
+    endTimer();
+  } catch (err) {
+    endTimer();
+    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
+    throw err;
+  }
 
-  // 4. Map AdapterResult → InferenceResult
+  // 4. Record token and cost metrics
+  aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);
+  aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "output" }, result.usage.outputTokens);
+
+  // 5. Map AdapterResult → InferenceResult
   return {
     content: result.text,
     inputTokens: result.usage.inputTokens,
@@ -281,6 +301,11 @@ export async function logTokenUsage(input: {
         provider.outputPricePerMToken ?? 0,
       );
     }
+  }
+
+  // Record cost metric for Prometheus
+  if (costUsd > 0) {
+    aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);
   }
 
   await prisma.tokenUsage.create({

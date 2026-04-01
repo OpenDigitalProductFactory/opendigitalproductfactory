@@ -2,6 +2,8 @@
 // Deterministic signal detection rules for conversation quality analysis.
 // No LLM calls — pure string matching on message content.
 
+import { observerFindings } from "@/lib/metrics";
+
 export interface ConversationMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -230,10 +232,17 @@ export function inferHumanScore(
 // ─── Main Analyzer ──────────────────────────────────────────────────────────
 
 export function analyzeConversation(messages: ConversationMessage[]): ObservationFinding[] {
-  return [
+  const findings = [
     ...detectToolFailures(messages),
     ...detectConfigGaps(messages),
     ...detectAgentQuality(messages),
     ...detectUserFriction(messages),
   ];
+
+  // Record metrics for Prometheus
+  for (const f of findings) {
+    observerFindings.inc({ type: f.type, severity: f.severity });
+  }
+
+  return findings;
 }

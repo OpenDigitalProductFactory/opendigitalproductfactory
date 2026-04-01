@@ -299,6 +299,14 @@ flowchart TB
         modelrunner[Docker Model Runner<br/>local inference]
     end
 
+    subgraph Monitoring["Monitoring stack (optional profile)"]
+        prometheus[Prometheus<br/>metrics + alerts]
+        grafana[Grafana<br/>dashboards]
+        cadvisor[cAdvisor<br/>container metrics]
+        nodeexp[node-exporter<br/>host metrics]
+        pgexp[postgres-exporter]
+    end
+
     ext[External AI providers<br/>optional]
     sandbox[On-demand sandbox stack<br/>preview, test, diff, isolated services]
 
@@ -313,6 +321,12 @@ flowchart TB
     portal -. launch / inspect / promote .-> sandbox
     operator --> portal
     operator -. HITL approval .-> sandbox
+    prometheus -. scrapes .-> portal
+    prometheus -. scrapes .-> cadvisor
+    prometheus -. scrapes .-> nodeexp
+    prometheus -. scrapes .-> pgexp
+    grafana --> prometheus
+    portal -. queries .-> prometheus
 ```
 
 **Current runtime:** `portal`, `portal-init`, `postgres`, `neo4j`, and `qdrant` are defined in `docker-compose.yml`. Local AI inference is provided by Docker Model Runner (built into Docker Desktop 4.40+) — no separate container needed. Sandbox containers are launched on demand from the `dpf-sandbox` image.
@@ -437,13 +451,46 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | `promoter` | One-shot container that builds new portal images from sandbox source, backs up the database, and deploys promoted features. Triggered by Build Studio ship phase or ops UI. Uses the `promote` profile. |
 | `playwright` | Optional tooling image used in the `build-images` profile |
 
+#### Monitoring Stack (optional)
+
+The platform includes a full operational health monitoring stack behind the `monitoring` Docker Compose profile. It is **off by default** and adds no overhead unless explicitly started.
+
+| Service | Image | Purpose | Port |
+|---------|-------|---------|------|
+| `prometheus` | `prom/prometheus` | Metrics collection, alerting rules, time-series storage (15-day retention) | 9090 |
+| `grafana` | `grafana/grafana-oss` | Dashboards and ad-hoc metric exploration (power-user tool) | 3002 |
+| `cadvisor` | `gcr.io/cadvisor/cadvisor` | Per-container CPU, memory, network, disk I/O metrics | 8080 |
+| `node-exporter` | `prom/node-exporter` | Host OS resource metrics (CPU, memory, disk, network) | 9100 |
+| `postgres-exporter` | `prometheuscommunity/postgres-exporter` | PostgreSQL connection pool, query performance, replication metrics | 9187 |
+
+Native exporters (no additional containers): Neo4j (`:2004/metrics`), Qdrant (`:6333/metrics`), Docker Model Runner (`/metrics`).
+
+**Start monitoring:**
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+**What you get:**
+
+- **System Health tab** in Operations > Backlog — platform-native dashboard with service status grid, host resource gauges (CPU/memory/disk), AI Coworker health panel, container resource table, database metrics, and alert history. No need to leave the platform.
+- **Health indicator** in the navigation bar — colored dot (green/amber/red/grey) visible on every page, with dropdown showing active alerts.
+- **AI Coworker awareness** — the chat panel shows contextual warnings when inference or semantic memory is degraded ("Memory offline", "AI responses may be slower").
+- **Grafana** at `http://localhost:3002` — pre-provisioned overview dashboard for custom PromQL queries and deep-dive exploration. Default login: `admin` / `dpf_monitor` (configurable via `GF_ADMIN_USER` and `GF_ADMIN_PASSWORD` in `.env`).
+- **13 alert rules** — container down, high CPU/memory/disk, Postgres connection saturation, Qdrant down, AI inference failures, semantic memory errors. Alerts fire into the platform's quality issue system automatically.
+
+The monitoring stack adds ~175-350 MB RAM. All dashboards and alert rules are auto-provisioned from config files in `monitoring/` — no manual Grafana setup required.
+
+**Architecture:** Prometheus and Grafana run as separate containers (not merged into the portal). The portal queries Prometheus via a server-side proxy API (`/api/platform/metrics`) for its native dashboards. Grafana is a secondary power-user tool, not the primary monitoring surface. Discovered monitoring containers are attributed to the **Foundational** portfolio under the **Observability Platform** taxonomy node and appear in the inventory with `monitors` relationships to the services they observe.
+
 In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres` and `neo4j` so the app can run locally while the stateful services remain containerized.
 
 ```bash
-docker compose up -d       # Start everything
-docker compose ps          # Check health
-docker compose logs -f     # View logs
-docker compose down        # Stop
+docker compose up -d                              # Start core stack
+docker compose --profile monitoring up -d         # Start core + monitoring
+docker compose ps                                 # Check health
+docker compose logs -f                            # View logs
+docker compose down                               # Stop
 ```
 
 ---
@@ -485,6 +532,9 @@ opendigitalproductfactory/
 │   ├── lib/                     # Auth, permissions, inference, routing
 │   └── lib/actions/             # Server actions
 ├── packages/db/                 # Prisma schema (42 models) + seed data
+├── monitoring/                  # Prometheus + Grafana config (auto-provisioned)
+│   ├── prometheus/              # prometheus.yml (scrape targets) + alerts.yml (13 rules)
+│   └── grafana/                 # Datasource, dashboard provider, alert channels, dashboards
 ├── scripts/                     # Convenience + hardware detection
 │   └── fresh-install.ps1        # Developer setup script
 ├── install-dpf.bat              # User installer launcher (double-click this)

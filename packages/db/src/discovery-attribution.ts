@@ -145,6 +145,9 @@ function findRuleMatch(
   } else if (itemType.includes("storage")) {
     node = matchByNodeId((nodeId) => nodeId.endsWith("/online_storage"));
     ruleId = node ? "foundational_storage" : undefined;
+  } else if (itemType.includes("monitoring") || itemType.includes("observability")) {
+    node = matchByNodeId((nodeId) => nodeId.includes("observability_platform"));
+    ruleId = node ? "foundational_observability" : undefined;
   }
 
   if (!node || !ruleId) {

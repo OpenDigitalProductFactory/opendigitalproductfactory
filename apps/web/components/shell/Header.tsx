@@ -5,6 +5,7 @@ import { signOutAction } from "@/lib/actions";
 import { can, type CapabilityKey } from "@/lib/permissions";
 import { NavBar } from "./NavBar";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
+import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
 import { useEffect, useState } from "react";
 
 type Props = {
@@ -98,6 +99,7 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, bra
         <NavBar items={visibleItems} />
       </div>
       <div className="flex items-center gap-3">
+        <PlatformHealthIndicator />
         <HeaderFeedbackButton userId={userId ?? null} />
         {platformRole !== null && (
           <span className="text-xs text-[var(--dpf-muted)]">{platformRole}</span>
