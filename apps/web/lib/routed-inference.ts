@@ -207,8 +207,21 @@ export async function routeAndCall(
     const preferredCandidate = decision.candidates.find(
       c => (c.endpointId === options.preferredProviderId || c.providerId === options.preferredProviderId) && !c.excluded,
     );
-    const excludedGemini = decision.candidates.filter(c => c.providerId === options.preferredProviderId && c.excluded);
-    console.log(`[routing] Preferred provider override: wanted=${options.preferredProviderId}, found=${preferredCandidate?.providerId ?? "NONE"}, excludedReasons=${excludedGemini.map(c => `${c.modelId}:${c.excludedReason}`).slice(0, 3).join("; ")}`);
+    const excludedForProvider = decision.candidates.filter(c => c.providerId === options.preferredProviderId && c.excluded);
+    const allProviderIds = [...new Set(decision.candidates.filter(c => !c.excluded).map(c => c.providerId))];
+    if (!preferredCandidate) {
+      const excludeDetail = excludedForProvider.length > 0
+        ? `(excluded: ${excludedForProvider.map(c => `${c.modelId}: ${c.excludedReason}`).slice(0, 3).join("; ")})`
+        : "(no models from this provider in candidate pool — is it active?)";
+      console.warn(
+        `[routing] Pinned provider "${options.preferredProviderId}" not available ${excludeDetail}. ` +
+        `Falling back to V2-selected: ${decision.selectedEndpoint}/${decision.selectedModelId}. ` +
+        `Active providers: [${allProviderIds.join(", ")}]`,
+      );
+      // Annotate the decision so the caller can surface this to the user
+      decision.reason = `WARNING: Pinned provider "${options.preferredProviderId}" not available ${excludeDetail}. ` +
+        `Fell back to ${decision.selectedEndpoint}/${decision.selectedModelId}. ${decision.reason}`;
+    }
     if (preferredCandidate) {
       const origSelected = decision.selectedEndpoint;
       decision.selectedEndpoint = preferredCandidate.endpointId;
