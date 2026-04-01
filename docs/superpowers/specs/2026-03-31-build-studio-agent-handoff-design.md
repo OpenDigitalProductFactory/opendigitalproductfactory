@@ -39,9 +39,91 @@ Each build phase is handled by a **specialist agent** with:
 |-------|-------|-----------|-------|---------------|
 | **Ideate** | `build-specialist` (Software Engineer) | AGT-ORCH-200 Explore | Haiku | search_project_files, read_project_file, saveBuildEvidence, reviewDesignDoc, save_build_notes (5) |
 | **Plan** | `ea-architect` (Enterprise Architect) | AGT-121/130 Architecture + Release Planning | Haiku | saveBuildEvidence, reviewBuildPlan, read_sandbox_file, list_sandbox_files, search_sandbox (5) |
+| **Plan** | `data-architect` (Data Architect) | AGT-903 Data Modeling & Schema Design | Haiku | read_sandbox_file, list_sandbox_files, search_sandbox, saveBuildEvidence, reviewBuildPlan (5) |
 | **Build** | `build-specialist` (Software Engineer) | AGT-131 Design & Develop | Sonnet | write_sandbox_file, read_sandbox_file, edit_sandbox_file, search_sandbox, list_sandbox_files, run_sandbox_command, run_sandbox_tests, generate_code, iterate_sandbox (9) |
 | **Review** | `ops-coordinator` (Scrum Master) | AGT-132 Release Acceptance | Haiku | run_sandbox_tests, generate_ux_test, run_ux_test, saveBuildEvidence, check_deployment_windows, read_sandbox_file (6) |
 | **Ship** | `platform-engineer` (AI Ops Engineer) | AGT-ORCH-400/500 Deploy + Release | Haiku | deploy_feature, register_digital_product_from_build, create_build_epic, check_deployment_windows, execute_promotion, schedule_promotion (6) |
+
+### Data Architect Specialist (Plan Phase)
+
+The `data-architect` agent (AGT-903) participates in the **plan phase** alongside the Enterprise Architect. When a build plan involves schema changes (new models, field additions, relation changes), the data architect reviews and designs the Prisma schema modifications before they reach the build phase.
+
+#### DAMA-DMBOK Knowledge Area Alignment
+
+| DAMA-DMBOK Knowledge Area | Agent Responsibility |
+|---------------------------|---------------------|
+| **Data Modeling & Design** | Review proposed Prisma models for 3rd normal form compliance, proper relationships (`@relation`), field types, and naming conventions (camelCase fields, PascalCase models) |
+| **Data Quality** | Enforce constraints (`@unique`, `@default`, `@@index`), required vs optional fields, and data type precision (e.g., `Decimal` for currency, `DateTime` for timestamps) |
+| **Metadata Management** | Ensure models carry audit fields (`createdAt`, `updatedAt`), that enum-like string fields document their canonical values, and that migration names are descriptive |
+| **Data Governance** | Validate that new data entities align with the existing data model graph, flag PII fields for retention policy, and check that no orphaned tables or redundant models are introduced |
+| **Reference & Master Data** | Protect referential integrity of master entities (`Product`, `Organization`, `Agent`), prevent duplication of reference data patterns, and enforce consistent foreign key naming |
+
+#### Diversity of Thought — How Data Architect Differs from Software Engineer
+
+Per the [Diversity of Thought framework](../../Reference/diversity-of-thought-framework.md), each agent must bring a genuinely different cognitive toolbox:
+
+| Component | Software Engineer | Data Architect |
+|-----------|------------------|----------------|
+| **Perspective** | Sees the problem as *code to write* — components, functions, UI interactions | Sees the problem as *data to model* — entities, relationships, cardinality, lifecycle |
+| **Heuristics** | DRY, SOLID, component composition, test coverage | 3NF normalization, referential integrity, index selectivity, DAMA-DMBOK patterns |
+| **Interpretive Model** | "Good" = working code that passes tests and renders correctly | "Good" = normalized schema with enforced constraints, no redundancy, migration-safe evolution |
+
+**Superadditivity test:** The Software Engineer might create a `complaints` table with `status VARCHAR` and `assignedTo VARCHAR`. The Data Architect would flag: status should reference the canonical enum pattern (per CLAUDE.md), `assignedTo` should be a foreign key to `Agent` or `User`, and the table needs `createdAt`/`updatedAt` audit fields and an index on `status` for filter queries. Neither agent alone produces the complete solution.
+
+#### Plan Phase Sequencing
+
+When a build involves schema changes:
+1. **Enterprise Architect** reviews the overall build plan (architecture fit, component structure)
+2. **Data Architect** reviews and refines the schema portion of the plan (Prisma model design)
+3. Both agents contribute to the Plan → Build handoff document
+
+When a build has **no schema changes** (e.g., "No database changes" in user preferences), the Data Architect is skipped and the Enterprise Architect handles the plan phase alone.
+
+#### IT4IT Alignment
+
+- **Primary:** §5.2.3 Define Digital Product Architecture (data architecture aspect)
+- **Secondary:** §6.1.3 Enterprise Architecture FC (data governance controls)
+- **Cross-reference:** Extends `data-governance-agent` (AGT-902) which handles compliance/retention but not structural schema design
+
+#### Agent Registry Entry (proposed for `agent_registry.json`)
+
+```json
+{
+  "agent_id": "AGT-903",
+  "agent_name": "data-architect",
+  "tier": "specialist",
+  "value_stream": "explore",
+  "capability_domain": "Reviews and designs Prisma schema changes during the plan phase; enforces 3NF normalization, referential integrity, index design, naming conventions, and audit field standards; aligned to DAMA-DMBOK knowledge areas (Data Modeling & Design, Data Quality, Metadata Management, Data Governance, Reference & Master Data); §5.2.3 Define Digital Product Architecture (data aspect)",
+  "human_supervisor_id": "HR-300",
+  "hitl_tier_default": "informed",
+  "delegates_to": [],
+  "escalates_to": "AGT-121",
+  "it4it_sections": ["5.2.3", "6.1.3", "DAMA-DMBOK"],
+  "status": "defined",
+  "config_profile": {
+    "model_binding": {
+      "model_id": "claude-haiku-4-5-20251001",
+      "temperature": 0.1,
+      "max_tokens": 4096,
+      "timeout_seconds": 120
+    },
+    "token_budget": {
+      "daily_limit": 200000,
+      "per_task_limit": 20000
+    },
+    "tool_grants": [
+      "registry_read",
+      "backlog_read",
+      "architecture_read",
+      "schema_review",
+      "decision_record_create",
+      "ea_graph_read"
+    ],
+    "memory": { "type": "session" },
+    "concurrency_limit": 4
+  }
+}
+```
 
 ### Handoff Protocol
 
@@ -70,7 +152,29 @@ userPreferences: ["No database changes", "In-memory state for demo"]
 #### Plan → Build Handoff
 ```
 summary: "Single file implementation: apps/web/app/(shell)/complaints/page.tsx. Client component with useState."
-evidence: { buildPlan: {...}, planReview: {...} }
+evidence: { buildPlan: {...}, planReview: {...}, schemaReview: null }
+openIssues: []
+userPreferences: ["No database changes"]
+```
+
+#### Plan → Build Handoff (with schema changes)
+
+```
+summary: "Complaints feature with Prisma model. New Complaint table with status enum, FK to User, indexes on status and createdAt."
+evidence: {
+  buildPlan: {...},
+  planReview: {...},
+  schemaReview: {
+    reviewedBy: "data-architect",
+    normalForm: "3NF",
+    models: ["Complaint"],
+    relationships: [{ from: "Complaint", to: "User", type: "many-to-one", field: "assignedTo" }],
+    indexes: ["@@index([status])", "@@index([createdAt])"],
+    auditFields: ["createdAt", "updatedAt"],
+    enumCompliance: "status uses canonical pattern per CLAUDE.md",
+    issues: []
+  }
+}
 openIssues: []
 userPreferences: []
 ```
@@ -157,7 +261,7 @@ This is a **3-4x reduction** in input tokens per call, which means:
 The user sees the same conversation panel but the agent name/avatar changes per phase:
 
 - Ideate: "Software Engineer" (designing)
-- Plan: "Enterprise Architect" (planning)
+- Plan: "Enterprise Architect" (planning) → "Data Architect" (schema review, if applicable)
 - Build: "Software Engineer" (building)
 - Review: "Scrum Master" (reviewing)
 - Ship: "AI Ops Engineer" (deploying)
@@ -172,6 +276,7 @@ The handoff is transparent: "Handing off to the Enterprise Architect for plannin
 | User confused by agent switch | Clear UI indication; handoff message in conversation |
 | Phase 1 alone doesn't fix Haiku | Phase 1 reduces tool count significantly, which is the primary confusion source |
 | Multiple agent configs to maintain | Each agent's tools are tagged in one place (`mcp-tools.ts`) |
+| Data architect skipped when needed | Plan phase checks if build plan references schema changes; skips data-architect when user preference is "No database changes" |
 
 ### Recommendation
 
@@ -184,3 +289,4 @@ The handoff is transparent: "Handing off to the Enterprise Architect for plannin
 3. **EP-BUILD-HANDOFF-003**: Route phases to different agents with per-agent model config
 4. **EP-BUILD-HANDOFF-004**: UI agent name/avatar switch per phase
 5. **EP-BUILD-HANDOFF-005**: Token budget monitoring and alerting
+6. **EP-BUILD-HANDOFF-006**: Add `data-architect` (AGT-903) to agent registry and seed data; DAMA-DMBOK aligned schema review in plan phase

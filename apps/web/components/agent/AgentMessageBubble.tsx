@@ -135,6 +135,8 @@ export function AgentMessageBubble({
   if (message.role === "system") {
     return (
       <div
+        data-testid="agent-message"
+        data-message-role="system"
         style={{
           textAlign: "center",
           padding: "8px 0",
@@ -176,9 +178,9 @@ export function AgentMessageBubble({
       const isApproved = isExecuted;
 
       return (
-        <div style={{ marginBottom: 12 }}>
+        <div data-testid="agent-message" data-message-role="assistant" data-message-type="proposal" style={{ marginBottom: 12 }}>
           {message.content && (
-            <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", fontSize: 13, lineHeight: 1.4, background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)", color: "var(--dpf-text)", marginBottom: 6 }}>
+            <div data-testid="agent-message-content" style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", fontSize: 13, lineHeight: 1.4, background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)", color: "var(--dpf-text)", marginBottom: 6 }}>
               {message.content}
             </div>
           )}
@@ -235,6 +237,9 @@ export function AgentMessageBubble({
 
     return (
       <div
+        data-testid="agent-message"
+        data-message-role="assistant"
+        data-message-type="proposal"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -252,6 +257,7 @@ export function AgentMessageBubble({
           {/* Show the text content first if any */}
           {message.content && (
             <div
+              data-testid="agent-message-content"
               title={formatRelativeTime(message.createdAt)}
               style={{
                 padding: "8px 12px",
@@ -340,6 +346,8 @@ export function AgentMessageBubble({
 
   return (
     <div
+      data-testid="agent-message"
+      data-message-role={isUser ? "user" : "assistant"}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -354,6 +362,7 @@ export function AgentMessageBubble({
         </span>
       )}
       <div
+        data-testid="agent-message-content"
         title={formatRelativeTime(message.createdAt)}
         style={{
           maxWidth: "85%",
