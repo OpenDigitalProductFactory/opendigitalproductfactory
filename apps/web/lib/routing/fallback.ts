@@ -113,7 +113,8 @@ export async function callWithFallbackChain(
         fallbackOccurred: i > 0,
       }).catch((err) => console.error("[outcome] Failed to record:", err));
 
-      const downgraded = i > 0;
+      const pinnedMiss = decision.reason?.startsWith("WARNING: Pinned provider") ?? false;
+      const downgraded = i > 0 || pinnedMiss;
       return {
         providerId: entry.providerId,
         modelId: entry.modelId,
@@ -125,7 +126,9 @@ export async function callWithFallbackChain(
             : undefined,
         downgraded,
         downgradeMessage: downgraded
-          ? `Switched to ${provider.name} after the preferred endpoint was unavailable.`
+          ? pinnedMiss
+            ? `${decision.reason?.split(". ")[0]}. Using ${provider.name} instead. Check AI Workforce settings to fix.`
+            : `Switched to ${provider.name} after the preferred endpoint was unavailable.`
           : null,
       };
     } catch (e) {
