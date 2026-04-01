@@ -1793,7 +1793,7 @@ export async function executeTool(
         if (build) {
           const current = build.phase as string;
           // Auto-advance when evidence satisfies the gate.
-          const NEXT_PHASE: Record<string, string> = { ideate: "plan", plan: "build", build: "review" };
+          const NEXT_PHASE: Record<string, string> = { ideate: "plan", plan: "build", build: "review", review: "ship" };
           const next = NEXT_PHASE[current];
           console.log(`[saveBuildEvidence] auto-advance check: current=${current} next=${next ?? "none"} field=${field}`);
           if (next && canTransitionPhase(current as any, next as any)) {
@@ -1802,6 +1802,7 @@ export async function executeTool(
               buildPlan: build.buildPlan, planReview: build.planReview,
               taskResults: build.taskResults, verificationOut: build.verificationOut,
               acceptanceMet: build.acceptanceMet,
+              uxTestResults: (build as Record<string, unknown>).uxTestResults,
             });
             console.log(`[saveBuildEvidence] gate: allowed=${gate.allowed} reason=${gate.reason ?? "ok"}`);
             if (gate.allowed) {
