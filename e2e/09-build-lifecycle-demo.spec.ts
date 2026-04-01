@@ -76,12 +76,19 @@ async function sendAndRead(
   const response = await sendAndWait(page, message, timeoutMs);
   await approveAllProposals(page);
 
-  // Fail fast on routing errors — don't waste 10 minutes sending more messages
+  // Detect routing errors. Give one retry after a pause (may be rate limit).
   if (isCannedFallback(response)) {
-    throw new Error(
-      `[${label}] AI provider routing broken — got canned fallback: "${response.slice(0, 150)}". ` +
-      `Fix provider config before re-running test.`,
-    );
+    console.log(`[${label}] Got canned fallback — waiting 15s and retrying (may be rate limit)...`);
+    await page.waitForTimeout(15_000);
+    const retryResponse = await sendAndWait(page, message, timeoutMs);
+    await approveAllProposals(page);
+    if (isCannedFallback(retryResponse)) {
+      throw new Error(
+        `[${label}] AI provider routing broken — got canned fallback twice: "${retryResponse.slice(0, 150)}". ` +
+        `Fix provider config before re-running test.`,
+      );
+    }
+    return retryResponse;
   }
 
   const phase = await getCurrentPhase(page);
