@@ -708,7 +708,10 @@ export async function sendMessage(input: {
       `Provider: ${responseProviderId}/${responseModelId} | ` +
       `Route: ${input.routeContext}`,
     );
-    responseContent = "I wasn't able to help with that effectively. I've logged it so the team can follow up. Try rephrasing your request, or use the skills menu in the header for common actions.";
+    const providerHint = responseProviderId
+      ? `Provider ${responseProviderId}/${responseModelId} returned an empty response.`
+      : "No AI provider was matched by the routing pipeline.";
+    responseContent = `**Unable to process this request.** ${providerHint} Check AI Workforce settings (Platform > AI) to verify provider configuration.`;
   }
 
   // Persist agent response
