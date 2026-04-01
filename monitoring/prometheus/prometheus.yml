@@ -1,0 +1,62 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # ─── Infrastructure ──────────────────────────────────────────
+  - job_name: "cadvisor"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: "node-exporter"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # ─── Databases ───────────────────────────────────────────────
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: "neo4j"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["neo4j:2004"]
+    metrics_path: /metrics
+
+  - job_name: "qdrant"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["qdrant:6333"]
+    metrics_path: /metrics
+
+  # ─── Application ────────────────────────────────────────────
+  - job_name: "portal"
+    static_configs:
+      - targets: ["portal:3000"]
+    metrics_path: /api/metrics
+
+  - job_name: "sandbox"
+    static_configs:
+      - targets:
+          - "sandbox:3000"
+          - "sandbox-2:3000"
+          - "sandbox-3:3000"
+    metrics_path: /api/metrics
+
+  # ─── AI Inference ───────────────────────────────────────────
+  - job_name: "model-runner"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["model-runner.docker.internal:80"]
+    metrics_path: /metrics
+
+  # ─── Self-monitoring ────────────────────────────────────────
+  - job_name: "prometheus"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["localhost:9090"]

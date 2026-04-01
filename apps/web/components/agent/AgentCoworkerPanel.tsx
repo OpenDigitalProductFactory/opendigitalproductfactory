@@ -10,6 +10,7 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
+import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 
 /** Renders setup action buttons only when the setup overlay is active (data attribute on <html>) */
@@ -496,6 +497,7 @@ export function AgentCoworkerPanel({
         <div ref={messagesEndRef} />
       </div>
 
+      <CoworkerHealthStatus />
       <AgentMessageInput
         onSend={handleSend}
         disabled={isPending || isClearing || !threadId}

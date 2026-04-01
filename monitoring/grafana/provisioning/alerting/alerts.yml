@@ -1,0 +1,21 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: dpf-platform-webhook
+    receivers:
+      - uid: dpf-webhook
+        type: webhook
+        settings:
+          url: http://portal:3000/api/platform/alerts
+          httpMethod: POST
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: dpf-platform-webhook
+    group_by:
+      - alertname
+      - severity
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

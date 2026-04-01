@@ -23,6 +23,8 @@ services:
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dpf_dev_password}
       NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_metrics_prometheus_enabled: "true"
+      NEO4J_server_metrics_prometheus_endpoint: "0.0.0.0:2004"
     volumes:
       - neo4jdata:/data
     healthcheck:
@@ -350,6 +352,96 @@ services:
       dev-init:
         condition: service_completed_successfully
 
+  # ─── Monitoring Stack (profile: monitoring) ───────────────────────────────
+  # Start with: docker compose --profile monitoring up -d
+  # Provides: Prometheus metrics, Grafana dashboards, container/host metrics.
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-dpf_monitor}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/dpf-overview.json
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    privileged: true
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
   neo4jdata:
@@ -365,3 +457,5 @@ volumes:
   sandbox_workspace:
   sandbox_workspace_2:
   sandbox_workspace_3:
+  prometheus_data:
+  grafana_data:

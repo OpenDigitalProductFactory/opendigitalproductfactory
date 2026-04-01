@@ -113,7 +113,8 @@ function isFoundationalInfrastructure(itemType: string): boolean {
     || itemType.endsWith("_runtime")
     || itemType.includes("database")
     || itemType.includes("network")
-    || itemType.includes("storage");
+    || itemType.includes("storage")
+    || itemType.includes("monitoring");
 }
 
 function buildFallbackAttribution(item: DiscoveredItemInput): DerivedAttribution {

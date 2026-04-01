@@ -1,0 +1,136 @@
+groups:
+  - name: dpf_infrastructure
+    rules:
+      # ─── Container Health ──────────────────────────────────
+      - alert: ContainerDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been unreachable for over 1 minute."
+
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name=~"dpf-.*"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} CPU above 80%"
+
+      - alert: ContainerHighMemory
+        expr: container_memory_usage_bytes{name=~"dpf-.*"} / container_spec_memory_limit_bytes{name=~"dpf-.*"} * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} memory above 85%"
+
+      - alert: ContainerRestarting
+        expr: increase(container_restart_count{name=~"dpf-.*"}[1h]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} restarted {{ $value }} times in 1h"
+
+      # ─── Host Resources ───────────────────────────────────
+      - alert: HostHighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU usage above 85% for 10 minutes"
+
+      - alert: HostHighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory usage above 85%"
+
+      - alert: HostDiskPressure
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host disk usage above 80%"
+
+      - alert: HostDiskCritical
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host disk usage above 90% -- immediate attention required"
+
+  - name: dpf_databases
+    rules:
+      - alert: PostgresConnectionSaturation
+        expr: pg_stat_activity_count / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool above 80% ({{ $value }}%)"
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unreachable"
+
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant vector DB is unreachable -- AI Coworker memory offline"
+
+  - name: dpf_application
+    rules:
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(dpf_http_request_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "95th percentile request latency above 5s"
+
+      - alert: HighErrorRate
+        expr: rate(dpf_http_requests_total{status_code=~"5.."}[5m]) / rate(dpf_http_requests_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx error rate above 5%"
+
+      - alert: AIInferenceDown
+        expr: up{job="model-runner"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Docker Model Runner is unreachable -- all AI inference offline"
+
+      - alert: AIInferenceHighLatency
+        expr: histogram_quantile(0.95, rate(dpf_ai_inference_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI inference p95 latency above 30s"
+
+      - alert: SemanticMemoryStoreFailures
+        expr: rate(dpf_semantic_memory_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Semantic memory store/recall failing -- AI Coworker context degraded"

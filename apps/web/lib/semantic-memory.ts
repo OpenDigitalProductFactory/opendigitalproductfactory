@@ -8,6 +8,11 @@ import {
   scrollPoints,
   QDRANT_COLLECTIONS,
 } from "@dpf/db";
+import {
+  semanticMemoryOps,
+  semanticMemoryErrors,
+  semanticMemoryLatency,
+} from "@/lib/metrics";
 
 // ─── Store Conversation Memory ──────────────────────────────────────────────
 
@@ -20,25 +25,35 @@ export async function storeConversationMemory(params: {
   routeContext: string;
   threadId: string;
 }): Promise<void> {
-  const embedding = await generateEmbedding(params.content);
-  if (!embedding) return; // silently skip if embedding unavailable
+  const endTimer = semanticMemoryLatency.startTimer({ operation: "store" });
+  try {
+    const embedding = await generateEmbedding(params.content);
+    if (!embedding) { endTimer(); return; } // silently skip if embedding unavailable
 
-  await upsertVectors(QDRANT_COLLECTIONS.AGENT_MEMORY, [
-    {
-      id: params.messageId,
-      vector: embedding,
-      payload: {
-        messageId: params.messageId,
-        userId: params.userId,
-        agentId: params.agentId,
-        routeContext: params.routeContext,
-        threadId: params.threadId,
-        role: params.role,
-        contentPreview: params.content.slice(0, 300),
-        timestamp: new Date().toISOString(),
+    await upsertVectors(QDRANT_COLLECTIONS.AGENT_MEMORY, [
+      {
+        id: params.messageId,
+        vector: embedding,
+        payload: {
+          messageId: params.messageId,
+          userId: params.userId,
+          agentId: params.agentId,
+          routeContext: params.routeContext,
+          threadId: params.threadId,
+          role: params.role,
+          contentPreview: params.content.slice(0, 300),
+          timestamp: new Date().toISOString(),
+        },
       },
-    },
-  ]);
+    ]);
+    semanticMemoryOps.inc({ operation: "store", status: "success" });
+    endTimer();
+  } catch (err) {
+    semanticMemoryErrors.inc({ operation: "store" });
+    semanticMemoryOps.inc({ operation: "store", status: "error" });
+    endTimer();
+    throw err;
+  }
 }
 
 // ─── Recall Relevant Context ────────────────────────────────────────────────
@@ -49,53 +64,64 @@ export async function recallRelevantContext(params: {
   currentThreadId?: string;
   limit?: number;
 }): Promise<string | null> {
-  const embedding = await generateEmbedding(params.query);
-  if (!embedding) return null;
+  const endTimer = semanticMemoryLatency.startTimer({ operation: "recall" });
+  try {
+    const embedding = await generateEmbedding(params.query);
+    if (!embedding) { endTimer(); return null; }
 
-  // Build filter: same user, exclude current thread
-  const must: Array<Record<string, unknown>> = [
-    { key: "userId", match: { value: params.userId } },
-  ];
-  if (params.currentThreadId) {
-    must.push({
-      key: "threadId",
-      match: { value: params.currentThreadId },
+    // Build filter: same user, exclude current thread
+    const must: Array<Record<string, unknown>> = [
+      { key: "userId", match: { value: params.userId } },
+    ];
+    if (params.currentThreadId) {
+      must.push({
+        key: "threadId",
+        match: { value: params.currentThreadId },
+      });
+    }
+
+    // For excluding current thread, use must_not
+    const filter: Record<string, unknown> = params.currentThreadId
+      ? {
+          must: [{ key: "userId", match: { value: params.userId } }],
+          must_not: [{ key: "threadId", match: { value: params.currentThreadId } }],
+        }
+      : { must };
+
+    const results = await searchSimilar(
+      QDRANT_COLLECTIONS.AGENT_MEMORY,
+      embedding,
+      filter,
+      params.limit ?? 8,
+      0.55, // lower threshold — more recall to compensate for short message window
+    );
+
+    semanticMemoryOps.inc({ operation: "recall", status: "success" });
+    endTimer();
+
+    if (results.length === 0) return null;
+
+    const contextLines = results.map((r) => {
+      const p = r.payload;
+      const role = p["role"] === "user" ? "You" : "Agent";
+      const route = p["routeContext"] ?? "unknown";
+      const preview = String(p["contentPreview"] ?? "");
+      return `[${role} on ${route}]: ${preview}`;
     });
+
+    return [
+      "",
+      "RELEVANT CONTEXT FROM PAST CONVERSATIONS:",
+      "These are semantically similar messages from your previous interactions.",
+      "Use them to inform your response, but don't reference them explicitly.",
+      ...contextLines,
+    ].join("\n");
+  } catch (err) {
+    semanticMemoryErrors.inc({ operation: "recall" });
+    semanticMemoryOps.inc({ operation: "recall", status: "error" });
+    endTimer();
+    throw err;
   }
-
-  // For excluding current thread, use must_not
-  const filter: Record<string, unknown> = params.currentThreadId
-    ? {
-        must: [{ key: "userId", match: { value: params.userId } }],
-        must_not: [{ key: "threadId", match: { value: params.currentThreadId } }],
-      }
-    : { must };
-
-  const results = await searchSimilar(
-    QDRANT_COLLECTIONS.AGENT_MEMORY,
-    embedding,
-    filter,
-    params.limit ?? 8,
-    0.55, // lower threshold — more recall to compensate for short message window
-  );
-
-  if (results.length === 0) return null;
-
-  const contextLines = results.map((r) => {
-    const p = r.payload;
-    const role = p["role"] === "user" ? "You" : "Agent";
-    const route = p["routeContext"] ?? "unknown";
-    const preview = String(p["contentPreview"] ?? "");
-    return `[${role} on ${route}]: ${preview}`;
-  });
-
-  return [
-    "",
-    "RELEVANT CONTEXT FROM PAST CONVERSATIONS:",
-    "These are semantically similar messages from your previous interactions.",
-    "Use them to inform your response, but don't reference them explicitly.",
-    ...contextLines,
-  ].join("\n");
 }
 
 // ─── Store Platform Knowledge ───────────────────────────────────────────────
