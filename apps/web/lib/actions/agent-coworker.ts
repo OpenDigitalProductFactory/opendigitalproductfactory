@@ -481,6 +481,48 @@ export async function sendMessage(input: {
     } catch (err) {
       console.error("[handoff] Failed to load PhaseHandoff:", err);
     }
+
+    // Ship phase: inject impact analysis and approval authority context
+    // so the AI Coworker can present the approval card to the user
+    if (activeBuildPhase === "ship") {
+      try {
+        const shipBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: user.id!, phase: "ship" },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true, diffPatch: true, title: true },
+        });
+        if (shipBuild?.diffPatch) {
+          const { analyzeChangeImpact, formatImpactForChat } = await import("@/lib/change-impact");
+          const { resolveApprovalAuthority, isCurrentUserTheAuthority, formatAuthorityForChat } = await import("@/lib/approval-authority");
+
+          const impactReport = await analyzeChangeImpact(shipBuild.diffPatch);
+          const authority = await resolveApprovalAuthority(
+            "deployment", "normal", impactReport.riskLevel, user.id!,
+          );
+          const isSelf = isCurrentUserTheAuthority(authority, user.id!);
+
+          const shipContext = [
+            "",
+            "## Deployment Approval Context",
+            "",
+            `Build: ${shipBuild.buildId} — ${shipBuild.title ?? "Untitled"}`,
+            "",
+            formatImpactForChat(impactReport),
+            "",
+            formatAuthorityForChat(authority, isSelf),
+            "",
+            isSelf
+              ? "The current user IS the approval authority. Present the approval request directly with [Approve] [Reject] [Schedule for Later] options."
+              : "The current user is NOT the approval authority. Inform them that the authority has been notified.",
+          ].join("\n");
+
+          populatedPrompt += shipContext;
+          console.log(`[ship] Injected impact analysis + authority context (${shipContext.length} chars)`);
+        }
+      } catch (err) {
+        console.warn("[ship] Failed to inject impact/authority context:", err);
+      }
+    }
   }
 
   // When external access is enabled, tell the agent about its web tools

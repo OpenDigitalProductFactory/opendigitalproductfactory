@@ -2543,6 +2543,58 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         // Non-fatal — window check is advisory at this stage
       }
 
+      // Run change impact analysis (EP-BUILD-HANDOFF-002 Phase 2b)
+      let impactReport: Awaited<ReturnType<typeof import("@/lib/change-impact").analyzeChangeImpact>> | null = null;
+      let impactSummary = "";
+      try {
+        const { analyzeChangeImpact, formatImpactForChat } = await import("@/lib/change-impact");
+        impactReport = await analyzeChangeImpact(extracted.fullDiff);
+        impactSummary = formatImpactForChat(impactReport);
+      } catch (err) {
+        console.warn("[deploy_feature] impact analysis failed:", err);
+      }
+
+      // Resolve approval authority (EP-BUILD-HANDOFF-002 Phase 2b)
+      let authorityInfo = "";
+      try {
+        const { resolveApprovalAuthority, isCurrentUserTheAuthority, formatAuthorityForChat } = await import("@/lib/approval-authority");
+        const riskLevel = impactReport?.riskLevel ?? "low";
+        const authority = await resolveApprovalAuthority("deployment", "normal", riskLevel, userId);
+        const isSelf = isCurrentUserTheAuthority(authority, userId);
+        authorityInfo = formatAuthorityForChat(authority, isSelf);
+      } catch (err) {
+        console.warn("[deploy_feature] authority resolution failed:", err);
+      }
+
+      // Submit as PR contribution (EP-BUILD-HANDOFF-002 Phase 2e)
+      let prContribution: Awaited<ReturnType<typeof import("@/lib/contribution-pipeline").submitBuildAsPR>> | null = null;
+      let prInfo = "";
+      try {
+        const { submitBuildAsPR, formatContributionForChat } = await import("@/lib/contribution-pipeline");
+        const buildInfo = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { title: true, digitalProductId: true, digitalProduct: { select: { productId: true } } },
+        });
+        const userInfo = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { employeeProfile: { select: { displayName: true } } },
+        });
+        const authorName = userInfo?.employeeProfile?.displayName ?? "AI Coworker";
+
+        prContribution = await submitBuildAsPR({
+          buildId,
+          title: buildInfo?.title ?? "Untitled feature",
+          diffPatch: extracted.fullDiff,
+          productId: buildInfo?.digitalProduct?.productId ?? null,
+          impactReport,
+          authorUserId: userId,
+          authorName,
+        });
+        prInfo = formatContributionForChat(prContribution);
+      } catch (err) {
+        console.warn("[deploy_feature] PR contribution failed:", err);
+      }
+
       const messageParts = [
         `Diff extracted: ${extracted.codeFiles.length} code file(s), ${extracted.migrationFiles.length} migration(s).`,
         windowStatus,
@@ -2550,12 +2602,21 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (destructiveWarnings.length > 0) {
         messageParts.push(`WARNING: ${destructiveWarnings.length} destructive operation(s) detected: ${destructiveWarnings.join("; ")}`);
       }
+      if (impactSummary) {
+        messageParts.push("", impactSummary);
+      }
+      if (authorityInfo) {
+        messageParts.push("", authorityInfo);
+      }
+      if (prInfo) {
+        messageParts.push("", prInfo);
+      }
 
       logBuildActivity(buildId, "deploy_feature", messageParts.join(" "));
 
       return {
         success: true,
-        message: messageParts.join(" "),
+        message: messageParts.join("\n"),
         data: {
           diffLength: extracted.fullDiff.length,
           summary: extracted.fullDiff.slice(0, 500),
@@ -2563,6 +2624,15 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           migrationFiles: extracted.migrationFiles.length,
           destructiveWarnings,
           windowStatus,
+          impactReport,
+          prContribution: prContribution ? {
+            mode: prContribution.mode,
+            branchName: prContribution.branchName,
+            prUrl: prContribution.prUrl,
+            prNumber: prContribution.prNumber,
+            securityScanPassed: prContribution.securityScan.passed,
+            status: prContribution.status,
+          } : null,
         },
       };
     }

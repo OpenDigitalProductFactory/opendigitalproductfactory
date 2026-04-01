@@ -511,6 +511,30 @@ export async function shipBuild(input: {
       ...(build.diffSummary ? { changeSummary: build.diffSummary } : {}),
     });
 
+    // Store change impact report on the RFC (EP-BUILD-HANDOFF-002 Phase 2b)
+    if (build.diffPatch) {
+      try {
+        const { analyzeChangeImpact } = await import("@/lib/change-impact");
+        const impactReport = await analyzeChangeImpact(build.diffPatch);
+
+        // Find the RFC created by createProductVersionWithRFC and store the impact report
+        const rfcRecord = await prisma.changeRequest.findFirst({
+          where: {
+            changeItems: { some: { changePromotionId: versionResult.promotion.id } },
+          },
+          select: { rfcId: true, id: true },
+        });
+        if (rfcRecord) {
+          await prisma.changeRequest.update({
+            where: { id: rfcRecord.id },
+            data: { impactReport: impactReport as unknown as Prisma.InputJsonValue },
+          });
+        }
+      } catch (err) {
+        console.warn("[shipBuild] impact report storage failed:", err);
+      }
+    }
+
     // Auto-approve the promotion — the user already approved deploy_feature
     // which is the HITL gate for the ship sequence.
     await prisma.changePromotion.update({
