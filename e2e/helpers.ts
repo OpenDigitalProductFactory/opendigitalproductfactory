@@ -93,20 +93,55 @@ async function waitForCoworkerBusy(
   }
 }
 
+// ─── Message Counting ──────────────────────────────────────────────────────
+
+/**
+ * Counts assistant messages currently in the panel.
+ * Used to detect when a NEW response arrives after sending.
+ */
+async function countAssistantMessages(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const panel = document.querySelector("[data-agent-panel='true']");
+    if (!panel) return 0;
+    return panel.querySelectorAll(
+      '[data-testid="agent-message"][data-message-role="assistant"]',
+    ).length;
+  });
+}
+
+/**
+ * Extracts assistant message at a specific index (0-based).
+ * Returns the text content of that message.
+ */
+async function extractAssistantMessageAt(page: Page, index: number): Promise<string> {
+  return page.evaluate((idx) => {
+    const panel = document.querySelector("[data-agent-panel='true']");
+    if (!panel) return "[no panel]";
+    const messages = panel.querySelectorAll(
+      '[data-testid="agent-message"][data-message-role="assistant"]',
+    );
+    if (idx >= messages.length) return "[no message at index]";
+    const el = messages[idx] as HTMLElement;
+    const content = el.querySelector('[data-testid="agent-message-content"]') as HTMLElement | null;
+    return (content ?? el)?.textContent?.trim() ?? "[empty]";
+  }, index);
+}
+
 // ─── Send Message & Wait ────────────────────────────────────────────────────
 
 /**
- * Sends a message to the coworker and waits for the complete response.
+ * Sends a message to the coworker and waits for the specific response.
  *
  * Flow:
- * 1. Wait for coworker to be idle (textarea enabled)
- * 2. Fill the textarea and click Send
- * 3. Confirm the message was accepted (textarea becomes disabled)
- * 4. Wait for the response to complete (textarea becomes enabled again)
- * 5. Extract and return the last assistant message
+ * 1. Count existing assistant messages (baseline)
+ * 2. Wait for coworker to be idle
+ * 3. Fill the textarea and click Send
+ * 4. Confirm the message was accepted (textarea becomes disabled)
+ * 5. Wait for the response to complete (textarea becomes enabled again)
+ * 6. Verify a NEW assistant message appeared (count increased)
+ * 7. Read that specific new message — not "the last one in the panel"
  *
- * This handles the async nature of the coworker correctly — no race
- * conditions between sending and the coworker starting to process.
+ * This correlates each sent message with its response.
  */
 export async function sendAndWait(
   page: Page,
@@ -115,18 +150,19 @@ export async function sendAndWait(
 ): Promise<string> {
   const panel = page.locator('[data-agent-panel="true"]');
 
-  // 1. Wait for coworker to be idle before attempting to send
-  console.log(`[helper] Waiting for coworker idle before sending...`);
+  // 1. Count assistant messages BEFORE sending — this is our baseline
+  const countBefore = await countAssistantMessages(page);
+
+  // 2. Wait for coworker to be idle before attempting to send
   await waitForCoworkerIdle(page, timeoutMs);
 
-  // 2. Find textarea, fill, and send
+  // 3. Find textarea, fill, and send
   const input = panel.locator("textarea");
   await input.waitFor({ state: "visible", timeout: 10_000 });
-  await page.waitForTimeout(500); // Brief stability pause
+  await page.waitForTimeout(500);
 
   await input.fill(message);
 
-  // Click Send button (or press Enter as fallback)
   const sendBtn = panel.locator('button:has-text("Send")').first();
   const canClickSend =
     (await sendBtn.isVisible({ timeout: 2_000 }).catch(() => false)) &&
@@ -137,21 +173,17 @@ export async function sendAndWait(
     await input.press("Enter");
   }
 
-  // 3. Confirm the message was accepted (textarea goes disabled)
+  // 4. Confirm the message was accepted (textarea goes disabled)
   const accepted = await waitForCoworkerBusy(page, 10_000);
   if (!accepted) {
     console.log("[helper] Warning: message may not have been sent (textarea never disabled)");
   }
 
-  // 4. Wait for the response to complete (textarea becomes enabled)
-  console.log(`[helper] Waiting for coworker response (up to ${timeoutMs / 1000}s)...`);
+  // 5. Wait for the response to complete (textarea becomes enabled)
   await waitForCoworkerIdle(page, timeoutMs);
-
-  // 5. Brief pause for DOM rendering
   await page.waitForTimeout(1_500);
 
-  // 5b. Check for "Not sent" state — the client-side timeout may have fired
-  //     before the server action completed. Auto-click Retry if visible.
+  // 5b. Handle "Not sent" — auto-retry if the client-side timeout fired
   for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
     const retryBtn = panel.locator('button:has-text("Retry")').first();
     const hasRetry = await retryBtn.isVisible({ timeout: 1_000 }).catch(() => false);
@@ -160,7 +192,6 @@ export async function sendAndWait(
     console.log(`[helper] Message shows "Not sent" — clicking Retry (attempt ${retryAttempt + 1})`);
     await retryBtn.click();
 
-    // Wait for the retry to be accepted and complete
     const retryAccepted = await waitForCoworkerBusy(page, 10_000);
     if (retryAccepted) {
       await waitForCoworkerIdle(page, timeoutMs);
@@ -171,10 +202,36 @@ export async function sendAndWait(
     }
   }
 
-  // 6. Extract and return the last assistant response
-  const response = await extractLastResponse(page);
-  console.log(`\n[demo] >>> ${message.slice(0, 80)}`);
-  console.log(`[demo] <<< ${response.slice(0, 200)}`);
+  // 6. Read the NEW assistant message(s) that appeared after our send
+  const countAfter = await countAssistantMessages(page);
+  let response: string;
+
+  if (countAfter > countBefore) {
+    // Read all new messages (there may be multiple — e.g. system + assistant)
+    // and concatenate them. The last new one is typically the main response.
+    const newMessages: string[] = [];
+    for (let i = countBefore; i < countAfter; i++) {
+      const msg = await extractAssistantMessageAt(page, i);
+      if (msg && msg !== "[empty]" && msg !== "[no message at index]") {
+        newMessages.push(msg);
+      }
+    }
+    response = newMessages.length > 0
+      ? newMessages[newMessages.length - 1]!
+      : "[new message was empty]";
+
+    if (newMessages.length > 1) {
+      console.log(`[helper] ${newMessages.length} new assistant messages; reading last one`);
+    }
+  } else {
+    // No new messages — the coworker went idle without responding.
+    // Fall back to reading the last message (may be from a previous turn).
+    response = await extractLastResponse(page);
+    console.log("[helper] Warning: no new assistant message detected after send");
+  }
+
+  console.log(`\n[send] >>> ${message.slice(0, 80)}`);
+  console.log(`[recv] <<< ${response.slice(0, 200)}`);
   return response;
 }
 
