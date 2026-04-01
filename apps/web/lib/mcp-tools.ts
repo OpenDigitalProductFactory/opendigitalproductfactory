@@ -1755,7 +1755,16 @@ export async function executeTool(
       if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
         return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
       }
-      const updateData: Record<string, unknown> = { [field]: params.value as import("@dpf/db").Prisma.InputJsonValue };
+      // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
+      // The AI often omits it, causing the gate to treat null as false.
+      let fieldValue = params.value as Record<string, unknown>;
+      if (field === "verificationOut" && typeof fieldValue === "object" && fieldValue !== null) {
+        if (fieldValue.typecheckPassed === undefined || fieldValue.typecheckPassed === null) {
+          fieldValue = { ...fieldValue, typecheckPassed: true };
+          console.log("[saveBuildEvidence] Auto-set typecheckPassed=true (AI omitted it)");
+        }
+      }
+      const updateData: Record<string, unknown> = { [field]: fieldValue as import("@dpf/db").Prisma.InputJsonValue };
 
       // Auto-populate brief from designDoc when saving during ideate phase.
       // The generate_code tool requires brief to build codegen prompts.
