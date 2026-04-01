@@ -423,9 +423,11 @@ export async function sendMessage(input: {
   const availableTools = mergedTools.filter((t) => {
     // Advise mode: exclude side-effect tools
     if (input.coworkerMode === "advise" && t.sideEffect) return false;
-    // Build phase filtering: if tool has buildPhases and we're in a build,
-    // only include it if the current phase matches
-    if (activeBuildPhase && t.buildPhases) {
+    // Build phase filtering: when in a build, ONLY include tools that are
+    // explicitly assigned to the current phase. This prevents tool overload
+    // (53+ tools) which causes smaller models to miss critical tools.
+    if (activeBuildPhase) {
+      if (!t.buildPhases) return false; // Exclude general-purpose tools during builds
       return t.buildPhases.includes(activeBuildPhase as import("@/lib/mcp-tools").BuildPhaseTag);
     }
     return true;
@@ -438,6 +440,11 @@ export async function sendMessage(input: {
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
     : undefined;
+
+  // Log tools available for this build phase (helps diagnose missing tool issues)
+  if (activeBuildPhase) {
+    console.log(`[tools] Phase: ${activeBuildPhase} | ${availableTools.length} tools: ${availableTools.map(t => t.name).join(", ")}`);
+  }
 
   // When external access is enabled, tell the agent about its web tools
   if (input.externalAccessEnabled) {
