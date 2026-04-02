@@ -2540,14 +2540,31 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (toolName === "run_sandbox_command") {
         const command = String(params.command ?? "");
         if (!command) return { success: false, error: "command is required.", message: "Provide a command to run." };
+
+        // Smart output truncation: keep errors (at the end) rather than progress noise (at the start)
+        const truncateOutput = (raw: string, limit: number = 15000): string => {
+          if (raw.length <= limit) return raw;
+          // For build/typecheck output, extract error lines first
+          const errorLines = raw.split("\n").filter((l) =>
+            /error\s+TS\d|ERROR|FAIL|Error:|Cannot find|not assignable|does not exist|Module.*not found/i.test(l)
+          );
+          if (errorLines.length > 0 && errorLines.length < 200) {
+            const errorSummary = errorLines.join("\n");
+            if (errorSummary.length <= limit) {
+              return `[${raw.split("\n").length} total lines, showing ${errorLines.length} error lines]\n${errorSummary}`;
+            }
+          }
+          // Fall back to keeping the tail (where errors typically appear)
+          return `[output truncated — showing last ${limit} chars of ${raw.length}]\n...${raw.slice(-limit)}`;
+        };
+
         try {
           const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
           logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
-          return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 10000) } };
+          return { success: true, message: `Command completed.`, data: { command, output: truncateOutput(output) } };
         } catch (err) {
           // Commands like tsc, prisma validate return non-zero exit codes when they
           // find errors. This is NOT a sandbox failure — it's useful output.
-          // Extract stdout/stderr from the error and return it as actionable data.
           const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: number };
           const output = (execErr.stdout ?? "") + (execErr.stderr ?? "");
           const exitCode = execErr.code;
@@ -2558,7 +2575,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
             return {
               success: true,
               message: `Command exited with code ${exitCode}. Review the output for errors to fix.`,
-              data: { command, output: output.slice(0, 10000), exitCode },
+              data: { command, output: truncateOutput(output), exitCode },
             };
           }
 
