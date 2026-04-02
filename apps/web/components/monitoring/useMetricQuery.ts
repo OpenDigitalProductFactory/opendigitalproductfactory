@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useMonitoringStatus } from "./MonitoringContext";
 
 export type PrometheusResult = {
   metric: Record<string, string>;
@@ -14,10 +15,13 @@ type QueryState = {
   offline: boolean;
 };
 
+const OFFLINE_STATE: QueryState = { data: null, loading: false, error: null, offline: true };
+
 export function useMetricQuery(
   query: string,
   intervalMs = 15_000,
 ): QueryState {
+  const { online, checked } = useMonitoringStatus();
   const [state, setState] = useState<QueryState>({
     data: null,
     loading: true,
@@ -31,7 +35,7 @@ export function useMetricQuery(
         `/api/platform/metrics?query=${encodeURIComponent(query)}`,
       );
       if (res.status === 503) {
-        setState({ data: null, loading: false, error: null, offline: true });
+        setState(OFFLINE_STATE);
         return;
       }
       const json = await res.json();
@@ -51,15 +55,23 @@ export function useMetricQuery(
         });
       }
     } catch {
-      setState({ data: null, loading: false, error: null, offline: true });
+      setState(OFFLINE_STATE);
     }
   }, [query]);
 
   useEffect(() => {
+    // Don't fire queries until connectivity is checked
+    if (!checked) return;
+    // If the shared probe says offline, skip all individual queries
+    if (!online) {
+      setState(OFFLINE_STATE);
+      return;
+    }
+
     fetchData();
     const id = setInterval(fetchData, intervalMs);
     return () => clearInterval(id);
-  }, [fetchData, intervalMs]);
+  }, [fetchData, intervalMs, online, checked]);
 
   return state;
 }

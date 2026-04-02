@@ -451,9 +451,9 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | `promoter` | One-shot container that builds new portal images from sandbox source, backs up the database, and deploys promoted features. Triggered by Build Studio ship phase or ops UI. Uses the `promote` profile. |
 | `playwright` | Optional tooling image used in the `build-images` profile |
 
-#### Monitoring Stack (optional)
+#### Monitoring Stack
 
-The platform includes a full operational health monitoring stack behind the `monitoring` Docker Compose profile. It is **off by default** and adds no overhead unless explicitly started.
+The platform includes a full operational health monitoring stack that starts automatically with the core services. It is headless infrastructure — it feeds the platform's native System Health dashboard, alert pipeline, and AI Coworker health indicators.
 
 | Service | Image | Purpose | Port |
 |---------|-------|---------|------|
@@ -465,12 +465,6 @@ The platform includes a full operational health monitoring stack behind the `mon
 
 Native exporters (no additional containers): Neo4j (`:2004/metrics`), Qdrant (`:6333/metrics`), Docker Model Runner (`/metrics`).
 
-**Start monitoring:**
-
-```bash
-docker compose --profile monitoring up -d
-```
-
 **What you get:**
 
 - **System Health tab** in Operations > Backlog — platform-native dashboard with service status grid, host resource gauges (CPU/memory/disk), AI Coworker health panel, container resource table, database metrics, and alert history. No need to leave the platform.
@@ -479,18 +473,17 @@ docker compose --profile monitoring up -d
 - **Grafana** at `http://localhost:3002` — pre-provisioned overview dashboard for custom PromQL queries and deep-dive exploration. Default login: `admin` / `dpf_monitor` (configurable via `GF_ADMIN_USER` and `GF_ADMIN_PASSWORD` in `.env`).
 - **13 alert rules** — container down, high CPU/memory/disk, Postgres connection saturation, Qdrant down, AI inference failures, semantic memory errors. Alerts fire into the platform's quality issue system automatically.
 
-The monitoring stack adds ~175-350 MB RAM. All dashboards and alert rules are auto-provisioned from config files in `monitoring/` — no manual Grafana setup required.
+The monitoring stack adds ~175-350 MB RAM and starts automatically with `docker compose up -d`. All dashboards and alert rules are auto-provisioned from config files in `monitoring/` — no manual setup required.
 
 **Architecture:** Prometheus and Grafana run as separate containers (not merged into the portal). The portal queries Prometheus via a server-side proxy API (`/api/platform/metrics`) for its native dashboards. Grafana is a secondary power-user tool, not the primary monitoring surface. Discovered monitoring containers are attributed to the **Foundational** portfolio under the **Observability Platform** taxonomy node and appear in the inventory with `monitors` relationships to the services they observe.
 
 In customer mode, only `portal` is exposed. In native developer mode, `docker-compose.dev.yml` publishes host ports for `postgres` and `neo4j` so the app can run locally while the stateful services remain containerized.
 
 ```bash
-docker compose up -d                              # Start core stack
-docker compose --profile monitoring up -d         # Start core + monitoring
-docker compose ps                                 # Check health
-docker compose logs -f                            # View logs
-docker compose down                               # Stop
+docker compose up -d       # Start everything (core + monitoring)
+docker compose ps          # Check health
+docker compose logs -f     # View logs
+docker compose down        # Stop
 ```
 
 ---

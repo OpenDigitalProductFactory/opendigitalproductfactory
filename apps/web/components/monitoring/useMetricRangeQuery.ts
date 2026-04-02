@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useMonitoringStatus } from "./MonitoringContext";
 
 export type RangeResult = {
   metric: Record<string, string>;
@@ -14,12 +15,15 @@ type RangeQueryState = {
   offline: boolean;
 };
 
+const OFFLINE_STATE: RangeQueryState = { data: null, loading: false, error: null, offline: true };
+
 export function useMetricRangeQuery(
   query: string,
   duration = "1h",
   step = "15s",
   intervalMs = 30_000,
 ): RangeQueryState {
+  const { online, checked } = useMonitoringStatus();
   const [state, setState] = useState<RangeQueryState>({
     data: null,
     loading: true,
@@ -42,7 +46,7 @@ export function useMetricRangeQuery(
       });
       const res = await fetch(`/api/platform/metrics?${params}`);
       if (res.status === 503) {
-        setState({ data: null, loading: false, error: null, offline: true });
+        setState(OFFLINE_STATE);
         return;
       }
       const json = await res.json();
@@ -62,15 +66,21 @@ export function useMetricRangeQuery(
         });
       }
     } catch {
-      setState({ data: null, loading: false, error: null, offline: true });
+      setState(OFFLINE_STATE);
     }
   }, [query, duration, step]);
 
   useEffect(() => {
+    if (!checked) return;
+    if (!online) {
+      setState(OFFLINE_STATE);
+      return;
+    }
+
     fetchData();
     const id = setInterval(fetchData, intervalMs);
     return () => clearInterval(id);
-  }, [fetchData, intervalMs]);
+  }, [fetchData, intervalMs, online, checked]);
 
   return state;
 }

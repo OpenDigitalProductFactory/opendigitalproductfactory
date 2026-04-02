@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(promUrl.toString(), { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(promUrl.toString(), { signal: AbortSignal.timeout(2_000) });
     const data = await res.json();
     return NextResponse.json(data);
   } catch {

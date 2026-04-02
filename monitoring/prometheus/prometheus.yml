@@ -22,11 +22,14 @@ scrape_configs:
     static_configs:
       - targets: ["postgres-exporter:9187"]
 
-  - job_name: "neo4j"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["neo4j:2004"]
-    metrics_path: /metrics
+  # Neo4j Community Edition does not expose Prometheus metrics.
+  # Neo4j Enterprise users: uncomment and add NEO4J_server_metrics_prometheus_enabled
+  # to the neo4j service environment in docker-compose.yml.
+  # - job_name: "neo4j"
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ["neo4j:2004"]
+  #   metrics_path: /metrics
 
   - job_name: "qdrant"
     scrape_interval: 30s

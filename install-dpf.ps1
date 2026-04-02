@@ -943,40 +943,6 @@ if (-not (Is-StepDone "autostart")) {
     Write-OK "Already configured"
 }
 
-# --- Optional: Monitoring Stack -----------------------------------------------
-
-if (-not (Is-StepDone "monitoring_asked")) {
-    Write-Host ""
-    Write-Host "  Would you like to enable platform health monitoring?" -ForegroundColor Cyan
-    Write-Host "  This adds Prometheus, Grafana, and container metrics for operational" -ForegroundColor White
-    Write-Host "  visibility (CPU, memory, disk, AI inference health, alerting)." -ForegroundColor White
-    Write-Host "  Adds ~350 MB RAM. You can enable/disable this anytime later." -ForegroundColor White
-    Write-Host ""
-    $monAnswer = Read-Host "  Enable monitoring? (y/N)"
-    if ($monAnswer -match "^[Yy]") {
-        Write-Action "Starting monitoring stack (Prometheus, Grafana, cAdvisor, exporters)..."
-        Set-Location $DPF_DIR
-        $oldEAP = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        docker compose --profile monitoring up -d 2>&1 | Out-Null
-        $ErrorActionPreference = $oldEAP
-        if ($LASTEXITCODE -eq 0) {
-            Write-OK "Monitoring stack running -- Grafana at http://localhost:3002"
-            # Persist the choice so dpf-start also starts monitoring
-            $envContent = Get-Content "$DPF_DIR\.env" -Raw
-            if ($envContent -notmatch "COMPOSE_PROFILES") {
-                Add-Content "$DPF_DIR\.env" "COMPOSE_PROFILES=monitoring"
-            }
-        } else {
-            Write-Warn "Monitoring stack failed to start. You can try later:"
-            Write-Warn "  cd $DPF_DIR && docker compose --profile monitoring up -d"
-        }
-    } else {
-        Write-OK "Monitoring skipped -- enable anytime with: docker compose --profile monitoring up -d"
-    }
-    Save-Progress "monitoring_asked"
-}
-
 Write-Step 9 9 "Opening your portal!"
 
 # Read admin password from .env
@@ -996,12 +962,8 @@ Write-Host "  |  Save this password -- it won't be shown again!      |" -Foregro
 Write-Host "  |                                                      |" -ForegroundColor Green
 Write-Host "  |  To stop:  Open PowerShell, run: dpf-stop            |" -ForegroundColor Green
 Write-Host "  |  To start: Open PowerShell, run: dpf-start           |" -ForegroundColor Green
-$monitoringEnabled = (Get-Content "$DPF_DIR\.env" -ErrorAction SilentlyContinue) -match "COMPOSE_PROFILES.*monitoring"
-if ($monitoringEnabled) {
-    Write-Host "  |                                                      |" -ForegroundColor Green
-    Write-Host "  |  Monitoring: http://localhost:3002 (Grafana)          |" -ForegroundColor Green
-    Write-Host "  |  System Health: Operations > System Health tab        |" -ForegroundColor Green
-}
+Write-Host "  |                                                      |" -ForegroundColor Green
+Write-Host "  |  System Health: Operations > System Health tab        |" -ForegroundColor Green
 if ($InstallMode -eq "customizer") {
     Write-Host "  |                                                      |" -ForegroundColor Green
     Write-Host "  |  Local dev: cd $($DPF_DIR.PadRight(38))|" -ForegroundColor Cyan

@@ -10,5 +10,7 @@ export { SystemHealthDashboard } from "./SystemHealthDashboard";
 export { ContainerResourceTable } from "./ContainerResourceTable";
 export { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 export { RecentAlertsPanel } from "./RecentAlertsPanel";
+export { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
+export { CoworkerHealthStatus } from "./CoworkerHealthStatus";
 export { useMetricQuery } from "./useMetricQuery";
 export { useMetricRangeQuery } from "./useMetricRangeQuery";
