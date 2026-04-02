@@ -26,6 +26,12 @@ const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|
 // Narration patterns: agent describes code for the user instead of calling tools
 const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to add|change|pattern)|add (?:this |the following )|insert (?:this |before )|exact (?:lines|code|changes)|manually|copy[- ]paste)/i;
 
+// Frustration patterns: agent is spinning, apologizing, or hedging instead of acting.
+// Inspired by Claude Code's ~20 frustration regexes (March 2026 source leak).
+// Only checked in the no-tool-calls branch, so this won't fire when the agent
+// is actively using tools and reporting on results.
+export const FRUSTRATION_PATTERN = /(?:I (?:apologize|cannot|can't|am unable|don't have (?:access|the ability))|(?:unfortunately|regrettably),? I|I'm (?:not able|having (?:trouble|difficulty)|sorry)|(?:beyond|outside) my (?:capabilities|ability)|I (?:don't|do not) (?:currently )?have (?:a |the )?(?:tool|capability|access|ability)|I (?:was|am) unable to)/i;
+
 // Tools that actually build/write — not just read/search
 const BUILD_TOOL_NAMES = new Set([
   "saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan",
@@ -119,6 +125,72 @@ export type AgenticResult = {
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
 };
 
+/** Generate a phase-aware nudge based on which tools have been used so far. */
+function getPhaseSpecificNudge(executedTools: Array<{ name: string }>): string {
+  const usedNames = new Set(executedTools.map(t => t.name));
+
+  // If sandbox tools were used, we're likely in build phase
+  if (usedNames.has("launch_sandbox") || usedNames.has("generate_code") || usedNames.has("write_sandbox_file")) {
+    if (!usedNames.has("run_sandbox_tests")) return "Try run_sandbox_tests to verify your work, or read_sandbox_file to check what exists.";
+    return "Try run_sandbox_command to debug, or edit_sandbox_file to fix the issue.";
+  }
+
+  // If search/read tools were used, we're likely in ideate
+  if (usedNames.has("search_project_files") || usedNames.has("read_project_file")) {
+    return "Call saveBuildEvidence with field 'designDoc' to save your design.";
+  }
+
+  // If evidence tools were used, we're likely in plan/review
+  if (usedNames.has("saveBuildEvidence") || usedNames.has("reviewDesignDoc")) {
+    return "Call reviewBuildPlan to review the plan, or saveBuildEvidence to save your progress.";
+  }
+
+  // Deploy/ship tools
+  if (usedNames.has("deploy_feature") || usedNames.has("check_deployment_windows")) {
+    return "Call execute_promotion or schedule_promotion to complete deployment.";
+  }
+
+  // Generic fallback
+  return "Check your available tools and call the most relevant one now.";
+}
+
+/**
+ * Annotate tool descriptions with session-aware hints based on what the agent
+ * has already tried. Inspired by Claude Code's dynamic tool description system.
+ * Mutates nothing — returns a new array.
+ */
+function enrichToolDescriptions(
+  toolsForProvider: Array<Record<string, unknown>>,
+  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: { success: boolean; error?: string } }>,
+): Array<Record<string, unknown>> {
+  if (executedTools.length === 0) return toolsForProvider;
+
+  // Build failure map: tool name → last error. If a tool succeeded after
+  // failing, clear the warning — the tool recovered.
+  const failures = new Map<string, string>();
+  for (const t of executedTools) {
+    if (!t.result.success && t.result.error) {
+      failures.set(t.name, t.result.error.slice(0, 150));
+    } else if (t.result.success) {
+      failures.delete(t.name);
+    }
+  }
+
+  if (failures.size === 0) return toolsForProvider;
+
+  return toolsForProvider.map((tool) => {
+    const name = tool.name as string;
+    const lastError = failures.get(name);
+    if (!lastError) return tool;
+
+    const desc = tool.description as string;
+    return {
+      ...tool,
+      description: `${desc} [WARNING: This tool failed earlier in this session with: "${lastError}". Consider a different approach or different arguments.]`,
+    };
+  });
+}
+
 export async function runAgenticLoop(params: {
   chatHistory: ChatMessage[];
   systemPrompt: string;
@@ -196,6 +268,7 @@ export async function runAgenticLoop(params: {
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   let fabricationRetried = false;
+  let frustrationCount = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
 
@@ -254,8 +327,15 @@ export async function runAgenticLoop(params: {
       };
     }
 
+    // Dynamic tool descriptions: annotate tools that failed earlier in this session
+    // Inspired by Claude Code's session-aware tool description system.
+    const enrichedRouteOptions = {
+      ...routeOptions,
+      ...(routeOptions.tools ? { tools: enrichToolDescriptions(routeOptions.tools as Array<Record<string, unknown>>, executedTools) } : {}),
+    };
+
     // EP-INF-009b: All inference goes through V2 routing pipeline
-    const result = await routeAndCall(messages, systemPrompt, sensitivity, routeOptions);
+    const result = await routeAndCall(messages, systemPrompt, sensitivity, enrichedRouteOptions);
 
     // First iteration: check if the routed model matches the preferred model.
     // If not, warn — the agent may not be able to orchestrate tools effectively.
@@ -343,6 +423,38 @@ export async function runAgenticLoop(params: {
           {
             role: "user" as const,
             content: "STOP. You described code or claimed actions without using tools. Do NOT show code to the user. Call saveBuildEvidence to save your design, launch_sandbox to start the sandbox, propose_file_change to modify files, or create_backlog_item if you cannot proceed. Call a tool NOW.",
+          },
+        ];
+        continue;
+      }
+
+      // Frustration guardrail: agent is apologizing/hedging instead of acting.
+      // Only fires when fabrication detection didn't already handle it.
+      if (!fabricationRetried && frustrationCount < 3 && FRUSTRATION_PATTERN.test(trimmed) && !result.toolsStripped) {
+        frustrationCount++;
+        console.warn(`[agentic-loop] frustration detected (${frustrationCount}/3): ${trimmed.slice(0, 100)}`);
+        if (frustrationCount >= 3) {
+          // 3 strikes — break and be honest with the user
+          return {
+            content: trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+        // Phase-aware nudge: suggest tools specific to what the agent should be doing
+        const phaseTools = getPhaseSpecificNudge(executedTools);
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content: `STOP apologizing and hedging. You have tools — use them. ${phaseTools} If a previous tool call failed, try a DIFFERENT approach. Do not repeat the same failing call.`,
           },
         ];
         continue;

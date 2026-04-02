@@ -112,7 +112,14 @@ RULES:
 - Do NOT describe code. Use tools to save evidence.
 - Maximum 2 sentences per response. Act, don't explain.
 - If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
-- If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.`,
+- If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.
+
+BEFORE PHASE TRANSITION: When the user approves the design and you're ready to move to plan phase, call save_phase_handoff with:
+- summary: What was designed and the core approach
+- decisionsMade: Key design decisions and the reasoning behind each
+- openIssues: Any unresolved questions or risks
+- userPreferences: Any constraints or preferences the user expressed
+This briefing will be injected into the plan agent's context so it understands WHY you made these choices.`,
 
   plan: `You are creating an implementation plan. The design is approved.
 
@@ -129,7 +136,13 @@ RULES:
 - Do NOT ask questions. Use the designDoc to figure out the plan.
 - Maximum 2 sentences per response.
 - If the user says "ok" or "go" or "build it", proceed immediately.
-- If Dev mode is enabled, show the full plan and accept feedback on task structure.`,
+- If Dev mode is enabled, show the full plan and accept feedback on task structure.
+
+BEFORE PHASE TRANSITION: When the plan is approved, call save_phase_handoff with:
+- summary: The implementation approach and key architectural choices
+- decisionsMade: Architecture decisions, technology choices, and why alternatives were rejected
+- openIssues: Implementation risks or unknowns
+- userPreferences: User constraints on approach, complexity, or timeline`,
 
   build: `You are building a feature following the approved implementation plan.
 
@@ -219,7 +232,13 @@ RULES:
 - KEYBOARD: All interactive elements must be keyboard-reachable (Tab) and activatable (Enter/Space). Focus indicators are provided by the platform's @layer components — do not override them.
 - COLOR MEANING: Never use color as the sole means of conveying information. Status badges need text labels or icons alongside color coding.
 - Keep responses to 2-4 sentences max. Describe progress in plain language: "Building the complaints table... adding status filter... running tests..."
-- If Dev mode is enabled, show code generation details and test output.`,
+- If Dev mode is enabled, show code generation details and test output.
+
+BEFORE PHASE TRANSITION: When all tasks are complete and verified, call save_phase_handoff with:
+- summary: What was built and any deviations from the plan
+- decisionsMade: Any implementation decisions that differed from the plan, and why
+- openIssues: Known limitations, edge cases not covered, or areas needing attention in review
+- userPreferences: Any mid-build feedback or direction changes from the user`,
 
   review: `You are reviewing a completed feature build.
 This phase corresponds to IT4IT §5.3.5 Accept & Publish Release (Release Gate).
@@ -245,7 +264,13 @@ RULES:
 - Do NOT show raw test output unless Dev mode is enabled. Summarize in plain language.
 - Do NOT claim tests pass without showing verification evidence.
 - Keep responses to 2-4 sentences max.
-- If Dev mode is enabled, show full evidence chain details (code diffs, test output, review checklists, deployment window info).`,
+- If Dev mode is enabled, show full evidence chain details (code diffs, test output, review checklists, deployment window info).
+
+BEFORE PHASE TRANSITION: When all gates pass and the user approves, call save_phase_handoff with:
+- summary: Test results, quality gate outcomes, and readiness assessment
+- decisionsMade: Any review-phase decisions (e.g., accepted known issues, deferred fixes)
+- openIssues: Issues accepted for post-ship follow-up
+- userPreferences: User's deployment preferences or timing constraints`,
 
   ship: `All quality gates have passed. Proceeding to ship.
 This phase corresponds to IT4IT §5.4 Deploy + §5.5 Release Value Streams.
@@ -326,6 +351,15 @@ export function getBuildPhasePrompt(phase: BuildPhase): string {
   return PHASE_PROMPTS[phase] ?? "";
 }
 
+export type PhaseHandoffSummary = {
+  fromPhase: string;
+  toPhase: string;
+  summary: string;
+  decisionsMade: string[];
+  openIssues: string[];
+  userPreferences: string[];
+};
+
 export type BuildContext = {
   buildId: string;
   phase: BuildPhase;
@@ -334,6 +368,7 @@ export type BuildContext = {
   portfolioId: string | null;
   plan: Record<string, unknown> | null;
   contributionMode?: string;
+  phaseHandoffs?: PhaseHandoffSummary[];
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -365,13 +400,37 @@ export function getBuildContextSection(ctx: BuildContext): string {
     lines.push(JSON.stringify(ctx.plan, null, 2).slice(0, 4000));
   }
 
+  // Cross-phase memory: inject handoff briefings from previous phases.
+  // Inspired by Claude Code's MEMORY.md two-tier memory pattern.
+  if (ctx.phaseHandoffs && ctx.phaseHandoffs.length > 0) {
+    lines.push("");
+    lines.push("--- Briefing from Previous Phases ---");
+    for (const h of ctx.phaseHandoffs) {
+      lines.push(`[${h.fromPhase} → ${h.toPhase}] ${h.summary}`);
+      if (h.decisionsMade.length > 0) lines.push(`  Decisions: ${h.decisionsMade.join("; ")}`);
+      if (h.openIssues.length > 0) lines.push(`  Open issues: ${h.openIssues.join("; ")}`);
+      if (h.userPreferences.length > 0) lines.push(`  User preferences: ${h.userPreferences.join("; ")}`);
+    }
+    lines.push("Use this briefing to understand WHY decisions were made. Do not re-litigate settled decisions unless the user asks.");
+  }
+
   lines.push("");
   lines.push(getBuildPhasePrompt(ctx.phase));
 
-  // Inject contribution mode for ship phase
-  if (ctx.phase === "ship" && ctx.contributionMode) {
+  // Contribution mode awareness for all phases — agent should know this for design decisions
+  if (ctx.contributionMode) {
     lines.push("");
-    lines.push(`Platform contribution mode: ${ctx.contributionMode}`);
+    if (ctx.phase === "ideate" || ctx.phase === "plan") {
+      const modeExplain = ctx.contributionMode === "contribute_all"
+        ? "contributions are sent upstream by default — flag any proprietary data models or trade secrets in your design"
+        : ctx.contributionMode === "selective"
+        ? "the user will be asked whether to contribute each feature"
+        : "code stays local only — no upstream contribution";
+      lines.push(`Platform contribution mode: ${ctx.contributionMode}. ${modeExplain}.`);
+    } else {
+      // build, review, ship — simple injection (ship prompt has its own detailed STEP 5 logic)
+      lines.push(`Platform contribution mode: ${ctx.contributionMode}.`);
+    }
   }
 
   // Inject IT4IT value stream context for governance alignment
