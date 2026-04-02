@@ -17,7 +17,9 @@ export function PlatformHealthIndicator() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await fetch("/api/platform/metrics/alerts");
+      const res = await fetch("/api/platform/metrics/alerts", {
+        signal: AbortSignal.timeout(3_000),
+      });
       if (res.status === 503) {
         setHealth("offline");
         setAlerts([]);
@@ -70,7 +72,7 @@ export function PlatformHealthIndicator() {
         title={label}
       >
         <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-        {health !== "healthy" && (
+        {health !== "healthy" && health !== "offline" && (
           <span className="text-[10px] text-[var(--dpf-muted)]">
             {alerts.length > 0 ? alerts.length : ""}
           </span>
@@ -79,10 +81,8 @@ export function PlatformHealthIndicator() {
 
       {open && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          {/* Dropdown */}
           <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] shadow-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-[var(--dpf-border)] flex items-center justify-between">
               <span className="text-xs font-semibold text-[var(--dpf-text)]">Platform Health</span>
@@ -136,7 +136,7 @@ export function PlatformHealthIndicator() {
             )}
 
             <a
-              href="/portfolio/foundational/ops"
+              href="/ops/health"
               className="block px-3 py-2 text-xs text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] border-t border-[var(--dpf-border)]"
               onClick={() => setOpen(false)}
             >

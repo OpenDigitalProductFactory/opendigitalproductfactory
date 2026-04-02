@@ -1,5 +1,6 @@
 "use client";
 
+import { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
 import { AlertBanner } from "./AlertBanner";
 import { ServiceStatusGrid, DPF_SERVICES } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
@@ -11,6 +12,52 @@ import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
 
 export function SystemHealthDashboard() {
+  return (
+    <MonitoringProvider>
+      <SystemHealthContent />
+    </MonitoringProvider>
+  );
+}
+
+function MonitoringOfflineBanner() {
+  const { online, checked } = useMonitoringStatus();
+
+  if (!checked) {
+    return (
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center">
+        <p className="text-sm text-[var(--dpf-muted)]">Checking monitoring stack...</p>
+      </div>
+    );
+  }
+
+  if (!online) {
+    return (
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center space-y-2">
+        <p className="text-sm text-[var(--dpf-text)] font-medium">Monitoring stack is not running</p>
+        <p className="text-xs text-[var(--dpf-muted)]">
+          Start with: <code className="bg-[var(--dpf-bg)] px-1.5 py-0.5 rounded text-[10px]">docker compose --profile monitoring up -d</code>
+        </p>
+        <p className="text-xs text-[var(--dpf-muted)]">
+          This adds Prometheus, Grafana, and container metrics for operational visibility (~350 MB RAM).
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function SystemHealthContent() {
+  const { online, checked } = useMonitoringStatus();
+
+  if (!checked || !online) {
+    return (
+      <div className="space-y-6">
+        <MonitoringOfflineBanner />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Firing alerts */}
@@ -122,3 +169,4 @@ export function SystemHealthDashboard() {
     </div>
   );
 }
+

@@ -47,7 +47,7 @@ Integrate an open-source monitoring stack into the Docker Compose environment be
 
 ### Key Principles
 
-- **Docker Compose profile isolation** — monitoring services start only with `--profile monitoring`. Zero overhead for operators who don't need it. Zero impact on the default `docker compose up` experience.
+- **Always-on by default** — monitoring services start with the core stack via `docker compose up`. They are headless infrastructure that feeds the platform's native dashboards, alert pipeline, and AI Coworker health indicators.
 - **Auto-provisioned, not manually configured** — Grafana datasources, dashboards, and alert rules are provisioned via config files mounted at startup. No manual setup after `docker compose --profile monitoring up`.
 - **Lightweight first** — the Tier 1 stack adds ~175–350 MB RAM. Tier 2 and Tier 3 are additive and deferred.
 - **Feed the existing models** — metrics flow into `HealthProbe`/`HealthSnapshot` via a bridge service, so the Operations Console renders real Prometheus-sourced data without duplicating storage.

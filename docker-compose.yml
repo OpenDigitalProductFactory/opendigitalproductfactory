@@ -23,8 +23,6 @@ services:
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dpf_dev_password}
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_server_metrics_prometheus_enabled: "true"
-      NEO4J_server_metrics_prometheus_endpoint: "0.0.0.0:2004"
     volumes:
       - neo4jdata:/data
     healthcheck:
@@ -352,13 +350,13 @@ services:
       dev-init:
         condition: service_completed_successfully
 
-  # ─── Monitoring Stack (profile: monitoring) ───────────────────────────────
-  # Start with: docker compose --profile monitoring up -d
-  # Provides: Prometheus metrics, Grafana dashboards, container/host metrics.
+  # ─── Monitoring Stack ─────────────────────────────────────────────────────
+  # Headless infrastructure: feeds the platform's System Health dashboard,
+  # alert pipeline, and AI Coworker health indicators. Starts by default.
+  # Grafana (power-user tool) available at :3002.
 
   prometheus:
     image: prom/prometheus:latest
-    profiles: ["monitoring"]
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -378,7 +376,6 @@ services:
 
   grafana:
     image: grafana/grafana-oss:latest
-    profiles: ["monitoring"]
     restart: unless-stopped
     ports:
       - "3002:3000"
@@ -403,7 +400,6 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
-    profiles: ["monitoring"]
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -415,7 +411,6 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
-    profiles: ["monitoring"]
     restart: unless-stopped
     ports:
       - "9100:9100"
@@ -432,7 +427,6 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
-    profiles: ["monitoring"]
     restart: unless-stopped
     ports:
       - "9187:9187"

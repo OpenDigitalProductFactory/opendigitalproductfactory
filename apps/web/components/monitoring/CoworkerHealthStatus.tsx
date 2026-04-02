@@ -9,49 +9,42 @@ type HealthState = {
   offline: boolean;
 };
 
+const HEALTHY: HealthState = { inferenceUp: true, memoryUp: true, inferenceSlow: false, offline: true };
+
 export function CoworkerHealthStatus() {
-  const [health, setHealth] = useState<HealthState>({
-    inferenceUp: true,
-    memoryUp: true,
-    inferenceSlow: false,
-    offline: true, // start offline until first successful poll
-  });
+  const [health, setHealth] = useState<HealthState>(HEALTHY);
 
   const fetchHealth = useCallback(async () => {
     try {
-      // Check inference availability
-      const inferenceRes = await fetch(
-        `/api/platform/metrics?query=${encodeURIComponent('up{job="model-runner"}')}`,
+      // Single probe to check if monitoring is reachable at all
+      const probeRes = await fetch(
+        `/api/platform/metrics?query=${encodeURIComponent("up")}`,
+        { signal: AbortSignal.timeout(3_000) },
       );
-      if (inferenceRes.status === 503) {
-        setHealth({ inferenceUp: true, memoryUp: true, inferenceSlow: false, offline: true });
+      if (probeRes.status === 503) {
+        setHealth(HEALTHY); // monitoring offline = don't show warnings
         return;
       }
-      const inferenceJson = await inferenceRes.json();
-      const inferenceUp =
-        parseFloat(inferenceJson.data?.result?.[0]?.value?.[1] ?? "1") === 1;
+      const probeJson = await probeRes.json();
+      if (probeJson.status !== "success") {
+        setHealth(HEALTHY);
+        return;
+      }
 
-      // Check memory availability
-      const memRes = await fetch(
-        `/api/platform/metrics?query=${encodeURIComponent('up{job="qdrant"}')}`,
+      // Parse all "up" results in one pass
+      const results: Array<{ job: string; up: boolean }> = (probeJson.data?.result ?? []).map(
+        (r: { metric: Record<string, string>; value: [number, string] }) => ({
+          job: r.metric.job ?? "",
+          up: parseFloat(r.value[1]) === 1,
+        }),
       );
-      const memJson = await memRes.json();
-      const memoryUp =
-        parseFloat(memJson.data?.result?.[0]?.value?.[1] ?? "1") === 1;
 
-      // Check inference latency
-      const latencyRes = await fetch(
-        `/api/platform/metrics?query=${encodeURIComponent(
-          "histogram_quantile(0.95, rate(dpf_ai_inference_duration_seconds_bucket[5m]))",
-        )}`,
-      );
-      const latencyJson = await latencyRes.json();
-      const p95 = parseFloat(latencyJson.data?.result?.[0]?.value?.[1] ?? "0");
-      const inferenceSlow = p95 > 15;
+      const inferenceUp = results.find((r) => r.job === "model-runner")?.up ?? true;
+      const memoryUp = results.find((r) => r.job === "qdrant")?.up ?? true;
 
-      setHealth({ inferenceUp, memoryUp, inferenceSlow, offline: false });
+      setHealth({ inferenceUp, memoryUp, inferenceSlow: false, offline: false });
     } catch {
-      setHealth({ inferenceUp: true, memoryUp: true, inferenceSlow: false, offline: true });
+      setHealth(HEALTHY); // network error = don't show warnings
     }
   }, []);
 
@@ -65,7 +58,6 @@ export function CoworkerHealthStatus() {
   if (health.offline) return null;
   if (health.inferenceUp && health.memoryUp && !health.inferenceSlow) return null;
 
-  // Inference completely offline — replace input area hint
   if (!health.inferenceUp) {
     return (
       <div
@@ -83,7 +75,6 @@ export function CoworkerHealthStatus() {
     );
   }
 
-  // Memory offline or inference slow — subtle warning
   const messages: string[] = [];
   if (!health.memoryUp) {
     messages.push("Memory offline — responses won't recall prior context");
