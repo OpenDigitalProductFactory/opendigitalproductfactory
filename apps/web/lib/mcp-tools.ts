@@ -2542,14 +2542,14 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
             success: false,
             error: "Schema validation failed",
             message: formatSchemaValidation(result),
-            data: result,
+            data: result as unknown as Record<string, unknown>,
           };
         }
 
         return {
           success: true,
           message: formatSchemaValidation(result),
-          data: result,
+          data: result as unknown as Record<string, unknown>,
         };
       } catch (err) {
         return { success: false, error: "Schema validation error", message: err instanceof Error ? err.message : "Failed to validate schema" };
