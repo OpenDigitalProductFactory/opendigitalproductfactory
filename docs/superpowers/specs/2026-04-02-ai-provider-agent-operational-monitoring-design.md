@@ -587,6 +587,54 @@ Demonstrates the full detect-diagnose-correct flow:
    └─ Routing restores normal priority
 ```
 
-## Appendix B: Relationship to Product-Centric Refactoring
+## Appendix B: Feature-Specific Degradation Signals
+
+Not all provider failures affect all platform features equally. A missing deep-thinker provider (e.g., Claude) degrades Build Studio but has no impact on portfolio views or backlog management. The monitoring system must communicate degradation at the **feature level**, not just the platform level.
+
+### Capability-to-Feature Dependency Map
+
+| Feature | Required Capability Tier | Key Providers | Degradation Impact |
+|---------|------------------------|---------------|-------------------|
+| **Build Studio** (code gen, design review) | deep-thinker | Claude, GPT-4o | Cannot generate code, design reviews fail |
+| **Portfolio Advisor** (analysis, recommendations) | fast-worker+ | Any chat-capable | Falls back to smaller models, slower responses |
+| **EA Architect** (architecture modeling) | fast-worker+ | Any chat-capable | Reduced quality but functional |
+| **AI Coworker** (general chat) | budget+ | Any, including local | Works with local model as last resort |
+| **Semantic Memory** (context recall) | embedding | Local embedding model | No cross-conversation recall |
+| **Process Observer** (quality analysis) | N/A (deterministic) | None | Always functional |
+
+### How to Surface Feature Degradation
+
+When a provider outage or credential failure removes a capability tier from the routing pipeline:
+
+1. **Determine affected features** — map the missing tier to the features that require it (table above)
+2. **Show degradation inline** — on the affected feature's page/panel, show a contextual banner:
+   - Build Studio: "Code generation may be limited — advanced AI models are unavailable"
+   - Portfolio: "AI analysis running on a smaller model — responses may be less detailed"
+3. **Don't cry wolf** — if the feature still works (just with a fallback model), show an informational message, not an error. Only show errors when the feature is genuinely broken (no providers available at all).
+4. **Link to resolution** — the degradation banner should link to the provider health view where the operator can see which provider is down and take action.
+
+### Implementation Approach
+
+The routing pipeline already knows which capability tiers are available (it filters by them in Stage 1). A new function `getAvailableCapabilityTiers()` can query the endpoint manifest and return which tiers have at least one active provider. Features check this at render time:
+
+```typescript
+const tiers = await getAvailableCapabilityTiers();
+const hasDeepThinker = tiers.includes("deep-thinker");
+// Build Studio shows degradation banner if !hasDeepThinker
+```
+
+This is lightweight — no inference call, just a manifest query. The result can be cached and refreshed when provider status changes.
+
+### Relationship to Product-Centric Navigation
+
+When the product-centric refactoring lands, each digital product's lifecycle view includes a Health tab. The feature degradation signals described here become the product-level health indicators:
+- Build Studio product Health tab: "deep-thinker tier unavailable — code generation degraded"
+- The platform product Health tab: overall System Health dashboard
+
+The degradation logic is portable — it attaches to whatever navigation structure renders the feature.
+
+---
+
+## Appendix C: Relationship to Product-Centric Refactoring
 
 When the product-centric navigation refactoring (EP-PROD-NAV) lands, the AI provider monitoring surfaces described here will move from the current System Health tab under Operations to the **Foundational/Platform Services/AI Workforce** digital product's lifecycle view. The metrics, alerts, and components are product-agnostic — they attach to whatever navigation structure exists.
