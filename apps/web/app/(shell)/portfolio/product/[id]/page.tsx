@@ -1,194 +1,105 @@
 // apps/web/app/(shell)/portfolio/product/[id]/page.tsx
 //
-// Admin product detail page — shows product metadata, business model assignment,
-// and business model role assignment panel.
+// Overview tab — product metadata summary, stats, and quick links to other tabs.
 
-import { notFound } from "next/navigation";
-import Link from "next/link";
 import { prisma } from "@dpf/db";
-import { listBusinessModels, getProductBusinessModels } from "@/lib/actions/business-model";
-import { BusinessModelSelector } from "@/components/product/BusinessModelSelector";
-import { BusinessModelRolePanel } from "@/components/product/BusinessModelRolePanel";
+import { notFound } from "next/navigation";
 
 type Props = {
   params: Promise<{ id: string }>;
 };
 
-const STATUS_COLOURS: Record<string, string> = {
-  active: "#4ade80",
-  draft: "#fbbf24",
-  inactive: "#8888a0",
-};
-
-export default async function ProductDetailPage({ params }: Props) {
+export default async function ProductOverviewPage({ params }: Props) {
   const { id } = await params;
 
-  const [product, availableModels, assignedRaw, users] = await Promise.all([
-    prisma.digitalProduct.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        productId: true,
-        name: true,
-        description: true,
-        lifecycleStage: true,
-        lifecycleStatus: true,
-        version: true,
-        portfolio: { select: { name: true, slug: true } },
-        taxonomyNode: { select: { name: true, nodeId: true } },
-        createdAt: true,
-        updatedAt: true,
+  const product = await prisma.digitalProduct.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      productId: true,
+      name: true,
+      createdAt: true,
+      updatedAt: true,
+      lifecycleStage: true,
+      lifecycleStatus: true,
+      version: true,
+      portfolio: { select: { name: true } },
+      taxonomyNode: { select: { name: true } },
+      _count: {
+        select: {
+          backlogItems: true,
+          inventoryEntities: true,
+          eaElements: true,
+          versions: true,
+          serviceOfferings: true,
+          featureBuilds: true,
+          businessModels: true,
+        },
       },
-    }),
-    listBusinessModels(),
-    getProductBusinessModels(id),
-    prisma.user.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        email: true,
-        employeeProfile: { select: { displayName: true } },
-      },
-      orderBy: { email: "asc" },
-    }),
-  ]);
+    },
+  });
 
   if (!product) notFound();
 
-  const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#8888a0";
-
-  // Shape assigned models into the structure BusinessModelRolePanel expects
-  const assignedForPanel = assignedRaw.map((a) => ({
-    id: a.id,
-    assignedAt: a.assignedAt,
-    businessModel: {
-      ...a.businessModel,
-      roles: a.businessModel.roles.map((r) => ({
-        ...r,
-        assignments: r.assignments.map((asn) => ({
-          ...asn,
-          revokedAt: asn.revokedAt ?? null,
-        })),
-      })),
-    },
-  }));
-
-  // Shape for selector (needs _count.roles)
-  const availableForSelector = availableModels.map((m) => ({
-    ...m,
-    _count: { roles: m._count.roles },
-  }));
-
-  // Shape assigned for selector
-  const assignedForSelector = assignedRaw.map((a) => ({
-    id: a.id,
-    assignedAt: a.assignedAt,
-    businessModel: {
-      id: a.businessModel.id,
-      modelId: a.businessModel.modelId,
-      name: a.businessModel.name,
-      isBuiltIn: a.businessModel.isBuiltIn,
-    },
-  }));
+  const stats = [
+    { label: "Backlog Items", value: product._count.backlogItems, href: `/portfolio/product/${id}/backlog` },
+    { label: "Inventory Entities", value: product._count.inventoryEntities, href: `/portfolio/product/${id}/inventory` },
+    { label: "Architecture Elements", value: product._count.eaElements, href: `/portfolio/product/${id}/architecture` },
+    { label: "Versions", value: product._count.versions, href: `/portfolio/product/${id}/versions` },
+    { label: "Service Offerings", value: product._count.serviceOfferings, href: `/portfolio/product/${id}/offerings` },
+    { label: "Feature Builds", value: product._count.featureBuilds, href: `/portfolio/product/${id}/changes` },
+    { label: "Business Models", value: product._count.businessModels, href: `/portfolio/product/${id}/team` },
+  ];
 
   return (
     <div>
-      {/* Breadcrumb */}
-      <nav style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 16, display: "flex", gap: 6, alignItems: "center" }}>
-        <Link href="/portfolio" style={{ color: "var(--dpf-muted)", textDecoration: "none" }}>Portfolio</Link>
-        {product.portfolio && (
-          <>
-            <span>›</span>
-            <Link
-              href={`/portfolio/${product.portfolio.slug}`}
-              style={{ color: "var(--dpf-muted)", textDecoration: "none" }}
-            >
-              {product.portfolio.name}
-            </Link>
-          </>
-        )}
-        <span>›</span>
-        <span style={{ color: "var(--dpf-text)" }}>{product.name}</span>
-      </nav>
-
-      {/* Product header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{product.name}</h1>
-          <span
-            style={{
-              fontSize: 10,
-              borderRadius: 4,
-              padding: "2px 8px",
-              background: `${statusColour}20`,
-              color: statusColour,
-            }}
+      {/* Stats strip */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {stats.map((s) => (
+          <a
+            key={s.label}
+            href={s.href}
+            className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-4 no-underline hover:border-[var(--dpf-accent)] transition-colors"
           >
-            {product.lifecycleStatus}
-          </span>
-        </div>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
-          {product.productId} · {product.lifecycleStage} · v{product.version}
-          {product.taxonomyNode && ` · ${product.taxonomyNode.name}`}
-        </p>
-        {product.description && (
-          <p style={{ fontSize: 12, color: "var(--dpf-text)", marginTop: 8, maxWidth: 640 }}>{product.description}</p>
-        )}
+            <div className="text-2xl font-bold text-[var(--dpf-text)]">{s.value}</div>
+            <div className="text-[11px] text-[var(--dpf-muted)] mt-1">{s.label}</div>
+          </a>
+        ))}
       </div>
 
-      {/* Business Model section */}
-      <div
-        style={{
-          background: "var(--dpf-surface-1)",
-          border: "1px solid var(--dpf-border)",
-          borderRadius: 8,
-          padding: 20,
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ marginBottom: 14 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-            Business Model
-          </h2>
-          <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
-            Select the operating model that best describes this product. Each model provides a role template for assigning team members.
-          </p>
-        </div>
-
-        <BusinessModelSelector
-          productId={product.id}
-          availableModels={availableForSelector}
-          assignedModels={assignedForSelector}
-        />
-      </div>
-
-      {/* Role Assignments section */}
-      <div
-        style={{
-          background: "var(--dpf-surface-1)",
-          border: "1px solid var(--dpf-border)",
-          borderRadius: 8,
-          padding: 20,
-        }}
-      >
-        <div style={{ marginBottom: 14 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-            Role Assignments
-          </h2>
-          <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
-            Assign team members to business model roles. Each role defines an authority domain and escalation path.
-          </p>
-        </div>
-
-        <BusinessModelRolePanel
-          productId={product.id}
-          assignedModels={assignedForPanel}
-          users={users.map((u) => ({
-            id: u.id,
-            email: u.email,
-            displayName: u.employeeProfile?.displayName ?? null,
-          }))}
-        />
+      {/* Metadata */}
+      <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-5">
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Product Details</h2>
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-xs">
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Product ID</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.productId}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Lifecycle Stage</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.lifecycleStage}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Version</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">v{product.version}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Portfolio</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.portfolio?.name ?? "Unassigned"}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Taxonomy</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.taxonomyNode?.name ?? "Unattributed"}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Created</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.createdAt.toLocaleDateString()}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Last Updated</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.updatedAt.toLocaleDateString()}</dd>
+          </div>
+        </dl>
       </div>
     </div>
   );

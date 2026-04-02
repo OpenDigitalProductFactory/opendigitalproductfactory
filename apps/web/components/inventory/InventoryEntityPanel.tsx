@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type InventoryEntity = {
   id: string;
   entityKey: string;
@@ -10,7 +12,7 @@ type InventoryEntity = {
   attributionConfidence?: number | null;
   portfolio: { slug: string; name: string } | null;
   taxonomyNode: { nodeId: string; name: string } | null;
-  digitalProduct: { productId: string; name: string } | null;
+  digitalProduct: { id: string; productId: string; name: string } | null;
 };
 
 export function InventoryEntityPanel({
@@ -58,7 +60,14 @@ export function InventoryEntityPanel({
               {entity.taxonomyNode && (
                 <span>Taxonomy: {entity.taxonomyNode.nodeId.replace(/\//g, " / ")}</span>
               )}
-              {entity.digitalProduct && <span>Product: {entity.digitalProduct.name}</span>}
+              {entity.digitalProduct && (
+                <Link
+                  href={`/portfolio/product/${entity.digitalProduct.id}/inventory`}
+                  className="text-[var(--dpf-accent)] hover:underline"
+                >
+                  Product: {entity.digitalProduct.name}
+                </Link>
+              )}
               <span>Status: {entity.status}</span>
               {entity.attributionMethod && <span>Method: {entity.attributionMethod}</span>}
               {confidence != null && (

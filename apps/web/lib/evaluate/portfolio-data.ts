@@ -5,7 +5,7 @@ import { cache } from "react";
 import { prisma } from "@dpf/db";
 import { buildPortfolioTree, formatBudget, PORTFOLIO_OWNER_ROLES, type OwnerRoleInfo } from "./portfolio";
 
-export const getPortfolioTree = cache(async () => {
+export const getPortfolioTree = cache(async (pruneEmpty = true) => {
   const [nodes, totalCounts, activeCounts] = await Promise.all([
     prisma.taxonomyNode.findMany({
       where: { status: "active" },
@@ -22,7 +22,27 @@ export const getPortfolioTree = cache(async () => {
       where: { lifecycleStatus: "active" },
     }),
   ]);
-  return buildPortfolioTree(nodes, totalCounts, activeCounts);
+  return buildPortfolioTree(nodes, totalCounts, activeCounts, { pruneEmpty });
+});
+
+/** Returns the full (unpruned) tree for admin/reference views. */
+export const getFullPortfolioTree = cache(async () => {
+  const [nodes, totalCounts, activeCounts] = await Promise.all([
+    prisma.taxonomyNode.findMany({
+      where: { status: "active" },
+      select: { id: true, nodeId: true, name: true, parentId: true, portfolioId: true },
+    }),
+    prisma.digitalProduct.groupBy({
+      by: ["taxonomyNodeId"],
+      _count: { id: true },
+    }),
+    prisma.digitalProduct.groupBy({
+      by: ["taxonomyNodeId"],
+      _count: { id: true },
+      where: { lifecycleStatus: "active" },
+    }),
+  ]);
+  return buildPortfolioTree(nodes, totalCounts, activeCounts, { pruneEmpty: false });
 });
 
 /**
