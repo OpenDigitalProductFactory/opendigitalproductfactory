@@ -1,0 +1,56 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TB
+    subgraph WRITES["ALL WRITES (Single Source of Truth)"]
+        direction TB
+        postgres[("PostgreSQL\n─────────────────\nSystem of Record\n\nDigital Products\nPortfolios & Taxonomy\nInventory Entities\nAI Providers & Agents\nChange Requests\nCredentials & Governance\nHealth Snapshots")]
+    end
+
+    subgraph PROJECTIONS["READ-ONLY PROJECTIONS"]
+        direction LR
+        neo4j[("Neo4j Graph\n─────────────────\nTopology & Impact\n\nDigitalProduct nodes\nInfraCI nodes\nEaElement nodes\nDEPENDS_ON edges\nMONITORS edges\nBELONGS_TO edges\nCHILD_OF edges")]
+        prometheus[("Prometheus\n─────────────────\nTime-Series Metrics\n\nContainer CPU/Memory\nHost Resources\nInference Latency\nToken Consumption\nError Rates\nCredential Expiry\nRate Limit Utilization")]
+    end
+
+    subgraph QUESTIONS["WHAT EACH LAYER ANSWERS"]
+        direction TB
+        q_pg["PostgreSQL answers:\n'What is the current state\nof this entity?'\n'What changed and when?'"]
+        q_neo["Neo4j answers:\n'What breaks if this\ngoes down?'\n'What depends on what?'"]
+        q_prom["Prometheus answers:\n'How is this performing\nright now?'\n'What was the p95 latency\nover the last hour?'"]
+    end
+
+    subgraph CONVERGENCE["PLATFORM UI (The Convergence Point)"]
+        direction TB
+        health["System Health Dashboard\nGauges · Charts · Alerts"]
+        graph_view["Dependency Graph\nTopology + Health Overlay"]
+        impact["Impact Analysis\nWhat breaks if X fails?"]
+        product["Product Lifecycle View\nHealth · Backlog · Architecture"]
+    end
+
+    grafana["Grafana\n(Power-User Escape Hatch)\n─────────────────\nAd-hoc PromQL queries\nCustom dashboards\nRaw metric exploration\n\nPrometheus only\nNo graph · No business context"]
+
+    postgres -->|"sync functions\n(fire-and-forget)"| neo4j
+    postgres -->|"HealthSnapshot\nrecords"| health
+
+    prometheus -->|"real-time metrics\n(scraped every 15s)"| health
+    prometheus -->|"health overlay\nvia bridge"| graph_view
+
+    neo4j -->|"topology\ntraversal"| graph_view
+    neo4j -->|"downstream\nimpact"| impact
+
+    postgres -->|"entity data\nattribution"| graph_view
+    postgres -->|"business\ncontext"| product
+
+    health --> product
+    graph_view --> product
+    impact --> product
+
+    prometheus -.->|"same metrics\ndifferent audience"| grafana
+
+    style WRITES fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style PROJECTIONS fill:#1e293b,stroke:#64748b,stroke-width:1px
+    style CONVERGENCE fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style QUESTIONS fill:#0f172a,stroke:#334155,stroke-width:1px
+    style grafana fill:#44403c,stroke:#a8a29e,stroke-width:1px,stroke-dasharray: 5 5
+    style postgres fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style neo4j fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style prometheus fill:#7c2d12,stroke:#f97316,stroke-width:2px

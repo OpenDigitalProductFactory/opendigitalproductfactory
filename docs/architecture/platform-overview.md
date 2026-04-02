@@ -249,37 +249,9 @@ Prometheus scrapes metrics from running services every 10-15 seconds and stores 
 
 ### How the Three Layers Work Together
 
-```mermaid
-flowchart TB
-    subgraph Writes["All writes go to PostgreSQL"]
-        postgres[(PostgreSQL<br/>System of Record)]
-    end
+![Three-Layer Data Architecture](monitoring-diagrams/svg/01-three-layer-data-architecture.svg)
 
-    subgraph Projections["Read-only projections"]
-        neo4j[(Neo4j<br/>Graph Topology)]
-        prometheus[(Prometheus<br/>Time-Series Metrics)]
-    end
-
-    subgraph Consumers["Platform UI surfaces"]
-        health[System Health Dashboard<br/>gauges, charts, alerts]
-        graph[Dependency Graph<br/>topology + health overlay]
-        impact[Impact Analysis<br/>what breaks if X goes down?]
-        ea[EA Modeler<br/>architecture diagrams]
-    end
-
-    postgres -->|sync functions<br/>fire-and-forget| neo4j
-    postgres -->|HealthSnapshot records<br/>from bridge| health
-
-    prometheus -->|scraped from<br/>running services| health
-    prometheus -->|health overlay<br/>via bridge| graph
-
-    neo4j -->|topology traversal| graph
-    neo4j -->|downstream impact| impact
-    neo4j -->|EA relationships| ea
-
-    postgres -->|entity data<br/>attribution, status| graph
-    postgres -->|EA elements<br/>viewpoints| ea
-```
+*[High-resolution PNG](monitoring-diagrams/png/01-three-layer-data-architecture.png) | [Mermaid source](monitoring-diagrams/01-three-layer-data-architecture.mmd)*
 
 **The convergence point** is the platform's native UI. Only the platform can combine:
 - Topology from Neo4j ("Prometheus monitors PostgreSQL")
@@ -302,9 +274,31 @@ Grafana is included in the monitoring stack but serves a different audience and 
 | **Business context** | Yes — portfolios, products, taxonomy, governance | No — infrastructure metrics only |
 | **Alerting** | Fires into PortfolioQualityIssue (platform-native, visible in product lifecycle) | Fires into Grafana UI (separate tool) |
 
+![Platform UI vs Grafana](monitoring-diagrams/svg/04-grafana-vs-platform-ui.svg)
+
+*[High-resolution PNG](monitoring-diagrams/png/04-grafana-vs-platform-ui.png) | [Mermaid source](monitoring-diagrams/04-grafana-vs-platform-ui.mmd)*
+
 **When to use Grafana:** Something is wrong and you need to dig deeper — correlate metrics across arbitrary dimensions, zoom into a 5-minute window, write custom PromQL queries, explore metrics that the platform UI doesn't surface yet.
 
 **When to use the platform UI:** Day-to-day operational awareness, product lifecycle health, impact analysis before changes, understanding which digital products are affected by infrastructure degradation.
+
+### Monitoring Stack Topology
+
+The monitoring stack runs as part of the default Docker Compose stack. All services are headless infrastructure — they feed the platform's native UI and alert pipeline.
+
+![Monitoring Stack Topology](monitoring-diagrams/svg/02-monitoring-stack-topology.svg)
+
+*[High-resolution PNG](monitoring-diagrams/png/02-monitoring-stack-topology.png) | [Mermaid source](monitoring-diagrams/02-monitoring-stack-topology.mmd)*
+
+### AI Provider Failure Detection and Recovery
+
+When an AI provider fails (credential expiry, rate limit exhaustion, network outage), the platform detects, adapts, and surfaces the issue through a governed cascade:
+
+![Provider Failure Cascade](monitoring-diagrams/svg/03-provider-failure-cascade.svg)
+
+*[High-resolution PNG](monitoring-diagrams/png/03-provider-failure-cascade.png) | [Mermaid source](monitoring-diagrams/03-provider-failure-cascade.mmd)*
+
+Key design: degradation is **feature-specific, not platform-wide**. A missing deep-thinker provider degrades Build Studio (code generation) but has no impact on portfolio management or backlog tracking. The platform surfaces contextual warnings on the affected feature, not a global error banner.
 
 ### Neo4j Sync Integrity
 
