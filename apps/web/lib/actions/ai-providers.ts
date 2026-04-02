@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai-provider-types";
 import { encryptSecret } from "@/lib/credential-crypto";
 import {
+  autoDiscoverAndProfile,
   discoverModelsInternal,
   profileModelsInternal,
   getDecryptedCredential,
@@ -314,6 +315,8 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
           where: { providerId },
           data: { status: "active", sensitivityClearance: clearance },
         });
+        // Auto-discover models now that auth is confirmed
+        autoDiscoverAndProfile(providerId).catch(() => {});
         return { ok: true, message: "Connected via OAuth — token valid" };
       }
       return { ok: false, message: "OAuth token not found — sign in again" };
@@ -340,6 +343,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
           where: { providerId },
           data: { status: "active", sensitivityClearance: ["public", "internal", "confidential"] },
         });
+        autoDiscoverAndProfile(providerId).catch(() => {});
         return { ok: true, message: `Connected via subscription token — auth verified` };
       }
       const body = await res.text().catch(() => "");
@@ -356,6 +360,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
         where: { providerId },
         data: { status: "active", sensitivityClearance: clearance },
       });
+      autoDiscoverAndProfile(providerId).catch(() => {});
       return { ok: true, message: `Connected — HTTP ${res.status}` };
     }
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
