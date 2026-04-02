@@ -1,0 +1,44 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TB
+    subgraph DATASOURCES["DATA SOURCES"]
+        direction LR
+        pg[("PostgreSQL\n─────\nEntities\nRelationships\nGovernance\nBusiness Context")]
+        neo[("Neo4j\n─────\nGraph Topology\nImpact Paths\nDependencies\nEA Models")]
+        prom[("Prometheus\n─────\nTime-Series\nMetrics\nCounters\nHistograms")]
+    end
+
+    subgraph PLATFORM["PLATFORM UI (Primary Experience)"]
+        direction TB
+        p_header["Every User Sees This"]
+        p_health["System Health\n─────\nService status grid\nHost resource gauges\nAI provider table\nAgent quality scores\nAlert history"]
+        p_graph["Dependency Graph\n─────\nTopology from Neo4j\n+ Health from Prometheus\n+ Attribution from PostgreSQL\n= Full operational picture"]
+        p_impact["Impact Analysis\n─────\n'If Postgres goes down,\nwhich products are affected?'\nGraph traversal + business context"]
+        p_product["Product Lifecycle\n─────\nHealth tab per product\nFeature degradation warnings\nCapability tier availability"]
+        p_coworker["AI Coworker\n─────\nContextual health warnings\n'Memory offline'\n'Inference degraded'"]
+    end
+
+    subgraph GRAFANA["GRAFANA (Power-User Tool)"]
+        direction TB
+        g_header["Platform Engineers Only"]
+        g_custom["Custom Dashboards\n─────\nAd-hoc PromQL\nArbitrary time ranges\nMetric correlation"]
+        g_debug["Debugging\n─────\nZoom to 5-min window\nCross-metric analysis\nRaw histogram buckets"]
+        g_explore["Exploration\n─────\nDiscover new metrics\nBuild prototype panels\nTest alert expressions"]
+    end
+
+    pg -->|"entities +\nbusiness context"| PLATFORM
+    neo -->|"topology +\nimpact paths"| PLATFORM
+    prom -->|"real-time\nmetrics"| PLATFORM
+
+    prom -->|"same metrics\ndifferent context"| GRAFANA
+
+    pg -.-x|"NOT available"| GRAFANA
+    neo -.-x|"NOT available"| GRAFANA
+
+    style DATASOURCES fill:#0f172a,stroke:#334155,stroke-width:1px
+    style PLATFORM fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style GRAFANA fill:#44403c,stroke:#a8a29e,stroke-width:1px,stroke-dasharray: 5 5
+    style pg fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style neo fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style prom fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style p_header fill:#166534,stroke:#22c55e
+    style g_header fill:#57534e,stroke:#a8a29e

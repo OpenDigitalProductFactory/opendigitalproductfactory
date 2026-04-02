@@ -1,0 +1,75 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TD
+    subgraph DETECT["DETECT (Proactive)"]
+        direction TB
+        expiry_check["Credential Expiry Check\n(every 1 hour)\n─────\nScans tokenExpiresAt\nAttempts refresh 24h early"]
+        health_probe["Provider Health Probe\n(every 5 minutes)\n─────\nGET /v1/models\nTests reachability + auth"]
+        failure_track["Failure Rate Tracker\n(every inference call)\n─────\nSliding window (last 20)\nUpdates recentFailureRate"]
+    end
+
+    subgraph ALERT["ALERT (Prometheus Rules)"]
+        direction TB
+        cred_warn["CredentialExpiringSoon\n< 24 hours remaining"]
+        cred_expired["CredentialExpired\nalready past expiry"]
+        auth_fail["ProviderAuthFailing\nauth errors sustained > 2m"]
+        high_fail["ProviderHighFailureRate\n> 50% failure rate"]
+        provider_down["ProviderDown\nhealth probe failing > 5m"]
+        rate_limit["RateLimitApproaching\nutilization > 80%"]
+    end
+
+    subgraph ADAPT["ADAPT (Automatic)"]
+        direction TB
+        degrade["Status: active --> degraded\n─────\nRouting applies 0.7x multiplier\nProvider deprioritized"]
+        failover["Fallback Chain Activates\n─────\nNext provider in priority\nUser experience uninterrupted"]
+        disable["Status: degraded --> inactive\n─────\nProvider removed from routing\nScheduled re-enable (1 hour)"]
+    end
+
+    subgraph SURFACE["SURFACE (Platform UI)"]
+        direction TB
+        quality_issue["PortfolioQualityIssue\ncreated automatically"]
+        health_dash["System Health Dashboard\nProvider status table"]
+        feature_warn["Feature Degradation Banner\n'Build Studio limited --\nadvanced AI models unavailable'"]
+        coworker_warn["AI Coworker Warning\n'Memory offline' or\n'Responses may be slower'"]
+    end
+
+    subgraph RESOLVE["RESOLVE (Human or Auto)"]
+        direction TB
+        auto_refresh["Auto: Token Refresh\n(proactive, 24h before)"]
+        auto_recover["Auto: Re-enable\n(scheduled after 1 hour)"]
+        human_reauth["Human: Re-authenticate\nvia Provider detail page"]
+        human_config["Human: Reconfigure\nor add backup provider"]
+    end
+
+    expiry_check -->|"token < 24h"| cred_warn
+    expiry_check -->|"token expired"| cred_expired
+    health_probe -->|"unreachable"| provider_down
+    health_probe -->|"401/403"| auth_fail
+    failure_track -->|"> 50%"| high_fail
+    failure_track -->|"rate limit"| rate_limit
+
+    cred_warn --> quality_issue
+    cred_expired --> degrade
+    auth_fail --> degrade
+    high_fail --> degrade
+    provider_down --> disable
+    rate_limit --> quality_issue
+
+    degrade --> failover
+    degrade --> health_dash
+    disable --> health_dash
+
+    failover --> feature_warn
+    failover --> coworker_warn
+
+    quality_issue --> health_dash
+
+    auto_refresh -.->|"success"| cred_warn
+    auto_recover -.->|"re-enable"| disable
+    human_reauth -.->|"new token"| degrade
+    human_config -.->|"add provider"| failover
+
+    style DETECT fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style ALERT fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style ADAPT fill:#713f12,stroke:#eab308,stroke-width:2px
+    style SURFACE fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style RESOLVE fill:#1e293b,stroke:#64748b,stroke-width:2px

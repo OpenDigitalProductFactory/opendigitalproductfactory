@@ -1,0 +1,74 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart LR
+    subgraph APP["Application Services"]
+        direction TB
+        portal["Portal\n:3000\n─────\n/api/metrics\nprom-client"]
+        sandbox1["Sandbox 1\n:3035"]
+        sandbox2["Sandbox 2\n:3037"]
+        sandbox3["Sandbox 3\n:3038"]
+    end
+
+    subgraph DATA["Data Services"]
+        direction TB
+        pg[("PostgreSQL\n:5432")]
+        neo[("Neo4j\n:7474")]
+        qdrant[("Qdrant\n:6333\n─────\n/metrics native")]
+    end
+
+    subgraph AI["AI Inference"]
+        modelrunner["Docker Model\nRunner\n─────\n/metrics native"]
+        external["External\nProviders\n(Anthropic,\nOpenAI, etc.)"]
+    end
+
+    subgraph MON["Monitoring Stack"]
+        direction TB
+        prom["Prometheus\n:9090\n─────\n15s scrape interval\n15-day retention\n13 alert rules"]
+        grafana_svc["Grafana\n:3002\n─────\nAuto-provisioned\ndashboards"]
+        cadvisor["cAdvisor\n:8080\n─────\nContainer\nCPU/Mem/Net/Disk"]
+        nodeexp["node-exporter\n:9100\n─────\nHost OS\nCPU/Mem/Disk"]
+        pgexp["postgres-exporter\n:9187\n─────\nConnections\nQuery perf"]
+    end
+
+    subgraph PLATFORM_UI["Platform-Native UI"]
+        direction TB
+        sys_health["System Health\nDashboard"]
+        nav_dot["Nav Bar\nHealth Dot"]
+        coworker["AI Coworker\nHealth Warnings"]
+        alerts_wh["Alert Webhook\n/api/platform/alerts"]
+    end
+
+    prom -->|"scrape\n/api/metrics"| portal
+    prom -->|"scrape"| sandbox1
+    prom -->|"scrape"| sandbox2
+    prom -->|"scrape"| sandbox3
+    prom -->|"scrape"| cadvisor
+    prom -->|"scrape"| nodeexp
+    prom -->|"scrape"| pgexp
+    prom -->|"scrape\nnative /metrics"| qdrant
+    prom -->|"scrape\nnative /metrics"| modelrunner
+
+    cadvisor -.->|"Docker socket\n(read-only)"| portal
+    cadvisor -.->|"monitors all\ncontainers"| pg
+    cadvisor -.->|"monitors"| neo
+    cadvisor -.->|"monitors"| qdrant
+
+    pgexp -->|"SQL stats"| pg
+
+    grafana_svc -->|"datasource"| prom
+
+    portal -->|"proxy\n/api/platform/metrics"| prom
+    portal --> sys_health
+    portal --> nav_dot
+    portal --> coworker
+
+    grafana_svc -.->|"webhook"| alerts_wh
+    alerts_wh -->|"creates\nQualityIssue"| pg
+
+    portal -.->|"inference\ncalls"| modelrunner
+    portal -.->|"inference\ncalls"| external
+
+    style APP fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style DATA fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style AI fill:#581c87,stroke:#a855f7,stroke-width:2px
+    style MON fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style PLATFORM_UI fill:#14532d,stroke:#22c55e,stroke-width:2px
