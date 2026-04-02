@@ -415,9 +415,18 @@ export async function sendMessage(input: {
     const activeBuild = await prisma.featureBuild.findFirst({
       where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
       orderBy: { updatedAt: "desc" },
-      select: { phase: true },
+      select: { phase: true, buildId: true, threadId: true },
     }).catch(() => null);
     activeBuildPhase = activeBuild?.phase ?? null;
+
+    // Link build to this chat thread so the BuildStudio UI can live-refresh
+    // via SSE when the AI updates the build phase, sandbox, or evidence.
+    if (activeBuild && !activeBuild.threadId && input.threadId) {
+      prisma.featureBuild.update({
+        where: { buildId: activeBuild.buildId },
+        data: { threadId: input.threadId },
+      }).catch(() => {});
+    }
   }
 
   const availableTools = mergedTools.filter((t) => {
