@@ -460,7 +460,7 @@ export async function runAgenticLoop(params: {
           { role: "assistant" as const, content: result.content },
           {
             role: "user" as const,
-            content: "STOP. You described code or claimed actions without using tools. Do NOT show code to the user. Call saveBuildEvidence to save your design, launch_sandbox to start the sandbox, propose_file_change to modify files, or create_backlog_item if you cannot proceed. Call a tool NOW.",
+            content: `STOP. You described code or claimed actions without using tools. Do NOT show code to the user. ${getPhaseSpecificNudge(executedTools)} Call a tool NOW.`,
           },
         ];
         continue;
