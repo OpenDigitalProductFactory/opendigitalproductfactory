@@ -467,8 +467,7 @@ export async function runAgenticLoop(params: {
       }
 
       // Frustration guardrail: agent is apologizing/hedging instead of acting.
-      // Only fires when fabrication detection didn't already handle it.
-      if (!fabricationRetried && frustrationCount < 3 && FRUSTRATION_PATTERN.test(trimmed) && !result.toolsStripped) {
+      if (frustrationCount < 3 && FRUSTRATION_PATTERN.test(trimmed) && !result.toolsStripped) {
         frustrationCount++;
         console.warn(`[agentic-loop] frustration detected (${frustrationCount}/3): ${trimmed.slice(0, 100)}`);
         if (frustrationCount >= 3) {
