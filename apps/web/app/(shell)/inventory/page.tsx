@@ -75,11 +75,7 @@ export default async function InventoryPage() {
           {products.map((p) => {
             const colour = p.portfolio ? (PORTFOLIO_COLOURS[p.portfolio.slug] ?? "#7c8cf8") : "#555566";
             const statusColour = STATUS_COLOURS[p.lifecycleStatus] ?? "#555566";
-            const href = p.taxonomyNode
-              ? `/portfolio/${p.taxonomyNode.nodeId}`
-              : p.portfolio
-              ? `/portfolio/${p.portfolio.slug}`
-              : null;
+            const href = `/portfolio/product/${p.id}`;
             const taxonomyPath = p.taxonomyNode
               ? p.taxonomyNode.nodeId.replace(/\//g, " / ")
               : null;
@@ -109,7 +105,7 @@ export default async function InventoryPage() {
               </div>
             );
 
-            return href ? (
+            return (
               <Link
                 key={p.id}
                 href={href}
@@ -117,8 +113,6 @@ export default async function InventoryPage() {
               >
                 {card}
               </Link>
-            ) : (
-              <div key={p.id}>{card}</div>
             );
           })}
         </div>

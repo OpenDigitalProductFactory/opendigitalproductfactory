@@ -292,22 +292,30 @@ async function seedDigitalProducts(): Promise<void> {
 }
 
 async function seedDpfSelfRegistration(): Promise<void> {
-  // Resolve the manufacturing_and_delivery portfolio and taxonomy node
+  // The portal is a platform service under Foundational — it's the user-facing
+  // web application that provides lifecycle views for all digital products.
   const portfolio = await prisma.portfolio.findUnique({
-    where: { slug: "manufacturing_and_delivery" },
+    where: { slug: "foundational" },
   });
-  if (!portfolio) throw new Error("manufacturing_and_delivery portfolio not seeded");
+  if (!portfolio) throw new Error("foundational portfolio not seeded");
 
-  const taxonomyNode = await prisma.taxonomyNode.findUnique({
-    where: { nodeId: "manufacturing_and_delivery" },
+  // Try the specific platform services node first, fall back to portfolio root
+  let taxonomyNode = await prisma.taxonomyNode.findUnique({
+    where: { nodeId: "foundational/platform_services" },
   });
-  if (!taxonomyNode) throw new Error("manufacturing_and_delivery taxonomy node not seeded");
+  if (!taxonomyNode) {
+    taxonomyNode = await prisma.taxonomyNode.findUnique({
+      where: { nodeId: "foundational" },
+    });
+  }
+  if (!taxonomyNode) throw new Error("foundational taxonomy node not seeded");
 
   // Register DPF Portal as a DigitalProduct
-  const dpfPortal = await prisma.digitalProduct.upsert({
+  await prisma.digitalProduct.upsert({
     where: { productId: "dpf-portal" },
     update: {
       name:            "Digital Product Factory Portal",
+      description:     "The Digital Product Factory platform — portal application, AI workforce, monitoring, and administration.",
       lifecycleStage:  "production",
       lifecycleStatus: "active",
       portfolioId:     portfolio.id,
@@ -316,6 +324,7 @@ async function seedDpfSelfRegistration(): Promise<void> {
     create: {
       productId:       "dpf-portal",
       name:            "Digital Product Factory Portal",
+      description:     "The Digital Product Factory platform — portal application, AI workforce, monitoring, and administration.",
       lifecycleStage:  "production",
       lifecycleStatus: "active",
       portfolioId:     portfolio.id,
@@ -324,7 +333,7 @@ async function seedDpfSelfRegistration(): Promise<void> {
     select: { id: true },
   });
 
-  console.log("Seeded DPF Portal digital product");
+  console.log("Seeded DPF Portal digital product (foundational/platform_services)");
 }
 
 // Epic/backlog seeding removed — managed separately via backup/restore process.

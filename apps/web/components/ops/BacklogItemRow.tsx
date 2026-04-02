@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { deleteBacklogItem } from "@/lib/actions/backlog";
 import { BACKLOG_STATUS_COLOURS, type BacklogItemWithRelations } from "@/lib/backlog";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
@@ -44,6 +45,17 @@ export function BacklogItemRow({ item, onEdit }: Props) {
           {item.completedAt ? ` · done ${new Date(item.completedAt).toLocaleDateString()}` : ""}
         </p>
       </div>
+
+      {/* Product link */}
+      {item.digitalProduct && (
+        <Link
+          href={`/portfolio/product/${item.digitalProduct.id}/backlog`}
+          className="shrink-0 text-[9px] text-[var(--dpf-accent)] hover:underline px-1"
+          title={`View in ${item.digitalProduct.name}`}
+        >
+          product
+        </Link>
+      )}
 
       {/* Status badge */}
       <span

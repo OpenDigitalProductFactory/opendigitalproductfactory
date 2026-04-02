@@ -49,11 +49,20 @@ type CountRow = {
   _count: { id: number };
 };
 
+type BuildOptions = {
+  /** Remove branches that have zero products (direct + cumulative). Default: false. */
+  pruneEmpty?: boolean;
+  /** When total product count across all roots is below this threshold, flatten
+   *  pass-through nodes (single child, zero direct products). Default: 20. */
+  flattenThreshold?: number;
+};
+
 /** Build a tree from flat node rows + product count rows. */
 export function buildPortfolioTree(
   nodes: RawNode[],
   totalCounts: CountRow[],        // all products regardless of status
-  activeCounts: CountRow[] = []   // active products only; defaults to [] so existing call sites compile
+  activeCounts: CountRow[] = [],  // active products only; defaults to [] so existing call sites compile
+  options: BuildOptions = {}
 ): PortfolioTreeNode[] {
   // Deduplicate by nodeId — keeps first occurrence so duplicate DB rows don't produce
   // two roots with the same nodeId (which would generate duplicate React keys).
@@ -116,6 +125,45 @@ export function buildPortfolioTree(
     return { total: node.totalCount, active: node.activeCount };
   }
   for (const root of roots) sumSubtree(root);
+
+  const { pruneEmpty = false, flattenThreshold = 20 } = options;
+
+  // Prune empty branches: remove children (recursively) that have totalCount === 0.
+  // Portfolio roots are always kept so the structure is recognizable.
+  if (pruneEmpty) {
+    function prune(children: PortfolioTreeNode[]): PortfolioTreeNode[] {
+      return children
+        .filter((n) => n.totalCount > 0)
+        .map((n) => ({ ...n, children: prune(n.children) }));
+    }
+    for (const root of roots) {
+      root.children = prune(root.children);
+    }
+  }
+
+  // Flatten pass-through nodes when org is small: if total products across all
+  // roots is below the threshold, collapse intermediate nodes that have a single
+  // child and zero direct products (they just add depth without information).
+  const totalProducts = roots.reduce((sum, r) => sum + r.totalCount, 0);
+  if (totalProducts > 0 && totalProducts < flattenThreshold) {
+    function flatten(node: PortfolioTreeNode): PortfolioTreeNode {
+      // Recursively flatten children first
+      node.children = node.children.map(flatten);
+      // If this node is a pass-through (single child, no direct products), skip it
+      while (
+        node.children.length === 1 &&
+        node.directCount === 0 &&
+        node.children[0].children.length > 0
+      ) {
+        const child = node.children[0];
+        node.children = child.children;
+      }
+      return node;
+    }
+    for (const root of roots) {
+      flatten(root);
+    }
+  }
 
   return roots;
 }

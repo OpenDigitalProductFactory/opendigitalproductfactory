@@ -34,7 +34,7 @@ export async function getInventoryEntitiesForPage() {
     include: {
       portfolio: { select: { slug: true, name: true } },
       taxonomyNode: { select: { nodeId: true, name: true } },
-      digitalProduct: { select: { productId: true, name: true } },
+      digitalProduct: { select: { id: true, productId: true, name: true } },
     },
   });
 }
