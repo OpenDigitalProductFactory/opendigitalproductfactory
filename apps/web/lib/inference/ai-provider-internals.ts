@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai-provider-types";
 import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
 import { assignTierFromModelId, TIER_DIMENSION_BASELINES } from "@/lib/routing/quality-tiers";
+import { KNOWN_PROVIDER_MODELS, type KnownModel } from "@/lib/routing/known-provider-models";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
@@ -695,4 +696,149 @@ export async function seedAllRecipes(): Promise<number> {
     }
   }
   return seeded;
+}
+
+/**
+ * Auto-discover and profile models for a provider after activation.
+ * Called from OAuth callback and API key save flows.
+ *
+ * For discoverable providers: calls discoverModelsInternal + profileModelsInternal.
+ * For non-discoverable providers (chatgpt, codex): seeds from KNOWN_PROVIDER_MODELS catalog.
+ *
+ * Errors are logged but never thrown (activation should succeed even if discovery fails).
+ */
+export async function autoDiscoverAndProfile(providerId: string): Promise<{
+  discovered: number;
+  profiled: number;
+  error?: string;
+}> {
+  try {
+    const knownModels = KNOWN_PROVIDER_MODELS[providerId];
+    if (knownModels) {
+      return await seedKnownModels(providerId, knownModels);
+    }
+
+    const discovery = await discoverModelsInternal(providerId);
+    if (discovery.error || discovery.discovered === 0) {
+      return { discovered: 0, profiled: 0, error: discovery.error };
+    }
+
+    const profiling = await profileModelsInternal(providerId);
+    return {
+      discovered: discovery.discovered,
+      profiled: profiling.profiled,
+      error: profiling.error,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[auto-discover] Failed for ${providerId}: ${message}`);
+    return { discovered: 0, profiled: 0, error: message };
+  }
+}
+
+/**
+ * Seed DiscoveredModel + ModelProfile from the known-model catalog.
+ * Used for providers that can't call /v1/models (subscription OAuth, agent providers).
+ */
+async function seedKnownModels(
+  providerId: string,
+  models: KnownModel[],
+): Promise<{ discovered: number; profiled: number }> {
+  let discovered = 0;
+  let profiled = 0;
+
+  for (const m of models) {
+    await prisma.discoveredModel.upsert({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      create: {
+        providerId,
+        modelId: m.modelId,
+        rawMetadata: { id: m.modelId, source: "known_catalog" } as any,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        rawMetadata: { id: m.modelId, source: "known_catalog" } as any,
+        lastSeenAt: new Date(),
+      },
+    });
+    discovered++;
+
+    const existing = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      select: { qualityTierSource: true, profileSource: true },
+    });
+
+    const shouldWriteScores = !existing?.profileSource || existing.profileSource === "seed";
+    const shouldWriteTier = !existing?.qualityTierSource || existing.qualityTierSource !== "admin";
+
+    // Use per-model scores if provided, otherwise fall back to tier baselines
+    const scores = m.scores ?? {
+      reasoning: TIER_DIMENSION_BASELINES[m.qualityTier].reasoning,
+      codegen: TIER_DIMENSION_BASELINES[m.qualityTier].codegen,
+      toolFidelity: TIER_DIMENSION_BASELINES[m.qualityTier].toolFidelity,
+      instructionFollowingScore: TIER_DIMENSION_BASELINES[m.qualityTier].instructionFollowing,
+      structuredOutputScore: TIER_DIMENSION_BASELINES[m.qualityTier].structuredOutput,
+      conversational: TIER_DIMENSION_BASELINES[m.qualityTier].conversational,
+      contextRetention: TIER_DIMENSION_BASELINES[m.qualityTier].contextRetention,
+    };
+
+    const scoreFields = shouldWriteScores ? {
+      ...scores,
+      profileSource: "seed" as const,
+      profileConfidence: "medium" as const,
+    } : {};
+
+    const tierFields = shouldWriteTier ? {
+      qualityTier: m.qualityTier,
+      qualityTierSource: "auto" as const,
+    } : {};
+
+    await prisma.modelProfile.upsert({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      create: {
+        providerId,
+        modelId: m.modelId,
+        friendlyName: m.friendlyName,
+        summary: m.summary,
+        capabilityTier: m.capabilityTier,
+        costTier: m.costTier,
+        bestFor: m.bestFor,
+        avoidFor: m.avoidFor,
+        modelClass: m.modelClass,
+        modelFamily: m.modelFamily,
+        modelStatus: "active",
+        maxContextTokens: m.maxContextTokens,
+        maxOutputTokens: m.maxOutputTokens,
+        inputModalities: m.inputModalities,
+        outputModalities: m.outputModalities,
+        capabilities: m.capabilities as any,
+        supportsToolUse: m.capabilities.toolUse ?? false,
+        qualityTier: m.qualityTier,
+        qualityTierSource: "auto",
+        ...scores,
+        profileSource: "seed",
+        profileConfidence: "medium",
+        generatedBy: "system:auto-discover",
+      },
+      update: {
+        friendlyName: m.friendlyName,
+        summary: m.summary,
+        modelClass: m.modelClass,
+        modelFamily: m.modelFamily,
+        maxContextTokens: m.maxContextTokens,
+        maxOutputTokens: m.maxOutputTokens,
+        inputModalities: m.inputModalities,
+        outputModalities: m.outputModalities,
+        capabilities: m.capabilities as any,
+        supportsToolUse: m.capabilities.toolUse ?? false,
+        ...scoreFields,
+        ...tierFields,
+        generatedBy: "system:auto-discover",
+      },
+    });
+    profiled++;
+  }
+
+  console.log(`[auto-discover] Seeded ${discovered} known models for ${providerId}`);
+  return { discovered, profiled };
 }
