@@ -114,6 +114,15 @@ RULES:
 - If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
 - If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.
 
+5. After the user approves the design, call suggest_taxonomy_placement.
+   This analyzes the brief and suggests where the feature belongs in the portfolio taxonomy.
+   - If high confidence: state the recommendation and ask "Sound right?"
+   - If multiple candidates: present the top 2-3 options and ask which fits
+   - If no match: offer to place under the nearest node or propose a new category
+   When the user confirms (or says "sure", "yes", "that works"), call confirm_taxonomy_placement with the chosen nodeId.
+   If they want a new category, call confirm_taxonomy_placement with proposeNew instead.
+   If they skip or say "don't care", move on without confirming — the system will use the portfolio root as fallback at ship time.
+
 BEFORE PHASE TRANSITION: When the user approves the design and you're ready to move to plan phase, call save_phase_handoff with:
 - summary: What was designed and the core approach
 - decisionsMade: Key design decisions and the reasoning behind each

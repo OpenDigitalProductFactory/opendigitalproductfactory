@@ -392,13 +392,31 @@ export async function shipBuild(input: {
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
-  // Resolve portfolio + root taxonomy node for the product
+  // Resolve portfolio + taxonomy node for the product.
+  // Use confirmed attribution from ideate phase if available; fall back to portfolio root.
   const portfolio = await prisma.portfolio.findUnique({
     where: { slug: input.portfolioSlug },
     select: { id: true, slug: true },
   });
   let taxonomyNodeId: string | null = null;
-  if (portfolio) {
+  const attribution = build.taxonomyAttribution as { confirmedNodeId?: string; topCandidate?: { nodeId: string; score: number } } | null;
+  if (attribution?.confirmedNodeId) {
+    // User confirmed a specific taxonomy node during ideate
+    const confirmed = await prisma.taxonomyNode.findUnique({
+      where: { nodeId: attribution.confirmedNodeId },
+      select: { id: true },
+    });
+    taxonomyNodeId = confirmed?.id ?? null;
+  } else if (attribution?.topCandidate && attribution.topCandidate.score >= 0.75) {
+    // High-confidence suggestion that user didn't override
+    const suggested = await prisma.taxonomyNode.findUnique({
+      where: { nodeId: attribution.topCandidate.nodeId },
+      select: { id: true },
+    });
+    taxonomyNodeId = suggested?.id ?? null;
+  }
+  if (!taxonomyNodeId && portfolio) {
+    // Fall back to portfolio root node
     const rootNode = await prisma.taxonomyNode.findFirst({
       where: { portfolioId: portfolio.id, parentId: null },
       select: { id: true },
