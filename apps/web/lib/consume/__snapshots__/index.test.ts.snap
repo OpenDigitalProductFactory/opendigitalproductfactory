@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`consume barrel export > exports all public symbols 1`] = `
+[
+  "buildOnboardingPrompt",
+  "getChecklists",
+  "getInventoryEntitiesForPage",
+  "getLatestDiscoveryRun",
+  "getOpenPortfolioQualityIssues",
+  "getTasksForEmployee",
+  "summarizeDiscoveryHealth",
+]
+`;

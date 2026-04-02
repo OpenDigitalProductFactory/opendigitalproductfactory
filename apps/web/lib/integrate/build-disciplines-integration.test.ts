@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkPhaseGate, canTransitionPhase } from "./feature-build-types";
+import { checkPhaseGate, canTransitionPhase } from "@/lib/feature-build-types";
 import { parseReviewResponse, buildDesignReviewPrompt, buildPlanReviewPrompt } from "./build-reviewers";
 
 /**

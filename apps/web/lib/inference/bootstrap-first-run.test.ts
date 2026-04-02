@@ -23,14 +23,14 @@ vi.mock("./ollama", () => ({
   checkBundledProviders: vi.fn(),
 }));
 
-vi.mock("./actions/setup-progress", () => ({
+vi.mock("../actions/setup-progress", () => ({
   isFirstRun: vi.fn(),
   createSetupProgress: vi.fn(),
 }));
 
 import { prisma } from "@dpf/db";
 import { checkBootstrapNeeded, seedOnboardingAgent } from "./bootstrap-first-run";
-import { isFirstRun } from "./actions/setup-progress";
+import { isFirstRun } from "../actions/setup-progress";
 
 describe("bootstrap-first-run", () => {
   beforeEach(() => { vi.clearAllMocks(); });

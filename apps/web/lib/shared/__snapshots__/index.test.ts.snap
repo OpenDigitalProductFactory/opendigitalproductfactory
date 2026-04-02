@@ -1,0 +1,34 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shared barrel export > exports all public symbols 1`] = `
+[
+  "AREA_META",
+  "AREA_ORDER",
+  "buildDocsIndex",
+  "capParsedContentSize",
+  "composeApprovalEmail",
+  "composeDunningEmail",
+  "composeExpenseApprovalEmail",
+  "composeInvoiceEmail",
+  "deleteAttachmentsForThread",
+  "extractHeadings",
+  "getEmployeeAddresses",
+  "handleFileUpload",
+  "isUnifiedCoworkerEnabled",
+  "loadAllDocs",
+  "loadDocPage",
+  "parseCSV",
+  "parseCsv",
+  "parseDocFrontmatter",
+  "parseDocx",
+  "parseFileContent",
+  "parseICal",
+  "parsePdf",
+  "parseXlsx",
+  "resolveBmrAuthority",
+  "resolveProductProposalTarget",
+  "safeRenderValue",
+  "sendEmail",
+  "validateAddress",
+]
+`;
