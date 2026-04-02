@@ -2,11 +2,11 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 
-import { routeAndCall, type RoutedInferenceResult } from "./routed-inference";
-import { executeTool, type ToolDefinition, type ToolResult } from "./mcp-tools";
-import type { ChatMessage } from "./ai-inference";
+import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { executeTool, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
-import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "./routing/quality-tiers";
+import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern

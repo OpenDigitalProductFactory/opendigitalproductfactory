@@ -2,7 +2,7 @@
 // Pure types and helpers for the Build Studio. No server imports.
 
 import * as crypto from "crypto";
-import type { BuildExecutionState } from "./build-exec-types";
+import type { BuildExecutionState } from "@/lib/build-exec-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

@@ -4,8 +4,8 @@
 import { prisma } from "@dpf/db";
 import { analyzeConversation, inferHumanScore, type ConversationMessage } from "./process-observer";
 import { triageAndFile, type BacklogItemData } from "./process-observer-triage";
-import { evaluateAndUpdateProfile, updateHumanScore } from "./orchestrator-evaluator";
-import type { SensitivityLevel } from "./agent-router-types";
+import { evaluateAndUpdateProfile, updateHumanScore } from "@/lib/orchestrator-evaluator";
+import type { SensitivityLevel } from "@/lib/agent-router-types";
 
 export type RoutingMeta = {
   endpointId: string;

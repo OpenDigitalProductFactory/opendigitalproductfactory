@@ -4,13 +4,13 @@
 // Resilient by design: any failure results in a silent return, never a thrown error.
 
 import { prisma } from "@dpf/db";
-import { routeAndCall } from "./routed-inference";
+import { routeAndCall } from "@/lib/routed-inference";
 import { routePrimary } from "./agent-router";
 import { loadEndpoints } from "./agent-router-data";
-import { getTaskType } from "./task-types";
-import { updateEndpointDimensionScores } from "./routing/production-feedback";
+import { getTaskType } from "@/lib/task-types";
+import { updateEndpointDimensionScores } from "../routing/production-feedback";
 import type { SensitivityLevel } from "./agent-router-types";
-import type { ChatMessage } from "./ai-inference";
+import type { ChatMessage } from "@/lib/ai-inference";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

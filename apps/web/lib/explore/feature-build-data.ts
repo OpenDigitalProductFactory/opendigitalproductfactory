@@ -2,8 +2,8 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion } from "./feature-build-types";
-import type { BuildContext } from "./build-agent-prompts";
-import type { AttachmentInfo } from "./agent-coworker-types";
+import type { BuildContext } from "@/lib/build-agent-prompts";
+import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   const rows = await prisma.featureBuild.findMany({

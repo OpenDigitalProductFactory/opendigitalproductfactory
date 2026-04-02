@@ -1,5 +1,5 @@
 import type { GovernanceDecision, RiskBand } from "./governance-types";
-import type { SensitivityLevel } from "./agent-router-types";
+import type { SensitivityLevel } from "@/lib/agent-router-types";
 
 const RISK_BAND_ORDER: Record<RiskBand, number> = {
   low: 1,
