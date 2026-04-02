@@ -1,9 +1,12 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
-import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
+import { getPlatformDevConfig, getUntrackedFeatureCount } from "@/lib/actions/platform-dev-config";
 
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
+  const untrackedCount = config?.contributionMode === "fork_only"
+    ? await getUntrackedFeatureCount()
+    : 0;
 
   return (
     <div>
@@ -16,6 +19,10 @@ export default async function AdminPlatformDevelopmentPage() {
         currentMode={(config?.contributionMode as "fork_only" | "selective" | "contribute_all") ?? null}
         configuredAt={config?.configuredAt?.toISOString() ?? null}
         configuredByEmail={config?.configuredBy?.email ?? null}
+        gitRemoteUrl={config?.gitRemoteUrl ?? null}
+        dcoAcceptedAt={config?.dcoAcceptedAt?.toISOString() ?? null}
+        dcoAcceptedByEmail={(config?.dcoAcceptedBy as { email: string } | null)?.email ?? null}
+        untrackedFeatureCount={untrackedCount}
       />
     </div>
   );
