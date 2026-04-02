@@ -977,7 +977,20 @@ async function seedAgentModelDefaults(): Promise<void> {
       where: { agentId: d.agentId },
     });
     if (existing) {
-      // Admin has already configured this agent — don't overwrite
+      // Admin has already configured this agent — don't overwrite tier/budget.
+      // But DO apply pinned provider/model if the seed specifies them and
+      // the existing row doesn't have them (prevents recurring routing bugs).
+      if ((d.pinnedProviderId && !existing.pinnedProviderId) ||
+          (d.pinnedModelId && !existing.pinnedModelId)) {
+        await prisma.agentModelConfig.update({
+          where: { agentId: d.agentId },
+          data: {
+            ...(d.pinnedProviderId && !existing.pinnedProviderId ? { pinnedProviderId: d.pinnedProviderId } : {}),
+            ...(d.pinnedModelId && !existing.pinnedModelId ? { pinnedModelId: d.pinnedModelId } : {}),
+          },
+        });
+        console.log(`  Updated pins for ${d.agentId}: provider=${d.pinnedProviderId}, model=${d.pinnedModelId}`);
+      }
       existed++;
       continue;
     }
