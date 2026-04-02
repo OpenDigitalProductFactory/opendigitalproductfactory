@@ -34,6 +34,7 @@ export default async function ProductOverviewPage({ params }: Props) {
           serviceOfferings: true,
           featureBuilds: true,
           businessModels: true,
+          knowledgeArticles: true,
         },
       },
     },
@@ -48,6 +49,7 @@ export default async function ProductOverviewPage({ params }: Props) {
     { label: "Versions", value: product._count.versions, href: `/portfolio/product/${id}/versions` },
     { label: "Service Offerings", value: product._count.serviceOfferings, href: `/portfolio/product/${id}/offerings` },
     { label: "Feature Builds", value: product._count.featureBuilds, href: `/portfolio/product/${id}/changes` },
+    { label: "Knowledge Articles", value: product._count.knowledgeArticles, href: `/portfolio/product/${id}/knowledge` },
     { label: "Business Models", value: product._count.businessModels, href: `/portfolio/product/${id}/team` },
   ];
 
@@ -78,6 +80,10 @@ export default async function ProductOverviewPage({ params }: Props) {
           <div>
             <dt className="text-[var(--dpf-muted)]">Lifecycle Stage</dt>
             <dd className="text-[var(--dpf-text)] mt-0.5">{product.lifecycleStage}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--dpf-muted)]">Status</dt>
+            <dd className="text-[var(--dpf-text)] mt-0.5">{product.lifecycleStatus}</dd>
           </div>
           <div>
             <dt className="text-[var(--dpf-muted)]">Version</dt>
