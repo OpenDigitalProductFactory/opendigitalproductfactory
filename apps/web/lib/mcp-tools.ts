@@ -2566,33 +2566,28 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         console.warn("[deploy_feature] authority resolution failed:", err);
       }
 
-      // Submit as PR contribution (EP-BUILD-HANDOFF-002 Phase 2e)
-      let prContribution: Awaited<ReturnType<typeof import("@/lib/contribution-pipeline").submitBuildAsPR>> | null = null;
-      let prInfo = "";
+      // Contribution mode awareness (EP-BUILD-HANDOFF-002 Phase 2e extension)
+      let contributionModeInfo = "";
       try {
-        const { submitBuildAsPR, formatContributionForChat } = await import("@/lib/contribution-pipeline");
-        const buildInfo = await prisma.featureBuild.findUnique({
-          where: { buildId },
-          select: { title: true, digitalProductId: true, digitalProduct: { select: { productId: true } } },
-        });
-        const userInfo = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { employeeProfile: { select: { displayName: true } } },
-        });
-        const authorName = userInfo?.employeeProfile?.displayName ?? "AI Coworker";
+        const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
+        const mode = devConfig?.contributionMode ?? "fork_only";
 
-        prContribution = await submitBuildAsPR({
-          buildId,
-          title: buildInfo?.title ?? "Untitled feature",
-          diffPatch: extracted.fullDiff,
-          productId: buildInfo?.digitalProduct?.productId ?? null,
-          impactReport,
-          authorUserId: userId,
-          authorName,
-        });
-        prInfo = formatContributionForChat(prContribution);
+        if (mode === "fork_only" && !devConfig?.gitRemoteUrl) {
+          // Count untracked shipped features for escalating warning
+          const untrackedCount = await prisma.featureBuild.count({
+            where: { phase: "complete", gitCommitHashes: { isEmpty: true } },
+          });
+
+          if (untrackedCount >= 5) {
+            contributionModeInfo = `**Warning:** You have ${untrackedCount} custom features with no backup. This represents significant business value that could be lost in a container rebuild, Docker update, or system recovery. Setting up a git repository takes about 10 minutes and protects all your customizations. See Admin > Platform Development.`;
+          } else if (untrackedCount >= 2) {
+            contributionModeInfo = `**Note:** You now have ${untrackedCount} custom features deployed without version control. If your Docker containers are rebuilt, these changes could be lost. I'd recommend setting up a git repository -- see Admin > Platform Development.`;
+          } else if (untrackedCount >= 1) {
+            contributionModeInfo = "Note: since no git repository is configured, customizations exist only in your production container. You can set up a repository in Admin > Platform Development to protect your work.";
+          }
+        }
       } catch (err) {
-        console.warn("[deploy_feature] PR contribution failed:", err);
+        console.warn("[deploy_feature] contribution mode check failed:", err);
       }
 
       const messageParts = [
@@ -2608,8 +2603,8 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (authorityInfo) {
         messageParts.push("", authorityInfo);
       }
-      if (prInfo) {
-        messageParts.push("", prInfo);
+      if (contributionModeInfo) {
+        messageParts.push("", contributionModeInfo);
       }
 
       logBuildActivity(buildId, "deploy_feature", messageParts.join(" "));
@@ -2625,14 +2620,6 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           destructiveWarnings,
           windowStatus,
           impactReport,
-          prContribution: prContribution ? {
-            mode: prContribution.mode,
-            branchName: prContribution.branchName,
-            prUrl: prContribution.prUrl,
-            prNumber: prContribution.prNumber,
-            securityScanPassed: prContribution.securityScan.passed,
-            status: prContribution.status,
-          } : null,
         },
       };
     }
