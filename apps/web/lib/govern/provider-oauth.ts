@@ -5,6 +5,7 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
+import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,10 @@ export async function exchangeOAuthCode(
     data: { authMethod: "oauth2_authorization_code" },
   });
 
+  // Auto-discover and profile models now that the provider has valid credentials.
+  // Fire-and-forget — don't block the OAuth redirect. Errors are logged internally.
+  autoDiscoverAndProfile(flow.providerId).catch(() => {});
+
   // Auto-activate linked MCP services (e.g. codex-agent when codex provider connects)
   const linkedServers = await prisma.mcpServer.findMany({
     where: { config: { path: ["linkedProviderId"], equals: flow.providerId } },
@@ -210,6 +215,8 @@ export async function exchangeOAuthCode(
           sensitivityClearance: ["public", "internal", "confidential"],
         },
       });
+      // Also discover models for the sibling provider
+      autoDiscoverAndProfile(sibling).catch(() => {});
     }
   }
 
