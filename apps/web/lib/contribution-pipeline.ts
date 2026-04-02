@@ -37,6 +37,9 @@ interface SubmitBuildAsPRInput {
   impactReport: ChangeImpactReport | null;
   authorUserId: string;
   authorName: string;
+  forkRemoteUrl?: string;      // Push to this fork repo (user's gitRemoteUrl)
+  upstreamRemoteUrl?: string;  // Create PR targeting this upstream repo
+  dcoSignoff?: string;         // Signed-off-by line for DCO
 }
 
 interface GitHubPRResponse {
@@ -136,6 +139,7 @@ function generateCommitMessage(input: {
   buildId: string;
   productId: string | null;
   authorName: string;
+  dcoSignoff?: string;
 }): string {
   const lines = [
     `feat: ${input.title}`,
@@ -145,6 +149,7 @@ function generateCommitMessage(input: {
   if (input.productId) lines.push(`Product: ${input.productId}`);
   lines.push(`Author: ${input.authorName} (AI Coworker)`);
   lines.push("Change-Type: ai-proposed");
+  if (input.dcoSignoff) lines.push("", input.dcoSignoff);
   return lines.join("\n");
 }
 
@@ -314,10 +319,15 @@ export async function submitBuildAsPR(
 
   const hasRemote = await hasGitRemote();
 
-  if (hasRemote && process.env.GITHUB_TOKEN) {
+  if ((hasRemote || input.forkRemoteUrl) && process.env.GITHUB_TOKEN) {
     // ─── Remote Mode: Create actual PR on GitHub ────────────────────────
-    const remoteUrl = await getRemoteUrl();
-    const repo = remoteUrl ? parseGitHubRepo(remoteUrl) : null;
+    const remoteUrl = input.forkRemoteUrl ?? await getRemoteUrl();
+    const forkRepo = remoteUrl ? parseGitHubRepo(remoteUrl) : null;
+    const upstreamRepo = input.upstreamRemoteUrl ? parseGitHubRepo(input.upstreamRemoteUrl) : null;
+
+    // PR target: upstream if configured (cross-fork), otherwise same repo
+    const prTargetRepo = upstreamRepo ?? forkRepo;
+    const repo = forkRepo;
 
     if (!repo) {
       // Remote exists but isn't GitHub — fall through to local mode
@@ -349,6 +359,7 @@ export async function submitBuildAsPR(
       buildId: input.buildId,
       productId: input.productId,
       authorName: input.authorName,
+      dcoSignoff: input.dcoSignoff,
     });
     const commitResult = await commitAll(commitMessage);
     const commitHash = "hash" in commitResult ? commitResult.hash : null;
@@ -367,11 +378,13 @@ export async function submitBuildAsPR(
     if (!securityScan.passed) labels.push("security-review-needed");
 
     const prResult = await createGitHubPR({
-      owner: repo.owner,
-      repo: repo.repo,
+      owner: prTargetRepo!.owner,
+      repo: prTargetRepo!.repo,
       title: prTitle,
       body: prBody,
-      head: branchName,
+      head: upstreamRepo
+        ? `${forkRepo!.owner}:${branchName}`  // Cross-fork: "fork-owner:branch"
+        : branchName,
       base: "main",
       labels,
     });

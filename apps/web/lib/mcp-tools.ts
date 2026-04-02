@@ -3277,6 +3277,48 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         },
       });
 
+      // Create upstream PR if configured (EP-BUILD-HANDOFF-002 contribution mode)
+      let prUrl: string | null = null;
+      try {
+        const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
+        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
+        const hasDco = !!devConfig?.dcoAcceptedAt;
+
+        if (hasDco && (process.env.GITHUB_TOKEN || devConfig?.gitRemoteUrl)) {
+          const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
+          const userInfo = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { employeeProfile: { select: { displayName: true, workEmail: true } } },
+          });
+          const displayName = userInfo?.employeeProfile?.displayName ?? userName;
+          const email = userInfo?.employeeProfile?.workEmail ?? userEmail;
+          const dcoSignoff = `Signed-off-by: ${displayName} <${email}>\nDCO-Accepted: ${devConfig!.dcoAcceptedAt!.toISOString()}`;
+
+          const prResult = await submitBuildAsPR({
+            buildId,
+            title: build.title,
+            diffPatch: diff,
+            productId: null,
+            impactReport: null,
+            authorUserId: userId,
+            authorName: displayName,
+            forkRemoteUrl: devConfig?.gitRemoteUrl ?? undefined,
+            upstreamRemoteUrl: upstreamUrl,
+            dcoSignoff,
+          });
+
+          if (prResult.prUrl) {
+            prUrl = prResult.prUrl;
+            await prisma.featurePack.update({
+              where: { packId },
+              data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[contribute_to_hive] upstream PR creation failed:", err);
+      }
+
       // Update linked ImprovementProposal if exists
       await prisma.improvementProposal.updateMany({
         where: { buildId: build.id, contributionStatus: "local" },
@@ -3285,10 +3327,11 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
 
       logBuildActivity(buildId, "contribute_to_hive", `FeaturePack ${packId} created. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`);
 
+      const prMessage = prUrl ? ` A pull request has been created: ${prUrl}` : "";
       return {
         success: true,
-        message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation. Thank you for contributing!`,
-        data: { packId, manifest, dcoAttestation },
+        message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation.${prMessage} Thank you for contributing!`,
+        data: { packId, manifest, dcoAttestation, prUrl },
       };
     }
 
