@@ -624,16 +624,21 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis" },
     { agentId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal" },
     { agentId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization" },
-    { agentId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation" },
+    { agentId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", preferredProviderId: "anthropic-sub" },
     { agentId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration" },
     { agentId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities" },
   ];
 
   for (const cw of coworkers) {
+    const { agentId, ...rest } = cw;
     await prisma.agent.upsert({
-      where: { agentId: cw.agentId },
+      where: { agentId },
       create: cw,
-      update: { name: cw.name, description: cw.description },
+      update: {
+        name: rest.name,
+        description: rest.description,
+        ...("preferredProviderId" in rest ? { preferredProviderId: rest.preferredProviderId } : {}),
+      },
     });
   }
   console.log(`Seeded ${coworkers.length} coworker agents`);
@@ -952,7 +957,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     pinnedProviderId?: string;
     pinnedModelId?: string;
   }> = [
-    { agentId: "build-specialist",    minimumTier: "moderate", budgetClass: "quality_first" },
+    { agentId: "build-specialist",    minimumTier: "moderate", budgetClass: "quality_first", pinnedProviderId: "anthropic-sub", pinnedModelId: "claude-haiku-4-5-20251001" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
