@@ -270,9 +270,7 @@ export async function persistBootstrapDiscoveryRun(
           rawMetadata: software.rawMetadata ?? undefined,
           normalizationStatus: software.normalizationStatus,
           normalizationConfidence: software.normalizationConfidence,
-          softwareIdentity: software.softwareIdentityId
-            ? { connect: { id: software.softwareIdentityId } }
-            : undefined,
+          softwareIdentityId: software.softwareIdentityId ?? null,
           firstSeenAt: now,
           lastSeenAt: now,
         },
@@ -288,9 +286,7 @@ export async function persistBootstrapDiscoveryRun(
           rawMetadata: software.rawMetadata ?? undefined,
           normalizationStatus: software.normalizationStatus,
           normalizationConfidence: software.normalizationConfidence,
-          softwareIdentity: software.softwareIdentityId
-            ? { connect: { id: software.softwareIdentityId } }
-            : { disconnect: true },
+          softwareIdentityId: software.softwareIdentityId ?? null,
           lastSeenAt: now,
         },
       });
@@ -444,14 +440,12 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          taxonomyNode: issue.inventoryEntityKey
+          taxonomyNodeId: issue.inventoryEntityKey
             ? (() => {
                 const matchedEntity = normalized.inventoryEntities.find(
                   (entity) => entity.entityKey === issue.inventoryEntityKey,
                 );
-                return matchedEntity?.taxonomyNodeId
-                  ? { connect: { nodeId: matchedEntity.taxonomyNodeId } }
-                  : undefined;
+                return matchedEntity?.taxonomyNodeId ?? null;
               })()
             : undefined,
           inventoryEntity: inventoryEntityId
@@ -463,14 +457,12 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          taxonomyNode: issue.inventoryEntityKey
+          taxonomyNodeId: issue.inventoryEntityKey
             ? (() => {
                 const matchedEntity = normalized.inventoryEntities.find(
                   (entity) => entity.entityKey === issue.inventoryEntityKey,
                 );
-                return matchedEntity?.taxonomyNodeId
-                  ? { connect: { nodeId: matchedEntity.taxonomyNodeId } }
-                  : { disconnect: true };
+                return matchedEntity?.taxonomyNodeId ?? null;
               })()
             : undefined,
           inventoryEntity: inventoryEntityId
