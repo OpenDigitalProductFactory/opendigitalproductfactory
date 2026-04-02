@@ -66,6 +66,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "update_lifecycle",
       "query_version_history",
       "search_knowledge",
+      "search_knowledge_base",
     ],
     docsPath: "/docs/portfolios/index",
     skills: [
@@ -89,6 +90,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         prompt: "Help me find a specific digital product in the portfolio",
       },
       {
+        label: "Find knowledge",
+        description: "Search knowledge articles for this portfolio or product",
+        capability: "view_portfolio",
+        prompt: "Search the knowledge base for articles relevant to this product or portfolio. Show me what's available.",
+      },
+      {
         label: "Report an issue",
         description: "Report a bug or give feedback",
         capability: null,
@@ -108,6 +115,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "update_lifecycle",
       "query_version_history",
       "search_knowledge",
+      "search_knowledge_base",
     ],
     docsPath: "/docs/products/index",
     skills: [
@@ -223,6 +231,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainTools: [
       "create_backlog_item",
       "search_knowledge",
+      "search_knowledge_base",
     ],
     docsPath: "/docs/customers/index",
     skills: [
@@ -332,6 +341,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "list_project_directory",
       "propose_file_change",
       "search_knowledge",
+      "search_knowledge_base",
     ],
     docsPath: "/docs/build-studio/index",
     skills: [
@@ -452,6 +462,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainTools: [
       "prefill_onboarding_wizard",
       "search_knowledge",
+      "search_knowledge_base",
       "search_public_web",
     ],
     docsPath: "/docs/compliance/index",
@@ -527,6 +538,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "search_project_files",
       "propose_file_change",
       "search_knowledge",
+      "search_knowledge_base",
     ],
     docsPath: "/docs/workspace/index",
     skills: [
@@ -557,10 +569,48 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Documentation",
     sensitivity: "internal",
     domainContext:
-      "This page displays the platform user documentation. Users can browse guides for all platform areas, search for topics, and read how-to content.",
-    domainTools: ["search_knowledge"],
+      "This page displays the platform user documentation. The documentation specialist agent (AGT-904) assists with Mermaid diagram creation and validation, document structure review, cross-reference integrity checks, and renderer compatibility analysis. It optimizes for accuracy, self-containment, and renderability across GitHub, VS Code, and GitBook.",
+    domainTools: [
+      "search_knowledge",
+      "search_knowledge_base",
+      "search_project_files",
+      "read_project_file",
+      "list_project_directory",
+    ],
     docsPath: "/docs",
     skills: [
+      {
+        label: "Generate diagram",
+        description: "Create a Mermaid diagram for a concept",
+        capability: null,
+        taskType: "code_generation" as const,
+        prompt:
+          "Generate a Mermaid diagram for the concept I describe. Choose the appropriate diagram type (flowchart, sequence, class, state, ER, C4) based on the subject. Output the raw Mermaid syntax in a code block.",
+      },
+      {
+        label: "Review doc structure",
+        description: "Check a document for structural issues",
+        capability: null,
+        taskType: "analysis" as const,
+        prompt:
+          "Review the structure of this document. Check heading hierarchy, cross-references, section completeness, and IT4IT alignment. Flag any TODOs, placeholder content, or missing sections.",
+      },
+      {
+        label: "Regenerate diagrams",
+        description: "Update all diagrams in a doc to match current state",
+        capability: null,
+        taskType: "code_generation" as const,
+        prompt:
+          "Find and regenerate all Mermaid diagrams in this document to reflect the current codebase and architecture state. Use read_project_file and search_project_files to verify accuracy.",
+      },
+      {
+        label: "Renderer compatibility",
+        description: "Check diagrams for renderer compatibility",
+        capability: null,
+        taskType: "analysis" as const,
+        prompt:
+          "Check this Mermaid diagram for compatibility issues across renderers (GitHub, VS Code, GitBook). Flag unsupported syntax, excessive nesting, or features that render differently.",
+      },
       {
         label: "Report an issue",
         description: "Report a bug or give feedback",

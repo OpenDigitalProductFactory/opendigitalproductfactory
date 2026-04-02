@@ -25,6 +25,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey 
   { label: "EA Modeler",   href: "/ea",           capability: "view_ea_modeler" },
   { label: "AI Workforce", href: "/platform/ai",  capability: "view_platform" },
   { label: "Build",        href: "/build",        capability: "view_platform" },
+  { label: "Knowledge",    href: "/knowledge",    capability: null },
   { label: "Docs",         href: "/docs",         capability: null },
 ];
 

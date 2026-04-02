@@ -288,13 +288,24 @@ export async function sendMessage(input: {
 
     const routeData = await getRouteDataContext(input.routeContext, user.id!);
 
+    // EP-KM-001: Inject relevant knowledge articles into domain context
+    let enrichedDomainContext = routeCtx.domainContext;
+    try {
+      const knowledgeContext = await getKnowledgeContextForRoute(input.routeContext);
+      if (knowledgeContext) {
+        enrichedDomainContext += "\n\n" + knowledgeContext;
+      }
+    } catch {
+      // Non-blocking — knowledge injection failure should not break the conversation
+    }
+
     populatedPrompt = assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
       deniedCapabilities: denied,
       mode: (input.coworkerMode as "advise" | "act") ?? "advise",
       sensitivity: routeCtx.sensitivity,
-      domainContext: routeCtx.domainContext,
+      domainContext: enrichedDomainContext,
       domainTools: routeCtx.domainTools,
       routeData: routeData,
       attachmentContext,
@@ -1016,4 +1027,65 @@ export async function clearConversation(input: {
   });
 
   return { ok: true };
+}
+
+// ─── EP-KM-001: Knowledge Context Injection ─────────────────────────────────
+
+/**
+ * Extract product or portfolio context from the route and return a summary
+ * of the top 3 relevant knowledge articles for system prompt injection.
+ */
+async function getKnowledgeContextForRoute(routeContext: string): Promise<string | null> {
+  // Extract product ID from /portfolio/product/[id]... routes
+  const productMatch = routeContext.match(/\/portfolio\/product\/([^/]+)/);
+  // Extract portfolio slug from /portfolio/[slug]... routes (but not /portfolio/product)
+  const portfolioMatch = !productMatch && routeContext.match(/\/portfolio\/([^/]+)/);
+
+  if (!productMatch && !portfolioMatch) return null;
+
+  const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
+
+  if (productMatch) {
+    const productId = productMatch[1];
+    const product = await prisma.digitalProduct.findUnique({
+      where: { id: productId },
+      select: { name: true },
+    });
+    if (!product) return null;
+
+    const articles = await searchKnowledgeArticles({
+      query: product.name,
+      productId,
+      limit: 3,
+    });
+    if (articles.length === 0) return null;
+
+    const lines = articles.map(
+      (a) => `- ${a.articleId}: "${a.title}" (${a.category}) — ${a.contentPreview.slice(0, 80)}...`,
+    );
+    return `RELEVANT KNOWLEDGE ARTICLES FOR ${product.name}:\n${lines.join("\n")}`;
+  }
+
+  if (portfolioMatch) {
+    const portfolioSlug = portfolioMatch[1];
+    const portfolio = await prisma.portfolio.findUnique({
+      where: { slug: portfolioSlug },
+      select: { id: true, name: true },
+    });
+    if (!portfolio) return null;
+
+    const articles = await searchKnowledgeArticles({
+      query: portfolio.name,
+      portfolioId: portfolio.id,
+      limit: 3,
+    });
+    if (articles.length === 0) return null;
+
+    const lines = articles.map(
+      (a) => `- ${a.articleId}: "${a.title}" (${a.category}) — ${a.contentPreview.slice(0, 80)}...`,
+    );
+    return `RELEVANT KNOWLEDGE ARTICLES FOR ${portfolio.name} PORTFOLIO:\n${lines.join("\n")}`;
+  }
+
+  return null;
 }

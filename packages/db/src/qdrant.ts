@@ -192,7 +192,12 @@ export async function scrollPoints(
  * existing collections, not just new ones.
  */
 export async function ensurePayloadIndexes(): Promise<void> {
-  const keywordFields = ["route", "lifecycle_status", "action_name", "spec_ref"];
+  const keywordFields = [
+    // Capability discovery indexes
+    "route", "lifecycle_status", "action_name", "spec_ref",
+    // EP-KM-001: Knowledge article indexes
+    "category", "status", "product_ids", "portfolio_ids", "value_streams", "tags",
+  ];
   const boolFields = ["side_effect"];
 
   for (const field of keywordFields) {

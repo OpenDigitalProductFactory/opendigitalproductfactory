@@ -28,6 +28,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   analyze_public_website_branding: ["web_search"],
   search_integrations: ["external_registry_search", "registry_read"],
   search_knowledge: ["registry_read"],
+  search_knowledge_base: ["registry_read"],
+  create_knowledge_article: ["registry_write"],
+  flag_stale_knowledge: ["registry_read"],
 
   // Build / Sandbox
   launch_sandbox: ["sandbox_execute"],
@@ -124,9 +127,14 @@ type AgentEntry = {
   config_profile: { tool_grants: string[] };
 };
 
-/** Load tool_grants for an agent from agent_registry.json (cached). */
+/**
+ * Load tool_grants for an agent (cached).
+ * EP-AI-WORKFORCE-001: First tries DB (AgentToolGrant table), falls back to
+ * agent_registry.json for agents not yet migrated.
+ */
 export function getAgentToolGrants(agentId: string): string[] | null {
   if (grantCache.has(agentId)) return grantCache.get(agentId)!;
+  // Fallback: JSON registry lookup (synchronous, always available)
   const agent = (agentRegistry.agents as AgentEntry[]).find(
     (a) => a.agent_id === agentId,
   );
@@ -134,6 +142,33 @@ export function getAgentToolGrants(agentId: string): string[] | null {
   const grants = agent.config_profile.tool_grants;
   grantCache.set(agentId, grants);
   return grants;
+}
+
+/**
+ * EP-AI-WORKFORCE-001: Async DB-backed grant resolution.
+ * Resolves grants from AgentToolGrant table, falling back to JSON registry.
+ * Use this in async contexts (API routes, server actions).
+ */
+export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]> {
+  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
+
+  try {
+    const { prisma } = await import("@dpf/db");
+    const agent = await prisma.agent.findFirst({
+      where: { OR: [{ agentId }, { slugId: agentId }] },
+      include: { toolGrants: true },
+    });
+    if (agent && agent.toolGrants.length > 0) {
+      const grants = agent.toolGrants.map((g) => g.grantKey);
+      grantCache.set(agentId, grants);
+      return grants;
+    }
+  } catch {
+    // DB unavailable — fall through to JSON
+  }
+
+  // Fallback to JSON registry
+  return getAgentToolGrants(agentId) ?? [];
 }
 
 /** Check if a specific tool is allowed by an agent's grants. */

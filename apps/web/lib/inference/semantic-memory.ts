@@ -229,6 +229,100 @@ export async function storeCapabilityKnowledge(params: {
   ]);
 }
 
+// ─── Store Knowledge Article ──────────────────────────────────────────────
+
+/**
+ * Index a knowledge article into Qdrant platform-knowledge collection.
+ * Embeds title+body for semantic search. Stores structured payload fields
+ * for filter-based discovery by product, portfolio, category, value stream.
+ */
+export async function storeKnowledgeArticle(params: {
+  articleId: string;
+  title: string;
+  body: string;
+  category: string;
+  status: string;
+  productIds: string[];
+  portfolioIds: string[];
+  valueStreams: string[];
+  tags: string[];
+}): Promise<void> {
+  const text = `${params.title}\n${params.body}`;
+  const embeddingText = text.length > 8000 ? text.slice(0, 8000) : text;
+  const embedding = await generateEmbedding(embeddingText);
+  if (!embedding) return;
+
+  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+    {
+      id: `knowledge-article-${params.articleId}`,
+      vector: embedding,
+      payload: {
+        entityId: params.articleId,
+        entityType: "knowledge-article",
+        title: params.title,
+        contentPreview: params.body.slice(0, 500),
+        category: params.category,
+        status: params.status,
+        product_ids: params.productIds,
+        portfolio_ids: params.portfolioIds,
+        value_streams: params.valueStreams,
+        tags: params.tags,
+        timestamp: new Date().toISOString(),
+      },
+    },
+  ]);
+}
+
+// ─── Search Knowledge Articles ────────────────────────────────────────────
+
+/**
+ * Semantic search for knowledge articles with optional payload filters.
+ * Only returns published articles by default. Combines embedding similarity
+ * with Qdrant payload filters for product, portfolio, category, value stream.
+ */
+export async function searchKnowledgeArticles(params: {
+  query: string;
+  productId?: string;
+  portfolioId?: string;
+  category?: string;
+  valueStream?: string;
+  limit?: number;
+}): Promise<Array<{
+  articleId: string;
+  title: string;
+  category: string;
+  contentPreview: string;
+  score: number;
+}>> {
+  const embedding = await generateEmbedding(params.query);
+  if (!embedding) return [];
+
+  const must: Array<Record<string, unknown>> = [
+    { key: "entityType", match: { value: "knowledge-article" } },
+    { key: "status", match: { value: "published" } },
+  ];
+  if (params.productId) must.push({ key: "product_ids", match: { value: params.productId } });
+  if (params.portfolioId) must.push({ key: "portfolio_ids", match: { value: params.portfolioId } });
+  if (params.category) must.push({ key: "category", match: { value: params.category } });
+  if (params.valueStream) must.push({ key: "value_streams", match: { value: params.valueStream } });
+
+  const results = await searchSimilar(
+    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    embedding,
+    { must },
+    params.limit ?? 5,
+    0.55,
+  );
+
+  return results.map((r) => ({
+    articleId: String(r.payload["entityId"] ?? ""),
+    title: String(r.payload["title"] ?? ""),
+    category: String(r.payload["category"] ?? ""),
+    contentPreview: String(r.payload["contentPreview"] ?? ""),
+    score: r.score,
+  }));
+}
+
 // ─── Lookup Capability by Filter ───────────────────────────────────────────
 
 /**
