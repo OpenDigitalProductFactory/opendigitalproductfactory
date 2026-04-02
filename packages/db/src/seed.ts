@@ -56,47 +56,130 @@ async function seedRoles(): Promise<void> {
   console.log(`Seeded ${registry.roles.length} platform roles`);
 }
 
+// Registry agent type for seedAgents
+interface RegistryAgent {
+  agent_id: string;
+  agent_name: string;
+  tier?: string;
+  value_stream?: string;
+  capability_domain?: string;
+  status?: string;
+  human_supervisor_id?: string;
+  hitl_tier_default?: number;
+  delegates_to?: string[];
+  escalates_to?: string;
+  it4it_sections?: string[];
+  config_profile?: {
+    model_binding?: {
+      model_id?: string;
+      temperature?: number;
+      max_tokens?: number;
+    };
+    execution_runtime?: {
+      type?: string;
+      timeout_seconds?: number;
+    };
+    token_budget?: {
+      daily_limit?: number;
+      per_task_limit?: number;
+    };
+    tool_grants?: string[];
+    memory?: {
+      type?: string;
+      backend?: string | null;
+    };
+    concurrency_limit?: number;
+  };
+}
+
 async function seedAgents(): Promise<void> {
-  const registry = readJson<{
-    agents: Array<{
-      agent_id: string;
-      agent_name: string;
-      capability_domain?: string;
-      status?: string;
-      human_supervisor_id?: string;
-    }>;
-  }>("agent_registry.json");
+  const registry = readJson<{ agents: RegistryAgent[] }>("agent_registry.json");
 
   // Build portfolio slug → cuid lookup (portfolios must already be seeded)
   const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
   const portfolioIdBySlug = new Map(portfolios.map((p) => [p.slug, p.id]));
 
+  // Track seen agent_ids to skip duplicates (keep first occurrence)
+  const seen = new Set<string>();
+
   for (const a of registry.agents) {
+    if (seen.has(a.agent_id)) {
+      console.warn(`  → Skipping duplicate agent ${a.agent_id}`);
+      continue;
+    }
+    seen.add(a.agent_id);
+
     const portfolioSlug = parseAgentPortfolioSlug(a.human_supervisor_id ?? "");
     const portfolioId = portfolioSlug ? (portfolioIdBySlug.get(portfolioSlug) ?? null) : null;
 
-    await prisma.agent.upsert({
+    const unifiedFields = {
+      name: a.agent_name,
+      tier: parseAgentTier(a.agent_id),
+      type: parseAgentType(a.agent_id),
+      description: a.capability_domain ?? null,
+      status: "active",
+      portfolioId,
+      // EP-AI-WORKFORCE-001: Unified lifecycle fields
+      valueStream: a.value_stream ?? null,
+      it4itSections: a.it4it_sections ?? [],
+      humanSupervisorId: a.human_supervisor_id ?? null,
+      hitlTierDefault: a.hitl_tier_default ?? 3,
+      escalatesTo: a.escalates_to ?? null,
+      delegatesTo: a.delegates_to ?? [],
+      sensitivity: "internal" as const,
+    };
+
+    const agent = await prisma.agent.upsert({
       where: { agentId: a.agent_id },
-      update: {
-        name: a.agent_name,
-        tier: parseAgentTier(a.agent_id),
-        type: parseAgentType(a.agent_id),
-        description: a.capability_domain ?? null,
-        status: "active", // normalise: registry uses "defined" which means the same thing
-        portfolioId,
-      },
-      create: {
-        agentId: a.agent_id,
-        name: a.agent_name,
-        tier: parseAgentTier(a.agent_id),
-        type: parseAgentType(a.agent_id),
-        description: a.capability_domain ?? null,
-        status: "active",
-        portfolioId,
-      },
+      update: unifiedFields,
+      create: { agentId: a.agent_id, ...unifiedFields },
     });
+
+    // Seed AgentExecutionConfig from config_profile
+    const cp = a.config_profile;
+    if (cp) {
+      await prisma.agentExecutionConfig.upsert({
+        where: { agentId: agent.id },
+        update: {
+          defaultModelId: cp.model_binding?.model_id ?? null,
+          temperature: cp.model_binding?.temperature ?? 0.3,
+          maxTokens: cp.model_binding?.max_tokens ?? 4096,
+          executionType: cp.execution_runtime?.type ?? "in_process",
+          timeoutSeconds: cp.execution_runtime?.timeout_seconds ?? 120,
+          concurrencyLimit: cp.concurrency_limit ?? 4,
+          dailyTokenLimit: cp.token_budget?.daily_limit ?? 200000,
+          perTaskTokenLimit: cp.token_budget?.per_task_limit ?? 20000,
+          memoryType: cp.memory?.type ?? "session",
+          memoryBackend: cp.memory?.backend ?? null,
+        },
+        create: {
+          agentId: agent.id,
+          defaultModelId: cp.model_binding?.model_id ?? null,
+          temperature: cp.model_binding?.temperature ?? 0.3,
+          maxTokens: cp.model_binding?.max_tokens ?? 4096,
+          executionType: cp.execution_runtime?.type ?? "in_process",
+          timeoutSeconds: cp.execution_runtime?.timeout_seconds ?? 120,
+          concurrencyLimit: cp.concurrency_limit ?? 4,
+          dailyTokenLimit: cp.token_budget?.daily_limit ?? 200000,
+          perTaskTokenLimit: cp.token_budget?.per_task_limit ?? 20000,
+          memoryType: cp.memory?.type ?? "session",
+          memoryBackend: cp.memory?.backend ?? null,
+        },
+      });
+
+      // Seed AgentToolGrant rows from tool_grants array
+      if (cp.tool_grants) {
+        for (const grantKey of cp.tool_grants) {
+          await prisma.agentToolGrant.upsert({
+            where: { agentId_grantKey: { agentId: agent.id, grantKey } },
+            update: {},
+            create: { agentId: agent.id, grantKey },
+          });
+        }
+      }
+    }
   }
-  console.log(`Seeded ${registry.agents.length} agents`);
+  console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);
 }
 
 const PORTFOLIO_BUDGETS: Record<string, number> = {
@@ -260,7 +343,9 @@ async function seedDigitalProducts(): Promise<void> {
     digital_products: Array<{
       product_id: string;
       name: string;
+      description?: string;
       portfolio_id?: string;
+      taxonomy_node_id?: string;
       lifecycle?: { stage_status?: string };
     }>;
   }>("digital_product_registry.json");
@@ -272,19 +357,34 @@ async function seedDigitalProducts(): Promise<void> {
       const portfolio = await prisma.portfolio.findUnique({ where: { slug: p.portfolio_id } });
       portfolioDbId = portfolio?.id;
     }
+    // Resolve taxonomy node for portfolio tree placement
+    let taxonomyNodeDbId: string | undefined;
+    if (p.taxonomy_node_id) {
+      const node = await prisma.taxonomyNode.findUnique({ where: { nodeId: p.taxonomy_node_id } });
+      taxonomyNodeDbId = node?.id;
+    }
     // Treat registry stage_status as the operational lifecycleStatus.
     // All registry products are assumed to be in production.
     const lifecycleStatus = p.lifecycle?.stage_status ?? "active";
 
     await prisma.digitalProduct.upsert({
       where: { productId: p.product_id },
-      update: { name: p.name, lifecycleStage: "production", lifecycleStatus, portfolioId: portfolioDbId ?? null },
-      create: {
-        productId: p.product_id,
+      update: {
         name: p.name,
+        description: p.description ?? null,
         lifecycleStage: "production",
         lifecycleStatus,
         portfolioId: portfolioDbId ?? null,
+        taxonomyNodeId: taxonomyNodeDbId ?? undefined,
+      },
+      create: {
+        productId: p.product_id,
+        name: p.name,
+        description: p.description ?? null,
+        lifecycleStage: "production",
+        lifecycleStatus,
+        portfolioId: portfolioDbId ?? null,
+        taxonomyNodeId: taxonomyNodeDbId ?? null,
       },
     });
   }
@@ -625,33 +725,153 @@ async function seedSandboxPool(): Promise<void> {
 }
 
 async function seedCoworkerAgents(): Promise<void> {
+  // EP-AI-WORKFORCE-001: Coworker agents with canonical AGT-UI-xxx IDs and slugId aliases
   const coworkers = [
-    { agentId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis" },
-    { agentId: "inventory-specialist", name: "Product Manager", tier: 2, type: "coworker", description: "Product lifecycle, maturity, and market fit analysis" },
-    { agentId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance" },
-    { agentId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance" },
-    { agentId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis" },
-    { agentId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal" },
-    { agentId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization" },
-    { agentId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", preferredProviderId: "anthropic-sub" },
-    { agentId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration." },
-    { agentId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration" },
-    { agentId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities" },
+    { agentId: "portfolio-advisor", slugId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis", valueStream: "evaluate", sensitivity: "internal" },
+    { agentId: "inventory-specialist", slugId: "inventory-specialist", name: "Product Manager", tier: 2, type: "coworker", description: "Product lifecycle, maturity, and market fit analysis", valueStream: "explore", sensitivity: "internal" },
+    { agentId: "ea-architect", slugId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance", valueStream: "cross-cutting", sensitivity: "internal" },
+    { agentId: "hr-specialist", slugId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance", valueStream: "cross-cutting", sensitivity: "confidential" },
+    { agentId: "customer-advisor", slugId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis", valueStream: "consume", sensitivity: "confidential" },
+    { agentId: "ops-coordinator", slugId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal", valueStream: "integrate", sensitivity: "internal" },
+    { agentId: "platform-engineer", slugId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization", valueStream: "operate", sensitivity: "confidential" },
+    { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", preferredProviderId: "anthropic-sub", valueStream: "integrate", sensitivity: "internal" },
+    { agentId: "data-architect", slugId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.", valueStream: "integrate", sensitivity: "internal" },
+    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "restricted" },
+    { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
+    { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
   ];
 
   for (const cw of coworkers) {
-    const { agentId, ...rest } = cw;
+    const { agentId, slugId, ...rest } = cw;
     await prisma.agent.upsert({
       where: { agentId },
-      create: cw,
+      create: { agentId, slugId, ...rest, lifecycleStage: "production" },
       update: {
+        slugId,
         name: rest.name,
         description: rest.description,
+        valueStream: rest.valueStream,
+        sensitivity: rest.sensitivity,
         ...("preferredProviderId" in rest ? { preferredProviderId: rest.preferredProviderId } : {}),
       },
     });
   }
   console.log(`Seeded ${coworkers.length} coworker agents`);
+}
+
+/** EP-AI-WORKFORCE-001: Seed skills for coworker agents */
+async function seedCoworkerSkills(): Promise<void> {
+  // Skills per agent slug — matches the skills from agent-routing.ts ROUTE_AGENT_MAP
+  const agentSkills: Record<string, Array<{ label: string; description: string; capability?: string; prompt: string; sortOrder: number }>> = {
+    "portfolio-advisor": [
+      { label: "Health summary", description: "Analyze health metrics and flag risks", prompt: "Give me a health summary of the portfolio, highlighting any risks or issues.", sortOrder: 0 },
+      { label: "Budget analysis", description: "Review budget allocations and spending", prompt: "Analyze the budget allocations across the portfolio and flag any concerns.", sortOrder: 1 },
+      { label: "Find a product", description: "Search for a digital product", prompt: "Help me find a product in the portfolio.", sortOrder: 2 },
+      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 3 },
+    ],
+    "build-specialist": [
+      { label: "Start a build", description: "Begin a new feature build", capability: "build_studio", prompt: "Help me start a new feature build.", sortOrder: 0 },
+      { label: "Review code", description: "Review pending code changes", prompt: "Review the current code changes and suggest improvements.", sortOrder: 1 },
+      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 2 },
+    ],
+    "coo": [
+      { label: "Platform health", description: "Overview of platform health and agent status", prompt: "Give me an overview of platform health, agent status, and any operational concerns.", sortOrder: 0 },
+      { label: "Workforce status", description: "AI workforce operational summary", prompt: "Summarize the AI workforce status: which agents are active, degraded, or offline.", sortOrder: 1 },
+      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 2 },
+    ],
+    "doc-specialist": [
+      { label: "Generate diagram", description: "Create a Mermaid diagram for a concept", prompt: "Generate a Mermaid diagram for the concept I describe. Choose the appropriate diagram type (flowchart, sequence, class, state, ER, C4) based on the subject.", sortOrder: 0 },
+      { label: "Review doc structure", description: "Check document structural issues", prompt: "Review the structure of this document. Check heading hierarchy, cross-references, section completeness, and IT4IT alignment.", sortOrder: 1 },
+      { label: "Regenerate diagrams", description: "Update diagrams to match current state", prompt: "Find and regenerate all Mermaid diagrams in this document to reflect the current codebase and architecture state.", sortOrder: 2 },
+      { label: "Renderer compatibility", description: "Check diagram renderer compatibility", prompt: "Check this Mermaid diagram for compatibility issues across renderers (GitHub, VS Code, GitBook). Flag unsupported syntax.", sortOrder: 3 },
+      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 4 },
+    ],
+  };
+
+  let count = 0;
+  for (const [slugId, skills] of Object.entries(agentSkills)) {
+    const agent = await prisma.agent.findFirst({ where: { OR: [{ agentId: slugId }, { slugId }] } });
+    if (!agent) { console.warn(`  → Agent ${slugId} not found, skipping skills`); continue; }
+
+    for (const skill of skills) {
+      await prisma.agentSkillAssignment.upsert({
+        where: { agentId_label: { agentId: agent.id, label: skill.label } },
+        update: { description: skill.description, prompt: skill.prompt, sortOrder: skill.sortOrder, capability: skill.capability ?? null },
+        create: { agentId: agent.id, label: skill.label, description: skill.description, prompt: skill.prompt, sortOrder: skill.sortOrder, capability: skill.capability ?? null },
+      });
+      count++;
+    }
+  }
+  console.log(`Seeded ${count} agent skills`);
+}
+
+/** EP-AI-WORKFORCE-001: Seed prompt context for coworker agents */
+async function seedAgentPromptContexts(): Promise<void> {
+  const contexts: Record<string, { perspective: string; heuristics: string; interpretiveModel: string; domainTools: string[] }> = {
+    "portfolio-advisor": {
+      perspective: "You see the organization as a portfolio of investments. Every product is an asset with cost, value, risk, and return. You encode the world as financial health, investment ratios, and strategic alignment.",
+      heuristics: "Start with portfolio-level health metrics, then drill into product-level concerns. Flag concentration risk, budget overruns, and misaligned investments.",
+      interpretiveModel: "Optimize for risk-adjusted return on IT investment. A healthy portfolio balances innovation (new products) with stability (mature products).",
+      domainTools: ["list_products", "get_product", "list_backlog_items", "search_products"],
+    },
+    "build-specialist": {
+      perspective: "You see the platform as code to be written, tested, and shipped. Every request maps to files, functions, and tests. You encode the world as implementation tasks.",
+      heuristics: "Read existing code before proposing changes. Search for patterns and reuse. Write tests alongside implementation. Make the smallest change that works.",
+      interpretiveModel: "Optimize for working software delivered incrementally. Code is healthy when tests pass, types check, and the change is reviewable.",
+      domainTools: ["search_project_files", "read_project_file", "write_sandbox_file", "generate_code", "run_sandbox_tests"],
+    },
+    "doc-specialist": {
+      perspective: "You see the platform as a network of documents, diagrams, and cross-references. You encode the world as document completeness, structural consistency, diagram accuracy, and renderer compatibility.",
+      heuristics: "Structure validation: does the document follow the platform spec template? Cross-reference integrity: do links resolve? Diagram accuracy: does Mermaid syntax render correctly? Renderer awareness: GitHub, VS Code, and GitBook each support different features. Completeness: are there TODOs or placeholder content?",
+      interpretiveModel: "Optimize for documentation that is accurate, self-contained, and renderable. A document is healthy when a new developer can read it without questions, all diagrams render correctly, and all cross-references resolve.",
+      domainTools: ["search_project_files", "read_project_file", "list_products"],
+    },
+    "coo": {
+      perspective: "You see the organization as a system of systems. Every agent, product, and process is interconnected. You encode the world as operational health, strategic alignment, and workforce coordination.",
+      heuristics: "Start with the big picture: what is the platform's overall health? Which agents are performing well? Where are bottlenecks? Delegate details to specialist agents.",
+      interpretiveModel: "Optimize for organizational effectiveness. The platform is healthy when all value streams are flowing, agents are performing, and strategic priorities are advancing.",
+      domainTools: ["list_products", "get_product", "list_backlog_items", "search_products"],
+    },
+  };
+
+  let count = 0;
+  for (const [slugId, ctx] of Object.entries(contexts)) {
+    const agent = await prisma.agent.findFirst({ where: { OR: [{ agentId: slugId }, { slugId }] } });
+    if (!agent) { console.warn(`  → Agent ${slugId} not found, skipping prompt context`); continue; }
+
+    await prisma.agentPromptContext.upsert({
+      where: { agentId: agent.id },
+      update: ctx,
+      create: { agentId: agent.id, ...ctx },
+    });
+    count++;
+  }
+  console.log(`Seeded ${count} agent prompt contexts`);
+}
+
+/** EP-AI-WORKFORCE-001: Seed feature degradation mappings */
+async function seedFeatureDegradationMappings(): Promise<void> {
+  const mappings: Array<{ agentSlug: string; featureRoute: string; featureName: string; requiredTier: string; degradationMode: string; userMessage: string }> = [
+    { agentSlug: "build-specialist", featureRoute: "/build", featureName: "Build Studio code generation", requiredTier: "strong", degradationMode: "reduced", userMessage: "Code generation is running on a basic model. Complex implementations may need manual review." },
+    { agentSlug: "doc-specialist", featureRoute: "/docs", featureName: "Documentation review", requiredTier: "adequate", degradationMode: "manual_only", userMessage: "Documentation review is temporarily unavailable. Manual review required." },
+    { agentSlug: "doc-specialist", featureRoute: "/build", featureName: "Diagram generation in builds", requiredTier: "adequate", degradationMode: "reduced", userMessage: "Diagram generation is running on a basic model. Complex diagrams may have errors." },
+    { agentSlug: "portfolio-advisor", featureRoute: "/portfolio", featureName: "Portfolio health analysis", requiredTier: "adequate", degradationMode: "reduced", userMessage: "Portfolio analysis is running on a basic model. Results may be less detailed." },
+    { agentSlug: "ea-architect", featureRoute: "/ea", featureName: "Architecture governance", requiredTier: "adequate", degradationMode: "reduced", userMessage: "Architecture analysis is running on a basic model. Complex dependency analysis may be limited." },
+  ];
+
+  let count = 0;
+  for (const m of mappings) {
+    const agent = await prisma.agent.findFirst({ where: { OR: [{ agentId: m.agentSlug }, { slugId: m.agentSlug }] } });
+    if (!agent) { console.warn(`  → Agent ${m.agentSlug} not found, skipping degradation mapping`); continue; }
+
+    await prisma.featureDegradationMapping.upsert({
+      where: { agentId_featureRoute: { agentId: agent.id, featureRoute: m.featureRoute } },
+      update: { featureName: m.featureName, requiredTier: m.requiredTier, degradationMode: m.degradationMode, userMessage: m.userMessage },
+      create: { agentId: agent.id, featureRoute: m.featureRoute, featureName: m.featureName, requiredTier: m.requiredTier, degradationMode: m.degradationMode, userMessage: m.userMessage },
+    });
+    count++;
+  }
+  console.log(`Seeded ${count} feature degradation mappings`);
 }
 
 async function seedPlatformConfig(): Promise<void> {
@@ -978,6 +1198,8 @@ async function seedAgentModelDefaults(): Promise<void> {
     { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced" },
     { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced" },
     { agentId: "onboarding-coo",     minimumTier: "basic",    budgetClass: "minimize_cost" },
+    { agentId: "doc-specialist",     minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "data-architect",     minimumTier: "adequate", budgetClass: "balanced" },
   ];
 
   let seeded = 0;
@@ -1030,6 +1252,10 @@ async function main(): Promise<void> {
   await seedBusinessModels();
   await seedAgents();
   await seedCoworkerAgents();
+  // EP-AI-WORKFORCE-001: Seed unified agent lifecycle data
+  await seedCoworkerSkills();
+  await seedAgentPromptContexts();
+  await seedFeatureDegradationMappings();
   await seedTaxonomyNodes();
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
