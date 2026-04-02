@@ -192,7 +192,7 @@ After ALL tasks complete:
 3. Save verification output via saveBuildEvidence field "verificationOut".
 4. If verification passes, tell the user the build is complete and ready for review.
 
-FALLBACK: If the sandbox cannot be launched (Docker unavailable), use propose_file_change to make changes directly to the codebase. Each change requires approval.
+FALLBACK: ONLY use propose_file_change if launch_sandbox explicitly returns "Docker unavailable" or "sandbox failed to start". Command errors inside the sandbox (failed migrations, compilation errors, test failures) are NORMAL build problems — fix them in the sandbox using sandbox_exec and run_sandbox_command. A command returning an error does NOT mean the sandbox is unavailable.
 
 RULES:
 - For modifications: read FIRST, edit SURGICALLY, verify AFTER. Never guess at file contents.
