@@ -466,16 +466,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "edit_sandbox_file",
-    description: "Make a surgical edit to an existing file in the sandbox. Provide the exact old text and the new replacement text. By default old_text must match exactly one location. Set replace_all to true to replace every occurrence (useful for renaming).",
+    description: "Edit an existing file in the sandbox. Two modes: (1) String mode: old_text + new_text for exact find-and-replace. (2) Line mode: start_line + end_line + new_content to replace a line range by number. Use line mode when string matching fails — line numbers from read_sandbox_file are reliable.",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string", description: "File path relative to workspace root" },
-        old_text: { type: "string", description: "The exact text to find and replace" },
-        new_text: { type: "string", description: "The replacement text" },
-        replace_all: { type: "boolean", description: "Replace all occurrences instead of requiring a unique match. Default: false." },
+        old_text: { type: "string", description: "String mode: the exact text to find and replace" },
+        new_text: { type: "string", description: "String mode: the replacement text" },
+        replace_all: { type: "boolean", description: "String mode: replace all occurrences. Default: false." },
+        start_line: { type: "number", description: "Line mode: first line to replace (1-indexed, from read_sandbox_file)" },
+        end_line: { type: "number", description: "Line mode: last line to replace (inclusive)" },
+        new_content: { type: "string", description: "Line mode: replacement content for the line range" },
       },
-      required: ["path", "old_text", "new_text"],
+      required: ["path"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -2495,14 +2498,41 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
 
       if (toolName === "edit_sandbox_file") {
         const { resolved, relative } = resolveSandboxPath(String(params.path ?? ""));
+
+        // Line-based edit mode: replace a range of lines by number
+        // More reliable than string matching for AI-generated edits
+        const startLine = params.start_line ? Number(params.start_line) : undefined;
+        const endLine = params.end_line ? Number(params.end_line) : undefined;
+        const newContent = params.new_content ? String(params.new_content) : undefined;
+
+        if (startLine && endLine && newContent !== undefined) {
+          try {
+            const current = await readFile(resolved, "utf-8");
+            const lines = current.split("\n");
+            if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+              return { success: false, error: `Invalid line range ${startLine}-${endLine} (file has ${lines.length} lines).`, message: `Line range out of bounds.` };
+            }
+            const before = lines.slice(0, startLine - 1);
+            const after = lines.slice(endLine);
+            const newLines = newContent.split("\n");
+            const updated = [...before, ...newLines, ...after].join("\n");
+            await writeFile(resolved, updated, "utf-8");
+            logBuildActivity(buildId, "edit_sandbox_file", `Edited ${relative} lines ${startLine}-${endLine} (${endLine - startLine + 1} -> ${newLines.length} lines)`);
+            return { success: true, message: `Edited ${relative}: replaced lines ${startLine}-${endLine} with ${newLines.length} lines.`, data: { path: relative, linesReplaced: endLine - startLine + 1, newLines: newLines.length } };
+          } catch (err) {
+            return { success: false, error: `Edit failed: ${(err as Error).message?.slice(0, 200)}`, message: `Could not edit ${relative}` };
+          }
+        }
+
+        // String-matching edit mode (original)
         const oldText = String(params.old_text ?? "");
         const newText = String(params.new_text ?? "");
         const replaceAll = params.replace_all === true;
-        if (!oldText) return { success: false, error: "old_text is required.", message: "Provide the text to replace." };
+        if (!oldText) return { success: false, error: "old_text is required (or use start_line/end_line/new_content for line-based edit).", message: "Provide old_text to replace, or use line-based mode." };
         try {
           const current = await readFile(resolved, "utf-8");
           const occurrences = current.split(oldText).length - 1;
-          if (occurrences === 0) return { success: false, error: `old_text not found in ${relative}`, message: `The text to replace was not found. Read the file first to see the exact content.` };
+          if (occurrences === 0) return { success: false, error: `old_text not found in ${relative}. Use read_sandbox_file to see exact content, or use line-based edit (start_line, end_line, new_content).`, message: `Text not found. Try line-based edit instead.` };
           if (occurrences > 1 && !replaceAll) return { success: false, error: `old_text matches ${occurrences} locations in ${relative}. Provide more context to make it unique, or set replace_all: true.`, message: `Ambiguous match — ${occurrences} occurrences found. Add surrounding lines to make the match unique, or use replace_all.` };
           const updated = replaceAll ? current.split(oldText).join(newText) : current.replace(oldText, newText);
           await writeFile(resolved, updated, "utf-8");

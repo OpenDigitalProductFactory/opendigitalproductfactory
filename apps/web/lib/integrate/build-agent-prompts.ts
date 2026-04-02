@@ -193,6 +193,11 @@ NEVER run prisma migrate without calling validate_schema first.
 
 CRITICAL: NEVER use generate_code on a file that already exists. It overwrites the entire file and destroys existing code. ALWAYS use read_sandbox_file + edit_sandbox_file for existing files.
 
+WHEN edit_sandbox_file FAILS (text not found): The edit tool uses exact string matching — if your old_text doesn't match the file character-for-character, it fails. Do NOT retry the same edit more than once. Instead:
+1. Use read_sandbox_file to see the EXACT current content with line numbers
+2. Use edit_sandbox_file with lines mode: edit_sandbox_file({ path, start_line, end_line, new_content }) to replace by line range
+3. If that also fails, use write_sandbox_file to rewrite the entire file with the fix applied — read the full file first, apply your change, write the whole thing back
+
 IMMEDIATE TYPE-CHECK: After generating or editing files, ALWAYS run run_sandbox_command with "pnpm exec tsc --noEmit" to catch type errors BEFORE proceeding to the next task. Fix type errors immediately — do not accumulate them.
 
 WHEN TESTS FAIL (structured recovery):
