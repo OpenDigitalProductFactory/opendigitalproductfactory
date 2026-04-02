@@ -15,8 +15,21 @@ import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-ti
 // Safety nets — the loop exits naturally when the model responds with text-only.
 // These prevent infinite loops from bugs, not from normal workflows.
 const MAX_ITERATIONS = 100;
-const MAX_DURATION_MS = 120_000; // 2 minutes for normal conversation
-const MAX_DURATION_BUILD_MS = 600_000; // 10 minutes when sandbox init/code gen may run
+
+// ─── Duration limits by task type ──────────────────────────────────────────
+// Claude Code's ULTRAPLAN gives Opus 30 minutes for planning. We don't need
+// that extreme, but weaker models (Haiku, local) need more time per iteration
+// to produce the same quality — especially for ideate/plan phases where the
+// model must search, reason, and compose structured evidence.
+//
+// Architecture: similar to Claude Code's model-per-task routing, but tuned
+// for our narrower use case (digital product factory, not general coding).
+
+const MAX_DURATION_MS = 120_000;          // 2 min — normal conversation
+const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen (frontier models)
+const MAX_DURATION_PLAN_MS = 300_000;     // 5 min — ideate/plan phases (evidence + search)
+const MAX_DURATION_REVIEW_MS = 240_000;   // 4 min — review (tests + gate checks)
+const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship (deploy + promotion pipeline)
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -273,13 +286,38 @@ export async function runAgenticLoop(params: {
   const startTime = Date.now();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    // Time ceiling — use extended duration if build tools (sandbox, codegen) are active
+    // Time ceiling — phase-aware duration limits.
+    // Weaker models (Haiku, local) need more iterations for the same quality,
+    // and different phases have different workloads. Inspired by Claude Code's
+    // ULTRAPLAN giving Opus 30 min for planning — we scale proportionally.
     const hasBuildTools = executedTools.some(t =>
       t.name === "launch_sandbox" || t.name === "generate_code" || t.name === "run_sandbox_tests" ||
       t.name === "write_sandbox_file" || t.name === "edit_sandbox_file" ||
       t.name === "read_sandbox_file" || t.name === "run_sandbox_command"
     );
-    const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS : MAX_DURATION_MS;
+    const hasIdeateTools = executedTools.some(t =>
+      t.name === "search_project_files" || t.name === "read_project_file" ||
+      t.name === "saveBuildEvidence" || t.name === "reviewDesignDoc" ||
+      t.name === "save_build_notes" || t.name === "save_phase_handoff"
+    );
+    const hasPlanTools = executedTools.some(t =>
+      t.name === "reviewBuildPlan" || (t.name === "saveBuildEvidence" &&
+        (t.args as Record<string, unknown> | undefined)?.field === "buildPlan")
+    );
+    const hasReviewTools = executedTools.some(t =>
+      t.name === "generate_ux_test" || t.name === "run_ux_test" ||
+      t.name === "check_deployment_windows"
+    );
+    const hasShipTools = executedTools.some(t =>
+      t.name === "deploy_feature" || t.name === "execute_promotion" ||
+      t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
+    );
+    const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS
+      : hasShipTools ? MAX_DURATION_SHIP_MS
+      : hasPlanTools ? MAX_DURATION_PLAN_MS
+      : hasReviewTools ? MAX_DURATION_REVIEW_MS
+      : hasIdeateTools ? MAX_DURATION_PLAN_MS
+      : MAX_DURATION_MS;
     if (Date.now() - startTime > durationLimit) {
       console.warn(`[agentic-loop] hit MAX_DURATION (${durationLimit}ms). executedTools=${executedTools.length}.`);
       break;
