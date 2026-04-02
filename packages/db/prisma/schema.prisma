@@ -55,6 +55,7 @@ model User {
   taskRuns                     TaskRun[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
   platformDevConfigs           PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
+  platformDevDcoAcceptances    PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
   agentModelConfigs            AgentModelConfig[]            @relation("AgentModelConfiguredBy")
 }
 
@@ -2301,6 +2302,10 @@ model PlatformDevConfig {
   configuredAt     DateTime @default(now())
   configuredById   String?
   configuredBy     User?    @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
+  dcoAcceptedAt     DateTime?
+  dcoAcceptedById   String?
+  dcoAcceptedBy     User?    @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
+  upstreamRemoteUrl String?
 }
 
 model EaNotation {
