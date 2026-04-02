@@ -548,6 +548,27 @@ export async function shipBuild(input: {
     });
 
     promotionId = versionResult.promotion.promotionId;
+
+    // Git backup for fork_only mode (EP-BUILD-HANDOFF-002 contribution mode)
+    if (build.diffPatch) {
+      try {
+        const { backupPromotionToGit } = await import("@/lib/git-backup");
+        const backupResult = await backupPromotionToGit({
+          buildId: input.buildId,
+          title: input.name,
+          diffPatch: build.diffPatch as string,
+          productId: result.productId,
+          version: result.version,
+        });
+        if (backupResult.pushed) {
+          console.log(`[shipBuild] git backup pushed for ${input.buildId}`);
+        } else if (backupResult.error && backupResult.error !== "No git remote URL configured") {
+          console.warn(`[shipBuild] git backup failed: ${backupResult.error}`);
+        }
+      } catch (err) {
+        console.warn("[shipBuild] git backup failed:", err);
+      }
+    }
   } catch (err) {
     console.warn("[shipBuild] version tracking failed:", err);
   }
