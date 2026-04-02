@@ -530,6 +530,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["build"],
   },
   {
+    name: "describe_model",
+    description: "Look up a Prisma model's fields, types, relations, and indexes from the sandbox schema. Use this instead of asking the user about schema structure. Example: describe_model({ model_name: 'User' }) returns all fields with types.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        model_name: { type: "string", description: "Exact model name (PascalCase), e.g. 'User', 'Complaint', 'FeatureBuild'" },
+      },
+      required: ["model_name"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["plan", "build", "review"],
+  },
+  {
     name: "validate_schema",
     description: "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
     inputSchema: { type: "object", properties: {} },
@@ -2587,6 +2602,35 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
 
       return { success: false, error: "Unknown sandbox tool", message: "Internal error." };
+    }
+
+    case "describe_model": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!dmBuild?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+
+      const modelName = String(params.model_name ?? "");
+      if (!modelName) return { success: false, error: "model_name is required.", message: "Provide the model name (PascalCase)." };
+
+      try {
+        const { execInSandbox } = await import("@/lib/sandbox");
+        const schemaContent = await execInSandbox(
+          dmBuild.sandboxId,
+          "cat /workspace/packages/db/prisma/schema.prisma",
+        );
+        const { describeModel, formatModelDescription } = await import("@/lib/integrate/schema-validator");
+        const desc = describeModel(schemaContent, modelName);
+
+        if (!desc) {
+          return { success: false, error: `Model "${modelName}" not found in schema.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase).` };
+        }
+
+        const formatted = formatModelDescription(desc);
+        return { success: true, message: formatted, data: desc as unknown as Record<string, unknown> };
+      } catch (err) {
+        return { success: false, error: "Schema read error", message: err instanceof Error ? err.message : "Failed to read schema" };
+      }
     }
 
     case "validate_schema": {

@@ -262,3 +262,119 @@ export function formatSchemaValidation(result: SchemaValidationResult): string {
 
   return lines.join("\n");
 }
+
+// ─── Model Description (Data Architect) ─────────────────────────────────────
+
+export interface ModelField {
+  name: string;
+  type: string;
+  isOptional: boolean;
+  isArray: boolean;
+  isRelation: boolean;
+  attributes: string[];
+}
+
+export interface ModelDescription {
+  name: string;
+  fields: ModelField[];
+  indexes: string[];
+  startLine: number;
+  endLine: number;
+}
+
+/**
+ * Extract a specific model's full description from a Prisma schema.
+ * Returns all fields with types, optionality, relations, and attributes.
+ * Used by the data architect to answer "what fields does X have?"
+ */
+export function describeModel(schemaContent: string, modelName: string): ModelDescription | null {
+  const lines = schemaContent.split("\n");
+  let inModel = false;
+  let startLine = 0;
+  let braceDepth = 0;
+  const fields: ModelField[] = [];
+  const indexes: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    if (!inModel) {
+      const match = trimmed.match(new RegExp(`^model\\s+${modelName}\\s*\\{`));
+      if (match) {
+        inModel = true;
+        startLine = i + 1;
+        braceDepth = 1;
+        continue;
+      }
+      continue;
+    }
+
+    // Track braces
+    if (trimmed.includes("{")) braceDepth++;
+    if (trimmed.includes("}")) braceDepth--;
+    if (braceDepth === 0) {
+      return { name: modelName, fields, indexes, startLine, endLine: i + 1 };
+    }
+
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith("//")) continue;
+
+    // Index directives
+    if (trimmed.startsWith("@@index") || trimmed.startsWith("@@unique") || trimmed.startsWith("@@id")) {
+      indexes.push(trimmed);
+      continue;
+    }
+
+    // Field: name Type? @attributes
+    const fieldMatch = trimmed.match(/^(\w+)\s+(\w+)(\[\])?(\?)?\s*(.*)/);
+    if (fieldMatch) {
+      const [, name, type, isArray, isOptional, rest] = fieldMatch;
+      const isScalar = ["String", "Int", "Float", "Boolean", "DateTime", "Json", "BigInt", "Decimal", "Bytes"].includes(type);
+      const attributes = rest ? rest.split(/\s+/).filter((a: string) => a.startsWith("@")) : [];
+
+      fields.push({
+        name: name,
+        type: type + (isArray ?? "") + (isOptional ?? ""),
+        isOptional: !!isOptional,
+        isArray: !!isArray,
+        isRelation: !isScalar,
+        attributes,
+      });
+    }
+  }
+
+  return null; // Model not found
+}
+
+/**
+ * Format model description for AI consumption — concise, actionable.
+ */
+export function formatModelDescription(desc: ModelDescription): string {
+  const lines = [`model ${desc.name} (lines ${desc.startLine}-${desc.endLine})`, ""];
+
+  const scalarFields = desc.fields.filter((f) => !f.isRelation);
+  const relationFields = desc.fields.filter((f) => f.isRelation);
+
+  if (scalarFields.length > 0) {
+    lines.push("Fields:");
+    for (const f of scalarFields) {
+      lines.push(`  ${f.name}: ${f.type}${f.attributes.length > 0 ? " " + f.attributes.join(" ") : ""}`);
+    }
+  }
+
+  if (relationFields.length > 0) {
+    lines.push("", "Relations:");
+    for (const f of relationFields) {
+      lines.push(`  ${f.name}: ${f.type}${f.attributes.length > 0 ? " " + f.attributes.join(" ") : ""}`);
+    }
+  }
+
+  if (desc.indexes.length > 0) {
+    lines.push("", "Indexes:");
+    for (const idx of desc.indexes) {
+      lines.push(`  ${idx}`);
+    }
+  }
+
+  return lines.join("\n");
+}
