@@ -7,7 +7,7 @@ import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   const rows = await prisma.featureBuild.findMany({
-    where: { createdById: userId },
+    where: { createdById: userId, phase: { not: "failed" } },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
