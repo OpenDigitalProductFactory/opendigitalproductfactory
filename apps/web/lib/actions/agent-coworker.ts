@@ -522,6 +522,49 @@ export async function sendMessage(input: {
       } catch (err) {
         console.warn("[ship] Failed to inject impact/authority context:", err);
       }
+
+      // Ship phase: inject contribution mode context for STEP 5 advisory
+      try {
+        const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
+        const mode = devConfig?.contributionMode ?? "fork_only";
+        const hasRepo = !!devConfig?.gitRemoteUrl;
+        const hasDco = !!devConfig?.dcoAcceptedAt;
+
+        const modeContext: string[] = [
+          "",
+          `## Platform Contribution Mode: ${mode}`,
+          "",
+        ];
+
+        if (mode === "fork_only" && !hasRepo) {
+          const untrackedCount = await prisma.featureBuild.count({
+            where: { phase: "complete", gitCommitHashes: { isEmpty: true } },
+          });
+          if (untrackedCount > 0) {
+            modeContext.push(
+              `WARNING: ${untrackedCount} feature(s) deployed without version control backup.`,
+              "After completing the ship sequence, warn the user about data loss risk.",
+              "Suggest setting up a git repository in Admin > Platform Development.",
+              "",
+            );
+          }
+        }
+
+        if (mode === "selective" || mode === "contribute_all") {
+          if (!hasDco) {
+            modeContext.push(
+              "DCO has NOT been accepted yet. If the user chooses to contribute, remind them",
+              "to accept the Developer Certificate of Origin in Admin > Platform Development first.",
+              "",
+            );
+          }
+        }
+
+        populatedPrompt += modeContext.join("\n");
+        console.log(`[ship] Injected contribution mode context: ${mode}`);
+      } catch (err) {
+        console.warn("[ship] Failed to inject contribution mode context:", err);
+      }
     }
   }
 
