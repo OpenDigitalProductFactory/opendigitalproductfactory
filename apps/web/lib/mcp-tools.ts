@@ -324,6 +324,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ideate", "plan"],
   },
+  // ─── Phase Handoff Tool (Claude Code-inspired cross-phase memory) ────────
+  {
+    name: "save_phase_handoff",
+    description: "Save a structured handoff briefing for the next phase. Call this as your LAST action before a phase transition.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "2-3 sentence plain-language summary of what was accomplished in this phase" },
+        decisionsMade: { type: "array", items: { type: "string" }, description: "Key decisions made and why" },
+        openIssues: { type: "array", items: { type: "string" }, description: "Unresolved issues or risks carried to next phase" },
+        userPreferences: { type: "array", items: { type: "string" }, description: "User preferences or constraints expressed during this phase" },
+      },
+      required: ["summary"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
     name: "saveBuildEvidence",
@@ -1748,6 +1767,39 @@ export async function executeTool(
 
       const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
       return { success: true, message: `Spec updated — ${totalItems} items captured.` };
+    }
+
+    case "save_phase_handoff": {
+      const latestBuild = await prisma.featureBuild.findFirst({
+        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true, phase: true },
+      });
+      if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+
+      // Write to the existing PhaseHandoff relational model (schema line 2154)
+      const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
+      const idx = phaseOrder.indexOf(latestBuild.phase);
+      const toPhase = idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete";
+
+      await prisma.phaseHandoff.create({
+        data: {
+          buildId: latestBuild.buildId,
+          fromPhase: latestBuild.phase,
+          toPhase,
+          fromAgentId: context?.agentId ?? "unknown",
+          toAgentId: "pending",
+          summary: String(params["summary"] ?? ""),
+          decisionsMade: Array.isArray(params["decisionsMade"]) ? (params["decisionsMade"] as string[]).map(String) : [],
+          openIssues: Array.isArray(params["openIssues"]) ? (params["openIssues"] as string[]).map(String) : [],
+          userPreferences: Array.isArray(params["userPreferences"]) ? (params["userPreferences"] as string[]).map(String) : [],
+          evidenceFields: [],
+          evidenceDigest: {},
+          gateResult: {},
+        },
+      });
+
+      return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
     }
 
     // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────

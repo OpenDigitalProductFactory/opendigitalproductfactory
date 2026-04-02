@@ -186,20 +186,29 @@ export async function getFeatureBuildForContext(
       plan: true,
       portfolioId: true,
       createdById: true,
+      phaseHandoffs: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          fromPhase: true,
+          toPhase: true,
+          summary: true,
+          decisionsMade: true,
+          openIssues: true,
+          userPreferences: true,
+        },
+      },
     },
   });
 
   if (!r || r.createdById !== userId) return null;
 
-  // Load contribution mode for ship phase context injection
-  let contributionMode: string | undefined;
-  if (r.phase === "ship") {
-    const devConfig = await prisma.platformDevConfig.findUnique({
-      where: { id: "singleton" },
-      select: { contributionMode: true },
-    });
-    contributionMode = devConfig?.contributionMode ?? "selective";
-  }
+  // Load contribution mode for all phases — agent needs awareness early
+  // (e.g., contribute_all mode should flag proprietary designs in ideate)
+  const devConfig = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { contributionMode: true },
+  });
+  const contributionMode = devConfig?.contributionMode ?? "selective";
 
   return {
     buildId: r.buildId,
@@ -209,6 +218,7 @@ export async function getFeatureBuildForContext(
     plan: r.plan as Record<string, unknown> | null,
     portfolioId: r.portfolioId,
     contributionMode,
+    phaseHandoffs: r.phaseHandoffs,
   };
 }
 
