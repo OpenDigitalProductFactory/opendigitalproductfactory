@@ -186,6 +186,138 @@ flowchart TD
 - Human review remains the promotion gate for consequential changes.
 - The adaptive feedback loop should tune behavior gradually rather than allowing uncontrolled architectural drift.
 
+## Data Architecture: Three Complementary Data Layers
+
+The platform uses three distinct data stores, each optimized for a different kind of question. Understanding which system answers which question is key to understanding the architecture.
+
+### Layer 1: PostgreSQL — System of Record
+
+PostgreSQL is the authoritative source for all mutable platform data. Every entity, relationship, configuration, and credential lives here. All writes go to Postgres first; other systems receive projections.
+
+| What It Stores | Examples |
+|---------------|---------|
+| Business entities | Digital products, portfolios, taxonomy nodes, backlog items, epics |
+| Infrastructure inventory | InventoryEntity, InventoryRelationship (from bootstrap discovery) |
+| AI workforce | Agents, providers, credentials, token usage, task evaluations |
+| Governance | Change requests, deployment windows, audit trails, authority grants |
+| Health data | HealthSnapshot, PortfolioQualityIssue (from monitoring pipeline) |
+
+**Question it answers:** "What is the current state of this entity and its full history?"
+
+### Layer 2: Neo4j — Graph Projection for Topology and Impact
+
+Neo4j receives a **read-only projection** from PostgreSQL. It does not accept direct writes — sync functions (`syncDigitalProduct`, `syncInventoryEntityAsInfraCI`, `syncEaElement`) fire after Postgres writes and project the data into graph form. Failures are logged but never block the source write.
+
+| Node Type | Source | Purpose |
+|-----------|--------|---------|
+| DigitalProduct | Prisma DigitalProduct | Portfolio membership, taxonomy classification |
+| TaxonomyNode | Prisma TaxonomyNode | Hierarchy traversal (CHILD_OF relationships) |
+| Portfolio | Prisma Portfolio | Product grouping |
+| InfraCI | Prisma InventoryEntity | Infrastructure topology (hosts, containers, databases, monitoring services) |
+| EaElement | Prisma EaElement | Enterprise architecture modeling (ArchiMate notation) |
+
+**Relationship types:** BELONGS_TO, CATEGORIZED_AS, CHILD_OF, DEPENDS_ON (with role: hosts, monitors, depends_on, stores_data_in), PROVIDES_TO, EA_REPRESENTS, and dynamic EA relationship types.
+
+**Questions it answers:**
+- "If PostgreSQL goes down, what digital products are affected?" (downstream impact traversal)
+- "What infrastructure does this product depend on?" (upstream dependency traversal)
+- "What is the shortest dependency path between these two systems?" (shortest path)
+- "Show me the full topology of the Foundational portfolio" (subgraph extraction)
+
+**What it cannot answer:** "How is PostgreSQL performing right now?" or "What was the CPU usage of this container over the last hour?" — those are time-series questions.
+
+### Layer 3: Prometheus — Time-Series Metrics for Operational Health
+
+Prometheus scrapes metrics from running services every 10-15 seconds and stores them as time-series data with 15-day retention. It is the operational health layer — it knows how things are performing right now and how that has changed over time.
+
+| What It Collects | Source | Metrics |
+|-----------------|--------|---------|
+| Container resources | cAdvisor | CPU %, memory bytes, network I/O, disk I/O, restart count per container |
+| Host resources | node-exporter | Total CPU, memory, disk utilization, network throughput |
+| Database health | postgres-exporter | Connection pool utilization, active connections, query performance |
+| Application performance | Portal /api/metrics (prom-client) | HTTP request latency, error rates, AI inference duration/tokens/cost |
+| AI provider health | Portal /api/metrics | Inference errors by type (auth, rate_limit, network), semantic memory ops |
+| Vector DB health | Qdrant native /metrics | Collection sizes, search latency |
+
+**Questions it answers:**
+- "What is the CPU utilization of the portal container right now?"
+- "What was the p95 AI inference latency over the last hour?"
+- "Is the Qdrant vector DB reachable?"
+- "How many auth errors has the Anthropic provider thrown in the last 5 minutes?"
+
+**What it cannot answer:** "What depends on Qdrant?" or "Which digital products are affected if Qdrant goes down?" — those are graph questions.
+
+### How the Three Layers Work Together
+
+```mermaid
+flowchart TB
+    subgraph Writes["All writes go to PostgreSQL"]
+        postgres[(PostgreSQL<br/>System of Record)]
+    end
+
+    subgraph Projections["Read-only projections"]
+        neo4j[(Neo4j<br/>Graph Topology)]
+        prometheus[(Prometheus<br/>Time-Series Metrics)]
+    end
+
+    subgraph Consumers["Platform UI surfaces"]
+        health[System Health Dashboard<br/>gauges, charts, alerts]
+        graph[Dependency Graph<br/>topology + health overlay]
+        impact[Impact Analysis<br/>what breaks if X goes down?]
+        ea[EA Modeler<br/>architecture diagrams]
+    end
+
+    postgres -->|sync functions<br/>fire-and-forget| neo4j
+    postgres -->|HealthSnapshot records<br/>from bridge| health
+
+    prometheus -->|scraped from<br/>running services| health
+    prometheus -->|health overlay<br/>via bridge| graph
+
+    neo4j -->|topology traversal| graph
+    neo4j -->|downstream impact| impact
+    neo4j -->|EA relationships| ea
+
+    postgres -->|entity data<br/>attribution, status| graph
+    postgres -->|EA elements<br/>viewpoints| ea
+```
+
+**The convergence point** is the platform's native UI. Only the platform can combine:
+- Topology from Neo4j ("Prometheus monitors PostgreSQL")
+- Health from Prometheus ("PostgreSQL CPU is at 85%")
+- Business context from PostgreSQL ("PostgreSQL belongs to the Foundational portfolio and is attributed to the Database taxonomy node")
+
+No single data store has all three. This is why the platform renders its own dashboards rather than delegating entirely to Grafana.
+
+### Grafana's Role: Power-User Escape Hatch
+
+Grafana is included in the monitoring stack but serves a different audience and purpose:
+
+| | Platform UI | Grafana |
+|---|---|---|
+| **Audience** | All users — business owners, operators, product managers | Platform engineers, DevOps, advanced troubleshooting |
+| **Data sources** | PostgreSQL + Neo4j + Prometheus (all three) | Prometheus only (time-series) |
+| **Navigation** | Integrated into product lifecycle views | Separate tool at :3002 |
+| **Dashboards** | Curated, pre-built, context-aware | Ad-hoc, customizable, raw PromQL |
+| **Graph data** | Yes — topology, impact analysis, dependency visualization | No — cannot query Neo4j |
+| **Business context** | Yes — portfolios, products, taxonomy, governance | No — infrastructure metrics only |
+| **Alerting** | Fires into PortfolioQualityIssue (platform-native, visible in product lifecycle) | Fires into Grafana UI (separate tool) |
+
+**When to use Grafana:** Something is wrong and you need to dig deeper — correlate metrics across arbitrary dimensions, zoom into a 5-minute window, write custom PromQL queries, explore metrics that the platform UI doesn't surface yet.
+
+**When to use the platform UI:** Day-to-day operational awareness, product lifecycle health, impact analysis before changes, understanding which digital products are affected by infrastructure degradation.
+
+### Neo4j Sync Integrity
+
+Because Neo4j is a projection, it can fall out of sync with PostgreSQL. The current sync is fire-and-forget — failures are logged but not retried. This is a known operational risk that the monitoring system should track:
+
+- **Sync success/failure rate** — Prometheus metric to track projection health
+- **Drift detection** — periodic reconciliation comparing Postgres entity counts to Neo4j node counts
+- **Full rebuild** — the EA graph has `rebuildEaGraph()` for complete re-projection; inventory/product graphs should have equivalent capability
+
+When the monitoring stack detects sync drift, it creates a `PortfolioQualityIssue` so operators are aware that graph-based views (impact analysis, dependency topology) may be stale.
+
+---
+
 ## Hardware Guidance
 
 The platform supports a broad range of hardware, but the user experience changes significantly depending on whether the goal is simple evaluation, day-to-day local AI, or sandbox-heavy self-building workflows.
