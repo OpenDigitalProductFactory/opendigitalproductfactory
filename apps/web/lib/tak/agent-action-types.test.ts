@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolDefinition } from "./mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tools";
 import type { PageAction, PageActionManifest } from "./agent-action-types";
 
 describe("PageAction type", () => {

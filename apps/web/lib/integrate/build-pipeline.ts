@@ -109,7 +109,7 @@ export async function runBuildPipeline(params: {
         } else {
           // All retries exhausted — release sandbox slot and persist failure.
           try {
-            const { releaseSandbox } = await import("./sandbox-pool");
+            const { releaseSandbox } = await import("./sandbox/sandbox-pool");
             await releaseSandbox(buildId);
           } catch { /* non-fatal */ }
           const failed = buildFailedState(state, step, errorMsg);
@@ -122,7 +122,7 @@ export async function runBuildPipeline(params: {
 
   // All steps complete — release sandbox slot back to pool.
   try {
-    const { releaseSandbox } = await import("./sandbox-pool");
+    const { releaseSandbox } = await import("./sandbox/sandbox-pool");
     await releaseSandbox(buildId);
   } catch {
     // Non-fatal — slot will be cleaned up on next build
@@ -173,8 +173,8 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { acquireSandbox } = await import("./sandbox-pool");
-  const { isSandboxRunning } = await import("./sandbox");
+  const { acquireSandbox } = await import("./sandbox/sandbox-pool");
+  const { isSandboxRunning } = await import("./sandbox/sandbox");
   const { prisma } = await import("@dpf/db");
 
   // Resolve the build's creator for pool assignment
@@ -216,7 +216,7 @@ async function stepInitWorkspace(
   buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { copySourceAndBaseline } = await import("./sandbox-workspace");
+  const { copySourceAndBaseline } = await import("./sandbox/sandbox-workspace");
   await copySourceAndBaseline(state.containerId!, buildId);
   return state;
 }
@@ -230,8 +230,8 @@ async function stepInitDb(
     waitForSandboxNeo4j,
     waitForSandboxQdrant,
     seedSandboxDb,
-  } = await import("./sandbox-db");
-  const { execInSandbox } = await import("./sandbox");
+  } = await import("./sandbox/sandbox-db");
+  const { execInSandbox } = await import("./sandbox/sandbox");
 
   // Pool sandboxes use a shared sandbox-postgres managed by compose.
   // Per-build DB containers are only created for dynamic sandboxes.
@@ -265,7 +265,7 @@ async function stepInstallDeps(
   _buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { installDepsAndStart } = await import("./sandbox-workspace");
+  const { installDepsAndStart } = await import("./sandbox/sandbox-workspace");
   await installDepsAndStart(state.containerId!);
   return state;
 }
@@ -275,14 +275,14 @@ async function stepGenerateCode(
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
-  const { runAgenticLoop } = await import("./agentic-loop");
-  const { getAvailableTools, toolsToOpenAIFormat } = await import("./mcp-tools");
+  const { runAgenticLoop } = await import("@/lib/agentic-loop");
+  const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
   const { getBuildPhasePrompt, getBuildContextSection } = await import("./build-agent-prompts");
-  const { agentEventBus } = await import("./agent-event-bus");
+  const { agentEventBus } = await import("@/lib/agent-event-bus");
 
   const build = await prisma.featureBuild.findUniqueOrThrow({ where: { buildId } });
 
-  const brief = build.brief as import("./feature-build-types").FeatureBrief;
+  const brief = build.brief as import("@/lib/feature-build-types").FeatureBrief;
   const plan = (build.plan ?? {}) as Record<string, unknown>;
 
   // Build the system prompt with build context (same as the coworker uses)

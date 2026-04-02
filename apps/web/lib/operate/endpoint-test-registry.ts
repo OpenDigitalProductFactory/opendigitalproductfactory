@@ -1,8 +1,8 @@
 // apps/web/lib/endpoint-test-registry.ts
 // Defines capability probes and task scenarios for the agent test harness.
 
-import type { PromptInput } from "./prompt-assembler";
-import type { ToolDefinition } from "./mcp-tools";
+import type { PromptInput } from "@/lib/prompt-assembler";
+import type { ToolDefinition } from "@/lib/mcp-tools";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

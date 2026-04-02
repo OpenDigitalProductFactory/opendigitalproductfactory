@@ -329,7 +329,7 @@ export const getAsyncOperations = cache(
 /** Combined tool inventory: platform built-in tools + MCP server tools. */
 export const getToolInventory = cache(
   async (): Promise<ToolInventoryItem[]> => {
-    const { PLATFORM_TOOLS } = await import("./mcp-tools");
+    const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
     const platformItems: ToolInventoryItem[] = PLATFORM_TOOLS.map((t) => ({
       name: t.name,
       source: "Platform",

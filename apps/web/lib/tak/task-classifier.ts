@@ -1,4 +1,4 @@
-import { TASK_TYPES } from "./task-types";
+import { TASK_TYPES } from "@/lib/task-types";
 
 export type ClassificationResult = {
   taskType: string;

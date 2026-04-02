@@ -8,7 +8,7 @@ import {
   parseModelsResponse,
   getBillingLabel,
 } from "./ai-provider-types";
-import { generatePKCE } from "./provider-oauth";
+import { generatePKCE } from "@/lib/provider-oauth";
 
 describe("computeTokenCost", () => {
   it("returns 0 for zero tokens", () => {

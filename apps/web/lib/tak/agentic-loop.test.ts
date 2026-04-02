@@ -3,16 +3,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Import pure functions that don't need mocks
 import { shouldNudge, detectFabrication } from "./agentic-loop";
 
-vi.mock("./routed-inference", () => ({
+vi.mock("@/lib/routed-inference", () => ({
   routeAndCall: vi.fn(),
 }));
-vi.mock("./mcp-tools", () => ({
+vi.mock("@/lib/mcp-tools", () => ({
   executeTool: vi.fn(),
 }));
 
 import { runAgenticLoop } from "./agentic-loop";
-import { routeAndCall } from "./routed-inference";
-import { executeTool } from "./mcp-tools";
+import { routeAndCall } from "@/lib/routed-inference";
+import { executeTool } from "@/lib/mcp-tools";
 
 // Helper to build a mock RoutedInferenceResult
 function mockResult(overrides: {

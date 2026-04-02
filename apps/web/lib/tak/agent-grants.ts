@@ -1,5 +1,5 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
-import agentRegistryData from "../../../packages/db/data/agent_registry.json";
+import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
 
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 
