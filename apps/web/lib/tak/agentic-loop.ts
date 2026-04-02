@@ -400,6 +400,9 @@ export async function runAgenticLoop(params: {
       // Immediate tools — execute
       onProgress?.({ type: "tool:start", tool: tc.name, iteration });
 
+      const argsPreview = JSON.stringify(tc.arguments).slice(0, 300);
+      console.log(`[agentic-tool] CALL iter=${iteration} tool=${tc.name} args=${argsPreview}`);
+
       const toolStartMs = Date.now();
       const toolResult = await executeTool(
         tc.name,
@@ -407,6 +410,10 @@ export async function runAgenticLoop(params: {
         userId,
         { routeContext, agentId, threadId },
       );
+
+      const durationMs = Date.now() - toolStartMs;
+      const resultPreview = (toolResult.message ?? "").slice(0, 200);
+      console.log(`[agentic-tool] RESULT iter=${iteration} tool=${tc.name} success=${toolResult.success} duration=${durationMs}ms msg=${resultPreview}`);
 
       // Audit: record every tool execution (fire-and-forget)
       prisma.toolExecution.create({

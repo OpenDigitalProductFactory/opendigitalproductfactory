@@ -2493,7 +2493,26 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
           return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 10000) } };
         } catch (err) {
-          const errMsg = (err as Error).message?.slice(0, 2000) || "Command failed";
+          // Commands like tsc, prisma validate return non-zero exit codes when they
+          // find errors. This is NOT a sandbox failure — it's useful output.
+          // Extract stdout/stderr from the error and return it as actionable data.
+          const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: number };
+          const output = (execErr.stdout ?? "") + (execErr.stderr ?? "");
+          const exitCode = execErr.code;
+
+          // If we got output, the command ran — return the output so the AI can act on it
+          if (output.trim()) {
+            logBuildActivity(buildId, "run_sandbox_command", `Ran (exit ${exitCode}): ${command.slice(0, 100)}`);
+            return {
+              success: true,
+              message: `Command exited with code ${exitCode}. Review the output for errors to fix.`,
+              data: { command, output: output.slice(0, 10000), exitCode },
+            };
+          }
+
+          // No output — actual sandbox connectivity issue
+          const errMsg = execErr.message?.slice(0, 2000) || "Command failed";
+          console.error(`[run_sandbox_command] FAILED (no output): ${command.slice(0, 100)} -> ${errMsg.slice(0, 200)}`);
           return { success: false, error: errMsg, message: `Command failed: ${command.slice(0, 100)}`, data: { command, output: errMsg } };
         }
       }
