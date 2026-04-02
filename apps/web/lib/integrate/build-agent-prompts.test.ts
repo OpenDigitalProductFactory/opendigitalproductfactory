@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { bumpVersion } from "./feature-build-types";
+import { bumpVersion } from "@/lib/feature-build-types";
 import { getBuildPhasePrompt, getBuildContextSection } from "./build-agent-prompts";
-import type { FeatureBrief } from "./feature-build-types";
+import type { FeatureBrief } from "@/lib/feature-build-types";
 
 describe("bumpVersion", () => {
   it("bumps patch version", () => {

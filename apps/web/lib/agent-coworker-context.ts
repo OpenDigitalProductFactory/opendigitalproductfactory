@@ -1,4 +1,2 @@
-export function buildCoworkerContextKey(routeContext: string): string {
-  const normalized = routeContext.trim() || "/workspace";
-  return `coworker:${normalized}`;
-}
+// Shim — moved to lib/tak/agent-coworker-context.ts (Phase 12 refactoring)
+export * from "./tak/agent-coworker-context";
