@@ -511,6 +511,15 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["build"],
   },
   {
+    name: "validate_schema",
+    description: "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build"],
+  },
+  {
     name: "deploy_feature",
     description: "Extract the git diff from sandbox and deploy to the platform. Requires approval.",
     inputSchema: { type: "object", properties: {} },
@@ -2490,6 +2499,42 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
 
       return { success: false, error: "Unknown sandbox tool", message: "Internal error." };
+    }
+
+    case "validate_schema": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!vsBuild?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+
+      try {
+        const { execInSandbox } = await import("@/lib/sandbox");
+        const schemaContent = await execInSandbox(
+          vsBuild.sandboxId,
+          "cat /workspace/packages/db/prisma/schema.prisma",
+        );
+        const { validatePrismaSchema, formatSchemaValidation } = await import("@/lib/integrate/schema-validator");
+        const result = validatePrismaSchema(schemaContent);
+
+        logBuildActivity(buildId, "validate_schema", result.summary);
+
+        if (!result.valid) {
+          return {
+            success: false,
+            error: "Schema validation failed",
+            message: formatSchemaValidation(result),
+            data: result,
+          };
+        }
+
+        return {
+          success: true,
+          message: formatSchemaValidation(result),
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "Schema validation error", message: err instanceof Error ? err.message : "Failed to validate schema" };
+      }
     }
 
     case "deploy_feature": {
