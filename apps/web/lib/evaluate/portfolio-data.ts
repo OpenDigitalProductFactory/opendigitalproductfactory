@@ -108,3 +108,80 @@ export const getPortfolioOwnerRoles = cache(async (): Promise<Record<string, Own
     ])
   );
 });
+
+// ─── Aggregated Portfolio Summary ────────────────────────────────────────────
+
+export type LifecycleStageCounts = Record<string, number>;
+
+export type PortfolioSummary = {
+  totalProducts: number;
+  activeProducts: number;
+  draftProducts: number;
+  retiredProducts: number;
+  lifecycleStages: LifecycleStageCounts;
+  openBacklogItems: number;
+  inProgressBacklogItems: number;
+  openEpics: number;
+  totalAgents: number;
+  activeAgents: number;
+};
+
+/**
+ * Aggregated cross-portfolio summary for the portfolio overview page.
+ * Queries product lifecycle distribution, backlog health, and agent counts.
+ */
+export const getPortfolioSummary = cache(async (): Promise<PortfolioSummary> => {
+  const [
+    lifecycleGroups,
+    statusGroups,
+    backlogCounts,
+    epicCounts,
+    agentCounts,
+  ] = await Promise.all([
+    prisma.digitalProduct.groupBy({
+      by: ["lifecycleStage"],
+      _count: { id: true },
+    }),
+    prisma.digitalProduct.groupBy({
+      by: ["lifecycleStatus"],
+      _count: { id: true },
+    }),
+    prisma.backlogItem.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+    prisma.epic.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+    prisma.agent.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+  ]);
+
+  const lifecycleStages: LifecycleStageCounts = {};
+  let totalProducts = 0;
+  for (const g of lifecycleGroups) {
+    lifecycleStages[g.lifecycleStage] = g._count.id;
+    totalProducts += g._count.id;
+  }
+
+  const statusByName = new Map(statusGroups.map(g => [g.lifecycleStatus, g._count.id]));
+  const backlogByStatus = new Map(backlogCounts.map(g => [g.status, g._count.id]));
+  const epicByStatus = new Map(epicCounts.map(g => [g.status, g._count.id]));
+  const agentByStatus = new Map(agentCounts.map(g => [g.status, g._count.id]));
+
+  return {
+    totalProducts,
+    activeProducts: statusByName.get("active") ?? 0,
+    draftProducts: statusByName.get("draft") ?? 0,
+    retiredProducts: statusByName.get("retired") ?? 0,
+    lifecycleStages,
+    openBacklogItems: backlogByStatus.get("open") ?? 0,
+    inProgressBacklogItems: backlogByStatus.get("in-progress") ?? 0,
+    openEpics: epicByStatus.get("open") ?? 0,
+    totalAgents: agentCounts.reduce((s, g) => s + g._count.id, 0),
+    activeAgents: agentByStatus.get("active") ?? 0,
+  };
+});

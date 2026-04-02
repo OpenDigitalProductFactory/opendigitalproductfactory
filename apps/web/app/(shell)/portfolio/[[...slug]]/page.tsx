@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { getFullPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolioOwnerRoles } from "@/lib/portfolio-data";
+import { getFullPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolioOwnerRoles, getPortfolioSummary } from "@/lib/portfolio-data";
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
@@ -13,16 +13,17 @@ type Props = {
 export default async function PortfolioPage({ params }: Props) {
   const { slug } = await params;
   const slugs = slug ?? [];
-  const [roots, agentCounts, budgets, ownerRoles] = await Promise.all([
+  const [roots, agentCounts, budgets, ownerRoles, summary] = await Promise.all([
     getFullPortfolioTree(),
     getAgentCounts(),
     getPortfolioBudgets(),
     getPortfolioOwnerRoles(),
+    getPortfolioSummary(),
   ]);
 
   // Overview: /portfolio
   if (slugs.length === 0) {
-    return <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} />;
+    return <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} summary={summary} />;
   }
 
   // Node detail: /portfolio/[...slug]
