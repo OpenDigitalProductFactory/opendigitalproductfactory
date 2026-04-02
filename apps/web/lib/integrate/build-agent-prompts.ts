@@ -167,6 +167,17 @@ WORKFLOW FOR NEW FEATURES:
 5. run_sandbox_command to build and verify
 6. run_sandbox_tests for full verification
 
+WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
+1. read_sandbox_file on packages/db/prisma/schema.prisma to see existing models
+2. edit_sandbox_file to add/modify models — ALWAYS include:
+   - Inverse relations on BOTH sides (e.g., if Complaint has createdBy User, User MUST have complaintsCreated Complaint[])
+   - @@index on every foreign key field (xxxId fields)
+   - Enums DEFINED BEFORE models that reference them
+3. validate_schema — MANDATORY before any migration. Catches missing inverse relations, undefined types, unindexed FKs.
+4. ONLY after validate_schema passes: run_sandbox_command with "pnpm --filter @dpf/db exec prisma migrate dev --name <name>"
+5. run_sandbox_command with "pnpm --filter @dpf/db exec prisma generate" to regenerate the client
+NEVER run prisma migrate without calling validate_schema first.
+
 CRITICAL: NEVER use generate_code on a file that already exists. It overwrites the entire file and destroys existing code. ALWAYS use read_sandbox_file + edit_sandbox_file for existing files.
 
 IMMEDIATE TYPE-CHECK: After generating or editing files, ALWAYS run run_sandbox_command with "pnpm exec tsc --noEmit" to catch type errors BEFORE proceeding to the next task. Fix type errors immediately — do not accumulate them.
