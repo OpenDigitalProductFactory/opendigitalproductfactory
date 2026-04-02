@@ -39,6 +39,10 @@ const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|
 // Narration patterns: agent describes code for the user instead of calling tools
 const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to add|change|pattern)|add (?:this |the following )|insert (?:this |before )|exact (?:lines|code|changes)|manually|copy[- ]paste)/i;
 
+// Permission-seeking patterns: agent asks user to approve each step instead of acting.
+// During build phases, the agent should proceed autonomously — not ask "should I?" every step.
+export const PERMISSION_SEEKING_PATTERN = /(?:should I (?:proceed|continue|go ahead|fix|update|create|add|rewrite|investigate|check|try)|would you (?:like|prefer|want) me to|do you want me to|which (?:would you|do you) prefer|shall I|before I (?:proceed|continue)|want me to|ready for me to)/i;
+
 // Frustration patterns: agent is spinning, apologizing, or hedging instead of acting.
 // Inspired by Claude Code's ~20 frustration regexes (March 2026 source leak).
 // Only checked in the no-tool-calls branch, so this won't fire when the agent
@@ -93,7 +97,10 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
 }): boolean {
-  if (params.continuationNudges >= 1) return false;
+  // Permission-seeking gets up to 3 nudges; other nudge types get 1
+  const isPermission = params.responseText ? PERMISSION_SEEKING_PATTERN.test(params.responseText) : false;
+  const maxNudges = isPermission ? 3 : 1;
+  if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
 
@@ -116,6 +123,9 @@ export function shouldNudge(params: {
 
   // Agent is narrating code instead of using tools — nudge to use build tools
   if (params.responseText && NARRATION_PATTERN.test(params.responseText)) return true;
+
+  // Agent is asking permission instead of acting — nudge to proceed
+  if (params.responseText && PERMISSION_SEEKING_PATTERN.test(params.responseText)) return true;
 
   return false;
 }
@@ -434,6 +444,23 @@ export async function runAgenticLoop(params: {
           bestPreNudgeContent = trimmed;
         }
         continuationNudges++;
+
+        // Permission-seeking gets a specific nudge — tell it to act, not ask.
+        // Allow up to 3 permission nudges (not just 1) since models persist.
+        const isPermissionSeeking = PERMISSION_SEEKING_PATTERN.test(trimmed);
+        if (isPermissionSeeking && continuationNudges <= 3) {
+          console.log(`[agentic-loop] permission-seeking nudge (${continuationNudges}/3): ${trimmed.slice(0, 100)}`);
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            {
+              role: "user" as const,
+              content: "Do not ask for permission. Proceed with the next step. You only need user approval at phase transitions (ideate→plan→build→review→ship), not within a phase. Act now.",
+            },
+          ];
+          continue;
+        }
+
         const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
         console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response)`);
         messages = [
