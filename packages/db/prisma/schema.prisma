@@ -57,6 +57,8 @@ model User {
   platformDevConfigs           PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
   platformDevDcoAcceptances    PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
   agentModelConfigs            AgentModelConfig[]            @relation("AgentModelConfiguredBy")
+  knowledgeArticles            KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
+  knowledgeRevisions           KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
 }
 
 model UserGroup {
@@ -460,6 +462,7 @@ model Portfolio {
   epicPortfolios         EpicPortfolio[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
+  knowledgeArticles      KnowledgeArticlePortfolio[]
 }
 
 model DigitalProduct {
@@ -489,6 +492,7 @@ model DigitalProduct {
   changeItems                  ChangeItem[]                  @relation("ChangeItemProduct")
   businessModels               ProductBusinessModel[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
+  knowledgeArticles            KnowledgeArticleProduct[]
 }
 
 model BusinessModel {
@@ -1219,19 +1223,39 @@ model ScheduledJob {
 model Agent {
   id                  String                  @id @default(cuid())
   agentId             String                  @unique
+  slugId              String?                 @unique // backward-compat alias ("coo", "build-specialist")
   name                String
   tier                Int
   type                String
   description         String?
   status              String                  @default("active")
   createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
   portfolioId         String?
   preferredProviderId String?
   archived            Boolean                 @default(false)
+
+  // EP-AI-WORKFORCE-001: Unified agent lifecycle fields
+  valueStream         String?                 // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
+  it4itSections       String[]                @default([])
+  sensitivity         String                  @default("internal") // "public"|"internal"|"confidential"|"restricted"
+  humanSupervisorId   String?                 // "HR-000", "HR-100", etc.
+  hitlTierDefault     Int                     @default(3) // 0=human-only, 1=approve, 2=review, 3=autonomous
+  escalatesTo         String?                 // HR role or agent ID
+  delegatesTo         String[]                @default([])
+  lifecycleStage      String                  @default("production") // "plan"|"design"|"build"|"production"|"retirement"
+
   portfolio           Portfolio?              @relation(fields: [portfolioId], references: [id])
   governanceProfile   AgentGovernanceProfile?
   ownerships          AgentOwnership[]
   delegationGrants    DelegationGrant[]
+  executionConfig     AgentExecutionConfig?
+  skills              AgentSkillAssignment[]
+  toolGrants          AgentToolGrant[]
+  performanceProfiles AgentPerformance[]
+  degradationMappings FeatureDegradationMapping[]
+  promptContext       AgentPromptContext?
+  knowledgeArticles   KnowledgeArticle[]            @relation("KnowledgeArticleAgentAuthor")
 }
 
 model AgentOwnership {
@@ -1316,6 +1340,94 @@ model DelegationGrant {
   @@index([grantorUserId])
   @@index([granteeAgentId])
   @@index([status, expiresAt])
+}
+
+// EP-AI-WORKFORCE-001: Unified Agent Lifecycle Models
+
+model AgentExecutionConfig {
+  id               String @id @default(cuid())
+  agentId          String @unique
+  defaultModelId   String? // e.g. "claude-sonnet-4-6"
+  temperature      Float  @default(0.3)
+  maxTokens        Int    @default(4096)
+  executionType    String @default("in_process") // "in_process" | "sandbox" | "daemon"
+  timeoutSeconds   Int    @default(120)
+  concurrencyLimit Int    @default(4)
+  dailyTokenLimit  Int    @default(200000)
+  perTaskTokenLimit Int   @default(20000)
+  memoryType       String @default("session") // "none" | "session" | "persistent"
+  memoryBackend    String? // null | "redis" | "postgres"
+  agent            Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model AgentSkillAssignment {
+  id          String @id @default(cuid())
+  agentId     String
+  label       String
+  description String
+  capability  String? // permission gate, e.g. "view_portfolio"
+  prompt      String
+  taskType    String @default("conversation") // "conversation" | "code_generation" | "analysis"
+  sortOrder   Int    @default(0)
+  agent       Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, label])
+  @@index([agentId])
+}
+
+model AgentToolGrant {
+  id        String   @id @default(cuid())
+  agentId   String
+  grantKey  String // e.g. "registry_read", "backlog_write"
+  grantedAt DateTime @default(now())
+  grantedBy String? // User ID who granted, null = seed
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, grantKey])
+  @@index([grantKey])
+}
+
+model AgentPerformance {
+  id                   String    @id @default(cuid())
+  agentId              String
+  taskType             String
+  evaluationCount      Int       @default(0)
+  successCount         Int       @default(0)
+  avgOrchestratorScore Float     @default(0)
+  avgHumanScore        Float?
+  recentScores         Float[]   @default([])
+  instructionPhase     String    @default("learning") // "learning" | "practicing" | "innate"
+  profileConfidence    String    @default("low") // "low" | "medium" | "high"
+  lastEvaluatedAt      DateTime?
+  agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, taskType])
+  @@index([agentId])
+}
+
+model FeatureDegradationMapping {
+  id              String  @id @default(cuid())
+  agentId         String
+  featureRoute    String // e.g. "/build", "/portfolio"
+  featureName     String // e.g. "Build Studio code generation"
+  requiredTier    String // "frontier" | "strong" | "adequate" | "basic"
+  degradationMode String // "disabled" | "reduced" | "fallback_agent" | "manual_only"
+  fallbackAgentId String? // Agent that takes over when degraded
+  userMessage     String? // Shown to user when degraded
+  agent           Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, featureRoute])
+  @@index([agentId])
+}
+
+model AgentPromptContext {
+  id               String   @id @default(cuid())
+  agentId          String   @unique
+  perspective      String? // Scott Page: how agent frames problems
+  heuristics       String? // How agent searches for solutions
+  interpretiveModel String? // What agent optimizes for
+  domainTools      String[] @default([]) // Tool names available to this domain
+  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 }
 
 model AuthorizationDecisionLog {
@@ -2084,6 +2196,7 @@ model FeatureBuild {
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
   buildExecState        Json?
+  taxonomyAttribution   Json?
   releaseBundleId       String?
   calendarEventId       String?
   activities            BuildActivity[]
@@ -4653,5 +4766,69 @@ model SkillMetric {
 
   @@unique([skillId, agentId, period])
   @@index([skillId])
+}
+
+// ─── EP-KM-001: Knowledge Management ──────────────────────────────────────────
+
+model KnowledgeArticle {
+  id                 String                      @id @default(cuid())
+  articleId          String                      @unique // Human-readable: KA-001, KA-002...
+  title              String
+  body               String                      @db.Text
+  category           String // process | policy | decision | how-to | reference | troubleshooting | runbook
+  status             String                      @default("draft") // draft | published | review-needed | archived
+  visibility         String                      @default("internal") // internal | team | public
+  authorId           String?
+  authorAgentId      String?
+  reviewIntervalDays Int                         @default(90)
+  lastReviewedAt     DateTime?
+  valueStreams       String[]                    @default([])
+  tags               String[]                    @default([])
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  author             User?                       @relation("KnowledgeArticleAuthor", fields: [authorId], references: [id])
+  authorAgent        Agent?                      @relation("KnowledgeArticleAgentAuthor", fields: [authorAgentId], references: [id])
+  revisions          KnowledgeArticleRevision[]
+  products           KnowledgeArticleProduct[]
+  portfolios         KnowledgeArticlePortfolio[]
+
+  @@index([status])
+  @@index([category])
+  @@index([authorId])
+}
+
+model KnowledgeArticleRevision {
+  id               String           @id @default(cuid())
+  articleId        String
+  version          Int
+  title            String
+  body             String           @db.Text
+  changeSummary    String?
+  createdAt        DateTime         @default(now())
+  createdById      String?
+  createdByAgentId String?
+  article          KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdBy        User?            @relation("KnowledgeRevisionCreator", fields: [createdById], references: [id])
+
+  @@unique([articleId, version])
+  @@index([articleId])
+}
+
+model KnowledgeArticleProduct {
+  articleId        String
+  digitalProductId String
+  article          KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  digitalProduct   DigitalProduct   @relation(fields: [digitalProductId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, digitalProductId])
+}
+
+model KnowledgeArticlePortfolio {
+  articleId   String
+  portfolioId String
+  article     KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  portfolio   Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, portfolioId])
 }
 

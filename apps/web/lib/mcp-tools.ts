@@ -206,6 +206,42 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate"],
   },
   {
+    name: "suggest_taxonomy_placement",
+    description: "Analyze the current feature brief and suggest where it belongs in the portfolio taxonomy. Returns ranked candidates with match scores. Call after saving the feature brief.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    buildPhases: ["ideate"],
+  },
+  {
+    name: "confirm_taxonomy_placement",
+    description: "Confirm or override the taxonomy placement for the current feature build. Either confirm an existing node or propose a new one.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Confirmed taxonomy node ID (e.g. 'foundational/platform_services/api_management_platform'). Null if proposing new." },
+        proposeNew: {
+          type: "object",
+          description: "Propose a new taxonomy node when nothing fits",
+          properties: {
+            parentNodeId: { type: "string", description: "Parent node ID to create under" },
+            name: { type: "string", description: "Proposed node name" },
+            description: { type: "string", description: "What this capability area covers" },
+            rationale: { type: "string", description: "Why existing nodes don't fit" },
+          },
+          required: ["parentNodeId", "name", "description", "rationale"],
+        },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "ship"],
+  },
+  {
     name: "register_digital_product_from_build",
     description: "Register or update a DigitalProduct from the current build. Build ID is auto-resolved. Requires approval.",
     inputSchema: {
@@ -1112,6 +1148,75 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── EP-KM-001: Knowledge Management Tools ─────────────────────────────────
+  {
+    name: "search_knowledge_base",
+    description: "Search organizational knowledge articles (policies, processes, decisions, runbooks, reference material). Returns articles ranked by semantic relevance. Use this when the user asks about how things work, what the policy is, or needs procedural guidance.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for" },
+        productId: { type: "string", description: "Filter to articles linked to this product (optional)" },
+        portfolioId: { type: "string", description: "Filter to articles linked to this portfolio (optional)" },
+        category: {
+          type: "string",
+          enum: ["process", "policy", "decision", "how-to", "reference", "troubleshooting", "runbook"],
+          description: "Filter by category (optional)",
+        },
+        valueStream: {
+          type: "string",
+          enum: ["evaluate", "explore", "integrate", "deploy", "release", "operate", "consume"],
+          description: "Filter by IT4IT value stream (optional)",
+        },
+        limit: { type: "number", description: "Max results (default 5)" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "create_knowledge_article",
+    description: "Draft a new knowledge article. The article is created in 'draft' status and must be published separately. Use when the user asks to document a process, record a decision, or create a runbook.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Article title" },
+        body: { type: "string", description: "Article content in markdown" },
+        category: {
+          type: "string",
+          enum: ["process", "policy", "decision", "how-to", "reference", "troubleshooting", "runbook"],
+        },
+        productIds: { type: "array", items: { type: "string" }, description: "Product IDs to link (optional)" },
+        portfolioIds: { type: "array", items: { type: "string" }, description: "Portfolio IDs to link (optional)" },
+        valueStreams: {
+          type: "array",
+          items: { type: "string", enum: ["evaluate", "explore", "integrate", "deploy", "release", "operate", "consume"] },
+          description: "IT4IT value streams (optional)",
+        },
+        tags: { type: "array", items: { type: "string" }, description: "Free-form tags (optional)" },
+      },
+      required: ["title", "body", "category"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "proposal",
+    sideEffect: true,
+  },
+  {
+    name: "flag_stale_knowledge",
+    description: "Check for knowledge articles that haven't been reviewed within their review interval. Returns articles needing attention.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "Filter to a specific product (optional)" },
+        portfolioId: { type: "string", description: "Filter to a specific portfolio (optional)" },
+      },
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
   {
     name: "run_endpoint_tests",
@@ -1621,6 +1726,69 @@ export async function executeTool(
       };
       await updateFeatureBrief(buildId, brief);
       return { success: true, entityId: buildId, message: `Updated Feature Brief for ${buildId}` };
+    }
+
+    case "suggest_taxonomy_placement": {
+      let buildId = String(params["buildId"] ?? "");
+      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true, brief: true },
+        });
+        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        buildId = latestBuild.buildId;
+      }
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { brief: true },
+      });
+      if (!build?.brief) return { success: false, error: "No brief saved", message: "Save the feature brief first before requesting taxonomy placement." };
+      const briefData = build.brief as Record<string, unknown>;
+      const { attributeFeatureBuild, formatAttributionRecommendation } = await import("@/lib/integrate/feature-attribution");
+      const attribution = await attributeFeatureBuild(buildId, {
+        title: String(briefData.title ?? ""),
+        description: String(briefData.description ?? ""),
+        portfolioContext: String(briefData.portfolioContext ?? ""),
+        acceptanceCriteria: Array.isArray(briefData.acceptanceCriteria) ? briefData.acceptanceCriteria.map(String) : [],
+        targetRoles: Array.isArray(briefData.targetRoles) ? briefData.targetRoles.map(String) : [],
+        dataNeeds: String(briefData.dataNeeds ?? ""),
+      });
+      // Persist attribution result on the build
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { taxonomyAttribution: attribution as unknown as import("@dpf/db").Prisma.InputJsonValue },
+      });
+      const recommendation = formatAttributionRecommendation(attribution);
+      return {
+        success: true,
+        entityId: buildId,
+        message: recommendation,
+        data: {
+          method: attribution.method,
+          confidence: attribution.confidence,
+          topCandidate: attribution.topCandidate,
+          candidates: attribution.candidates,
+        },
+      };
+    }
+
+    case "confirm_taxonomy_placement": {
+      let buildId = String(params["buildId"] ?? "");
+      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true },
+        });
+        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+        buildId = latestBuild.buildId;
+      }
+      const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
+      const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
+      const proposeNew = params["proposeNew"] as { parentNodeId: string; name: string; description: string; rationale: string } | undefined;
+      const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
+      return { success: result.success, entityId: buildId, message: result.message };
     }
 
     case "register_digital_product_from_build": {
@@ -4296,6 +4464,138 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
       const summary = results.map((r) => `${r.entityType}:${r.entityId} — ${r.title} (${Math.round(r.score * 100)}% match)`).join("\n");
       return { success: true, message: summary, data: { results } };
+    }
+
+    case "search_knowledge_base": {
+      const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
+      const results = await searchKnowledgeArticles({
+        query: String(params["query"] ?? ""),
+        productId: typeof params["productId"] === "string" ? params["productId"] : undefined,
+        portfolioId: typeof params["portfolioId"] === "string" ? params["portfolioId"] : undefined,
+        category: typeof params["category"] === "string" ? params["category"] : undefined,
+        valueStream: typeof params["valueStream"] === "string" ? params["valueStream"] : undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : 5,
+      });
+      if (results.length === 0) {
+        return { success: true, message: "No matching knowledge articles found.", data: { results: [] } };
+      }
+      const summary = results.map((r) => `${r.category}:${r.articleId} — ${r.title} (${Math.round(r.score * 100)}% match)`).join("\n");
+      return { success: true, message: summary, data: { results } };
+    }
+
+    case "create_knowledge_article": {
+      const { prisma } = await import("@dpf/db");
+      const { storeKnowledgeArticle } = await import("@/lib/semantic-memory");
+
+      // Generate next articleId: KA-001, KA-002, ...
+      const lastArticle = await prisma.knowledgeArticle.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: { articleId: true },
+      });
+      const nextNum = lastArticle
+        ? parseInt(lastArticle.articleId.replace("KA-", ""), 10) + 1
+        : 1;
+      const articleId = `KA-${String(nextNum).padStart(3, "0")}`;
+
+      const title = String(params["title"] ?? "");
+      const body = String(params["body"] ?? "");
+      const category = String(params["category"] ?? "reference");
+      const productIds = Array.isArray(params["productIds"]) ? params["productIds"].map(String) : [];
+      const portfolioIds = Array.isArray(params["portfolioIds"]) ? params["portfolioIds"].map(String) : [];
+      const valueStreams = Array.isArray(params["valueStreams"]) ? params["valueStreams"].map(String) : [];
+      const tags = Array.isArray(params["tags"]) ? params["tags"].map(String) : [];
+
+      const article = await prisma.knowledgeArticle.create({
+        data: {
+          articleId,
+          title,
+          body,
+          category,
+          status: "draft",
+          visibility: "internal",
+          authorId: userId,
+          valueStreams,
+          tags,
+          products: productIds.length > 0
+            ? { create: productIds.map((id) => ({ digitalProductId: id })) }
+            : undefined,
+          portfolios: portfolioIds.length > 0
+            ? { create: portfolioIds.map((id) => ({ portfolioId: id })) }
+            : undefined,
+          revisions: {
+            create: {
+              version: 1,
+              title,
+              body,
+              changeSummary: "Initial draft",
+              createdById: userId,
+            },
+          },
+        },
+      });
+
+      // Index into Qdrant
+      await storeKnowledgeArticle({
+        articleId,
+        title,
+        body,
+        category,
+        status: "draft",
+        productIds,
+        portfolioIds,
+        valueStreams,
+        tags,
+      });
+
+      return {
+        success: true,
+        entityId: articleId,
+        message: `Knowledge article ${articleId} created as draft: "${title}". Publish it to make it searchable by AI coworkers.`,
+      };
+    }
+
+    case "flag_stale_knowledge": {
+      const { prisma } = await import("@dpf/db");
+
+      const where: Record<string, unknown> = { status: "published" };
+
+      if (typeof params["productId"] === "string") {
+        where.products = { some: { digitalProductId: params["productId"] } };
+      }
+      if (typeof params["portfolioId"] === "string") {
+        where.portfolios = { some: { portfolioId: params["portfolioId"] } };
+      }
+
+      const articles = await prisma.knowledgeArticle.findMany({
+        where: where as never,
+        select: {
+          articleId: true,
+          title: true,
+          category: true,
+          reviewIntervalDays: true,
+          lastReviewedAt: true,
+          createdAt: true,
+        },
+      });
+
+      const now = new Date();
+      const stale = articles.filter((a) => {
+        const baseline = a.lastReviewedAt ?? a.createdAt;
+        const dueDate = new Date(baseline.getTime() + a.reviewIntervalDays * 86400000);
+        return now > dueDate;
+      });
+
+      if (stale.length === 0) {
+        return { success: true, message: "All published knowledge articles are up to date.", data: { articles: [] } };
+      }
+
+      const summary = stale.map((a) => {
+        const baseline = a.lastReviewedAt ?? a.createdAt;
+        const daysOverdue = Math.floor((now.getTime() - baseline.getTime()) / 86400000) - a.reviewIntervalDays;
+        return `${a.articleId}: "${a.title}" (${a.category}) — ${daysOverdue} days overdue for review`;
+      }).join("\n");
+
+      return { success: true, message: `${stale.length} article(s) need review:\n${summary}`, data: { articles: stale } };
     }
 
     case "run_endpoint_tests": {

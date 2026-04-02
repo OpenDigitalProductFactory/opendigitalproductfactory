@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./ea-validation": "./src/ea-validation.ts",
     "./neo4j-sync": "./src/neo4j-sync.ts",
-    "./reference-model-projection": "./src/reference-model-projection.ts"
+    "./reference-model-projection": "./src/reference-model-projection.ts",
+    "./discovery-attribution": "./src/discovery-attribution.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
