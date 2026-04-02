@@ -91,10 +91,10 @@ export function PlatformHealthIndicator() {
 
             {health === "offline" && (
               <div className="px-3 py-4 text-xs text-[var(--dpf-muted)] text-center">
-                Monitoring stack not running.
+                Health data unavailable.
                 <br />
                 <span className="text-[10px]">
-                  Start with: docker compose --profile monitoring up -d
+                  Monitoring services may still be starting up.
                 </span>
               </div>
             )}

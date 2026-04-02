@@ -33,12 +33,10 @@ function MonitoringOfflineBanner() {
   if (!online) {
     return (
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center space-y-2">
-        <p className="text-sm text-[var(--dpf-text)] font-medium">Monitoring stack is not running</p>
+        <p className="text-sm text-[var(--dpf-text)] font-medium">Health data is currently unavailable</p>
         <p className="text-xs text-[var(--dpf-muted)]">
-          Start with: <code className="bg-[var(--dpf-bg)] px-1.5 py-0.5 rounded text-[10px]">docker compose --profile monitoring up -d</code>
-        </p>
-        <p className="text-xs text-[var(--dpf-muted)]">
-          This adds Prometheus, Grafana, and container metrics for operational visibility (~350 MB RAM).
+          The platform monitoring services are starting up or temporarily unreachable.
+          This page will update automatically when data becomes available.
         </p>
       </div>
     );
