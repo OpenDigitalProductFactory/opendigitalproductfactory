@@ -630,21 +630,15 @@ export async function sendMessage(input: {
     ].join("\n");
   }
 
-  let responseContent: string;
+  let responseContent = "";
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
 
-  // Check DB for agent-level provider preference (overrides hardcoded config)
-  const dbAgent = await prisma.agent.findUnique({
-    where: { agentId: agent.agentId },
-    select: { preferredProviderId: true },
-  });
-  const modelReqs = {
-    ...agent.modelRequirements,
-    ...(dbAgent?.preferredProviderId ? { preferredProviderId: dbAgent.preferredProviderId } : {}),
-  };
+  // EP-AI-WORKFORCE-001: Provider pinning is now via AgentModelConfig.pinnedProviderId
+  // (resolved in agentic-loop.ts via agentModelConfig lookup). No need to merge here.
+  const modelReqs = { ...agent.modelRequirements };
 
   // --- Task classification and performance profile injection ---
   // EP-INF-009b: Routing is handled by the agentic loop via routeAndCall().
@@ -671,6 +665,52 @@ export async function sendMessage(input: {
     }
   }
 
+  // ── EP-BUILD-ORCHESTRATOR: parallel specialist dispatch for build phase ───
+  if (input.routeContext.startsWith("/build") && activeBuildPhase === "build") {
+    const activeBuild = await prisma.featureBuild.findFirst({
+      where: { createdById: user.id!, phase: "build" },
+      orderBy: { updatedAt: "desc" },
+      select: { buildId: true, plan: true },
+    });
+    const plan = activeBuild?.plan as Record<string, unknown> | null;
+    const buildPlan = plan?.buildPlan as import("@/lib/explore/feature-build-types").BuildPlanDoc | undefined;
+
+    if (activeBuild && buildPlan?.tasks?.length) {
+      const { runBuildOrchestrator } = await import("@/lib/integrate/build-orchestrator");
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+
+      const orchestratorResult = await runBuildOrchestrator({
+        buildId: activeBuild.buildId,
+        plan: buildPlan,
+        userId: user.id!,
+        platformRole: user.platformRole ?? null,
+        isSuperuser: user.isSuperuser ?? false,
+        parentThreadId: input.threadId,
+        buildContext: populatedPrompt,
+      });
+
+      agentEventBus.emit(input.threadId, { type: "done" });
+
+      responseContent = orchestratorResult.content;
+      responseProviderId = "orchestrator";
+      responseModelId = "multi-specialist";
+
+      // Log token usage
+      logTokenUsage({
+        agentId: agent.agentId,
+        providerId: "orchestrator",
+        contextKey: "coworker",
+        inputTokens: orchestratorResult.totalInputTokens,
+        outputTokens: orchestratorResult.totalOutputTokens,
+        inferenceMs: 0,
+      }).catch((err) => console.error("[logTokenUsage]", err));
+
+      // Fall through to message persistence and return below
+    }
+  }
+
+  // ── Single-agent fallback (all phases except orchestrated build) ─────────
+  if (!responseContent) {
   try {
     // ── Agentic execution loop ──────────────────────────────────────────────
     // EP-INF-009b: The loop handles V2 routing internally via routeAndCall().
@@ -823,6 +863,7 @@ export async function sendMessage(input: {
       throw e;
     }
   }
+  } // close if (!responseContent)
 
   if (input.elevatedFormFillEnabled && input.formAssistContext) {
     const extracted = extractFormAssistResult(responseContent, input.formAssistContext);

@@ -19,11 +19,23 @@ export async function seedOnboardingAgent(): Promise<void> {
       type: "onboarding",
       description: "Guides new platform owners through initial setup.",
       status: "active",
-      preferredProviderId: "ollama",
     },
     update: {
       status: "active",
-      preferredProviderId: "ollama",
+    },
+  });
+
+  // EP-AI-WORKFORCE-001: Provider pinning via AgentModelConfig (replaces Agent.preferredProviderId)
+  await prisma.agentModelConfig.upsert({
+    where: { agentId: "onboarding-coo" },
+    create: {
+      agentId: "onboarding-coo",
+      minimumTier: "basic",
+      budgetClass: "minimize_cost",
+      pinnedProviderId: "ollama",
+    },
+    update: {
+      pinnedProviderId: "ollama",
     },
   });
 }

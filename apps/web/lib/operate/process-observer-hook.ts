@@ -13,6 +13,7 @@ export type RoutingMeta = {
   sensitivity: string;
   userMessage: string;
   aiResponse: string;
+  agentId?: string; // EP-AI-WORKFORCE-001: agent slug for performance bridging
 };
 
 const DEFAULT_SAMPLE_RATE = 5;
@@ -33,6 +34,7 @@ export async function observeConversation(
       sensitivity: routingMeta.sensitivity as SensitivityLevel,
       userMessage: routingMeta.userMessage,
       aiResponse: routingMeta.aiResponse,
+      agentId: routingMeta.agentId, // EP-AI-WORKFORCE-001
     }).catch((err) => console.error("[orchestrator-evaluator]", err));
   }
 

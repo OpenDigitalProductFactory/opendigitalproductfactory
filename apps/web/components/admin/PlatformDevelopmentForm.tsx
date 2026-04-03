@@ -204,6 +204,12 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
                 {dcoAcceptedAt ? new Date(dcoAcceptedAt).toLocaleDateString() : "unknown date"}.
               </p>
             </div>
+          ) : selected !== props.currentMode ? (
+            <div className="rounded border border-amber-400/50 bg-amber-400/10 px-3 py-2">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Save your contribution mode first, then accept the DCO.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               <div className="rounded border border-amber-400/50 bg-amber-400/10 px-3 py-2">
