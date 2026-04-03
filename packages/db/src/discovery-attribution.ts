@@ -51,7 +51,7 @@ export type InventoryAttributionResult = {
 export type InventoryQualityEntityInput = {
   entityKey: string;
   entityType: string;
-  attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale";
+  attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale" | "dismissed";
   attributionMethod?: "rule" | "heuristic" | "manual" | "ai_proposed" | null;
   attributionConfidence?: number | null;
   candidateTaxonomy?: Array<{ nodeId: string; score: number }> | null;
@@ -148,6 +148,13 @@ function findRuleMatch(
   } else if (itemType.includes("monitoring") || itemType.includes("observability")) {
     node = matchByNodeId((nodeId) => nodeId.includes("observability_platform"));
     ruleId = node ? "foundational_observability" : undefined;
+  } else if (itemType.includes("ai_service")) {
+    node = matchByNodeId((nodeId) => nodeId.includes("ai_and_agent_platform"))
+        ?? matchByNodeId((nodeId) => nodeId.includes("platform_services"));
+    ruleId = node ? "foundational_ai_service" : undefined;
+  } else if (itemType === "application") {
+    node = matchByNodeId((nodeId) => nodeId.endsWith("/platform_services"));
+    ruleId = node ? "foundational_application" : undefined;
   }
 
   if (!node || !ruleId) {
