@@ -5,11 +5,13 @@ import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import {
   getInventoryEntitiesForPage,
   getLatestDiscoveryRun,
+  getNeedsReviewEntities,
   getOpenPortfolioQualityIssues,
   summarizeDiscoveryHealth,
 } from "@/lib/discovery-data";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
 import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPanel";
+import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
 import { RelationshipGraph } from "@/components/inventory/RelationshipGraph";
 import { getFullGraphData } from "@/lib/actions/graph";
@@ -21,7 +23,7 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, latestRun, inventoryEntities, openIssues, graphData] = await Promise.all([
+  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData] = await Promise.all([
     prisma.digitalProduct.findMany({
       orderBy: [{ portfolio: { name: "asc" } }, { name: "asc" }],
       select: {
@@ -34,6 +36,7 @@ export default async function InventoryPage() {
     }),
     getLatestDiscoveryRun(),
     getInventoryEntitiesForPage(),
+    getNeedsReviewEntities(),
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
   ]);
@@ -54,6 +57,7 @@ export default async function InventoryPage() {
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
+        <InventoryExceptionQueue entities={needsReview} />
         <InventoryEntityPanel entities={inventoryEntities} />
         <PortfolioQualityIssuesPanel issues={openIssues} />
       </div>

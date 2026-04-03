@@ -64,6 +64,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   schedule_release_bundle: ["release_plan_create"],
   get_release_status: ["release_plan_read"],
 
+  // Discovery / Monitoring
+  discovery_sweep: ["telemetry_read"],
+
   // UX / Page evaluation
   evaluate_page: ["file_read"],
   generate_ux_test: ["file_read"],
