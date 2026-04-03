@@ -62,6 +62,7 @@ export async function getNeedsReviewEntities() {
     candidateTaxonomy: Array.isArray(e.candidateTaxonomy)
       ? (e.candidateTaxonomy as Array<{ nodeId: string; name: string; score: number }>)
       : [],
+    properties: (e.properties ?? {}) as Record<string, unknown>,
   }));
 }
 

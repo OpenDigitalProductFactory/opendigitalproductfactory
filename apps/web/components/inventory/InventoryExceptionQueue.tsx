@@ -18,7 +18,7 @@ type ExceptionEntity = {
   firstSeenAt: string;
   lastSeenAt: string;
   candidateTaxonomy: CandidateTaxonomy[];
-  properties: Record<string, unknown>;
+  properties: Record<string, unknown> | unknown[] | string | number | boolean | null;
 };
 
 type Props = {
