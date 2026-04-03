@@ -5,6 +5,26 @@
 
 import { runCypher } from "./neo4j";
 
+// ─── Traversal constants ─────────────────────────────────────────────────────
+// All relationship types that impact analysis and dependency queries should
+// traverse. Defined once to avoid drift between queries.
+
+const IMPACT_RELATIONSHIP_TYPES = [
+  "DEPENDS_ON",
+  "HOSTS",
+  "RUNS_ON",
+  "LISTENS_ON",
+  "MONITORS",
+  "MEMBER_OF",
+  "ROUTES_THROUGH",
+  "CARRIED_BY",
+  "CONNECTS_TO",
+  "PEER_OF",
+] as const;
+
+/** Cypher relationship filter fragment, e.g. ":DEPENDS_ON|HOSTS|RUNS_ON|..." */
+const IMPACT_REL_FILTER = IMPACT_RELATIONSHIP_TYPES.map((t) => t).join("|");
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type GraphNode = {
@@ -33,6 +53,10 @@ export type ImpactResult = {
  * Downstream impact: everything that depends (directly or transitively) on
  * the given InfraCI. Returns affected nodes ordered by depth.
  * Used for "if this CI goes down, what breaks?"
+ *
+ * Traverses all relationship types (DEPENDS_ON, HOSTS, RUNS_ON, MONITORS,
+ * MEMBER_OF, ROUTES_THROUGH, etc.) so impact traces from L1 physical
+ * faults through L3 network to L7 products.
  */
 export async function getDownstreamImpact(ciId: string, maxDepth = 10): Promise<ImpactResult[]> {
   const rows = await runCypher<{
@@ -40,7 +64,7 @@ export async function getDownstreamImpact(ciId: string, maxDepth = 10): Promise<
     depth: unknown;
     path: unknown[];
   }>(
-    `MATCH p = (origin:InfraCI {ciId: $ciId})<-[:DEPENDS_ON*1..${maxDepth}]-(affected)
+    `MATCH p = (origin:InfraCI {ciId: $ciId})<-[:${IMPACT_REL_FILTER}*1..${maxDepth}]-(affected)
      RETURN affected, length(p) AS depth,
             [n IN nodes(p) | coalesce(n.productId, n.ciId, n.nodeId, n.slug)] AS path
      ORDER BY depth`,
@@ -69,7 +93,7 @@ export async function getUpstreamDependencies(
     depth: unknown;
     path: unknown[];
   }>(
-    `MATCH p = (origin:${label} {${keyField}: $nodeKey})-[:DEPENDS_ON*1..${maxDepth}]->(dep)
+    `MATCH p = (origin:${label} {${keyField}: $nodeKey})-[:${IMPACT_REL_FILTER}*1..${maxDepth}]->(dep)
      RETURN dep, length(p) AS depth,
             [n IN nodes(p) | coalesce(n.productId, n.ciId, n.nodeId, n.slug)] AS path
      ORDER BY depth`,
@@ -126,7 +150,7 @@ export async function shortestPath(fromKey: string, toKey: string): Promise<stri
     `MATCH (a), (b)
      WHERE coalesce(a.productId, a.ciId, a.nodeId, a.slug) = $fromKey
        AND coalesce(b.productId, b.ciId, b.nodeId, b.slug) = $toKey
-     MATCH p = shortestPath((a)-[:DEPENDS_ON*]-(b))
+     MATCH p = shortestPath((a)-[:${IMPACT_REL_FILTER}*]-(b))
      RETURN [n IN nodes(p) | coalesce(n.productId, n.ciId, n.nodeId, n.slug)] AS path`,
     { fromKey, toKey },
   );
@@ -217,7 +241,7 @@ export async function getLayeredDependencyStack(productId: string): Promise<Laye
     layerName: unknown;
   }>(
     `MATCH (dp:DigitalProduct {productId: $productId})
-     MATCH path = (dp)-[:DEPENDS_ON|RUNS_ON|LISTENS_ON|HOSTS|MEMBER_OF|CARRIED_BY*1..15]->(dep)
+     MATCH path = (dp)-[:${IMPACT_REL_FILTER}*1..15]->(dep)
      RETURN DISTINCT dep,
             dep.osiLayer AS layer,
             dep.osiLayerName AS layerName
