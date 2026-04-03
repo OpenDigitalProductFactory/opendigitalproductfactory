@@ -23,6 +23,18 @@
 
 import { runCypher } from "./neo4j";
 
+/** Network topology relationship types (OSI-aware multi-layer graph). */
+export const NETWORK_RELATIONSHIP_TYPES = [
+  "RUNS_ON",          // L7 → L3/L4
+  "LISTENS_ON",       // L7 → L4
+  "HOSTS",            // L3 → L4/L7
+  "MEMBER_OF",        // L3 → L2
+  "ROUTES_THROUGH",   // L3 → L3
+  "CARRIED_BY",       // L2 → L1
+  "CONNECTS_TO",      // L1 → L1
+  "PEER_OF",          // L2 → L2 (LLDP/CDP)
+] as const;
+
 const SCHEMA_STATEMENTS = [
   // ── Uniqueness constraints (also create backing index) ────────────────────
   "CREATE CONSTRAINT dp_productId IF NOT EXISTS FOR (n:DigitalProduct) REQUIRE n.productId IS UNIQUE",
@@ -39,6 +51,10 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX tn_name  IF NOT EXISTS FOR (n:TaxonomyNode)   ON (n.name)",
   "CREATE INDEX ci_type  IF NOT EXISTS FOR (n:InfraCI)        ON (n.ciType)",
   "CREATE INDEX ci_status IF NOT EXISTS FOR (n:InfraCI)       ON (n.status)",
+
+  // OSI-aware topology indexes
+  "CREATE INDEX ci_osi_layer       IF NOT EXISTS FOR (n:InfraCI) ON (n.osiLayer)",
+  "CREATE INDEX ci_network_address IF NOT EXISTS FOR (n:InfraCI) ON (n.networkAddress)",
 ];
 
 export async function initNeo4jSchema(): Promise<void> {
@@ -54,5 +70,36 @@ export async function initNeo4jSchema(): Promise<void> {
       console.warn("  ⚠ skipped:", msg.slice(0, 120));
     }
   }
+  await backfillOsiLayers();
   console.log("Neo4j schema ready.");
+}
+
+/**
+ * Backfill osiLayer on existing InfraCI nodes that don't have one yet.
+ * Maps ciType → default OSI layer. Safe to re-run — only touches nodes
+ * where osiLayer IS NULL.
+ */
+export async function backfillOsiLayers(): Promise<void> {
+  const mapping: Array<{ ciTypes: string[]; layer: number; layerName: string }> = [
+    { ciTypes: ["server", "host", "network"], layer: 3, layerName: "network" },
+    { ciTypes: ["container", "service", "database", "runtime", "ai-inference"], layer: 7, layerName: "application" },
+  ];
+  for (const { ciTypes, layer, layerName } of mapping) {
+    try {
+      const result = await runCypher<{ updated: unknown }>(
+        `MATCH (ci:InfraCI)
+         WHERE ci.osiLayer IS NULL AND ci.ciType IN $ciTypes
+         SET ci.osiLayer = $layer, ci.osiLayerName = $layerName
+         RETURN count(ci) AS updated`,
+        { ciTypes, layer, layerName },
+      );
+      const count = Number(result[0]?.updated ?? 0);
+      if (count > 0) {
+        console.log(`  backfill: set osiLayer=${layer} on ${count} InfraCI nodes (${ciTypes.join(", ")})`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  ⚠ backfill osiLayer=${layer} failed:`, msg.slice(0, 120));
+    }
+  }
 }

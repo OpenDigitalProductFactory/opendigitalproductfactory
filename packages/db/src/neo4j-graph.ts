@@ -133,6 +133,155 @@ export async function shortestPath(fromKey: string, toKey: string): Promise<stri
   return rows[0]?.path as string[] ?? [];
 }
 
+// ─── Stale CI pruning ────────────────────────────────────────────────────────
+
+export type PruneResult = {
+  marked: number;   // stamped decommissionedAt
+  deleted: number;  // DETACH DELETE
+};
+
+/**
+ * Two-phase prune of InfraCI nodes no longer seen by discovery:
+ *  Phase 1 — stamp decommissionedAt on stale nodes (status stays as-is)
+ *  Phase 2 — hard-delete nodes that have been decommissioned for deleteAfterDays
+ *
+ * Uses a separate `decommissionedAt` timestamp rather than mutating `status`,
+ * so the existing operational/degraded/offline status enum is preserved.
+ * Queries that want to exclude decommissioned nodes filter on
+ * `WHERE ci.decommissionedAt IS NULL`.
+ *
+ * Safe to run on a schedule — idempotent. Does NOT touch nodes synced recently.
+ */
+export async function pruneStaleInfraCIs({
+  markDecommissionedAfterDays = 30,
+  deleteAfterDays = 90,
+}: {
+  markDecommissionedAfterDays?: number;
+  deleteAfterDays?: number;
+} = {}): Promise<PruneResult> {
+  const now = Date.now();
+  const markThreshold   = new Date(now - markDecommissionedAfterDays * 86_400_000).toISOString();
+  const deleteThreshold = new Date(now - deleteAfterDays             * 86_400_000).toISOString();
+
+  // Phase 1: stamp decommissionedAt on stale nodes not yet marked
+  const markRows = await runCypher<{ marked: unknown }>(
+    `MATCH (ci:InfraCI)
+     WHERE ci.decommissionedAt IS NULL
+       AND ci.syncedAt IS NOT NULL
+       AND ci.syncedAt < datetime($markThreshold)
+     SET ci.decommissionedAt = datetime()
+     RETURN count(ci) AS marked`,
+    { markThreshold },
+  );
+  const marked = Number(markRows[0]?.marked ?? 0);
+
+  // Phase 2: count then hard-delete nodes decommissioned longer than deleteAfterDays
+  const countRows = await runCypher<{ toDelete: unknown }>(
+    `MATCH (ci:InfraCI)
+     WHERE ci.decommissionedAt IS NOT NULL
+       AND ci.decommissionedAt < datetime($deleteThreshold)
+     RETURN count(ci) AS toDelete`,
+    { deleteThreshold },
+  );
+  const toDelete = Number(countRows[0]?.toDelete ?? 0);
+
+  if (toDelete > 0) {
+    await runCypher(
+      `MATCH (ci:InfraCI)
+       WHERE ci.decommissionedAt IS NOT NULL
+         AND ci.decommissionedAt < datetime($deleteThreshold)
+       DETACH DELETE ci`,
+      { deleteThreshold },
+    );
+  }
+
+  return { marked, deleted: toDelete };
+}
+
+// ─── OSI-aware topology queries ─────────────────────────────────────────────
+
+export type LayeredDependency = {
+  osiLayer: number | null;
+  osiLayerName: string | null;
+  nodes: GraphNode[];
+};
+
+/**
+ * All dependencies of a product grouped by OSI layer, traversing both
+ * service-level (DEPENDS_ON) and network-level relationships up to 15 hops.
+ */
+export async function getLayeredDependencyStack(productId: string): Promise<LayeredDependency[]> {
+  const rows = await runCypher<{
+    dep: { identity: unknown; labels: string[]; properties: Record<string, unknown> };
+    layer: unknown;
+    layerName: unknown;
+  }>(
+    `MATCH (dp:DigitalProduct {productId: $productId})
+     MATCH path = (dp)-[:DEPENDS_ON|RUNS_ON|LISTENS_ON|HOSTS|MEMBER_OF|CARRIED_BY*1..15]->(dep)
+     RETURN DISTINCT dep,
+            dep.osiLayer AS layer,
+            dep.osiLayerName AS layerName
+     ORDER BY dep.osiLayer ASC`,
+    { productId },
+  );
+
+  // Group by OSI layer
+  const byLayer = new Map<number | null, { layerName: string | null; nodes: GraphNode[] }>();
+  for (const r of rows) {
+    const layer = r.layer != null ? Number(r.layer) : null;
+    const layerName = (r.layerName as string | null) ?? null;
+    let entry = byLayer.get(layer);
+    if (!entry) {
+      entry = { layerName, nodes: [] };
+      byLayer.set(layer, entry);
+    }
+    entry.nodes.push(nodeFromRecord(r.dep));
+  }
+
+  return Array.from(byLayer.entries())
+    .sort((a, b) => (a[0] ?? 99) - (b[0] ?? 99))
+    .map(([layer, { layerName, nodes }]) => ({ osiLayer: layer, osiLayerName: layerName, nodes }));
+}
+
+/**
+ * All InfraCI entities and their interconnections at a specific OSI layer.
+ */
+export async function getNetworkTopologyAtLayer(osiLayer: number): Promise<{
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}> {
+  const [nodeRows, edgeRows] = await Promise.all([
+    runCypher<{
+      n: { identity: unknown; labels: string[]; properties: Record<string, unknown> };
+    }>(
+      `MATCH (n:InfraCI {osiLayer: $osiLayer})
+       RETURN n ORDER BY n.name`,
+      { osiLayer },
+    ),
+    runCypher<{
+      fromId: string;
+      toId: string;
+      relType: string;
+      relProps: Record<string, unknown>;
+    }>(
+      `MATCH (a:InfraCI {osiLayer: $osiLayer})-[r]-(b:InfraCI {osiLayer: $osiLayer})
+       WHERE a.ciId < b.ciId
+       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType, properties(r) AS relProps`,
+      { osiLayer },
+    ),
+  ]);
+
+  return {
+    nodes: nodeRows.map((r) => nodeFromRecord(r.n)),
+    edges: edgeRows.map((r) => ({
+      from: r.fromId,
+      to: r.toId,
+      type: r.relType,
+      properties: r.relProps,
+    })),
+  };
+}
+
 // ─── InfraCI helpers ─────────────────────────────────────────────────────────
 
 /**
