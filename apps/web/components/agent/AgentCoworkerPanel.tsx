@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRoute, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { clearConversation, sendMessage } from "@/lib/actions/agent-coworker";
+import { clearConversation, getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
@@ -51,7 +51,6 @@ import {
 import {
   createOptimisticUserMessage,
   failOptimisticMessage,
-  reconcileOptimisticMessage,
   retryOptimisticMessage,
   type AgentRenderableMessage,
 } from "./agent-message-state";
@@ -75,11 +74,11 @@ function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
 
 function isClearDisabled(
   messages: AgentRenderableMessage[],
-  isPending: boolean,
+  busy: boolean,
   isClearing: boolean,
   threadId?: string | null,
 ) {
-  return !threadId || messages.length === 0 || isPending || isClearing;
+  return !threadId || messages.length === 0 || busy || isClearing;
 }
 
 export function AgentCoworkerPanel({
@@ -94,7 +93,9 @@ export function AgentCoworkerPanel({
 }: Props) {
   const pathname = usePathname();
   const [messages, setMessages] = useState<AgentRenderableMessage[]>(() => filterMessages(initialMessages));
-  const [isPending, startTransition] = useTransition();
+  // EP-ASYNC-COWORKER-001: isBusy replaces useTransition's isPending for message flow.
+  // This is a plain useState — it does NOT block the Next.js router or prevent navigation.
+  const [isBusy, setIsBusy] = useState(false);
   const [isClearing, startClearing] = useTransition();
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
@@ -119,14 +120,14 @@ export function AgentCoworkerPanel({
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [orchestratorStatus, setOrchestratorStatus] = useState<string | null>(null);
   useEffect(() => {
-    if (!isPending) { setThinkingSeconds(0); return; }
+    if (!isBusy) { setThinkingSeconds(0); return; }
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, [isPending]);
+  }, [isBusy]);
 
-  // SSE for tool-level and orchestrator progress
+  // SSE for tool-level progress, orchestrator status, and async completion
   useEffect(() => {
-    if (!isPending || !threadId) { setCurrentTool(null); setOrchestratorStatus(null); return; }
+    if (!isBusy || !threadId) { setCurrentTool(null); setOrchestratorStatus(null); return; }
     const es = new EventSource(`/api/agent/stream?threadId=${threadId}`);
     es.onmessage = (event) => {
       try {
@@ -149,11 +150,64 @@ export function AgentCoworkerPanel({
         if (data.type === "orchestrator:specialist_retry") {
           setOrchestratorStatus(`Retrying ${data.specialist} (attempt ${data.attempt})`);
         }
-        if (data.type === "done") { setCurrentTool(null); setOrchestratorStatus(null); }
+        // EP-ASYNC-COWORKER-001: error event — show in chat
+        if (data.type === "error") {
+          setMessages((prev) => [...prev, {
+            id: `local-error-${Date.now()}`,
+            role: "system" as const,
+            content: data.message ?? "An error occurred during agent execution.",
+            agentId: agent.agentId,
+            routeContext: pathname,
+            createdAt: new Date().toISOString(),
+          }]);
+        }
+        // EP-ASYNC-COWORKER-001: enriched done — fetch messages from DB and apply ephemeral data
+        if (data.type === "done") {
+          setCurrentTool(null);
+          setOrchestratorStatus(null);
+
+          // Apply ephemeral data not stored in DB
+          if (data.providerInfo) {
+            setLastProviderInfo(data.providerInfo);
+          }
+          if (data.formAssistUpdate && activeFormAssistRef.current) {
+            activeFormAssistRef.current.applyFieldUpdates(data.formAssistUpdate);
+          }
+
+          // Refresh messages from DB — authoritative source
+          getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
+            if (snapshot) {
+              setMessages(filterMessages(snapshot.messages));
+            }
+            setIsBusy(false);
+          }).catch(() => {
+            setIsBusy(false);
+          });
+        }
       } catch { /* ignore */ }
     };
+    // SSE connection lost — don't mark as "Not sent", show reconnection attempt
+    es.onerror = () => {
+      // EventSource auto-reconnects. If the server already emitted "done" while
+      // disconnected, the reconnection won't see it. After a few retries, we
+      // check if messages appeared in DB as a fallback.
+      setTimeout(() => {
+        if (!isBusy) return; // Already resolved
+        getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
+          if (!snapshot) return;
+          // If new messages appeared since we started, the agent finished while we were disconnected
+          const latestMsg = snapshot.messages[snapshot.messages.length - 1];
+          if (latestMsg && latestMsg.role === "assistant") {
+            setMessages(filterMessages(snapshot.messages));
+            setIsBusy(false);
+            setCurrentTool(null);
+            setOrchestratorStatus(null);
+          }
+        }).catch(() => {});
+      }, 5000);
+    };
     return () => { es.close(); setCurrentTool(null); setOrchestratorStatus(null); };
-  }, [isPending, threadId]);
+  }, [isBusy, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -163,6 +217,27 @@ export function AgentCoworkerPanel({
     setMessages(filterMessages(initialMessages));
     setClearConfirmOpen(false);
   }, [threadId, initialMessages]);
+
+  // EP-ASYNC-COWORKER-001: When thread changes (user navigated to another page),
+  // reset isBusy and probe the server to check if this thread has an active execution.
+  // This handles the re-entrant scenario: user leaves while COO is working on /workspace,
+  // starts a new task on /employee, then comes back to /workspace — the thinking
+  // indicator resumes if the COO is still executing.
+  useEffect(() => {
+    setIsBusy(false);
+    setCurrentTool(null);
+    setOrchestratorStatus(null);
+    if (!threadId) return;
+    let cancelled = false;
+    fetch(`/api/agent/status?threadId=${threadId}`).then(async (res) => {
+      if (cancelled) return;
+      const body = await res.json().catch(() => null);
+      if (body?.active) {
+        setIsBusy(true); // Resume SSE listener and thinking indicator
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [threadId]);
 
   useEffect(() => {
     setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
@@ -211,14 +286,19 @@ export function AgentCoworkerPanel({
     });
   }
 
+  // EP-ASYNC-COWORKER-001: activeFormAssist ref for SSE done handler
+  const activeFormAssistRef = useRef<ReturnType<typeof getActiveFormAssist>>(null);
+  activeFormAssistRef.current = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
+
   function submitMessage(
     content: string,
     optimisticMessage = createOptimisticUserMessage(content, pathname),
     appendOptimistic = true,
   ) {
     if (!threadId) return;
-    const activeFormAssist = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
-    const formAssistContext = activeFormAssist ? buildAgentFormAssistContext(activeFormAssist) : undefined;
+    const formAssistContext = activeFormAssistRef.current
+      ? buildAgentFormAssistContext(activeFormAssistRef.current)
+      : undefined;
     if (appendOptimistic) {
       setMessages((prev) => [...prev, optimisticMessage]);
     }
@@ -226,71 +306,46 @@ export function AgentCoworkerPanel({
     const attachmentForThisMessage = pendingAttachment;
     if (attachmentForThisMessage) setPendingAttachment(null);
 
-    startTransition(async () => {
-      try {
-        const sendPromise = sendMessage({
-          threadId,
-          content,
-          routeContext: pathname,
-          coworkerMode: devMode || pathname.startsWith("/build") ? "act" as const : coworkerMode,
-          externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
-          elevatedFormFillEnabled: elevatedAssistEnabled,
-          ...(formAssistContext ? { formAssistContext } : {}),
-          ...(activeBuildId ? { buildId: activeBuildId } : {}),
-          ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
-        });
-        // Build Studio interactions involve sandbox operations that can take minutes.
-        // Use a longer timeout for /build routes to avoid premature "Not sent" failures.
-        const timeoutMs = pathname.startsWith("/build") ? 600_000 : 60_000;
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out — try again")), timeoutMs),
-        );
-        const result = await Promise.race([sendPromise, timeout]);
-        if ("error" in result) {
-          console.warn("sendMessage error:", result.error);
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
-            ),
-          );
-          return;
-        }
-        if ("providerInfo" in result) {
-          const info = (result as { providerInfo?: { providerId: string; modelId: string } }).providerInfo;
-          if (info) setLastProviderInfo(info);
-        }
-        const newMessages: AgentRenderableMessage[] = [];
-        if ("systemMessage" in result && result.systemMessage) {
-          newMessages.push(result.systemMessage);
-        }
-        newMessages.push(result.agentMessage);
-        if ("formAssistUpdate" in result && result.formAssistUpdate && activeFormAssist) {
-          activeFormAssist.applyFieldUpdates(result.formAssistUpdate);
-          newMessages.push({
-            id: `local-form-assist-${Date.now()}`,
-            role: "system",
-            content: "Applied the agent's suggested field updates to the active form for your review.",
-            agentId: agent.agentId,
-            routeContext: pathname,
-            createdAt: new Date().toISOString(),
-          });
-        }
-        setMessages((prev) => {
-          const reconciled = prev.flatMap((message) =>
-            message.id === optimisticMessage.id
-              ? [reconcileOptimisticMessage(message, result.userMessage)]
-              : [message],
-          );
-          return [...reconciled, ...newMessages];
-        });
-      } catch (e) {
-        console.error("[submitMessage]", e);
+    setIsBusy(true);
+
+    // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
+    // Returns immediately. Agent execution runs in background on the server.
+    // Completion is signaled via SSE "done" event (handled in useEffect below).
+    fetch("/api/agent/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId,
+        content,
+        routeContext: pathname,
+        coworkerMode: devMode || pathname.startsWith("/build") ? "act" : coworkerMode,
+        externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
+        elevatedFormFillEnabled: elevatedAssistEnabled,
+        ...(formAssistContext ? { formAssistContext } : {}),
+        ...(activeBuildId ? { buildId: activeBuildId } : {}),
+        ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
+      }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Send failed" }));
+        console.warn("[submitMessage] send failed:", body.error);
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
           ),
         );
+        setIsBusy(false);
       }
+      // On success (200), the server is processing in background.
+      // The SSE "done" handler below will handle completion.
+    }).catch((e) => {
+      console.error("[submitMessage] network error:", e);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,
+        ),
+      );
+      setIsBusy(false);
     });
   }
 
@@ -367,7 +422,7 @@ export function AgentCoworkerPanel({
   }
 
   function handleOpenClearConfirm() {
-    if (isClearDisabled(messages, isPending, isClearing, threadId)) return;
+    if (isClearDisabled(messages, isBusy, isClearing, threadId)) return;
     setClearConfirmOpen(true);
   }
 
@@ -399,7 +454,7 @@ export function AgentCoworkerPanel({
         onOpenClearConfirm={handleOpenClearConfirm}
         onCancelClearConfirm={handleCancelClearConfirm}
         onConfirmClear={handleConfirmClear}
-        clearDisabled={isClearDisabled(messages, isPending, isClearing, threadId)}
+        clearDisabled={isClearDisabled(messages, isBusy, isClearing, threadId)}
         clearConfirmOpen={clearConfirmOpen}
         elevatedAssistEnabled={elevatedAssistEnabled}
         onToggleElevatedAssist={handleToggleElevatedAssist}
@@ -440,8 +495,8 @@ export function AgentCoworkerPanel({
           );
         })}
         {/* Setup action buttons — shown when setup overlay is active */}
-        <SetupActionButtonsWrapper isPending={isPending} />
-        {(isPending || isClearing) && (
+        <SetupActionButtonsWrapper isPending={isBusy} />
+        {(isBusy || isClearing) && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
             {/* Pulsing agent avatar */}
             <div
@@ -501,6 +556,32 @@ export function AgentCoworkerPanel({
                   />
                 ))}
               </span>
+              {/* EP-ASYNC-COWORKER-001: Cancel button after 15s */}
+              {!isClearing && thinkingSeconds >= 15 && threadId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetch("/api/agent/cancel", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ threadId }),
+                    }).catch(() => {});
+                  }}
+                  style={{
+                    background: "none",
+                    border: "1px solid color-mix(in srgb, var(--dpf-text) 15%, transparent)",
+                    borderRadius: 999,
+                    color: "var(--dpf-muted)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    lineHeight: 1,
+                    padding: "2px 8px",
+                    marginLeft: 4,
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
             <style>{`
               @keyframes dpf-bounce {
@@ -520,7 +601,7 @@ export function AgentCoworkerPanel({
       <CoworkerHealthStatus />
       <AgentMessageInput
         onSend={handleSend}
-        disabled={isPending || isClearing || !threadId}
+        disabled={isBusy || isClearing || !threadId}
         threadId={threadId}
         pendingFile={pendingAttachment}
         onFileUploaded={setPendingAttachment}

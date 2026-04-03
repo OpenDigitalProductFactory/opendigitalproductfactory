@@ -6,6 +6,7 @@ import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference
 import { executeTool, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
+import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
@@ -297,6 +298,13 @@ export async function runAgenticLoop(params: {
   const startTime = Date.now();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
+    if (agentEventBus.isCancelled(threadId)) {
+      agentEventBus.clearCancel(threadId);
+      console.log(`[agentic-loop] cancelled by user at iteration ${iteration}`);
+      break;
+    }
+
     // Time ceiling — phase-aware duration limits.
     // Weaker models (Haiku, local) need more iterations for the same quality,
     // and different phases have different workloads. Inspired by Claude Code's
