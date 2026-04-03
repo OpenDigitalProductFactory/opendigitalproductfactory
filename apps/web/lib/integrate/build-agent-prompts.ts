@@ -98,12 +98,15 @@ ${PROJECT_CONTEXT}
 
 DO THIS NOW — no questions, no asking for clarification:
 1. Search the codebase for existing functionality. Use search_project_files and read_project_file.
-2. Based on what the user described + what you found, write the design document IMMEDIATELY.
+2. Research externally: Use search_public_web to find best practices, open source precedents, and industry patterns for what the user is building. For example, if building a complaints system, search for "complaint management system best practices" and "open source complaint tracking". Include findings in the design doc's externalResearch field.
+   If search_public_web is NOT in your available tools, tell the user: "I recommend enabling external web access (Platform > AI > External Access) so I can research best practices and open source precedents before designing." Then proceed with what you know.
+3. Based on what the user described + codebase audit + external research, write the design document.
    Call saveBuildEvidence with field "designDoc" and a value containing:
-   { problemStatement, existingFunctionalityAudit, alternativesConsidered, proposedApproach, acceptanceCriteria }
+   { problemStatement, existingFunctionalityAudit, externalResearch, alternativesConsidered, proposedApproach, acceptanceCriteria }
+   externalResearch: what you found from web search — best practices, open source projects, patterns to adopt or avoid.
    Include accessibility criteria automatically: semantic HTML, keyboard navigation, WCAG AA contrast, no color-only indicators.
-3. Call reviewDesignDoc to review it.
-4. Present a PLAIN LANGUAGE summary to the user: "Here's what I'll build — [1-2 sentence summary]. It'll meet our accessibility standards automatically. Sound right?"
+4. Call reviewDesignDoc to review it.
+5. Present a PLAIN LANGUAGE summary to the user: "Here's what I'll build — [1-2 sentence summary]. It'll meet our accessibility standards automatically. Sound right?"
    Do NOT show the design document text unless the user has Dev mode enabled.
 
 RULES:
@@ -114,7 +117,7 @@ RULES:
 - If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
 - If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.
 
-5. After the user approves the design, call suggest_taxonomy_placement.
+6. After the user approves the design, call suggest_taxonomy_placement.
    This analyzes the brief and suggests where the feature belongs in the portfolio taxonomy.
    - If high confidence: state the recommendation and ask "Sound right?"
    - If multiple candidates: present the top 2-3 options and ask which fits
@@ -384,6 +387,7 @@ export type BuildContext = {
   plan: Record<string, unknown> | null;
   contributionMode?: string;
   phaseHandoffs?: PhaseHandoffSummary[];
+  taxonomyContext?: { path: string; siblingProducts: string[] };
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -395,7 +399,12 @@ export function getBuildContextSection(ctx: BuildContext): string {
     `Phase: ${ctx.phase}`,
   ];
 
-  if (ctx.portfolioId) {
+  if (ctx.taxonomyContext) {
+    lines.push(`Portfolio Taxonomy: ${ctx.taxonomyContext.path}`);
+    if (ctx.taxonomyContext.siblingProducts.length > 0) {
+      lines.push(`Similar products in this category: ${ctx.taxonomyContext.siblingProducts.join(", ")}`);
+    }
+  } else if (ctx.portfolioId) {
     lines.push(`Portfolio: ${ctx.portfolioId}`);
   }
 

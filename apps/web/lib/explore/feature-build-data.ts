@@ -210,6 +210,47 @@ export async function getFeatureBuildForContext(
   });
   const contributionMode = devConfig?.contributionMode ?? "selective";
 
+  // Resolve taxonomy path and sibling products for richer context
+  let taxonomyContext: { path: string; siblingProducts: string[] } | undefined;
+  const taxonomyAttr = (await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { taxonomyAttribution: true },
+  }))?.taxonomyAttribution as { confirmedNodeId?: string } | null;
+
+  if (taxonomyAttr?.confirmedNodeId) {
+    // Walk the taxonomy tree upward to build the full path
+    const pathParts: string[] = [];
+    let currentNodeId: string | null = taxonomyAttr.confirmedNodeId;
+    while (currentNodeId) {
+      const node: { name: string; parentId: string | null } | null = await prisma.taxonomyNode.findUnique({
+        where: { id: currentNodeId },
+        select: { name: true, parentId: true },
+      });
+      if (!node) break;
+      pathParts.unshift(node.name);
+      currentNodeId = node.parentId;
+    }
+    // Find sibling products in the same taxonomy node
+    const siblings = await prisma.digitalProduct.findMany({
+      where: { taxonomyNodeId: taxonomyAttr.confirmedNodeId },
+      select: { name: true },
+      take: 10,
+    });
+    taxonomyContext = {
+      path: pathParts.join(" > "),
+      siblingProducts: siblings.map((s) => s.name),
+    };
+  } else if (r.portfolioId) {
+    // Fallback: resolve portfolio name at minimum
+    const portfolio = await prisma.portfolio.findUnique({
+      where: { slug: r.portfolioId },
+      select: { name: true },
+    });
+    if (portfolio) {
+      taxonomyContext = { path: portfolio.name, siblingProducts: [] };
+    }
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -219,6 +260,7 @@ export async function getFeatureBuildForContext(
     portfolioId: r.portfolioId,
     contributionMode,
     phaseHandoffs: r.phaseHandoffs,
+    taxonomyContext,
   };
 }
 
