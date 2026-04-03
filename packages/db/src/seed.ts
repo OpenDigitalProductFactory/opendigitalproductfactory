@@ -734,7 +734,7 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "customer-advisor", slugId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis", valueStream: "consume", sensitivity: "confidential" },
     { agentId: "ops-coordinator", slugId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal", valueStream: "integrate", sensitivity: "internal" },
     { agentId: "platform-engineer", slugId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization", valueStream: "operate", sensitivity: "confidential" },
-    { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", preferredProviderId: "anthropic-sub", valueStream: "integrate", sensitivity: "internal" },
+    { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", valueStream: "integrate", sensitivity: "internal" },
     { agentId: "data-architect", slugId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.", valueStream: "integrate", sensitivity: "internal" },
     { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "restricted" },
     { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
@@ -752,7 +752,6 @@ async function seedCoworkerAgents(): Promise<void> {
         description: rest.description,
         valueStream: rest.valueStream,
         sensitivity: rest.sensitivity,
-        ...("preferredProviderId" in rest ? { preferredProviderId: rest.preferredProviderId } : {}),
       },
     });
   }

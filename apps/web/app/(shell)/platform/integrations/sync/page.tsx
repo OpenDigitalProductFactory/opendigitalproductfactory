@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 import { McpSyncButton } from "@/components/platform/McpSyncButton";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { getScheduledJobs } from "@/lib/ai-provider-data";
+import { runInfraPruneIfDue } from "@/lib/actions/infra-prune";
 
 export default async function IntegrationsSyncPage() {
   const session = await auth();
@@ -17,6 +18,9 @@ export default async function IntegrationsSyncPage() {
       "manage_provider_connections"
     );
 
+  // Ensure the infra prune job exists and kick it off if due
+  await runInfraPruneIfDue();
+
   const [recentSyncs, allJobs] = await Promise.all([
     prisma.mcpCatalogSync.findMany({
       orderBy: { startedAt: "desc" },
@@ -25,7 +29,8 @@ export default async function IntegrationsSyncPage() {
     getScheduledJobs(),
   ]);
 
-  const syncJob = allJobs.filter((j) => j.jobId === "mcp-catalog-sync");
+  const syncJob      = allJobs.filter((j) => j.jobId === "mcp-catalog-sync");
+  const infraPruneJob = allJobs.filter((j) => j.jobId === "infra-ci-prune");
   const isRunning = recentSyncs.some((s) => s.status === "running");
   const lastSync = recentSyncs[0] ?? null;
 
@@ -76,6 +81,16 @@ export default async function IntegrationsSyncPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Schedule</h2>
         <ScheduledJobsTable jobs={syncJob} canWrite={canWrite} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Infrastructure Maintenance</h2>
+        <p className="text-muted-foreground text-sm">
+          Prunes InfraCI nodes no longer seen by discovery.
+          Nodes unseen for 30+ days receive a <em>decommissionedAt</em> timestamp (status unchanged);
+          after 90 days they are hard-deleted from the graph.
+        </p>
+        <ScheduledJobsTable jobs={infraPruneJob} canWrite={canWrite} />
       </section>
 
       <section className="space-y-2">
