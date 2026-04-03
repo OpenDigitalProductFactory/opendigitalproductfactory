@@ -2,7 +2,8 @@ export type DiscoverySourceKind =
   | "dpf_bootstrap"
   | "host"
   | "docker"
-  | "kubernetes";
+  | "kubernetes"
+  | "prometheus";
 
 export type DiscoveredItemInput = {
   sourceKind?: DiscoverySourceKind;
@@ -50,6 +51,6 @@ export type CollectorContext = {
   sourceKind: DiscoverySourceKind;
 };
 
-export type CollectorName = "host" | "docker" | "kubernetes";
+export type CollectorName = "host" | "docker" | "kubernetes" | "prometheus";
 
 export type DiscoveryCollector = (ctx?: CollectorContext) => Promise<CollectorOutput>;

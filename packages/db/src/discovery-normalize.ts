@@ -37,7 +37,7 @@ export type NormalizedInventoryEntity = {
   discoveredKey: string;
   portfolioSlug?: string | null;
   taxonomyNodeId?: string | null;
-  attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale";
+  attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale" | "dismissed";
   attributionMethod?: "rule" | "heuristic";
   attributionConfidence?: number;
   attributionEvidence?: Record<string, unknown>;
