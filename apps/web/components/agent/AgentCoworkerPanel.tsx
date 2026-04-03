@@ -117,24 +117,42 @@ export function AgentCoworkerPanel({
   // Elapsed time counter for thinking indicator
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
+  const [orchestratorStatus, setOrchestratorStatus] = useState<string | null>(null);
   useEffect(() => {
     if (!isPending) { setThinkingSeconds(0); return; }
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [isPending]);
 
-  // SSE for tool-level progress
+  // SSE for tool-level and orchestrator progress
   useEffect(() => {
-    if (!isPending || !threadId) { setCurrentTool(null); return; }
+    if (!isPending || !threadId) { setCurrentTool(null); setOrchestratorStatus(null); return; }
     const es = new EventSource(`/api/agent/stream?threadId=${threadId}`);
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "tool:start") setCurrentTool(data.tool);
-        if (data.type === "tool:complete" || data.type === "done") setCurrentTool(null);
+        if (data.type === "tool:complete") setCurrentTool(null);
+        // Orchestrator progress — show specialist status to user
+        if (data.type === "orchestrator:build_started") {
+          setOrchestratorStatus(`Starting build: ${data.taskCount} tasks across ${data.specialists.length} specialists`);
+        }
+        if (data.type === "orchestrator:task_dispatched") {
+          setOrchestratorStatus(`${data.specialist} working on: ${data.taskTitle}`);
+        }
+        if (data.type === "orchestrator:task_complete") {
+          setOrchestratorStatus(`${data.specialist} complete`);
+        }
+        if (data.type === "orchestrator:phase_summary") {
+          setOrchestratorStatus(`${data.completed}/${data.total} tasks done`);
+        }
+        if (data.type === "orchestrator:specialist_retry") {
+          setOrchestratorStatus(`Retrying ${data.specialist} (attempt ${data.attempt})`);
+        }
+        if (data.type === "done") { setCurrentTool(null); setOrchestratorStatus(null); }
       } catch { /* ignore */ }
     };
-    return () => { es.close(); setCurrentTool(null); };
+    return () => { es.close(); setCurrentTool(null); setOrchestratorStatus(null); };
   }, [isPending, threadId]);
 
   useEffect(() => {
@@ -458,13 +476,15 @@ export function AgentCoworkerPanel({
               <span style={{ fontSize: 11 }}>
                 {isClearing
                   ? "Clearing conversation"
-                  : currentTool
-                    ? `${agent.agentName} is using ${currentTool.replace(/_/g, " ")}...`
-                    : thinkingSeconds < 5
-                      ? `${agent.agentName} is thinking`
-                      : thinkingSeconds < 15
-                        ? `${agent.agentName} is working on it`
-                        : `${agent.agentName} is still working (${thinkingSeconds}s)`}
+                  : orchestratorStatus
+                    ? orchestratorStatus
+                    : currentTool
+                      ? `${agent.agentName} is using ${currentTool.replace(/_/g, " ")}...`
+                      : thinkingSeconds < 5
+                        ? `${agent.agentName} is thinking`
+                        : thinkingSeconds < 15
+                          ? `${agent.agentName} is working on it`
+                          : `${agent.agentName} is still working (${thinkingSeconds}s)`}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
