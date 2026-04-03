@@ -2017,6 +2017,66 @@ export async function executeTool(
       if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
         return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
       }
+
+      // ── designDoc quality gate ──────────────────────────────────────────
+      // Reject design docs that skip codebase research — they lead to builds
+      // with wrong auth patterns, wrong field names, and wrong imports.
+      if (field === "designDoc") {
+        const doc = params.value as Record<string, unknown> | null;
+        const audit = String(doc?.existingFunctionalityAudit ?? "");
+        if (!audit || audit.length < 20) {
+          return {
+            success: false,
+            error: "Design doc missing codebase research.",
+            message: "REJECTED: existingFunctionalityAudit is empty or too short. You MUST research the codebase BEFORE saving the design doc. Use search_project_files, read_project_file, and describe_model to understand existing patterns (auth, routes, models), then include specific findings in existingFunctionalityAudit.",
+          };
+        }
+      }
+
+      // ── buildPlan format validation ──────────────────────────────────────
+      // The build orchestrator reads buildPlan.fileStructure and buildPlan.tasks
+      // to dispatch specialist agents. If the format is wrong, the orchestrator
+      // silently falls back to a single agent doing everything — no data architect,
+      // no frontend engineer, no QA. Reject malformed plans early.
+      if (field === "buildPlan") {
+        const plan = params.value as Record<string, unknown> | null;
+        const fileStructure = plan?.fileStructure;
+        const tasks = plan?.tasks;
+
+        if (!plan || typeof plan !== "object") {
+          return { success: false, error: "buildPlan must be a JSON object.", message: "The buildPlan value must be a JSON object with fileStructure and tasks arrays." };
+        }
+
+        if (!Array.isArray(fileStructure) || fileStructure.length === 0) {
+          const hint = plan ? `Got keys: ${Object.keys(plan).join(", ")}` : "Got null";
+          return {
+            success: false,
+            error: "buildPlan missing fileStructure array.",
+            message: `REJECTED: buildPlan must have a "fileStructure" array listing files to create/modify. ${hint}. Required format: { "fileStructure": [{ "path": "...", "action": "create"|"modify", "purpose": "..." }], "tasks": [{ "title": "...", "testFirst": "...", "implement": "...", "verify": "..." }] }`,
+          };
+        }
+
+        if (!Array.isArray(tasks) || tasks.length === 0) {
+          return {
+            success: false,
+            error: "buildPlan missing tasks array.",
+            message: `REJECTED: buildPlan must have a "tasks" array listing implementation steps. Required format: { "fileStructure": [...], "tasks": [{ "title": "...", "testFirst": "...", "implement": "...", "verify": "..." }] }`,
+          };
+        }
+
+        // Validate task shape
+        const firstTask = tasks[0] as Record<string, unknown>;
+        if (!firstTask?.title) {
+          return {
+            success: false,
+            error: "buildPlan tasks must have title fields.",
+            message: `REJECTED: Each task needs at minimum a "title" field. Got: ${JSON.stringify(Object.keys(firstTask ?? {}))}.`,
+          };
+        }
+
+        console.log(`[saveBuildEvidence] buildPlan validated: ${fileStructure.length} files, ${tasks.length} tasks`);
+      }
+
       // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
       // The AI often omits it, causing the gate to treat null as false.
       let fieldValue = params.value as Record<string, unknown>;
