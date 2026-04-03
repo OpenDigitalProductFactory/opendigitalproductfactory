@@ -39,10 +39,22 @@ function classifyContainer(image: string): { itemType: string; serviceRole: stri
   return { itemType: "container", serviceRole: null, monitors: [] };
 }
 
-type DockerDeps = {
+export type DockerHostInfo = {
+  operatingSystem?: string;
+  osType?: string;
+  architecture?: string;
+  kernelVersion?: string;
+  cpus?: number;
+  memTotal?: number;
+  serverVersion?: string;
+  name?: string;
+};
+
+export type DockerDeps = {
   socketPaths: string[];
   existsSync: (path: string) => boolean;
   listContainers: () => Promise<Array<{ id: string; name: string; image: string }>>;
+  getDockerInfo: () => DockerHostInfo | null;
 };
 
 async function defaultListContainers(): Promise<Array<{ id: string; name: string; image: string }>> {
@@ -67,10 +79,35 @@ async function defaultListContainers(): Promise<Array<{ id: string; name: string
     }));
 }
 
+function defaultGetDockerInfo(): DockerHostInfo | null {
+  const result = spawnSync(
+    "docker",
+    ["info", "--format", "{{json .}}"],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0 || !result.stdout.trim()) return null;
+  try {
+    const info = JSON.parse(result.stdout) as Record<string, unknown>;
+    return {
+      operatingSystem: info.OperatingSystem as string | undefined,
+      osType: info.OSType as string | undefined,
+      architecture: info.Architecture as string | undefined,
+      kernelVersion: info.KernelVersion as string | undefined,
+      cpus: info.NCPU as number | undefined,
+      memTotal: info.MemTotal as number | undefined,
+      serverVersion: info.ServerVersion as string | undefined,
+      name: info.Name as string | undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const defaultDockerDeps: DockerDeps = {
   socketPaths: DOCKER_SOCKET_PATHS,
   existsSync: fs.existsSync,
   listContainers: defaultListContainers,
+  getDockerInfo: defaultGetDockerInfo,
 };
 
 export async function collectDockerDiscovery(
@@ -102,6 +139,43 @@ export async function collectDockerDiscovery(
   ];
 
   const relationships: CollectorOutput["relationships"] = [];
+
+  // ── Docker Host System (the machine running Docker) ─────────────
+  const hostInfo = deps.getDockerInfo();
+  if (hostInfo) {
+    const hostRef = `docker-host:${hostInfo.name ?? "localhost"}`;
+    items.push({
+      sourceKind: source,
+      itemType: "docker_host",
+      name: hostInfo.operatingSystem
+        ? `${hostInfo.name ?? "Docker Host"} (${hostInfo.operatingSystem})`
+        : (hostInfo.name ?? "Docker Host"),
+      externalRef: hostRef,
+      naturalKey: `docker-host:${hostInfo.name ?? "localhost"}`,
+      confidence: 0.95,
+      attributes: {
+        operatingSystem: hostInfo.operatingSystem,
+        osType: hostInfo.osType,
+        architecture: hostInfo.architecture,
+        kernelVersion: hostInfo.kernelVersion,
+        cpus: hostInfo.cpus,
+        memTotalBytes: hostInfo.memTotal,
+        dockerVersion: hostInfo.serverVersion,
+        osiLayer: 3,
+        osiLayerName: "network",
+      },
+    });
+
+    // Docker host HOSTS the Docker runtime
+    relationships.push({
+      sourceKind: source,
+      relationshipType: "HOSTS",
+      fromExternalRef: hostRef,
+      toExternalRef: runtimeRef,
+      confidence: 0.95,
+      attributes: { mechanism: "docker_desktop" },
+    });
+  }
   const software: CollectorOutput["software"] = [];
 
   for (const container of containers) {

@@ -67,6 +67,16 @@ groups:
         annotations:
           summary: "Host disk usage above 90% -- immediate attention required"
 
+      # ─── Network Topology ──────────────────────────────────
+      - alert: HostNetworkInterfaceDown
+        expr: node_network_up{device!~"lo|veth.*|br-.*|docker.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Network interface {{ $labels.device }} is down"
+          description: "Physical or virtual network interface {{ $labels.device }} has been down for over 1 minute. Impact may propagate to services on this subnet."
+
   - name: dpf_databases
     rules:
       - alert: PostgresConnectionSaturation

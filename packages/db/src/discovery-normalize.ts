@@ -105,6 +105,8 @@ function mapEntityType(itemType: string): string {
   if (itemType === "host") return "host";
   if (itemType.endsWith("_runtime")) return "runtime";
   if (itemType.includes("container")) return "container";
+  // Network topology types — passthrough (already canonical)
+  if (itemType === "network_interface" || itemType === "subnet" || itemType === "gateway" || itemType === "docker_host") return itemType;
   return itemType;
 }
 
@@ -114,7 +116,10 @@ function isFoundationalInfrastructure(itemType: string): boolean {
     || itemType.includes("database")
     || itemType.includes("network")
     || itemType.includes("storage")
-    || itemType.includes("monitoring");
+    || itemType.includes("monitoring")
+    || itemType === "subnet"
+    || itemType === "gateway"
+    || itemType === "docker_host";
 }
 
 function buildFallbackAttribution(item: DiscoveredItemInput): DerivedAttribution {

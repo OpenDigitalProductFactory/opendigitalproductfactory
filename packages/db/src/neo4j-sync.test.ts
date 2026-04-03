@@ -6,7 +6,7 @@ vi.mock("./neo4j", () => ({
 }));
 
 import { runCypher } from "./neo4j";
-import { syncInfraCI } from "./neo4j-sync";
+import { syncInfraCI, syncInventoryRelationship } from "./neo4j-sync";
 
 const mockRunCypher = vi.mocked(runCypher);
 
@@ -89,5 +89,85 @@ describe("syncInfraCI", () => {
     expect(mockRunCypher).toHaveBeenCalledTimes(2);
     const edgeCypher = mockRunCypher.mock.calls[1]![0] as string;
     expect(edgeCypher).toContain("BELONGS_TO");
+  });
+});
+
+describe("syncInventoryRelationship", () => {
+  beforeEach(() => {
+    mockRunCypher.mockClear();
+  });
+
+  it("creates typed HOSTS edge for network relationship types", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "docker-host:myhost",
+      toEntityKey: "docker_runtime:/var/run/docker.sock",
+      relationshipType: "HOSTS",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain(":HOSTS");
+    expect(cypher).not.toContain("DEPENDS_ON");
+  });
+
+  it("creates typed MONITORS edge", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "prom-target:prometheus:localhost:9090",
+      toEntityKey: "prom-target:portal:portal:3000",
+      relationshipType: "monitors",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain(":MONITORS");
+    expect(cypher).not.toContain("DEPENDS_ON");
+  });
+
+  it("creates typed MEMBER_OF edge for subnet relationships", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "net-iface:eth0:10.0.0.5",
+      toEntityKey: "subnet:10.0.0.0/24",
+      relationshipType: "MEMBER_OF",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain(":MEMBER_OF");
+  });
+
+  it("creates typed RUNS_ON edge", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "container:abc123",
+      toEntityKey: "host:myhost",
+      relationshipType: "RUNS_ON",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain(":RUNS_ON");
+  });
+
+  it("falls back to DEPENDS_ON for unknown relationship types", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "app:portal",
+      toEntityKey: "db:postgres",
+      relationshipType: "uses",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain("DEPENDS_ON");
+  });
+
+  it("handles case-insensitive relationship type matching", async () => {
+    await syncInventoryRelationship({
+      fromEntityKey: "docker-host:myhost",
+      toEntityKey: "docker_runtime:sock",
+      relationshipType: "hosts",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    expect(cypher).toContain(":HOSTS");
   });
 });

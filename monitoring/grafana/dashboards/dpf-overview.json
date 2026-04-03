@@ -242,6 +242,66 @@
         "dashboardAlerts": false,
         "stateFilter": { "firing": true, "pending": true, "noData": false, "normal": false, "error": true }
       }
+    },
+    {
+      "title": "Discovered Scrape Targets",
+      "description": "All Prometheus scrape targets by job and health status. These feed the infrastructure discovery pipeline.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+      "targets": [
+        {
+          "expr": "up",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "mappings", "value": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true },
+            "renameByName": { "job": "Job", "instance": "Instance", "Value": "Status" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Host Network I/O",
+      "description": "Network traffic on the Docker host - bytes received and transmitted across all interfaces.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\"}[5m])",
+          "legendFormat": "{{ device }} rx",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\"}[5m])",
+          "legendFormat": "{{ device }} tx",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,

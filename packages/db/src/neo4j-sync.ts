@@ -4,6 +4,7 @@
 // allowed to bubble up to the caller. Postgres is always the authority.
 
 import { runCypher } from "./neo4j";
+import { NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
 
 /** Upsert a DigitalProduct node and wire its Portfolio + TaxonomyNode edges. */
 export async function syncDigitalProduct(dp: {
@@ -112,6 +113,13 @@ export interface InfraCIExtendedProps {
   gpu?: string;
   vramGb?: number | null;
   modelCount?: number;
+  // OSI layer context (Phase 1 — multi-layer topology graph)
+  osiLayer?: number;
+  osiLayerName?: string;
+  networkAddress?: string;
+  networkMask?: string;
+  protocolFamily?: string;
+  parentCiId?: string;
 }
 
 /** Upsert an InfraCI node. */
@@ -154,6 +162,30 @@ export async function syncInfraCI(
     if (extendedProps.modelCount !== undefined) {
       setClauses.push("ci.modelCount = $modelCount");
       params.modelCount = extendedProps.modelCount;
+    }
+    if (extendedProps.osiLayer !== undefined) {
+      setClauses.push("ci.osiLayer = $osiLayer");
+      params.osiLayer = extendedProps.osiLayer;
+    }
+    if (extendedProps.osiLayerName !== undefined) {
+      setClauses.push("ci.osiLayerName = $osiLayerName");
+      params.osiLayerName = extendedProps.osiLayerName;
+    }
+    if (extendedProps.networkAddress !== undefined) {
+      setClauses.push("ci.networkAddress = $networkAddress");
+      params.networkAddress = extendedProps.networkAddress;
+    }
+    if (extendedProps.networkMask !== undefined) {
+      setClauses.push("ci.networkMask = $networkMask");
+      params.networkMask = extendedProps.networkMask;
+    }
+    if (extendedProps.protocolFamily !== undefined) {
+      setClauses.push("ci.protocolFamily = $protocolFamily");
+      params.protocolFamily = extendedProps.protocolFamily;
+    }
+    if (extendedProps.parentCiId !== undefined) {
+      setClauses.push("ci.parentCiId = $parentCiId");
+      params.parentCiId = extendedProps.parentCiId;
     }
   }
 
@@ -204,12 +236,38 @@ export async function syncDependsOn(dep: {
  *  Note: infraCiKey is stored as a scalar property on the node — there is
  *  no EA_REPRESENTS bridge edge to InfraCI (the key is denormalised for
  *  direct lookup in queries without requiring an extra hop). */
+/** Default OSI layer for known entity types. */
+const DEFAULT_OSI_LAYER: Record<string, number> = {
+  host: 3,
+  container: 7,
+  runtime: 7,
+  database: 7,
+  service: 7,
+  network: 3,
+  "ai-inference": 7,
+  network_interface: 3,
+  subnet: 3,
+  gateway: 3,
+  docker_host: 3,
+};
+
+const OSI_LAYER_NAMES: Record<number, string> = {
+  1: "physical",
+  2: "data_link",
+  3: "network",
+  4: "transport",
+  5: "session",
+  6: "presentation",
+  7: "application",
+};
+
 export async function syncInventoryEntityAsInfraCI(entity: {
   entityKey: string;
   name: string;
   entityType: string;
   status: string;
   portfolioSlug?: string | null;
+  properties?: Record<string, unknown> | null;
 }): Promise<void> {
   const ciType =
     entity.entityType === "host" ? "server"
@@ -221,20 +279,57 @@ export async function syncInventoryEntityAsInfraCI(entity: {
     : entity.status === "inactive" ? "offline"
     : "operational";
 
-  await syncInfraCI({
-    ciId: entity.entityKey,
-    name: entity.name,
-    ciType,
-    status: operationalStatus,
-    portfolioSlug: entity.portfolioSlug ?? null,
-  });
+  // Resolve OSI layer: explicit from entity properties, else default by type
+  const props = entity.properties ?? {};
+  const osiLayer = (props.osiLayer as number | undefined)
+    ?? DEFAULT_OSI_LAYER[entity.entityType];
+  const osiLayerName = (props.osiLayerName as string | undefined)
+    ?? (osiLayer != null ? OSI_LAYER_NAMES[osiLayer] : undefined);
+
+  const extendedProps: InfraCIExtendedProps = {};
+  if (osiLayer != null) extendedProps.osiLayer = osiLayer;
+  if (osiLayerName != null) extendedProps.osiLayerName = osiLayerName;
+  if (props.networkAddress != null) extendedProps.networkAddress = props.networkAddress as string;
+  if (props.networkMask != null) extendedProps.networkMask = props.networkMask as string;
+  if (props.protocolFamily != null) extendedProps.protocolFamily = props.protocolFamily as string;
+  if (props.parentCiId != null) extendedProps.parentCiId = props.parentCiId as string;
+
+  await syncInfraCI(
+    {
+      ciId: entity.entityKey,
+      name: entity.name,
+      ciType,
+      status: operationalStatus,
+      portfolioSlug: entity.portfolioSlug ?? null,
+    },
+    Object.keys(extendedProps).length > 0 ? extendedProps : undefined,
+  );
 }
+
+/** Relationship types that get their own typed Neo4j edge instead of DEPENDS_ON. */
+const TYPED_EDGE_RELATIONSHIP_TYPES = new Set([
+  ...NETWORK_RELATIONSHIP_TYPES.map((t) => t.toUpperCase()),
+  "MONITORS",
+]);
 
 export async function syncInventoryRelationship(rel: {
   fromEntityKey: string;
   toEntityKey: string;
   relationshipType: string;
 }): Promise<void> {
+  const neoType = rel.relationshipType.toUpperCase();
+
+  if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
+    await runCypher(
+      `MATCH (from:InfraCI {ciId: $fromId})
+       MATCH (to:InfraCI {ciId: $toId})
+       MERGE (from)-[r:${neoType}]->(to)
+       SET r.syncedAt = datetime()`,
+      { fromId: rel.fromEntityKey, toId: rel.toEntityKey },
+    );
+    return;
+  }
+
   await syncDependsOn({
     fromLabel: "InfraCI",
     fromId: rel.fromEntityKey,
