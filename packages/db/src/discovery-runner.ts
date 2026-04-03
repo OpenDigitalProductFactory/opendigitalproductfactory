@@ -2,6 +2,7 @@ import {
   collectDockerDiscovery,
   collectHostDiscovery,
   collectKubernetesDiscovery,
+  collectNetworkDiscovery,
   collectPrometheusDiscovery,
 } from "./discovery-collectors";
 import {
@@ -42,6 +43,7 @@ export async function runLocalDiscoveryCollectors(
     collectDockerDiscovery,
     collectKubernetesDiscovery,
     collectPrometheusDiscovery,
+    collectNetworkDiscovery,
   ],
 ): Promise<CollectorOutput> {
   const outputs = await Promise.all(
