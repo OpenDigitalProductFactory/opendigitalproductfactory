@@ -432,6 +432,12 @@ export async function persistBootstrapDiscoveryRun(
         ? entityIdsByEntityKey.get(issue.inventoryEntityKey)
         : undefined;
 
+      const resolvedTaxonomyNodeId = issue.inventoryEntityKey
+        ? normalized.inventoryEntities.find(
+            (entity) => entity.entityKey === issue.inventoryEntityKey,
+          )?.taxonomyNodeId ?? undefined
+        : undefined;
+
       await tx.portfolioQualityIssue.upsert({
         where: { issueKey: issue.issueKey },
         create: {
@@ -440,34 +446,16 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          taxonomyNodeId: issue.inventoryEntityKey
-            ? (() => {
-                const matchedEntity = normalized.inventoryEntities.find(
-                  (entity) => entity.entityKey === issue.inventoryEntityKey,
-                );
-                return matchedEntity?.taxonomyNodeId ?? null;
-              })()
-            : undefined,
-          inventoryEntity: inventoryEntityId
-            ? { connect: { id: inventoryEntityId } }
-            : undefined,
+          ...(resolvedTaxonomyNodeId ? { taxonomyNodeId: resolvedTaxonomyNodeId } : {}),
+          ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
         },
         update: {
           issueType: issue.issueType,
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          taxonomyNodeId: issue.inventoryEntityKey
-            ? (() => {
-                const matchedEntity = normalized.inventoryEntities.find(
-                  (entity) => entity.entityKey === issue.inventoryEntityKey,
-                );
-                return matchedEntity?.taxonomyNodeId ?? null;
-              })()
-            : undefined,
-          inventoryEntity: inventoryEntityId
-            ? { connect: { id: inventoryEntityId } }
-            : undefined,
+          ...(resolvedTaxonomyNodeId ? { taxonomyNodeId: resolvedTaxonomyNodeId } : {}),
+          ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
         },
       });
 
