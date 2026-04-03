@@ -725,6 +725,10 @@ export async function sendMessage(input: {
     const plan = activeBuild?.plan as Record<string, unknown> | null;
     const buildPlan = plan?.buildPlan as import("@/lib/explore/feature-build-types").BuildPlanDoc | undefined;
 
+    if (activeBuild && !buildPlan?.tasks?.length) {
+      console.warn(`[orchestrator] SKIPPED for ${activeBuild.buildId}: buildPlan missing "tasks" array. Plan keys: ${buildPlan ? Object.keys(buildPlan).join(", ") : "null"}. Falling back to single-agent mode — no specialist dispatch.`);
+    }
+
     if (activeBuild && buildPlan?.tasks?.length) {
       const { runBuildOrchestrator } = await import("@/lib/integrate/build-orchestrator");
       const { agentEventBus } = await import("@/lib/agent-event-bus");

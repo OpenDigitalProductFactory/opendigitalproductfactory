@@ -94,6 +94,7 @@ services:
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     depends_on:
       portal-init:
         condition: service_completed_successfully

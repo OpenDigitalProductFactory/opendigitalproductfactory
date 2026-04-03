@@ -144,3 +144,100 @@ export async function hasGitBackupCredential(): Promise<boolean> {
   });
   return cred?.status === "active";
 }
+
+/**
+ * Retrieve the stored GitHub token (decrypted). Used by the contribution
+ * pipeline when process.env.GITHUB_TOKEN is not set.
+ * Returns null if no credential is stored or decryption fails.
+ */
+export async function getStoredGitHubToken(): Promise<string | null> {
+  const cred = await prisma.credentialEntry.findUnique({
+    where: { providerId: "git-backup" },
+    select: { secretRef: true, status: true },
+  });
+  if (!cred || cred.status !== "active" || !cred.secretRef) return null;
+
+  try {
+    const { decryptSecret } = await import("@/lib/credential-crypto");
+    return decryptSecret(cred.secretRef);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate a GitHub token by making a test API call.
+ * Returns the authenticated username on success, or an error message.
+ */
+export async function validateGitHubToken(token: string): Promise<{
+  valid: boolean;
+  username?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) return { valid: false, error: "Token is invalid or expired." };
+      return { valid: false, error: `GitHub returned status ${response.status}.` };
+    }
+
+    const data = await response.json() as { login?: string };
+    return { valid: true, username: data.login ?? "unknown" };
+  } catch (err) {
+    return { valid: false, error: "Could not reach GitHub. Check your internet connection." };
+  }
+}
+
+/**
+ * Save the GitHub token and optionally validate it first.
+ * Also sets the upstream remote URL to the platform repo.
+ */
+export async function saveContributionSetup(input: {
+  token: string;
+  mode: ContributionMode;
+}): Promise<{ success: boolean; username?: string; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { success: false, error: "Not authenticated" };
+
+  // Validate token first
+  const validation = await validateGitHubToken(input.token);
+  if (!validation.valid) return { success: false, error: validation.error };
+
+  // Save contribution mode
+  await prisma.platformDevConfig.upsert({
+    where: { id: "singleton" },
+    update: {
+      contributionMode: input.mode,
+      configuredAt: new Date(),
+      configuredById: userId,
+      upstreamRemoteUrl: "https://github.com/markdbodman/opendigitalproductfactory.git",
+    },
+    create: {
+      id: "singleton",
+      contributionMode: input.mode,
+      configuredAt: new Date(),
+      configuredById: userId,
+      upstreamRemoteUrl: "https://github.com/markdbodman/opendigitalproductfactory.git",
+    },
+  });
+
+  // Encrypt and save the token
+  const { encryptSecret } = await import("@/lib/credential-crypto");
+  const encrypted = encryptSecret(input.token);
+  await prisma.credentialEntry.upsert({
+    where: { providerId: "git-backup" },
+    create: { providerId: "git-backup", secretRef: encrypted, status: "active" },
+    update: { secretRef: encrypted, status: "active" },
+  });
+
+  revalidatePath("/admin/platform-development");
+  return { success: true, username: validation.username };
+}

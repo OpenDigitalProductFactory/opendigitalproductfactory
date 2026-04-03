@@ -138,8 +138,23 @@ This briefing will be injected into the plan agent's context so it understands W
 ${PROJECT_CONTEXT}
 
 DO THIS NOW:
-1. Call saveBuildEvidence with field "buildPlan" containing:
-   { fileStructure: [{path, action, purpose}], tasks: [{title, testFirst, implement, verify}] }
+1. Call saveBuildEvidence with field "buildPlan" containing EXACTLY this JSON structure:
+   {
+     "fileStructure": [
+       { "path": "packages/db/prisma/schema.prisma", "action": "modify", "purpose": "Add Complaint model" },
+       { "path": "apps/web/app/api/complaints/route.ts", "action": "create", "purpose": "REST endpoints" },
+       ...
+     ],
+     "tasks": [
+       { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "edit schema.prisma", "verify": "prisma migrate" },
+       { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "write route handlers", "verify": "tsc --noEmit" },
+       ...
+     ]
+   }
+   CRITICAL: The value MUST have "fileStructure" (array) and "tasks" (array) as top-level keys.
+   Do NOT wrap them in "phases", "plan", or any other nesting. The build orchestrator
+   reads these arrays directly to dispatch specialist agents (data architect, software engineer, etc.).
+   If the format is wrong, the build falls back to a single agent doing everything — no specialists.
 2. Call reviewBuildPlan to review it.
 3. Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] components, [N] database tables, [N] tests."
    Do NOT show the full plan unless Dev mode is enabled.
@@ -307,7 +322,30 @@ STEP 2: Call register_digital_product_from_build.
 STEP 3: Call create_build_epic to set up backlog tracking.
   Do NOT skip this step. Call it immediately after step 2 succeeds.
 
-STEP 4: Check the deployment window and deploy.
+STEP 4 — contribution (depends on the Platform contribution mode injected below):
+  IMPORTANT: This step runs BEFORE deployment because execute_promotion restarts
+  the portal container, which would end this conversation. Contribution must happen
+  while the sandbox is still available.
+
+If mode is "fork_only":
+  - Do NOT call assess_contribution or contribute_to_hive.
+  - Continue to STEP 5 (deployment).
+
+If mode is "selective":
+  - Call assess_contribution.
+  - Present the full assessment and recommendation to the user.
+  - Offer [Keep local] and [Contribute] — wait for user choice.
+  - Call contribute_to_hive only if user explicitly chooses to contribute.
+  - Continue to STEP 5 (deployment).
+
+If mode is "contribute_all":
+  - Call assess_contribution.
+  - Present the assessment — indicate contribution is the default.
+  - Offer [Contribute] as primary and [Keep this one local] as secondary.
+  - Call contribute_to_hive unless user explicitly chooses to keep local.
+  - Continue to STEP 5 (deployment).
+
+STEP 5: Check the deployment window and deploy.
   a) Call check_deployment_windows with change_type "normal" and risk_level "low".
   b) If the window is OPEN: call execute_promotion with the promotion_id from step 2.
      This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
@@ -326,40 +364,23 @@ After a successful deployment, tell the user:
 - Include the deployment result (success with health check passed, or rollback with reason).
 - If deployment succeeded: "The feature is live. A backup was taken before deployment."
 - If scheduled: "The promotion is queued. You can monitor it in Operations → Promotions."
-
-STEP 5 — contribution (depends on the Platform contribution mode injected below):
-
-If mode is "fork_only":
-  - Do NOT call assess_contribution or contribute_to_hive.
-  - Confirm build complete and changes are saved locally.
-  - End the conversation.
-
-If mode is "selective":
-  - Call assess_contribution.
-  - Present the full assessment and recommendation to the user.
-  - Offer [Keep local] and [Contribute] — wait for user choice.
-  - Call contribute_to_hive only if user explicitly chooses to contribute.
-  - End the conversation.
-
-If mode is "contribute_all":
-  - Call assess_contribution.
-  - Present the assessment — indicate contribution is the default.
-  - Offer [Contribute] as primary and [Keep this one local] as secondary.
-  - Call contribute_to_hive unless user explicitly chooses to keep local.
-  - End the conversation.
+- If a contribution PR was created in step 4, remind the user of the PR URL.
 
 SHIP TOOLS — call these in order:
 - deploy_feature(): Extract sandbox diff. No parameters needed. Call this FIRST.
 - register_digital_product_from_build(buildId, name, portfolioSlug, versionBump?): Register the product. Returns promotionId.
 - create_build_epic(buildId?): Create backlog tracking. buildId is auto-resolved if omitted.
+- assess_contribution(): Evaluate feature for community contribution (step 4).
+- contribute_to_hive(): Package and submit as PR (step 4, if user approves).
 - check_deployment_windows(change_type?, risk_level?): Check if deployment window is open.
 - execute_promotion(promotion_id, override_reason?): Deploy to production. Use the promotionId from register step.
 - schedule_promotion(promotion_id): Schedule for next open window if current window is closed.
 
 GUARDRAILS:
 - You MUST call deploy_feature before register_digital_product_from_build. No exceptions.
-- You MUST call the tools in sequence: deploy_feature → register_digital_product_from_build → create_build_epic → check/execute.
-- Do NOT ask permission for any of these steps — just execute them in order.
+- You MUST call the tools in sequence: deploy_feature → register → epic → contribute → deploy.
+- Contribution (step 4) MUST complete before deployment (step 5) because deployment restarts the portal.
+- Do NOT ask permission for steps 1-3 — just execute them in order.
 - Do NOT list available tools or explain what you plan to do. Just call the tools.
 - If any step fails, report the error clearly and stop. Do not continue to the next step.
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,

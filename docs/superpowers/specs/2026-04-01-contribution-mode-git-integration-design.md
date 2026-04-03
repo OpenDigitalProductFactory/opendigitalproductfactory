@@ -5,7 +5,7 @@
 | **Epic** | EP-BUILD-HANDOFF-002 (Phase 2e extension) |
 | **IT4IT Alignment** | §5.4 Deploy — contribution pipeline governs how built artifacts flow from sandbox to production and optionally to upstream |
 | **Depends On** | EP-BUILD-HANDOFF-002 Phase 2e (PR contribution pipeline — implemented), PlatformDevConfig Step 7 (implemented), `assess_contribution` + `contribute_to_hive` tools (implemented) |
-| **Status** | Draft |
+| **Status** | Implemented |
 | **Created** | 2026-04-01 |
 | **Author** | Claude (Software Engineer) + Mark Bodman (CEO) |
 
@@ -368,3 +368,64 @@ This documentation is linked from the escalating warning messages and the Platfo
 9. **Upstream URL is an application-level default, not a schema default.** This allows the upstream URL to be updated via code deployments without requiring a database migration.
 10. **Git credentials use existing CredentialEntry infrastructure.** The same encrypted storage that protects AI provider API keys is reused for git access tokens.
 11. **Mode downgrade is safe.** Switching back to `fork_only` stops future contributions but does not affect existing PRs or FeaturePacks.
+
+## Addendum: 2026-04-03 — Critical Fixes for End-to-End Contribution Flow
+
+Testing the full contribution lifecycle revealed four blocking issues that prevented PRs from being created. All four have been fixed.
+
+### Issue 1: `extractDiff` missed new files
+
+**Root cause:** `extractDiff` ran `git diff --name-only` which only sees *modified tracked* files. New files created by `write_sandbox_file` in the sandbox are untracked and invisible to `git diff`.
+
+**Fix:** `extractDiff` now runs `git add -A` (with exclusions for node_modules, .next, etc.) before diffing, then uses `git diff --cached` to capture both new and modified files.
+
+**File:** `apps/web/lib/integrate/sandbox/sandbox.ts`
+
+### Issue 2: No `.git` inside the portal container
+
+**Root cause:** `.dockerignore` excludes `.git`, so the portal container has no git repository. The contribution pipeline's local git operations (`createBranch`, `commitAll`, `pushBranch`) all fail silently, falling back to local mode (no PR).
+
+**Fix:** New module `github-api-commit.ts` creates branches, blobs, trees, commits, and PRs entirely via the GitHub REST API (Git Data API). No local `.git` directory needed. `submitBuildAsPR` now prefers this path when `GITHUB_TOKEN` is available.
+
+**Files:**
+
+- `apps/web/lib/integrate/github-api-commit.ts` (new)
+- `apps/web/lib/integrate/contribution-pipeline.ts` (refactored)
+
+### Issue 3: Ship phase ordering — contribution after deployment
+
+**Root cause:** The ship phase prompt had contribution as STEP 5 and deployment as STEP 4. `execute_promotion` restarts the portal container (image rebuild + container swap), which kills the AI Coworker conversation *before* the contribution step can run.
+
+**Fix:** Reordered: contribution is now STEP 4 (while sandbox is still alive), deployment is STEP 5 (portal restart is the last action).
+
+**File:** `apps/web/lib/integrate/build-agent-prompts.ts`
+
+### Issue 4: Stored token not read by contribution pipeline
+
+**Root cause:** `contribute_to_hive` only checked `process.env.GITHUB_TOKEN`. Portal users configure their token through the admin UI, which stores it in `CredentialEntry` — the env var is never set.
+
+**Fix:** `contribute_to_hive` now falls back to `getStoredGitHubToken()` which reads and decrypts the stored credential. `GITHUB_TOKEN` env var is also passed through in `docker-compose.yml` for admin-level override.
+
+**Files:**
+
+- `apps/web/lib/actions/platform-dev-config.ts` (new: `getStoredGitHubToken`, `validateGitHubToken`, `saveContributionSetup`)
+- `apps/web/lib/mcp-tools.ts` (updated `contribute_to_hive` handler)
+- `docker-compose.yml` (added `GITHUB_TOKEN` pass-through)
+
+### Issue 5: Admin UI assumed developer knowledge
+
+**Root cause:** The Platform Development settings page showed raw input fields for git URLs, access tokens, and DCO legal text. Non-technical users selecting "Share selectively" would not know what to do.
+
+**Fix:** Replaced raw form fields with a guided 4-step wizard:
+
+1. **How sharing works** — plain-language explanation
+2. **GitHub account** — instructions for creating an account if needed
+3. **Create and paste token** — step-by-step instructions for generating a personal access token with `repo` scope, with token validation via GitHub API before proceeding
+4. **Contributor agreement** — simplified DCO in 3 plain-language points
+
+Token validation calls `GET /user` on the GitHub API to confirm the token works before saving.
+
+**Files:**
+
+- `apps/web/components/admin/PlatformDevelopmentForm.tsx` (rewritten)
+- `apps/web/app/(shell)/admin/platform-development/page.tsx` (updated props)

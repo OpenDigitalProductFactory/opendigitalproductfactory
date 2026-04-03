@@ -46,9 +46,17 @@ function classifyFile(path: string): SpecialistRole {
 }
 
 function assignSpecialist(task: PlanTask, taskIndex: number, files: PlanFileEntry[]): AssignedTask {
-  // Match task to files by index (plan tasks align 1:1 with file groups)
-  // or by title keyword matching as fallback
-  const taskFiles = files.filter((_f, i) => i === taskIndex) || [];
+  // Match task to files by scanning file purposes/paths for keywords from the task title.
+  // Falls back to title-based classification if no files match.
+  const titleLower = task.title.toLowerCase();
+  const titleWords = titleLower.split(/\s+/).filter(w => w.length > 3);
+  const taskFiles = files.filter(f => {
+    const purposeLower = f.purpose.toLowerCase();
+    const pathLower = f.path.toLowerCase();
+    return titleWords.some(w => purposeLower.includes(w) || pathLower.includes(w));
+  });
+
+  // Classify by the matched files, or fall back to title keywords
   const specialist = taskFiles.length > 0
     ? classifyFile(taskFiles[0]!.path)
     : classifyFromTitle(task.title);
