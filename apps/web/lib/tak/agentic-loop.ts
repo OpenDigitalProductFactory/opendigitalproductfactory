@@ -355,6 +355,9 @@ export async function runAgenticLoop(params: {
       if (args?.field) keyParts.push(String(args.field));
       if (args?.query) keyParts.push(String(args.query).slice(0, 50));
       if (args?.path) keyParts.push(String(args.path));
+      if (args?.offset != null) keyParts.push(`offset=${args.offset}`);
+      if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));
+      if (args?.command) keyParts.push(String(args.command).slice(0, 80));
       if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
       const sig = keyParts.join(":");
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
