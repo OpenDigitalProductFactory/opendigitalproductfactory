@@ -40,7 +40,7 @@ A new API route `/api/v1/discovery/sweep` accepts POST requests to trigger a dis
 1. Every **60 seconds**: polls Prometheus `/api/v1/targets` for new/disappeared scrape targets (fast, ~50ms)
 2. Every **15 minutes**: runs the full discovery pipeline (host + Docker + Prometheus + attribution + sync)
 
-The timer starts on portal boot and is resilient to failures (catches errors, logs, continues).
+The timer starts on portal boot and is resilient to failures (catches errors, logs, continues). A `sweepInProgress` flag prevents concurrent sweeps -- if a sweep is still running when the timer fires, the new sweep is skipped and a warning is logged.
 
 ```
 apps/web/lib/operate/discovery-scheduler.ts
@@ -122,15 +122,18 @@ async function promoteInventoryEntities(prisma: PrismaClient): Promise<Promotion
 
 **Promotable entity types** (auto-promote without review):
 - `host` -- physical/virtual machines
-- `docker_runtime` -- container runtimes
+- `runtime` -- container runtimes (mapped from docker_runtime by normalize)
 - `container` -- application containers (non-monitoring)
 - `database` -- database services
 - `monitoring_service` -- observability stack
 - `ai_service` -- AI inference endpoints
+- `application` -- platform applications (portal, sandbox)
 
 **Threshold:** `AUTO_PROMOTE_THRESHOLD = 0.90`
 - Rule-based attributions have 0.98 confidence -> auto-promote
 - Heuristic matches below 0.90 -> exception queue
+
+**Portfolio resolution:** Look up `Portfolio` by slug derived from the taxonomy node's root path segment (e.g., `foundational/data_and_storage_management/database` yields slug `"foundational"`). If no Portfolio exists for the slug, skip promotion and place entity in the exception queue instead.
 
 **ProductId generation:**
 - From entity name: `"PostgreSQL"` -> `"infra-postgresql"`
@@ -155,11 +158,13 @@ For each `InventoryEntity` with `attributionStatus = "needs_review"`:
 
 ### 4.5 Change Detection (Staleness)
 
-When a discovery sweep runs, entities NOT seen in the current sweep are marked `status = "stale"`. The system:
+When a discovery sweep runs, entities NOT seen in the current sweep are marked `status = "stale"` (existing behavior in discovery-sync.ts). The staleness escalation uses `lastSeenAt` timestamps rather than consecutive-sweep counters -- simpler, no schema migration needed:
 
-1. After 3 consecutive sweeps without seeing an entity -> create `PortfolioQualityIssue` with `issueType = "stale_entity"`
-2. After 10 consecutive sweeps -> flag the linked DigitalProduct for lifecycle review (do NOT auto-retire)
+1. Entity `lastSeenAt` older than 1 hour (4 missed sweeps at 15-min interval) -> create `PortfolioQualityIssue` with `issueType = "stale_entity"`, severity `"warn"`
+2. Entity `lastSeenAt` older than 4 hours -> escalate to severity `"error"`, flag the linked DigitalProduct for lifecycle review (do NOT auto-retire)
 3. Surface stale entities prominently in the exception queue
+
+**Retention:** Keep the last 100 `DiscoveryRun` records. Prune older runs during each full sweep.
 
 ### 4.6 Integration with Existing Systems
 
@@ -210,11 +215,16 @@ Exception Queue (ENHANCED /inventory UI)
 
 | File | Change |
 |---|---|
-| `packages/db/src/discovery-normalize.ts` | Register Prometheus collector output |
-| `packages/db/src/discovery-sync.ts` | Call promotion pass after persistence |
+| `packages/db/src/discovery-types.ts` | Add `"prometheus"` to `DiscoverySourceKind` and `CollectorName` unions |
+| `packages/db/src/discovery-collectors/index.ts` | Export `collectPrometheusDiscovery` |
+| `packages/db/src/discovery-attribution.ts` | Add `"dismissed"` to attribution status types; add `ai_service` and `application` rule-match branches |
+| `packages/db/src/discovery-normalize.ts` | Add `"dismissed"` to `attributionStatus` union |
+| `packages/db/src/discovery-runner.ts` | Add Prometheus to default collectors; call promotion after persist |
+| `packages/db/src/discovery-sync.ts` | Skip dismissed entities in quality evaluation; add run retention pruning |
+| `packages/db/src/index.ts` | Export `promoteInventoryEntities` and `collectPrometheusDiscovery` |
+| `apps/web/lib/consume/discovery-data.ts` | Add query for needs_review entities with candidateTaxonomy |
 | `apps/web/app/(shell)/inventory/page.tsx` | Wire in exception queue component |
 | `packages/db/data/agent_registry.json` | Add `discovery_sweep` tool to AGT-170 |
-| `monitoring/prometheus/prometheus.yml` | No changes needed (targets already defined) |
 
 ## 6. Testing Strategy
 
