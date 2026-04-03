@@ -11,6 +11,10 @@ import {
 } from "./discovery-normalize";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import { promoteInventoryEntities } from "./discovery-promotion";
+import {
+  inferCrossCollectorRelationships,
+  inferProductDependencies,
+} from "./discovery-inference";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
@@ -62,7 +66,11 @@ export async function executeBootstrapDiscovery(
   db: BootstrapDiscoveryDb,
   options: BootstrapExecutionOptions = {},
 ) {
-  const collected = await runBootstrapCollectors(options.collectors);
+  const rawCollected = await runBootstrapCollectors(options.collectors);
+
+  // Pass 1: Cross-collector relationship inference (host↔interfaces, target↔container)
+  const collected = inferCrossCollectorRelationships(rawCollected);
+
   const taxonomyNodes = options.taxonomyNodes
     ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
       ? await ((db as unknown) as {
@@ -95,6 +103,19 @@ export async function executeBootstrapDiscovery(
     }
   } catch (err) {
     console.error("[discovery] Promotion pass failed (non-fatal):", err);
+  }
+
+  // Pass 2 & 3: Product-to-infrastructure relationship inference
+  try {
+    const inferenceSummary = await inferProductDependencies(db as never);
+    const total = inferenceSummary.productToInfraEdges + inferenceSummary.nameMatchEdges;
+    if (total > 0) {
+      console.log(
+        `[discovery] Inferred ${total} product→infra edges (${inferenceSummary.productToInfraEdges} promoted, ${inferenceSummary.nameMatchEdges} name-matched)`,
+      );
+    }
+  } catch (err) {
+    console.error("[discovery] Product inference pass failed (non-fatal):", err);
   }
 
   return persistenceSummary;
