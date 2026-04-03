@@ -77,6 +77,20 @@ export async function approveProposal(
       },
     });
 
+    // Inject tool result as a system message so the agent sees it in the next turn.
+    // Without this, the agent doesn't know the tool succeeded and re-calls it.
+    const toolResultSummary = result.success
+      ? `${proposal.actionType} completed successfully.${result.message ? ` ${result.message.slice(0, 500)}` : ""}`
+      : `${proposal.actionType} failed: ${result.error ?? result.message ?? "unknown error"}`;
+    await prisma.agentMessage.create({
+      data: {
+        threadId: proposal.threadId,
+        role: "system",
+        content: toolResultSummary,
+        agentId: proposal.agentId,
+      },
+    }).catch(() => {});
+
     const returnVal: { success: boolean; resultEntityId?: string; error?: string } = { success: result.success };
     if (result.entityId !== undefined) returnVal.resultEntityId = result.entityId;
     if (result.error !== undefined) returnVal.error = result.error;
