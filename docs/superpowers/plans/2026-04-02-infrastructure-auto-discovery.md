@@ -49,7 +49,11 @@
   Default: `{ itemType: "service", confidence: 0.5 }` for unrecognized jobs.
 - [ ] **Step 4: Run test to verify it passes** — `pnpm --filter @dpf/db test -- prometheus.test`
 - [ ] **Step 5: Wire into collectors barrel** — Add `export { collectPrometheusDiscovery } from "./prometheus"` to `discovery-collectors/index.ts`. Add `"prometheus"` to `DiscoverySourceKind` union in `discovery-types.ts`. Add `"prometheus"` to `CollectorName` type.
-- [ ] **Step 6: Commit** — `feat(discovery): add Prometheus target collector`
+- [ ] **Step 6: Add attribution rules for new types** — In `discovery-attribution.ts` `findRuleMatch()`, add rule branches:
+  - `itemType.includes("ai_service")` -> match node ending in `ai_and_agent_platform` or `observability_platform`, ruleId `foundational_ai_service`
+  - `itemType === "application"` -> match node ending in `platform_services`, ruleId `foundational_application`
+  - Add `"dismissed"` to `attributionStatus` unions in `discovery-attribution.ts` and `discovery-normalize.ts`
+- [ ] **Step 7: Commit** — `feat(discovery): add Prometheus target collector`
 
 ---
 
@@ -138,6 +142,7 @@
   let prometheusTimer: ReturnType<typeof setInterval> | null = null;
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   let knownTargetKeys = new Set<string>();
+  let sweepInProgress = false;
   
   export function startDiscoveryScheduler() { ... }
   export function stopDiscoveryScheduler() { ... }
