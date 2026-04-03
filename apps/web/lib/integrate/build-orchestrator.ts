@@ -275,6 +275,33 @@ export async function runBuildOrchestrator(params: {
     });
   }
 
+  // Save verification evidence and trigger phase advance (build → review)
+  // The QA specialist's result contains test/typecheck output — persist it
+  // so the phase gate can evaluate and auto-advance.
+  const qaResult = allResults.find(r => r.task.specialist === "qa-engineer");
+  if (qaResult) {
+    try {
+      const { executeTool } = await import("@/lib/mcp-tools");
+      // Parse QA output for structured verification data
+      const qaContent = qaResult.result.content;
+      const typecheckPassed = !qaContent.toLowerCase().includes("typecheck: fail") && !qaContent.toLowerCase().includes("type error");
+      const testsMatch = qaContent.match(/(\d+)\s*pass/i);
+      const failsMatch = qaContent.match(/(\d+)\s*fail/i);
+      await executeTool("saveBuildEvidence", {
+        field: "verificationOut",
+        value: {
+          typecheckPassed,
+          testsPassed: testsMatch ? parseInt(testsMatch[1]!) : 0,
+          testsFailed: failsMatch ? parseInt(failsMatch[1]!) : 0,
+          fullOutput: qaContent.slice(0, 2000),
+          timestamp: new Date().toISOString(),
+        },
+      }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+    } catch (err) {
+      console.error("[orchestrator] Failed to save verification evidence:", err);
+    }
+  }
+
   // Synthesize final result
   const completedTasks = allResults.filter(r => r.success).length;
   const failedTasks = allResults.filter(r => !r.success).length;
