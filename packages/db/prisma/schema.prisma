@@ -1232,7 +1232,6 @@ model Agent {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
   portfolioId         String?
-  preferredProviderId String?
   archived            Boolean                 @default(false)
 
   // EP-AI-WORKFORCE-001: Unified agent lifecycle fields

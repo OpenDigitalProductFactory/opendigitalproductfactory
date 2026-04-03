@@ -86,15 +86,15 @@ export default async function WorkspacePage() {
     prisma.bill.count({ where: { status: { in: ["approved", "partially_paid"] } } }),
   ]);
 
-  // Check for agents with inactive preferred providers
+  // EP-AI-WORKFORCE-001: Check for agents with inactive pinned providers via AgentModelConfig
   const inactiveProviderIds = (await prisma.modelProvider.findMany({
     where: { status: "inactive" },
     select: { providerId: true },
   })).map((p) => p.providerId);
 
   const agentsWithBrokenProviders = inactiveProviderIds.length > 0
-    ? await prisma.agent.count({
-        where: { preferredProviderId: { in: inactiveProviderIds } },
+    ? await prisma.agentModelConfig.count({
+        where: { pinnedProviderId: { in: inactiveProviderIds } },
       })
     : 0;
 

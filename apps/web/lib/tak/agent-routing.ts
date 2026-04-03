@@ -381,10 +381,17 @@ WHAT YOU DO NOT DO:
 
 const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 
-/** Lookup agentId → agentName for rendering historical messages. */
+/**
+ * Lookup agentId → agentName for rendering historical messages.
+ * EP-AI-WORKFORCE-001: This remains synchronous for client component compatibility.
+ * The canonical source is the Agent DB table; this map mirrors it for client-side rendering.
+ * TODO: Replace with server component data passing when UI architecture supports it.
+ */
 export const AGENT_NAME_MAP: Record<string, string> = {
   ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
   coworker: "Coworker",
+  "doc-specialist": "Documentation Specialist",
+  "data-architect": "Data Architect",
 };
 
 /**

@@ -34,6 +34,7 @@ export type EvaluateInput = {
   aiResponse: string;
   routeContext: string;
   sensitivity?: SensitivityLevel;
+  agentId?: string; // EP-AI-WORKFORCE-001: Optional agent slug or canonical ID for agent-level performance
 };
 
 // ─── Core: evaluateAndUpdateProfile ─────────────────────────────────────────
@@ -148,6 +149,13 @@ async function runEvaluation(input: EvaluateInput): Promise<void> {
 
   // 8. Update performance profile
   await updatePerformanceProfile(endpointId, taskType, score);
+
+  // EP-AI-WORKFORCE-001: Bridge agent-level performance tracking
+  if (input.agentId) {
+    updateAgentPerformance(input.agentId, taskType, score).catch((err) =>
+      console.error("[orchestrator-evaluator] agent performance update failed:", err),
+    );
+  }
 
   // EP-INF-001-P6: Feed orchestrator score into routing dimension profiles
   await updateEndpointDimensionScores(input.endpointId, input.modelId ?? "", input.taskType, score).catch((err) =>
@@ -350,6 +358,87 @@ export async function updatePerformanceProfile(
       currentInstructions,
       lastEvaluatedAt: new Date(),
       lastInstructionUpdateAt,
+    },
+  });
+}
+
+// ─── EP-AI-WORKFORCE-001: Agent-level Performance Bridge ──────────────────
+
+/**
+ * Updates AgentPerformance record alongside EndpointTaskPerformance.
+ * Uses the same EMA and phase transition logic but keyed on (agentId, taskType)
+ * instead of (endpointId, taskType).
+ */
+async function updateAgentPerformance(
+  agentIdOrSlug: string,
+  taskType: string,
+  score: number,
+): Promise<void> {
+  // Resolve agent by slug or canonical ID
+  const agent = await prisma.agent.findFirst({
+    where: { OR: [{ agentId: agentIdOrSlug }, { slugId: agentIdOrSlug }] },
+    select: { id: true },
+  });
+  if (!agent) return;
+
+  const existing = await prisma.agentPerformance.findUnique({
+    where: { agentId_taskType: { agentId: agent.id, taskType } },
+  });
+
+  if (!existing) {
+    await prisma.agentPerformance.create({
+      data: {
+        agentId: agent.id,
+        taskType,
+        evaluationCount: 1,
+        avgOrchestratorScore: score,
+        successCount: score >= 3 ? 1 : 0,
+        recentScores: [score],
+        instructionPhase: "learning",
+        profileConfidence: "low",
+        lastEvaluatedAt: new Date(),
+      },
+    });
+    return;
+  }
+
+  const evaluationCount = existing.evaluationCount + 1;
+  const avgOrchestratorScore =
+    existing.avgOrchestratorScore * (1 - EMA_DECAY) + score * EMA_DECAY;
+  const successCount = score >= 3 ? existing.successCount + 1 : existing.successCount;
+  const recentScores = [...existing.recentScores, score].slice(-RECENT_WINDOW);
+
+  // Phase transitions (same thresholds as endpoint-level)
+  let instructionPhase = existing.instructionPhase;
+  if (recentScores.length >= REGRESSION_WINDOW) {
+    const lastN = recentScores.slice(-REGRESSION_WINDOW);
+    const avgLast = lastN.reduce((a, b) => a + b, 0) / lastN.length;
+    if (avgLast < REGRESSION_THRESHOLD) {
+      instructionPhase = "learning";
+    }
+  }
+  if (instructionPhase === "learning" && evaluationCount >= 10 && avgOrchestratorScore >= 3.5) {
+    instructionPhase = "practicing";
+  } else if (instructionPhase === "practicing" && evaluationCount >= 50 && avgOrchestratorScore >= 4.0) {
+    const successRate = evaluationCount > 0 ? successCount / evaluationCount : 0;
+    if (successRate >= 0.9) instructionPhase = "innate";
+  }
+
+  // Profile confidence
+  let profileConfidence = "low";
+  if (evaluationCount >= 50) profileConfidence = "high";
+  else if (evaluationCount >= 10) profileConfidence = "medium";
+
+  await prisma.agentPerformance.update({
+    where: { agentId_taskType: { agentId: agent.id, taskType } },
+    data: {
+      evaluationCount,
+      avgOrchestratorScore,
+      successCount,
+      recentScores,
+      instructionPhase,
+      profileConfidence,
+      lastEvaluatedAt: new Date(),
     },
   });
 }

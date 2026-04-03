@@ -61,7 +61,7 @@ export default async function AuthorityPage() {
       orderBy: [{ product: { name: "asc" } }],
     }),
   ]);
-  const agentSummaries = getAgentGrantSummaries();
+  const agentSummaries = await getAgentGrantSummaries();
 
   // Transform BMR data for panels
   const bmrRows: BmrRoleRow[] = rawBmrData.flatMap((pbm) =>

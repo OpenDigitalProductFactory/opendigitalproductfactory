@@ -405,6 +405,15 @@ export async function discoverModels(
 export async function updateScheduledJob(input: { jobId: string; schedule: string }): Promise<void> {
   await requireManageProviders();
   const nextRunAt = computeNextRunAt(input.schedule, new Date());
+  // infra-ci-prune may not exist yet — upsert so the first schedule change creates it
+  if (input.jobId === "infra-ci-prune") {
+    await prisma.scheduledJob.upsert({
+      where:  { jobId: "infra-ci-prune" },
+      create: { jobId: "infra-ci-prune", name: "Infrastructure CI Prune", schedule: input.schedule, nextRunAt },
+      update: { schedule: input.schedule, nextRunAt },
+    });
+    return;
+  }
   await prisma.scheduledJob.update({
     where: { jobId: input.jobId },
     data: { schedule: input.schedule, nextRunAt },
@@ -420,6 +429,11 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
   if (jobId === "mcp-catalog-sync") {
     const { triggerMcpCatalogSync } = await import("@/lib/actions/mcp-catalog");
     await triggerMcpCatalogSync();
+    return;
+  }
+  if (jobId === "infra-ci-prune") {
+    const { runInfraPruneNow } = await import("@/lib/actions/infra-prune");
+    await runInfraPruneNow();
     return;
   }
   console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);
@@ -451,16 +465,33 @@ export async function verifyProviderModels(
 
 // ─── Agent Provider Assignment ──────────────────────────────────────────────
 
+/**
+ * EP-AI-WORKFORCE-001: Pin agent to a specific provider via AgentModelConfig.
+ * Replaces the deprecated Agent.preferredProviderId column.
+ */
 export async function updateAgentPreferredProvider(
   agentId: string,
   preferredProviderId: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireManageProviders();
-  const agent = await prisma.agent.findUnique({ where: { agentId } });
-  if (!agent) return { ok: false, error: "Agent not found" };
-  await prisma.agent.update({
+  const agent = await prisma.agent.findUnique({
     where: { agentId },
-    data: { preferredProviderId },
+    select: { slugId: true, agentId: true },
+  });
+  if (!agent) return { ok: false, error: "Agent not found" };
+
+  const configKey = agent.slugId ?? agent.agentId;
+  await prisma.agentModelConfig.upsert({
+    where: { agentId: configKey },
+    create: {
+      agentId: configKey,
+      minimumTier: "adequate",
+      budgetClass: "balanced",
+      pinnedProviderId: preferredProviderId,
+    },
+    update: {
+      pinnedProviderId: preferredProviderId,
+    },
   });
   return { ok: true };
 }

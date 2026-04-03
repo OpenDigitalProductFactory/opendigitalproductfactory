@@ -39,6 +39,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_sandbox_tests: ["sandbox_execute"],
   read_sandbox_file: ["sandbox_execute"],
   edit_sandbox_file: ["sandbox_execute"],
+  write_sandbox_file: ["sandbox_execute"],
+  validate_schema: ["sandbox_execute"],
+  describe_model: ["sandbox_execute"],
   search_sandbox: ["sandbox_execute"],
   list_sandbox_files: ["sandbox_execute"],
   run_sandbox_command: ["sandbox_execute"],
@@ -53,6 +56,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Deploy / Release
   deploy_feature: ["iac_execute"],
+  execute_promotion: ["iac_execute"],
   check_deployment_windows: ["deployment_plan_create"],
   schedule_promotion: ["deployment_plan_create"],
   create_release_bundle: ["release_gate_create"],
@@ -198,8 +202,11 @@ export function getToolGrantMapping(): Record<string, string[]> {
   return { ...TOOL_TO_GRANTS };
 }
 
-/** Get all agent IDs and their grant counts (for summary display). */
-export function getAgentGrantSummaries(): Array<{
+/**
+ * EP-AI-WORKFORCE-001: Get agent grant summaries from DB (unified model).
+ * Falls back to JSON registry if DB query fails.
+ */
+export async function getAgentGrantSummaries(): Promise<Array<{
   agentId: string;
   agentName: string;
   tier: string;
@@ -210,19 +217,42 @@ export function getAgentGrantSummaries(): Array<{
   hitlTier: number;
   escalatesTo: string;
   delegatesTo: string[];
-}> {
-  return (agentRegistry.agents as AgentEntry[]).map(
-    (a) => ({
-      agentId: a.agent_id,
-      agentName: a.agent_name,
-      tier: a.tier,
-      valueStream: a.value_stream,
-      grantCount: a.config_profile.tool_grants.length,
-      grants: a.config_profile.tool_grants as string[],
-      supervisorId: a.human_supervisor_id,
-      hitlTier: a.hitl_tier_default,
-      escalatesTo: a.escalates_to,
-      delegatesTo: a.delegates_to,
-    }),
-  );
+}>> {
+  const TIER_LABELS: Record<number, string> = { 1: "orchestrator", 2: "specialist", 3: "cross-cutting" };
+  try {
+    const { prisma } = await import("@dpf/db");
+    const agents = await prisma.agent.findMany({
+      where: { archived: false },
+      orderBy: [{ tier: "asc" }, { name: "asc" }],
+      include: { toolGrants: true },
+    });
+    return agents.map((a) => ({
+      agentId: a.agentId,
+      agentName: a.name,
+      tier: TIER_LABELS[a.tier] ?? "specialist",
+      valueStream: a.valueStream ?? "cross-cutting",
+      grantCount: a.toolGrants.length,
+      grants: a.toolGrants.map((g) => g.grantKey),
+      supervisorId: a.humanSupervisorId ?? "",
+      hitlTier: a.hitlTierDefault,
+      escalatesTo: a.escalatesTo ?? "",
+      delegatesTo: a.delegatesTo,
+    }));
+  } catch {
+    // Fallback to JSON registry
+    return (agentRegistry.agents as AgentEntry[]).map(
+      (a) => ({
+        agentId: a.agent_id,
+        agentName: a.agent_name,
+        tier: a.tier,
+        valueStream: a.value_stream,
+        grantCount: a.config_profile.tool_grants.length,
+        grants: a.config_profile.tool_grants as string[],
+        supervisorId: a.human_supervisor_id,
+        hitlTier: a.hitl_tier_default,
+        escalatesTo: a.escalates_to,
+        delegatesTo: a.delegates_to,
+      }),
+    );
+  }
 }

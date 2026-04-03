@@ -62,17 +62,25 @@ export async function acceptDco(): Promise<{ accepted: boolean; error?: string }
   if (!userId) return { accepted: false, error: "Not authenticated" };
 
   const config = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
-  if (!config) return { accepted: false, error: "Platform development not configured" };
 
-  if (config.contributionMode === "fork_only") {
+  if (config?.contributionMode === "fork_only") {
     return { accepted: false, error: "DCO is not required for fork_only mode" };
   }
 
-  await prisma.platformDevConfig.update({
+  // Upsert to handle case where singleton doesn't exist yet (e.g., during onboarding)
+  await prisma.platformDevConfig.upsert({
     where: { id: "singleton" },
-    data: {
+    update: {
       dcoAcceptedAt: new Date(),
       dcoAcceptedById: userId,
+    },
+    create: {
+      id: "singleton",
+      contributionMode: "selective",
+      dcoAcceptedAt: new Date(),
+      dcoAcceptedById: userId,
+      configuredAt: new Date(),
+      configuredById: userId,
     },
   });
 
@@ -91,9 +99,16 @@ export async function saveGitRemoteUrl(url: string | null): Promise<void> {
   const userId = session?.user?.id;
   if (!userId) throw new Error("Not authenticated");
 
-  await prisma.platformDevConfig.update({
+  await prisma.platformDevConfig.upsert({
     where: { id: "singleton" },
-    data: { gitRemoteUrl: url?.trim() || null },
+    update: { gitRemoteUrl: url?.trim() || null },
+    create: {
+      id: "singleton",
+      contributionMode: "fork_only",
+      gitRemoteUrl: url?.trim() || null,
+      configuredAt: new Date(),
+      configuredById: userId,
+    },
   });
 
   revalidatePath("/admin/platform-development");

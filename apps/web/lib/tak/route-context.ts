@@ -160,12 +160,19 @@ async function getAiWorkforceContext(): Promise<string> {
   const agents = await prisma.agent.findMany({
     where: { type: "coworker" },
     orderBy: { name: "asc" },
-    select: { agentId: true, name: true, preferredProviderId: true },
+    select: { agentId: true, slugId: true, name: true },
   });
 
-  const lines = agents.map((a) =>
-    `- ${a.name} (${a.agentId}): provider=${a.preferredProviderId ?? "auto"}`
-  );
+  // EP-AI-WORKFORCE-001: Read pinned provider from AgentModelConfig
+  const modelConfigs = await prisma.agentModelConfig.findMany({
+    select: { agentId: true, pinnedProviderId: true },
+  });
+  const configBySlug = new Map(modelConfigs.map((c) => [c.agentId, c.pinnedProviderId]));
+
+  const lines = agents.map((a) => {
+    const pinnedProvider = configBySlug.get(a.slugId ?? a.agentId) ?? null;
+    return `- ${a.name} (${a.agentId}): provider=${pinnedProvider ?? "auto"}`;
+  });
 
   return [
     "\nPAGE DATA — AI Workforce:",
