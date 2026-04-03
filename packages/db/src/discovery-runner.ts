@@ -2,12 +2,14 @@ import {
   collectDockerDiscovery,
   collectHostDiscovery,
   collectKubernetesDiscovery,
+  collectPrometheusDiscovery,
 } from "./discovery-collectors";
 import {
   normalizeDiscoveredFacts,
   type NormalizeDiscoveryOptions,
 } from "./discovery-normalize";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
+import { promoteInventoryEntities } from "./discovery-promotion";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
@@ -39,6 +41,7 @@ export async function runLocalDiscoveryCollectors(
     collectHostDiscovery,
     collectDockerDiscovery,
     collectKubernetesDiscovery,
+    collectPrometheusDiscovery,
   ],
 ): Promise<CollectorOutput> {
   const outputs = await Promise.all(
@@ -76,9 +79,21 @@ export async function executeBootstrapDiscovery(
     ...(options.softwareRules ? { softwareRules: options.softwareRules } : {}),
   });
 
-  return (options.persist ?? persistBootstrapDiscoveryRun)(db, normalized, {
+  const persistenceSummary = await (options.persist ?? persistBootstrapDiscoveryRun)(db, normalized, {
     runKey: options.runKey ?? `DISC-${Date.now()}`,
     sourceSlug: options.sourceSlug ?? "dpf_bootstrap",
     trigger: options.trigger ?? "bootstrap",
   });
+
+  // Auto-promote high-confidence entities to DigitalProduct records
+  try {
+    const promotionSummary = await promoteInventoryEntities(db as never);
+    if (promotionSummary.promoted > 0) {
+      console.log(`[discovery] Auto-promoted ${promotionSummary.promoted} entities to DigitalProducts`);
+    }
+  } catch (err) {
+    console.error("[discovery] Promotion pass failed (non-fatal):", err);
+  }
+
+  return persistenceSummary;
 }
