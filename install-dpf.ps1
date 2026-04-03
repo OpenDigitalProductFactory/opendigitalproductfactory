@@ -142,37 +142,50 @@ if (-not (Is-StepDone "windows_check")) {
 
 Write-Step 2 9 "Setting up WSL2..."
 if (-not (Is-StepDone "wsl2")) {
-    $vmpFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
-    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
+    # Windows 11 24H2+ (build 26100+) ships WSL as an inbox component, not a DISM
+    # optional feature. Detect this by checking if "wsl --version" succeeds.
+    $wslInbox = $false
+    try {
+        wsl --version 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $wslInbox = $true }
+    } catch { }
 
-    $needsReboot = $false
+    if ($wslInbox) {
+        Write-Action "WSL is built into this Windows version -- no feature enablement needed"
+    } else {
+        # Legacy path: Windows 10 / Windows 11 pre-24H2
+        $vmpFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+        $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
 
-    if ($vmpFeature.State -ne "Enabled") {
-        Write-Action "Enabling Virtual Machine Platform (safe -- needed for Docker)..."
-        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -WarningAction SilentlyContinue | Out-Null
-        $needsReboot = $true
-    }
+        $needsReboot = $false
 
-    if ($wslFeature.State -ne "Enabled") {
-        Write-Action "Enabling Windows Subsystem for Linux..."
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart -WarningAction SilentlyContinue | Out-Null
-        $needsReboot = $true
-    }
+        if ($vmpFeature.State -ne "Enabled") {
+            Write-Action "Enabling Virtual Machine Platform (safe -- needed for Docker)..."
+            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -WarningAction SilentlyContinue | Out-Null
+            $needsReboot = $true
+        }
 
-    if ($needsReboot) {
-        # Save progress so we can resume after reboot
-        Save-Progress "wsl2_partial"
-        Write-Warn "Windows needs to restart to finish setting up."
-        Write-Host ""
-        Write-Host "  After your computer restarts:" -ForegroundColor White
-        Write-Host "  1. Open the folder where you saved the installer"
-        Write-Host "  2. Double-click install-dpf.bat (or run it from a terminal)"
-        Write-Host "  3. The installer will pick up where it left off"
-        Write-Host ""
-        Write-Host "  Restarting in 15 seconds... (press Ctrl+C to cancel)" -ForegroundColor Yellow
-        Start-Sleep -Seconds 15
-        Restart-Computer -Force
-        exit 0
+        if ($wslFeature.State -ne "Enabled") {
+            Write-Action "Enabling Windows Subsystem for Linux..."
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart -WarningAction SilentlyContinue | Out-Null
+            $needsReboot = $true
+        }
+
+        if ($needsReboot) {
+            # Save progress so we can resume after reboot
+            Save-Progress "wsl2_partial"
+            Write-Warn "Windows needs to restart to finish setting up."
+            Write-Host ""
+            Write-Host "  After your computer restarts:" -ForegroundColor White
+            Write-Host "  1. Open the folder where you saved the installer"
+            Write-Host "  2. Double-click install-dpf.bat (or run it from a terminal)"
+            Write-Host "  3. The installer will pick up where it left off"
+            Write-Host ""
+            Write-Host "  Restarting in 15 seconds... (press Ctrl+C to cancel)" -ForegroundColor Yellow
+            Start-Sleep -Seconds 15
+            Restart-Computer -Force
+            exit 0
+        }
     }
 
     # Set WSL default version
