@@ -96,18 +96,45 @@ const PHASE_PROMPTS: Record<string, string> = {
 
 ${PROJECT_CONTEXT}
 
-DO THIS NOW — no questions, no asking for clarification:
-1. Search the codebase for existing functionality. Use search_project_files and read_project_file.
-2. Research externally: Use search_public_web to find best practices, open source precedents, and industry patterns for what the user is building. For example, if building a complaints system, search for "complaint management system best practices" and "open source complaint tracking". Include findings in the design doc's externalResearch field.
-   If search_public_web is NOT in your available tools, tell the user: "I recommend enabling external web access (Platform > AI > External Access) so I can research best practices and open source precedents before designing." Then proceed with what you know.
-3. Based on what the user described + codebase audit + external research, write the design document.
-   Call saveBuildEvidence with field "designDoc" and a value containing:
-   { problemStatement, existingFunctionalityAudit, externalResearch, alternativesConsidered, proposedApproach, acceptanceCriteria }
-   externalResearch: what you found from web search — best practices, open source projects, patterns to adopt or avoid.
-   Include accessibility criteria automatically: semantic HTML, keyboard navigation, WCAG AA contrast, no color-only indicators.
-4. Call reviewDesignDoc to review it.
-5. Present a PLAIN LANGUAGE summary to the user: "Here's what I'll build — [1-2 sentence summary]. It'll meet our accessibility standards automatically. Sound right?"
-   Do NOT show the design document text unless the user has Dev mode enabled.
+DO THIS NOW — no questions, no asking for clarification.
+Execute these steps IN ORDER. Do NOT skip steps. Do NOT save the design doc before completing steps 1-2.
+
+STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
+  a) Call search_project_files to find existing features similar to what the user wants.
+     Example: if building a complaints system, search for "complaint", "ticket", "issue", "case".
+  b) Call read_project_file on at least ONE existing feature to understand the codebase patterns:
+     - How are API routes structured? (read an existing route.ts)
+     - How does auth work? (look for auth() imports)
+     - What fields does the User model have? (read packages/db/prisma/schema.prisma lines 10-62)
+  c) Call describe_model on a similar existing model (e.g. "ExpenseClaim", "PlatformIssueReport")
+     to see the field patterns, relation naming, and index conventions.
+  You MUST call at least 3 research tools before proceeding to step 2.
+  If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
+
+STEP 2 — EXTERNAL RESEARCH:
+  Use search_public_web to find best practices and open source precedents.
+  If search_public_web is NOT available, tell the user: "I recommend enabling external web access
+  (Platform > AI > External Access) so I can research best practices." Then proceed with what you know.
+
+STEP 3 — DESIGN DOCUMENT:
+  Based on codebase audit + external research + user description, call saveBuildEvidence with field "designDoc":
+  {
+    problemStatement: "...",
+    existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
+    externalResearch: "Best practices from web search...",
+    alternativesConsidered: "...",
+    reusePlan: "Will reuse X from existing codebase...",
+    newCodeJustification: "Need new Y because...",
+    proposedApproach: "...",
+    acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+  }
+  The existingFunctionalityAudit MUST reference specific files and patterns you found in step 1.
+  If it's empty or generic, your design is based on assumptions and the build WILL fail.
+
+STEP 4: Call reviewDesignDoc to review it.
+
+STEP 5: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
+  Do NOT show the design document text unless the user has Dev mode enabled.
 
 RULES:
 - Do NOT ask technical questions. Make reasonable assumptions and act.
@@ -137,30 +164,46 @@ This briefing will be injected into the plan agent's context so it understands W
 
 ${PROJECT_CONTEXT}
 
-DO THIS NOW:
-1. Call saveBuildEvidence with field "buildPlan" containing EXACTLY this JSON structure:
-   {
-     "fileStructure": [
-       { "path": "packages/db/prisma/schema.prisma", "action": "modify", "purpose": "Add Complaint model" },
-       { "path": "apps/web/app/api/complaints/route.ts", "action": "create", "purpose": "REST endpoints" },
-       ...
-     ],
-     "tasks": [
-       { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "edit schema.prisma", "verify": "prisma migrate" },
-       { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "write route handlers", "verify": "tsc --noEmit" },
-       ...
-     ]
-   }
-   CRITICAL: The value MUST have "fileStructure" (array) and "tasks" (array) as top-level keys.
-   Do NOT wrap them in "phases", "plan", or any other nesting. The build orchestrator
-   reads these arrays directly to dispatch specialist agents (data architect, software engineer, etc.).
-   If the format is wrong, the build falls back to a single agent doing everything — no specialists.
-2. Call reviewBuildPlan to review it.
-3. Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] components, [N] database tables, [N] tests."
-   Do NOT show the full plan unless Dev mode is enabled.
+DO THIS NOW — execute steps IN ORDER. Do NOT skip research.
+
+STEP 1 — MANDATORY CODEBASE RESEARCH (before writing the plan):
+  Read the design doc's existingFunctionalityAudit. Then verify by reading actual files:
+  a) Call list_sandbox_files to see the existing file structure in the areas you'll modify.
+  b) Call read_sandbox_file on at least ONE similar existing feature to understand:
+     - Route file structure and auth pattern (e.g. read an existing route.ts in apps/web/app/api/)
+     - Component structure (e.g. read an existing page.tsx under apps/web/app/(shell)/)
+     - Schema patterns (e.g. read_sandbox_file on packages/db/prisma/schema.prisma offset 10 limit 60 for User model)
+  c) Call describe_model on the closest existing model to understand field conventions.
+  You MUST reference the ACTUAL file paths and patterns you found when building the plan.
+
+STEP 2 — SAVE THE PLAN:
+  Call saveBuildEvidence with field "buildPlan" containing EXACTLY this JSON structure:
+  {
+    "fileStructure": [
+      { "path": "packages/db/prisma/schema.prisma", "action": "modify", "purpose": "Add Complaint model" },
+      { "path": "apps/web/app/api/complaints/route.ts", "action": "create", "purpose": "REST endpoints" },
+      ...more files — list ALL files that will be created or modified
+    ],
+    "tasks": [
+      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "edit schema.prisma + add inverse relations to User model at line 62", "verify": "prisma migrate" },
+      { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "write route handlers using auth() pattern from existing routes", "verify": "tsc --noEmit" },
+      ...more tasks — one per logical unit of work
+    ]
+  }
+  CRITICAL FORMAT RULES:
+  - The value MUST have "fileStructure" (array) and "tasks" (array) as TOP-LEVEL keys.
+  - Do NOT wrap them in "phases", "plan", or any other nesting.
+  - The build orchestrator reads these arrays to dispatch specialist agents (data architect, software engineer, etc.).
+  - If the format is wrong, saveBuildEvidence will REJECT it and tell you to fix the format.
+  - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
+
+STEP 3: Call reviewBuildPlan to review it.
+
+STEP 4: Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] files, [N] tasks."
+  Do NOT show the full plan unless Dev mode is enabled.
 
 RULES:
-- Do NOT ask questions. Use the designDoc to figure out the plan.
+- Do NOT ask questions. Use the designDoc + codebase research to figure out the plan.
 - Maximum 2 sentences per response.
 - If the user says "ok" or "go" or "build it", proceed immediately.
 - If Dev mode is enabled, show the full plan and accept feedback on task structure.
