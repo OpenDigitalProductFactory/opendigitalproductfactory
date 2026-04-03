@@ -24,7 +24,13 @@ export type AgentEvent =
   | { type: "async:progress"; operationId: string; progressPct: number; message: string }
   | { type: "async:complete"; operationId: string }
   | { type: "async:failed"; operationId: string; error: string }
-  | { type: "async:expired"; operationId: string };
+  | { type: "async:expired"; operationId: string }
+  // EP-BUILD-ORCHESTRATOR: orchestrator progress events
+  | { type: "orchestrator:build_started"; buildId: string; taskCount: number; specialists: string[] }
+  | { type: "orchestrator:task_dispatched"; buildId: string; taskTitle: string; specialist: string }
+  | { type: "orchestrator:task_complete"; buildId: string; taskTitle: string; specialist: string; outcome: string }
+  | { type: "orchestrator:phase_summary"; buildId: string; completed: number; total: number; summary: string }
+  | { type: "orchestrator:specialist_retry"; buildId: string; specialist: string; reason: string; attempt: number };
 
 type Handler = (event: AgentEvent) => void;
 

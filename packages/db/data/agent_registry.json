@@ -174,7 +174,11 @@
       "delegates_to": [
         "AGT-130",
         "AGT-131",
-        "AGT-132"
+        "AGT-132",
+        "AGT-BUILD-DA",
+        "AGT-BUILD-SE",
+        "AGT-BUILD-FE",
+        "AGT-BUILD-QA"
       ],
       "escalates_to": "HR-200",
       "it4it_sections": [
@@ -210,7 +214,8 @@
           "role_registry_read",
           "sbom_read",
           "release_gate_create",
-          "build_plan_write"
+          "build_plan_write",
+          "backlog_write"
         ],
         "memory": {
           "type": "persistent",
@@ -2148,47 +2153,183 @@
       }
     },
     {
-      "agent_id": "AGT-903",
-      "agent_name": "ux-accessibility-agent",
+      "agent_id": "AGT-904",
+      "agent_name": "documentation-specialist",
       "tier": "cross-cutting",
       "value_stream": "cross-cutting",
-      "capability_domain": "Reviews UI implementations for WCAG 2.1 AA compliance on dark themes; validates contrast ratios (4.5:1 normal text, 3:1 large text) against platform surfaces; enforces minimum font-size policy (10px floor, 12px labels, 13px inputs); checks focus indicators, disabled-state contrast, and surface separation hierarchy; flags accessibility regressions during code review",
+      "capability_domain": "Creates, regenerates, and validates Mermaid diagrams across all documentation. Enforces documentation structure and consistency standards. Maintains awareness of Mermaid rendering tool limitations (GitHub vs VS Code vs GitBook). Reviews spec and architecture documents for completeness, cross-reference integrity, and IT4IT alignment. Cross-cutting: touches documentation across all value streams.",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 3,
       "delegates_to": [],
       "escalates_to": "HR-300",
-      "it4it_sections": [
-        "SHOULD-0012"
-      ],
+      "it4it_sections": [],
       "status": "defined",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-sonnet-4-6",
           "temperature": 0.2,
-          "max_tokens": 4096,
+          "max_tokens": 8192,
           "provider_id": "anthropic",
           "credential_ref": "anthropic-prod",
           "auth_type": "api_key"
         },
         "execution_runtime": {
           "type": "in_process",
-          "timeout_seconds": 120
+          "timeout_seconds": 180
         },
         "token_budget": {
-          "daily_limit": 150000,
-          "per_task_limit": 15000
+          "daily_limit": 300000,
+          "per_task_limit": 30000
         },
         "tool_grants": [
-          "registry_read",
           "file_read",
-          "contrast_check",
-          "style_audit"
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "decision_record_create",
+          "architecture_read"
         ],
         "memory": {
           "type": "session",
           "backend": null
         },
         "concurrency_limit": 4
+      }
+    },
+    {
+      "agent_id": "AGT-BUILD-DA",
+      "agent_name": "build-data-architect",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Schema design, Prisma migrations, model validation, index optimization; DAMA-DMBOK aligned",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.3"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "sandbox_execute"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-BUILD-SE",
+      "agent_name": "build-software-engineer",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Schema design, Prisma migrations, model validation, index optimization; DAMA-DMBOK aligned",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.3"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "sandbox_execute"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-BUILD-FE",
+      "agent_name": "build-frontend-engineer",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Schema design, Prisma migrations, model validation, index optimization; DAMA-DMBOK aligned",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.3"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "sandbox_execute"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-BUILD-QA",
+      "agent_name": "build-qa-engineer",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Schema design, Prisma migrations, model validation, index optimization; DAMA-DMBOK aligned",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.3"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.1,
+          "max_tokens": 4096
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 25000
+        },
+        "tool_grants": [
+          "sandbox_execute"
+        ]
       }
     }
   ]
