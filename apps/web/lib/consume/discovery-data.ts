@@ -39,6 +39,32 @@ export async function getInventoryEntitiesForPage() {
   });
 }
 
+export async function getNeedsReviewEntities() {
+  const entities = await prisma.inventoryEntity.findMany({
+    where: { attributionStatus: "needs_review" },
+    orderBy: [{ lastSeenAt: "desc" }],
+    select: {
+      id: true,
+      entityKey: true,
+      entityType: true,
+      name: true,
+      attributionConfidence: true,
+      candidateTaxonomy: true,
+      firstSeenAt: true,
+      lastSeenAt: true,
+      properties: true,
+    },
+  });
+  return entities.map((e) => ({
+    ...e,
+    firstSeenAt: e.firstSeenAt.toISOString(),
+    lastSeenAt: e.lastSeenAt.toISOString(),
+    candidateTaxonomy: Array.isArray(e.candidateTaxonomy)
+      ? (e.candidateTaxonomy as Array<{ nodeId: string; name: string; score: number }>)
+      : [],
+  }));
+}
+
 export async function getOpenPortfolioQualityIssues() {
   return prisma.portfolioQualityIssue.findMany({
     where: { status: "open" },
