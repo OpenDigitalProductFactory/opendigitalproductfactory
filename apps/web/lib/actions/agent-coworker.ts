@@ -1151,7 +1151,17 @@ async function getKnowledgePointersForRoute(routeContext: string): Promise<strin
     });
     if (articles.length === 0) return "";
 
-    const lines = articles.map((a) => `- ${a.articleId}: "${a.title}" (${a.category})`);
+    // Enrich with utility-generated abstracts from DB when available
+    const abstracts = await prisma.knowledgeArticle.findMany({
+      where: { articleId: { in: articles.map((a) => a.articleId) } },
+      select: { articleId: true, abstract: true },
+    });
+    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
+
+    const lines = articles.map((a) => {
+      const abs = abstractMap.get(a.articleId);
+      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
+    });
     return `KNOWLEDGE: ${articles.length} articles for ${product.name} — use search_knowledge_base for details.\n${lines.join("\n")}`;
   }
 
@@ -1170,7 +1180,16 @@ async function getKnowledgePointersForRoute(routeContext: string): Promise<strin
     });
     if (articles.length === 0) return "";
 
-    const lines = articles.map((a) => `- ${a.articleId}: "${a.title}" (${a.category})`);
+    const abstracts = await prisma.knowledgeArticle.findMany({
+      where: { articleId: { in: articles.map((a) => a.articleId) } },
+      select: { articleId: true, abstract: true },
+    });
+    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
+
+    const lines = articles.map((a) => {
+      const abs = abstractMap.get(a.articleId);
+      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
+    });
     return `KNOWLEDGE: ${articles.length} articles for ${portfolio.name} portfolio — use search_knowledge_base for details.\n${lines.join("\n")}`;
   }
 
