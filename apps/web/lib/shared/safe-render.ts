@@ -10,10 +10,29 @@ export function safeRenderValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map((v) => safeRenderValue(v)).join(", ");
   }
-  // Object — pretty-print as JSON
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  // Object — render as human-readable sections instead of raw JSON
+  if (typeof value === "object") {
+    return formatObjectHuman(value as Record<string, unknown>);
   }
+  return String(value);
+}
+
+/**
+ * Format a nested object as human-readable text with section headers.
+ * Handles the common AI pattern of { category: string[] } structures
+ * (e.g., dataNeeds with api, pages, userFlow, dataModel arrays).
+ */
+function formatObjectHuman(obj: Record<string, unknown>): string {
+  const sections: string[] = [];
+  for (const [key, val] of Object.entries(obj)) {
+    const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim();
+    if (Array.isArray(val)) {
+      sections.push(`${label}:\n${val.map((v) => `  - ${safeRenderValue(v)}`).join("\n")}`);
+    } else if (typeof val === "object" && val !== null) {
+      sections.push(`${label}:\n${formatObjectHuman(val as Record<string, unknown>)}`);
+    } else {
+      sections.push(`${label}: ${safeRenderValue(val)}`);
+    }
+  }
+  return sections.join("\n\n");
 }
