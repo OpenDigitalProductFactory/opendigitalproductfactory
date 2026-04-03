@@ -5,6 +5,7 @@
 | **Epic** | EP-CTX-001 |
 | **IT4IT Alignment** | Cross-cutting: affects all value streams by governing how AI coworkers consume context across every route |
 | **Depends On** | Agentic Architecture Patterns (2026-04-02, active reference), Prompt Assembler (implemented), Knowledge Management (EP-KM-001, implemented), Knowledge-Driven Agent Capabilities (EP-AGENT-CAP-001, partially implemented) |
+| **Complementary** | Async Coworker Messaging (EP-ASYNC-COWORKER-001, design) — enables two-phase context loading and makes tool-deferred content safer via cancellation support |
 | **Predecessor Specs** | Unified MCP Coworker Architecture, Shared Memory / Vector DB, Build Studio IT4IT Alignment |
 | **Status** | Draft |
 | **Created** | 2026-04-03 |
@@ -438,7 +439,53 @@ The legacy persona mode path in `sendMessage()` is not modified — it's already
 
 ---
 
-## 13. What's NOT in This Design
+## 13. Relationship to Async Coworker Messaging (EP-ASYNC-COWORKER-001)
+
+EP-ASYNC-COWORKER-001 replaces the blocking `useTransition` + server action pattern with fire-and-forget `POST /api/agent/send` + SSE completion. This is complementary to context budget arbitration — async fixes the UX layer (no page freeze), this spec fixes the data layer (right-size the prompt). Together they address both sides of the token spend problem.
+
+### 13.1 Two-Phase Context Loading
+
+The async model decouples message submission from agent execution. This enables a pattern where the arbitrator assembles context in two phases:
+
+| Phase | What | When | Blocking? |
+|-------|------|------|-----------|
+| **Fast (L0+L1)** | Identity, authority, mode, sensitivity, domain context, tool list | Before first inference call | Yes — but < 10ms, deterministic |
+| **Deferred (L2)** | Knowledge pointers, page data summary, build context summary | After agent starts, before processing user message | No — injected as first system message in conversation array |
+
+The agent sees L2 context before it reasons about the user's question, but the HTTP ack to the client is not delayed by L2 loading. Knowledge article search, page data summarization, and build context assembly can run in parallel during the background execution window.
+
+### 13.2 Cancellation Makes Tool Deferral Safer
+
+EP-ASYNC-COWORKER-001 adds cancel support (after 15s, the user can stop the agent). This makes L3/L4 tool-deferred content safer: if the agent calls `recall_phase_handoff` and the extra round-trip makes execution slow, the user can cancel. Without cancellation, deferring to tools risks unbounded execution with no escape.
+
+### 13.3 SSE Observability for Arbitration
+
+The enriched event bus from EP-ASYNC-COWORKER-001 can surface arbitration decisions:
+
+```typescript
+{ type: "context:loaded", sources: ["identity", "domain", "knowledge(3)", "page-summary"], totalTokens: 2105 }
+```
+
+This makes the budget visible in development and debuggable in production without adding a separate observability channel.
+
+### 13.4 Attachment Deduplication Is Now Clean
+
+The async spec's DB snapshot reconciliation (`getOrCreateThreadSnapshot` on `done`) means the client fetches messages from DB after completion. Attachments no longer need to be stuffed into the user message for client-side rendering — they're already persisted. This supports Section 6.4's recommendation to stop duplicating attachment content.
+
+### 13.5 Implementation Sequencing
+
+These specs can be implemented independently, but the optimal sequence is:
+
+1. **EP-ASYNC-COWORKER-001 first** — fixes the UX-blocking problem immediately
+2. **EP-CTX-001 Phase 1-2** — token counting + arbitration logic (pure functions, testable independently)
+3. **EP-CTX-001 Phase 3** — refactor injection points in `agent-coworker.ts` (now refactored by async spec into `executeAgentInBackground`)
+4. **EP-CTX-001 Phase 4-5** — deferred content tools + source optimizations
+
+Phase 3 of this spec modifies `agent-coworker.ts`, which EP-ASYNC-COWORKER-001 also refactors (extracting `persistUserMessage` + `executeAgentInBackground`). Implementing async first means the context arbitrator integrates into `executeAgentInBackground` rather than the monolithic `sendMessage` — a cleaner integration point.
+
+---
+
+## 14. What's NOT in This Design
 
 - **Adaptive budgets** — budgets are static per model tier. Dynamic adjustment based on conversation length or complexity is a future enhancement.
 - **Cross-turn context management** — this spec covers single-turn system prompt assembly. Multi-turn context window management (sliding windows, summarization of earlier turns) is a separate concern.
