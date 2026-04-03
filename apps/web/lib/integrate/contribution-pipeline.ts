@@ -42,11 +42,6 @@ interface SubmitBuildAsPRInput {
   dcoSignoff?: string;         // Signed-off-by line for DCO
 }
 
-interface GitHubPRResponse {
-  number: number;
-  html_url: string;
-}
-
 // ─── Branch Name Generation ─────────────────────────────────────────────────
 
 function slugify(text: string): string {
@@ -173,75 +168,7 @@ function parseGitHubRepo(remoteUrl: string): { owner: string; repo: string } | n
   return null;
 }
 
-/**
- * Create a pull request on GitHub via the REST API.
- * Requires GITHUB_TOKEN environment variable.
- */
-async function createGitHubPR(input: {
-  owner: string;
-  repo: string;
-  title: string;
-  body: string;
-  head: string;
-  base: string;
-  labels: string[];
-}): Promise<GitHubPRResponse | { error: string }> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) return { error: "GITHUB_TOKEN not configured" };
-
-  try {
-    const response = await fetch(
-      `https://api.github.com/repos/${input.owner}/${input.repo}/pulls`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        body: JSON.stringify({
-          title: input.title,
-          body: input.body,
-          head: input.head,
-          base: input.base,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { error: `GitHub API error ${response.status}: ${text}` };
-    }
-
-    const pr = (await response.json()) as GitHubPRResponse;
-
-    // Add labels (best-effort — may fail if labels don't exist)
-    if (input.labels.length > 0) {
-      try {
-        await fetch(
-          `https://api.github.com/repos/${input.owner}/${input.repo}/issues/${pr.number}/labels`,
-          {
-            method: "POST",
-            headers: {
-              Accept: "application/vnd.github+json",
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-              "X-GitHub-Api-Version": "2022-11-28",
-            },
-            body: JSON.stringify({ labels: input.labels }),
-          },
-        );
-      } catch {
-        // Label application is best-effort
-      }
-    }
-
-    return pr;
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "GitHub API call failed" };
-  }
-}
+// PR creation is now handled by github-api-commit.ts (createBranchAndPR)
 
 // ─── Main Entry Point ───────────────────────────────────────────────────────
 
@@ -305,55 +232,37 @@ export async function submitBuildAsPR(
     evidenceDigest,
   });
 
-  // 3. Check for git remote
-  const {
-    hasGitRemote,
-    getRemoteUrl,
-    createBranch,
-    applyPatch,
-    commitAll,
-    pushBranch,
-    getCurrentBranch,
-    checkoutBranch,
-  } = await import("@/lib/git-utils");
+  // 3. Determine the best method to create the PR
+  //
+  // Priority:
+  //   A. GitHub API (no local .git needed — works in Docker containers)
+  //   B. Local git operations (legacy — requires .git directory)
+  //   C. Local mode fallback (no PR, chat-only review)
 
-  const hasRemote = await hasGitRemote();
+  const token = process.env.GITHUB_TOKEN;
 
-  if ((hasRemote || input.forkRemoteUrl) && process.env.GITHUB_TOKEN) {
-    // ─── Remote Mode: Create actual PR on GitHub ────────────────────────
-    const remoteUrl = input.forkRemoteUrl ?? await getRemoteUrl();
-    const forkRepo = remoteUrl ? parseGitHubRepo(remoteUrl) : null;
-    const upstreamRepo = input.upstreamRemoteUrl ? parseGitHubRepo(input.upstreamRemoteUrl) : null;
+  // Resolve repository coordinates
+  const forkUrl = input.forkRemoteUrl;
+  const upstreamUrl = input.upstreamRemoteUrl;
+  const forkRepo = forkUrl ? parseGitHubRepo(forkUrl) : null;
+  const upstreamRepo = upstreamUrl ? parseGitHubRepo(upstreamUrl) : null;
 
-    // PR target: upstream if configured (cross-fork), otherwise same repo
-    const prTargetRepo = upstreamRepo ?? forkRepo;
-    const repo = forkRepo;
+  // If no explicit fork/upstream URLs, try the git remote
+  let targetRepo = upstreamRepo ?? forkRepo;
+  if (!targetRepo && token) {
+    try {
+      const { hasGitRemote, getRemoteUrl } = await import("@/lib/git-utils");
+      if (await hasGitRemote()) {
+        const remoteUrl = await getRemoteUrl();
+        if (remoteUrl) targetRepo = parseGitHubRepo(remoteUrl);
+      }
+    } catch { /* git may not be available */ }
+  }
 
-    if (!repo) {
-      // Remote exists but isn't GitHub — fall through to local mode
-      return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport);
-    }
+  if (targetRepo && token) {
+    // ─── GitHub API Mode: Create PR via REST API (no local git needed) ──
+    const { createBranchAndPR, createCrossForkPR } = await import("@/lib/integrate/github-api-commit");
 
-    // Save current branch to return to after
-    const originalBranch = await getCurrentBranch();
-
-    // Create feature branch
-    const branchResult = await createBranch(branchName);
-    if ("error" in branchResult) {
-      return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport,
-        `Branch creation failed: ${branchResult.error}`);
-    }
-
-    // Apply the diff
-    const applyResult = await applyPatch(input.diffPatch);
-    if ("error" in applyResult) {
-      // Clean up: return to original branch
-      if (originalBranch) await checkoutBranch(originalBranch);
-      return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport,
-        `Patch apply failed: ${applyResult.error}`);
-    }
-
-    // Commit
     const commitMessage = generateCommitMessage({
       title: input.title,
       buildId: input.buildId,
@@ -361,57 +270,64 @@ export async function submitBuildAsPR(
       authorName: input.authorName,
       dcoSignoff: input.dcoSignoff,
     });
-    const commitResult = await commitAll(commitMessage);
-    const commitHash = "hash" in commitResult ? commitResult.hash : null;
 
-    // Push
-    const pushResult = await pushBranch(branchName);
-    if ("error" in pushResult) {
-      if (originalBranch) await checkoutBranch(originalBranch);
-      return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport,
-        `Push failed: ${pushResult.error}`);
-    }
-
-    // Create PR on GitHub
     const labels = ["ai-contributed"];
     if (input.impactReport) labels.push(`risk:${input.impactReport.riskLevel}`);
     if (!securityScan.passed) labels.push("security-review-needed");
 
-    const prResult = await createGitHubPR({
-      owner: prTargetRepo!.owner,
-      repo: prTargetRepo!.repo,
-      title: prTitle,
-      body: prBody,
-      head: upstreamRepo
-        ? `${forkRepo!.owner}:${branchName}`  // Cross-fork: "fork-owner:branch"
-        : branchName,
-      base: "main",
-      labels,
-    });
+    try {
+      let result;
 
-    // Return to original branch
-    if (originalBranch) await checkoutBranch(originalBranch);
+      if (forkRepo && upstreamRepo) {
+        // Cross-fork: commit to fork, PR targets upstream
+        result = await createCrossForkPR({
+          forkOwner: forkRepo.owner,
+          forkRepo: forkRepo.repo,
+          upstreamOwner: upstreamRepo.owner,
+          upstreamRepo: upstreamRepo.repo,
+          branchName,
+          commitMessage,
+          diff: input.diffPatch,
+          prTitle,
+          prBody,
+          labels,
+          token,
+        });
+      } else {
+        // Same-repo: commit and PR on the same repo
+        result = await createBranchAndPR({
+          owner: targetRepo.owner,
+          repo: targetRepo.repo,
+          branchName,
+          commitMessage,
+          diff: input.diffPatch,
+          prTitle,
+          prBody,
+          labels,
+          token,
+        });
+      }
 
-    if ("error" in prResult) {
+      return {
+        mode: "remote" as const,
+        branchName: result.branchName,
+        commitHash: result.commitSha,
+        prUrl: result.prUrl,
+        prNumber: result.prNumber,
+        securityScan,
+        impactReport: input.impactReport,
+        title: prTitle,
+        body: prBody,
+        status: "open" as const,
+      };
+    } catch (err) {
+      console.warn("[contribution-pipeline] GitHub API PR creation failed:", err);
       return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport,
-        `PR creation failed: ${prResult.error}`);
+        `GitHub API failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    return {
-      mode: "remote",
-      branchName,
-      commitHash,
-      prUrl: prResult.html_url,
-      prNumber: prResult.number,
-      securityScan,
-      impactReport: input.impactReport,
-      title: prTitle,
-      body: prBody,
-      status: "open",
-    };
   }
 
-  // ─── Local Mode: Consumer mode fallback ───────────────────────────────
+  // ─── Local Mode: Consumer mode fallback (no GitHub token or repo) ─────
   return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport);
 }
 

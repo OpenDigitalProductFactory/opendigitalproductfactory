@@ -1,12 +1,13 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
-import { getPlatformDevConfig, getUntrackedFeatureCount } from "@/lib/actions/platform-dev-config";
+import { getPlatformDevConfig, getUntrackedFeatureCount, hasGitBackupCredential } from "@/lib/actions/platform-dev-config";
 
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
   const untrackedCount = config?.contributionMode === "fork_only"
     ? await getUntrackedFeatureCount()
     : 0;
+  const hasCredential = await hasGitBackupCredential();
 
   return (
     <div>
@@ -23,6 +24,7 @@ export default async function AdminPlatformDevelopmentPage() {
         dcoAcceptedAt={config?.dcoAcceptedAt?.toISOString() ?? null}
         dcoAcceptedByEmail={(config?.dcoAcceptedBy as { email: string } | null)?.email ?? null}
         untrackedFeatureCount={untrackedCount}
+        hasGitCredential={hasCredential}
       />
     </div>
   );

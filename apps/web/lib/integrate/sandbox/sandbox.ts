@@ -229,17 +229,22 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 }
 
 export async function extractDiff(containerId: string): Promise<string> {
-  // Get only the feature's changed source files — node_modules, .next, lock files
-  // produce a 200MB+ diff that crashes the buffer. Filter to source-only files first,
-  // then diff just those files. Quote each path to handle (shell) parentheses.
+  // Stage ALL changes (including new untracked files) so git diff --cached sees them.
+  // Without this, new files created by write_sandbox_file are untracked and invisible.
+  // Filter out node_modules, .next, lock files — they produce a 200MB+ diff.
+  await execInSandbox(containerId,
+    "cd /workspace && git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'",
+  );
+
+  // Get the list of staged source files
   const changedFiles = await execInSandbox(containerId,
-    "cd /workspace && git diff --name-only | grep -v node_modules | grep -v '.next/' | grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
+    "cd /workspace && git diff --cached --name-only | grep -v node_modules | grep -v '.next/' | grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
   );
   const files = changedFiles.trim().split("\n").filter(Boolean);
   if (files.length === 0) return "";
   // Quote each file path to handle shell metacharacters like (parentheses)
   const quotedFiles = files.map((f) => `'${f}'`).join(" ");
-  return execInSandbox(containerId, `cd /workspace && git diff -- ${quotedFiles}`);
+  return execInSandbox(containerId, `cd /workspace && git diff --cached -- ${quotedFiles}`);
 }
 
 export async function destroySandbox(containerId: string): Promise<void> {

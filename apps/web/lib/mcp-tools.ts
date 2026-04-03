@@ -2727,8 +2727,20 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           );
           const cleaned = stdout.replace(new RegExp(SANDBOX_MOUNT + "/", "g"), "");
           return { success: true, message: `Search results for "${pattern}"`, data: { pattern, results: cleaned } };
-        } catch {
-          return { success: true, message: `No matches found for "${pattern}"`, data: { pattern, results: "" } };
+        } catch (err) {
+          // grep exits with code 1 when no matches are found — this is NOT an error.
+          // Distinguish "no matches" from actual sandbox failures.
+          const execErr = err as { code?: number; killed?: boolean; signal?: string };
+          if (execErr.code === 1) {
+            return {
+              success: true,
+              message: `No matches found for "${pattern}" in ${globFilter} files. The sandbox is working — this search term simply doesn't exist in the codebase. Try a different keyword or check spelling.`,
+              data: { pattern, results: "", matchCount: 0 },
+            };
+          }
+          // Actual failure (timeout, mount not accessible, etc.)
+          const errMsg = (err as Error).message?.slice(0, 200) ?? "Search failed";
+          return { success: false, error: `Sandbox search error: ${errMsg}`, message: `Search failed — the sandbox may not be accessible. Error: ${errMsg}` };
         }
       }
 
@@ -2744,9 +2756,13 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
             { timeout: 10_000 },
           );
           const cleaned = stdout.split("\n").map((l: string) => l.replace(`${SANDBOX_MOUNT}/`, "")).filter(Boolean).join("\n");
+          if (!cleaned) {
+            return { success: true, message: `No files matching "${pattern}". The sandbox is working — this path pattern has no matches. Try a broader pattern like "apps/web/app/**/*.tsx".`, data: { pattern, files: "" } };
+          }
           return { success: true, message: `Files matching "${pattern}"`, data: { pattern, files: cleaned } };
-        } catch {
-          return { success: true, message: `No files matching "${pattern}"`, data: { pattern, files: "" } };
+        } catch (err) {
+          const errMsg = (err as Error).message?.slice(0, 200) ?? "List failed";
+          return { success: false, error: `Sandbox file listing error: ${errMsg}`, message: `File listing failed — the sandbox may not be accessible. Error: ${errMsg}` };
         }
       }
 
@@ -3659,7 +3675,18 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
         const hasDco = !!devConfig?.dcoAcceptedAt;
 
-        if (hasDco && (process.env.GITHUB_TOKEN || devConfig?.gitRemoteUrl)) {
+        // Resolve GitHub token: env var takes priority, then stored credential from portal setup
+        let githubToken = process.env.GITHUB_TOKEN ?? "";
+        if (!githubToken) {
+          const { getStoredGitHubToken } = await import("@/lib/actions/platform-dev-config");
+          githubToken = (await getStoredGitHubToken()) ?? "";
+        }
+
+        if (hasDco && githubToken) {
+          // Temporarily set GITHUB_TOKEN so downstream code can access it
+          const prevToken = process.env.GITHUB_TOKEN;
+          process.env.GITHUB_TOKEN = githubToken;
+
           const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
           const userInfo = await prisma.user.findUnique({
             where: { id: userId },
@@ -3689,6 +3716,10 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
               data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
             });
           }
+
+          // Restore original env state
+          if (prevToken) process.env.GITHUB_TOKEN = prevToken;
+          else delete process.env.GITHUB_TOKEN;
         }
       } catch (err) {
         console.warn("[contribute_to_hive] upstream PR creation failed:", err);
@@ -3773,15 +3804,29 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       const { exec: execCb } = await import("child_process");
       const { promisify } = await import("util");
       const exec = promisify(execCb);
-      await exec(`docker exec playwright sh -c 'mkdir -p /scripts && cat > /scripts/${buildId}.spec.ts << SCRIPT_EOF\n${script}\nSCRIPT_EOF'`);
+      try {
+        await exec(`docker exec playwright sh -c 'mkdir -p /scripts && cat > /scripts/${buildId}.spec.ts << SCRIPT_EOF\n${script}\nSCRIPT_EOF'`);
+      } catch (err) {
+        const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
+        if (msg.includes("No such container") || msg.includes("is not running")) {
+          return { success: false, error: "Playwright container not running.", message: "The Playwright test container is not available. UX tests are optional — you can skip this step and proceed with the review." };
+        }
+        return { success: false, error: `UX test generation failed: ${msg}`, message: `Could not generate UX test: ${msg}. You can skip this step and proceed.` };
+      }
       return { success: true, message: "UX test script generated.", data: { script } };
     }
 
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const { runPlaywrightTest } = await import("@/lib/playwright-runner");
-      const steps = await runPlaywrightTest(buildId);
+      let steps;
+      try {
+        const { runPlaywrightTest } = await import("@/lib/playwright-runner");
+        steps = await runPlaywrightTest(buildId);
+      } catch (err) {
+        const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
+        return { success: false, error: `UX test run failed: ${msg}`, message: `Could not run UX tests — Playwright container may not be available. You can skip UX tests and proceed with the review.` };
+      }
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       for (let i = 0; i < steps.length; i++) {
         if (context?.threadId) {
