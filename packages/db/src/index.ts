@@ -16,7 +16,7 @@ export {
   hashToNumber,
   QDRANT_COLLECTIONS,
 } from "./qdrant";
-export { initNeo4jSchema } from "./neo4j-schema";
+export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
 export {
   getDownstreamImpact,
   getUpstreamDependencies,
@@ -25,9 +25,14 @@ export {
   shortestPath,
   getInfraCIs,
   getNeighbours,
+  getLayeredDependencyStack,
+  getNetworkTopologyAtLayer,
+  pruneStaleInfraCIs,
   type GraphNode,
   type GraphEdge,
   type ImpactResult,
+  type LayeredDependency,
+  type PruneResult,
 } from "./neo4j-graph";
 export {
   syncDigitalProduct,
@@ -96,3 +101,10 @@ export {
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
 } from "./discovery-sync";
+export {
+  promoteInventoryEntities,
+  generateProductId,
+  AUTO_PROMOTE_THRESHOLD,
+  PROMOTABLE_TYPES,
+  type PromotionSummary,
+} from "./discovery-promotion";
