@@ -11,7 +11,9 @@ export type AgentEvent =
   | { type: "iteration"; iteration: number; toolCount: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
-  | { type: "done" }
+  | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; providerInfo?: { providerId: string; modelId: string }; error?: string }
+  // EP-ASYNC-COWORKER-001: error event for background execution failures
+  | { type: "error"; message: string }
   // Sandbox lifecycle events
   | { type: "sandbox:ready"; buildId: string; port: number }
   // Robust coding events — emitted during sandbox code generation
@@ -49,4 +51,37 @@ function emit(threadId: string, event: AgentEvent): void {
   subscribers.get(threadId)?.forEach((handler) => handler(event));
 }
 
-export const agentEventBus = { subscribe, emit };
+// EP-ASYNC-COWORKER-001: Track which threads have active background executions.
+// Used by the client to resume the SSE listener + thinking indicator when
+// navigating back to a page with a running agent task.
+const activeThreads = new Set<string>();
+
+function markActive(threadId: string): void {
+  activeThreads.add(threadId);
+}
+
+function markIdle(threadId: string): void {
+  activeThreads.delete(threadId);
+}
+
+function isActive(threadId: string): boolean {
+  return activeThreads.has(threadId);
+}
+
+// EP-ASYNC-COWORKER-001: In-memory cancellation set.
+// Checked by agentic-loop at each iteration boundary.
+const cancelledThreads = new Set<string>();
+
+function requestCancel(threadId: string): void {
+  cancelledThreads.add(threadId);
+}
+
+function isCancelled(threadId: string): boolean {
+  return cancelledThreads.has(threadId);
+}
+
+function clearCancel(threadId: string): void {
+  cancelledThreads.delete(threadId);
+}
+
+export const agentEventBus = { subscribe, emit, requestCancel, isCancelled, clearCancel, markActive, markIdle, isActive };
