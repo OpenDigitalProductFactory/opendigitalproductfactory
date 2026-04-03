@@ -189,6 +189,20 @@ export async function publishKnowledgeArticle(id: string): Promise<void> {
     },
   });
 
+  // EP-INF-UTIL-001: Generate abstract via utility tier (write-time, non-blocking)
+  const { utilityInfer } = await import("@/lib/inference/utility-inference");
+  const abstractResult = await utilityInfer({
+    task: "generate_abstract",
+    input: article.body,
+  }).catch(() => null);
+
+  if (abstractResult?.output) {
+    await prisma.knowledgeArticle.update({
+      where: { articleId: article.articleId },
+      data: { abstract: abstractResult.output },
+    }).catch((err) => console.error("[utility] abstract save failed:", err));
+  }
+
   const { storeKnowledgeArticle } = await import("@/lib/semantic-memory");
   await storeKnowledgeArticle({
     articleId: article.articleId,

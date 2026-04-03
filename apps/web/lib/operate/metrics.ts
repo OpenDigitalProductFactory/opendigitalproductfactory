@@ -128,3 +128,20 @@ export const observerFindings = new Counter({
   labelNames: ["type", "severity"] as const,
   registers: [metricsRegistry],
 });
+
+// ─── EP-INF-UTIL-001: Utility Inference Metrics ────────────────────────────
+
+export const utilityInferenceOps = new Counter({
+  name: "dpf_utility_inference_ops_total",
+  help: "Utility inference operations by task, status, and provider",
+  labelNames: ["task", "status", "provider"] as const,
+  registers: [metricsRegistry],
+});
+
+export const utilityInferenceLatency = new Histogram({
+  name: "dpf_utility_inference_duration_seconds",
+  help: "Utility inference latency by task and provider",
+  labelNames: ["task", "provider"] as const,
+  buckets: [0.5, 1, 2, 5, 10],
+  registers: [metricsRegistry],
+});
