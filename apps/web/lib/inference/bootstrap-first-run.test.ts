@@ -48,8 +48,11 @@ describe("bootstrap-first-run", () => {
   });
 
   describe("seedOnboardingAgent", () => {
-    it("upserts the onboarding-coo agent", async () => {
+    it("upserts the onboarding-coo agent and pins provider via AgentModelConfig", async () => {
       (prisma.agent.upsert as any).mockResolvedValue({
+        agentId: "onboarding-coo",
+      });
+      (prisma.agentModelConfig.upsert as any).mockResolvedValue({
         agentId: "onboarding-coo",
       });
       await seedOnboardingAgent();
@@ -61,7 +64,14 @@ describe("bootstrap-first-run", () => {
             name: "Onboarding COO",
             type: "onboarding",
             tier: 1,
-            preferredProviderId: "ollama",
+          }),
+        }),
+      );
+      expect(prisma.agentModelConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { agentId: "onboarding-coo" },
+          create: expect.objectContaining({
+            pinnedProviderId: "ollama",
           }),
         }),
       );
