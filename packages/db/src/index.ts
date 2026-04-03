@@ -108,3 +108,8 @@ export {
   PROMOTABLE_TYPES,
   type PromotionSummary,
 } from "./discovery-promotion";
+export {
+  inferCrossCollectorRelationships,
+  inferProductDependencies,
+  type InferenceSummary,
+} from "./discovery-inference";
