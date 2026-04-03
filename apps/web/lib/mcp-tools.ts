@@ -1724,7 +1724,12 @@ export async function executeTool(
         dataNeeds: String(params["dataNeeds"] ?? ""),
         acceptanceCriteria: Array.isArray(params["acceptanceCriteria"]) ? params["acceptanceCriteria"].map(String) : [],
       };
-      await updateFeatureBrief(buildId, brief);
+      try {
+        await updateFeatureBrief(buildId, brief);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Update failed";
+        return { success: false, error: msg, message: `Could not update brief: ${msg}. The brief can only be updated during the Ideate phase. You are past that phase — proceed with your current phase instead.` };
+      }
       return { success: true, entityId: buildId, message: `Updated Feature Brief for ${buildId}` };
     }
 
@@ -1812,22 +1817,27 @@ export async function executeTool(
         buildId = latestBuild.buildId;
       }
       const { shipBuild } = await import("@/lib/actions/build");
-      const result = await shipBuild({
-        buildId,
-        name: String(params["name"]),
-        portfolioSlug: String(params["portfolioSlug"]),
-        versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
-      });
-      return {
-        success: true,
-        entityId: result.productId,
-        message: result.message,
-        data: {
-          productInternalId: result.productInternalId,
-          portfolioInternalId: result.portfolioInternalId,
-          promotionId: result.promotionId,
-        },
-      };
+      try {
+        const result = await shipBuild({
+          buildId,
+          name: String(params["name"]),
+          portfolioSlug: String(params["portfolioSlug"]),
+          versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
+        });
+        return {
+          success: true,
+          entityId: result.productId,
+          message: result.message,
+          data: {
+            productInternalId: result.productInternalId,
+            portfolioInternalId: result.portfolioInternalId,
+            promotionId: result.promotionId,
+          },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Ship failed";
+        return { success: false, error: msg, message: `Product registration failed: ${msg}` };
+      }
     }
 
     case "create_build_epic": {
@@ -1863,8 +1873,13 @@ export async function executeTool(
       };
       if (resolvedPortfolioSlug) epicInput.portfolioSlug = resolvedPortfolioSlug;
       if (resolvedProductId) epicInput.digitalProductId = resolvedProductId;
-      const result = await createBuildEpic(epicInput);
-      return { success: true, entityId: result.epicId, message: result.message };
+      try {
+        const result = await createBuildEpic(epicInput);
+        return { success: true, entityId: result.epicId, message: result.message };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Epic creation failed";
+        return { success: false, error: msg, message: `Could not create epic: ${msg}` };
+      }
     }
 
     case "search_portfolio_context": {
