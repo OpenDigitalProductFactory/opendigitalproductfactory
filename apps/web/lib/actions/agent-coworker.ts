@@ -281,6 +281,8 @@ export async function sendMessage(input: {
 
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
+    // EP-CTX-001: Context sources are submitted to the arbitrator, which enforces
+    // per-model-tier token budgets and priority-based selection.
     const routeCtx = resolveRouteContext(input.routeContext);
     const userCtx = { platformRole: user.platformRole, isSuperuser: user.isSuperuser };
     const granted = getGrantedCapabilities(userCtx);
@@ -288,16 +290,64 @@ export async function sendMessage(input: {
 
     const routeData = await getRouteDataContext(input.routeContext, user.id!);
 
-    // EP-KM-001: Inject relevant knowledge articles into domain context
-    let enrichedDomainContext = routeCtx.domainContext;
+    // EP-KM-001: Load knowledge pointers (title-only, not full summaries)
+    let knowledgePointers = "";
     try {
-      const knowledgeContext = await getKnowledgeContextForRoute(input.routeContext);
-      if (knowledgeContext) {
-        enrichedDomainContext += "\n\n" + knowledgeContext;
-      }
+      knowledgePointers = await getKnowledgePointersForRoute(input.routeContext);
     } catch {
-      // Non-blocking — knowledge injection failure should not break the conversation
+      // Non-blocking
     }
+
+    // EP-CTX-001: Build context sources for arbitration
+    const { arbitrate, getBudgetForTier, inferModelTierFromRoute, countTokens, formatArbitrationLog } = await import("@/lib/tak/context-arbitrator");
+    const modelTier = inferModelTierFromRoute(input.routeContext);
+    const budget = getBudgetForTier(modelTier);
+
+    const domainBlock = routeCtx.domainTools.length > 0
+      ? routeCtx.domainContext + `\nAvailable domain tools: ${routeCtx.domainTools.join(", ")}`
+      : routeCtx.domainContext;
+
+    const contextSources = [
+      // L1: Route-essential context
+      { tier: "L1" as const, priority: 0, content: domainBlock, tokenCount: countTokens(domainBlock), source: "domain", compressible: false },
+      // L2: Situational — page data
+      ...(routeData ? [{
+        tier: "L2" as const, priority: 1, content: `--- PAGE DATA ---\n${routeData}`, tokenCount: countTokens(routeData),
+        source: "page-data", compressible: true,
+        compressedContent: `--- PAGE DATA ---\n${routeData.slice(0, 400)}...`,
+        compressedTokenCount: countTokens(routeData.slice(0, 400)),
+      }] : []),
+      // L2: Knowledge pointers
+      ...(knowledgePointers ? [{
+        tier: "L2" as const, priority: 3, content: knowledgePointers, tokenCount: countTokens(knowledgePointers),
+        source: "knowledge", compressible: true, compressedContent: "", compressedTokenCount: 0,
+      }] : []),
+      // L2: Attachments (Block 7 — no longer duplicated in user message)
+      ...(attachmentContext ? [{
+        tier: "L2" as const, priority: 4, content: attachmentContext, tokenCount: countTokens(attachmentContext),
+        source: "attachments", compressible: true,
+        compressedContent: attachmentContext.slice(0, 600),
+        compressedTokenCount: countTokens(attachmentContext.slice(0, 600)),
+      }] : []),
+    ];
+
+    const result = arbitrate(contextSources, budget);
+
+    // Debug logging in development
+    if (process.env.NODE_ENV === "development") {
+      console.log(formatArbitrationLog(result, budget));
+    }
+
+    // Reconstruct domain context and route data from selected sources
+    const selectedDomain = result.selected.find((s) => s.source === "domain")?.content ?? routeCtx.domainContext;
+    const selectedPageData = result.selected.find((s) => s.source === "page-data")?.content?.replace("--- PAGE DATA ---\n", "") ?? null;
+    const selectedAttachments = result.selected.find((s) => s.source === "attachments")?.content ?? null;
+    const selectedKnowledge = result.selected.find((s) => s.source === "knowledge")?.content ?? null;
+
+    // Merge knowledge into domain context if it made the budget
+    const finalDomainContext = selectedKnowledge
+      ? selectedDomain + "\n\n" + selectedKnowledge
+      : selectedDomain;
 
     populatedPrompt = assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
@@ -305,10 +355,10 @@ export async function sendMessage(input: {
       deniedCapabilities: denied,
       mode: (input.coworkerMode as "advise" | "act") ?? "advise",
       sensitivity: routeCtx.sensitivity,
-      domainContext: enrichedDomainContext,
-      domainTools: routeCtx.domainTools,
-      routeData: routeData,
-      attachmentContext,
+      domainContext: finalDomainContext,
+      domainTools: [], // Already included in domain block
+      routeData: selectedPageData,
+      attachmentContext: selectedAttachments,
     });
   } else {
     // ── Legacy persona-based prompt assembly ──
@@ -689,7 +739,8 @@ export async function sendMessage(input: {
         buildContext: populatedPrompt,
       });
 
-      agentEventBus.emit(input.threadId, { type: "done" });
+      // EP-ASYNC-COWORKER-001: done event moved to caller (API route) so it fires
+      // AFTER message persistence, enabling SSE-driven async completion.
 
       responseContent = orchestratorResult.content;
       responseProviderId = "orchestrator";
@@ -731,8 +782,8 @@ export async function sendMessage(input: {
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });
 
-    // Signal loop completion to SSE subscribers
-    agentEventBus.emit(input.threadId, { type: "done" });
+    // EP-ASYNC-COWORKER-001: done event moved to caller (API route) so it fires
+    // AFTER message persistence, enabling SSE-driven async completion.
 
     // Handle proposal — agent wants to take a side-effecting action that needs approval
     if (agenticResult.proposal) {
@@ -1070,19 +1121,18 @@ export async function clearConversation(input: {
   return { ok: true };
 }
 
-// ─── EP-KM-001: Knowledge Context Injection ─────────────────────────────────
+// ─── EP-KM-001 + EP-CTX-001: Knowledge Pointers ────────────────────────────
 
 /**
- * Extract product or portfolio context from the route and return a summary
- * of the top 3 relevant knowledge articles for system prompt injection.
+ * Return title-only knowledge pointers for the current route context.
+ * Costs ~45 tokens instead of ~150 for full summaries.
+ * The agent uses search_knowledge_base to pull full content when needed.
  */
-async function getKnowledgeContextForRoute(routeContext: string): Promise<string | null> {
-  // Extract product ID from /portfolio/product/[id]... routes
+async function getKnowledgePointersForRoute(routeContext: string): Promise<string> {
   const productMatch = routeContext.match(/\/portfolio\/product\/([^/]+)/);
-  // Extract portfolio slug from /portfolio/[slug]... routes (but not /portfolio/product)
   const portfolioMatch = !productMatch && routeContext.match(/\/portfolio\/([^/]+)/);
 
-  if (!productMatch && !portfolioMatch) return null;
+  if (!productMatch && !portfolioMatch) return "";
 
   const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
 
@@ -1092,19 +1142,17 @@ async function getKnowledgeContextForRoute(routeContext: string): Promise<string
       where: { id: productId },
       select: { name: true },
     });
-    if (!product) return null;
+    if (!product) return "";
 
     const articles = await searchKnowledgeArticles({
       query: product.name,
       productId,
       limit: 3,
     });
-    if (articles.length === 0) return null;
+    if (articles.length === 0) return "";
 
-    const lines = articles.map(
-      (a) => `- ${a.articleId}: "${a.title}" (${a.category}) — ${a.contentPreview.slice(0, 80)}...`,
-    );
-    return `RELEVANT KNOWLEDGE ARTICLES FOR ${product.name}:\n${lines.join("\n")}`;
+    const lines = articles.map((a) => `- ${a.articleId}: "${a.title}" (${a.category})`);
+    return `KNOWLEDGE: ${articles.length} articles for ${product.name} — use search_knowledge_base for details.\n${lines.join("\n")}`;
   }
 
   if (portfolioMatch) {
@@ -1113,20 +1161,18 @@ async function getKnowledgeContextForRoute(routeContext: string): Promise<string
       where: { slug: portfolioSlug },
       select: { id: true, name: true },
     });
-    if (!portfolio) return null;
+    if (!portfolio) return "";
 
     const articles = await searchKnowledgeArticles({
       query: portfolio.name,
       portfolioId: portfolio.id,
       limit: 3,
     });
-    if (articles.length === 0) return null;
+    if (articles.length === 0) return "";
 
-    const lines = articles.map(
-      (a) => `- ${a.articleId}: "${a.title}" (${a.category}) — ${a.contentPreview.slice(0, 80)}...`,
-    );
-    return `RELEVANT KNOWLEDGE ARTICLES FOR ${portfolio.name} PORTFOLIO:\n${lines.join("\n")}`;
+    const lines = articles.map((a) => `- ${a.articleId}: "${a.title}" (${a.category})`);
+    return `KNOWLEDGE: ${articles.length} articles for ${portfolio.name} portfolio — use search_knowledge_base for details.\n${lines.join("\n")}`;
   }
 
-  return null;
+  return "";
 }
