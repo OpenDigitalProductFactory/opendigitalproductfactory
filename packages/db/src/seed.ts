@@ -4,6 +4,8 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
+import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
+import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
@@ -528,6 +530,60 @@ async function seedEaViewpoints(): Promise<void> {
     });
   }
   console.log("Seeded 4 viewpoint definitions");
+
+  // ── BPMN 2.0 viewpoints ───────────────────────────────────────────────
+  const bpmnNotation = await prisma.eaNotation.findUnique({
+    where: { slug: "bpmn20" },
+    select: { id: true },
+  });
+  if (bpmnNotation) {
+    const bpmnNId = bpmnNotation.id;
+    async function resolveBpmnElementSlugs(slugs: string[]): Promise<string[]> {
+      for (const slug of slugs) {
+        await prisma.eaElementType.findUniqueOrThrow({
+          where: { notationId_slug: { notationId: bpmnNId, slug } },
+          select: { id: true },
+        });
+      }
+      return slugs;
+    }
+    async function resolveBpmnRelSlugs(slugs: string[]): Promise<string[]> {
+      for (const slug of slugs) {
+        await prisma.eaRelationshipType.findUniqueOrThrow({
+          where: { notationId_slug: { notationId: bpmnNId, slug } },
+          select: { id: true },
+        });
+      }
+      return slugs;
+    }
+
+    const bpmnViewpoints = [
+      {
+        name: "Process Architecture",
+        description: "BPMN process flows with activities, gateways, events, and swimlanes. Shows who does what (AI coworker or human) and where decisions branch.",
+        elementSlugs: [
+          "bpmn_process", "bpmn_sub_process", "bpmn_service_task", "bpmn_user_task",
+          "bpmn_manual_task", "bpmn_script_task", "bpmn_business_rule_task",
+          "bpmn_exclusive_gateway", "bpmn_parallel_gateway", "bpmn_inclusive_gateway",
+          "bpmn_start_event", "bpmn_end_event", "bpmn_intermediate_throw_event", "bpmn_intermediate_catch_event",
+          "bpmn_pool", "bpmn_lane",
+          "bpmn_data_object", "bpmn_data_input", "bpmn_data_output",
+        ],
+        relSlugs: ["sequence_flow", "message_flow", "data_association", "conditional_flow", "default_flow", "association"],
+      },
+    ];
+
+    for (const vp of bpmnViewpoints) {
+      const allowedElementTypeSlugs = await resolveBpmnElementSlugs(vp.elementSlugs);
+      const allowedRelTypeSlugs = await resolveBpmnRelSlugs(vp.relSlugs);
+      await prisma.viewpointDefinition.upsert({
+        where: { name: vp.name },
+        update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
+        create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
+      });
+    }
+    console.log("Seeded 1 BPMN viewpoint definition");
+  }
 }
 
 async function seedEaViews(): Promise<void> {
@@ -968,35 +1024,34 @@ async function seedCodexModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
 
-  // Codex coding models
-  const codeModels = [
-    {
-      modelId: "gpt-5-codex",
-      friendlyName: "GPT-5 Codex",
-      summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
-      modelClass: "code",
-      costTier: "$$$",
-      bestFor: ["coding", "reasoning", "agentic-tasks"] as string[],
-      avoidFor: ["conversation"] as string[],
-      reasoning: 88, codegen: 96, toolFidelity: 90,
-      instructionFollowingScore: 86, structuredOutputScore: 84,
-      conversational: 50, contextRetention: 78,
-    },
-    {
-      modelId: "codex-mini-latest",
-      friendlyName: "Codex Mini",
-      summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
-      modelClass: "code",
-      costTier: "$$",
-      bestFor: ["coding", "agentic-tasks"] as string[],
-      avoidFor: ["conversation"] as string[],
-      reasoning: 70, codegen: 90, toolFidelity: 85,
-      instructionFollowingScore: 80, structuredOutputScore: 70,
+    const codeModels = [
+      {
+        modelId: "gpt-5-codex",
+        friendlyName: "GPT-5 Codex",
+        summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
+        modelClass: "code",
+        costTier: "$$$",
+        bestFor: ["coding", "reasoning", "agentic-tasks"] as string[],
+        avoidFor: ["conversation"] as string[],
+        reasoning: 88, codegen: 96, toolFidelity: 90,
+        instructionFollowingScore: 86, structuredOutputScore: 84,
+        conversational: 50, contextRetention: 78,
+      },
+      {
+        modelId: "codex-mini-latest",
+        friendlyName: "Codex Mini",
+        summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
+        modelClass: "code",
+        costTier: "$$",
+        bestFor: ["coding", "agentic-tasks"] as string[],
+        avoidFor: ["conversation"] as string[],
+        reasoning: 70, codegen: 90, toolFidelity: 85,
+        instructionFollowingScore: 80, structuredOutputScore: 70,
       conversational: 40, contextRetention: 60,
     },
   ];
 
-  const allModels = [...codeModels];
+    const allModels = [...codeModels];
   let created = 0;
   for (const m of allModels) {
     await prisma.discoveredModel.upsert({
@@ -1040,11 +1095,11 @@ async function seedCodexModels(): Promise<void> {
   if (created > 0) console.log(`  Seeded ${created} Codex model profile(s)`);
 }
 
-/**
- * Seed ChatGPT (GPT-4o) models under the chatgpt provider.
- * These are chat models accessed via the same OpenAI OAuth as Codex.
- * The chatgpt provider is auto-activated when Codex OAuth completes.
- */
+  /**
+   * Seed ChatGPT subscription models under the chatgpt provider.
+   * These are chat models accessed via the same OpenAI OAuth as Codex.
+   * The chatgpt provider is auto-activated when Codex OAuth completes.
+   */
 async function seedChatGPTModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "chatgpt" } });
   if (!provider) return;
@@ -1145,13 +1200,13 @@ async function seedModelProfiles(): Promise<void> {
   console.log(`  Seeded ${created} model profiles (${skipped} already existed)`);
 }
 
-/**
- * The build-specialist agent requires a tool-capable model (Haiku 4.5+).
- * Haiku 3.0 cannot orchestrate multi-step tool calls.
- *
- * This runs on every seed to fix profiles that may have been incorrectly
- * set by model discovery or provider sync.
- */
+  /**
+   * Keep Anthropic subscription profiles in a healthy fallback state for
+   * Build Studio and coworker flows when Codex is unavailable.
+   *
+   * This runs on every seed to fix profiles that may have been incorrectly
+   * set by model discovery or provider sync.
+   */
 async function ensureBuildStudioModelConfig(): Promise<void> {
   // Prefer Haiku 4.5 over 3.0 for anthropic-sub (subscription tier)
   const haiku45 = await prisma.modelProfile.findFirst({
@@ -1198,7 +1253,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     pinnedProviderId?: string;
     pinnedModelId?: string;
   }> = [
-    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedProviderId: "codex" },
+      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedProviderId: "codex" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
@@ -1273,6 +1328,8 @@ async function main(): Promise<void> {
   });
   await seedDigitalProducts();
   await seedEaArchimate4();
+  await seedEaBpmn20();
+  await seedEaCrossNotation();
   await seedEaStructureRules();
   await seedEaViewpoints();
   await seedEaViews();
