@@ -15,12 +15,28 @@ async function requireManageProviders(): Promise<string> {
 }
 
 export async function startProviderOAuth(providerId: string): Promise<{ authorizeUrl: string } | { error: string }> {
-  await requireManageProviders();
-  return createOAuthFlow(providerId);
+  try {
+    await requireManageProviders();
+    return createOAuthFlow(providerId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start OAuth sign-in";
+    if (message === "Unauthorized") {
+      return { error: "Your admin session expired — sign in again and retry OAuth setup" };
+    }
+    return { error: message };
+  }
 }
 
 export async function disconnectProviderOAuth(providerId: string): Promise<{ error?: string }> {
-  await requireManageProviders();
+  try {
+    await requireManageProviders();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to disconnect provider";
+    if (message === "Unauthorized") {
+      return { error: "Your admin session expired — sign in again before disconnecting this provider" };
+    }
+    return { error: message };
+  }
   await prisma.credentialEntry.upsert({
     where: { providerId },
     create: { providerId, status: "unconfigured" },
