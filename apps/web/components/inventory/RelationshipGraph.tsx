@@ -15,6 +15,11 @@ const LINK_TYPES = [
   { label: "Classified As", key: "CLASSIFIED_AS", color: "#fb923c" },
   { label: "Parent Of", key: "PARENT_OF", color: "var(--dpf-muted)" },
   { label: "Depends On", key: "DEPENDS_ON", color: "#38bdf8" },
+  { label: "Hosts", key: "HOSTS", color: "#22d3ee" },
+  { label: "Member Of", key: "MEMBER_OF", color: "#a78bfa" },
+  { label: "Routes Through", key: "ROUTES_THROUGH", color: "#f472b6" },
+  { label: "Runs On", key: "RUNS_ON", color: "#34d399" },
+  { label: "Monitors", key: "MONITORS", color: "#fbbf24" },
 ];
 
 type Props = {
@@ -167,8 +172,10 @@ export function RelationshipGraph({ data }: Props) {
       if (!source?.x || !target?.x) continue;
 
       const isHighlighted = hoveredNode === source.id || hoveredNode === target.id || focusNodeId === source.id || focusNodeId === target.id;
-      ctx.strokeStyle = isHighlighted ? "rgba(124,140,248,0.6)" : "rgba(255,255,255,0.08)";
-      ctx.lineWidth = isHighlighted ? 1.5 : 0.5;
+      const linkDef = LINK_TYPES.find((lt) => lt.key === link.type);
+      const linkColor = linkDef?.color ?? "rgba(255,255,255,0.15)";
+      ctx.strokeStyle = isHighlighted ? linkColor : `${linkColor}30`;
+      ctx.lineWidth = isHighlighted ? 2 : 0.7;
       ctx.beginPath();
       ctx.moveTo(source.x, source.y!);
       ctx.lineTo(target.x, target.y!);
