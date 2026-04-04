@@ -46,30 +46,50 @@ const ADVISE_MODE_BLOCK = `Mode: ADVISE. You may read, search, analyze, and reco
 
 const ACT_MODE_BLOCK = `Mode: ACT. You may execute any tool the employee's role authorizes. All actions are logged. Prefer the most direct path. Don't ask for confirmation on routine operations — the employee chose Act mode because they trust you to act.`;
 
+// ─── Cache Boundary ────────────────────────────────────────────────────────
+// Blocks 1-3 (Identity, Mode templates) are static across conversations for
+// the same role+mode combination. Placing a boundary marker between static
+// and dynamic content lets inference providers cache the static prefix and
+// only re-process dynamic blocks on each turn. This follows the Claude Code
+// SYSTEM_PROMPT_DYNAMIC_BOUNDARY pattern revealed in the source leak.
+//
+// The marker itself is invisible to the model — it's consumed by the caller
+// (routed-inference.ts) to split the prompt into cacheable and non-cacheable
+// segments when the provider supports prompt caching.
+
+export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n\n<!-- DYNAMIC_BOUNDARY -->\n\n";
+
 // ─── Assembler ──────────────────────────────────────────────────────────────
 
 export function assembleSystemPrompt(input: PromptInput): string {
-  const blocks: string[] = [];
+  // --- Static blocks (cacheable across turns for same role+mode) ---
+  const staticBlocks: string[] = [];
 
-  // Block 1: Identity (static) + current date for temporal grounding
+  // Block 1: Identity (static)
+  staticBlocks.push(IDENTITY_BLOCK);
+
+  // Block 3: Mode (static per session — advise or act doesn't change mid-conversation)
+  staticBlocks.push(input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK);
+
+  // --- Dynamic blocks (change per turn / per route) ---
+  const dynamicBlocks: string[] = [];
+
+  // Current date for temporal grounding
   const today = new Date().toISOString().slice(0, 10);
-  blocks.push(IDENTITY_BLOCK + `\n\nToday's date is ${today}.`);
+  dynamicBlocks.push(`Today's date is ${today}.`);
 
-  // Block 2: Authority (dynamic)
+  // Block 2: Authority (dynamic — varies by user)
   const granted = input.grantedCapabilities.join(", ");
   const denied = input.deniedCapabilities.length > 0
     ? input.deniedCapabilities.join(", ")
     : "none — but do not assume unlimited authority";
-  blocks.push(
+  dynamicBlocks.push(
     `The employee you're working with holds role ${input.hrRole}. They are authorized to: ${granted}. They are NOT authorized to: ${denied}. All actions you take execute under their authority. Never exceed it.`
   );
 
-  // Block 3: Mode
-  blocks.push(input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK);
-
   // Block 4: Sensitivity
   const level = input.sensitivity.toUpperCase();
-  blocks.push(
+  dynamicBlocks.push(
     `This page is classified ${level}. Only endpoints cleared for ${level} are handling requests. Do not include classified data in sub-tasks routed to lower-clearance endpoints.`
   );
 
@@ -78,17 +98,19 @@ export function assembleSystemPrompt(input: PromptInput): string {
   if (input.domainTools.length > 0) {
     domainBlock += `\nAvailable domain tools: ${input.domainTools.join(", ")}`;
   }
-  blocks.push(domainBlock);
+  dynamicBlocks.push(domainBlock);
 
   // Block 6: Route data (conditional)
   if (input.routeData !== null) {
-    blocks.push(`--- PAGE DATA ---\n${input.routeData}`);
+    dynamicBlocks.push(`--- PAGE DATA ---\n${input.routeData}`);
   }
 
   // Block 7: Attachments (conditional)
   if (input.attachmentContext !== null) {
-    blocks.push(input.attachmentContext);
+    dynamicBlocks.push(input.attachmentContext);
   }
 
-  return blocks.join("\n\n");
+  return staticBlocks.join("\n\n")
+    + SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+    + dynamicBlocks.join("\n\n");
 }

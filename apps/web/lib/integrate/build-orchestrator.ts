@@ -43,20 +43,73 @@ export type BuildSummary = {
   totalTasks: number;
   completedTasks: number;
   failedTasks: number;
-  specialistSummaries: Array<{ role: SpecialistRole; outcome: string }>;
+  specialistSummaries: Array<{ role: SpecialistRole; outcome: string; status: SpecialistOutcome }>;
 };
 
 export function formatBuildCompleteMessage(summary: BuildSummary): string {
   const status = `${summary.completedTasks}/${summary.totalTasks} tasks done`;
   const failNote = summary.failedTasks > 0 ? `, ${summary.failedTasks} failed` : "";
+  const hasConcerns = summary.specialistSummaries.some(s => s.status === "DONE_WITH_CONCERNS");
+  const hasBlocked = summary.specialistSummaries.some(s => s.status === "BLOCKED" || s.status === "NEEDS_CONTEXT");
   const outcomes = summary.specialistSummaries
-    .map(s => `- ${ROLE_LABELS[s.role]}: ${s.outcome}`)
+    .map(s => `- ${ROLE_LABELS[s.role]} [${s.status}]: ${s.outcome}`)
     .join("\n");
 
-  if (summary.failedTasks > 0) {
+  if (hasBlocked || summary.failedTasks > 0) {
     return `Build incomplete. ${status}${failNote}.\n${outcomes}\n\nSome tasks need attention before proceeding.`;
   }
+  if (hasConcerns) {
+    return `Build complete with concerns. ${status}.\n${outcomes}\n\nReview flagged concerns before proceeding.`;
+  }
   return `Build complete. ${status}.\n${outcomes}\n\nReady for review?`;
+}
+
+// ─── Specialist Outcome Protocol (Superpowers-inspired) ────────────────────
+// Structured status codes for specialist results. Replaces boolean success
+// with a 4-status protocol that enables smarter orchestration decisions.
+
+export type SpecialistOutcome =
+  | "DONE"                // Task completed successfully
+  | "DONE_WITH_CONCERNS"  // Task completed but flagged issues for review
+  | "BLOCKED"             // Task cannot proceed — needs human or dependency resolution
+  | "NEEDS_CONTEXT";      // Task needs additional information from orchestrator
+
+/** Classify a specialist's agentic result into a structured outcome. */
+function classifyOutcome(result: AgenticResult, role: SpecialistRole): SpecialistOutcome {
+  const content = result.content.toLowerCase();
+  const calledBuildTools = result.executedTools.some(t =>
+    t.name !== "read_sandbox_file" && t.name !== "search_sandbox" && t.name !== "list_sandbox_files"
+  );
+  const hasErrors = result.executedTools.some(t => !t.result.success);
+  const isQA = role === "qa-engineer";
+
+  // Blocked: explicit blocker signals or no tools called (stalled)
+  if (content.includes("blocked") || content.includes("cannot proceed") || content.includes("missing prerequisite")) {
+    return "BLOCKED";
+  }
+
+  // Needs context: agent asked for more info
+  if (content.includes("need more information") || content.includes("please clarify") || content.includes("which ")) {
+    return "NEEDS_CONTEXT";
+  }
+
+  // QA always counts as done (test results are informational)
+  if (isQA && calledBuildTools) {
+    return hasErrors ? "DONE_WITH_CONCERNS" : "DONE";
+  }
+
+  // Build tools called with no errors = done
+  if (calledBuildTools && !hasErrors) {
+    return "DONE";
+  }
+
+  // Build tools called but some errors = concerns
+  if (calledBuildTools && hasErrors) {
+    return "DONE_WITH_CONCERNS";
+  }
+
+  // No build tools called = blocked (stalled agent)
+  return "BLOCKED";
 }
 
 // ─── Specialist Dispatch ────────────────────────────────────────────────────
@@ -64,6 +117,7 @@ export function formatBuildCompleteMessage(summary: BuildSummary): string {
 type SpecialistResult = {
   task: AssignedTask;
   result: AgenticResult;
+  outcome: SpecialistOutcome;
   success: boolean;
   retries: number;
 };
@@ -140,15 +194,11 @@ async function dispatchSpecialist(params: {
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
 
-    // Check if specialist succeeded — heuristic: no frustration exit, tools were called
-    const calledBuildTools = lastResult.executedTools.some(t =>
-      t.name !== "read_sandbox_file" && t.name !== "search_sandbox" && t.name !== "list_sandbox_files"
-    );
-    const hasErrors = lastResult.executedTools.some(t => !t.result.success);
-    const isQA = role === "qa-engineer"; // QA success = ran tests, regardless of test outcome
+    // Classify outcome using structured protocol
+    const outcome = classifyOutcome(lastResult, role);
 
-    if ((calledBuildTools && !hasErrors) || isQA) {
-      return { task, result: lastResult, success: true, retries: attempt };
+    if (outcome === "DONE" || outcome === "DONE_WITH_CONCERNS") {
+      return { task, result: lastResult, outcome, success: true, retries: attempt };
     }
 
     retries = attempt + 1;
@@ -163,7 +213,8 @@ async function dispatchSpecialist(params: {
     }
   }
 
-  return { task, result: lastResult!, success: false, retries };
+  const finalOutcome = classifyOutcome(lastResult!, role);
+  return { task, result: lastResult!, outcome: finalOutcome, success: false, retries };
 }
 
 // ─── Orchestrator Main ──────────────────────────────────────────────────────
@@ -247,21 +298,26 @@ export async function runBuildOrchestrator(params: {
       allResults.push(sr);
 
       const roleLabel = ROLE_LABELS[sr.task.specialist];
-      const outcome = sr.success
+      const outcomeText = sr.outcome === "DONE"
         ? sr.result.content.slice(0, 300)
-        : `FAILED after ${sr.retries} retries: ${sr.result.content.slice(0, 200)}`;
+        : sr.outcome === "DONE_WITH_CONCERNS"
+          ? `[CONCERNS] ${sr.result.content.slice(0, 280)}`
+          : sr.outcome === "NEEDS_CONTEXT"
+            ? `[NEEDS_CONTEXT] ${sr.result.content.slice(0, 270)}`
+            : `[BLOCKED] after ${sr.retries} retries: ${sr.result.content.slice(0, 250)}`;
 
-      // Emit completion event
+      // Emit completion event with structured outcome
       agentEventBus.emit(parentThreadId, {
         type: "orchestrator:task_complete",
         buildId,
         taskTitle: sr.task.title,
         specialist: roleLabel,
-        outcome,
+        outcome: outcomeText,
+        status: sr.outcome,
       });
 
-      // Accumulate context for downstream specialists
-      priorResultsSummary += `\n${roleLabel} (${sr.task.title}): ${outcome}`;
+      // Accumulate context for downstream specialists (include status for awareness)
+      priorResultsSummary += `\n${roleLabel} [${sr.outcome}] (${sr.task.title}): ${outcomeText}`;
     }
 
     // Emit phase summary
@@ -314,7 +370,14 @@ export async function runBuildOrchestrator(params: {
     failedTasks,
     specialistSummaries: allResults.map(r => ({
       role: r.task.specialist,
-      outcome: r.success ? r.result.content.slice(0, 200) : `FAILED: ${r.result.content.slice(0, 150)}`,
+      status: r.outcome,
+      outcome: r.outcome === "DONE"
+        ? r.result.content.slice(0, 200)
+        : r.outcome === "DONE_WITH_CONCERNS"
+          ? `Completed with concerns: ${r.result.content.slice(0, 180)}`
+          : r.outcome === "NEEDS_CONTEXT"
+            ? `Needs context: ${r.result.content.slice(0, 180)}`
+            : `Blocked: ${r.result.content.slice(0, 180)}`,
     })),
   };
 

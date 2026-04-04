@@ -13,10 +13,10 @@ describe("orchestrator communication templates", () => {
       completedTasks: 4,
       failedTasks: 0,
       specialistSummaries: [
-        { role: "data-architect", outcome: "Complaint model with 8 fields" },
-        { role: "software-engineer", outcome: "4 API routes" },
-        { role: "frontend-engineer", outcome: "ComplaintList page" },
-        { role: "qa-engineer", outcome: "12 tests pass, typecheck clean" },
+        { role: "data-architect", status: "DONE", outcome: "Complaint model with 8 fields" },
+        { role: "software-engineer", status: "DONE", outcome: "4 API routes" },
+        { role: "frontend-engineer", status: "DONE", outcome: "ComplaintList page" },
+        { role: "qa-engineer", status: "DONE", outcome: "12 tests pass, typecheck clean" },
       ],
     });
     expect(msg).toContain("Build complete");
@@ -30,10 +30,10 @@ describe("orchestrator communication templates", () => {
       completedTasks: 3,
       failedTasks: 1,
       specialistSummaries: [
-        { role: "data-architect", outcome: "Complaint model with 8 fields" },
-        { role: "software-engineer", outcome: "FAILED: Migration not found" },
-        { role: "frontend-engineer", outcome: "ComplaintList page" },
-        { role: "qa-engineer", outcome: "8 tests pass, 4 failed" },
+        { role: "data-architect", status: "DONE", outcome: "Complaint model with 8 fields" },
+        { role: "software-engineer", status: "BLOCKED", outcome: "FAILED: Migration not found" },
+        { role: "frontend-engineer", status: "DONE", outcome: "ComplaintList page" },
+        { role: "qa-engineer", status: "DONE_WITH_CONCERNS", outcome: "8 tests pass, 4 failed" },
       ],
     });
     expect(msg).toContain("3/4 tasks done");
