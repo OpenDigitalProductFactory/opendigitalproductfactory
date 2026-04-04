@@ -1,5 +1,4 @@
-import { Graph } from "dagre-d3-es/src/graphlib/index.js";
-import { layout } from "dagre-d3-es/src/dagre/index.js";
+import dagre from "dagre";
 import type { GraphData } from "@/lib/actions/graph";
 import type { LayoutResult, PositionedNode } from "./types";
 
@@ -28,7 +27,7 @@ export function computeHierarchicalLayout(
     return { nodes: [], links: [] };
   }
 
-  const g = new Graph({ directed: true, compound: false, multigraph: false });
+  const g = new dagre.graphlib.Graph({ directed: true, compound: false, multigraph: false });
   g.setGraph({ rankdir: direction, ranksep: rankSep, nodesep: nodeSep });
   g.setDefaultEdgeLabel(() => ({}));
 
@@ -44,7 +43,7 @@ export function computeHierarchicalLayout(
     }
   }
 
-  layout(g, {});
+  dagre.layout(g);
 
   const nodes: PositionedNode[] = data.nodes.map((node) => {
     const gNode = g.node(node.id);

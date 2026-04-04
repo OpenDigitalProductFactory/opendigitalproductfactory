@@ -95,10 +95,9 @@ export {
   type ConnectionLoaderDb,
   type DecryptFn,
 } from "./discovery-runners/connection-collectors";
-export {
-  collectUnifiDiscovery,
-  buildDepsFromConnection as buildUnifiDepsFromConnection,
-} from "./discovery-collectors/unifi";
+// UniFi collector uses 'undici' (Node-only) — do NOT export from barrel.
+// Import dynamically in server actions: await import("@dpf/db/discovery-collectors-unifi")
+export type { UnifiDeps } from "./discovery-collectors/unifi";
 export {
   deriveNestedChevronSequenceWarnings,
   sortStructuredChildren,

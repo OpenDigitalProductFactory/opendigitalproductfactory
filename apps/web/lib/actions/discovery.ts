@@ -160,10 +160,10 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
   if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
 
   // Import collector dynamically to avoid circular deps
-  const { collectUnifiDiscovery, buildUnifiDepsFromConnection } = await import("@dpf/db");
+  const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
 
   const config = (conn.configuration ?? {}) as Record<string, unknown>;
-  const deps = buildUnifiDepsFromConnection({
+  const deps = buildDepsFromConnection({
     endpointUrl: conn.endpointUrl,
     apiKey,
     configuration: {
