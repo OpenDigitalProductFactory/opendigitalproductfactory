@@ -295,13 +295,8 @@ if (-not (Is-StepDone "windows_exporter")) {
             Invoke-WebRequest -Uri $weUrl -OutFile $weMsi -UseBasicParsing
 
             Write-Action "Installing silently (creates Windows service + firewall rule)..."
-            $msiArgs = @(
-                "/i", $weMsi,
-                "/quiet", "/norestart",
-                "ENABLED_COLLECTORS=cpu,memory,net,logical_disk,os,system,thermalzone",
-                "ADDLOCAL=FirewallException"
-            )
-            Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArgs -Wait -NoNewWindow
+            $msiCmd = "/i `"$weMsi`" /quiet /norestart ENABLED_COLLECTORS=cpu,memory,net,logical_disk,os,system,thermalzone ADDLOCAL=FirewallException /L*v `"$env:TEMP\windows_exporter_install.log`""
+            Start-Process -FilePath "msiexec.exe" -ArgumentList $msiCmd -Wait -NoNewWindow
 
             # Verify it installed
             Start-Sleep -Seconds 3
