@@ -453,7 +453,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 type="button"
                 disabled={isPending}
                 onClick={() => startTransition(async () => {
-                  await disconnectProviderOAuth(provider.providerId);
+                  const result = await disconnectProviderOAuth(provider.providerId);
+                  if (result.error) {
+                    setTestResult({ ok: false, message: result.error });
+                    return;
+                  }
                   router.refresh();
                 })}
                 style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
