@@ -47,6 +47,10 @@ vi.mock("./rate-recovery", () => ({
   scheduleRecovery: vi.fn(),
 }));
 
+vi.mock("@/lib/ai-provider-internals", () => ({
+  autoDiscoverAndProfile: vi.fn(),
+}));
+
 // ── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { callWithFallbackChain } from "./fallback";
@@ -54,6 +58,7 @@ import { prisma } from "@dpf/db";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
+import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import type { RouteDecision } from "./types";
 import type { SensitivityLevel } from "./types";
 
@@ -89,6 +94,7 @@ const mockRecordRequest = recordRequest as ReturnType<typeof vi.fn>;
 const mockLearnFromRateLimitResponse = learnFromRateLimitResponse as ReturnType<typeof vi.fn>;
 const mockExtractRetryAfterMs = extractRetryAfterMs as ReturnType<typeof vi.fn>;
 const mockScheduleRecovery = scheduleRecovery as ReturnType<typeof vi.fn>;
+const mockAutoDiscoverAndProfile = autoDiscoverAndProfile as ReturnType<typeof vi.fn>;
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +110,10 @@ beforeEach(() => {
   // Default: prisma writes succeed
   mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.modelProvider.update.mockResolvedValue({});
+  mockAutoDiscoverAndProfile.mockResolvedValue({
+    discovered: 1,
+    profiled: 1,
+  });
 
   // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
@@ -267,6 +277,20 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
     });
+
+    it("triggers provider reconciliation after retirement", async () => {
+      throwModelNotFound();
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
+    });
   });
 
   // ── auth error ───────────────────────────────────────────────────────────
@@ -311,6 +335,33 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("provider interface drift", () => {
+    it("degrades the model and triggers reconciliation after unsupported parameter errors", async () => {
+      const err = new InferenceError(
+        "HTTP 400 from prov1: Unsupported parameter: reasoning_effort",
+        "provider_error",
+        "prov1",
+        400,
+      );
+      mockCallProvider.mockRejectedValue(err);
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
+        where: { providerId: "prov1", modelId: "model1" },
+        data: { modelStatus: "degraded" },
+      });
+      expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
     });
   });
 });

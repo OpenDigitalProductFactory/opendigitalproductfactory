@@ -45,15 +45,15 @@ export function getExclusionReasonV2(
   }
 
   // EP-INF-009c: Model class filter — exact match when requiredModelClass is set,
-  // otherwise default to chat/reasoning only (preserves pre-009c behavior).
+  // otherwise default to general-purpose text models.
   const modelClass = (ep as unknown as Record<string, unknown>).modelClass ?? "chat";
   if (contract.requiredModelClass) {
     if (modelClass !== contract.requiredModelClass) {
       return `modelClass "${modelClass}" does not match required "${contract.requiredModelClass}"`;
     }
   } else {
-    if (modelClass !== "chat" && modelClass !== "reasoning") {
-      return `modelClass "${modelClass}" is not eligible for chat/reasoning tasks`;
+    if (modelClass !== "chat" && modelClass !== "reasoning" && modelClass !== "code") {
+      return `modelClass "${modelClass}" is not eligible for general-purpose text tasks`;
     }
   }
 

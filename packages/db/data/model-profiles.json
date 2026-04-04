@@ -221,13 +221,73 @@
     },
     "summary": "GPT-5.4 (ChatGPT Subscription) by ChatGPT - optimized for conversation"
   },
-  {
-    "providerId": "codex",
-    "modelId": "codex-mini-latest",
-    "friendlyName": "Codex Mini",
-    "modelStatus": "active",
-    "capabilityTier": "advanced",
-    "costTier": "$$",
+    {
+      "providerId": "codex",
+      "modelId": "gpt-5-codex",
+      "friendlyName": "GPT-5 Codex",
+      "modelStatus": "active",
+      "capabilityTier": "advanced",
+      "costTier": "$$$",
+      "bestFor": [
+        "coding",
+        "reasoning",
+        "agentic-tasks"
+      ],
+      "avoidFor": [
+        "conversation"
+      ],
+      "contextWindow": null,
+      "speedRating": null,
+      "supportsToolUse": true,
+      "codingCapability": null,
+      "instructionFollowing": null,
+      "modelFamily": "codex",
+      "modelClass": "code",
+      "maxInputTokens": null,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": {
+        "toolUse": true,
+        "streaming": true,
+        "imageInput": false,
+        "structuredOutput": true
+      },
+      "pricing": {},
+      "instructType": null,
+      "trainingDataCutoff": null,
+      "codegen": 96,
+      "contextRetention": 78,
+      "conversational": 50,
+      "reasoning": 88,
+      "structuredOutputScore": 84,
+      "toolFidelity": 90,
+      "maxContextTokens": 128000,
+      "maxOutputTokens": 16384,
+      "inputPricePerMToken": null,
+      "outputPricePerMToken": null,
+      "profileConfidence": "medium",
+      "profileSource": "seed",
+      "supportedModalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "summary": "GPT-5 Codex by OpenAI Codex - flagship coding model"
+    },
+    {
+      "providerId": "codex",
+      "modelId": "codex-mini-latest",
+      "friendlyName": "Codex Mini",
+      "modelStatus": "active",
+      "capabilityTier": "advanced",
+      "costTier": "$$",
     "bestFor": [
       "coding",
       "agentic-tasks"
@@ -237,11 +297,11 @@
     ],
     "contextWindow": null,
     "speedRating": null,
-    "supportsToolUse": true,
-    "codingCapability": null,
-    "instructionFollowing": null,
-    "modelFamily": null,
-    "modelClass": "agent",
+      "supportsToolUse": true,
+      "codingCapability": null,
+      "instructionFollowing": null,
+      "modelFamily": "codex",
+      "modelClass": "code",
     "maxInputTokens": null,
     "inputModalities": [
       "text"
@@ -278,8 +338,8 @@
         "text"
       ]
     },
-    "summary": "Codex Mini by OpenAI Codex - optimized for coding"
-  },
+      "summary": "Codex Mini by OpenAI Codex - optimized for coding"
+    },
   {
     "providerId": "gemini",
     "modelId": "deep-research-pro-preview-12-2025",

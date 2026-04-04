@@ -18,14 +18,25 @@ describe("KNOWN_PROVIDER_MODELS catalog", () => {
     expect(KNOWN_PROVIDER_MODELS["ollama"]).toBeUndefined();
   });
 
-  it("codex model matches seed.ts data", () => {
-    const codex = KNOWN_PROVIDER_MODELS.codex[0];
-    expect(codex.modelId).toBe("codex-mini-latest");
-    expect(codex.modelClass).toBe("agent");
-    expect(codex.costTier).toBe("$$");
-    expect(codex.capabilities.toolUse).toBe(true);
-    expect(codex.scores?.codegen).toBe(90);
-    expect(codex.scores?.reasoning).toBe(70);
+  it("codex catalog uses canonical code model class and includes GPT-5 Codex", () => {
+    const codexModels = KNOWN_PROVIDER_MODELS.codex;
+    const modelIds = codexModels.map((model) => model.modelId);
+
+    expect(modelIds).toContain("codex-mini-latest");
+    expect(modelIds).toContain("gpt-5-codex");
+
+    for (const model of codexModels) {
+      expect(model.modelClass).toBe("code");
+      expect(model.capabilities.toolUse).toBe(true);
+    }
+
+    const codexMini = codexModels.find((model) => model.modelId === "codex-mini-latest");
+    const gpt5Codex = codexModels.find((model) => model.modelId === "gpt-5-codex");
+
+    expect(codexMini).toBeDefined();
+    expect(gpt5Codex).toBeDefined();
+    expect(gpt5Codex!.scores?.codegen).toBeGreaterThan(codexMini!.scores?.codegen ?? 0);
+    expect(gpt5Codex!.scores?.reasoning).toBeGreaterThan(codexMini!.scores?.reasoning ?? 0);
   });
 
   it("chatgpt model matches seed.ts data", () => {

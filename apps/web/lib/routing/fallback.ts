@@ -10,6 +10,11 @@ import type { RoutedExecutionPlan } from "./recipe-types";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { recordRouteOutcome } from "./route-outcome";
+import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
+import {
+  shouldDegradeModelForInterfaceDrift,
+  shouldReconcileProviderAfterError,
+} from "@/lib/inference/provider-reconciliation";
 
 export interface FallbackResult {
   providerId: string;
@@ -193,6 +198,15 @@ export async function callWithFallbackChain(
               ),
             );
 
+          if (shouldReconcileProviderAfterError(e.code, e.message)) {
+            autoDiscoverAndProfile(entry.providerId).catch((err) =>
+              console.error(
+                `[callWithFallbackChain] failed to reconcile ${entry.providerId} after model_not_found:`,
+                err,
+              ),
+            );
+          }
+
         } else if (e.code === "auth") {
           // Auth errors remain at provider level — credentials are shared
           await prisma.modelProvider
@@ -206,6 +220,27 @@ export async function callWithFallbackChain(
                 err,
               ),
             );
+        } else if (shouldDegradeModelForInterfaceDrift(e.code, e.message)) {
+          await prisma.modelProfile
+            .updateMany({
+              where: { providerId: entry.providerId, modelId: entry.modelId },
+              data: { modelStatus: "degraded" },
+            })
+            .catch((err) =>
+              console.error(
+                `[callWithFallbackChain] failed to degrade ${entry.providerId}/${entry.modelId} after interface drift:`,
+                err,
+              ),
+            );
+
+          if (shouldReconcileProviderAfterError(e.code, e.message)) {
+            autoDiscoverAndProfile(entry.providerId).catch((err) =>
+              console.error(
+                `[callWithFallbackChain] failed to reconcile ${entry.providerId} after interface drift:`,
+                err,
+              ),
+            );
+          }
         }
 
         // EP-INF-006: Record error outcome (fire-and-forget)

@@ -237,6 +237,18 @@ describe("getExclusionReasonV2", () => {
     const contract = makeContract();
     expect(getExclusionReasonV2(ep, contract)).toBeNull();
   });
+
+  it("allows code-class endpoints in the default general-purpose eligibility set", () => {
+    const codeEndpoint = makeEndpoint({ modelClass: "code" });
+    const contract = makeContract({ taskType: "unknown" });
+    expect(getExclusionReasonV2(codeEndpoint, contract)).toBeNull();
+  });
+
+  it("does not exclude code-class endpoints for coding-oriented requests", () => {
+    const codeEndpoint = makeEndpoint({ modelClass: "code" });
+    const contract = makeContract({ taskType: "code-gen" });
+    expect(getExclusionReasonV2(codeEndpoint, contract)).toBeNull();
+  });
 });
 
 // ── getExclusionReasonV2 – EP-INF-009c: requiredModelClass ───────────────────
@@ -266,12 +278,14 @@ describe("getExclusionReasonV2 – requiredModelClass (EP-INF-009c)", () => {
     expect(getExclusionReasonV2(embedding, contract)).toContain("modelClass");
   });
 
-  it("still allows chat and reasoning when no requiredModelClass (backward compat)", () => {
+  it("still allows chat, reasoning, and code when no requiredModelClass", () => {
     const chat = makeEndpoint({ modelClass: "chat" });
     const reasoning = makeEndpoint({ modelClass: "reasoning" });
+    const code = makeEndpoint({ modelClass: "code" });
     const contract = makeContract();
     expect(getExclusionReasonV2(chat, contract)).toBeNull();
     expect(getExclusionReasonV2(reasoning, contract)).toBeNull();
+    expect(getExclusionReasonV2(code, contract)).toBeNull();
   });
 
   it("allows audio models when requiredModelClass is audio", () => {

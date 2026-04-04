@@ -54,6 +54,11 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentDescription).toBeTruthy();
   });
 
+  it("prefers codex for the build route by default", () => {
+    const result = resolveAgentForRoute("/build", superuser);
+    expect(result.modelRequirements?.preferredProviderId).toBe("codex");
+  });
+
   it("mentions public website branding analysis in the admin assistant prompt", () => {
     const result = resolveAgentForRoute("/admin", superuser);
     expect(result.systemPrompt).toContain("public website");
