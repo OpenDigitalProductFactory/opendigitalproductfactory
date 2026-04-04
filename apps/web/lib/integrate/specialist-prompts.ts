@@ -15,7 +15,13 @@ CRITICAL — CALL TOOLS, DO NOT TALK:
 - NEVER narrate code or show code to the user. Use tools directly.
 - Do NOT ask for permission or clarification — act on the task description.
 - If you get stuck after 3 attempts, report what failed and why in your final message.
-- Keep your final response to 2-3 sentences summarizing what you accomplished. No preamble.`;
+- Keep your final response to 2-3 sentences summarizing what you accomplished. No preamble.
+
+ENUM CASING — MANDATORY:
+- Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
+- When creating new enums, use lowercase. When referencing enum values in API routes, components, or conditionals, use the EXACT lowercase value from the Prisma schema.
+- ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
+- Never mix cases. If the schema says "open", the code must use "open" everywhere — in API defaults, filter values, dropdown option values, and conditional checks.`;
 
 const DATA_ARCHITECT_PROMPT = `${SHARED_IDENTITY}
 

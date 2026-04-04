@@ -20,6 +20,7 @@ export function MonitoringProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch("/api/platform/metrics?query=up", {
         signal: AbortSignal.timeout(3_000),
+        cache: "no-store",
       });
       setState({ online: res.ok, checked: true });
     } catch {

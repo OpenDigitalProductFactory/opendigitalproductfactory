@@ -137,6 +137,30 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "get_marketing_summary",
+    description: "Get archetype-aware marketing metrics: storefront inbox counts, CRM pipeline summary, and the marketing playbook for this business type",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Number of days to look back (default 30)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_storefront",
+    sideEffect: false,
+  },
+  {
+    name: "suggest_campaign_ideas",
+    description: "Get structured context for generating archetype-specific marketing campaign ideas, including business type, season, playbook, and top storefront items",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_storefront",
+    sideEffect: false,
+  },
+  {
     name: "search_public_web",
     description: "Search the public web for relevant pages or facts",
     inputSchema: {
@@ -436,7 +460,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Writes to sandbox only, not production — available in advise mode
-    buildPhases: ["build"],
+    buildPhases: ["build", "review"],
   },
   {
     name: "iterate_sandbox",
@@ -498,7 +522,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
-    buildPhases: ["build"],
+    buildPhases: ["build", "review"],
   },
   {
     name: "edit_sandbox_file",
@@ -519,7 +543,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
-    buildPhases: ["build"],
+    buildPhases: ["build", "review"],
   },
   {
     name: "search_sandbox",
@@ -566,7 +590,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox is isolated from production — safe in any mode
-    buildPhases: ["build"],
+    buildPhases: ["build", "review"],
   },
   {
     name: "describe_model",
@@ -1496,6 +1520,7 @@ export async function executeTool(
   userId: string,
   context?: { routeContext?: string; agentId?: string; threadId?: string },
 ): Promise<ToolResult> {
+  try {
   switch (toolName) {
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
@@ -1779,21 +1804,39 @@ export async function executeTool(
     }
 
     case "confirm_taxonomy_placement": {
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        buildId = latestBuild.buildId;
+      try {
+        let buildId = String(params["buildId"] ?? "");
+        if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
+          const latestBuild = await prisma.featureBuild.findFirst({
+            where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+            orderBy: { updatedAt: "desc" },
+            select: { buildId: true },
+          });
+          if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+          buildId = latestBuild.buildId;
+        }
+        const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
+        const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
+        // Validate proposeNew structure before passing to Prisma
+        let proposeNew: { parentNodeId: string; name: string; description: string; rationale: string } | undefined;
+        if (params["proposeNew"] && typeof params["proposeNew"] === "object") {
+          const raw = params["proposeNew"] as Record<string, unknown>;
+          const parentNodeId = typeof raw["parentNodeId"] === "string" ? raw["parentNodeId"] : "";
+          const name = typeof raw["name"] === "string" ? raw["name"] : "";
+          const description = typeof raw["description"] === "string" ? raw["description"] : "";
+          const rationale = typeof raw["rationale"] === "string" ? raw["rationale"] : "";
+          if (!parentNodeId || !name) {
+            return { success: false, error: "Invalid proposeNew", message: "proposeNew requires at least parentNodeId and name" };
+          }
+          proposeNew = { parentNodeId, name, description, rationale };
+        }
+        const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
+        return { success: result.success, entityId: buildId, message: result.message };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        console.error(`[confirm_taxonomy_placement] Error:`, msg);
+        return { success: false, error: msg, message: `Taxonomy placement failed: ${msg}` };
       }
-      const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
-      const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
-      const proposeNew = params["proposeNew"] as { parentNodeId: string; name: string; description: string; rationale: string } | undefined;
-      const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
-      return { success: result.success, entityId: buildId, message: result.message };
     }
 
     case "register_digital_product_from_build": {
@@ -2265,6 +2308,14 @@ export async function executeTool(
         } catch (initErr) {
           console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
         }
+      }
+
+      // Start preview server so Live Preview shows the mockup (or "building..." spinner)
+      try {
+        const { startSandboxDevServer } = await import("@/lib/sandbox");
+        await startSandboxDevServer(slot.containerId);
+      } catch (devErr) {
+        console.log(`[launch_sandbox] preview server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
       }
 
       const { agentEventBus } = await import("@/lib/agent-event-bus");
@@ -5087,6 +5138,84 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
     }
 
+    case "get_marketing_summary": {
+      const { getPlaybookForCtaType } = await import("@/lib/tak/marketing-playbooks");
+      const days = typeof params["days"] === "number" ? params["days"] : 30;
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+
+      const config = await prisma.storefrontConfig.findFirst({
+        include: { archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } } },
+      });
+
+      if (!config) {
+        return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+      }
+
+      const playbook = getPlaybookForCtaType(config.archetype.ctaType);
+
+      const [bookings, inquiries, orders, donations, engagements, opportunities] = await Promise.all([
+        prisma.storefrontBooking.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
+        prisma.storefrontInquiry.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
+        prisma.storefrontOrder.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
+        prisma.storefrontDonation.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
+        prisma.engagement.groupBy({ by: ["status"], _count: true }),
+        prisma.opportunity.groupBy({ by: ["stage"], _count: true }),
+      ]);
+
+      return {
+        success: true,
+        message: `Marketing summary for ${config.archetype.name} (${config.archetype.ctaType})`,
+        data: {
+          archetype: { id: config.archetype.archetypeId, name: config.archetype.name, category: config.archetype.category, ctaType: config.archetype.ctaType },
+          playbook,
+          inbox: { days, bookings, inquiries, orders, donations, total: bookings + inquiries + orders + donations },
+          pipeline: {
+            engagements: Object.fromEntries(engagements.map((e) => [e.status, e._count])),
+            opportunities: Object.fromEntries(opportunities.map((o) => [o.stage, o._count])),
+          },
+        },
+      };
+    }
+
+    case "suggest_campaign_ideas": {
+      const { getPlaybookForCtaType } = await import("@/lib/tak/marketing-playbooks");
+
+      const config = await prisma.storefrontConfig.findFirst({
+        include: { archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } } },
+      });
+
+      if (!config) {
+        return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+      }
+
+      const playbook = getPlaybookForCtaType(config.archetype.ctaType);
+
+      // Current season for seasonal relevance
+      const month = new Date().getMonth();
+      const season = month <= 1 || month === 11 ? "winter" : month <= 4 ? "spring" : month <= 7 ? "summer" : "autumn";
+
+      // Top storefront items by name for campaign targeting
+      const items = await prisma.storefrontItem.findMany({
+        where: { storefrontId: config.id, isActive: true },
+        select: { name: true, priceType: true, ctaType: true },
+        orderBy: { sortOrder: "asc" },
+        take: 10,
+      });
+
+      return {
+        success: true,
+        message: `Campaign context for ${config.archetype.name}`,
+        data: {
+          archetype: { name: config.archetype.name, category: config.archetype.category, ctaType: config.archetype.ctaType },
+          playbook,
+          season,
+          currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
+          activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
+        },
+      };
+    }
+
     default: {
       const { parseNamespacedTool, executeMcpServerTool } = await import("./mcp-server-tools");
       const parsed = parseNamespacedTool(toolName);
@@ -5095,6 +5224,11 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       }
       return { success: false, error: "Unknown tool", message: `Tool ${toolName} not found` };
     }
+  }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[executeTool] Uncaught exception in tool "${toolName}":`, msg);
+    return { success: false, error: msg, message: `Tool ${toolName} failed: ${msg}` };
   }
 }
 

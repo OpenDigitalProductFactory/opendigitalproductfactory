@@ -44,7 +44,7 @@ export function useMetricRangeQuery(
         end: now.toString(),
         step,
       });
-      const res = await fetch(`/api/platform/metrics?${params}`);
+      const res = await fetch(`/api/platform/metrics?${params}`, { cache: "no-store" });
       if (res.status === 503) {
         setState(OFFLINE_STATE);
         return;

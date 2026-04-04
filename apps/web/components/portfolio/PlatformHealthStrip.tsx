@@ -42,10 +42,11 @@ export function PlatformHealthStrip() {
 
   const probe = useCallback(async () => {
     try {
-      // Fetch service status and alerts in parallel
+      // Fetch service status and alerts in parallel (cache: "no-store" prevents stale browser cache)
+      const fetchOpts = { signal: AbortSignal.timeout(3_000), cache: "no-store" as RequestCache };
       const [upRes, alertRes] = await Promise.all([
-        fetch("/api/platform/metrics?query=up", { signal: AbortSignal.timeout(3_000) }),
-        fetch("/api/platform/metrics/alerts", { signal: AbortSignal.timeout(3_000) }),
+        fetch("/api/platform/metrics?query=up", fetchOpts),
+        fetch("/api/platform/metrics/alerts", fetchOpts),
       ]);
 
       if (!upRes.ok) {

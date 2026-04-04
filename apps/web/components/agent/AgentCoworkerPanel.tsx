@@ -189,24 +189,26 @@ export function AgentCoworkerPanel({
     // SSE connection lost — don't mark as "Not sent", show reconnection attempt
     es.onerror = () => {
       // EventSource auto-reconnects. If the server already emitted "done" while
-      // disconnected, the reconnection won't see it. After a few retries, we
-      // check if messages appeared in DB as a fallback.
-      setTimeout(() => {
-        if (!isBusy) return; // Already resolved
-        getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
-          if (!snapshot) return;
-          // If new messages appeared since we started, the agent finished while we were disconnected
-          const latestMsg = snapshot.messages[snapshot.messages.length - 1];
-          if (latestMsg && latestMsg.role === "assistant") {
-            setMessages(filterMessages(snapshot.messages));
-            setIsBusy(false);
-            setCurrentTool(null);
-            setOrchestratorStatus(null);
-          }
-        }).catch(() => {});
-      }, 5000);
+      // disconnected, the reconnection won't see it. The periodic recovery poll
+      // below will catch this case.
     };
-    return () => { es.close(); setCurrentTool(null); setOrchestratorStatus(null); };
+
+    // Periodic recovery: check DB every 15 seconds while busy.
+    // Catches missed SSE "done" events (connection drops, server restart, etc.)
+    const recoveryInterval = setInterval(() => {
+      getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
+        if (!snapshot) return;
+        const latestMsg = snapshot.messages[snapshot.messages.length - 1];
+        if (latestMsg && latestMsg.role === "assistant") {
+          setMessages(filterMessages(snapshot.messages));
+          setIsBusy(false);
+          setCurrentTool(null);
+          setOrchestratorStatus(null);
+        }
+      }).catch(() => {});
+    }, 15_000);
+
+    return () => { es.close(); clearInterval(recoveryInterval); setCurrentTool(null); setOrchestratorStatus(null); };
   }, [isBusy, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -335,9 +337,15 @@ export function AgentCoworkerPanel({
           ),
         );
         setIsBusy(false);
+      } else {
+        // Server accepted — mark as sent so user sees delivery confirmation
+        // instead of "Sending..." for the entire duration of agent execution.
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
+          ),
+        );
       }
-      // On success (200), the server is processing in background.
-      // The SSE "done" handler below will handle completion.
     }).catch((e) => {
       console.error("[submitMessage] network error:", e);
       setMessages((prev) =>
@@ -601,7 +609,8 @@ export function AgentCoworkerPanel({
       <CoworkerHealthStatus />
       <AgentMessageInput
         onSend={handleSend}
-        disabled={isBusy || isClearing || !threadId}
+        disabled={isClearing || !threadId}
+        busy={isBusy}
         threadId={threadId}
         pendingFile={pendingAttachment}
         onFileUploaded={setPendingAttachment}
