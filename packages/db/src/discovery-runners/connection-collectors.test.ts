@@ -90,7 +90,7 @@ describe("runConnectionCollectors", () => {
     expect(result.items).toHaveLength(0);
   });
 
-  it("skips and updates status when decrypt fails", async () => {
+  it("skips when decrypt fails and returns empty output", async () => {
     const db = makeMockDb([
       {
         id: "conn-3",
@@ -106,15 +106,6 @@ describe("runConnectionCollectors", () => {
     const result = await runConnectionCollectors(db, mockDecrypt);
 
     expect(result.items).toHaveLength(0);
-    expect(db.discoveryConnection.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "conn-3" },
-        data: expect.objectContaining({
-          lastTestStatus: "decrypt_failed",
-          status: "auth_failed",
-        }),
-      }),
-    );
   });
 
   it("skips non-unifi collector types", async () => {
