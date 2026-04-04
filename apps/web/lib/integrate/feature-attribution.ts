@@ -164,19 +164,41 @@ export async function confirmFeatureTaxonomy(
     where: { buildId },
     select: { id: true, taxonomyAttribution: true },
   });
-  if (!build) return { success: false, message: "Build not found" };
+  if (!build) return { success: false, message: `Build ${buildId} not found` };
 
-  const existing = (build.taxonomyAttribution as TaxonomyAttribution | null) ?? {
-    method: "manual" as const,
-    confidence: 1.0,
-    confirmedNodeId: null,
-    topCandidate: null,
-    candidates: [],
-    proposedNewNode: null,
-    attributedAt: new Date().toISOString(),
-  };
+  // Safely parse existing attribution — guard against corrupted JSON
+  let existing: TaxonomyAttribution;
+  try {
+    const raw = build.taxonomyAttribution;
+    existing = (raw && typeof raw === "object" ? raw : null) as TaxonomyAttribution | null ?? {
+      method: "manual" as const,
+      confidence: 1.0,
+      confirmedNodeId: null,
+      topCandidate: null,
+      candidates: [],
+      proposedNewNode: null,
+      attributedAt: new Date().toISOString(),
+    };
+  } catch {
+    existing = {
+      method: "manual" as const,
+      confidence: 1.0,
+      confirmedNodeId: null,
+      topCandidate: null,
+      candidates: [],
+      proposedNewNode: null,
+      attributedAt: new Date().toISOString(),
+    };
+  }
 
   if (proposeNew && !nodeId) {
+    // Validate that parentNodeId exists
+    const parentNode = await prisma.taxonomyNode.findUnique({
+      where: { nodeId: proposeNew.parentNodeId },
+      select: { nodeId: true, name: true },
+    });
+    if (!parentNode) return { success: false, message: `Parent taxonomy node ${proposeNew.parentNodeId} not found` };
+
     // Proposing a new taxonomy node
     await prisma.featureBuild.update({
       where: { buildId },
@@ -192,7 +214,7 @@ export async function confirmFeatureTaxonomy(
     });
     return {
       success: true,
-      message: `Proposed new taxonomy node "${proposeNew.name}" under ${proposeNew.parentNodeId}. The architecture team will review this proposal.`,
+      message: `Proposed new taxonomy node "${proposeNew.name}" under ${parentNode.name} (${proposeNew.parentNodeId}). The architecture team will review this proposal.`,
     };
   }
 

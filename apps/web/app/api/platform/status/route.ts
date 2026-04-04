@@ -7,6 +7,11 @@ import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Pragma": "no-cache",
+};
+
 export async function GET() {
   try {
     const activeRFCs = await prisma.changeRequest.findMany({
@@ -54,11 +59,11 @@ export async function GET() {
         })),
       })),
       checkedAt: new Date().toISOString(),
-    });
+    }, { headers: NO_CACHE_HEADERS });
   } catch {
     return NextResponse.json(
       { status: "unknown", maintenanceActive: false, activeMaintenanceWindows: [], error: "Failed to check status" },
-      { status: 500 },
+      { status: 500, headers: NO_CACHE_HEADERS },
     );
   }
 }

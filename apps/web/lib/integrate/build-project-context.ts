@@ -13,18 +13,36 @@ export const PROJECT_CONTEXT = `
 ARCHITECTURE:
 - Next.js 16 monorepo with pnpm workspaces
 - Two packages: apps/web (Next.js app) and packages/db (Prisma ORM)
-- App pages live at: apps/web/app/(shell)/<feature>/page.tsx
 - API routes live at: apps/web/app/api/<endpoint>/route.ts
 - Shared libraries at: apps/web/lib/
 - Prisma schema at: packages/db/prisma/schema.prisma (large file — use offset/limit when reading)
 - Tailwind CSS with CSS custom properties for theming
 
+ROUTE GROUPS — CRITICAL (Next.js uses parenthesized folders for layout grouping):
+- (shell)/         — Internal portal pages. REQUIRES AUTHENTICATION (staff login). Employee-facing features go here.
+                     Examples: (shell)/customer/, (shell)/workspace/, (shell)/finance/, (shell)/employee/
+- (storefront)/    — Public-facing storefront pages. NO AUTHENTICATION required. Customer/visitor-facing.
+                     Structure: (storefront)/s/[slug]/<feature>/page.tsx (each storefront has a slug)
+                     Examples: (storefront)/s/[slug]/checkout/, (storefront)/s/[slug]/inquire/
+- (customer-auth)/ — Customer authentication flows (login, signup, profile completion). Public.
+- (auth)/          — Internal staff auth flows (login, forgot-password). Public.
+- (setup)/         — First-run setup wizard. Internal.
+
+ROUTING RULES:
+- Public forms that ANYONE can access (no login) → put under (storefront)/s/[slug]/
+- Authenticated customer-facing dashboards → put under (shell)/customer/
+- Internal staff tools → put under (shell)/<feature>/
+- NEVER put public pages in (shell)/ — they will redirect to login
+- ALWAYS use list_sandbox_files to check existing route structure before creating new routes
+
 KEY PATHS:
-- Pages: apps/web/app/(shell)/         — all user-facing pages
-- API:   apps/web/app/api/             — all API endpoints
-- Lib:   apps/web/lib/                 — shared code, actions, utilities
-- DB:    packages/db/prisma/schema.prisma — database schema
-- Types: apps/web/lib/*-types.ts       — TypeScript type definitions
+- Internal pages: apps/web/app/(shell)/         — authenticated portal pages
+- Public pages:   apps/web/app/(storefront)/     — unauthenticated storefront pages
+- Customer hub:   apps/web/app/(shell)/customer/ — authenticated customer pages (engagements, quotes, orders, etc.)
+- API:            apps/web/app/api/              — all API endpoints
+- Lib:            apps/web/lib/                  — shared code, actions, utilities
+- DB:             packages/db/prisma/schema.prisma — database schema
+- Types:          apps/web/lib/*-types.ts        — TypeScript type definitions
 
 CONVENTIONS:
 - Pages use 'use client' directive for interactive components

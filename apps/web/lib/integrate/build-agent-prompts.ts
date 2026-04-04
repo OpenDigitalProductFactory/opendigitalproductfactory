@@ -256,10 +256,17 @@ WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
    - Inverse relations on BOTH sides (e.g., if Complaint has createdBy User, User MUST have complaintsCreated Complaint[])
    - @@index on every foreign key field (xxxId fields)
    - Enums DEFINED BEFORE models that reference them
+   - Enum values in LOWERCASE (open, assigned, resolved — NOT Open, OPEN, ASSIGNED)
 3. validate_schema — MANDATORY before any migration. Catches missing inverse relations, undefined types, unindexed FKs.
 4. ONLY after validate_schema passes: run_sandbox_command with "pnpm --filter @dpf/db exec prisma migrate dev --name <name>"
 5. run_sandbox_command with "pnpm --filter @dpf/db exec prisma generate" to regenerate the client
 NEVER run prisma migrate without calling validate_schema first.
+
+ENUM CASING — MANDATORY:
+- Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
+- When referencing enum values in API routes, components, dropdown <option> values, or conditional checks, use the EXACT lowercase value from the Prisma schema.
+- ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
+- Never mix cases. If the schema says "open", every reference must be "open" — in defaults, filters, option values, and conditionals.
 
 CRITICAL: NEVER use generate_code on a file that already exists. It overwrites the entire file and destroys existing code. ALWAYS use read_sandbox_file + edit_sandbox_file for existing files.
 

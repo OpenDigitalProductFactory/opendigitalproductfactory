@@ -33,6 +33,7 @@ export function useMetricQuery(
     try {
       const res = await fetch(
         `/api/platform/metrics?query=${encodeURIComponent(query)}`,
+        { cache: "no-store" },
       );
       if (res.status === 503) {
         setState(OFFLINE_STATE);

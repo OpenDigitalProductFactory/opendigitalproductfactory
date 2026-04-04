@@ -13,13 +13,14 @@ type PendingFile = {
 type Props = {
   onSend: (content: string) => void;
   disabled: boolean;
+  busy?: boolean;
   threadId: string | null;
   pendingFile: PendingFile | null;
   onFileUploaded: (result: PendingFile) => void;
   onFileClear: () => void;
 };
 
-export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onFileUploaded, onFileClear }: Props) {
+export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear }: Props) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -36,7 +37,7 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
 
   function handleSubmit() {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled || busy) return;
     if (trimmed.length > MAX_MESSAGE_LENGTH) return;
     onSend(trimmed);
     setValue("");
@@ -109,7 +110,7 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? "Sending..." : "Ask your co-worker..."}
+          placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
           rows={1}
           style={{
             flex: 1,
@@ -134,13 +135,14 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
         )}
         <AgentFileUpload
           threadId={threadId}
-          disabled={disabled}
+          disabled={disabled || !!busy}
           onUploaded={onFileUploaded}
         />
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={disabled || !value.trim() || overLimit}
+          disabled={disabled || busy || !value.trim() || overLimit}
+          title={busy ? "Agent is still working" : undefined}
           style={{
             background: "var(--dpf-accent)",
             border: "none",
@@ -148,8 +150,8 @@ export function AgentMessageInput({ onSend, disabled, threadId, pendingFile, onF
             padding: "6px 12px",
             fontSize: 12,
             color: "#ffffff",
-            cursor: disabled || !value.trim() || overLimit ? "not-allowed" : "pointer",
-            opacity: disabled || !value.trim() || overLimit ? 0.5 : 1,
+            cursor: disabled || busy || !value.trim() || overLimit ? "not-allowed" : "pointer",
+            opacity: disabled || busy || !value.trim() || overLimit ? 0.5 : 1,
             flexShrink: 0,
             height: 32,
           }}

@@ -592,12 +592,19 @@ export async function runAgenticLoop(params: {
       console.log(`[agentic-tool] CALL iter=${iteration} tool=${tc.name} args=${argsPreview}`);
 
       const toolStartMs = Date.now();
-      const toolResult = await executeTool(
-        tc.name,
-        tc.arguments,
-        userId,
-        { routeContext, agentId, threadId },
-      );
+      let toolResult: ToolResult;
+      try {
+        toolResult = await executeTool(
+          tc.name,
+          tc.arguments,
+          userId,
+          { routeContext, agentId, threadId },
+        );
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        console.error(`[agentic-tool] UNCAUGHT iter=${iteration} tool=${tc.name}:`, errorMsg);
+        toolResult = { success: false, error: errorMsg, message: `Tool ${tc.name} failed: ${errorMsg}` };
+      }
 
       const durationMs = Date.now() - toolStartMs;
       const resultPreview = (toolResult.message ?? "").slice(0, 200);

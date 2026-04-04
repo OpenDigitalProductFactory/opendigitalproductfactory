@@ -19,6 +19,7 @@ export function PlatformHealthIndicator() {
     try {
       const res = await fetch("/api/platform/metrics/alerts", {
         signal: AbortSignal.timeout(3_000),
+        cache: "no-store",
       });
       if (res.status === 503) {
         setHealth("offline");
