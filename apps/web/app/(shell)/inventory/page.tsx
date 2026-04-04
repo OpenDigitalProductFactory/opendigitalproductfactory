@@ -24,7 +24,7 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData, connectionCount] = await Promise.all([
+  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData, connectionCount, detectedGateways] = await Promise.all([
     prisma.digitalProduct.findMany({
       orderBy: [{ portfolio: { name: "asc" } }, { name: "asc" }],
       select: {
@@ -41,7 +41,21 @@ export default async function InventoryPage() {
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
     prisma.discoveryConnection.count(),
+    // Find the real network gateway (not Docker bridges) from discovered entities
+    prisma.inventoryEntity.findMany({
+      where: {
+        entityType: "gateway",
+        NOT: { name: { contains: "Docker" } },
+      },
+      select: { name: true, properties: true },
+      take: 5,
+    }),
   ]);
+  // Extract real gateway IP (non-Docker, non-172.x)
+  const realGatewayIp = detectedGateways
+    .map((g) => (g.properties as Record<string, unknown>)?.address as string | undefined)
+    .find((addr) => addr && !addr.startsWith("172.")) ?? null;
+
   const health = summarizeDiscoveryHealth({
     totalEntities: inventoryEntities.length,
     staleEntities: inventoryEntities.filter((entity) => entity.status === "stale").length,
@@ -59,7 +73,7 @@ export default async function InventoryPage() {
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
-        {connectionCount === 0 && <AddDiscoveryConnection />}
+        {connectionCount === 0 && <AddDiscoveryConnection detectedGateway={realGatewayIp} />}
         <InventoryExceptionQueue entities={needsReview} />
         <InventoryEntityPanel entities={inventoryEntities} />
         <PortfolioQualityIssuesPanel issues={openIssues} />
