@@ -558,6 +558,91 @@ services:
     profiles: ["promote"]
     restart: "no"
 
+  # --- Monitoring Stack ---------------------------------------------------
+  # Prometheus + Grafana + exporters for infrastructure discovery and health.
+  # node-exporter runs on the HOST network so it sees real interfaces.
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: dpf_monitor
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/dpf-overview.json
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    privileged: true
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--web.listen-address=:9100"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
   neo4jdata:
@@ -565,7 +650,158 @@ volumes:
   sandbox_pgdata:
   sandbox_workspace:
   backups:
+  prometheus_data:
+  grafana_data:
 "@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
+
+            # Write monitoring configuration files (Prometheus + Grafana)
+            $monDir = "$DPF_DIR\monitoring"
+            New-Item -ItemType Directory -Path "$monDir\prometheus" -Force | Out-Null
+            New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\datasources" -Force | Out-Null
+            New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\dashboards" -Force | Out-Null
+            New-Item -ItemType Directory -Path "$monDir\grafana\dashboards" -Force | Out-Null
+
+            # Prometheus config
+            @"
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: "cadvisor"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: "node-exporter"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["host.docker.internal:9100"]
+
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: "qdrant"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["qdrant:6333"]
+    metrics_path: /metrics
+
+  - job_name: "portal"
+    static_configs:
+      - targets: ["portal:3000"]
+    metrics_path: /api/metrics
+
+  - job_name: "sandbox"
+    static_configs:
+      - targets: ["sandbox:3000"]
+    metrics_path: /api/metrics
+
+  - job_name: "model-runner"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["model-runner.docker.internal:80"]
+    metrics_path: /metrics
+
+  - job_name: "prometheus"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["localhost:9090"]
+"@ | Set-Content "$monDir\prometheus\prometheus.yml" -Encoding UTF8
+
+            # Prometheus alerts
+            @"
+groups:
+  - name: dpf_infrastructure
+    rules:
+      - alert: ContainerDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ `$labels.job }} is down"
+
+      - alert: HostHighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU usage above 85% for 10 minutes"
+
+      - alert: HostHighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory usage above 85%"
+
+      - alert: HostNetworkInterfaceDown
+        expr: node_network_up{device!~"lo|veth.*|br-.*|docker.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Network interface {{ `$labels.device }} is down"
+
+  - name: dpf_databases
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unreachable"
+
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant vector DB is unreachable"
+"@ | Set-Content "$monDir\prometheus\alerts.yml" -Encoding UTF8
+
+            # Grafana datasource
+            @"
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+"@ | Set-Content "$monDir\grafana\provisioning\datasources\prometheus.yml" -Encoding UTF8
+
+            # Grafana dashboard provisioner
+            @"
+apiVersion: 1
+providers:
+  - name: DPF
+    orgId: 1
+    folder: DPF Platform
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
+"@ | Set-Content "$monDir\grafana\provisioning\dashboards\dashboards.yml" -Encoding UTF8
+
+            # Grafana overview dashboard (minimal)
+            @"
+{"editable":false,"panels":[{"title":"Platform Services","type":"stat","gridPos":{"h":4,"w":24,"x":0,"y":0},"targets":[{"expr":"up","legendFormat":"{{ job }}","refId":"A"}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}],"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}},"overrides":[]},"options":{"colorMode":"background","graphMode":"none","justifyMode":"auto","textMode":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}}],"schemaVersion":39,"tags":["dpf","overview"],"templating":{"list":[]},"time":{"from":"now-1h","to":"now"},"timepicker":{},"timezone":"browser","title":"DPF Platform Overview","uid":"dpf-overview","version":1}
+"@ | Set-Content "$monDir\grafana\dashboards\dpf-overview.json" -Encoding UTF8
+
+            Write-OK "Created monitoring configuration (Prometheus + Grafana)"
 
             # Write dpf-start.ps1 for consumer (no .git dependency)
             @'
