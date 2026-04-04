@@ -61,7 +61,7 @@ export function ConfigureConnectionInline({
       setMessage("");
 
       const configuration: Record<string, unknown> = {};
-      if (isUnifi) configuration.site = site;
+      if (isUnifi) { configuration.site = site; configuration.discoverClients = true; }
       if (isSnmp) configuration.community = apiKey || "public";
       if (isArpScan) configuration.subnet = endpointUrl;
 
