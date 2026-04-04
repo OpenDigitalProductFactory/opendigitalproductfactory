@@ -4,7 +4,8 @@ export type DiscoverySourceKind =
   | "docker"
   | "kubernetes"
   | "prometheus"
-  | "network";
+  | "network"
+  | "unifi";
 
 export type DiscoveredItemInput = {
   sourceKind?: DiscoverySourceKind;
@@ -52,6 +53,6 @@ export type CollectorContext = {
   sourceKind: DiscoverySourceKind;
 };
 
-export type CollectorName = "host" | "docker" | "kubernetes" | "prometheus" | "network";
+export type CollectorName = "host" | "docker" | "kubernetes" | "prometheus" | "network" | "unifi";
 
 export type DiscoveryCollector = (ctx?: CollectorContext) => Promise<CollectorOutput>;

@@ -15,6 +15,7 @@ import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
 } from "./discovery-inference";
+import { runConnectionCollectors, type ConnectionLoaderDb, type DecryptFn } from "./discovery-runners/connection-collectors";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
@@ -26,6 +27,8 @@ type BootstrapExecutionOptions = NormalizeDiscoveryOptions & {
   runKey?: string;
   sourceSlug?: string;
   trigger?: string;
+  /** Credential decryption function. If provided, enables connection-based collectors. */
+  decrypt?: DecryptFn;
 };
 
 export function mergeCollectorOutputs(outputs: CollectorOutput[]): CollectorOutput {
@@ -66,7 +69,22 @@ export async function executeBootstrapDiscovery(
   db: BootstrapDiscoveryDb,
   options: BootstrapExecutionOptions = {},
 ) {
-  const rawCollected = await runBootstrapCollectors(options.collectors);
+  const rawStaticOutput = await runBootstrapCollectors(options.collectors);
+
+  // Run connection-based collectors (UniFi, etc.) loaded from the DB
+  let connectionOutput: CollectorOutput = { items: [], relationships: [] };
+  if (options.decrypt) {
+    try {
+      connectionOutput = await runConnectionCollectors(
+        db as unknown as ConnectionLoaderDb,
+        options.decrypt,
+      );
+    } catch (err) {
+      console.error("[discovery] Connection collectors failed (non-fatal):", err);
+    }
+  }
+
+  const rawCollected = mergeCollectorOutputs([rawStaticOutput, connectionOutput]);
 
   // Pass 1: Cross-collector relationship inference (host↔interfaces, target↔container)
   const collected = inferCrossCollectorRelationships(rawCollected);
@@ -118,5 +136,125 @@ export async function executeBootstrapDiscovery(
     console.error("[discovery] Product inference pass failed (non-fatal):", err);
   }
 
+  // Flag gateways that have no discovery connection configured
+  try {
+    await flagUnconfiguredGateways(db as never);
+  } catch (err) {
+    console.error("[discovery] Gateway connection flagging failed (non-fatal):", err);
+  }
+
   return persistenceSummary;
+}
+
+// ─── Gateway Connection Quality Issues ──────────────────────────────────────
+
+type GatewayFlagDb = {
+  inventoryEntity: {
+    findMany(args: {
+      where: { entityType: { in: string[] }; status: string };
+      select: { id: true; entityKey: true; name: true; properties: true };
+    }): Promise<Array<{
+      id: string;
+      entityKey: string;
+      name: string;
+      properties: unknown;
+    }>>;
+  };
+  discoveryConnection: {
+    findMany(args: {
+      where: { status: { not: string } };
+      select: { gatewayEntityId: true; endpointUrl: true };
+    }): Promise<Array<{ gatewayEntityId: string | null; endpointUrl: string }>>;
+  };
+  portfolioQualityIssue: {
+    upsert(args: {
+      where: { issueKey: string };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }): Promise<unknown>;
+    updateMany(args: {
+      where: { issueType: string; issueKey: { notIn: string[] } };
+      data: { status: string; resolvedAt: Date };
+    }): Promise<{ count: number }>;
+  };
+};
+
+async function flagUnconfiguredGateways(db: GatewayFlagDb): Promise<void> {
+  let gateways: Awaited<ReturnType<GatewayFlagDb["inventoryEntity"]["findMany"]>>;
+  try {
+    gateways = await db.inventoryEntity.findMany({
+      where: { entityType: { in: ["gateway", "router"] }, status: "active" },
+      select: { id: true, entityKey: true, name: true, properties: true },
+    });
+  } catch {
+    return; // table may not exist yet
+  }
+
+  if (gateways.length === 0) return;
+
+  // Load all configured connections to check which gateways are covered
+  let connections: Awaited<ReturnType<GatewayFlagDb["discoveryConnection"]["findMany"]>>;
+  try {
+    connections = await db.discoveryConnection.findMany({
+      where: { status: { not: "deleted" } },
+      select: { gatewayEntityId: true, endpointUrl: true },
+    });
+  } catch {
+    connections = []; // table may not exist yet (pre-migration)
+  }
+
+  const coveredEntityIds = new Set(
+    connections.map((c) => c.gatewayEntityId).filter(Boolean),
+  );
+  const coveredEndpoints = new Set(
+    connections.map((c) => {
+      try { return new URL(c.endpointUrl).hostname; } catch { return c.endpointUrl; }
+    }),
+  );
+
+  const activeIssueKeys: string[] = [];
+
+  for (const gw of gateways) {
+    // Check if this gateway is covered by any connection (by entity ID or by IP match)
+    if (coveredEntityIds.has(gw.id)) continue;
+    const props = (gw.properties ?? {}) as Record<string, unknown>;
+    const gwAddress = (props.address as string) ?? "";
+    if (gwAddress && coveredEndpoints.has(gwAddress)) continue;
+
+    const issueKey = `gateway_connection:${gw.entityKey}`;
+    activeIssueKeys.push(issueKey);
+
+    await db.portfolioQualityIssue.upsert({
+      where: { issueKey },
+      create: {
+        issueKey,
+        issueType: "gateway_connection_needed",
+        status: "open",
+        severity: "warn",
+        summary: `Gateway "${gw.name}" can be enriched with network topology data. Configure a discovery connection to pull device, VLAN, and client information.`,
+        details: { gatewayEntityId: gw.id, address: gwAddress },
+        inventoryEntity: { connect: { id: gw.id } },
+      },
+      update: {
+        status: "open",
+        lastDetectedAt: new Date(),
+        summary: `Gateway "${gw.name}" can be enriched with network topology data. Configure a discovery connection to pull device, VLAN, and client information.`,
+        details: { gatewayEntityId: gw.id, address: gwAddress },
+      },
+    });
+  }
+
+  // Auto-resolve issues for gateways that now have connections
+  try {
+    const resolved = await db.portfolioQualityIssue.updateMany({
+      where: {
+        issueType: "gateway_connection_needed",
+        issueKey: { notIn: activeIssueKeys },
+      },
+      data: { status: "resolved", resolvedAt: new Date() },
+    });
+    if (resolved.count > 0) {
+      console.log(`[discovery] Resolved ${resolved.count} gateway connection issue(s)`);
+    }
+  } catch { /* non-fatal */ }
 }

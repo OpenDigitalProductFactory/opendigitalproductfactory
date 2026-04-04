@@ -1,6 +1,7 @@
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { decryptSecret } from "@/lib/govern/credential-crypto";
 import { NextResponse } from "next/server";
 
 export async function POST() {
@@ -20,6 +21,7 @@ export async function POST() {
   try {
     const summary = await executeBootstrapDiscovery(prisma as never, {
       trigger: "manual_api",
+      decrypt: decryptSecret,
     });
     return NextResponse.json({ ok: true, summary });
   } catch (err) {

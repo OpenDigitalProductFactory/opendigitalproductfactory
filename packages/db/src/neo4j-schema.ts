@@ -81,7 +81,8 @@ export async function initNeo4jSchema(): Promise<void> {
  */
 export async function backfillOsiLayers(): Promise<void> {
   const mapping: Array<{ ciTypes: string[]; layer: number; layerName: string }> = [
-    { ciTypes: ["server", "host", "network", "subnet", "gateway", "network_interface", "docker_host"], layer: 3, layerName: "network" },
+    { ciTypes: ["server", "host", "network", "subnet", "gateway", "network_interface", "docker_host", "router", "network_client", "network_device"], layer: 3, layerName: "network" },
+    { ciTypes: ["switch", "access_point", "vlan"], layer: 2, layerName: "data_link" },
     { ciTypes: ["container", "service", "database", "runtime", "ai-inference"], layer: 7, layerName: "application" },
   ];
   for (const { ciTypes, layer, layerName } of mapping) {

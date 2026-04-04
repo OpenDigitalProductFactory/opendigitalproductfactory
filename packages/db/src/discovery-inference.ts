@@ -128,6 +128,28 @@ export function inferCrossCollectorRelationships(
     }
   }
 
+  // Correlate UniFi router with network gateway by shared IP address
+  const unifiRouter = collected.items.find(
+    (i) => i.itemType === "router" && i.sourceKind === "unifi",
+  );
+  const networkGateway = collected.items.find(
+    (i) => i.itemType === "gateway" && i.sourceKind === "network",
+  );
+  if (unifiRouter && networkGateway) {
+    const routerAddr = unifiRouter.attributes?.address as string | undefined;
+    const gwAddr = networkGateway.attributes?.address as string | undefined;
+    if (routerAddr && gwAddr && routerAddr === gwAddr) {
+      addedRelationships.push({
+        sourceKind: "dpf_bootstrap",
+        relationshipType: "PEER_OF",
+        fromExternalRef: unifiRouter.externalRef,
+        toExternalRef: networkGateway.externalRef,
+        confidence: 0.95,
+        attributes: { inferred: true, rule: "unifi_router_is_network_gateway" },
+      });
+    }
+  }
+
   // Return enriched output
   return {
     ...collected,

@@ -463,6 +463,7 @@ model Portfolio {
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
   knowledgeArticles      KnowledgeArticlePortfolio[]
+  valueStreamTeams       ValueStreamTeam[]
 }
 
 model DigitalProduct {
@@ -1254,7 +1255,8 @@ model Agent {
   performanceProfiles AgentPerformance[]
   degradationMappings FeatureDegradationMapping[]
   promptContext       AgentPromptContext?
-  knowledgeArticles   KnowledgeArticle[]            @relation("KnowledgeArticleAgentAuthor")
+  knowledgeArticles      KnowledgeArticle[]            @relation("KnowledgeArticleAgentAuthor")
+  valueStreamTeamRoles   ValueStreamTeamRole[]
 }
 
 model AgentOwnership {
@@ -1871,8 +1873,11 @@ model InventoryEntity {
   fromRelationships     InventoryRelationship[] @relation("InventoryRelationshipFromEntity")
   toRelationships       InventoryRelationship[] @relation("InventoryRelationshipToEntity")
   qualityIssues         PortfolioQualityIssue[]
-  changeItems           ChangeItem[]
-  softwareEvidence      DiscoveredSoftwareEvidence[]
+  changeItems                ChangeItem[]
+  softwareEvidence           DiscoveredSoftwareEvidence[]
+  discoveryConnectionGateways DiscoveryConnection[]  @relation("DiscoveryConnectionGateway")
+  discoveredViaConnectionId  String?
+  discoveredViaConnection    DiscoveryConnection?   @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
 
   @@index([entityType])
   @@index([attributionStatus])
@@ -4831,5 +4836,98 @@ model KnowledgeArticlePortfolio {
   portfolio   Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([articleId, portfolioId])
+}
+
+// ─── Value Stream Team Architecture (EP-VST-001) ─────────────────────────────
+// Spec: docs/superpowers/specs/2026-04-03-value-stream-team-architecture-design.md
+
+model ValueStreamTeam {
+  id                  String                @id @default(cuid())
+  name                String
+  valueStream         String                // IT4IT value stream slug: evaluate|explore|integrate|deploy|release|consume|operate
+  teamPattern         String                // specialist-dispatch|review-board|pair|swarm|pipeline
+  coordinationPattern Json                  // CoordinationPattern structure
+  eaProcessId         String?               // Link to EaElement (bpmn_process)
+  eaViewId            String?               // Link to EaView
+  portfolioId         String?
+  portfolio           Portfolio?            @relation(fields: [portfolioId], references: [id])
+  roles               ValueStreamTeamRole[]
+  hitlGates           ValueStreamHitlGate[]
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([portfolioId])
+  @@index([valueStream])
+}
+
+model ValueStreamTeamRole {
+  id                String          @id @default(cuid())
+  teamId            String
+  team              ValueStreamTeam @relation(fields: [teamId], references: [id])
+  roleName          String
+  workerType        String          // ai-agent|human|either
+  agentId           String?         // References Agent.id (cuid PK), not Agent.agentId
+  agent             Agent?          @relation(fields: [agentId], references: [id])
+  humanRoleId       String?         // PlatformRole reference
+  perspective       String?         // Diversity of Thought: how this role frames problems
+  heuristics        String?         // Diversity of Thought: strategies for finding solutions
+  interpretiveModel String?         // Diversity of Thought: what "good" means to this role
+  priority          Int             @default(0)
+  grantScope        String[]        @default([]) // AgentToolGrant keys resolved to tool names at dispatch
+  modelTier         String?         // frontier|strong|adequate|basic
+  bpmnLaneId        String?         // Link to EaElement (bpmn_lane)
+  maxRetries        Int             @default(2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([teamId])
+  @@index([agentId])
+}
+
+model ValueStreamHitlGate {
+  id                       String          @id @default(cuid())
+  teamId                   String
+  team                     ValueStreamTeam @relation(fields: [teamId], references: [id])
+  triggerPoint             String          // phase-transition|before-tool|after-evaluation|on-error
+  condition                Json?           // JSON expression evaluating context
+  requiredRole             String          // PlatformRole code (e.g., "HR-500", "HR-000")
+  escalationTimeoutMinutes Int             @default(30)
+  escalationPath           String[]        @default([])
+  channels                 String[]        @default([]) // in-app|slack|email|sms
+  emergencyBypass          Boolean         @default(false)
+  bpmnGatewayId            String?         // Link to EaElement (bpmn_gateway)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([teamId])
+}
+
+// ─── Discovery Connections ─────────────────────────────────────────────────────
+// Connects discovered infrastructure entities (e.g. gateways) to their management
+// APIs.  When a gateway is discovered, the user can configure a connection with
+// credentials.  On subsequent discovery sweeps, collectors read these connections
+// from the DB and use them to pull rich topology data.
+
+model DiscoveryConnection {
+  id                String              @id @default(cuid())
+  connectionKey     String              @unique          // e.g. "unifi:192.168.0.1"
+  name              String                               // human label
+  collectorType     String                               // "unifi" | future: "meraki", "fortigate", ...
+  status            String              @default("unconfigured") // unconfigured | active | auth_failed | unreachable
+  endpointUrl       String                               // e.g. "https://192.168.0.1"
+  encryptedApiKey   String?                              // AES-256-GCM encrypted via credential-crypto
+  configuration     Json                @default("{}")   // collector-specific config (site, discoverClients, etc.)
+  lastTestedAt      DateTime?
+  lastTestStatus    String?                              // ok | auth_failed | unreachable | tls_error
+  lastTestMessage   String?
+  gatewayEntityId   String?                              // FK to the InventoryEntity that triggered this connection
+  gatewayEntity     InventoryEntity?    @relation("DiscoveryConnectionGateway", fields: [gatewayEntityId], references: [id])
+  inventoryEntities InventoryEntity[]   @relation("DiscoveredViaConnection")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([collectorType])
+  @@index([status])
 }
 
