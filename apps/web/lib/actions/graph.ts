@@ -1,7 +1,8 @@
 // apps/web/lib/actions/graph.ts
 "use server";
 
-import { getNeighbours, type GraphNode, type GraphEdge } from "@dpf/db";
+import { getNeighbours, getInfraCIs, type GraphNode, type GraphEdge } from "@dpf/db";
+import { runCypher } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
 export type GraphData = {
@@ -109,8 +110,43 @@ export async function getFullGraphData(): Promise<GraphData> {
     }
   }
 
-  // Try to enrich with Neo4j graph data (infrastructure CIs, dependencies)
+  // Enrich with Neo4j infrastructure topology
   try {
+    // Add all InfraCI nodes
+    const infraCIs = await getInfraCIs();
+    for (const ci of infraCIs) {
+      if (!nodeMap.has(ci.id)) {
+        nodeMap.set(ci.id, {
+          id: ci.id,
+          name: ci.name,
+          label: "InfraCI",
+          color: LABEL_COLORS.InfraCI ?? "#38bdf8",
+          size: LABEL_SIZES.InfraCI ?? 5,
+        });
+      }
+    }
+
+    // Add all InfraCI-to-InfraCI relationships
+    const infraEdges = await runCypher<{
+      fromId: string;
+      toId: string;
+      relType: string;
+    }>(
+      `MATCH (a:InfraCI)-[r]->(b:InfraCI)
+       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
+      {},
+    );
+    for (const edge of infraEdges) {
+      if (nodeMap.has(edge.fromId) && nodeMap.has(edge.toId)) {
+        links.push({
+          source: edge.fromId,
+          target: edge.toId,
+          type: edge.relType,
+        });
+      }
+    }
+
+    // Add product-to-infra neighbours
     for (const p of products.slice(0, 20)) {
       const { incoming, outgoing } = await getNeighbours(p.productId);
       for (const n of [...incoming, ...outgoing]) {
