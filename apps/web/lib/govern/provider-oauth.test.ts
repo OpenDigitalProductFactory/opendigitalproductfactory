@@ -84,10 +84,10 @@ describe("createOAuthFlow", () => {
 
     expect(result).toHaveProperty("authorizeUrl");
     const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
-    expect(url.searchParams.get("scope")).toBe("api.responses.write");
+    expect(url.searchParams.get("scope")).toBeNull();
   });
 
-  it("merges required Responses scope with configured OAuth scopes", async () => {
+  it("preserves configured OAuth scopes without adding new defaults", async () => {
     mockPrisma.credentialEntry.findUnique.mockResolvedValue({
       providerId: "chatgpt",
       scope: "openid profile",
@@ -97,7 +97,7 @@ describe("createOAuthFlow", () => {
 
     expect(result).toHaveProperty("authorizeUrl");
     const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
-    expect(url.searchParams.get("scope")).toBe("openid profile api.responses.write");
+    expect(url.searchParams.get("scope")).toBe("openid profile");
   });
 });
 
