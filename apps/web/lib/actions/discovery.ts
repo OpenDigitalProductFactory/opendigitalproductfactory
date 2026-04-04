@@ -100,6 +100,32 @@ export async function listDiscoveryConnections(): Promise<
   };
 }
 
+/**
+ * Normalize user input into a proper endpoint URL.
+ * Accepts: "192.168.0.1", "http://192.168.0.1", "https://192.168.0.1:8443/"
+ * Returns: "https://192.168.0.1" (HTTPS by default for UniFi/SNMP controllers)
+ */
+function normalizeEndpointUrl(raw: string, collectorType: string): string {
+  let url = raw.trim().replace(/\/+$/, "");
+
+  // For ARP scan, the input is a subnet not a URL
+  if (collectorType === "arp_scan") return url;
+
+  // If no protocol specified, add one
+  if (!/^https?:\/\//i.test(url)) {
+    // UniFi controllers always use HTTPS
+    const protocol = collectorType === "unifi" ? "https" : "http";
+    url = `${protocol}://${url}`;
+  }
+
+  // UniFi should always be HTTPS (common mistake to use http://)
+  if (collectorType === "unifi" && url.startsWith("http://")) {
+    url = url.replace("http://", "https://");
+  }
+
+  return url;
+}
+
 /** Create or update a discovery connection. API key is encrypted at rest. */
 export async function configureDiscoveryConnection(input: {
   gatewayEntityId?: string;
@@ -112,7 +138,8 @@ export async function configureDiscoveryConnection(input: {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
 
-  const connectionKey = `${input.collectorType}:${input.endpointUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  const endpointUrl = normalizeEndpointUrl(input.endpointUrl, input.collectorType);
+  const connectionKey = `${input.collectorType}:${endpointUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
 
@@ -122,7 +149,7 @@ export async function configureDiscoveryConnection(input: {
       connectionKey,
       name: input.name,
       collectorType: input.collectorType,
-      endpointUrl: input.endpointUrl.replace(/\/+$/, ""),
+      endpointUrl,
       encryptedApiKey: encryptedApiKey ?? null,
       configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
       status: encryptedApiKey ? "active" : "unconfigured",
@@ -130,7 +157,7 @@ export async function configureDiscoveryConnection(input: {
     },
     update: {
       name: input.name,
-      endpointUrl: input.endpointUrl.replace(/\/+$/, ""),
+      endpointUrl,
       ...(encryptedApiKey ? { encryptedApiKey } : {}),
       configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
       status: encryptedApiKey ? "active" : "unconfigured",
