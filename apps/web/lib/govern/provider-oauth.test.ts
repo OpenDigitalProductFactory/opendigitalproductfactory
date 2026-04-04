@@ -41,7 +41,60 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: mockAutoDiscoverAndProfile,
 }));
 
-import { exchangeOAuthCode } from "./provider-oauth";
+import { createOAuthFlow, exchangeOAuthCode } from "./provider-oauth";
+
+describe("createOAuthFlow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockPrisma.oAuthPendingFlow.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.oAuthPendingFlow.create.mockResolvedValue({});
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
+
+    mockPrisma.modelProvider.findUnique.mockImplementation(
+      async ({ where }: { where: { providerId: string } }) => {
+        if (where.providerId === "codex") {
+          return {
+            providerId: "codex",
+            authorizeUrl: "https://auth.openai.com/oauth/authorize",
+            oauthClientId: "client-codex",
+            oauthRedirectUri: null,
+          };
+        }
+        if (where.providerId === "chatgpt") {
+          return {
+            providerId: "chatgpt",
+            authorizeUrl: "https://auth.openai.com/oauth/authorize",
+            oauthClientId: "client-chatgpt",
+            oauthRedirectUri: null,
+          };
+        }
+        return null;
+      },
+    );
+  });
+
+  it("requests the Responses API scope for Codex OAuth flows", async () => {
+    const result = await createOAuthFlow("codex");
+
+    expect(result).toHaveProperty("authorizeUrl");
+    const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
+    expect(url.searchParams.get("scope")).toBe("api.responses.write");
+  });
+
+  it("merges required Responses scope with configured OAuth scopes", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "chatgpt",
+      scope: "openid profile",
+    });
+
+    const result = await createOAuthFlow("chatgpt");
+
+    expect(result).toHaveProperty("authorizeUrl");
+    const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
+    expect(url.searchParams.get("scope")).toBe("openid profile api.responses.write");
+  });
+});
 
 describe("exchangeOAuthCode", () => {
   beforeEach(() => {

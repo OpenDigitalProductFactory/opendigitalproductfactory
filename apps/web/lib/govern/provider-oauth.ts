@@ -23,6 +23,28 @@ export function generatePKCE(): { codeVerifier: string; codeChallenge: string } 
 // ─── Flow start ───────────────────────────────────────────────────────────────
 
 const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const PROVIDER_REQUIRED_OAUTH_SCOPES: Record<string, readonly string[]> = {
+  codex: ["api.responses.write"],
+  chatgpt: ["api.responses.write"],
+};
+
+function mergeOAuthScopes(
+  configuredScope: string | null | undefined,
+  requiredScopes: readonly string[],
+): string | null {
+  const scopes = new Set(
+    (configuredScope ?? "")
+      .split(/\s+/)
+      .map((scope) => scope.trim())
+      .filter(Boolean),
+  );
+
+  for (const scope of requiredScopes) {
+    scopes.add(scope);
+  }
+
+  return scopes.size > 0 ? Array.from(scopes).join(" ") : null;
+}
 
 /** Determine the OAuth redirect URI for a provider.
  *  1. Explicit override (escape hatch for unusual providers)
@@ -70,10 +92,12 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     state,
   });
 
-  // Scope: use credential entry override if set, otherwise no default
-  // (providers have different scope requirements — don't assume OIDC scopes)
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (cred?.scope) params.set("scope", cred.scope);
+  const requestedScope = mergeOAuthScopes(
+    cred?.scope,
+    PROVIDER_REQUIRED_OAUTH_SCOPES[providerId] ?? [],
+  );
+  if (requestedScope) params.set("scope", requestedScope);
 
   return { authorizeUrl: `${provider.authorizeUrl}?${params.toString()}` };
 }

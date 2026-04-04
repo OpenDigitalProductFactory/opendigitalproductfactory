@@ -271,6 +271,11 @@ function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
   };
 }
 
+function formatResponsesScopeError(body: string): string | null {
+  if (!body.includes("api.responses.write")) return null;
+  return "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again";
+}
+
 export async function testProviderAuth(providerId: string): Promise<{ ok: boolean; message: string }> {
   await requireManageProviders();
 
@@ -349,6 +354,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       }
 
       const body = await res.text().catch(() => "");
+      const scopeError = formatResponsesScopeError(body);
+      if (scopeError) {
+        return { ok: false, message: scopeError };
+      }
       return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
     }
 
