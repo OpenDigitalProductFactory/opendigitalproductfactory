@@ -57,15 +57,46 @@ export function useGraphLayout(
         break;
       }
       case "swimlane": {
-        const osiMap = new Map(
-          filtered.nodes.map((n) => [
-            n.id,
-            (n as Record<string, unknown>).osiLayer as number | null ?? null,
-          ]),
-        );
-        computeSwimLaneLayout(filtered, (id) => osiMap.get(id) ?? null).then(
-          setResult,
-        );
+        if (view.name === "subnet-topology") {
+          // Build subnet membership map from MEMBER_OF edges
+          const subnetMap = new Map<string, string>();
+          const subnetNodes = new Set(
+            filtered.nodes
+              .filter((n) => {
+                const ct = (n as Record<string, unknown>).ciType;
+                return ct === "subnet" || ct === "vlan";
+              })
+              .map((n) => n.id),
+          );
+          for (const link of filtered.links) {
+            if (link.type === "MEMBER_OF" && subnetNodes.has(link.target)) {
+              subnetMap.set(link.source, link.target);
+            }
+          }
+          // Subnet nodes belong to their own partition
+          for (const id of subnetNodes) subnetMap.set(id, id);
+          // Find subnet name for partition labels
+          const subnetNames = new Map<string, string>();
+          for (const n of filtered.nodes) {
+            if (subnetNodes.has(n.id)) subnetNames.set(n.id, n.name);
+          }
+          computeSwimLaneLayout(
+            filtered,
+            (id) => subnetMap.get(id) ?? null,
+            { partitionLabels: subnetNames },
+          ).then(setResult);
+        } else {
+          // Default OSI layer partitioning
+          const osiMap = new Map(
+            filtered.nodes.map((n) => [
+              n.id,
+              (n as Record<string, unknown>).osiLayer as number | null ?? null,
+            ]),
+          );
+          computeSwimLaneLayout(filtered, (id) => osiMap.get(id) ?? null).then(
+            setResult,
+          );
+        }
         break;
       }
       case "force":

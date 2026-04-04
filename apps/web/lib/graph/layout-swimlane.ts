@@ -1,34 +1,57 @@
 import type { GraphData } from "@/lib/actions/graph";
 import type { LayoutResult, PositionedNode } from "./types";
 
+export type PartitionFn = (nodeId: string) => number | string | null;
+
 /**
- * Swimlane layout using ELK.js with OSI layer partitioning.
- * L7 (application) at the top, L1 (physical) at the bottom.
+ * Swimlane layout using ELK.js with partitioning.
+ * Supports OSI layer partitioning (numeric) and subnet partitioning (string).
  * Falls back to simple band layout if ELK is unavailable.
  */
 export async function computeSwimLaneLayout(
   data: GraphData,
-  getOsiLayer: (nodeId: string) => number | null,
+  getPartition: PartitionFn,
+  options?: { partitionLabels?: Map<string | number, string> },
 ): Promise<LayoutResult> {
   if (data.nodes.length === 0) {
     return { nodes: [], links: [] };
   }
 
+  // Build partition index map for ELK (needs integer partition keys)
+  const partitionKeys = new Set<string | number>();
+  for (const node of data.nodes) {
+    const p = getPartition(node.id);
+    if (p != null) partitionKeys.add(p);
+  }
+  const sortedPartitions = [...partitionKeys].sort((a, b) => {
+    // Numeric partitions: higher OSI layer first (L7 at top)
+    if (typeof a === "number" && typeof b === "number") return b - a;
+    // String partitions: physical first (non-172), then Docker (172)
+    const aStr = String(a);
+    const bStr = String(b);
+    const aIsDocker = aStr.startsWith("172.");
+    const bIsDocker = bStr.startsWith("172.");
+    if (aIsDocker !== bIsDocker) return aIsDocker ? 1 : -1;
+    return aStr.localeCompare(bStr);
+  });
+  const partitionIndex = new Map<string | number, number>();
+  sortedPartitions.forEach((key, idx) => partitionIndex.set(key, idx));
+
   try {
-    // Dynamic import — elkjs is ~400KB, only load when needed
     const ELK = (await import("elkjs/lib/elk.bundled.js")).default;
     const elk = new ELK();
 
     const nodeIds = new Set(data.nodes.map((n) => n.id));
 
     const children = data.nodes.map((node) => {
-      const layer = getOsiLayer(node.id);
+      const partition = getPartition(node.id);
+      const idx = partition != null ? partitionIndex.get(partition) : undefined;
       return {
         id: node.id,
         width: 60,
         height: 30,
-        ...(layer != null
-          ? { layoutOptions: { "elk.partitioning.partition": String(7 - layer) } }
+        ...(idx != null
+          ? { layoutOptions: { "elk.partitioning.partition": String(idx) } }
           : {}),
       };
     });
@@ -61,63 +84,67 @@ export async function computeSwimLaneLayout(
 
     const nodes: PositionedNode[] = data.nodes.map((node) => {
       const pos = posMap.get(node.id) ?? { x: 0, y: 0 };
-      return { ...node, ...pos, osiLayer: getOsiLayer(node.id) };
+      const partition = getPartition(node.id);
+      return {
+        ...node,
+        ...pos,
+        osiLayer: typeof partition === "number" ? partition : null,
+        partition: partition ?? undefined,
+      } as PositionedNode;
     });
 
     return { nodes, links: data.links };
   } catch {
-    // Fallback: simple band layout without ELK
-    return computeFallbackBandLayout(data, getOsiLayer);
+    return computeFallbackBandLayout(data, getPartition);
   }
 }
 
-/** Simple fallback: group nodes into horizontal bands by OSI layer. */
+/** Simple fallback: group nodes into horizontal bands by partition. */
 function computeFallbackBandLayout(
   data: GraphData,
-  getOsiLayer: (nodeId: string) => number | null,
+  getPartition: PartitionFn,
 ): LayoutResult {
   const bandHeight = 100;
   const nodeSpacing = 80;
 
-  // Group by layer
-  const byLayer = new Map<number, typeof data.nodes>();
-  const noLayer: typeof data.nodes = [];
+  const byPartition = new Map<string | number, typeof data.nodes>();
+  const noPartition: typeof data.nodes = [];
 
   for (const node of data.nodes) {
-    const layer = getOsiLayer(node.id);
-    if (layer != null) {
-      if (!byLayer.has(layer)) byLayer.set(layer, []);
-      byLayer.get(layer)!.push(node);
+    const p = getPartition(node.id);
+    if (p != null) {
+      if (!byPartition.has(p)) byPartition.set(p, []);
+      byPartition.get(p)!.push(node);
     } else {
-      noLayer.push(node);
+      noPartition.push(node);
     }
   }
 
   const nodes: PositionedNode[] = [];
+  const sortedKeys = [...byPartition.keys()].sort((a, b) => {
+    if (typeof a === "number" && typeof b === "number") return b - a;
+    return String(a).localeCompare(String(b));
+  });
 
-  // Sort layers descending (L7 at top)
-  const sortedLayers = [...byLayer.keys()].sort((a, b) => b - a);
-
-  for (let bandIdx = 0; bandIdx < sortedLayers.length; bandIdx++) {
-    const layer = sortedLayers[bandIdx]!;
-    const layerNodes = byLayer.get(layer)!;
+  for (let bandIdx = 0; bandIdx < sortedKeys.length; bandIdx++) {
+    const key = sortedKeys[bandIdx]!;
+    const bandNodes = byPartition.get(key)!;
     const y = 40 + bandIdx * bandHeight;
 
-    for (let i = 0; i < layerNodes.length; i++) {
+    for (let i = 0; i < bandNodes.length; i++) {
       nodes.push({
-        ...layerNodes[i],
+        ...bandNodes[i],
         x: 60 + i * nodeSpacing,
         y,
-        osiLayer: layer,
+        osiLayer: typeof key === "number" ? key : null,
       });
     }
   }
 
-  // Place unassigned nodes at the bottom
-  const bottomY = 40 + sortedLayers.length * bandHeight;
-  for (let i = 0; i < noLayer.length; i++) {
+  const bottomY = 40 + sortedKeys.length * bandHeight;
+  for (let i = 0; i < noPartition.length; i++) {
     nodes.push({
-      ...noLayer[i],
+      ...noPartition[i],
       x: 60 + i * nodeSpacing,
       y: bottomY,
       osiLayer: null,

@@ -3,14 +3,14 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import {
-  getInventoryEntitiesForPage,
+  getInventoryEntitiesGroupedBySubnet,
   getLatestDiscoveryRun,
   getNeedsReviewEntities,
   getOpenPortfolioQualityIssues,
   summarizeDiscoveryHealth,
 } from "@/lib/discovery-data";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
-import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPanel";
+import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupedInventoryPanel";
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
@@ -24,7 +24,7 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData, connectionCount, detectedGateways] = await Promise.all([
+  const [products, latestRun, groupedInventory, needsReview, openIssues, graphData, connectionCount, detectedGateways] = await Promise.all([
     prisma.digitalProduct.findMany({
       orderBy: [{ portfolio: { name: "asc" } }, { name: "asc" }],
       select: {
@@ -36,7 +36,7 @@ export default async function InventoryPage() {
       },
     }),
     getLatestDiscoveryRun(),
-    getInventoryEntitiesForPage(),
+    getInventoryEntitiesGroupedBySubnet(),
     getNeedsReviewEntities(),
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
@@ -57,8 +57,8 @@ export default async function InventoryPage() {
     .find((addr) => addr && !addr.startsWith("172.")) ?? null;
 
   const health = summarizeDiscoveryHealth({
-    totalEntities: inventoryEntities.length,
-    staleEntities: inventoryEntities.filter((entity) => entity.status === "stale").length,
+    totalEntities: groupedInventory.totalCount,
+    staleEntities: 0, // stale entities are filtered out by the grouped query
     openIssues: openIssues.length,
   });
 
@@ -75,7 +75,7 @@ export default async function InventoryPage() {
         <DiscoveryRunSummary run={latestRun} health={health} />
         {connectionCount === 0 && <AddDiscoveryConnection detectedGateway={realGatewayIp} />}
         <InventoryExceptionQueue entities={needsReview} />
-        <InventoryEntityPanel entities={inventoryEntities} />
+        <SubnetGroupedInventoryPanel groups={groupedInventory} />
         <PortfolioQualityIssuesPanel issues={openIssues} />
       </div>
 
