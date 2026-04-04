@@ -619,7 +619,8 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "9100:9100"
     pid: host
     volumes:
       - /proc:/host/proc:ro
@@ -629,7 +630,6 @@ services:
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/rootfs"
-      - "--web.listen-address=:9100"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   postgres-exporter:
@@ -679,7 +679,7 @@ scrape_configs:
   - job_name: "node-exporter"
     scrape_interval: 10s
     static_configs:
-      - targets: ["host.docker.internal:9100"]
+      - targets: ["node-exporter:9100"]
 
   - job_name: "postgres"
     static_configs:
