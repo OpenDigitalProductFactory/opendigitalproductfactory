@@ -41,7 +41,12 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: mockAutoDiscoverAndProfile,
 }));
 
-import { createOAuthFlow, exchangeOAuthCode } from "./provider-oauth";
+import {
+  buildProviderOAuthErrorPath,
+  createOAuthFlow,
+  exchangeOAuthCode,
+  findPendingOAuthProviderId,
+} from "./provider-oauth";
 
 describe("createOAuthFlow", () => {
   beforeEach(() => {
@@ -165,5 +170,38 @@ describe("exchangeOAuthCode", () => {
     expect(result).toEqual({ providerId: "codex" });
     expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalled();
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+});
+
+describe("findPendingOAuthProviderId", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the provider id for a known OAuth state", async () => {
+    mockPrisma.oAuthPendingFlow.findUnique.mockResolvedValue({
+      providerId: "codex",
+    });
+
+    await expect(findPendingOAuthProviderId("state-1")).resolves.toBe("codex");
+  });
+
+  it("returns null when state is missing", async () => {
+    await expect(findPendingOAuthProviderId(null)).resolves.toBeNull();
+    expect(mockPrisma.oAuthPendingFlow.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildProviderOAuthErrorPath", () => {
+  it("returns the provider page path when provider id is known", () => {
+    expect(buildProviderOAuthErrorPath("codex", "token_exchange_failed")).toBe(
+      "/platform/ai/providers/codex?oauth=error&reason=token_exchange_failed",
+    );
+  });
+
+  it("falls back to the AI overview page when provider id is unknown", () => {
+    expect(buildProviderOAuthErrorPath(null, "missing_params")).toBe(
+      "/platform/ai?oauth=error&reason=missing_params",
+    );
   });
 });

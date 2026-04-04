@@ -102,6 +102,29 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
   return { authorizeUrl: `${provider.authorizeUrl}?${params.toString()}` };
 }
 
+export async function findPendingOAuthProviderId(
+  state: string | null | undefined,
+): Promise<string | null> {
+  if (!state) return null;
+
+  const flow = await prisma.oAuthPendingFlow.findUnique({
+    where: { state },
+    select: { providerId: true },
+  });
+
+  return flow?.providerId ?? null;
+}
+
+export function buildProviderOAuthErrorPath(
+  providerId: string | null | undefined,
+  reason: string,
+): string {
+  const encodedReason = encodeURIComponent(reason);
+  return providerId
+    ? `/platform/ai/providers/${providerId}?oauth=error&reason=${encodedReason}`
+    : `/platform/ai?oauth=error&reason=${encodedReason}`;
+}
+
 // ─── Token exchange (callback) ────────────────────────────────────────────────
 
 export async function exchangeOAuthCode(

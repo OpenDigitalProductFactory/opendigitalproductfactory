@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { exchangeOAuthCode } from "@/lib/provider-oauth";
+import {
+  buildProviderOAuthErrorPath,
+  exchangeOAuthCode,
+  findPendingOAuthProviderId,
+} from "@/lib/provider-oauth";
 
 // Inside Docker, request.url resolves to http://0.0.0.0:3000 which browsers can't reach.
 function appBase(): string {
@@ -8,6 +12,8 @@ function appBase(): string {
 }
 
 export async function GET(request: NextRequest) {
+  const state = request.nextUrl.searchParams.get("state");
+  const pendingProviderId = await findPendingOAuthProviderId(state);
   // Verify admin is authenticated
   const session = await auth();
   if (!session?.user) {
@@ -15,22 +21,21 @@ export async function GET(request: NextRequest) {
   }
 
   const code = request.nextUrl.searchParams.get("code");
-  const state = request.nextUrl.searchParams.get("state");
   const error = request.nextUrl.searchParams.get("error");
 
   // Provider returned an error (e.g., user denied consent)
   if (error) {
-    return NextResponse.redirect(new URL(`/platform/ai?oauth=error&reason=${encodeURIComponent(error)}`, appBase()));
+    return NextResponse.redirect(new URL(buildProviderOAuthErrorPath(pendingProviderId, error), appBase()));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/platform/ai?oauth=error&reason=missing_params", appBase()));
+    return NextResponse.redirect(new URL(buildProviderOAuthErrorPath(pendingProviderId, "missing_params"), appBase()));
   }
 
   const result = await exchangeOAuthCode(state, code);
 
   if ("error" in result) {
-    return NextResponse.redirect(new URL(`/platform/ai?oauth=error&reason=${encodeURIComponent(result.error)}`, appBase()));
+    return NextResponse.redirect(new URL(buildProviderOAuthErrorPath(pendingProviderId, result.error), appBase()));
   }
 
   return NextResponse.redirect(
