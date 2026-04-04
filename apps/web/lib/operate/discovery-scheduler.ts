@@ -1,6 +1,7 @@
 // discovery-scheduler.ts
 // Timer-based infrastructure discovery. Started on portal boot via instrumentation.ts.
 // Polls Prometheus targets every 60s (lightweight). Runs full discovery every 15 min.
+// Registers both jobs as ScheduledJob records so they appear on the workspace calendar.
 
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 import { decryptSecret } from "../govern/credential-crypto";
@@ -9,15 +10,70 @@ const PROMETHEUS_POLL_INTERVAL_MS = 60_000;
 const FULL_SWEEP_INTERVAL_MS = 15 * 60_000;
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL ?? "http://prometheus:9090";
 
+const JOB_PROMETHEUS_POLL = "discovery-prometheus-poll";
+const JOB_FULL_SWEEP      = "discovery-full-sweep";
+
 let prometheusTimer: ReturnType<typeof setInterval> | null = null;
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 let knownTargetKeys = new Set<string>();
 let sweepInProgress = false;
 
+/** Upsert ScheduledJob rows so calendar-data.ts can project discovery events. */
+async function registerScheduledJobs(): Promise<void> {
+  const now = new Date();
+  await Promise.all([
+    prisma.scheduledJob.upsert({
+      where:  { jobId: JOB_PROMETHEUS_POLL },
+      create: {
+        jobId: JOB_PROMETHEUS_POLL,
+        name:  "Discovery: Prometheus target poll",
+        schedule: "every-1m",
+        nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
+      },
+      update: {
+        schedule: "every-1m",
+        nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
+      },
+    }),
+    prisma.scheduledJob.upsert({
+      where:  { jobId: JOB_FULL_SWEEP },
+      create: {
+        jobId: JOB_FULL_SWEEP,
+        name:  "Discovery: full infrastructure sweep",
+        schedule: "every-15m",
+        nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
+      },
+      update: {
+        schedule: "every-15m",
+        nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
+      },
+    }),
+  ]);
+}
+
+/** Update a ScheduledJob after a run completes. */
+async function recordJobRun(jobId: string, intervalMs: number, status: string, error?: string): Promise<void> {
+  const now = new Date();
+  await prisma.scheduledJob.update({
+    where: { jobId },
+    data: {
+      lastRunAt:  now,
+      lastStatus: status,
+      lastError:  error ?? null,
+      nextRunAt:  new Date(now.getTime() + intervalMs),
+    },
+  }).catch((err) => console.error(`[discovery-scheduler] Failed to update job ${jobId}:`, err));
+}
+
 export function startDiscoveryScheduler(): void {
   if (prometheusTimer || sweepTimer) return; // already running
 
   console.log("[discovery-scheduler] Starting (poll=60s, sweep=15m)");
+
+  // Register jobs in DB so the calendar can see them
+  registerScheduledJobs().catch((err) =>
+    console.error("[discovery-scheduler] Failed to register jobs:", err),
+  );
 
   // Prometheus target poll — lightweight, detects new/disappeared services
   prometheusTimer = setInterval(() => {
@@ -65,7 +121,10 @@ export async function runPrometheusTargetCheck(): Promise<{ newTargets: string[]
     const res = await fetch(`${PROMETHEUS_URL}/api/v1/targets`, {
       signal: AbortSignal.timeout(3_000),
     });
-    if (!res.ok) return { newTargets: [] };
+    if (!res.ok) {
+      await recordJobRun(JOB_PROMETHEUS_POLL, PROMETHEUS_POLL_INTERVAL_MS, "error", `HTTP ${res.status}`);
+      return { newTargets: [] };
+    }
 
     const json = (await res.json()) as TargetResponse;
     const targets = json.data?.activeTargets ?? [];
@@ -95,8 +154,11 @@ export async function runPrometheusTargetCheck(): Promise<{ newTargets: string[]
       );
     }
 
+    await recordJobRun(JOB_PROMETHEUS_POLL, PROMETHEUS_POLL_INTERVAL_MS, "ok");
     return { newTargets };
-  } catch {
+  } catch (err) {
+    await recordJobRun(JOB_PROMETHEUS_POLL, PROMETHEUS_POLL_INTERVAL_MS, "error",
+      err instanceof Error ? err.message : "unknown");
     return { newTargets: [] };
   }
 }
@@ -115,6 +177,11 @@ export async function runFullDiscoverySweep(): Promise<void> {
       decrypt: decryptSecret,
     });
     console.log("[discovery-scheduler] Sweep complete");
+    await recordJobRun(JOB_FULL_SWEEP, FULL_SWEEP_INTERVAL_MS, "ok");
+  } catch (err) {
+    await recordJobRun(JOB_FULL_SWEEP, FULL_SWEEP_INTERVAL_MS, "error",
+      err instanceof Error ? err.message : "unknown");
+    throw err;
   } finally {
     sweepInProgress = false;
   }

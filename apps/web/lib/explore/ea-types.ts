@@ -65,13 +65,28 @@ export const LAYER_COLOURS: Record<string, { bg: string; border: string }> = {
   business:    { bg: "#FFFFCC", border: "#c8b400" },
   application: { bg: "#CCE5FF", border: "#4a90d9" },
   technology:  { bg: "#CCFFCC", border: "#4a9460" },
+  // BPMN 2.0 domain colours
+  bpmn_process:     { bg: "#E8F0FE", border: "#4285f4" },  // Blue — activities
+  bpmn_event:       { bg: "#FFF3E0", border: "#e88a1a" },  // Amber — events
+  bpmn_gateway:     { bg: "#FCE4EC", border: "#d32f2f" },  // Rose — decision points
+  bpmn_participant: { bg: "#F3E5F5", border: "#7b1fa2" },  // Purple — pools/lanes
+  bpmn_data:        { bg: "#E0F2F1", border: "#00796b" },  // Teal — data objects
 };
 
-// Infer ArchiMate layer from neoLabel.
-// Labels follow the pattern "ArchiMate__<Domain><Concept>", e.g. "ArchiMate__BusinessCapability".
-// Strip the vendor prefix before the __ then match on the domain name.
+// Infer colour layer from neoLabel.
+// ArchiMate labels: "ArchiMate__<Domain><Concept>"
+// BPMN labels: "BPMN__<Concept>"
 export function layerFromNeoLabel(neoLabel: string): keyof typeof LAYER_COLOURS {
   const part = neoLabel.replace(/^[^_]+__/, "").toLowerCase();
+  // BPMN dispatch — use domain from element type slug prefix
+  if (neoLabel.startsWith("BPMN__")) {
+    if (part.includes("gateway")) return "bpmn_gateway";
+    if (part.includes("event"))   return "bpmn_event";
+    if (part.includes("pool") || part.includes("lane")) return "bpmn_participant";
+    if (part.includes("data"))    return "bpmn_data";
+    return "bpmn_process";
+  }
+  // ArchiMate dispatch
   if (part.startsWith("business") || part.startsWith("value")) return "business";
   if (part.startsWith("application") || part.startsWith("data") || part.startsWith("interface")) return "application";
   return "technology";

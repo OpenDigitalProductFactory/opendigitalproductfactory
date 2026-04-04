@@ -1,0 +1,56 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '14px'}}}%%
+flowchart TB
+
+    %% ── Standard ArchiMate anchors ─────────────────────────────────────────────
+    BA["Business Actor\n/ Stakeholder"]
+    BR["Business Role"]
+    AC["Application Component"]
+    TN["Technology Node / Service"]
+    CONTRACT["Contract"]
+
+    %% ── DPF ontology extension types (orange) ──────────────────────────────────
+    subgraph EXT["DPF Ontology Extensions"]
+        direction LR
+        SO["Service Offering"]
+        DP["Digital Product"]
+        AIC["AI Coworker"]
+        IO["Information Object"]
+        CTRL["Control"]
+        EV["Event / Evidence"]
+    end
+
+    %% ── Offering & product relationships ──────────────────────────────────────
+    SO -->|serves| BA
+    SO -->|associated_with| CONTRACT
+    DP -->|realizes| SO
+    DP -->|composed_of| AC
+    DP -->|composed_of| TN
+    DP -->|accesses| IO
+    DP -->|associated_with| CTRL
+    CTRL -->|influences| DP
+
+    %% ── AI Coworker relationships ──────────────────────────────────────────────
+    AIC -->|associated_with| DP
+    AIC -->|realizes| AC
+    AIC -->|assigned_to| BR
+    AIC -->|associated_with| CTRL
+
+    %% ── Governance spine ───────────────────────────────────────────────────────
+    IO -->|associated_with| CTRL
+    IO -->|realizes| EV
+    CTRL -->|associated_with| EV
+    AIC -->|associated_with| EV
+
+    %% ── Refinement levels (conceptual → logical → actual) ──────────────────────
+    subgraph REFINE["Refinement Levels"]
+        direction LR
+        CONC["Conceptual\n(intent)"] -->|"→"| LOGI["Logical\n(design)"] -->|"→"| ACTU["Actual\n(deployed)"]
+    end
+
+    classDef ext fill:#e65100,stroke:#bf360c,color:#fff,font-weight:bold
+    classDef std fill:#1e3a5f,stroke:#2d5a8e,color:#fff
+    classDef refine fill:#e8f0fe,stroke:#2d5a8e,color:#1e3a5f,font-style:italic
+
+    class SO,DP,AIC,IO,CTRL,EV ext
+    class BA,BR,AC,TN,CONTRACT std
+    class CONC,LOGI,ACTU refine

@@ -87,6 +87,26 @@
       "problemMatcher": []
     },
     {
+      "label": "DPF: Rebuild Portal",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose build portal portal-init && docker compose up -d portal-init && docker compose up -d portal"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Rebuild portal image from source and restart (includes migrations)"
+    },
+    {
+      "label": "DPF: Rebuild All",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "docker compose build && docker compose up -d"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Rebuild all images and restart full stack"
+    },
+    {
       "label": "DPF: Publish Release",
       "type": "shell",
       "command": "$latest = git tag --sort=-version:refname | Select-Object -First 1; Write-Host \"Last release: $latest\" -ForegroundColor Cyan; $tag = Read-Host 'Enter version tag'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\" -ForegroundColor Green",
