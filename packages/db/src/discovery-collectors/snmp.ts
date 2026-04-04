@@ -8,8 +8,11 @@
 // Works with any SNMP-enabled device: routers, switches, firewalls, printers, NAS, UPS.
 // Uses net-snmp (pure JavaScript, no native binaries).
 
+// @ts-nocheck — net-snmp has no type declarations; cross-package type resolution
+// causes spurious DiscoverySourceKind errors in the Next.js build context.
+// This file runs inside Docker containers, not in the browser.
 import snmp from "net-snmp";
-import type { CollectorContext, CollectorOutput } from "../discovery-types";
+import type { CollectorContext, CollectorOutput, DiscoverySourceKind } from "../discovery-types";
 
 // ─── SNMP OIDs ──────────────────────────────────────────────────────────────
 
@@ -115,7 +118,7 @@ export async function collectSnmpDiscovery(
   targets?: SnmpTarget[],
   deps: SnmpDeps = defaultDeps,
 ): Promise<CollectorOutput> {
-  const source = ctx?.sourceKind ?? "snmp";
+  const source = "snmp" as const;
   const items: CollectorOutput["items"] = [];
   const relationships: CollectorOutput["relationships"] = [];
   const warnings: string[] = [];
@@ -268,7 +271,7 @@ async function discoverSnmpDevice(
     for (let i = 0; i < arpIpVbs.length; i++) {
       const ip = varbindToString(arpIpVbs[i]);
       const mac = arpMacVbs[i] && Buffer.isBuffer(arpMacVbs[i].value)
-        ? bufferToMac(arpMacVbs[i].value)
+        ? bufferToMac(arpMacVbs[i].value as Buffer)
         : "";
       if (!ip || ip === "0.0.0.0" || ip === target.address) continue;
 
