@@ -14,6 +14,7 @@ import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPane
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
+import { AddDiscoveryConnection } from "@/components/inventory/AddDiscoveryConnection";
 import { getFullGraphData } from "@/lib/actions/graph";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -23,7 +24,7 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData] = await Promise.all([
+  const [products, latestRun, inventoryEntities, needsReview, openIssues, graphData, connectionCount] = await Promise.all([
     prisma.digitalProduct.findMany({
       orderBy: [{ portfolio: { name: "asc" } }, { name: "asc" }],
       select: {
@@ -39,6 +40,7 @@ export default async function InventoryPage() {
     getNeedsReviewEntities(),
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
+    prisma.discoveryConnection.count(),
   ]);
   const health = summarizeDiscoveryHealth({
     totalEntities: inventoryEntities.length,
@@ -57,6 +59,7 @@ export default async function InventoryPage() {
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
+        {connectionCount === 0 && <AddDiscoveryConnection />}
         <InventoryExceptionQueue entities={needsReview} />
         <InventoryEntityPanel entities={inventoryEntities} />
         <PortfolioQualityIssuesPanel issues={openIssues} />
