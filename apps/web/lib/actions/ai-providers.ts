@@ -257,10 +257,26 @@ export async function configureProvider(input: {
 // ─── Test provider auth ───────────────────────────────────────────────────────
 
 function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
-  if (providerId === "chatgpt") {
+  if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
     return `${baseUrl}/codex/responses`;
   }
   return baseUrl.endsWith("/v1") ? `${baseUrl}/responses` : `${baseUrl}/v1/responses`;
+}
+
+async function resolveResponsesProbeBaseUrl(provider: {
+  providerId: string;
+  authMethod: string;
+  baseUrl: string | null;
+  endpoint: string | null;
+}): Promise<string> {
+  if (provider.providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
+    const chatgptProvider = await prisma.modelProvider.findUnique({
+      where: { providerId: "chatgpt" },
+      select: { baseUrl: true, endpoint: true },
+    });
+    return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
+  }
+  return provider.baseUrl ?? provider.endpoint ?? "";
 }
 
 function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
@@ -331,7 +347,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
         return { ok: false, message: "OAuth token not found — sign in again" };
       }
 
-      const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
+      const baseUrl = await resolveResponsesProbeBaseUrl(provider);
       const responsesUrl = buildResponsesProbeUrl(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
       res = await fetch(responsesUrl, {

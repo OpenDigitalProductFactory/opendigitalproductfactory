@@ -77,17 +77,29 @@ describe("testProviderAuth", () => {
   });
 
   it("triggers reconciliation for OAuth subscription-style providers", async () => {
-    mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "codex",
-      name: "Codex",
-      baseUrl: "https://api.openai.com/v1",
-      endpoint: null,
-      authMethod: "oauth2_authorization_code",
-      authHeader: "Authorization",
-      category: "agent",
-      families: [],
-      enabledFamilies: [],
-      supportedAuthMethods: ["oauth2_authorization_code"],
+    mockPrisma.modelProvider.findUnique.mockImplementation(({ where }: { where: { providerId: string } }) => {
+      if (where.providerId === "codex") {
+        return Promise.resolve({
+          providerId: "codex",
+          name: "Codex",
+          baseUrl: "https://api.openai.com/v1",
+          endpoint: null,
+          authMethod: "oauth2_authorization_code",
+          authHeader: "Authorization",
+          category: "agent",
+          families: [],
+          enabledFamilies: [],
+          supportedAuthMethods: ["oauth2_authorization_code"],
+        });
+      }
+      if (where.providerId === "chatgpt") {
+        return Promise.resolve({
+          providerId: "chatgpt",
+          baseUrl: "https://chatgpt.com/backend-api",
+          endpoint: null,
+        });
+      }
+      return Promise.resolve(null);
     });
     mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
     mockPrisma.credentialEntry.findUnique.mockResolvedValue({
@@ -103,7 +115,7 @@ describe("testProviderAuth", () => {
       message: "Connected via OAuth — Responses API verified",
     });
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.openai.com/v1/responses",
+      "https://chatgpt.com/backend-api/codex/responses",
       expect.objectContaining({ method: "POST" }),
     );
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
@@ -143,17 +155,29 @@ describe("testProviderAuth", () => {
   });
 
   it("returns a reconnect hint when the OAuth token is missing Responses scope", async () => {
-    mockPrisma.modelProvider.findUnique.mockResolvedValue({
-      providerId: "codex",
-      name: "Codex",
-      baseUrl: "https://api.openai.com/v1",
-      endpoint: null,
-      authMethod: "oauth2_authorization_code",
-      authHeader: "Authorization",
-      category: "agent",
-      families: [],
-      enabledFamilies: [],
-      supportedAuthMethods: ["oauth2_authorization_code"],
+    mockPrisma.modelProvider.findUnique.mockImplementation(({ where }: { where: { providerId: string } }) => {
+      if (where.providerId === "codex") {
+        return Promise.resolve({
+          providerId: "codex",
+          name: "Codex",
+          baseUrl: "https://api.openai.com/v1",
+          endpoint: null,
+          authMethod: "oauth2_authorization_code",
+          authHeader: "Authorization",
+          category: "agent",
+          families: [],
+          enabledFamilies: [],
+          supportedAuthMethods: ["oauth2_authorization_code"],
+        });
+      }
+      if (where.providerId === "chatgpt") {
+        return Promise.resolve({
+          providerId: "chatgpt",
+          baseUrl: "https://chatgpt.com/backend-api",
+          endpoint: null,
+        });
+      }
+      return Promise.resolve(null);
     });
     mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
     mockPrisma.credentialEntry.findUnique.mockResolvedValue({
