@@ -5,6 +5,7 @@ import type { GraphData } from "@/lib/actions/graph";
 import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/types";
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
+import { getDeviceVisual, LEGEND_ENTRIES } from "@/lib/graph/device-icons";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -231,13 +232,29 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       if (node.x == null || node.y == null) continue;
       const isHovered = hoveredNode === node.id;
       const isFocus = focusNodeId === node.id;
-      const radius = (node.size ?? 4) * (isHovered || isFocus ? 1.5 : 1);
+      const ciType = (node as { ciType?: string }).ciType;
+      const dv = ciType ? getDeviceVisual(ciType) : null;
+      const nodeColor = dv?.color ?? node.color;
+      const radius = (dv?.size ?? node.size ?? 4) * (isHovered || isFocus ? 1.5 : 1);
 
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
       ctx.globalAlpha = hoveredNode && !isHovered && !isFocus ? 0.3 : 1;
-      ctx.fill();
+
+      if (dv && node.label === "InfraCI") {
+        // Draw device-type symbol instead of circle
+        const fontSize = Math.max(12, radius * 2.5);
+        ctx.font = `${fontSize}px -apple-system, sans-serif`;
+        ctx.fillStyle = nodeColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(dv.symbol, node.x, node.y);
+        ctx.textBaseline = "alphabetic";
+      } else {
+        // Default circle for non-InfraCI nodes
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = nodeColor;
+        ctx.fill();
+      }
 
       if (isFocus) {
         ctx.strokeStyle = "#fff";
@@ -249,11 +266,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
 
       ctx.globalAlpha = 1;
 
-      if (isHovered || isFocus || node.size >= 6 || !isPositioned) {
+      if (isHovered || isFocus || (dv?.size ?? node.size) >= 6 || !isPositioned) {
         ctx.font = `${isHovered || isFocus ? 11 : 9}px -apple-system, sans-serif`;
         ctx.fillStyle = isHovered || isFocus ? "#fff" : "rgba(224,224,255,0.6)";
         ctx.textAlign = "center";
-        ctx.fillText(node.name, node.x, node.y - radius - 4);
+        ctx.fillText(node.name, node.x, node.y - radius - 6);
       }
     }
     ctx.restore();
@@ -501,6 +518,14 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
             cursor: isPanningRef.current ? "grabbing" : hoveredNode ? "pointer" : "grab",
           }}
         />
+        <div className="absolute bottom-2 left-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-[var(--dpf-muted)]">
+          {LEGEND_ENTRIES.map((entry) => (
+            <span key={entry.ciType} className="flex items-center gap-1">
+              <span style={{ color: entry.visual.color, fontSize: 11 }}>{entry.visual.symbol}</span>
+              {entry.visual.label}
+            </span>
+          ))}
+        </div>
         <div className="absolute bottom-2 right-2 text-[9px] text-[var(--dpf-muted)] flex items-center gap-2">
           <span>{displayNodes.length} nodes / {displayLinks.length} edges</span>
           <span>{Math.round(zoom * 100)}%</span>
@@ -568,29 +593,68 @@ function drawSwimlaneBands(
   nodes: PositionedNode[],
   dimensions: { width: number; height: number },
 ) {
-  // Group nodes by osiLayer and find Y range for each
-  const layerYRanges = new Map<number, { min: number; max: number }>();
-  for (const node of nodes) {
-    if (node.osiLayer == null) continue;
-    const range = layerYRanges.get(node.osiLayer);
-    if (range) {
-      range.min = Math.min(range.min, node.y - 20);
-      range.max = Math.max(range.max, node.y + 20);
-    } else {
-      layerYRanges.set(node.osiLayer, { min: node.y - 20, max: node.y + 20 });
+  // Check if nodes have partition (subnet view) or osiLayer (dependency view)
+  const hasPartitions = nodes.some((n) => (n as { partition?: unknown }).partition != null);
+
+  if (hasPartitions) {
+    // Subnet-based bands
+    const partitionRanges = new Map<string, { min: number; max: number; name: string }>();
+    for (const node of nodes) {
+      const p = (node as { partition?: string | number }).partition;
+      if (p == null) continue;
+      const key = String(p);
+      const range = partitionRanges.get(key);
+      if (range) {
+        range.min = Math.min(range.min, node.y - 20);
+        range.max = Math.max(range.max, node.y + 20);
+      } else {
+        // Use node name for subnet nodes as band label
+        const label = node.name.length < 40 ? node.name : key;
+        partitionRanges.set(key, { min: node.y - 20, max: node.y + 20, name: label });
+      }
     }
-  }
 
-  for (const [layer, range] of layerYRanges) {
-    const bandY = range.min - 10;
-    const bandH = range.max - range.min + 20;
+    let idx = 0;
+    for (const [, range] of partitionRanges) {
+      const bandY = range.min - 10;
+      const bandH = range.max - range.min + 20;
+      const isDocker = range.name.startsWith("Docker:") || range.name.startsWith("172.");
 
-    ctx.fillStyle = layer % 2 === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)";
-    ctx.fillRect(0, bandY, dimensions.width, bandH);
+      ctx.fillStyle = idx % 2 === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)";
+      if (isDocker) ctx.fillStyle = idx % 2 === 0 ? "rgba(52,211,153,0.03)" : "rgba(52,211,153,0.05)";
+      ctx.fillRect(0, bandY, dimensions.width, bandH);
 
-    ctx.font = "9px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(224,224,255,0.25)";
-    ctx.textAlign = "left";
-    ctx.fillText(`L${layer} ${OSI_LAYER_NAMES[layer] ?? ""}`, 8, bandY + 12);
+      ctx.font = "9px -apple-system, sans-serif";
+      ctx.fillStyle = isDocker ? "rgba(52,211,153,0.4)" : "rgba(124,140,248,0.4)";
+      ctx.textAlign = "left";
+      ctx.fillText(range.name, 8, bandY + 12);
+      idx++;
+    }
+  } else {
+    // OSI layer bands (original behavior)
+    const layerYRanges = new Map<number, { min: number; max: number }>();
+    for (const node of nodes) {
+      if (node.osiLayer == null) continue;
+      const range = layerYRanges.get(node.osiLayer);
+      if (range) {
+        range.min = Math.min(range.min, node.y - 20);
+        range.max = Math.max(range.max, node.y + 20);
+      } else {
+        layerYRanges.set(node.osiLayer, { min: node.y - 20, max: node.y + 20 });
+      }
+    }
+
+    for (const [layer, range] of layerYRanges) {
+      const bandY = range.min - 10;
+      const bandH = range.max - range.min + 20;
+
+      ctx.fillStyle = layer % 2 === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)";
+      ctx.fillRect(0, bandY, dimensions.width, bandH);
+
+      ctx.font = "9px -apple-system, sans-serif";
+      ctx.fillStyle = "rgba(224,224,255,0.25)";
+      ctx.textAlign = "left";
+      ctx.fillText(`L${layer} ${OSI_LAYER_NAMES[layer] ?? ""}`, 8, bandY + 12);
+    }
   }
 }

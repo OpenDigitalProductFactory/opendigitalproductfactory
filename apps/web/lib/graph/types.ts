@@ -2,6 +2,7 @@ import type { GraphData } from "@/lib/actions/graph";
 
 export type GraphViewName =
   | "network-topology"
+  | "subnet-topology"
   | "hosting-stack"
   | "impact-blast-radius"
   | "dependency-audit"
@@ -13,6 +14,7 @@ export type PositionedNode = GraphData["nodes"][0] & {
   x: number;
   y: number;
   osiLayer?: number | null;
+  partition?: string | number;
 };
 
 export type LayoutResult = {

@@ -11,6 +11,16 @@ export const VIEW_CONFIGS: Record<GraphViewName, ViewConfig> = {
     rootDetection: "gateway",
     description: "Hierarchical network view: gateways at top, subnets and hosts below",
   },
+  "subnet-topology": {
+    name: "subnet-topology",
+    label: "Subnet View",
+    layout: "swimlane",
+    direction: "TB",
+    edgesShown: new Set(["HOSTS", "MEMBER_OF", "ROUTES_THROUGH", "CONNECTS_TO", "PEER_OF"]),
+    nodeTypesShown: new Set(["InfraCI"]),
+    rootDetection: "gateway",
+    description: "Network devices grouped by subnet segment",
+  },
   "hosting-stack": {
     name: "hosting-stack",
     label: "Hosting Stack",
