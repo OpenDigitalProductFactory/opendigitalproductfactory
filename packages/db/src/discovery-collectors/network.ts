@@ -130,13 +130,13 @@ async function discoverHostInterfacesFromPrometheus(
   return queryNodeExporterInterfaces(deps);
 }
 
-/** Query windows_exporter's windows_net_bytes_total for real Windows NICs. */
+/** Query windows_exporter's windows_net_nic_address_info for real Windows NICs with IP addresses. */
 async function queryWindowsNetInterfaces(
   deps: NetworkDeps,
 ): Promise<PromHostInterface[]> {
   try {
     const res = await deps.fetchFn(
-      `${deps.prometheusUrl}/api/v1/query?query=windows_net_bytes_total`,
+      `${deps.prometheusUrl}/api/v1/query?query=windows_net_nic_address_info`,
       { signal: AbortSignal.timeout(3_000) },
     );
     if (!res.ok) return [];
@@ -144,8 +144,12 @@ async function queryWindowsNetInterfaces(
     const json = await res.json() as {
       data?: {
         result?: Array<{
-          metric: { nic?: string; instance?: string };
-          value: [number, string];
+          metric: {
+            nic?: string;
+            address?: string;
+            family?: string;
+            friendly_name?: string;
+          };
         }>;
       };
     };
@@ -153,16 +157,22 @@ async function queryWindowsNetInterfaces(
     const results = json.data?.result ?? [];
     if (results.length === 0) return [];
 
-    // Deduplicate by NIC name
+    // Only IPv4, deduplicate by NIC+address
     const seen = new Set<string>();
     const ifaces: PromHostInterface[] = [];
     for (const r of results) {
       const nic = r.metric.nic;
-      if (!nic || seen.has(nic)) continue;
+      const address = r.metric.address;
+      const family = r.metric.family;
+      const friendlyName = r.metric.friendly_name;
+      if (!nic || !address || family !== "ipv4") continue;
+      const key = `${nic}:${address}`;
+      if (seen.has(key)) continue;
       if (isWindowsVirtualInterface(nic)) continue;
-      seen.add(nic);
+      seen.add(key);
       ifaces.push({
-        device: nic,
+        device: friendlyName ?? nic,
+        address,
         operstate: "up",
         source: "windows_exporter",
       });
@@ -242,27 +252,71 @@ export async function collectNetworkDiscovery(
   const usePrometheus = promInterfaces.length > 0;
 
   if (usePrometheus) {
-    // Use node-exporter data for real host interfaces
+    // Use windows_exporter / node_exporter data for real host interfaces
     for (const iface of promInterfaces) {
-      const ifaceRef = `net-iface:${iface.device}`;
+      const hasIp = iface.address && /^\d+\.\d+\.\d+\.\d+$/.test(iface.address);
+      const ifaceRef = hasIp
+        ? `net-iface:${iface.device}:${iface.address}`
+        : `net-iface:${iface.device}`;
+      const displayName = hasIp
+        ? `${iface.device} (${iface.address})`
+        : `${iface.device}${iface.mac ? ` (${iface.mac})` : ""}`;
+
       items.push({
         sourceKind: source,
         itemType: "network_interface",
-        name: `${iface.device}${iface.mac ? ` (${iface.mac})` : ""}`,
+        name: displayName,
         externalRef: ifaceRef,
-        naturalKey: `iface:host:${iface.device}`,
+        naturalKey: hasIp ? `iface:${iface.device}:${iface.address}` : `iface:host:${iface.device}`,
         confidence: 0.90,
         attributes: {
           interfaceName: iface.device,
-          mac: iface.mac,
+          ...(iface.address ? { address: iface.address } : {}),
+          ...(iface.mac ? { mac: iface.mac } : {}),
           operstate: iface.operstate,
           speed: iface.speed,
           osiLayer: 3,
           osiLayerName: "network",
-          protocolFamily: "ethernet",
+          ...(hasIp ? { networkAddress: iface.address } : {}),
+          protocolFamily: "ipv4",
           discoveredVia: iface.source ?? "prometheus",
         },
       });
+
+      // Derive subnet from IP (assume /24 for discovered host interfaces)
+      if (hasIp) {
+        const parts = iface.address!.split(".");
+        const network = `${parts[0]}.${parts[1]}.${parts[2]}.0`;
+        const subnetKey = `${network}/24`;
+        if (!seenSubnets.has(subnetKey)) {
+          seenSubnets.add(subnetKey);
+          items.push({
+            sourceKind: source,
+            itemType: "subnet",
+            name: subnetKey,
+            externalRef: `subnet:${subnetKey}`,
+            naturalKey: `subnet:${subnetKey}`,
+            confidence: 0.85,
+            attributes: {
+              network,
+              cidr: 24,
+              osiLayer: 3,
+              osiLayerName: "network",
+              networkAddress: subnetKey,
+              protocolFamily: "ipv4",
+            },
+          });
+        }
+
+        // Interface MEMBER_OF subnet
+        relationships.push({
+          sourceKind: source,
+          relationshipType: "MEMBER_OF",
+          fromExternalRef: ifaceRef,
+          toExternalRef: `subnet:${subnetKey}`,
+          confidence: 0.90,
+        });
+      }
     }
   }
 
