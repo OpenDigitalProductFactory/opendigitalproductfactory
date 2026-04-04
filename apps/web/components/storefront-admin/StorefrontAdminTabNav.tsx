@@ -1,21 +1,27 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
-const TABS = [
-  { label: "Dashboard", href: "/admin/storefront" },
-  { label: "Sections", href: "/admin/storefront/sections" },
-  { label: "Items", href: "/admin/storefront/items" },
-  { label: "Team", href: "/admin/storefront/team" },
-  { label: "Inbox", href: "/admin/storefront/inbox" },
-  { label: "Settings", href: "/admin/storefront/settings" },
-];
+type Props = {
+  vocabulary: ArchetypeVocabulary;
+};
 
-export function StorefrontAdminTabNav() {
+export function StorefrontAdminTabNav({ vocabulary }: Props) {
   const path = usePathname();
+
+  const tabs = [
+    { label: "Dashboard", href: "/admin/storefront" },
+    { label: "Sections", href: "/admin/storefront/sections" },
+    { label: vocabulary.itemsLabel, href: "/admin/storefront/items" },
+    { label: vocabulary.teamLabel, href: "/admin/storefront/team" },
+    { label: vocabulary.inboxLabel, href: "/admin/storefront/inbox" },
+    { label: "Settings", href: "/admin/storefront/settings" },
+  ];
+
   return (
     <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--dpf-border)", marginBottom: 24 }}>
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active = tab.href === "/admin/storefront" ? path === "/admin/storefront" : path === tab.href;
         return (
           <Link key={tab.href} href={tab.href} style={{

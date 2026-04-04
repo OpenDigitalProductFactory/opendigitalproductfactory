@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export default async function StorefrontSettingsPage() {
   const config = await prisma.storefrontConfig.findFirst({
@@ -11,6 +12,7 @@ export default async function StorefrontSettingsPage() {
       contactPhone: true,
       heroImageUrl: true,
       organization: { select: { slug: true } },
+      archetype: { select: { name: true, isBuiltIn: true } },
     },
   });
   if (!config) redirect("/admin/storefront/setup");
@@ -89,6 +91,42 @@ export default async function StorefrontSettingsPage() {
       >
         Save Changes
       </button>
+
+      {/* Improve template section */}
+      <div style={{
+        marginTop: 24,
+        padding: "16px",
+        borderRadius: 8,
+        border: "1px dashed var(--dpf-border)",
+        background: "var(--dpf-surface-1)",
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: "var(--dpf-text)" }}>
+          Improve template
+        </div>
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginBottom: 8 }}>
+          Your live configuration may differ from the original {config.archetype?.name ?? "archetype"} template.
+          Review the changes and optionally contribute improvements back to help future users of this business type.
+        </p>
+        <Link
+          href="/api/storefront/admin/archetypes/refinement"
+          target="_blank"
+          style={{
+            display: "inline-block",
+            padding: "6px 14px",
+            borderRadius: 6,
+            border: "1px solid var(--dpf-border)",
+            fontSize: 12,
+            color: "var(--dpf-text)",
+            textDecoration: "none",
+            background: "var(--dpf-surface-2)",
+          }}
+        >
+          View refinement diff
+        </Link>
+        <span style={{ fontSize: 11, color: "var(--dpf-muted)", marginLeft: 8 }}>
+          Or use the AI coworker skill: &quot;Improve template&quot;
+        </span>
+      </div>
     </form>
   );
 }

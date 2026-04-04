@@ -3731,6 +3731,8 @@ model StorefrontArchetype {
   formSchema       Json
   tags             String[]
   isActive         Boolean            @default(true)
+  isBuiltIn        Boolean            @default(true)
+  customVocabulary Json?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   storefronts      StorefrontConfig[]

@@ -199,6 +199,36 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "generate_custom_archetype",
+    description: "Generate a custom business archetype from a description of the business, its offerings, and customer interaction patterns. Creates a new StorefrontArchetype record.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        businessName: { type: "string", description: "Name of the business type (e.g. 'Co-working Space')" },
+        businessDescription: { type: "string", description: "What the business does" },
+        offerings: { type: "array", items: { type: "string" }, description: "List of products/services offered" },
+        primaryCtaType: { type: "string", enum: ["booking", "purchase", "inquiry", "donation", "mixed"], description: "How customers primarily interact" },
+        stakeholderLabel: { type: "string", description: "What to call the customers (Members, Clients, Patients, etc.)" },
+        portalLabel: { type: "string", description: "What to call the portal (Member Portal, Client Portal, etc.)" },
+        closestCategory: { type: "string", description: "Closest existing archetype category or 'custom'" },
+      },
+      required: ["businessName", "businessDescription", "offerings", "primaryCtaType"],
+    },
+    requiredCapability: "view_storefront",
+    sideEffect: true,
+  },
+  {
+    name: "assess_archetype_refinement",
+    description: "Compare the current storefront configuration against the original archetype template and return a structured refinement diff showing what items, sections, and categories have changed",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_storefront",
+    sideEffect: false,
+  },
+  {
     name: "search_public_web",
     description: "Search the public web for relevant pages or facts",
     inputSchema: {
@@ -5250,6 +5280,166 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           season,
           currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
           activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
+        },
+      };
+    }
+
+    case "generate_custom_archetype": {
+      const businessName = String(params["businessName"] ?? "Custom Business");
+      const businessDescription = String(params["businessDescription"] ?? "");
+      const offerings = Array.isArray(params["offerings"]) ? params["offerings"] as string[] : [];
+      const primaryCtaType = String(params["primaryCtaType"] ?? "inquiry");
+      const stakeholderLabel = typeof params["stakeholderLabel"] === "string" ? params["stakeholderLabel"] : "Customers";
+      const portalLabel = typeof params["portalLabel"] === "string" ? params["portalLabel"] : "Portal";
+      const closestCategory = typeof params["closestCategory"] === "string" ? params["closestCategory"] : "professional-services";
+
+      if (offerings.length === 0) {
+        return { success: false, message: "At least one offering is required in the 'offerings' array." };
+      }
+
+      // Generate archetypeId
+      const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const archetypeId = `custom-${slug}`;
+
+      // Check for duplicate
+      const existingArch = await prisma.storefrontArchetype.findUnique({ where: { archetypeId } });
+      if (existingArch) {
+        return { success: false, message: `Archetype "${archetypeId}" already exists. Choose a different name.` };
+      }
+
+      // Infer price type from CTA
+      const defaultPriceType: Record<string, string> = {
+        booking: "per-session", purchase: "fixed", inquiry: "quote", donation: "donation", mixed: "fixed",
+      };
+
+      // Generate item templates from offerings
+      const itemTemplates = offerings.map((name) => ({
+        name,
+        description: "",
+        priceType: defaultPriceType[primaryCtaType] ?? "quote",
+        ...(primaryCtaType === "booking" ? { bookingDurationMinutes: 60 } : {}),
+      }));
+
+      // Generate section templates
+      const sectionTemplates = [
+        { type: "hero", title: "Welcome", sortOrder: 0 },
+        { type: "items", title: offerings.length > 3 ? "What We Offer" : "Services", sortOrder: 1 },
+        { type: "about", title: "About Us", sortOrder: 2 },
+        { type: "gallery", title: "Gallery", sortOrder: 3 },
+        { type: "testimonials", title: "Testimonials", sortOrder: 4 },
+        { type: "contact", title: "Get in Touch", sortOrder: 5 },
+      ];
+
+      // Generate form schema
+      const formSchema = [
+        { name: "name", label: "Name", type: "text", required: true },
+        { name: "email", label: "Email", type: "email", required: true },
+        { name: "phone", label: "Phone", type: "tel", required: false },
+        { name: "message", label: "Message", type: "textarea", required: false },
+      ];
+
+      // Generate tags from business name and offerings
+      const tags = [
+        ...businessName.toLowerCase().split(/\s+/),
+        ...offerings.map((o) => o.toLowerCase()),
+      ].slice(0, 15);
+
+      const category = closestCategory === "custom" ? slug : closestCategory;
+
+      const archetype = await prisma.storefrontArchetype.create({
+        data: {
+          archetypeId,
+          name: businessName,
+          category,
+          ctaType: primaryCtaType === "mixed" ? "inquiry" : primaryCtaType,
+          itemTemplates,
+          sectionTemplates,
+          formSchema,
+          tags,
+          isActive: true,
+          isBuiltIn: false,
+          customVocabulary: { portalLabel, stakeholderLabel },
+        },
+      });
+
+      return {
+        success: true,
+        entityId: archetype.archetypeId,
+        message: `Custom archetype "${businessName}" created as ${archetypeId}. You can now select it in the setup wizard.`,
+        data: {
+          archetypeId: archetype.archetypeId,
+          name: archetype.name,
+          category: archetype.category,
+          ctaType: archetype.ctaType,
+          itemCount: itemTemplates.length,
+          sectionCount: sectionTemplates.length,
+        },
+      };
+    }
+
+    case "assess_archetype_refinement": {
+      const config = await prisma.storefrontConfig.findFirst({
+        include: { archetype: true },
+      });
+
+      if (!config) {
+        return { success: false, message: "No storefront configured." };
+      }
+
+      const archetype = config.archetype;
+      const originalItems = (archetype.itemTemplates as Array<{ name: string }>) ?? [];
+      const originalSections = (archetype.sectionTemplates as Array<{ type: string; title: string }>) ?? [];
+
+      const [liveItems, liveSections] = await Promise.all([
+        prisma.storefrontItem.findMany({
+          where: { storefrontId: config.id },
+          select: { name: true, category: true, ctaType: true, priceType: true, isActive: true },
+          orderBy: { sortOrder: "asc" },
+        }),
+        prisma.storefrontSection.findMany({
+          where: { storefrontId: config.id },
+          select: { type: true, title: true, isVisible: true },
+          orderBy: { sortOrder: "asc" },
+        }),
+      ]);
+
+      const originalItemNames = new Set(originalItems.map((i) => i.name));
+      const liveItemNames = new Set(liveItems.map((i) => i.name));
+
+      const itemsAdded = liveItems.filter((i) => !originalItemNames.has(i.name) && i.isActive)
+        .map((i) => ({ name: i.name, ctaType: i.ctaType, priceType: i.priceType, category: i.category }));
+      const itemsRemoved = originalItems.filter((i) => !liveItemNames.has(i.name)).map((i) => i.name);
+      const itemsDeactivated = liveItems.filter((i) => originalItemNames.has(i.name) && !i.isActive).map((i) => i.name);
+      const categoriesUsed = [...new Set(liveItems.map((i) => i.category).filter(Boolean))];
+
+      const originalSectionTypes = new Set(originalSections.map((s) => s.type));
+      const sectionsAdded = liveSections.filter((s) => !originalSectionTypes.has(s.type) && s.isVisible)
+        .map((s) => ({ type: s.type, title: s.title }));
+      const sectionsHidden = liveSections.filter((s) => originalSectionTypes.has(s.type) && !s.isVisible)
+        .map((s) => s.type);
+
+      const hasChanges = itemsAdded.length > 0 || itemsRemoved.length > 0 || itemsDeactivated.length > 0 ||
+        sectionsAdded.length > 0 || sectionsHidden.length > 0 || categoriesUsed.length > 0;
+
+      const summaryParts: string[] = [];
+      if (itemsAdded.length > 0) summaryParts.push(`${itemsAdded.length} item(s) added`);
+      if (itemsRemoved.length > 0) summaryParts.push(`${itemsRemoved.length} template item(s) removed`);
+      if (itemsDeactivated.length > 0) summaryParts.push(`${itemsDeactivated.length} template item(s) deactivated`);
+      if (sectionsAdded.length > 0) summaryParts.push(`${sectionsAdded.length} section(s) added`);
+      if (sectionsHidden.length > 0) summaryParts.push(`${sectionsHidden.length} section(s) hidden`);
+      if (categoriesUsed.length > 0) summaryParts.push(`categories: ${categoriesUsed.join(", ")}`);
+
+      return {
+        success: true,
+        message: hasChanges
+          ? `Your ${archetype.name} configuration has diverged from the original template: ${summaryParts.join("; ")}. These refinements could improve the template for future users of this business type.`
+          : `Your configuration matches the original ${archetype.name} template — no refinements to contribute.`,
+        data: {
+          archetypeId: archetype.archetypeId,
+          archetypeName: archetype.name,
+          isBuiltIn: archetype.isBuiltIn,
+          hasChanges,
+          changes: { itemsAdded, itemsRemoved, itemsDeactivated, categoriesUsed, sectionsAdded, sectionsHidden },
         },
       };
     }
