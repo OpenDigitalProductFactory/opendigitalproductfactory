@@ -15,7 +15,8 @@ import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
 } from "./discovery-inference";
-import { runConnectionCollectors, type ConnectionLoaderDb, type DecryptFn } from "./discovery-runners/connection-collectors";
+import { runConnectionCollectors, type DecryptFn } from "./discovery-runners/connection-collectors";
+import { prisma } from "./client";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
@@ -71,12 +72,13 @@ export async function executeBootstrapDiscovery(
 ) {
   const rawStaticOutput = await runBootstrapCollectors(options.collectors);
 
-  // Run connection-based collectors (UniFi, etc.) loaded from the DB
+  // Run connection-based collectors (UniFi, etc.) loaded from the DB.
+  // Uses the global prisma client (not the db/tx param which may lack discoveryConnection).
   let connectionOutput: CollectorOutput = { items: [], relationships: [] };
   if (options.decrypt) {
     try {
       connectionOutput = await runConnectionCollectors(
-        db as unknown as ConnectionLoaderDb,
+        prisma as never,
         options.decrypt,
       );
     } catch (err) {
@@ -138,7 +140,7 @@ export async function executeBootstrapDiscovery(
 
   // Flag gateways that have no discovery connection configured
   try {
-    await flagUnconfiguredGateways(db as never);
+    await flagUnconfiguredGateways(prisma as never);
   } catch (err) {
     console.error("[discovery] Gateway connection flagging failed (non-fatal):", err);
   }
