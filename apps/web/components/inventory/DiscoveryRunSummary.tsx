@@ -1,3 +1,7 @@
+"use client";
+
+import { useTransition } from "react";
+import { triggerBootstrapDiscovery } from "@/lib/actions/discovery";
 import type { DiscoveryHealthSummary } from "@/lib/discovery-data";
 
 type DiscoveryRun = {
@@ -17,6 +21,14 @@ export function DiscoveryRunSummary({
   run: DiscoveryRun;
   health: DiscoveryHealthSummary;
 }) {
+  const [isPending, startTransition] = useTransition();
+
+  const handleSweep = () => {
+    startTransition(async () => {
+      await triggerBootstrapDiscovery();
+    });
+  };
+
   return (
     <section className="rounded-xl border border-white/10 bg-[var(--dpf-surface-1)] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -33,11 +45,21 @@ export function DiscoveryRunSummary({
               : "Run bootstrap discovery to populate foundational inventory."}
           </p>
         </div>
-        {run && (
-          <span className="rounded-full bg-[#4ade8020] px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[#4ade80]">
-            {run.status}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSweep}
+            disabled={isPending}
+            className="rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-1)] disabled:opacity-50 transition-colors"
+          >
+            {isPending ? "Running..." : "Run Sweep"}
+          </button>
+          {run && (
+            <span className="rounded-full bg-[#4ade8020] px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[#4ade80]">
+              {run.status}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
