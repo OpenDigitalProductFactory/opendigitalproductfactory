@@ -28,6 +28,7 @@ function makeDeps(overrides: Partial<DockerDeps> = {}): DockerDeps {
     existsSync: (path: string) => path === "/var/run/docker.sock",
     listContainers: async () => MOCK_CONTAINERS,
     getDockerInfo: () => MOCK_HOST_INFO,
+    listNetworks: () => [],
     ...overrides,
   };
 }
@@ -124,5 +125,112 @@ describe("collectDockerDiscovery — containers", () => {
 
     expect(result.items).toHaveLength(0);
     expect(result.warnings).toContain("docker_unavailable");
+  });
+});
+
+// ─── Docker Network Topology ───────────────────────────────────────────────
+
+describe("collectDockerDiscovery — network topology", () => {
+  it("discovers Docker networks as subnet items", async () => {
+    const deps = makeDeps({
+      listNetworks: () => [
+        {
+          name: "dpf_default",
+          driver: "bridge",
+          subnet: "172.18.0.0/16",
+          gateway: "172.18.0.1",
+          containers: [
+            { id: "abc123", name: "dpf-portal", ipv4: "172.18.0.7" },
+          ],
+        },
+      ],
+    });
+
+    const result = await collectDockerDiscovery(undefined, deps);
+
+    const subnet = result.items.find(
+      (i) => i.itemType === "subnet" && i.attributes?.dockerNetworkName === "dpf_default",
+    );
+    expect(subnet).toBeDefined();
+    expect(subnet!.name).toContain("dpf_default");
+    expect(subnet!.attributes?.networkAddress).toBe("172.18.0.0/16");
+  });
+
+  it("creates HOSTS from docker_host to network", async () => {
+    const deps = makeDeps({
+      listNetworks: () => [
+        {
+          name: "dpf_default",
+          driver: "bridge",
+          subnet: "172.18.0.0/16",
+          gateway: "172.18.0.1",
+          containers: [],
+        },
+      ],
+    });
+
+    const result = await collectDockerDiscovery(undefined, deps);
+
+    const hostsNet = result.relationships.find(
+      (r) =>
+        r.relationshipType === "HOSTS" &&
+        r.toExternalRef === "docker-net:dpf_default",
+    );
+    expect(hostsNet).toBeDefined();
+    expect(hostsNet!.fromExternalRef).toBe("docker-host:docker-desktop");
+  });
+
+  it("creates gateway and ROUTES_THROUGH for network", async () => {
+    const deps = makeDeps({
+      listNetworks: () => [
+        {
+          name: "dpf_default",
+          driver: "bridge",
+          subnet: "172.18.0.0/16",
+          gateway: "172.18.0.1",
+          containers: [],
+        },
+      ],
+    });
+
+    const result = await collectDockerDiscovery(undefined, deps);
+
+    const gw = result.items.find(
+      (i) => i.itemType === "gateway" && i.attributes?.dockerNetworkName === "dpf_default",
+    );
+    expect(gw).toBeDefined();
+    expect(gw!.attributes?.address).toBe("172.18.0.1");
+
+    const routesThrough = result.relationships.find(
+      (r) => r.relationshipType === "ROUTES_THROUGH",
+    );
+    expect(routesThrough).toBeDefined();
+  });
+
+  it("creates MEMBER_OF from containers to their network", async () => {
+    const deps = makeDeps({
+      listNetworks: () => [
+        {
+          name: "dpf_default",
+          driver: "bridge",
+          subnet: "172.18.0.0/16",
+          gateway: "172.18.0.1",
+          containers: [
+            { id: "abc123", name: "dpf-portal", ipv4: "172.18.0.7" },
+            { id: "def456", name: "dpf-postgres", ipv4: "172.18.0.2" },
+          ],
+        },
+      ],
+    });
+
+    const result = await collectDockerDiscovery(undefined, deps);
+
+    const memberOfs = result.relationships.filter(
+      (r) =>
+        r.relationshipType === "MEMBER_OF" &&
+        r.toExternalRef === "docker-net:dpf_default",
+    );
+    expect(memberOfs).toHaveLength(2);
+    expect(memberOfs[0].attributes?.ipv4).toBe("172.18.0.7");
   });
 });

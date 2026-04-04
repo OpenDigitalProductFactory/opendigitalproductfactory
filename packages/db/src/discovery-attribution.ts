@@ -139,9 +139,13 @@ function findRuleMatch(
   } else if (itemType.includes("database")) {
     node = matchByNodeId((nodeId) => nodeId.endsWith("/database"));
     ruleId = node ? "foundational_database" : undefined;
-  } else if (itemType.includes("network")) {
+  } else if (itemType.includes("network") || itemType === "subnet" || itemType === "gateway") {
     node = matchByNodeId((nodeId) => nodeId.includes("network_management"));
     ruleId = node ? "foundational_network" : undefined;
+  } else if (itemType === "docker_host") {
+    node = matchByNodeId((nodeId) => nodeId.includes("container_platform"))
+        ?? matchByNodeId((nodeId) => nodeId.endsWith("/servers"));
+    ruleId = node ? "foundational_docker_host" : undefined;
   } else if (itemType.includes("storage")) {
     node = matchByNodeId((nodeId) => nodeId.endsWith("/online_storage"));
     ruleId = node ? "foundational_storage" : undefined;

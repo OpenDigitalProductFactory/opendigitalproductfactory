@@ -50,11 +50,20 @@ export type DockerHostInfo = {
   name?: string;
 };
 
+export type DockerNetwork = {
+  name: string;
+  driver: string;
+  subnet?: string;
+  gateway?: string;
+  containers: Array<{ name: string; ipv4: string; id: string }>;
+};
+
 export type DockerDeps = {
   socketPaths: string[];
   existsSync: (path: string) => boolean;
   listContainers: () => Promise<Array<{ id: string; name: string; image: string }>>;
   getDockerInfo: () => DockerHostInfo | null;
+  listNetworks: () => DockerNetwork[];
 };
 
 async function defaultListContainers(): Promise<Array<{ id: string; name: string; image: string }>> {
@@ -103,11 +112,65 @@ function defaultGetDockerInfo(): DockerHostInfo | null {
   }
 }
 
+function defaultListNetworks(): DockerNetwork[] {
+  // Get network names
+  const lsResult = spawnSync(
+    "docker",
+    ["network", "ls", "--format", "{{.Name}}"],
+    { encoding: "utf8" },
+  );
+  if (lsResult.status !== 0 || !lsResult.stdout.trim()) return [];
+
+  const networkNames = lsResult.stdout
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((n) => n !== "none" && n !== "host"); // Skip special networks
+
+  const networks: DockerNetwork[] = [];
+  for (const name of networkNames) {
+    const inspectResult = spawnSync(
+      "docker",
+      ["network", "inspect", name, "--format", "{{json .}}"],
+      { encoding: "utf8" },
+    );
+    if (inspectResult.status !== 0 || !inspectResult.stdout.trim()) continue;
+
+    try {
+      const info = JSON.parse(inspectResult.stdout) as {
+        Name?: string;
+        Driver?: string;
+        IPAM?: { Config?: Array<{ Subnet?: string; Gateway?: string }> };
+        Containers?: Record<string, { Name?: string; IPv4Address?: string }>;
+      };
+      const ipamConfig = info.IPAM?.Config?.[0];
+      const containerEntries = Object.entries(info.Containers ?? {}).map(
+        ([id, c]) => ({
+          id: id.slice(0, 12),
+          name: c.Name ?? id.slice(0, 12),
+          ipv4: (c.IPv4Address ?? "").replace(/\/\d+$/, ""),
+        }),
+      );
+      networks.push({
+        name: info.Name ?? name,
+        driver: info.Driver ?? "bridge",
+        subnet: ipamConfig?.Subnet,
+        gateway: ipamConfig?.Gateway,
+        containers: containerEntries,
+      });
+    } catch {
+      // Skip unparseable networks
+    }
+  }
+
+  return networks;
+}
+
 const defaultDockerDeps: DockerDeps = {
   socketPaths: DOCKER_SOCKET_PATHS,
   existsSync: fs.existsSync,
   listContainers: defaultListContainers,
   getDockerInfo: defaultGetDockerInfo,
+  listNetworks: defaultListNetworks,
 };
 
 export async function collectDockerDiscovery(
@@ -231,6 +294,90 @@ export async function collectDockerDiscovery(
       rawProductName: container.image,
       rawPackageName: container.image,
     });
+  }
+
+  // ── Docker Network Topology ──────────────────────────────────────
+  // Discover Docker networks, subnets, gateways, and container IP assignments
+  const networks = deps.listNetworks();
+  const hostRef = hostInfo ? `docker-host:${hostInfo.name ?? "localhost"}` : null;
+
+  for (const network of networks) {
+    if (!network.subnet) continue;
+
+    const networkRef = `docker-net:${network.name}`;
+    items.push({
+      sourceKind: source,
+      itemType: "subnet",
+      name: `Docker: ${network.name} (${network.subnet})`,
+      externalRef: networkRef,
+      naturalKey: `docker-net:${network.name}`,
+      confidence: 0.95,
+      attributes: {
+        network: network.subnet.split("/")[0],
+        cidr: Number(network.subnet.split("/")[1]),
+        driver: network.driver,
+        dockerNetworkName: network.name,
+        osiLayer: 3,
+        osiLayerName: "network",
+        networkAddress: network.subnet,
+        protocolFamily: "ipv4",
+      },
+    });
+
+    // Docker host HOSTS this network
+    if (hostRef) {
+      relationships.push({
+        sourceKind: source,
+        relationshipType: "HOSTS",
+        fromExternalRef: hostRef,
+        toExternalRef: networkRef,
+        confidence: 0.95,
+        attributes: { mechanism: "docker_network" },
+      });
+    }
+
+    // Gateway for this network
+    if (network.gateway) {
+      const gwRef = `docker-gw:${network.name}:${network.gateway}`;
+      items.push({
+        sourceKind: source,
+        itemType: "gateway",
+        name: `Docker GW ${network.name} (${network.gateway})`,
+        externalRef: gwRef,
+        naturalKey: `docker-gw:${network.name}:${network.gateway}`,
+        confidence: 0.95,
+        attributes: {
+          address: network.gateway,
+          dockerNetworkName: network.name,
+          osiLayer: 3,
+          osiLayerName: "network",
+          networkAddress: network.gateway,
+          protocolFamily: "ipv4",
+        },
+      });
+
+      // Subnet ROUTES_THROUGH gateway
+      relationships.push({
+        sourceKind: source,
+        relationshipType: "ROUTES_THROUGH",
+        fromExternalRef: networkRef,
+        toExternalRef: gwRef,
+        confidence: 0.95,
+      });
+    }
+
+    // Containers are MEMBER_OF this network
+    for (const netContainer of network.containers) {
+      const containerRef = `container:${netContainer.id}`;
+      relationships.push({
+        sourceKind: source,
+        relationshipType: "MEMBER_OF",
+        fromExternalRef: containerRef,
+        toExternalRef: networkRef,
+        confidence: 0.95,
+        attributes: { ipv4: netContainer.ipv4 },
+      });
+    }
   }
 
   return { items, relationships, software };
