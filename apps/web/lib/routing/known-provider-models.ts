@@ -39,6 +39,38 @@ export interface KnownModel {
 export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
   codex: [
     {
+      modelId: "gpt-5-codex",
+      friendlyName: "GPT-5 Codex",
+      summary:
+        "OpenAI flagship Codex coding model -- advanced coding, reasoning, and tool use",
+      qualityTier: "frontier",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: true,
+        streaming: true,
+        structuredOutput: true,
+      },
+      maxContextTokens: 128_000,
+      maxOutputTokens: 16_384,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      modelClass: "code",
+      modelFamily: "codex",
+      capabilityTier: "advanced",
+      costTier: "$$$",
+      bestFor: ["coding", "reasoning", "agentic-tasks"],
+      avoidFor: ["conversation"],
+      scores: {
+        reasoning: 88,
+        codegen: 96,
+        toolFidelity: 90,
+        instructionFollowingScore: 86,
+        structuredOutputScore: 84,
+        conversational: 50,
+        contextRetention: 78,
+      },
+    },
+    {
       modelId: "codex-mini-latest",
       friendlyName: "Codex Mini",
       summary:
@@ -54,7 +86,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       maxOutputTokens: 16_384,
       inputModalities: ["text"],
       outputModalities: ["text"],
-      modelClass: "agent",
+      modelClass: "code",
       modelFamily: "codex",
       capabilityTier: "advanced",
       costTier: "$$",

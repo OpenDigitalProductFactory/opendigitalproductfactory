@@ -968,13 +968,25 @@ async function seedCodexModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
 
-  // Codex agent model
-  const agentModels = [
+  // Codex coding models
+  const codeModels = [
+    {
+      modelId: "gpt-5-codex",
+      friendlyName: "GPT-5 Codex",
+      summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
+      modelClass: "code",
+      costTier: "$$$",
+      bestFor: ["coding", "reasoning", "agentic-tasks"] as string[],
+      avoidFor: ["conversation"] as string[],
+      reasoning: 88, codegen: 96, toolFidelity: 90,
+      instructionFollowingScore: 86, structuredOutputScore: 84,
+      conversational: 50, contextRetention: 78,
+    },
     {
       modelId: "codex-mini-latest",
       friendlyName: "Codex Mini",
       summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
-      modelClass: "agent",
+      modelClass: "code",
       costTier: "$$",
       bestFor: ["coding", "agentic-tasks"] as string[],
       avoidFor: ["conversation"] as string[],
@@ -984,7 +996,7 @@ async function seedCodexModels(): Promise<void> {
     },
   ];
 
-  const allModels = [...agentModels];
+  const allModels = [...codeModels];
   let created = 0;
   for (const m of allModels) {
     await prisma.discoveredModel.upsert({
@@ -1186,7 +1198,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     pinnedProviderId?: string;
     pinnedModelId?: string;
   }> = [
-    { agentId: "build-specialist",    minimumTier: "moderate", budgetClass: "quality_first", pinnedProviderId: "anthropic-sub", pinnedModelId: "claude-haiku-4-5-20251001" },
+    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedProviderId: "codex" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },

@@ -270,6 +270,7 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     modelRequirements: {
       defaultMinimumTier: "frontier",
       defaultBudgetClass: "quality_first",
+      preferredProviderId: "codex",
     },
   },
   "/admin": {

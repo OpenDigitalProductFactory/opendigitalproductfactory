@@ -1,0 +1,155 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const {
+  mockPrisma,
+  mockAutoDiscoverAndProfile,
+  mockGetDecryptedCredential,
+  mockGetProviderBearerToken,
+  mockCan,
+  mockAuth,
+} = vi.hoisted(() => ({
+  mockPrisma: {
+    modelProvider: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    credentialEntry: {
+      findUnique: vi.fn(),
+    },
+  },
+  mockAutoDiscoverAndProfile: vi.fn(),
+  mockGetDecryptedCredential: vi.fn(),
+  mockGetProviderBearerToken: vi.fn(),
+  mockCan: vi.fn(),
+  mockAuth: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: mockPrisma,
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: mockAuth,
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  can: mockCan,
+}));
+
+vi.mock("@/lib/ai-provider-internals", () => ({
+  autoDiscoverAndProfile: mockAutoDiscoverAndProfile,
+  discoverModelsInternal: vi.fn(),
+  profileModelsInternal: vi.fn(),
+  getDecryptedCredential: mockGetDecryptedCredential,
+  getProviderExtraHeaders: vi.fn(() => ({})),
+  getProviderBearerToken: mockGetProviderBearerToken,
+  isAnthropicProvider: vi.fn(() => false),
+  ANTHROPIC_OAUTH_BETA_HEADERS: "oauth-2025-04-20",
+  backfillModelCards: vi.fn(),
+  seedAllRecipes: vi.fn(),
+}));
+
+import { testProviderAuth } from "./ai-providers";
+
+describe("testProviderAuth", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockAuth.mockResolvedValue({
+      user: {
+        id: "user-1",
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    });
+    mockCan.mockReturnValue(true);
+    mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 1, profiled: 1 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => "",
+      }),
+    );
+  });
+
+  it("triggers reconciliation for OAuth subscription-style providers", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      name: "Codex",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      category: "agent",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["oauth2_authorization_code"],
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "codex",
+      status: "ok",
+      cachedToken: "enc:token-1",
+    });
+
+    const result = await testProviderAuth("codex");
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Connected via OAuth — token valid",
+    });
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+
+  it("triggers reconciliation for direct cloud providers after a successful auth test", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      name: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      category: "llm",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["api_key"],
+    });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "sk-test" });
+
+    const result = await testProviderAuth("openai");
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Connected — HTTP 200",
+    });
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("openai");
+  });
+
+  it("does not trigger reconciliation when auth validation fails", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      name: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      category: "llm",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["api_key"],
+    });
+    mockGetDecryptedCredential.mockResolvedValue(null);
+
+    const result = await testProviderAuth("openai");
+
+    expect(result).toEqual({
+      ok: false,
+      message: "No API key configured",
+    });
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+});
