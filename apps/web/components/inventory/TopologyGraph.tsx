@@ -255,6 +255,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         ctx.textAlign = "center";
         ctx.fillText(node.name, node.x, node.y - radius - 4);
       }
+    }
     ctx.restore();
   }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, viewConfig.layout, zoom, pan]);
 
