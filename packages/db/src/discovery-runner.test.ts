@@ -83,7 +83,7 @@ describe("collectDockerDiscovery", () => {
   it("returns an empty output rather than throwing when Docker is unavailable", async () => {
     const result = await collectDockerDiscovery(
       { sourceKind: "dpf_bootstrap" },
-      { socketPaths: ["/missing.sock"], existsSync: () => false, listContainers: async () => [], getDockerInfo: () => null },
+      { socketPaths: ["/missing.sock"], existsSync: () => false, listContainers: async () => [], getDockerInfo: () => null, listNetworks: () => [] },
     );
 
     expect(result.items).toEqual([]);
@@ -104,6 +104,7 @@ describe("collectDockerDiscovery", () => {
           },
         ],
         getDockerInfo: () => null,
+        listNetworks: () => [],
       },
     );
 
