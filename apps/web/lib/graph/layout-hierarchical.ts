@@ -44,7 +44,7 @@ export function computeHierarchicalLayout(
     }
   }
 
-  layout(g);
+  layout(g, {});
 
   const nodes: PositionedNode[] = data.nodes.map((node) => {
     const gNode = g.node(node.id);
