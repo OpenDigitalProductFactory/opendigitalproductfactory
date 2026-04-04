@@ -122,7 +122,7 @@ if (-not (Test-Path $DPF_DIR)) {
 
 # --- Step 1: Check Windows ----------------------------------------------------
 
-Write-Step 1 9 "Checking Windows version..."
+Write-Step 1 10 "Checking Windows version..."
 if (-not (Is-StepDone "windows_check")) {
     $os = Get-CimInstance Win32_OperatingSystem
     $build = [int]$os.BuildNumber
@@ -140,7 +140,7 @@ if (-not (Is-StepDone "windows_check")) {
 
 # --- Step 2: WSL2 -------------------------------------------------------------
 
-Write-Step 2 9 "Setting up WSL2..."
+Write-Step 2 10 "Setting up WSL2..."
 if (-not (Is-StepDone "wsl2")) {
     # Windows 11 24H2+ (build 26100+) ships WSL as an inbox component, not a DISM
     # optional feature. Detect this by checking if "wsl --version" succeeds.
@@ -206,7 +206,7 @@ if ((Is-StepDone "wsl2_partial") -and -not (Is-StepDone "wsl2")) {
 
 # --- Step 3: Docker Desktop ---------------------------------------------------
 
-Write-Step 3 9 "Installing Docker Desktop..."
+Write-Step 3 10 "Installing Docker Desktop..."
 if (-not (Is-StepDone "docker")) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
@@ -276,9 +276,65 @@ if (-not (Is-StepDone "docker")) {
     Write-OK "Already installed"
 }
 
-# --- Step 4: Choose install mode and set up files ----------------------------
+# --- Step 4: Install Windows Exporter (host metrics for network discovery) ----
 
-Write-Step 4 9 "Setting up Digital Product Factory..."
+Write-Step 4 10 "Installing Windows metrics exporter..."
+if (-not (Is-StepDone "windows_exporter")) {
+    $weService = Get-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
+    if ($weService) {
+        Write-OK "windows_exporter service already installed"
+    } else {
+        Write-Action "Installing windows_exporter for real host network discovery..."
+
+        $weVersion = "0.30.5"
+        $weUrl = "https://github.com/prometheus-community/windows_exporter/releases/download/v${weVersion}/windows_exporter-${weVersion}-amd64.msi"
+        $weMsi = "$env:TEMP\windows_exporter.msi"
+
+        try {
+            Write-Action "Downloading windows_exporter v${weVersion}..."
+            Invoke-WebRequest -Uri $weUrl -OutFile $weMsi -UseBasicParsing
+
+            Write-Action "Installing silently (creates Windows service + firewall rule)..."
+            $msiArgs = @(
+                "/i", $weMsi,
+                "/quiet", "/norestart",
+                "ENABLED_COLLECTORS=cpu,memory,net,logical_disk,os,system,thermalzone",
+                "ADDLOCAL=FirewallException"
+            )
+            Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArgs -Wait -NoNewWindow
+
+            # Verify it installed
+            Start-Sleep -Seconds 3
+            $weCheck = Get-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
+            if ($weCheck -and $weCheck.Status -eq "Running") {
+                Write-OK "windows_exporter installed and running on port 9182"
+            } else {
+                # Try to start it
+                Start-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                $weCheck = Get-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
+                if ($weCheck -and $weCheck.Status -eq "Running") {
+                    Write-OK "windows_exporter started on port 9182"
+                } else {
+                    Write-Warn "windows_exporter installed but may not be running. Check: Get-Service windows_exporter"
+                }
+            }
+
+            Remove-Item $weMsi -ErrorAction SilentlyContinue
+        } catch {
+            Write-Warn "Could not install windows_exporter: $_"
+            Write-Warn "Network discovery will be limited to Docker-internal topology."
+            Write-Warn "You can install it manually: choco install prometheus-windows-exporter.install"
+        }
+    }
+    Save-Progress "windows_exporter"
+} else {
+    Write-OK "Already installed"
+}
+
+# --- Step 5: Choose install mode and set up files ----------------------------
+
+Write-Step 5 10 "Setting up Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
 
     # If we already have a compose file, detect mode from prior install
@@ -707,6 +763,13 @@ scrape_configs:
       - targets: ["model-runner.docker.internal:80"]
     metrics_path: /metrics
 
+  - job_name: "windows-host"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["host.docker.internal:9182"]
+        labels:
+          instance: "windows-host"
+
   - job_name: "prometheus"
     scrape_interval: 30s
     static_configs:
@@ -940,7 +1003,7 @@ services:
 
 # --- Step 5: Hardware Detection ------------------------------------------------
 
-Write-Step 5 9 "Detecting your hardware..."
+Write-Step 6 10 "Detecting your hardware..."
 if (-not (Is-StepDone "hardware")) {
     $cpu = Get-CimInstance Win32_Processor
     $mem = Get-CimInstance Win32_ComputerSystem
@@ -1054,7 +1117,7 @@ GF_ADMIN_PASSWORD=$adminPass
 
 # --- Step 6: Start Platform ---------------------------------------------------
 
-Write-Step 6 9 "Starting the platform..."
+Write-Step 7 10 "Starting the platform..."
 if (-not (Is-StepDone "started")) {
     Set-Location $DPF_DIR
 
@@ -1160,7 +1223,7 @@ if (-not (Is-StepDone "started")) {
 
 # --- Step 7: Wait for AI Model -------------------------------------------------
 
-Write-Step 7 9 "Setting up your AI Coworker..."
+Write-Step 8 10 "Setting up your AI Coworker..."
 if (-not (Is-StepDone "model")) {
     # Pull model via Docker Model Runner (built into Docker Desktop 4.40+)
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
@@ -1183,7 +1246,7 @@ if (-not (Is-StepDone "model")) {
 
 # --- Step 8: Open Browser -----------------------------------------------------
 
-Write-Step 8 9 "Configuring auto-start on logon..."
+Write-Step 9 10 "Configuring auto-start on logon..."
 if (-not (Is-StepDone "autostart")) {
     if (Ensure-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\dpf-start.ps1") {
         Save-Progress "autostart"
@@ -1192,7 +1255,7 @@ if (-not (Is-StepDone "autostart")) {
     Write-OK "Already configured"
 }
 
-Write-Step 9 9 "Opening your portal!"
+Write-Step 10 10 "Opening your portal!"
 
 # Read admin password from .env
 $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PASSWORD=" }) -replace "^ADMIN_PASSWORD=", ""

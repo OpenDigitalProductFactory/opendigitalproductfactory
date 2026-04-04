@@ -58,6 +58,16 @@ scrape_configs:
       - targets: ["model-runner.docker.internal:80"]
     metrics_path: /metrics
 
+  # ─── Windows Host (real hardware via windows_exporter) ───────
+  # windows_exporter runs natively on the Windows host (not in Docker).
+  # Discovers real network interfaces, disk, memory — not WSL2 VM.
+  - job_name: "windows-host"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["host.docker.internal:9182"]
+        labels:
+          instance: "windows-host"
+
   # ─── Self-monitoring ────────────────────────────────────────
   - job_name: "prometheus"
     scrape_interval: 30s

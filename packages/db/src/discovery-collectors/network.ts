@@ -116,13 +116,68 @@ type PromHostInterface = {
   operstate: string;
   mac?: string;
   speed?: number;
+  source?: "windows_exporter" | "node_exporter";
 };
 
 async function discoverHostInterfacesFromPrometheus(
   deps: NetworkDeps,
 ): Promise<PromHostInterface[]> {
+  // Try windows_exporter first (real Windows host interfaces)
+  const windowsInterfaces = await queryWindowsNetInterfaces(deps);
+  if (windowsInterfaces.length > 0) return windowsInterfaces;
+
+  // Fall back to node_exporter (Linux host or WSL2 VM)
+  return queryNodeExporterInterfaces(deps);
+}
+
+/** Query windows_exporter's windows_net_bytes_total for real Windows NICs. */
+async function queryWindowsNetInterfaces(
+  deps: NetworkDeps,
+): Promise<PromHostInterface[]> {
   try {
-    // node_network_info gives us device names and operstates
+    const res = await deps.fetchFn(
+      `${deps.prometheusUrl}/api/v1/query?query=windows_net_bytes_total`,
+      { signal: AbortSignal.timeout(3_000) },
+    );
+    if (!res.ok) return [];
+
+    const json = await res.json() as {
+      data?: {
+        result?: Array<{
+          metric: { nic?: string; instance?: string };
+          value: [number, string];
+        }>;
+      };
+    };
+
+    const results = json.data?.result ?? [];
+    if (results.length === 0) return [];
+
+    // Deduplicate by NIC name
+    const seen = new Set<string>();
+    const ifaces: PromHostInterface[] = [];
+    for (const r of results) {
+      const nic = r.metric.nic;
+      if (!nic || seen.has(nic)) continue;
+      if (isWindowsVirtualInterface(nic)) continue;
+      seen.add(nic);
+      ifaces.push({
+        device: nic,
+        operstate: "up",
+        source: "windows_exporter",
+      });
+    }
+    return ifaces;
+  } catch {
+    return [];
+  }
+}
+
+/** Query node_exporter's node_network_info for Linux host NICs. */
+async function queryNodeExporterInterfaces(
+  deps: NetworkDeps,
+): Promise<PromHostInterface[]> {
+  try {
     const res = await deps.fetchFn(
       `${deps.prometheusUrl}/api/v1/query?query=node_network_info`,
       { signal: AbortSignal.timeout(3_000) },
@@ -144,54 +199,30 @@ async function discoverHostInterfacesFromPrometheus(
 
     return (json.data?.result ?? [])
       .filter((r) => r.metric.device && r.metric.operstate !== "down")
-      .filter((r) => !isVirtualInterface(r.metric.device!))
+      .filter((r) => !isLinuxVirtualInterface(r.metric.device!))
       .map((r) => ({
         device: r.metric.device!,
         operstate: r.metric.operstate ?? "unknown",
         mac: r.metric.address,
         speed: r.metric.speed ? Number(r.metric.speed) : undefined,
+        source: "node_exporter" as const,
       }));
   } catch {
     return [];
   }
 }
 
-/** Filter out Docker/virtual/loopback interfaces — we only want real ones. */
-function isVirtualInterface(name: string): boolean {
+/** Filter out Docker/virtual/loopback interfaces on Linux. */
+function isLinuxVirtualInterface(name: string): boolean {
   return /^(lo|veth|br-|docker|cni|flannel|cali|tunl|virbr)/.test(name);
 }
 
-async function discoverHostGatewayFromPrometheus(
-  deps: NetworkDeps,
-): Promise<string | null> {
-  try {
-    // node_network_route_info (if available) or fall back to
-    // checking which interface has the default route via node_network_transmit_bytes_total
-    // For now, we check the Prometheus targets for node-exporter's instance address
-    const res = await deps.fetchFn(
-      `${deps.prometheusUrl}/api/v1/query?query=node_network_transmit_bytes_total`,
-      { signal: AbortSignal.timeout(3_000) },
-    );
-    if (!res.ok) return null;
-
-    const json = await res.json() as {
-      data?: {
-        result?: Array<{
-          metric: { instance?: string };
-        }>;
-      };
-    };
-
-    // The instance label tells us the node-exporter host IP
-    const instance = json.data?.result?.[0]?.metric.instance;
-    if (!instance) return null;
-    const hostIp = instance.split(":")[0];
-    // Can't determine gateway from Prometheus alone — return null.
-    // Gateway discovery falls back to local commands or the Docker collector.
-    return hostIp && hostIp !== "localhost" ? null : null;
-  } catch {
-    return null;
-  }
+/** Filter out Hyper-V/Docker/loopback virtual adapters on Windows. */
+function isWindowsVirtualInterface(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes("isatap")
+    || lower.includes("teredo")
+    || lower === "loopback pseudo-interface 1";
 }
 
 // ─── Collector ─────────────────────────────────────────────────────────────
@@ -229,7 +260,7 @@ export async function collectNetworkDiscovery(
           osiLayer: 3,
           osiLayerName: "network",
           protocolFamily: "ethernet",
-          discoveredVia: "node_exporter",
+          discoveredVia: iface.source ?? "prometheus",
         },
       });
     }
