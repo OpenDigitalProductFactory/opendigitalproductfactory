@@ -1,6 +1,4 @@
-// @ts-expect-error -- dagre-d3-es internal modules lack type declarations
 import { Graph } from "dagre-d3-es/src/graphlib/index.js";
-// @ts-expect-error -- dagre-d3-es internal modules lack type declarations
 import { layout } from "dagre-d3-es/src/dagre/index.js";
 import type { GraphData } from "@/lib/actions/graph";
 import type { LayoutResult, PositionedNode } from "./types";
