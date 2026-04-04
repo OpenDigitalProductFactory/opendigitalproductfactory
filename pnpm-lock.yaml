@@ -299,6 +299,9 @@ importers:
       neo4j-driver:
         specifier: ^5.27.0
         version: 5.28.3
+      net-snmp:
+        specifier: ^3.26.1
+        version: 3.26.1
       pg:
         specifier: ^8.13.0
         version: 8.20.0
@@ -3038,6 +3041,9 @@ packages:
   asap@2.0.6:
     resolution: {integrity: sha512-BSHWgDSAiKs50o2Re8ppvp3seVHXSRM44cdSsT9FfNEUUZLOGWVCsiWaRPWM1Znn+mqZ1OfVZ3z3DWEzSp7hRA==}
 
+  asn1-ber@1.2.2:
+    resolution: {integrity: sha512-CbNem/7hxrjSiOAOOTX4iZxu+0m3jiLqlsERQwwPM1IDR/22M8IPpA1VVndCLw5KtjRYyRODbvAEIfuTogNDng==}
+
   assert@2.1.0:
     resolution: {integrity: sha512-eLHpSK/Y4nhMJ07gDaAzoX/XAKS8PSaojml3M0DM4JpV1LAi5JOJ/p6H/XWrl8L+DzVEvVCW1z3vWAaB9oTsQw==}
 
@@ -5750,6 +5756,9 @@ packages:
 
   nested-error-stacks@2.0.1:
     resolution: {integrity: sha512-SrQrok4CATudVzBS7coSz26QRSmlK9TzzoFbeKfcPBUFPjcQM9Rqvr/DlJkOrwI/0KcgvMub1n1g5Jt9EgRn4A==}
+
+  net-snmp@3.26.1:
+    resolution: {integrity: sha512-ZWsfchno5Lxj6OOUt4YS+88KLwce4tpnh4pLxiiwUULg3QQsN1n4OYAli4Ch2C+fkjqQXjhoI8rKltQyBVFzxg==}
 
   netmask@2.0.2:
     resolution: {integrity: sha512-dBpDMdxv9Irdq66304OLfEmQ9tbNRFnFTuZiLo+bD+r332bBmMJ8GBLXklIXXgxd3+v9+KUnZaUR5PJMa75Gsg==}
@@ -11069,6 +11078,8 @@ snapshots:
 
   asap@2.0.6: {}
 
+  asn1-ber@1.2.2: {}
+
   assert@2.1.0:
     dependencies:
       call-bind: 1.0.8
@@ -14389,6 +14400,11 @@ snapshots:
       rxjs: 7.8.2
 
   nested-error-stacks@2.0.1: {}
+
+  net-snmp@3.26.1:
+    dependencies:
+      asn1-ber: 1.2.2
+      smart-buffer: 4.2.0
 
   netmask@2.0.2: {}
 
