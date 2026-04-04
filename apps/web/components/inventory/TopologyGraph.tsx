@@ -54,6 +54,12 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [focusNodeId, setFocusNodeId] = useState<string | null>(initialFocusNodeId ?? null);
   const [maxHops, setMaxHops] = useState(0);
 
+  // Pan and zoom state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
   // View selection
   const autoView = defaultView ?? resolveViewForTaxonomy(taxonomyNodeId ?? null);
   const [selectedView, setSelectedView] = useState<GraphViewName>(autoView);
@@ -179,6 +185,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
 
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
+    // Apply zoom and pan transform
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
+
     // Draw swimlane bands if in swimlane mode
     if (viewConfig.layout === "swimlane" && isPositioned) {
       drawSwimlaneBands(ctx, layoutResult.nodes, dimensions);
@@ -244,8 +255,8 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         ctx.textAlign = "center";
         ctx.fillText(node.name, node.x, node.y - radius - 4);
       }
-    }
-  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, viewConfig.layout]);
+    ctx.restore();
+  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, viewConfig.layout, zoom, pan]);
 
   // ─── Initialize force simulation nodes ────────────────────────────────
   useEffect(() => {
@@ -267,7 +278,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width } = entry.contentRect;
-        setDimensions({ width, height: Math.max(400, Math.min(600, width * 0.6)) });
+        setDimensions({ width, height: Math.max(500, Math.min(800, width * 0.65)) });
       }
     });
     ro.observe(container);
@@ -287,20 +298,29 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     return () => { running = false; cancelAnimationFrame(animRef.current); };
   }, [simulate, draw, layoutResult]);
 
+  // Convert screen coordinates to graph coordinates (accounting for zoom/pan)
+  function screenToGraph(screenX: number, screenY: number) {
+    return {
+      x: (screenX - pan.x) / zoom,
+      y: (screenY - pan.y) / zoom,
+    };
+  }
+
   // ─── Click to focus ───────────────────────────────────────────────────
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (isPanningRef.current) return; // Don't select after a drag
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: mx, y: my } = screenToGraph(e.clientX - rect.left, e.clientY - rect.top);
 
     const drawNodes = layoutResult?.nodes ?? nodesRef.current;
+    const hitRadius = 6 / zoom; // Adjust hit area for zoom level
     for (const node of drawNodes) {
       if (node.x == null || node.y == null) continue;
       const dx = mx - node.x;
       const dy = my - node.y;
-      if (dx * dx + dy * dy < ((node.size ?? 4) + 6) ** 2) {
+      if (dx * dx + dy * dy < ((node.size ?? 4) + hitRadius) ** 2) {
         setFocusNodeId((prev) => (prev === node.id ? null : node.id));
         return;
       }
@@ -313,8 +333,18 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+
+    // Handle panning via middle-click or left-click drag
+    if (isPanningRef.current) {
+      setPan({
+        x: panStartRef.current.panX + (e.clientX - panStartRef.current.x),
+        y: panStartRef.current.panY + (e.clientY - panStartRef.current.y),
+      });
+      return;
+    }
+
+    const { x: mx, y: my } = screenToGraph(e.clientX - rect.left, e.clientY - rect.top);
+    const hitRadius = 4 / zoom;
 
     const drawNodes = layoutResult?.nodes ?? nodesRef.current;
     let found: string | null = null;
@@ -322,12 +352,46 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       if (node.x == null || node.y == null) continue;
       const dx = mx - node.x;
       const dy = my - node.y;
-      if (dx * dx + dy * dy < ((node.size ?? 4) + 4) ** 2) {
+      if (dx * dx + dy * dy < ((node.size ?? 4) + hitRadius) ** 2) {
         found = node.id;
         break;
       }
     }
     setHoveredNode(found);
+  }
+
+  // ─── Scroll to zoom ──────────────────────────────────────────────────
+  function handleWheel(e: React.WheelEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = Math.min(5, Math.max(0.1, zoom * zoomFactor));
+
+    // Zoom toward cursor position
+    setPan({
+      x: mouseX - (mouseX - pan.x) * (newZoom / zoom),
+      y: mouseY - (mouseY - pan.y) * (newZoom / zoom),
+    });
+    setZoom(newZoom);
+  }
+
+  // ─── Mouse down/up for panning ────────────────────────────────────────
+  function handleMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    // Right-click or middle-click or shift+left-click to pan
+    if (e.button === 1 || e.button === 2 || e.shiftKey) {
+      e.preventDefault();
+      isPanningRef.current = true;
+      panStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+    }
+  }
+
+  function handleMouseUp() {
+    isPanningRef.current = false;
   }
 
   if (data.nodes.length === 0) {
@@ -343,7 +407,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const displayLinks = layoutResult?.links ?? filteredData.links;
 
   return (
-    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 -mx-6 lg:-mx-8">
       {/* ─── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
@@ -425,19 +489,33 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           height={dimensions.height}
           onClick={handleClick}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHoveredNode(null)}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => { setHoveredNode(null); isPanningRef.current = false; }}
+          onWheel={handleWheel}
+          onContextMenu={(e) => e.preventDefault()}
           style={{
             width: "100%",
             height: dimensions.height,
-            cursor: hoveredNode ? "pointer" : "default",
+            cursor: isPanningRef.current ? "grabbing" : hoveredNode ? "pointer" : "grab",
           }}
         />
-        <div className="absolute bottom-2 right-2 text-[9px] text-[var(--dpf-muted)]">
-          {displayNodes.length} nodes / {displayLinks.length} edges
+        <div className="absolute bottom-2 right-2 text-[9px] text-[var(--dpf-muted)] flex items-center gap-2">
+          <span>{displayNodes.length} nodes / {displayLinks.length} edges</span>
+          <span>{Math.round(zoom * 100)}%</span>
+          {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
+            <button
+              type="button"
+              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              className="text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] underline"
+            >
+              reset
+            </button>
+          )}
         </div>
         {!focusNodeId && (
           <div className="absolute bottom-2 left-2 text-[9px] text-[var(--dpf-muted)]">
-            Click a node to focus
+            Scroll to zoom / Shift-drag to pan / Click to focus
           </div>
         )}
       </div>
