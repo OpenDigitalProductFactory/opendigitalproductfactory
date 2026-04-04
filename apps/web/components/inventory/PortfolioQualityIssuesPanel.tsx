@@ -8,7 +8,7 @@ type PortfolioQualityIssue = {
   issueType: string;
   severity: string;
   summary: string;
-  details?: Record<string, unknown> | null;
+  details?: unknown;
   inventoryEntity: { entityKey: string; name: string } | null;
   portfolio: { slug: string; name: string } | null;
   taxonomyNode: { nodeId: string; name: string } | null;
