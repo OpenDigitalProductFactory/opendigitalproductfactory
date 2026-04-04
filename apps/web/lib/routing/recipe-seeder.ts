@@ -8,7 +8,7 @@
  */
 
 import type { ModelCardCapabilities } from "./model-card-types";
-import { isAnthropic, isOpenAI } from "./provider-utils";
+import { isAnthropic, isOpenAI, usesResponsesApi } from "./provider-utils";
 import { buildProviderTools } from "./provider-tools";
 
 // EP-INF-009c: Model class → execution adapter mapping
@@ -94,7 +94,9 @@ export function buildSeedRecipe(
   }
 
   // EP-INF-009c: Select adapter based on model class
-  const executionAdapter = MODEL_CLASS_ADAPTER[modelCard.modelClass] ?? "chat";
+  const executionAdapter = usesResponsesApi(providerId)
+    ? "responses"
+    : (MODEL_CLASS_ADAPTER[modelCard.modelClass] ?? "chat");
 
   return { providerSettings, toolPolicy, responsePolicy, executionAdapter };
 }

@@ -7,8 +7,46 @@ import { auth } from "@/lib/auth";
 import { sendMessage } from "@/lib/actions/agent-coworker";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
+import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
+
+async function persistBackgroundFailureMessage(input: {
+  threadId: string;
+  routeContext: string;
+  message: string;
+  sessionUser: { id: string; platformRole?: string | null; isSuperuser?: boolean | null };
+}): Promise<string | null> {
+  try {
+    const agent = resolveAgentForRoute(input.routeContext, {
+      userId: input.sessionUser.id,
+      platformRole: input.sessionUser.platformRole ?? null,
+      isSuperuser: input.sessionUser.isSuperuser ?? false,
+    });
+    const sysMsg = await prisma.agentMessage.create({
+      data: {
+        threadId: input.threadId,
+        role: "system",
+        content: input.message,
+        agentId: agent.agentId,
+        routeContext: input.routeContext,
+      },
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        agentId: true,
+        routeContext: true,
+        createdAt: true,
+      },
+    });
+    return sysMsg.id;
+  } catch (persistErr) {
+    console.error("[api/agent/send] failed to persist background error message:", persistErr);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest): Promise<Response> {
   const session = await auth();
@@ -76,11 +114,26 @@ export async function POST(request: NextRequest): Promise<Response> {
     } catch (err) {
       agentEventBus.markIdle(input.threadId);
       console.error("[api/agent/send] background execution failed:", err);
+      const errorMessage = err instanceof Error ? err.message : "Agent execution failed";
+      const systemMessageId = await persistBackgroundFailureMessage({
+        threadId: input.threadId,
+        routeContext: input.routeContext,
+        message: `The AI coworker hit a background error and could not finish this request: ${errorMessage}`,
+        sessionUser: {
+          id: session.user.id,
+          platformRole: session.user.platformRole ?? null,
+          isSuperuser: session.user.isSuperuser ?? false,
+        },
+      });
       agentEventBus.emit(input.threadId, {
         type: "error",
-        message: err instanceof Error ? err.message : "Agent execution failed",
+        message: errorMessage,
       });
-      agentEventBus.emit(input.threadId, { type: "done", error: "Agent execution failed" });
+      agentEventBus.emit(input.threadId, {
+        type: "done",
+        ...(systemMessageId ? { systemMessageId } : {}),
+        error: "Agent execution failed",
+      });
     }
   })();
 

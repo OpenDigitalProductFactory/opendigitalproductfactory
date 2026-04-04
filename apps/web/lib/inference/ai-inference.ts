@@ -20,6 +20,7 @@ import {
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
+import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
 import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter

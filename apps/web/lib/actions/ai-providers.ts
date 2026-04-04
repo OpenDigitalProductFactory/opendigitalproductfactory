@@ -256,6 +256,21 @@ export async function configureProvider(input: {
 
 // ─── Test provider auth ───────────────────────────────────────────────────────
 
+function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
+  if (providerId === "chatgpt") {
+    return `${baseUrl}/codex/responses`;
+  }
+  return baseUrl.endsWith("/v1") ? `${baseUrl}/responses` : `${baseUrl}/v1/responses`;
+}
+
+function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
+  return {
+    model: providerId === "chatgpt" ? "gpt-5.4" : "gpt-5-codex",
+    input: [{ role: "user", content: "ping" }],
+    store: false,
+  };
+}
+
 export async function testProviderAuth(providerId: string): Promise<{ ok: boolean; message: string }> {
   await requireManageProviders();
 
@@ -302,12 +317,26 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   try {
     let res: Response;
 
-    // Agent providers (e.g. Codex) and ChatGPT subscription: the token can't hit
-    // standard API endpoints like /v1/models. Verify credential status only.
+    // Agent providers (e.g. Codex) and ChatGPT subscription use the Responses
+    // API, so verify the actual execution path instead of /models.
     if (provider.authMethod === "oauth2_authorization_code" &&
         (provider.category === "agent" || providerId === "chatgpt")) {
       const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-      if (cred?.status === "ok" && cred.cachedToken) {
+      if (!cred?.status || !cred.cachedToken) {
+        return { ok: false, message: "OAuth token not found — sign in again" };
+      }
+
+      const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
+      const responsesUrl = buildResponsesProbeUrl(providerId, baseUrl);
+      headers["Content-Type"] = "application/json";
+      res = await fetch(responsesUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(buildResponsesProbeBody(providerId)),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (res.ok || res.status === 400) {
         const clearance = providerId === "chatgpt"
           ? ["public", "internal", "confidential"]
           : ["public", "internal"];
@@ -315,11 +344,12 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
           where: { providerId },
           data: { status: "active", sensitivityClearance: clearance },
         });
-        // Auto-discover models now that auth is confirmed
         autoDiscoverAndProfile(providerId).catch(() => {});
-        return { ok: true, message: "Connected via OAuth — token valid" };
+        return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
-      return { ok: false, message: "OAuth token not found — sign in again" };
+
+      const body = await res.text().catch(() => "");
+      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
     }
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead

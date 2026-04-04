@@ -197,6 +197,16 @@ describe("buildPlanFromRecipe", () => {
     const plan = buildPlanFromRecipe(recipe, makeContract());
     expect(plan.executionAdapter).toBe("image_gen");
   });
+
+  it("overrides legacy codex chat recipes to the responses adapter", () => {
+    const recipe = makeRecipe({
+      providerId: "codex",
+      modelId: "gpt-5-codex",
+      executionAdapter: "chat",
+    });
+    const plan = buildPlanFromRecipe(recipe, makeContract());
+    expect(plan.executionAdapter).toBe("responses");
+  });
 });
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────
@@ -267,6 +277,14 @@ describe("buildDefaultPlan", () => {
   it("defaults executionAdapter to 'chat'", () => {
     const plan = buildDefaultPlan(makeEndpoint(), makeContract());
     expect(plan.executionAdapter).toBe("chat");
+  });
+
+  it("selects responses adapter for codex endpoints", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({ providerId: "codex", modelId: "gpt-5-codex", modelClass: "code" }),
+      makeContract(),
+    );
+    expect(plan.executionAdapter).toBe("responses");
   });
 
   // ── EP-INF-009c: adapter selection based on requiredModelClass ──────────

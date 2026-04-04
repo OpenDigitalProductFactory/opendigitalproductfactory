@@ -505,6 +505,7 @@
     "authHeader": "Authorization",
     "costModel": "token",
     "families": [
+      "gpt-5-codex",
       "codex-mini"
     ],
     "inputPricePerMToken": 1.5,

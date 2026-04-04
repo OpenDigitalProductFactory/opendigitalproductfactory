@@ -806,7 +806,11 @@ async function seedKnownModels(
         avoidFor: m.avoidFor,
         modelClass: m.modelClass,
         modelFamily: m.modelFamily,
-        modelStatus: "active",
+        modelStatus: m.defaultStatus,
+        retiredAt: m.defaultStatus === "retired" ? new Date() : null,
+        retiredReason: m.defaultStatus === "retired" || m.defaultStatus === "disabled"
+          ? (m.retiredReason ?? null)
+          : null,
         maxContextTokens: m.maxContextTokens,
         maxOutputTokens: m.maxOutputTokens,
         inputModalities: m.inputModalities,
@@ -825,6 +829,11 @@ async function seedKnownModels(
         summary: m.summary,
         modelClass: m.modelClass,
         modelFamily: m.modelFamily,
+        modelStatus: m.defaultStatus,
+        retiredAt: m.defaultStatus === "retired" ? new Date() : null,
+        retiredReason: m.defaultStatus === "retired" || m.defaultStatus === "disabled"
+          ? (m.retiredReason ?? null)
+          : null,
         maxContextTokens: m.maxContextTokens,
         maxOutputTokens: m.maxOutputTokens,
         inputModalities: m.inputModalities,

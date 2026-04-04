@@ -199,7 +199,7 @@ export function AgentCoworkerPanel({
       getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
         if (!snapshot) return;
         const latestMsg = snapshot.messages[snapshot.messages.length - 1];
-        if (latestMsg && latestMsg.role === "assistant") {
+        if (latestMsg && (latestMsg.role === "assistant" || latestMsg.role === "system")) {
           setMessages(filterMessages(snapshot.messages));
           setIsBusy(false);
           setCurrentTool(null);
