@@ -142,6 +142,49 @@ describe("testProviderAuth", () => {
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
   });
 
+  it("returns a reconnect hint when the OAuth token is missing Responses scope", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      name: "Codex",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      category: "agent",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["oauth2_authorization_code"],
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "codex",
+      status: "ok",
+      cachedToken: "enc:token-1",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () =>
+          JSON.stringify({
+            error: {
+              message: "Missing scopes: api.responses.write",
+            },
+          }),
+      }),
+    );
+
+    const result = await testProviderAuth("codex");
+
+    expect(result).toEqual({
+      ok: false,
+      message:
+        "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again",
+    });
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
   it("triggers reconciliation for direct cloud providers after a successful auth test", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai",
