@@ -95,6 +95,8 @@ services:
       PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
     depends_on:
       portal-init:
         condition: service_completed_successfully
