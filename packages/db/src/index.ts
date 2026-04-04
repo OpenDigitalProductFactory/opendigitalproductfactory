@@ -96,6 +96,10 @@ export {
   type DecryptFn,
 } from "./discovery-runners/connection-collectors";
 export {
+  collectUnifiDiscovery,
+  buildDepsFromConnection as buildUnifiDepsFromConnection,
+} from "./discovery-collectors/unifi";
+export {
   deriveNestedChevronSequenceWarnings,
   sortStructuredChildren,
   type StructuredChildRecord,
