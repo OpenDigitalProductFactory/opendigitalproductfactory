@@ -154,6 +154,28 @@ describe("responsesAdapter", () => {
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 
+  it("uses the ChatGPT backend responses path for codex OAuth providers", async () => {
+    stubFetchOk({
+      output: [
+        { type: "message", content: [{ type: "output_text", text: "OAuth OK." }] },
+      ],
+      usage: { input_tokens: 4, output_tokens: 2 },
+    });
+
+    await responsesAdapter.execute(
+      makeRequest({
+        providerId: "codex",
+        provider: {
+          baseUrl: "https://chatgpt.com/backend-api",
+          headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+        },
+      }),
+    );
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://chatgpt.com/backend-api/codex/responses");
+  });
+
   it("uses the ChatGPT backend responses path for chatgpt subscription providers", async () => {
     stubFetchOk({
       output: [

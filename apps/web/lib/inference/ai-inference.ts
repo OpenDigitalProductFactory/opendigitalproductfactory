@@ -133,6 +133,20 @@ async function buildAuthHeaders(
   return headers;
 }
 
+async function resolveExecutionBaseUrl(
+  providerId: string,
+  provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
+): Promise<string | null> {
+  if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
+    const chatgptProvider = await prisma.modelProvider.findUnique({
+      where: { providerId: "chatgpt" },
+      select: { baseUrl: true, endpoint: true },
+    });
+    return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
+  }
+  return provider.baseUrl ?? provider.endpoint;
+}
+
 // ─── Tool Call Extraction Helpers ─────────────────────────────────────────────
 
 /** Extract tool calls from Anthropic content blocks, preserving IDs */
@@ -221,7 +235,7 @@ export async function callProvider(
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
-  const baseUrl = provider.baseUrl ?? provider.endpoint;
+  const baseUrl = await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
   const headers = await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 

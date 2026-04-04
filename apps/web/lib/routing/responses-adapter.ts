@@ -24,7 +24,7 @@ type ResponsesOutputItem =
     };
 
 function buildResponsesUrl(providerId: string, baseUrl: string): string {
-  if (providerId === "chatgpt") {
+  if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
     return `${baseUrl}/codex/responses`;
   }
   const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
