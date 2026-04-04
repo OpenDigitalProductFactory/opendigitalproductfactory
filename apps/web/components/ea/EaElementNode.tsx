@@ -5,6 +5,10 @@ import { Handle, Position, useConnection, type NodeProps } from "@xyflow/react";
 import { layerFromNeoLabel, LAYER_COLOURS, type SerializedViewElement } from "@/lib/ea-types";
 import { StructuredValueStreamNode } from "./StructuredValueStreamNode";
 import { ValueStreamStageNode } from "./ValueStreamStageNode";
+import { BpmnTaskNode } from "./BpmnTaskNode";
+import { BpmnGatewayNode } from "./BpmnGatewayNode";
+import { BpmnEventNode } from "./BpmnEventNode";
+import { BpmnLaneNode } from "./BpmnLaneNode";
 
 // One source handle per side. ConnectionMode.Loose allows source→source connections,
 // so target handles are unnecessary. Floating edge routing uses node intersection, not handle IDs.
@@ -74,6 +78,53 @@ export const EaElementNode = memo(function EaElementNode({ id, data, selected }:
 
   if (nodeData.elementType.slug === "value_stream_stage") {
     return <ValueStreamStageNode data={nodeData} selected={selected} />;
+  }
+
+  // ── BPMN 2.0 dispatch ─────────────────────────────────────────────────
+  if (nodeData.elementType.neoLabel.startsWith("BPMN__")) {
+    const slug = nodeData.elementType.slug;
+    const bpmnHandles = (
+      <>
+        {SIDES.map(({ position, id: handleId }) => (
+          <Handle key={handleId} type="source" id={handleId} position={position} style={handleStyle} />
+        ))}
+      </>
+    );
+
+    // Gateways (diamond)
+    if (slug.includes("gateway")) {
+      return (
+        <div style={{ position: "relative" }}>
+          {bpmnHandles}
+          <BpmnGatewayNode data={nodeData} selected={selected} />
+        </div>
+      );
+    }
+    // Events (circles)
+    if (slug.includes("event")) {
+      return (
+        <div style={{ position: "relative" }}>
+          {bpmnHandles}
+          <BpmnEventNode data={nodeData} selected={selected} />
+        </div>
+      );
+    }
+    // Pools and lanes (swimlane containers)
+    if (slug === "bpmn_pool" || slug === "bpmn_lane") {
+      return (
+        <div style={{ position: "relative" }}>
+          {bpmnHandles}
+          <BpmnLaneNode data={nodeData} selected={selected} />
+        </div>
+      );
+    }
+    // All task types and activities (rounded rectangle)
+    return (
+      <div style={{ position: "relative" }}>
+        {bpmnHandles}
+        <BpmnTaskNode data={nodeData} selected={selected} />
+      </div>
+    );
   }
 
   return (

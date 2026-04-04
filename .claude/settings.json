@@ -7,7 +7,12 @@
       "Bash(EP002_ID=\"6ac3b596-fe41-47d6-acd5-25c7dd4ed2a9\")",
       "Bash(__NEW_LINE_867a1779880fcd4b__ docker exec dpf-postgres-1 psql -U dpf -d dpf -c \":*)",
       "Bash(docker compose:*)",
-      "Bash(pnpm --filter @dpf/db exec prisma migrate dev --name add_archimate4_ontology_graph)"
+      "Bash(pnpm --filter @dpf/db exec prisma migrate dev --name add_archimate4_ontology_graph)",
+      "WebFetch(domain:skillsllm.com)",
+      "WebFetch(domain:skillsmp.com)",
+      "Read(//d/DPF/**)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec dpf-sandbox-1 env)",
+      "Bash(curl -s http://localhost:3000/api/health)"
     ]
   },
   "enabledPlugins": {

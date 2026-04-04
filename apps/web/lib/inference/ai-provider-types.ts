@@ -3,12 +3,19 @@
 // ─── Schedule helpers ─────────────────────────────────────────────────────────
 
 export const SCHEDULE_INTERVALS_MS = {
+  "every-1m":  1 * 60 * 1000,
+  "every-5m":  5 * 60 * 1000,
+  "every-15m": 15 * 60 * 1000,
+  "every-30m": 30 * 60 * 1000,
+  hourly:  1 * 60 * 60 * 1000,
   daily:   1 * 24 * 60 * 60 * 1000,
   weekly:  7 * 24 * 60 * 60 * 1000,
   monthly: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
-export type ScheduleValue = "daily" | "weekly" | "monthly" | "disabled";
+export type ScheduleValue =
+  | "every-1m" | "every-5m" | "every-15m" | "every-30m"
+  | "hourly" | "daily" | "weekly" | "monthly" | "disabled";
 
 export function computeNextRunAt(schedule: string, from: Date): Date | null {
   if (schedule === "disabled") return null;

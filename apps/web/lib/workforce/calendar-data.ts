@@ -13,11 +13,17 @@ export type CalendarEventView = {
   end: string | null;
   allDay: boolean;
   category: string;      // hr | operations | platform | personal | external
-  eventType: string;      // meeting | reminder | deadline | leave | review | timesheet | onboarding | lifecycle
+  eventType: string;      // meeting | reminder | deadline | leave | review | timesheet | onboarding | lifecycle | recurring-digest
   color: string;
   editable: boolean;      // false for projected events
   sourceType: "native" | "projected";
   sourceId?: string;      // original record ID for projected events
+  /** Present on recurring-digest events — how many occurrences the digest represents. */
+  digestCount?: number;
+  /** Present on recurring-digest events — job schedule key for client-side expansion. */
+  digestSchedule?: string;
+  /** Present on recurring-digest events — last recorded run status. */
+  digestLastStatus?: string | null;
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -189,6 +195,173 @@ async function projectLifecycleEvents(rangeStart: Date, rangeEnd: Date): Promise
   return events;
 }
 
+// ─── Platform maintenance projections ───────────────────────────────────────
+
+/** Intervals for sub-daily schedules (ms). Matches SCHEDULE_INTERVALS_MS keys. */
+const HIGH_FREQ_INTERVALS: Record<string, number> = {
+  "every-1m":  1 * 60_000,
+  "every-5m":  5 * 60_000,
+  "every-15m": 15 * 60_000,
+  "every-30m": 30 * 60_000,
+  hourly:      60 * 60_000,
+};
+
+const MS_PER_DAY  = 24 * 60 * 60_000;
+const MS_PER_HOUR = 60 * 60_000;
+
+/** Determine display density from the query range span. */
+type Density = "month" | "week" | "day";
+function densityForRange(rangeStart: Date, rangeEnd: Date): Density {
+  const span = rangeEnd.getTime() - rangeStart.getTime();
+  if (span <= 2 * MS_PER_DAY) return "day";     // day view (up to ~2 days)
+  if (span <= 8 * MS_PER_DAY) return "week";     // week view (up to ~8 days)
+  return "month";                                  // month or wider
+}
+
+/** Find the first occurrence anchor >= rangeStart for a recurring job. */
+function anchorForJob(
+  job: { nextRunAt: Date | null; lastRunAt: Date | null },
+  intervalMs: number,
+  rangeStart: Date,
+): number {
+  let anchor: number;
+  if (job.nextRunAt) {
+    anchor = job.nextRunAt.getTime();
+    while (anchor > rangeStart.getTime() + intervalMs) anchor -= intervalMs;
+    if (anchor < rangeStart.getTime()) anchor += intervalMs;
+  } else if (job.lastRunAt) {
+    anchor = job.lastRunAt.getTime() + intervalMs;
+  } else {
+    anchor = rangeStart.getTime();
+  }
+  return anchor;
+}
+
+/**
+ * Projects scheduled platform jobs as calendar events with progressive
+ * disclosure based on the requested date range:
+ *
+ * - **Month view** (>8 days): one daily-digest event per job per day.
+ *   Shows run count and last status — click to drill into day view.
+ *
+ * - **Week view** (2–8 days): hourly summary blocks per job.
+ *   Shows run count per hour — click to drill into day view.
+ *
+ * - **Day view** (<=2 days): individual timed events (2-min blocks).
+ *   Full detail for the narrow window.
+ *
+ * Low-frequency jobs (daily / weekly / monthly) always render as a single
+ * all-day event regardless of density.
+ */
+async function projectScheduledJobEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const jobs = await prisma.scheduledJob.findMany({
+    where: { schedule: { not: "disabled" } },
+    select: { id: true, jobId: true, name: true, schedule: true, nextRunAt: true, lastRunAt: true, lastStatus: true },
+  });
+
+  const density = densityForRange(rangeStart, rangeEnd);
+  const events: CalendarEventView[] = [];
+
+  for (const job of jobs) {
+    const intervalMs = HIGH_FREQ_INTERVALS[job.schedule];
+
+    if (!intervalMs) {
+      // ── Low-frequency: single all-day event if nextRunAt in range ────
+      if (job.nextRunAt && job.nextRunAt >= rangeStart && job.nextRunAt <= rangeEnd) {
+        events.push({
+          id:         `scheduled-job-${job.jobId}`,
+          title:      `Scheduled: ${job.name}`,
+          start:      job.nextRunAt.toISOString(),
+          end:        null,
+          allDay:     true,
+          category:   "platform",
+          eventType:  "maintenance",
+          color:      CATEGORY_COLORS.platform!,
+          editable:   false,
+          sourceType: "projected",
+          sourceId:   job.id,
+        });
+      }
+      continue;
+    }
+
+    // ── High-frequency job ─────────────────────────────────────────────
+    const anchor = anchorForJob(job, intervalMs, rangeStart);
+    const runsPerDay  = Math.floor(MS_PER_DAY / intervalMs);
+    const runsPerHour = Math.max(1, Math.floor(MS_PER_HOUR / intervalMs));
+    const statusLabel = job.lastStatus === "error" ? " [!]" : "";
+
+    if (density === "month") {
+      // ── Daily digest: one event per day ───────────────────────────────
+      const dayStart = new Date(rangeStart);
+      dayStart.setHours(0, 0, 0, 0);
+      for (let d = dayStart.getTime(); d < rangeEnd.getTime(); d += MS_PER_DAY) {
+        events.push({
+          id:              `digest-day-${job.jobId}-${d}`,
+          title:           `${job.name} -- ${runsPerDay} runs/day${statusLabel}`,
+          start:           new Date(d).toISOString(),
+          end:             null,
+          allDay:          true,
+          category:        "platform",
+          eventType:       "recurring-digest",
+          color:           job.lastStatus === "error" ? "#ef4444" : CATEGORY_COLORS.platform!,
+          editable:        false,
+          sourceType:      "projected",
+          sourceId:        job.id,
+          digestCount:     runsPerDay,
+          digestSchedule:  job.schedule,
+          digestLastStatus: job.lastStatus,
+        });
+      }
+    } else if (density === "week") {
+      // ── Hourly digest: one block per hour ─────────────────────────────
+      const hourStart = new Date(rangeStart);
+      hourStart.setMinutes(0, 0, 0);
+      for (let h = hourStart.getTime(); h < rangeEnd.getTime(); h += MS_PER_HOUR) {
+        const blockEnd = new Date(h + MS_PER_HOUR);
+        events.push({
+          id:              `digest-hour-${job.jobId}-${h}`,
+          title:           `${job.name} (${runsPerHour}x)${statusLabel}`,
+          start:           new Date(h).toISOString(),
+          end:             blockEnd.toISOString(),
+          allDay:          false,
+          category:        "platform",
+          eventType:       "recurring-digest",
+          color:           job.lastStatus === "error" ? "#ef4444" : CATEGORY_COLORS.platform!,
+          editable:        false,
+          sourceType:      "projected",
+          sourceId:        job.id,
+          digestCount:     runsPerHour,
+          digestSchedule:  job.schedule,
+          digestLastStatus: job.lastStatus,
+        });
+      }
+    } else {
+      // ── Day view: individual timed events ─────────────────────────────
+      for (let t = anchor; t <= rangeEnd.getTime(); t += intervalMs) {
+        if (t < rangeStart.getTime()) continue;
+        const start = new Date(t);
+        const end = new Date(t + 2 * 60_000);
+        events.push({
+          id:         `recurring-${job.jobId}-${t}`,
+          title:      job.name,
+          start:      start.toISOString(),
+          end:        end.toISOString(),
+          allDay:     false,
+          category:   "platform",
+          eventType:  "maintenance",
+          color:      CATEGORY_COLORS.platform!,
+          editable:   false,
+          sourceType: "projected",
+          sourceId:   job.id,
+        });
+      }
+    }
+  }
+
+  return events;
+}
+
 // ─── Main Query ─────────────────────────────────────────────────────────────
 
 export const getCalendarEvents = cache(async (
@@ -224,14 +397,15 @@ export const getCalendarEvents = cache(async (
   }));
 
   // Projected events from platform data
-  const [leaves, reviews, timesheets, onboarding, lifecycle] = await Promise.all([
+  const [leaves, reviews, timesheets, onboarding, lifecycle, maintenance] = await Promise.all([
     projectLeaveEvents(rangeStart, rangeEnd),
     projectReviewEvents(rangeStart, rangeEnd),
     projectTimesheetEvents(rangeStart, rangeEnd),
     projectOnboardingEvents(rangeStart, rangeEnd),
     projectLifecycleEvents(rangeStart, rangeEnd),
+    projectScheduledJobEvents(rangeStart, rangeEnd),
   ]);
 
-  return [...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle]
+  return [...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle, ...maintenance]
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 });

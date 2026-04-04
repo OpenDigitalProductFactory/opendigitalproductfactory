@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import type { DatesSetArg, EventClickArg } from "@fullcalendar/core";
 import type { CalendarEventView } from "@/lib/calendar-data";
 import { CalendarEventPopover } from "./CalendarEventPopover";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
@@ -21,9 +22,12 @@ type Props = {
   events: CalendarEventView[];
 };
 
-export function WorkspaceCalendar({ events }: Props) {
+export function WorkspaceCalendar({ events: initialEvents }: Props) {
+  const calendarRef = useRef<FullCalendar>(null);
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
+  const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
+  const [fetching, setFetching] = useState(false);
 
   function toggleCategory(cat: string) {
     setHiddenCategories((prev) => {
@@ -34,8 +38,39 @@ export function WorkspaceCalendar({ events }: Props) {
     });
   }
 
+  // Refetch calendar events at the right density when the view or date range changes
+  const handleDatesSet = useCallback(async (arg: DatesSetArg) => {
+    setFetching(true);
+    try {
+      const params = new URLSearchParams({
+        start: arg.start.toISOString(),
+        end:   arg.end.toISOString(),
+      });
+      const res = await fetch(`/api/calendar/events?${params}`);
+      if (res.ok) {
+        const data = (await res.json()) as CalendarEventView[];
+        setLiveEvents(data);
+      }
+    } catch {
+      // Silently fall back to current events
+    } finally {
+      setFetching(false);
+    }
+  }, []);
+
+  // Drill-down: clicking a digest event navigates to day view for that date
+  const handleEventClick = useCallback((info: EventClickArg) => {
+    const eventType = info.event.extendedProps.eventType as string;
+    if (eventType === "recurring-digest") {
+      const api = calendarRef.current?.getApi();
+      if (api) {
+        api.changeView("timeGridDay", info.event.startStr);
+      }
+    }
+  }, []);
+
   const filteredEvents = useMemo(() =>
-    events
+    liveEvents
       .filter((e) => !hiddenCategories.has(e.category))
       .map((e) => ({
         id: e.id,
@@ -51,9 +86,12 @@ export function WorkspaceCalendar({ events }: Props) {
           category: e.category,
           eventType: e.eventType,
           sourceType: e.sourceType,
+          digestCount: e.digestCount,
+          digestSchedule: e.digestSchedule,
+          digestLastStatus: e.digestLastStatus,
         },
       })),
-    [events, hiddenCategories],
+    [liveEvents, hiddenCategories],
   );
 
   return (
@@ -80,6 +118,9 @@ export function WorkspaceCalendar({ events }: Props) {
             </button>
           );
         })}
+        {fetching && (
+          <span className="text-[10px] text-[var(--dpf-muted)] ml-auto">Loading...</span>
+        )}
       </div>
 
       {/* FullCalendar */}
@@ -104,8 +145,11 @@ export function WorkspaceCalendar({ events }: Props) {
         .fc .fc-daygrid-event-dot { display: none; }
         .fc .fc-scrollgrid { border-color: var(--dpf-border); }
         .fc td, .fc th { border-color: var(--dpf-border) !important; }
+        /* Digest events get a dashed left border to signal drill-down */
+        .fc .fc-event[data-digest="true"] { border-left: 2px dashed var(--dpf-accent); cursor: zoom-in; }
       `}</style>
       <FullCalendar
+        ref={calendarRef}
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
         headerToolbar={{
@@ -115,10 +159,23 @@ export function WorkspaceCalendar({ events }: Props) {
         }}
         events={filteredEvents}
         height="auto"
-        dayMaxEvents={3}
+        dayMaxEvents={4}
         editable={false}
         selectable={true}
         nowIndicator={true}
+        datesSet={handleDatesSet}
+        eventClick={handleEventClick}
+        eventDidMount={(info) => {
+          if (info.event.extendedProps.eventType === "recurring-digest") {
+            info.el.setAttribute("data-digest", "true");
+            const count = info.event.extendedProps.digestCount;
+            const schedule = info.event.extendedProps.digestSchedule;
+            info.el.title = `${info.event.title}\nSchedule: ${schedule}\nClick to drill into day view`;
+            if (count) {
+              info.el.title += `\n${count} occurrences`;
+            }
+          }
+        }}
         dateClick={(info) => {
           setCreatePopover({ date: info.dateStr });
         }}
