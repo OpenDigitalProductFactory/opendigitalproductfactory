@@ -1,4 +1,4 @@
-import { Agent } from "undici";
+import https from "node:https";
 
 import type {
   CollectorContext,
@@ -119,11 +119,44 @@ export type UnifiDeps = {
 };
 
 function createInsecureFetch(): UnifiDeps["fetchFn"] {
-  const agent = new Agent({
-    connect: { rejectUnauthorized: false },
-  });
+  const agent = new https.Agent({ rejectUnauthorized: false });
   return (url, init) =>
-    globalThis.fetch(url, { ...init, dispatcher: agent } as RequestInit);
+    new Promise((resolve, reject) => {
+      const parsedUrl = new URL(String(url));
+      const headers: Record<string, string> = {};
+      if (init?.headers) {
+        const h = init.headers as Record<string, string>;
+        for (const [k, v] of Object.entries(h)) headers[k] = v;
+      }
+      const req = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port || 443,
+          path: parsedUrl.pathname + parsedUrl.search,
+          method: init?.method ?? "GET",
+          agent,
+          headers,
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (chunk) => (body += chunk));
+          res.on("end", () => {
+            resolve(new Response(body, {
+              status: res.statusCode ?? 500,
+              headers: (res.headers ?? {}) as Record<string, string>,
+            }));
+          });
+        },
+      );
+      if (init?.signal) {
+        init.signal.addEventListener("abort", () => {
+          req.destroy();
+          reject(new Error("aborted"));
+        });
+      }
+      req.on("error", reject);
+      req.end();
+    });
 }
 
 /** Build deps from a DiscoveryConnection loaded by the runner. */
