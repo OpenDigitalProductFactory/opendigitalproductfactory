@@ -13,6 +13,20 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 
+/** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
+ *  These let the agent router and governance layer make safety decisions
+ *  without parsing the tool description text. */
+export type ToolAnnotations = {
+  /** Tool only reads data — never mutates state */
+  readOnlyHint?: boolean;
+  /** Tool performs a destructive/irreversible action (delete, overwrite, deploy) */
+  destructiveHint?: boolean;
+  /** Calling the tool twice with the same input produces the same result */
+  idempotentHint?: boolean;
+  /** Tool reaches outside the platform boundary (network, external API) */
+  openWorldHint?: boolean;
+};
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -24,7 +38,31 @@ export type ToolDefinition = {
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
+  /** MCP-spec tool annotations for governance and safety classification */
+  annotations?: ToolAnnotations;
 };
+
+/** Derive tool annotations from existing ToolDefinition fields.
+ *  Explicit `annotations` on a tool override these defaults. */
+export function resolveAnnotations(tool: ToolDefinition): ToolAnnotations {
+  const defaults: ToolAnnotations = {
+    readOnlyHint: tool.sideEffect === false && tool.executionMode !== "proposal",
+    destructiveHint: tool.executionMode === "proposal" || DESTRUCTIVE_TOOLS.has(tool.name),
+    idempotentHint: tool.sideEffect === false,
+    openWorldHint: tool.requiresExternalAccess === true,
+  };
+  return { ...defaults, ...tool.annotations };
+}
+
+/** Tools that perform destructive or irreversible actions beyond what
+ *  sideEffect/executionMode already captures. */
+const DESTRUCTIVE_TOOLS = new Set([
+  "deploy_feature",
+  "execute_promotion",
+  "transition_employee_status",
+  "contribute_to_hive",
+  "apply_platform_update",
+]);
 
 export type ToolResult = {
   success: boolean;
@@ -5139,7 +5177,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     }
 
     case "get_marketing_summary": {
-      const { getPlaybookForCtaType } = await import("@/lib/tak/marketing-playbooks");
+      const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
       const days = typeof params["days"] === "number" ? params["days"] : 30;
       const since = new Date();
       since.setDate(since.getDate() - days);
@@ -5152,7 +5190,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
       }
 
-      const playbook = getPlaybookForCtaType(config.archetype.ctaType);
+      const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
 
       const [bookings, inquiries, orders, donations, engagements, opportunities] = await Promise.all([
         prisma.storefrontBooking.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
@@ -5179,7 +5217,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     }
 
     case "suggest_campaign_ideas": {
-      const { getPlaybookForCtaType } = await import("@/lib/tak/marketing-playbooks");
+      const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
 
       const config = await prisma.storefrontConfig.findFirst({
         include: { archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } } },
@@ -5189,7 +5227,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
       }
 
-      const playbook = getPlaybookForCtaType(config.archetype.ctaType);
+      const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
 
       // Current season for seasonal relevance
       const month = new Date().getMonth();
@@ -5241,6 +5279,7 @@ export function toolsToOpenAIFormat(tools: ToolDefinition[]): Array<Record<strin
       name: t.name,
       description: t.description,
       parameters: t.inputSchema,
+      annotations: resolveAnnotations(t),
     },
   }));
 }
