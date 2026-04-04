@@ -41,6 +41,12 @@
 - `apps/web/lib/routing/fallback.test.ts`
   Responsibility: regression coverage for runtime retire/degrade/fallback behavior.
 
+- `apps/web/lib/govern/provider-oauth.ts`
+  Responsibility: OAuth activation path that must trigger discovery/reconciliation reliably for subscription-backed providers.
+
+- `apps/web/lib/actions/ai-providers.ts`
+  Responsibility: API key / auth-test activation path that must trigger discovery/reconciliation reliably for direct and OAuth-tested providers.
+
 ### Files to create
 
 - `apps/web/lib/inference/provider-reconciliation.ts`
@@ -48,6 +54,12 @@
 
 - `apps/web/lib/inference/provider-reconciliation.test.ts`
   Responsibility: unit tests for runtime provider-drift heuristics.
+
+- `apps/web/lib/govern/provider-oauth.test.ts`
+  Responsibility: regression coverage for OAuth activation/reconciliation behavior and sibling-provider sync.
+
+- `apps/web/lib/actions/ai-providers.test.ts`
+  Responsibility: regression coverage for auth-test activation/reconciliation behavior in direct provider flows.
 
 ---
 
@@ -147,9 +159,111 @@ git commit -m "feat(routing): canonicalize Codex catalog and add gpt-5-codex"
 
 ---
 
-## Chunk 2: Make Codex Actually Eligible For The Right Routes
+## Chunk 2: Prove Activation Paths Reconcile Runtime State
 
-### Task 2: Write failing routing tests for `code` model eligibility
+### Task 2: Write failing tests for OAuth activation reconciliation
+
+**Files:**
+- Create: `apps/web/lib/govern/provider-oauth.test.ts`
+- Modify: `apps/web/lib/govern/provider-oauth.ts` only if the test exposes missing behavior
+- Reference: `apps/web/lib/inference/ai-provider-internals.ts`
+
+- [ ] **Step 1: Create an OAuth activation regression test**
+
+Add tests that assert:
+
+- `exchangeOAuthCode()` triggers `autoDiscoverAndProfile(flow.providerId)` after successful activation
+- codex/chatgpt sibling activation also triggers reconciliation for the sibling
+- failures in auto-discovery do not break the OAuth completion path
+
+Prefer mocking Prisma and `autoDiscoverAndProfile()` rather than using a real DB.
+
+- [ ] **Step 2: Run the new OAuth test and verify red/green honestly**
+
+Run:
+
+```bash
+pnpm --filter @dpf/web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
+```
+
+Expected:
+
+- If existing behavior already covers the path, the test may pass immediately after being written. If so, keep it as regression protection and do not force artificial code changes.
+- If behavior is missing, let it fail for the exact missing reconciliation call, then patch only that gap.
+
+- [ ] **Step 3: Fix only if the test reveals a real gap**
+
+If needed, patch `apps/web/lib/govern/provider-oauth.ts` so successful OAuth activation and sibling activation always trigger runtime reconciliation.
+
+- [ ] **Step 4: Re-run the OAuth test**
+
+Run:
+
+```bash
+pnpm --filter @dpf/web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
+```
+
+Expected:
+
+- PASS
+
+### Task 3: Write failing tests for direct-provider auth-test reconciliation
+
+**Files:**
+- Create: `apps/web/lib/actions/ai-providers.test.ts`
+- Modify: `apps/web/lib/actions/ai-providers.ts` only if the test exposes missing behavior
+
+- [ ] **Step 1: Create auth-test reconciliation regression tests**
+
+Add tests that assert successful `testProviderAuth()` paths trigger `autoDiscoverAndProfile()` for:
+
+- OAuth subscription-style providers
+- cloud API providers
+- local providers only where applicable
+
+Also assert auth failures do not trigger reconciliation.
+
+- [ ] **Step 2: Run the new auth-test file**
+
+Run:
+
+```bash
+pnpm --filter @dpf/web exec vitest run apps/web/lib/actions/ai-providers.test.ts
+```
+
+Expected:
+
+- PASS if current implementation is already correct
+- otherwise FAIL specifically on missing reconciliation calls
+
+- [ ] **Step 3: Patch only if needed**
+
+If any success path does not trigger reconciliation, update `apps/web/lib/actions/ai-providers.ts` narrowly and keep the behavior idempotent.
+
+- [ ] **Step 4: Re-run the auth-test file**
+
+Run:
+
+```bash
+pnpm --filter @dpf/web exec vitest run apps/web/lib/actions/ai-providers.test.ts
+```
+
+Expected:
+
+- PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/lib/govern/provider-oauth.test.ts apps/web/lib/actions/ai-providers.test.ts apps/web/lib/govern/provider-oauth.ts apps/web/lib/actions/ai-providers.ts
+git commit -m "test(routing): cover provider activation reconciliation paths"
+```
+
+---
+
+## Chunk 3: Make Codex Actually Eligible For The Right Routes
+
+### Task 4: Write failing routing tests for `code` model eligibility
 
 **Files:**
 - Modify: `apps/web/lib/routing/pipeline-v2.test.ts`
@@ -218,7 +332,7 @@ Expected:
 
 - PASS
 
-### Task 3: Write failing Build Studio preference test
+### Task 5: Write failing Build Studio preference test
 
 **Files:**
 - Modify: `apps/web/lib/tak/agent-routing.test.ts`
@@ -279,9 +393,9 @@ git commit -m "feat(routing): admit code models and prefer codex for build"
 
 ---
 
-## Chunk 3: Reconcile Runtime Provider Drift
+## Chunk 4: Reconcile Runtime Provider Drift
 
-### Task 4: Create provider-drift decision helper with failing tests first
+### Task 6: Create provider-drift decision helper with failing tests first
 
 **Files:**
 - Create: `apps/web/lib/inference/provider-reconciliation.ts`
@@ -360,7 +474,7 @@ Expected:
 
 - PASS
 
-### Task 5: Write failing fallback reconciliation test
+### Task 7: Write failing fallback reconciliation test
 
 **Files:**
 - Modify: `apps/web/lib/routing/fallback.test.ts`
@@ -434,9 +548,9 @@ git commit -m "feat(routing): reconcile provider drift after runtime failures"
 
 ---
 
-## Chunk 4: Verification Gate
+## Chunk 5: Verification Gate
 
-### Task 6: Run the affected test suite and production build
+### Task 8: Run the affected test suite and production build
 
 **Files:**
 - Verify only; no file edits expected unless failures appear
@@ -448,6 +562,8 @@ Run:
 ```bash
 pnpm --filter @dpf/web exec vitest run \
   apps/web/lib/auto-discover.test.ts \
+  apps/web/lib/govern/provider-oauth.test.ts \
+  apps/web/lib/actions/ai-providers.test.ts \
   apps/web/lib/routing/pipeline-v2.test.ts \
   apps/web/lib/tak/agent-routing.test.ts \
   apps/web/lib/inference/provider-reconciliation.test.ts \
@@ -462,7 +578,25 @@ Expected:
 
 If any neighboring tests fail, fix them before proceeding. Do not defer breakage caused by this work.
 
-- [ ] **Step 3: Run the production build gate**
+- [ ] **Step 3: Create a manual provider validation matrix in the session notes or PR summary**
+
+Record a concise validation matrix covering:
+
+- OAuth provider activation
+- API key provider activation
+- known-model provider activation (`codex`, `chatgpt`)
+- consumer install with stale bootstrap local model present
+- runtime fallback after `model_not_found`
+- runtime fallback after interface drift / unsupported parameter
+
+For each scenario, capture:
+
+- trigger
+- expected reconciled state
+- expected selected route family
+- expected fallback behavior
+
+- [ ] **Step 4: Run the production build gate**
 
 Run:
 
@@ -475,7 +609,7 @@ Expected:
 
 - build succeeds with zero errors
 
-- [ ] **Step 4: Commit the final verification fixes if needed**
+- [ ] **Step 5: Commit the final verification fixes if needed**
 
 ```bash
 git add <affected-files>
@@ -491,6 +625,7 @@ git commit -m "fix(routing): complete provider activation routing reconciliation
 - Do not invent a new model class. Use canonical `ModelClass` values only.
 - Treat Build Studio specially through default preference, not through a global hard override.
 - If `gpt-5-codex` turns out to require a different execution path in practice, keep the catalog entry but document that as a follow-up adapter/recipe issue instead of blocking the catalog normalization work.
+- Testing here is part of the feature, not cleanup. Activation-path regression tests and runtime-drift regression tests are required deliverables because this area is historically brittle.
 
 ---
 
