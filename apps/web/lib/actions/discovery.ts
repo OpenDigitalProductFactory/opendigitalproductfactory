@@ -4,6 +4,7 @@ import {
   executeBootstrapDiscovery,
   persistBootstrapDiscoveryRun,
   prisma,
+  type Prisma,
 } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
@@ -123,7 +124,7 @@ export async function configureDiscoveryConnection(input: {
       collectorType: input.collectorType,
       endpointUrl: input.endpointUrl.replace(/\/+$/, ""),
       encryptedApiKey: encryptedApiKey ?? null,
-      configuration: input.configuration ?? {},
+      configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
       status: encryptedApiKey ? "active" : "unconfigured",
       gatewayEntityId: input.gatewayEntityId ?? null,
     },
@@ -131,7 +132,7 @@ export async function configureDiscoveryConnection(input: {
       name: input.name,
       endpointUrl: input.endpointUrl.replace(/\/+$/, ""),
       ...(encryptedApiKey ? { encryptedApiKey } : {}),
-      configuration: input.configuration ?? {},
+      configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
       status: encryptedApiKey ? "active" : "unconfigured",
       gatewayEntityId: input.gatewayEntityId ?? null,
     },
