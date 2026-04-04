@@ -11,8 +11,13 @@ import {
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
+// Mock fetch that returns no Prometheus data (forces local-only discovery)
+const noopFetch = (() => Promise.resolve({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
+
 function makeDeps(overrides: Partial<NetworkDeps> = {}): NetworkDeps {
   return {
+    fetchFn: noopFetch,
+    prometheusUrl: "http://localhost:9090",
     networkInterfaces: () => ({
       eth0: [
         {
