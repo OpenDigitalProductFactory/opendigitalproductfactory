@@ -249,6 +249,12 @@ const DEFAULT_OSI_LAYER: Record<string, number> = {
   subnet: 3,
   gateway: 3,
   docker_host: 3,
+  router: 3,
+  network_client: 3,
+  network_device: 3,
+  switch: 2,
+  access_point: 2,
+  vlan: 2,
 };
 
 const OSI_LAYER_NAMES: Record<number, string> = {

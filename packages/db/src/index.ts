@@ -91,6 +91,11 @@ export {
   runBootstrapCollectors,
 } from "./discovery-runner";
 export {
+  runConnectionCollectors,
+  type ConnectionLoaderDb,
+  type DecryptFn,
+} from "./discovery-runners/connection-collectors";
+export {
   deriveNestedChevronSequenceWarnings,
   sortStructuredChildren,
   type StructuredChildRecord,

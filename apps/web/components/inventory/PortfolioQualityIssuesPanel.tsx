@@ -1,8 +1,14 @@
+"use client";
+
+import { useState } from "react";
+import { ConfigureConnectionInline } from "./ConfigureConnectionInline";
+
 type PortfolioQualityIssue = {
   id: string;
   issueType: string;
   severity: string;
   summary: string;
+  details?: Record<string, unknown> | null;
   inventoryEntity: { entityKey: string; name: string } | null;
   portfolio: { slug: string; name: string } | null;
   taxonomyNode: { nodeId: string; name: string } | null;
@@ -14,6 +20,8 @@ export function PortfolioQualityIssuesPanel({
 }: {
   issues: PortfolioQualityIssue[];
 }) {
+  const [configuringIssueId, setConfiguringIssueId] = useState<string | null>(null);
+
   return (
     <section className="rounded-xl border border-white/10 bg-[var(--dpf-surface-1)] p-4">
       <div className="flex items-center justify-between gap-2">
@@ -39,9 +47,23 @@ export function PortfolioQualityIssuesPanel({
                   {issue.issueType}
                 </p>
               </div>
-              <span className="rounded-full bg-[#fb718520] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[#fb7185]">
-                {issue.severity}
-              </span>
+              <div className="flex items-center gap-2">
+                {issue.issueType === "gateway_connection_needed" && (
+                  <button
+                    onClick={() =>
+                      setConfiguringIssueId(
+                        configuringIssueId === issue.id ? null : issue.id,
+                      )
+                    }
+                    className="rounded-md bg-[#7c8cf8] px-3 py-1 text-[11px] font-medium text-white hover:bg-[#6b7bf7] transition-colors"
+                  >
+                    {configuringIssueId === issue.id ? "Cancel" : "Configure"}
+                  </button>
+                )}
+                <span className="rounded-full bg-[#fb718520] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[#fb7185]">
+                  {issue.severity}
+                </span>
+              </div>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--dpf-muted)]">
@@ -50,6 +72,22 @@ export function PortfolioQualityIssuesPanel({
               {issue.taxonomyNode && <span>Taxonomy: {issue.taxonomyNode.nodeId}</span>}
               {issue.digitalProduct && <span>Product: {issue.digitalProduct.name}</span>}
             </div>
+
+            {issue.issueType === "gateway_connection_needed" &&
+              configuringIssueId === issue.id && (
+                <ConfigureConnectionInline
+                  gatewayEntityId={
+                    (issue.details as Record<string, unknown> | null)
+                      ?.gatewayEntityId as string | undefined
+                  }
+                  gatewayAddress={
+                    (issue.details as Record<string, unknown> | null)
+                      ?.address as string | undefined
+                  }
+                  gatewayName={issue.inventoryEntity?.name ?? "Gateway"}
+                  onComplete={() => setConfiguringIssueId(null)}
+                />
+              )}
           </article>
         ))}
       </div>

@@ -140,6 +140,69 @@ describe("inferCrossCollectorRelationships", () => {
     });
     expect(result.relationships).toHaveLength(0);
   });
+
+  it("creates PEER_OF between UniFi router and network gateway with same IP", () => {
+    const input: CollectorOutput = {
+      items: [
+        {
+          sourceKind: "unifi",
+          itemType: "router",
+          name: "UDM Pro",
+          externalRef: "unifi-device:aa:bb:cc:dd:ee:01",
+          attributes: { address: "192.168.0.1" },
+        },
+        {
+          sourceKind: "network",
+          itemType: "gateway",
+          name: "Gateway 192.168.0.1",
+          externalRef: "gateway:192.168.0.1",
+          attributes: { address: "192.168.0.1" },
+        },
+      ],
+      relationships: [],
+    };
+
+    const result = inferCrossCollectorRelationships(input);
+
+    const peerOf = result.relationships.find(
+      (r) =>
+        r.relationshipType === "PEER_OF" &&
+        r.attributes?.rule === "unifi_router_is_network_gateway",
+    );
+    expect(peerOf).toBeDefined();
+    expect(peerOf!.fromExternalRef).toBe("unifi-device:aa:bb:cc:dd:ee:01");
+    expect(peerOf!.toExternalRef).toBe("gateway:192.168.0.1");
+    expect(peerOf!.confidence).toBe(0.95);
+  });
+
+  it("does not create PEER_OF when UniFi router and gateway have different IPs", () => {
+    const input: CollectorOutput = {
+      items: [
+        {
+          sourceKind: "unifi",
+          itemType: "router",
+          name: "UDM Pro",
+          externalRef: "unifi-device:aa:bb:cc:dd:ee:01",
+          attributes: { address: "10.0.0.1" },
+        },
+        {
+          sourceKind: "network",
+          itemType: "gateway",
+          name: "Gateway 192.168.0.1",
+          externalRef: "gateway:192.168.0.1",
+          attributes: { address: "192.168.0.1" },
+        },
+      ],
+      relationships: [],
+    };
+
+    const result = inferCrossCollectorRelationships(input);
+
+    const peerOf = result.relationships.find(
+      (r) => r.attributes?.rule === "unifi_router_is_network_gateway",
+    );
+    expect(peerOf).toBeUndefined();
+  });
 });
 
 // ─── Passes 2 & 3: Product-to-infrastructure inference ────────────────────

@@ -3,6 +3,7 @@
 // Polls Prometheus targets every 60s (lightweight). Runs full discovery every 15 min.
 
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
+import { decryptSecret } from "../govern/credential-crypto";
 
 const PROMETHEUS_POLL_INTERVAL_MS = 60_000;
 const FULL_SWEEP_INTERVAL_MS = 15 * 60_000;
@@ -111,6 +112,7 @@ export async function runFullDiscoverySweep(): Promise<void> {
     console.log("[discovery-scheduler] Starting full discovery sweep");
     await executeBootstrapDiscovery(prisma as never, {
       trigger: "scheduled",
+      decrypt: decryptSecret,
     });
     console.log("[discovery-scheduler] Sweep complete");
   } finally {

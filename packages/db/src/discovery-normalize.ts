@@ -107,6 +107,8 @@ function mapEntityType(itemType: string): string {
   if (itemType.includes("container")) return "container";
   // Network topology types — passthrough (already canonical)
   if (itemType === "network_interface" || itemType === "subnet" || itemType === "gateway" || itemType === "docker_host") return itemType;
+  // UniFi network equipment types — passthrough
+  if (itemType === "router" || itemType === "switch" || itemType === "access_point" || itemType === "vlan" || itemType === "network_client" || itemType === "network_device") return itemType;
   return itemType;
 }
 
@@ -119,7 +121,11 @@ function isFoundationalInfrastructure(itemType: string): boolean {
     || itemType.includes("monitoring")
     || itemType === "subnet"
     || itemType === "gateway"
-    || itemType === "docker_host";
+    || itemType === "docker_host"
+    || itemType === "router"
+    || itemType === "switch"
+    || itemType === "access_point"
+    || itemType === "vlan";
 }
 
 function buildFallbackAttribution(item: DiscoveredItemInput): DerivedAttribution {

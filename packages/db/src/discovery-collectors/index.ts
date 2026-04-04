@@ -3,3 +3,4 @@ export { collectDockerDiscovery } from "./docker";
 export { collectKubernetesDiscovery } from "./kubernetes";
 export { collectPrometheusDiscovery } from "./prometheus";
 export { collectNetworkDiscovery } from "./network";
+export { collectUnifiDiscovery } from "./unifi";
