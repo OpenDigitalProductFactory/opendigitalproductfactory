@@ -1,7 +1,15 @@
 // apps/web/lib/actions/graph.ts
 "use server";
 
-import { getNeighbours, getInfraCIs, type GraphNode, type GraphEdge } from "@dpf/db";
+import {
+  getNeighbours,
+  getInfraCIs,
+  getDownstreamImpact,
+  getLayeredDependencyStack,
+  getNetworkTopologyAtLayer,
+  type GraphNode,
+  type GraphEdge,
+} from "@dpf/db";
 import { runCypher } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
@@ -12,6 +20,9 @@ export type GraphData = {
     label: string;
     color: string;
     size: number;
+    osiLayer?: number | null;
+    status?: string | null;
+    ciType?: string | null;
   }>;
   links: Array<{
     source: string;
@@ -116,13 +127,7 @@ export async function getFullGraphData(): Promise<GraphData> {
     const infraCIs = await getInfraCIs();
     for (const ci of infraCIs) {
       if (!nodeMap.has(ci.id)) {
-        nodeMap.set(ci.id, {
-          id: ci.id,
-          name: ci.name,
-          label: "InfraCI",
-          color: LABEL_COLORS.InfraCI ?? "#38bdf8",
-          size: LABEL_SIZES.InfraCI ?? 5,
-        });
+        nodeMap.set(ci.id, infraCIToGraphNode(ci));
       }
     }
 
@@ -168,5 +173,205 @@ export async function getFullGraphData(): Promise<GraphData> {
   return {
     nodes: Array.from(nodeMap.values()),
     links: links.filter((l) => nodeMap.has(l.source) && nodeMap.has(l.target)),
+  };
+}
+
+// ─── View-Specific Server Actions ──────────────────────────────────────────
+
+/** Network topology: L3 InfraCI nodes + their edges. */
+export async function getNetworkTopologyData(): Promise<GraphData> {
+  try {
+    const { nodes: ciNodes, edges: ciEdges } = await getNetworkTopologyAtLayer(3);
+    const nodeMap = new Map<string, GraphData["nodes"][0]>();
+    for (const ci of ciNodes) {
+      nodeMap.set(ci.id, infraCIToGraphNode(ci));
+    }
+    // Also include L7 nodes connected to L3 nodes (containers on subnets)
+    const allInfra = await getInfraCIs();
+    const infraEdges = await runCypher<{ fromId: string; toId: string; relType: string }>(
+      `MATCH (a:InfraCI)-[r]->(b:InfraCI)
+       WHERE a.osiLayer = 3 OR b.osiLayer = 3
+       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
+      {},
+    );
+    for (const edge of infraEdges) {
+      for (const id of [edge.fromId, edge.toId]) {
+        if (!nodeMap.has(id)) {
+          const ci = allInfra.find((c) => c.id === id);
+          if (ci) nodeMap.set(id, infraCIToGraphNode(ci));
+        }
+      }
+    }
+    const links: GraphData["links"] = [
+      ...ciEdges.map((e) => ({ source: e.from, target: e.to, type: e.type })),
+      ...infraEdges
+        .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
+        .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType })),
+    ];
+    // Deduplicate links
+    const seen = new Set<string>();
+    const uniqueLinks = links.filter((l) => {
+      const key = `${l.source}-${l.type}-${l.target}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return { nodes: Array.from(nodeMap.values()), links: uniqueLinks };
+  } catch {
+    return { nodes: [], links: [] };
+  }
+}
+
+/** Hosting stack: Docker host + runtime + containers + HOSTS/RUNS_ON edges. */
+export async function getHostingStackData(): Promise<GraphData> {
+  try {
+    const infraCIs = await getInfraCIs();
+    const hostingTypes = new Set(["docker_host", "server", "service", "container", "monitoring_service", "ai-inference"]);
+    const nodeMap = new Map<string, GraphData["nodes"][0]>();
+    for (const ci of infraCIs) {
+      const ciType = (ci.properties?.ciType as string) ?? ci.id.split(":")[0];
+      if (hostingTypes.has(ciType) || ciType === "docker_host") {
+        nodeMap.set(ci.id, infraCIToGraphNode(ci));
+      }
+    }
+    const infraEdges = await runCypher<{ fromId: string; toId: string; relType: string }>(
+      `MATCH (a:InfraCI)-[r:HOSTS|RUNS_ON|MEMBER_OF]->(b:InfraCI)
+       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
+      {},
+    );
+    const links: GraphData["links"] = infraEdges
+      .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
+      .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));
+    return { nodes: Array.from(nodeMap.values()), links };
+  } catch {
+    return { nodes: [], links: [] };
+  }
+}
+
+/** Impact blast radius: everything affected if the given CI fails. */
+export async function getImpactData(ciId: string): Promise<GraphData> {
+  try {
+    const impacts = await getDownstreamImpact(ciId);
+    const nodeMap = new Map<string, GraphData["nodes"][0]>();
+    // Add the fault node
+    const allInfra = await getInfraCIs();
+    const faultNode = allInfra.find((ci) => ci.id === ciId);
+    if (faultNode) {
+      const gn = infraCIToGraphNode(faultNode);
+      gn.color = "#ef4444"; // Red for fault origin
+      gn.size = 10;
+      nodeMap.set(faultNode.id, gn);
+    }
+    // Add affected nodes
+    for (const impact of impacts) {
+      if (!nodeMap.has(impact.node.id)) {
+        const gn = impact.node.label === "InfraCI"
+          ? infraCIToGraphNode(impact.node)
+          : {
+              id: impact.node.id,
+              name: impact.node.name,
+              label: impact.node.label,
+              color: LABEL_COLORS[impact.node.label] ?? "#8888a0",
+              size: LABEL_SIZES[impact.node.label] ?? 4,
+            };
+        // Color by distance
+        if (impact.depth === 1) gn.color = "#f97316"; // orange
+        else if (impact.depth === 2) gn.color = "#eab308"; // yellow
+        nodeMap.set(impact.node.id, gn);
+      }
+    }
+    // Get edges between the involved nodes
+    const nodeIds = [...nodeMap.keys()];
+    if (nodeIds.length === 0) return { nodes: [], links: [] };
+    const edges = await runCypher<{ fromId: string; toId: string; relType: string }>(
+      `MATCH (a)-[r]->(b)
+       WHERE coalesce(a.ciId, a.productId) IN $nodeIds
+         AND coalesce(b.ciId, b.productId) IN $nodeIds
+       RETURN coalesce(a.ciId, a.productId) AS fromId,
+              coalesce(b.ciId, b.productId) AS toId,
+              type(r) AS relType`,
+      { nodeIds },
+    );
+    const links = edges
+      .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
+      .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));
+    return { nodes: Array.from(nodeMap.values()), links };
+  } catch {
+    return { nodes: [], links: [] };
+  }
+}
+
+/** Dependency audit: full dependency stack from a product, grouped by OSI layer. */
+export async function getDependencyAuditData(productId: string): Promise<GraphData> {
+  try {
+    const layers = await getLayeredDependencyStack(productId);
+    const nodeMap = new Map<string, GraphData["nodes"][0]>();
+    // Add the product itself
+    const product = await prisma.digitalProduct.findUnique({
+      where: { productId },
+      select: { productId: true, name: true, lifecycleStatus: true },
+    });
+    if (product) {
+      nodeMap.set(product.productId, {
+        id: product.productId,
+        name: product.name,
+        label: "DigitalProduct",
+        color: LABEL_COLORS.DigitalProduct ?? "#4ade80",
+        size: 8,
+        osiLayer: 7,
+      });
+    }
+    // Add dependency nodes
+    for (const layer of layers) {
+      for (const node of layer.nodes) {
+        if (!nodeMap.has(node.id)) {
+          const gn = infraCIToGraphNode(node);
+          gn.osiLayer = layer.osiLayer;
+          nodeMap.set(node.id, gn);
+        }
+      }
+    }
+    // Get edges between involved nodes
+    const nodeIds = [...nodeMap.keys()];
+    if (nodeIds.length === 0) return { nodes: [], links: [] };
+    const edges = await runCypher<{ fromId: string; toId: string; relType: string }>(
+      `MATCH (a)-[r]->(b)
+       WHERE coalesce(a.ciId, a.productId) IN $nodeIds
+         AND coalesce(b.ciId, b.productId) IN $nodeIds
+       RETURN coalesce(a.ciId, a.productId) AS fromId,
+              coalesce(b.ciId, b.productId) AS toId,
+              type(r) AS relType`,
+      { nodeIds },
+    );
+    const links = edges
+      .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
+      .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));
+    return { nodes: Array.from(nodeMap.values()), links };
+  } catch {
+    return { nodes: [], links: [] };
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  operational: "#4ade80",
+  degraded: "#eab308",
+  offline: "#ef4444",
+};
+
+function infraCIToGraphNode(ci: GraphNode): GraphData["nodes"][0] {
+  const ciType = (ci.properties?.ciType as string) ?? "";
+  const status = (ci.properties?.status as string) ?? "operational";
+  const osiLayer = (ci.properties?.osiLayer as number | undefined) ?? null;
+  return {
+    id: ci.id,
+    name: ci.name,
+    label: "InfraCI",
+    color: STATUS_COLORS[status] ?? LABEL_COLORS.InfraCI ?? "#38bdf8",
+    size: ciType === "docker_host" || ciType === "gateway" ? 7 : LABEL_SIZES.InfraCI ?? 5,
+    osiLayer,
+    status,
+    ciType,
   };
 }

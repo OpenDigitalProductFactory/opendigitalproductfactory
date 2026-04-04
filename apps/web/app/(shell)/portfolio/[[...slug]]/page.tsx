@@ -5,6 +5,7 @@ import { getFullPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolio
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
+import { getFullGraphData } from "@/lib/actions/graph";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
@@ -41,6 +42,7 @@ export default async function PortfolioPage({ params }: Props) {
     orderBy: { name: "asc" },
   });
 
+  const graphData = await getFullGraphData();
   const breadcrumbs = buildBreadcrumbs(roots, slugs);
 
   const rootSlug = slugs[0] ?? ""; // slugs.length === 0 handled above; ?? "" satisfies noUncheckedIndexedAccess
@@ -59,6 +61,8 @@ export default async function PortfolioPage({ params }: Props) {
       health={healthStr}
       investment={investment}
       ownerRole={ownerRole}
+      graphData={graphData}
+      taxonomyNodeId={node.nodeId}
     />
   );
 }

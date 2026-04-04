@@ -13,7 +13,7 @@ import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary"
 import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPanel";
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
-import { RelationshipGraph } from "@/components/inventory/RelationshipGraph";
+import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import { getFullGraphData } from "@/lib/actions/graph";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -62,9 +62,9 @@ export default async function InventoryPage() {
         <PortfolioQualityIssuesPanel issues={openIssues} />
       </div>
 
-      {/* Relationship Graph */}
+      {/* Topology Graph */}
       <div className="mt-6">
-        <RelationshipGraph data={graphData} />
+        <TopologyGraph data={graphData} />
       </div>
 
       <div className="mt-8">

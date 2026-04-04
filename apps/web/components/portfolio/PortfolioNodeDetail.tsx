@@ -3,6 +3,8 @@ import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
 import { PORTFOLIO_COLOURS, type OwnerRoleInfo } from "@/lib/portfolio";
 import { ProductList } from "./ProductList";
+import { TopologyGraph } from "@/components/inventory/TopologyGraph";
+import type { GraphData } from "@/lib/actions/graph";
 
 type Product = { id: string; productId: string; name: string; lifecycleStatus: string };
 
@@ -15,6 +17,8 @@ type Props = {
   health: string;
   investment: string;
   ownerRole: OwnerRoleInfo | null;
+  graphData?: GraphData;
+  taxonomyNodeId?: string;
 };
 
 function getRootSlug(nodeId: string): string {
@@ -30,6 +34,8 @@ export function PortfolioNodeDetail({
   health,
   investment,
   ownerRole,
+  graphData,
+  taxonomyNodeId,
 }: Props) {
   const rootSlug = getRootSlug(node.nodeId);
   const colour = PORTFOLIO_COLOURS[rootSlug] ?? "#7c8cf8";
@@ -110,6 +116,16 @@ export function PortfolioNodeDetail({
         <p className="text-sm text-[var(--dpf-muted)]">
           No products classified here yet.
         </p>
+      )}
+
+      {/* Topology Graph */}
+      {graphData && graphData.nodes.length > 0 && (
+        <div className="mt-6">
+          <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
+            Infrastructure Topology
+          </p>
+          <TopologyGraph data={graphData} taxonomyNodeId={taxonomyNodeId} />
+        </div>
       )}
 
       {/* People */}
