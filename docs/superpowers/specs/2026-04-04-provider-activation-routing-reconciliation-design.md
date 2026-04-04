@@ -19,8 +19,9 @@ This design closes the gap between provider activation and routing eligibility. 
 
 1. refresh the runtime model catalog,
 2. normalize newly introduced models into canonical routing classes and capabilities,
-3. update routing eligibility for affected task families and agents,
-4. preserve local models as last-resort fallback rather than accidental first winner.
+3. reconcile provider lifecycle changes including additions, retirements, and interface drift,
+4. update routing eligibility for affected task families and agents,
+5. preserve local models as last-resort fallback rather than accidental first winner.
 
 ---
 
@@ -49,6 +50,7 @@ The current source shows a structural mismatch:
 2. The known Codex model is currently seeded as `modelClass: "agent"`.
 3. The canonical `ModelClass` union does not include `"agent"`; it includes `"code"`.
 4. Preferred provider overrides happen after eligibility filtering, so a configured provider cannot win if it never became eligible.
+5. Providers add and retire models over time, and sometimes expose different invocation interfaces for adjacent models. The current runtime does not fully reconcile those changes into routing eligibility and execution compatibility.
 
 This means Codex can be present in the database but still be filtered out before ranking for many coworker tasks, especially when task classification lands on `unknown` or another generic task type.
 
@@ -63,7 +65,11 @@ This means Codex can be present in the database but still be filtered out before
    - coding agents/tasks prefer Codex-family models,
    - general coworkers prefer strong chat/reasoning models,
    - local models remain final fallback.
-5. Ensure consumer installs behave correctly after provider activation, not just source checkouts and fresh seeds.
+5. Detect and reconcile provider-side model churn:
+   - new models,
+   - retired models,
+   - changed interfaces or parameter contracts.
+6. Ensure consumer installs behave correctly after provider activation, not just source checkouts and fresh seeds.
 
 ## Non-Goals
 
@@ -117,6 +123,7 @@ What we learn:
 
 - Canonical model classes drive routing, not provider-specific labels.
 - Provider activation should trigger model-catalog refresh automatically.
+- Provider reconciliation should be repeatable and idempotent, not a one-time bootstrap operation.
 - Capability-first routing should distinguish coding workloads from generic chat workloads.
 - Strong cloud models should be preferred only when they are eligible for the current task family.
 
@@ -134,6 +141,7 @@ What we learn:
 - Treating provider activation as complete before routing metadata is reconciled.
 - Applying preferred-provider logic only after hard exclusion.
 - Letting local bootstrap defaults remain sticky after stronger providers are connected.
+- Assuming a provider's model list and invocation interface stay stable after the first successful activation.
 
 ---
 
@@ -151,6 +159,10 @@ What we learn:
 - Codex-family models are classified in a way that does not map to the canonical router.
 - Generic coworkers can classify to `unknown`, making the router use default class filtering that excludes Codex.
 - Consumer installs can therefore appear properly configured while still behaving as if Codex were absent.
+- Provider evolution is not fully reconciled:
+  - new models may not become eligible,
+  - retired models may linger too long,
+  - invocation interfaces can drift from what the registered adapter expects.
 
 ---
 
@@ -160,12 +172,13 @@ What we learn:
 
 Provider activation must no longer stop at "credential valid" or "provider status active."
 
-Activation completion means all four of these are true:
+Activation completion means all of these are true:
 
 1. provider credentials are valid,
 2. model catalog is refreshed,
 3. model metadata is normalized to canonical classes/capabilities,
-4. routing eligibility caches and task-family mappings are refreshed.
+4. provider-specific invocation compatibility is refreshed,
+5. routing eligibility caches and task-family mappings are refreshed.
 
 ### Proposed behavior
 
@@ -178,6 +191,17 @@ When a provider is activated through OAuth, API key validation, or sibling activ
 - emit a reconciliation result with counts and failures.
 
 This should be one server-side flow, not a sequence of loosely related manual steps.
+
+### Reconciliation must also be periodic
+
+Provider reconciliation cannot run only at initial activation. Providers add, retire, and reshape models continuously. The same reconciliation flow should therefore be callable from:
+
+- OAuth/API-key activation,
+- manual sync,
+- scheduled periodic refresh,
+- runtime failure recovery when the provider reports `model_not_found`, unsupported parameters, or interface mismatch.
+
+This keeps the runtime aligned with provider reality instead of requiring repeated design-time patches.
 
 ---
 
@@ -258,7 +282,49 @@ This does not require rebuilding the entire app; it requires the runtime to stop
 
 ---
 
-## Section 5: Consumer install behavior
+## Section 5: Reconcile retirements and interface drift
+
+Provider lifecycle reconciliation must treat stale models and stale invocation strategies as first-class failure modes.
+
+### Retired models
+
+When a provider no longer offers a model:
+
+- the runtime should mark that model retired after reconciliation confirms absence,
+- remove it from preferred routing candidates,
+- preserve audit history without continuing to route to it,
+- fall forward to the next best eligible model in the same capability family.
+
+### Interface drift
+
+Providers sometimes keep a model name but change how it must be called:
+
+- endpoint family changes,
+- parameter support changes,
+- structured output behavior changes,
+- tool calling schema changes,
+- streaming behavior changes.
+
+The runtime should therefore separate:
+
+- model identity,
+- canonical routing class/capabilities,
+- execution adapter compatibility.
+
+### Proposed compatibility contract
+
+Each model profile should be reconciled into an execution-compatibility view that answers:
+
+- which execution adapter should be used,
+- whether the adapter is confirmed compatible,
+- whether capabilities are verified or inferred,
+- whether the model should remain routable, degraded, or retired.
+
+If compatibility is uncertain after reconciliation, the model should be downgraded rather than silently treated as healthy.
+
+---
+
+## Section 6: Consumer install behavior
 
 Consumer installs like `D:\DPF` can start with a local bootstrap model such as `ai/llama3.1`. That is acceptable as the worst-case fallback.
 
@@ -289,6 +355,7 @@ This feature does not require a new canonical identity model, but it does requir
 - `ModelProfile.modelClass` is the canonical routing class.
 - Known-model catalogs must only contain canonical class values.
 - Provider activation flows are the canonical trigger for runtime catalog reconciliation.
+- Execution compatibility must have one canonical source of truth rather than being split across seed assumptions, adapter defaults, and stale profile metadata.
 
 ### Future refactoring
 
@@ -297,7 +364,8 @@ If routing metadata continues to drift between seed, known-model catalogs, and p
 - class,
 - quality tier,
 - capability projection,
-- best-for / avoid-for metadata.
+- best-for / avoid-for metadata,
+- execution compatibility state.
 
 ---
 
@@ -308,7 +376,9 @@ If routing metadata continues to drift between seed, known-model catalogs, and p
 1. Add regression tests proving Codex known models normalize to `code`, not `agent`.
 2. Add routing tests proving `code` class models become eligible for coding-oriented requests.
 3. Add provider-activation tests proving newly activated known models become routable without manual intervention.
-4. Add consumer-install tests proving local fallback remains available but no longer masks eligible Codex models.
+4. Add reconciliation tests proving retired models are de-ranked or retired cleanly.
+5. Add adapter-compatibility tests proving interface drift degrades models instead of leaving them falsely routable.
+6. Add consumer-install tests proving local fallback remains available but no longer masks eligible Codex models.
 
 ### Manual
 
@@ -316,7 +386,8 @@ If routing metadata continues to drift between seed, known-model catalogs, and p
 2. Verify model profiles exist after activation.
 3. Verify Build Studio routes to a Codex-family model.
 4. Verify a generic non-coding coworker still prefers chat/reasoning models.
-5. Verify disabling cloud providers falls back cleanly to the local model.
+5. Simulate a retired or unsupported model and verify fallback switches cleanly.
+6. Verify disabling cloud providers falls back cleanly to the local model.
 
 ---
 
@@ -324,9 +395,10 @@ If routing metadata continues to drift between seed, known-model catalogs, and p
 
 1. Normalize known-model metadata for Codex-family models.
 2. Add `gpt-5-codex` to the known/seeded catalog.
-3. Extend activation reconciliation to refresh routing-facing state.
+3. Extend activation reconciliation to refresh routing-facing state and execution compatibility.
 4. Update routing eligibility rules for coding task families.
-5. Validate in source checkout first, then in consumer install workflow.
+5. Add retirement and interface-drift reconciliation hooks.
+6. Validate in source checkout first, then in consumer install workflow.
 
 ---
 
@@ -335,6 +407,7 @@ If routing metadata continues to drift between seed, known-model catalogs, and p
 1. Should generic `unknown` requests allow `code` models when tools are present, or only when the agent itself is coding-oriented?
 2. Should `gpt-5-codex` be preferred over `codex-mini-latest` automatically for `quality_first` coding routes, with `codex-mini-latest` preferred for balanced/minimize-cost?
 3. Should the platform surface a visible "provider activated, routing refreshed" status to admins so reconciliation failures are obvious?
+4. Should reconciliation be strictly pull-based on activation/schedule, or also trigger opportunistically after runtime provider errors such as `model_not_found` and unsupported-parameter responses?
 
 ---
 
