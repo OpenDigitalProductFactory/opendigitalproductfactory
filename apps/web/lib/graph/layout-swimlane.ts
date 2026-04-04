@@ -27,9 +27,9 @@ export async function computeSwimLaneLayout(
         id: node.id,
         width: 60,
         height: 30,
-        layoutOptions: layer != null
-          ? { "elk.partitioning.partition": String(7 - layer) }
-          : {},
+        ...(layer != null
+          ? { layoutOptions: { "elk.partitioning.partition": String(7 - layer) } }
+          : {}),
       };
     });
 
