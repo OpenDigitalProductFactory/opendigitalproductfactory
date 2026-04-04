@@ -12,6 +12,11 @@ export const PROMOTABLE_TYPES = [
   "monitoring_service",
   "ai_service",
   "application",
+  "subnet",
+  "gateway",
+  "network_interface",
+  "docker_host",
+  "router",
 ];
 
 export type PromotionSummary = {
