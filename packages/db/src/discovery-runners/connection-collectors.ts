@@ -130,7 +130,7 @@ async function runSingleConnection(
         apiKey,
         configuration: {
           site: (config.site as string) ?? "default",
-          discoverClients: (config.discoverClients as boolean) ?? false,
+          discoverClients: (config.discoverClients as boolean) ?? true,
         },
       });
       return collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
