@@ -159,9 +159,9 @@ function pingAndArp(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
     return output
       .split(/\r?\n/)
       .filter(Boolean)
-      .map((line) => {
+      .map((line): DiscoveredHost | null => {
         const match = line.match(/^(\d+\.\d+\.\d+\.\d+)\s+.*lladdr\s+([\da-fA-F:]+)/);
-        return match ? { ip: match[1], mac: match[2] } : null;
+        return match ? { ip: match[1]!, mac: match[2]! } : null;
       })
       .filter((h): h is DiscoveredHost => h != null);
   }
@@ -172,9 +172,9 @@ function pingAndArp(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
     return output
       .split(/\r?\n/)
       .filter(Boolean)
-      .map((line) => {
+      .map((line): DiscoveredHost | null => {
         const match = line.match(/(\d+\.\d+\.\d+\.\d+)\s+([\da-fA-F:-]+)/);
-        return match ? { ip: match[1], mac: match[2].replace(/-/g, ":") } : null;
+        return match ? { ip: match[1]!, mac: match[2]!.replace(/-/g, ":") } : null;
       })
       .filter((h): h is DiscoveredHost => h != null)
       .filter((h) => h.mac !== "ff:ff:ff:ff:ff:ff");

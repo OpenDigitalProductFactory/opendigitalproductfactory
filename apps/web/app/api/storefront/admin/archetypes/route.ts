@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       tags: body.tags ?? [],
       isActive: true,
       isBuiltIn: false,
-      customVocabulary: body.customVocabulary ?? null,
+      ...(body.customVocabulary && { customVocabulary: body.customVocabulary }),
     },
   });
 
