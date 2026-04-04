@@ -212,6 +212,32 @@ describe("buildSeedRecipe – unknown provider", () => {
   });
 });
 
+describe("buildSeedRecipe – responses-backed providers", () => {
+  it("routes codex models through the responses adapter", () => {
+    const result = buildSeedRecipe(
+      "codex",
+      "gpt-5-codex",
+      "sync.code-gen",
+      baseModelCard({ modelClass: "code" }),
+      baseContract(),
+    );
+
+    expect(result.executionAdapter).toBe("responses");
+  });
+
+  it("routes chatgpt subscription models through the responses adapter", () => {
+    const result = buildSeedRecipe(
+      "chatgpt",
+      "gpt-5.4",
+      "sync.reasoning",
+      baseModelCard({ modelClass: "chat" }),
+      baseContract(),
+    );
+
+    expect(result.executionAdapter).toBe("responses");
+  });
+});
+
 // ── Tool policy ──────────────────────────────────────────────────────────────
 
 describe("buildSeedRecipe – toolPolicy", () => {

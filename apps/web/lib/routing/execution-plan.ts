@@ -10,6 +10,7 @@
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
+import { usesResponsesApi } from "./provider-utils";
 
 // EP-INF-009c: Model class → execution adapter mapping
 const MODEL_CLASS_ADAPTER: Record<string, string> = {
@@ -63,12 +64,16 @@ export function buildPlanFromRecipe(
       ? (recipe.responsePolicy as RoutedExecutionPlan["responsePolicy"])
       : {};
 
+  const executionAdapter = usesResponsesApi(recipe.providerId)
+    ? "responses"
+    : (recipe.executionAdapter ?? "chat");
+
   const plan: RoutedExecutionPlan = {
     providerId: recipe.providerId,
     modelId: recipe.modelId,
     recipeId: recipe.id,
     contractFamily: recipe.contractFamily,
-    executionAdapter: recipe.executionAdapter ?? "chat",
+    executionAdapter,
     maxTokens,
     providerSettings: remainingSettings,
     toolPolicy,
@@ -110,9 +115,11 @@ export function buildDefaultPlan(
   };
 
   // EP-INF-009c: Select adapter based on required model class
-  const adapterType = contract.requiredModelClass
-    ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
-    : "chat";
+  const adapterType = usesResponsesApi(endpoint.providerId)
+    ? "responses"
+    : contract.requiredModelClass
+      ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
+      : "chat";
 
   return {
     providerId: endpoint.providerId,

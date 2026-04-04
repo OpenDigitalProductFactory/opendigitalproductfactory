@@ -1040,7 +1040,7 @@ async function seedCodexModels(): Promise<void> {
       {
         modelId: "codex-mini-latest",
         friendlyName: "Codex Mini",
-        summary: "OpenAI Codex agentic coding model — sandboxed execution with tool use",
+        summary: "OpenAI Codex mini model — retained for catalog visibility, but disabled by default for platform routing",
         modelClass: "code",
         costTier: "$$",
         bestFor: ["coding", "agentic-tasks"] as string[],
@@ -1074,7 +1074,7 @@ async function seedCodexModels(): Promise<void> {
           bestFor: m.bestFor,
           avoidFor: m.avoidFor,
           modelClass: m.modelClass,
-          modelStatus: "active",
+          modelStatus: m.modelId === "codex-mini-latest" ? "disabled" : "active",
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "medium",
@@ -1134,7 +1134,7 @@ async function seedChatGPTModels(): Promise<void> {
           bestFor: m.bestFor,
           avoidFor: m.avoidFor,
           modelClass: "chat",
-          modelStatus: "disabled",  // ChatGPT SSE adapter returns empty; disabled until fixed
+          modelStatus: "active",
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "medium",

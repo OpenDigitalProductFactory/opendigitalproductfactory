@@ -25,6 +25,8 @@ export interface KnownModel {
   costTier: string;
   bestFor: string[];
   avoidFor: string[];
+  defaultStatus: "active" | "disabled" | "retired";
+  retiredReason?: string;
   scores?: {
     reasoning: number;
     codegen: number;
@@ -60,6 +62,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$$",
       bestFor: ["coding", "reasoning", "agentic-tasks"],
       avoidFor: ["conversation"],
+      defaultStatus: "active",
       scores: {
         reasoning: 88,
         codegen: 96,
@@ -92,6 +95,9 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$",
       bestFor: ["coding", "agentic-tasks"],
       avoidFor: ["conversation"],
+      defaultStatus: "disabled",
+      retiredReason:
+        "Codex Mini is not enabled by default for platform routing because it is CLI-oriented and often unavailable via the shared API path.",
       scores: {
         reasoning: 70,
         codegen: 90,
@@ -128,6 +134,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "subscription",
       bestFor: ["conversation", "coding", "general-purpose", "reasoning"],
       avoidFor: ["local-only-required"],
+      defaultStatus: "active",
       scores: {
         reasoning: 85,
         codegen: 90,

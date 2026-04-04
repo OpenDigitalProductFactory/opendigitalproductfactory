@@ -281,11 +281,11 @@
       },
       "summary": "GPT-5 Codex by OpenAI Codex - flagship coding model"
     },
-    {
-      "providerId": "codex",
-      "modelId": "codex-mini-latest",
-      "friendlyName": "Codex Mini",
-      "modelStatus": "active",
+  {
+    "providerId": "codex",
+    "modelId": "codex-mini-latest",
+    "friendlyName": "Codex Mini",
+    "modelStatus": "disabled",
       "capabilityTier": "advanced",
       "costTier": "$$",
     "bestFor": [
@@ -338,8 +338,8 @@
         "text"
       ]
     },
-      "summary": "Codex Mini by OpenAI Codex - optimized for coding"
-    },
+    "summary": "Codex Mini by OpenAI Codex - catalog-visible but disabled by default for platform routing"
+  },
   {
     "providerId": "gemini",
     "modelId": "deep-research-pro-preview-12-2025",

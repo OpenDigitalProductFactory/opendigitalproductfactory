@@ -100,9 +100,46 @@ describe("testProviderAuth", () => {
 
     expect(result).toEqual({
       ok: true,
-      message: "Connected via OAuth — token valid",
+      message: "Connected via OAuth — Responses API verified",
     });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/responses",
+      expect.objectContaining({ method: "POST" }),
+    );
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+
+  it("verifies the ChatGPT subscription backend through the responses path", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "chatgpt",
+      name: "ChatGPT",
+      baseUrl: "https://chatgpt.com/backend-api",
+      endpoint: null,
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      category: "direct",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["oauth2_authorization_code"],
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "chatgpt",
+      status: "ok",
+      cachedToken: "enc:token-1",
+    });
+
+    const result = await testProviderAuth("chatgpt");
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Connected via OAuth — Responses API verified",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://chatgpt.com/backend-api/codex/responses",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
   });
 
   it("triggers reconciliation for direct cloud providers after a successful auth test", async () => {

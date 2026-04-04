@@ -12,3 +12,7 @@ export function isAnthropic(providerId: string): boolean {
 export function isOpenAI(providerId: string): boolean {
   return providerId === "openai" || providerId.startsWith("openai-");
 }
+
+export function usesResponsesApi(providerId: string): boolean {
+  return providerId === "codex" || providerId === "chatgpt";
+}
