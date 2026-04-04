@@ -307,6 +307,39 @@ BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (pa
       defaultBudgetClass: "balanced",
     },
   },
+  "/storefront": {
+    agentId: "marketing-specialist",
+    agentName: "Marketing Specialist",
+    agentDescription: "Archetype-aware marketing strategy, campaigns, and growth",
+    capability: "view_storefront",
+    sensitivity: "confidential",
+    systemPrompt: `You are the business engagement specialist for this organization. Your actual role name and the portal label are in your PAGE DATA \u2014 use them. You may be a Marketing Specialist, Community Manager, Venue Manager, Enrolment Manager, or other role depending on the business model.
+
+PERSPECTIVE: You see the business through the lens of its stakeholders and engagement patterns. The PAGE DATA tells you who the stakeholders are (customers, homeowners, patients, members, supporters, etc.) and what the marketing objective is for this business model. An HOA communicates bylaws and manages community \u2014 that is NOT the same as retail marketing. A healthcare practice focuses on patient recall and preventive care \u2014 that is NOT the same as product promotion. ALWAYS adapt to the business model shown in PAGE DATA.
+
+HEURISTICS:
+- Business-model-first thinking: every recommendation MUST match the business model, stakeholders, and engagement patterns shown in PAGE DATA
+- Use the stakeholder language from PAGE DATA \u2014 say "homeowners" not "customers" for an HOA, "patients" not "clients" for a dental practice
+- Use the agent skills listed in PAGE DATA as your primary action repertoire
+- Funnel optimization: identify the weakest engagement stage and suggest targeted interventions
+- Seasonal awareness: align campaigns with calendar events, industry cycles, and capacity patterns
+- Content-market fit: match content format and tone to the audience defined by the business model
+
+INTERPRETIVE MODEL: You optimize for sustainable, model-appropriate engagement. What "good" means varies by business model: for an HOA it is community satisfaction and assessment compliance; for a restaurant it is covers and repeat visits; for a nonprofit it is donor retention and volunteer engagement. Reference the primary goal from your PAGE DATA playbook.
+
+ON THIS PAGE: The user sees the portal admin with business-model-specific tabs. The PAGE DATA includes the portal label, stakeholder types, and a full marketing playbook adapted to this specific business model \u2014 reference it explicitly.`,
+    skills: [
+      { label: "Campaign ideas", description: "Get archetype-tailored campaign suggestions", capability: "view_storefront", prompt: "Suggest 3-5 marketing campaigns tailored to our business type and current season. Reference the archetype playbook in your PAGE DATA. For each campaign: name, goal, target audience, channel, and expected outcome." },
+      { label: "Content brief", description: "Draft a content piece for your audience", capability: "view_storefront", prompt: "Draft a content brief for a marketing piece adapted to our business archetype. Include: topic, format (blog/email/social/flyer), tone guidance from the playbook, key messages, and call-to-action. Ask what the content should be about." },
+      { label: "Review inbox", description: "Spot marketing opportunities in recent interactions", capability: "view_storefront", prompt: "Summarise recent storefront inbox activity. Identify marketing opportunities \u2014 recurring questions that could become FAQ content, popular services that deserve promotion, or quiet periods that need campaigns." },
+      { label: "Marketing health check", description: "Assess your marketing posture by archetype", capability: "view_storefront", prompt: "Run a marketing health check for this business. Using the archetype playbook and current metrics from PAGE DATA: (1) assess whether key metrics are healthy for this business type, (2) identify the biggest gap in the marketing strategy, (3) suggest one high-impact action. Create a backlog item for the recommended action." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+    },
+  },
   "/setup": {
     agentId: "onboarding-coo",
     agentName: "Onboarding COO",
@@ -391,6 +424,7 @@ const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 export const AGENT_NAME_MAP: Record<string, string> = {
   ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
   coworker: "Coworker",
+  "marketing-specialist": "Marketing Specialist",
   "doc-specialist": "Documentation Specialist",
   "data-architect": "Data Architect",
 };
@@ -552,6 +586,14 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
     ],
     restricted: [
       "I'm here to help you navigate. Let me know what you're looking for and I'll point you in the right direction.",
+    ],
+  },
+  "marketing-specialist": {
+    default: [
+      "I'm your engagement specialist, adapted to your business model. I can suggest campaigns, draft communications, and analyse your engagement patterns. Check the skills menu for actions tailored to your business type.",
+    ],
+    restricted: [
+      "I can help you understand your engagement options, but some actions may require additional permissions.",
     ],
   },
   // TODO: remove if no route maps to workspace-guide
