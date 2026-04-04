@@ -139,7 +139,7 @@ function findRuleMatch(
   } else if (itemType.includes("database")) {
     node = matchByNodeId((nodeId) => nodeId.endsWith("/database"));
     ruleId = node ? "foundational_database" : undefined;
-  } else if (itemType.includes("network") || itemType === "subnet" || itemType === "gateway") {
+  } else if (itemType.includes("network") || itemType === "subnet" || itemType === "gateway" || itemType === "router") {
     node = matchByNodeId((nodeId) => nodeId.includes("network_management"));
     ruleId = node ? "foundational_network" : undefined;
   } else if (itemType === "docker_host") {
