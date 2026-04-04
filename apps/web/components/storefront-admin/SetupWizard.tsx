@@ -10,9 +10,10 @@ type Archetype = {
   tags: unknown;
   itemTemplates: unknown;
   sectionTemplates: unknown;
+  isBuiltIn?: boolean;
 };
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | "custom";
 
 type SetupWizardProps = {
   archetypes: Archetype[];
@@ -40,6 +41,28 @@ function financeSlugFromCategory(category: string): string {
   return map[category] ?? "professional_services";
 }
 
+const CATEGORY_OPTIONS = [
+  { value: "healthcare-wellness", label: "Healthcare & Wellness" },
+  { value: "beauty-personal-care", label: "Beauty & Personal Care" },
+  { value: "trades-maintenance", label: "Trades & Maintenance" },
+  { value: "professional-services", label: "Professional Services" },
+  { value: "education-training", label: "Education & Training" },
+  { value: "pet-services", label: "Pet Services" },
+  { value: "food-hospitality", label: "Food & Hospitality" },
+  { value: "retail-goods", label: "Retail & Goods" },
+  { value: "fitness-recreation", label: "Fitness & Recreation" },
+  { value: "nonprofit-community", label: "Nonprofit & Community" },
+  { value: "hoa-property-management", label: "HOA & Property Management" },
+  { value: "custom", label: "Other / New category" },
+];
+
+const CTA_OPTIONS = [
+  { value: "booking", label: "Booking", description: "Customers book appointments or sessions" },
+  { value: "purchase", label: "Purchase", description: "Customers buy products or pay for services" },
+  { value: "inquiry", label: "Inquiry", description: "Customers request quotes or information" },
+  { value: "donation", label: "Donation", description: "Supporters donate to a cause" },
+];
+
 export function SetupWizard({
   archetypes,
   suggestedArchetypeId,
@@ -58,13 +81,25 @@ export function SetupWizard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Custom archetype state
+  const [customName, setCustomName] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
+  const [customCategory, setCustomCategory] = useState("professional-services");
+  const [customCtaType, setCustomCtaType] = useState("inquiry");
+  const [customOfferings, setCustomOfferings] = useState("");
+  const [customPortalLabel, setCustomPortalLabel] = useState("");
+  const [customStakeholderLabel, setCustomStakeholderLabel] = useState("");
+  const [customCreating, setCustomCreating] = useState(false);
+
   // Derive slug from name
   function derivedSlug(name: string) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   }
 
-  const categories = Array.from(new Set(archetypes.map((a) => a.category))).sort();
-  const filtered = archetypes.filter((a) =>
+  const builtIn = archetypes.filter((a) => a.isBuiltIn !== false);
+  const custom = archetypes.filter((a) => a.isBuiltIn === false);
+  const categories = Array.from(new Set(builtIn.map((a) => a.category))).sort();
+  const filtered = builtIn.filter((a) =>
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.category.includes(search.toLowerCase())
   );
 
@@ -89,6 +124,81 @@ export function SetupWizard({
       setSubmitting(false);
     }
   }
+
+  async function handleCreateCustom() {
+    setError(null);
+    setCustomCreating(true);
+    try {
+      const offerings = customOfferings.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (offerings.length === 0) {
+        setError("Add at least one offering (one per line)");
+        return;
+      }
+
+      const res = await fetch("/api/storefront/admin/archetypes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customName,
+          category: customCategory === "custom" ? customName.toLowerCase().replace(/[^a-z0-9]+/g, "-") : customCategory,
+          ctaType: customCtaType,
+          itemTemplates: offerings.map((name) => ({
+            name,
+            description: "",
+            priceType: customCtaType === "booking" ? "per-session" : customCtaType === "purchase" ? "fixed" : customCtaType === "donation" ? "donation" : "quote",
+            ...(customCtaType === "booking" ? { bookingDurationMinutes: 60 } : {}),
+          })),
+          sectionTemplates: [
+            { type: "hero", title: "Welcome", sortOrder: 0 },
+            { type: "items", title: "What We Offer", sortOrder: 1 },
+            { type: "about", title: "About Us", sortOrder: 2 },
+            { type: "gallery", title: "Gallery", sortOrder: 3 },
+            { type: "contact", title: "Get in Touch", sortOrder: 4 },
+          ],
+          formSchema: [
+            { name: "name", label: "Name", type: "text", required: true },
+            { name: "email", label: "Email", type: "email", required: true },
+            { name: "phone", label: "Phone", type: "tel", required: false },
+            { name: "message", label: "Message", type: "textarea", required: false },
+          ],
+          tags: [
+            ...customName.toLowerCase().split(/\s+/),
+            ...offerings.map((o) => o.toLowerCase()),
+          ].slice(0, 15),
+          customVocabulary: {
+            ...(customPortalLabel && { portalLabel: customPortalLabel }),
+            ...(customStakeholderLabel && { stakeholderLabel: customStakeholderLabel }),
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? "Failed to create archetype");
+      }
+
+      const created = await res.json();
+
+      // Select the newly created archetype and go to preview
+      setSelected({
+        archetypeId: created.archetypeId,
+        name: created.name,
+        category: created.category,
+        ctaType: created.ctaType,
+        tags: created.tags,
+        itemTemplates: created.itemTemplates,
+        sectionTemplates: created.sectionTemplates,
+        isBuiltIn: false,
+      });
+      setStep(2);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create archetype");
+    } finally {
+      setCustomCreating(false);
+    }
+  }
+
+  // ─── Step 1: Choose Archetype ───────────────────────────────────────
 
   if (step === 1) {
     return (
@@ -159,9 +269,138 @@ export function SetupWizard({
             </div>
           );
         })}
+
+        {/* Custom archetypes section */}
+        {custom.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", marginBottom: 8 }}>
+              Custom business types
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+              {custom.map((a) => (
+                <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                  style={{
+                    padding: "12px 16px", textAlign: "left", borderRadius: 8,
+                    border: "1px dashed var(--dpf-border)", background: "var(--dpf-surface-1)",
+                    cursor: "pointer", fontSize: 13, color: "var(--dpf-text)",
+                  }}>
+                  <div style={{ fontWeight: 600 }}>{a.name}</div>
+                  <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>Custom</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* "Other" card */}
+        <div style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setStep("custom")}
+            style={{
+              width: "100%", padding: "16px 20px", textAlign: "left", borderRadius: 8,
+              border: "1px dashed var(--dpf-accent)", cursor: "pointer", fontSize: 13,
+              color: "var(--dpf-text)",
+              background: "color-mix(in srgb, var(--dpf-accent) 5%, var(--dpf-surface-1))",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Can't find your business?</div>
+            <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+              Define a custom business model. Your template can also be contributed back to help others.
+            </div>
+          </button>
+        </div>
       </div>
     );
   }
+
+  // ─── Custom Archetype Definition ──────────────────────────────────────
+
+  if (step === "custom") {
+    return (
+      <div style={{ maxWidth: 520, color: "var(--dpf-text)" }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Define your business model</h2>
+        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>
+          Tell us about your business and we'll create a custom template.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Business type name *</div>
+            <input type="text" value={customName} onChange={(e) => setCustomName(e.target.value)}
+              placeholder="e.g. Brewery Taproom, Dog Daycare, Co-working Space"
+              required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+          </label>
+
+          <label style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>What does this business do?</div>
+            <textarea value={customDescription} onChange={(e) => setCustomDescription(e.target.value)}
+              placeholder="Brief description of the business..."
+              rows={2} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)", resize: "none" }} />
+          </label>
+
+          <label style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Closest category</div>
+            <select value={customCategory} onChange={(e) => setCustomCategory(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }}>
+              {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+
+          <label style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>How do customers interact? *</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {CTA_OPTIONS.map((o) => (
+                <button key={o.value} type="button" onClick={() => setCustomCtaType(o.value)}
+                  style={{
+                    padding: "8px 12px", textAlign: "left", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                    border: customCtaType === o.value ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                    background: customCtaType === o.value ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
+                    color: "var(--dpf-text)",
+                  }}>
+                  <div style={{ fontWeight: 600 }}>{o.label}</div>
+                  <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>{o.description}</div>
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>What do you offer? * (one per line)</div>
+            <textarea value={customOfferings} onChange={(e) => setCustomOfferings(e.target.value)}
+              placeholder={"Hot Desk\nMeeting Room\nPrivate Office\nVirtual Office"}
+              rows={5} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text)", background: "var(--dpf-surface-1)", resize: "vertical" }} />
+          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label style={{ fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Portal name</div>
+              <input type="text" value={customPortalLabel} onChange={(e) => setCustomPortalLabel(e.target.value)}
+                placeholder="e.g. Member Portal"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+            </label>
+            <label style={{ fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Your customers are...</div>
+              <input type="text" value={customStakeholderLabel} onChange={(e) => setCustomStakeholderLabel(e.target.value)}
+                placeholder="e.g. Members, Clients"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+            </label>
+          </div>
+
+          {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
+            <button onClick={handleCreateCustom} disabled={customCreating || !customName.trim() || !customOfferings.trim()}
+              style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: customCreating ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: customCreating ? 0.7 : 1 }}>
+              {customCreating ? "Creating..." : "Create template & preview"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step 2: Preview ──────────────────────────────────────────────────
 
   if (step === 2) {
     const items = Array.isArray(selected?.itemTemplates) ? selected!.itemTemplates as Array<{ name: string }> : [];
@@ -169,7 +408,10 @@ export function SetupWizard({
     return (
       <div style={{ color: "var(--dpf-text)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Preview: {selected?.name}</h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>These sections and items will be created. You can edit them later.</p>
+        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>
+          These sections and items will be created. You can edit them later.
+          {selected?.isBuiltIn === false && " This is a custom template."}
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>
@@ -188,7 +430,8 @@ export function SetupWizard({
     );
   }
 
-  // Step 4: financial setup (rendered before the redirect so we keep wizard context)
+  // ─── Step 4: Financial Setup ──────────────────────────────────────────
+
   if (step === 4) {
     return (
       <FinancialSetupStep
@@ -200,7 +443,8 @@ export function SetupWizard({
     );
   }
 
-  // Step 3: identity
+  // ─── Step 3: Business Identity ────────────────────────────────────────
+
   return (
     <div style={{ maxWidth: 480, color: "var(--dpf-text)" }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Your business identity</h2>
@@ -220,7 +464,7 @@ export function SetupWizard({
           <input type="text" value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)}
             required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
           <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
-            Permanent URL — choose carefully, this cannot easily be changed later. Your storefront will be at /s/{orgSlug || "your-slug"}
+            Permanent URL — choose carefully, this cannot easily be changed later. Your portal will be at /s/{orgSlug || "your-slug"}
           </div>
         </label>
         <label style={{ fontSize: 13 }}>
@@ -238,7 +482,7 @@ export function SetupWizard({
           <button onClick={() => setStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
           <button onClick={handleComplete} disabled={submitting || !orgName || !orgSlug}
             style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
-            {submitting ? "Creating..." : "Create Storefront"}
+            {submitting ? "Creating..." : "Create Portal"}
           </button>
         </div>
       </div>

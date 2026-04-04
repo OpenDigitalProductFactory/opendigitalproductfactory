@@ -9,6 +9,7 @@ const TABS = [
   { label: "Pipeline", href: "/customer/opportunities" },
   { label: "Quotes", href: "/customer/quotes" },
   { label: "Orders", href: "/customer/sales-orders" },
+  { label: "Funnel", href: "/customer/funnel" },
 ] as const;
 
 export function CustomerTabNav() {

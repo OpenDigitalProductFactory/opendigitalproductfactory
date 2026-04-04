@@ -227,8 +227,9 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Customer Success",
     sensitivity: "confidential",
     domainContext:
-      "This page displays customer accounts and service relationships. Data here is classified as confidential — it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, and friction points.",
+      "This page displays customer accounts, service relationships, and conversion funnels. Data here is classified as confidential \u2014 it includes customer identity and service-level information. Users track adoption rates, satisfaction signals, friction points, and conversion funnels from storefront interactions through the CRM pipeline.",
     domainTools: [
+      "get_marketing_summary",
       "create_backlog_item",
       "search_knowledge",
       "search_knowledge_base",
@@ -503,6 +504,75 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         capability: "manage_compliance",
         taskType: "analysis",
         prompt: "Help the user onboard a new regulation, standard, or framework. Ask what they want to onboard. Then: (1) Research it — use web search for public standards, or ask for a document upload for proprietary ones. (2) Extract the obligation structure — titles, references (article/clause numbers), categories, frequency, applicability. (3) Suggest control mappings where obvious. (4) Call prefill_onboarding_wizard with the drafted structure to create a draft and navigate the user to the onboarding wizard for review.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/storefront": {
+    routePrefix: "/storefront",
+    domain: "Business Portal & Engagement",
+    sensitivity: "confidential",
+    domainContext:
+      "This page manages the business portal and engagement strategy. " +
+      "The portal adapts to the business model \u2014 it may be a Storefront, Community Portal, Client Portal, Patient Portal, etc. " +
+      "The PAGE DATA contains the portal label, stakeholder types, and a marketing playbook specific to this business model \u2014 " +
+      "reference them in every recommendation. Use stakeholder-appropriate language (homeowners, patients, members, etc.). " +
+      "Users manage sections, items/services/campaigns, team/staff, inbox/requests, and settings.",
+    domainTools: [
+      "get_marketing_summary",
+      "suggest_campaign_ideas",
+      "generate_custom_archetype",
+      "assess_archetype_refinement",
+      "create_backlog_item",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    skills: [
+      {
+        label: "Campaign ideas",
+        description: "Get archetype-tailored campaign suggestions",
+        capability: "view_storefront",
+        prompt:
+          "Suggest 3-5 marketing campaigns tailored to our business type and current season. Reference the archetype playbook in your PAGE DATA. For each campaign: name, goal, target audience, channel, and expected outcome.",
+      },
+      {
+        label: "Content brief",
+        description: "Draft a content piece for your audience",
+        capability: "view_storefront",
+        prompt:
+          "Draft a content brief for a marketing piece adapted to our business archetype. Include: topic, format (blog/email/social/flyer), tone guidance from the playbook, key messages, and call-to-action. Ask what the content should be about.",
+      },
+      {
+        label: "Review inbox",
+        description: "Spot marketing opportunities in recent interactions",
+        capability: "view_storefront",
+        prompt:
+          "Summarise recent storefront inbox activity. Identify marketing opportunities \u2014 recurring questions that could become FAQ content, popular services that deserve promotion, or quiet periods that need campaigns.",
+      },
+      {
+        label: "Marketing health check",
+        description: "Assess your marketing posture by archetype",
+        capability: "view_storefront",
+        taskType: "analysis" as const,
+        prompt:
+          "Run a marketing health check for this business. Using the archetype playbook and current metrics from PAGE DATA: (1) assess whether key metrics are healthy for this business type, (2) identify the biggest gap in the marketing strategy, (3) suggest one high-impact action. Create a backlog item for the recommended action.",
+      },
+      {
+        label: "Improve template",
+        description: "Review how your config differs from the original template and contribute improvements",
+        capability: "view_storefront",
+        taskType: "analysis" as const,
+        prompt:
+          "Use assess_archetype_refinement to compare my current portal configuration against the original archetype template. " +
+          "Show me what I've changed (added items, removed sections, new categories). " +
+          "Then tell me whether these refinements could improve the template for future users of the same business type. " +
+          "If contribution mode is enabled, offer to contribute the improvements back via Hive Mind.",
       },
       {
         label: "Report an issue",

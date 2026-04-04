@@ -18,6 +18,7 @@ export default async function StorefrontSetupPage() {
         tags: true,
         itemTemplates: true,
         sectionTemplates: true,
+        isBuiltIn: true,
       },
       orderBy: { category: "asc" },
     }),
