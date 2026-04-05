@@ -226,6 +226,25 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
+function buildSaveEvidenceSignature(args: Record<string, unknown>): string | null {
+  const field = typeof args.field === "string" ? args.field : null;
+  if (!field) return null;
+
+  if (field === "buildPlan") {
+    const rawValue = (args.value ?? args.data) as Record<string, unknown> | undefined;
+    if (!rawValue || typeof rawValue !== "object") return "buildPlan:empty";
+    const fileStructure = Array.isArray(rawValue.fileStructure) ? rawValue.fileStructure : [];
+    const tasks = Array.isArray(rawValue.tasks) ? rawValue.tasks : [];
+    const taskTitles = tasks
+      .slice(0, 3)
+      .map((task) => (task && typeof task === "object" && "title" in task ? String((task as Record<string, unknown>).title ?? "") : ""))
+      .join("|");
+    return `buildPlan:${fileStructure.length}:${tasks.length}:${taskTitles}`;
+  }
+
+  return field;
+}
+
 function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
   const scopedMessages = messages.length <= MAX_AGENTIC_HISTORY_MESSAGES
     ? messages
@@ -396,7 +415,10 @@ export async function runAgenticLoop(params: {
       const args = t.args as Record<string, unknown> | undefined;
       // Build a signature from the tool name + distinguishing argument values
       const keyParts = [t.name];
-      if (args?.field) keyParts.push(String(args.field));
+      if (t.name === "saveBuildEvidence" && args) {
+        const evidenceSignature = buildSaveEvidenceSignature(args);
+        if (evidenceSignature) keyParts.push(evidenceSignature);
+      } else if (args?.field) keyParts.push(String(args.field));
       if (args?.query) keyParts.push(String(args.query).slice(0, 50));
       if (args?.path) keyParts.push(String(args.path));
       if (args?.offset != null) keyParts.push(`offset=${args.offset}`);

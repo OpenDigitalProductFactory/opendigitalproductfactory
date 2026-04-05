@@ -36,6 +36,8 @@ describe("getBuildPhasePrompt", () => {
     const prompt = getBuildPhasePrompt("plan");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("testFirst");
+    expect(prompt).toContain("If reviewBuildPlan returns fail");
+    expect(prompt).toContain("Break oversized tasks into smaller 2-5 minute tasks");
   });
   it("returns build prompt for build phase", () => {
     const prompt = getBuildPhasePrompt("build");
