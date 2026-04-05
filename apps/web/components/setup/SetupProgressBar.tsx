@@ -18,10 +18,12 @@ export function SetupProgressBar({ currentStep, steps, onStepClick }: Props) {
           <button
             key={step}
             onClick={() => onStepClick?.(step)}
+            aria-label={`Step ${idx + 1}: ${STEP_LABELS[step]}`}
+            aria-current={isCurrent ? "step" : undefined}
             className={`
               flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
               ${isCurrent ? "bg-[var(--dpf-accent)]/10 text-[var(--dpf-accent)]" : ""}
-              ${status === "completed" ? "text-[#4ade80]" : ""}
+              ${status === "completed" ? "text-[var(--dpf-success)]" : ""}
               ${status === "skipped" ? "text-[var(--dpf-muted)]" : ""}
               ${status === "pending" && !isCurrent ? "text-[var(--dpf-muted)]" : ""}
             `}

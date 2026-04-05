@@ -61,7 +61,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
           </span>
           <ul className="mt-1 pl-4 list-disc">
             {brief.acceptanceCriteria.map((c, i) => (
-              <li key={i} className="text-[13px] text-[#ccc] leading-relaxed">{safeRenderValue(c)}</li>
+              <li key={i} className="text-[13px] text-[var(--dpf-text-secondary)] leading-relaxed">{safeRenderValue(c)}</li>
             ))}
           </ul>
         </div>
@@ -86,7 +86,7 @@ function Section({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">{label}</span>
-      <p className="text-[13px] text-[#ccc] mt-0.5 leading-snug">{value}</p>
+      <p className="text-[13px] text-[var(--dpf-text-secondary)] mt-0.5 leading-snug">{value}</p>
     </div>
   );
 }

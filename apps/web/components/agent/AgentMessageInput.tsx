@@ -115,7 +115,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           style={{
             flex: 1,
             background: "color-mix(in srgb, var(--dpf-bg) 80%, transparent)",
-            border: `1px solid ${overLimit ? "#ef4444" : "var(--dpf-border)"}`,
+            border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
             borderRadius: 6,
             padding: "6px 10px",
             fontSize: 12,
@@ -129,7 +129,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           }}
         />
         {overLimit && (
-          <span style={{ fontSize: 10, color: "#ef4444", flexShrink: 0, alignSelf: "center" }}>
+          <span style={{ fontSize: 10, color: "var(--dpf-error)", flexShrink: 0, alignSelf: "center" }}>
             {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
           </span>
         )}

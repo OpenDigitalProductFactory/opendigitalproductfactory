@@ -59,20 +59,20 @@ export function EvidenceSummary({ build }: Props) {
   ];
 
   const STATUS_COLORS: Record<string, string> = {
-    pass: "#4ade80",
-    complete: "#4ade80",
-    fail: "#f87171",
-    missing: "#8888a0",
+    pass: "var(--dpf-success)",
+    complete: "var(--dpf-success)",
+    fail: "var(--dpf-error)",
+    missing: "var(--dpf-muted)",
   };
 
   return (
     <div className="space-y-2">
       <h3 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Evidence Chain</h3>
       {items.map((item) => (
-        <div key={item.label} data-testid={`evidence-${item.label.toLowerCase().replace(/\s+/g, "-")}`} data-evidence-status={item.status} className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+        <div key={item.label} data-testid={`evidence-${item.label.toLowerCase().replace(/\s+/g, "-")}`} data-evidence-status={item.status} className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] shadow-dpf-xs">
           <span
             className="w-2 h-2 rounded-full shrink-0"
-            style={{ background: STATUS_COLORS[item.status] ?? "#8888a0" }}
+            style={{ background: STATUS_COLORS[item.status] ?? "var(--dpf-muted)" }}
             title={item.status}
           />
           <span className="text-xs text-[var(--dpf-text)] flex-1">{item.label}</span>
@@ -85,7 +85,7 @@ export function EvidenceSummary({ build }: Props) {
         <>
           <h3 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest mt-4">Phase Handoffs</h3>
           {build.phaseHandoffs.map((h) => (
-            <div key={`${h.fromPhase}-${h.toPhase}`} className="px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+            <div key={`${h.fromPhase}-${h.toPhase}`} className="px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] shadow-dpf-xs">
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-medium text-[var(--dpf-text)]">{h.fromPhase} &rarr; {h.toPhase}</span>
                 <span className="text-[10px] text-[var(--dpf-muted)]">{h.fromAgentId} &rarr; {h.toAgentId}</span>

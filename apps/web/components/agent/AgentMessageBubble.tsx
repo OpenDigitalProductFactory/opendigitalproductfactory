@@ -161,9 +161,9 @@ export function AgentMessageBubble({
     const isFailed = p.status === "failed";
 
     const borderColor = isExecuted
-      ? "rgba(74,222,128,0.4)"
+      ? "color-mix(in srgb, var(--dpf-success) 40%, transparent)"
       : isRejected || isFailed
-        ? "rgba(239,68,68,0.4)"
+        ? "color-mix(in srgb, var(--dpf-error) 40%, transparent)"
         : "color-mix(in srgb, var(--dpf-accent) 40%, transparent)";
 
     const actionLabel = p.actionType
@@ -205,8 +205,8 @@ export function AgentMessageBubble({
                 border: "1px solid var(--dpf-border)", margin: "0 0 8px",
               }}>
                 {diff.split("\n").map((line, i) => {
-                  const colour = line.startsWith("+") && !line.startsWith("+++") ? "#4ade80"
-                    : line.startsWith("-") && !line.startsWith("---") ? "#ef4444"
+                  const colour = line.startsWith("+") && !line.startsWith("+++") ? "var(--dpf-success)"
+                    : line.startsWith("-") && !line.startsWith("---") ? "var(--dpf-error)"
                     : line.startsWith("@@") ? "var(--dpf-accent)"
                     : "var(--dpf-muted)";
                   return (
@@ -219,17 +219,17 @@ export function AgentMessageBubble({
             )}
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>
-                <button type="button" onClick={() => onApprove?.(p.proposalId)} style={{ flex: 1, background: "rgba(74,222,128,0.2)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "#4ade80", cursor: "pointer" }}>
+                <button type="button" onClick={() => onApprove?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-success) 20%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-success)", cursor: "pointer" }}>
                   Approve &amp; Apply
                 </button>
-                <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
+                <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-error)", cursor: "pointer" }}>
                   Reject
                 </button>
               </div>
             )}
-            {isApproved && <div style={{ color: "#4ade80", fontSize: 11, marginTop: 6 }}>Applied to {filePath}</div>}
-            {isRejected && <div style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>Rejected</div>}
-            {isFailed && <div style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>Failed: {p.resultError}</div>}
+            {isApproved && <div style={{ color: "var(--dpf-success)", fontSize: 11, marginTop: 6 }}>Applied to {filePath}</div>}
+            {isRejected && <div style={{ color: "var(--dpf-error)", fontSize: 11, marginTop: 6 }}>Rejected</div>}
+            {isFailed && <div style={{ color: "var(--dpf-error)", fontSize: 11, marginTop: 6 }}>Failed: {p.resultError}</div>}
           </div>
         </div>
       );
@@ -296,12 +296,12 @@ export function AgentMessageBubble({
                   onClick={() => onApprove?.(p.proposalId)}
                   style={{
                     flex: 1,
-                    background: "rgba(74,222,128,0.2)",
-                    border: "1px solid rgba(74,222,128,0.4)",
+                    background: "color-mix(in srgb, var(--dpf-success) 20%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)",
                     borderRadius: 6,
                     padding: "5px 10px",
                     fontSize: 11,
-                    color: "#4ade80",
+                    color: "var(--dpf-success)",
                     cursor: "pointer",
                   }}
                 >
@@ -312,12 +312,12 @@ export function AgentMessageBubble({
                   onClick={() => onReject?.(p.proposalId)}
                   style={{
                     flex: 1,
-                    background: "rgba(239,68,68,0.15)",
-                    border: "1px solid rgba(239,68,68,0.3)",
+                    background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)",
                     borderRadius: 6,
                     padding: "5px 10px",
                     fontSize: 11,
-                    color: "#ef4444",
+                    color: "var(--dpf-error)",
                     cursor: "pointer",
                   }}
                 >
@@ -326,16 +326,16 @@ export function AgentMessageBubble({
               </div>
             )}
             {isExecuted && (
-              <div style={{ color: "#4ade80", fontSize: 11 }}>
-                ✓ Approved{p.resultEntityId ? ` — Created ${p.resultEntityId}` : ""}
+              <div style={{ color: "var(--dpf-success)", fontSize: 11 }}>
+                Approved{p.resultEntityId ? ` -- Created ${p.resultEntityId}` : ""}
               </div>
             )}
             {isRejected && (
-              <div style={{ color: "#ef4444", fontSize: 11 }}>✕ Rejected</div>
+              <div style={{ color: "var(--dpf-error)", fontSize: 11 }}>Rejected</div>
             )}
             {isFailed && (
-              <div style={{ color: "#ef4444", fontSize: 11 }}>
-                ⚠ Failed: {p.resultError}
+              <div style={{ color: "var(--dpf-error)", fontSize: 11 }}>
+                Failed: {p.resultError}
               </div>
             )}
           </div>

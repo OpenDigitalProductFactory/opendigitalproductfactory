@@ -10,6 +10,8 @@ import { ClaimBadge } from "./ClaimBadge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
+import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 
 type Props = {
@@ -26,6 +28,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [buildView, setBuildView] = useState<"preview" | "docs">("preview");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const isDevEnvironment = dpfEnvironment === "dev";
 
   useEffect(() => {
@@ -123,9 +126,19 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar toggle (visible on small screens) */}
+        <button
+          type="button"
+          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="absolute top-2 left-2 z-10 lg:hidden w-8 h-8 rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] grid place-items-center text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
+        >
+          {sidebarOpen ? "\u2190" : "\u2192"}
+        </button>
+
         {/* Left: Build List */}
-        <div className="w-[360px] border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)]">
+        <div className={`border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)] transition-all duration-200 ${sidebarOpen ? "w-[280px] lg:w-[360px]" : "w-0 overflow-hidden border-r-0"}`}>
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
@@ -146,9 +159,10 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 <button
                   onClick={handleCreate}
                   disabled={creating || !newTitle.trim()}
-                  className="px-4 py-2 text-[13px] font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                  className="px-4 py-2 text-[13px] font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
-                  New
+                  {creating && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  {creating ? "Creating..." : "New"}
                 </button>
               </div>
             </div>
@@ -164,12 +178,14 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 </p>
               </div>
             ) : (
-              builds.map((build) => (
+              builds.map((build, idx) => (
                 <button
                   key={build.buildId}
-                  onClick={() => setActiveBuild(build)}
-                  className="block w-full text-left px-3 py-2.5 mb-1 rounded-md cursor-pointer transition-colors"
+                  onClick={() => { setActiveBuild(build); setSidebarOpen(true); }}
+                  className="block w-full text-left px-3 py-2.5 mb-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-[var(--dpf-surface-2)] hover:shadow-dpf-xs animate-slide-up focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
                   style={{
+                    animationDelay: `${idx * 30}ms`,
+                    animationFillMode: "backwards",
                     border: activeBuild?.buildId === build.buildId
                       ? "1px solid var(--dpf-accent)"
                       : "1px solid transparent",
@@ -180,10 +196,9 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 >
                   <div className="flex items-start justify-between">
                     <div className="text-[13px] font-semibold text-[var(--dpf-text)] mb-0.5">{build.title}</div>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      title="Delete build"
+                    <button
+                      type="button"
+                      aria-label={`Delete ${build.title}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isDevEnvironment) return;
@@ -193,11 +208,10 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                           router.refresh();
                         });
                       }}
-                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.click(); }}
-                      className="text-[var(--dpf-muted)] hover:text-[#f87171] text-xs ml-2 shrink-0 cursor-pointer"
+                      className="text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] text-xs ml-2 shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 rounded"
                     >
                       &times;
-                    </span>
+                    </button>
                   </div>
                   <div className="text-[11px] text-[var(--dpf-muted)]">
                     {build.buildId} &middot; {build.phase}
@@ -225,32 +239,36 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 </div>
               </div>
 
+              {/* Error banner for failed builds */}
+              {activeBuild.phase === "failed" && (
+                <BuildFailedBanner execState={activeBuild.buildExecState} />
+              )}
+
               <div className="flex-1 flex flex-col">
                 {/* Tab selector — only show when sandbox is available */}
                 {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
-                  <div className="flex gap-1 px-4 pt-3 pb-0">
-                    <button
-                      onClick={() => setBuildView("preview")}
-                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors"
-                      style={{
-                        background: buildView === "preview" ? "var(--dpf-surface-2)" : "transparent",
-                        color: buildView === "preview" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                        borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                      }}
-                    >
-                      Live Preview
-                    </button>
-                    <button
-                      onClick={() => setBuildView("docs")}
-                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors"
-                      style={{
-                        background: buildView === "docs" ? "var(--dpf-surface-2)" : "transparent",
-                        color: buildView === "docs" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                        borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                      }}
-                    >
-                      Build Details
-                    </button>
+                  <div role="tablist" aria-label="Build view tabs" className="flex gap-1 px-4 pt-3 pb-0">
+                    {(["preview", "docs"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        role="tab"
+                        aria-selected={buildView === tab}
+                        aria-controls={`panel-${tab}`}
+                        onClick={() => setBuildView(tab)}
+                        onKeyDown={(e) => {
+                          if (e.key === "ArrowRight") { setBuildView(tab === "preview" ? "docs" : "preview"); }
+                          if (e.key === "ArrowLeft") { setBuildView(tab === "docs" ? "preview" : "docs"); }
+                        }}
+                        className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                        style={{
+                          background: buildView === tab ? "var(--dpf-surface-2)" : "transparent",
+                          color: buildView === tab ? "var(--dpf-text)" : "var(--dpf-muted)",
+                          borderBottom: buildView === tab ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                        }}
+                      >
+                        {tab === "preview" ? "Live Preview" : "Build Details"}
+                      </button>
+                    ))}
                   </div>
                 )}
                 <div className="flex-1 flex p-4 gap-4">
@@ -281,7 +299,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                 <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
                   Build features without writing code. Describe what you want, and your AI Coworker will design, build, and deploy it.
                 </p>
-                <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4">
+                <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4 shadow-dpf-md">
                   <p className="text-xs font-semibold text-[var(--dpf-text)] mb-3 uppercase tracking-wider">How it works</p>
                   <div className="flex flex-col gap-2.5">
                     <Step n={1} text="Type a feature name in the sidebar and click New" />
@@ -301,13 +319,45 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
   );
 }
 
+function BuildFailedBanner({ execState }: { execState: BuildExecutionState | null }) {
+  const failedStep = execState?.failedAt ?? execState?.step ?? "unknown";
+  const stepLabel = STEP_LABELS[failedStep as keyof typeof STEP_LABELS] ?? failedStep;
+  const errorMsg = execState?.error;
+
+  const RECOVERY_HINTS: Record<string, string> = {
+    sandbox_created: "The sandbox container failed to start. Try again -- Docker may have been busy.",
+    workspace_initialized: "Project files could not be copied into the sandbox. Check disk space.",
+    db_ready: "The sandbox database failed to initialize. This is usually transient -- retry.",
+    deps_installed: "Dependency installation failed. Check package.json for invalid packages.",
+    code_generated: "Code generation encountered errors. Review the brief and ask your coworker to retry.",
+    tests_run: "Tests failed after code generation. Ask your coworker to review the test output.",
+  };
+
+  const hint = RECOVERY_HINTS[failedStep] ?? "Ask your AI Coworker for help diagnosing this failure.";
+
+  return (
+    <div className="mx-4 mt-3 p-3 rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] animate-fade-in" role="alert">
+      <div className="flex items-start gap-2">
+        <span className="w-5 h-5 rounded-full bg-[var(--dpf-error)] text-white text-xs font-bold grid place-items-center shrink-0 mt-0.5">!</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[var(--dpf-error)]">Build failed at: {stepLabel}</p>
+          {errorMsg && (
+            <pre className="text-xs text-[var(--dpf-text-secondary)] mt-1 whitespace-pre-wrap leading-relaxed max-h-24 overflow-auto">{errorMsg}</pre>
+          )}
+          <p className="text-xs text-[var(--dpf-muted)] mt-2">{hint}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Step({ n, text }: { n: number; text: string }) {
   return (
     <div className="flex items-start gap-3">
       <span className="w-5 h-5 rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-white grid place-items-center shrink-0 mt-0.5">
         {n}
       </span>
-      <span className="text-[13px] text-[#ccc] leading-snug">{text}</span>
+      <span className="text-[13px] text-[var(--dpf-text-secondary)] leading-snug">{text}</span>
     </div>
   );
 }

@@ -116,8 +116,8 @@ export function AgentFAB({ onClick }: Props) {
       }}
     >
       <span
-        className="inline-block w-1.5 h-1.5 rounded-full bg-green-400"
-        style={{ boxShadow: "0 0 6px rgba(74, 222, 128, 0.5)" }}
+        className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--dpf-success)]"
+        style={{ boxShadow: "0 0 6px color-mix(in srgb, var(--dpf-success) 50%, transparent)" }}
       />
       AI Coworker
     </button>

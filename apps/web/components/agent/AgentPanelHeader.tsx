@@ -74,7 +74,7 @@ export function AgentPanelHeader({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--dpf-success)]" />
           <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
             {agent.agentName}
           </span>
@@ -122,8 +122,8 @@ export function AgentPanelHeader({
               textTransform: "uppercase",
               letterSpacing: "0.08em",
               color: elevatedAssistEnabled ? "#241700" : "var(--dpf-muted)",
-              background: elevatedAssistEnabled ? "#facc15" : "transparent",
-              border: `1px solid ${elevatedAssistEnabled ? "#facc15" : "var(--dpf-border)"}`,
+              background: elevatedAssistEnabled ? "var(--dpf-warning)" : "transparent",
+              border: `1px solid ${elevatedAssistEnabled ? "var(--dpf-warning)" : "var(--dpf-border)"}`,
               borderRadius: 999,
               padding: "2px 6px",
               fontWeight: elevatedAssistEnabled ? 700 : 500,
@@ -150,9 +150,9 @@ export function AgentPanelHeader({
                 fontSize: 9,
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: coworkerMode === "act" ? "#a7f3d0" : "var(--dpf-muted)",
-                background: coworkerMode === "act" ? "rgba(16, 185, 129, 0.16)" : "transparent",
-                border: `1px solid ${coworkerMode === "act" ? "rgba(16, 185, 129, 0.55)" : "var(--dpf-border)"}`,
+                color: coworkerMode === "act" ? "var(--dpf-success)" : "var(--dpf-muted)",
+                background: coworkerMode === "act" ? "color-mix(in srgb, var(--dpf-success) 16%, transparent)" : "transparent",
+                border: `1px solid ${coworkerMode === "act" ? "color-mix(in srgb, var(--dpf-success) 55%, transparent)" : "var(--dpf-border)"}`,
                 borderRadius: 999,
                 padding: "2px 6px",
                 fontWeight: coworkerMode === "act" ? 700 : 500,
@@ -179,9 +179,9 @@ export function AgentPanelHeader({
                 fontSize: 9,
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: externalAccessEnabled ? "#a7f3d0" : "var(--dpf-muted)",
-                background: externalAccessEnabled ? "rgba(16, 185, 129, 0.16)" : "transparent",
-                border: `1px solid ${externalAccessEnabled ? "rgba(16, 185, 129, 0.55)" : "var(--dpf-border)"}`,
+                color: externalAccessEnabled ? "var(--dpf-success)" : "var(--dpf-muted)",
+                background: externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 16%, transparent)" : "transparent",
+                border: `1px solid ${externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 55%, transparent)" : "var(--dpf-border)"}`,
                 borderRadius: 999,
                 padding: "2px 6px",
                 fontWeight: externalAccessEnabled ? 700 : 500,
@@ -205,9 +205,9 @@ export function AgentPanelHeader({
                 fontSize: 9,
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: devMode ? "#fff" : "var(--dpf-muted)",
-                background: devMode ? "rgba(124, 140, 248, 0.3)" : "transparent",
-                border: `1px solid ${devMode ? "#7c8cf8" : "var(--dpf-border)"}`,
+                color: devMode ? "var(--dpf-text)" : "var(--dpf-muted)",
+                background: devMode ? "color-mix(in srgb, var(--dpf-accent) 30%, transparent)" : "transparent",
+                border: `1px solid ${devMode ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
                 borderRadius: 999,
                 padding: "2px 6px",
                 fontWeight: devMode ? 700 : 500,
@@ -315,10 +315,10 @@ export function AgentPanelHeader({
                   onConfirmClear();
                 }}
                 style={{
-                  background: "rgba(239, 68, 68, 0.16)",
-                  border: "1px solid rgba(239, 68, 68, 0.5)",
+                  background: "color-mix(in srgb, var(--dpf-error) 16%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--dpf-error) 50%, transparent)",
                   borderRadius: 6,
-                  color: "#fca5a5",
+                  color: "var(--dpf-error)",
                   cursor: "pointer",
                   fontSize: 11,
                   lineHeight: 1,

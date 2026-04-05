@@ -67,9 +67,9 @@ export function AgentFileUpload({ threadId, disabled, onUploaded }: Props) {
         <div style={{
           padding: "4px 8px",
           borderRadius: 4,
-          background: "rgba(239,68,68,0.15)",
-          border: "1px solid rgba(239,68,68,0.3)",
-          color: "#f87171",
+          background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)",
+          color: "var(--dpf-error)",
           fontSize: 11,
           flexShrink: 0,
         }}>

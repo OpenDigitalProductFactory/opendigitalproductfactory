@@ -14,7 +14,7 @@ export function BuildActivityLog({ activities }: { activities: Activity[] }) {
             <span className="shrink-0 tabular-nums">
               {new Date(a.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
-            <span className="text-[#ccc]">{a.summary}</span>
+            <span className="text-[var(--dpf-text-secondary)]">{a.summary}</span>
           </div>
         ))}
       </div>
