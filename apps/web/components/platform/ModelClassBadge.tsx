@@ -2,13 +2,13 @@
 
 const MODEL_CLASS_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
   chat:       { label: "Chat",       emoji: "",   color: "" },
-  reasoning:  { label: "Reasoning",  emoji: "🧠", color: "#a78bfa" },
+  reasoning:  { label: "Reasoning",  emoji: "🧠", color: "var(--dpf-accent)" },
   image_gen:  { label: "Image",      emoji: "🖼️", color: "#f97316" },
   embedding:  { label: "Embedding",  emoji: "📐", color: "#06b6d4" },
   audio:      { label: "Audio",      emoji: "🎤", color: "#ec4899" },
-  speech:     { label: "Speech",     emoji: "🔊", color: "#8b5cf6" },
-  video:      { label: "Video",      emoji: "🎬", color: "#ef4444" },
-  moderation: { label: "Moderation", emoji: "🛡️", color: "#f59e0b" },
+  speech:     { label: "Speech",     emoji: "🔊", color: "var(--dpf-accent)" },
+  video:      { label: "Video",      emoji: "🎬", color: "var(--dpf-error)" },
+  moderation: { label: "Moderation", emoji: "🛡️", color: "var(--dpf-warning)" },
   realtime:   { label: "Realtime",   emoji: "⚡", color: "#10b981" },
   code:       { label: "Code",       emoji: "💻", color: "#6366f1" },
 };

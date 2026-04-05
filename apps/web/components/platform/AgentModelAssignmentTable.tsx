@@ -179,7 +179,7 @@ export function AgentModelAssignmentTable({
                       </button>
                     )}
                     {saved[row.agentId] && (
-                      <span style={{ fontSize: 10, color: "#4ade80" }}>Saved</span>
+                      <span style={{ fontSize: 10, color: "var(--dpf-success)" }}>Saved</span>
                     )}
                     {canWrite && (
                       <button

@@ -141,7 +141,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
         <div className={`border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)] transition-all duration-200 ${sidebarOpen ? "w-[280px] lg:w-[360px]" : "w-0 overflow-hidden border-r-0"}`}>
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
-              <div className="px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
+              <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
                 Development environment -- builds are managed from the production instance
               </div>
             </div>
@@ -154,12 +154,12 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  className="flex-1 px-3 py-2 text-[13px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                  className="flex-1 px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
                 />
                 <button
                   onClick={handleCreate}
                   disabled={creating || !newTitle.trim()}
-                  className="px-4 py-2 text-[13px] font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                  className="px-4 py-2 text-sm font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
                   {creating && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                   {creating ? "Creating..." : "New"}
@@ -172,7 +172,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
             {builds.length === 0 ? (
               <div className="p-6 text-center">
                 <div className="text-3xl mb-3 opacity-20">&#128161;</div>
-                <p className="text-[13px] text-[var(--dpf-muted)] mb-2">No builds yet</p>
+                <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
                 <p className="text-xs text-[var(--dpf-muted)] opacity-70">
                   Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
                 </p>
@@ -195,7 +195,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                   }}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="text-[13px] font-semibold text-[var(--dpf-text)] mb-0.5">{build.title}</div>
+                    <div className="text-sm font-semibold text-[var(--dpf-text)] mb-0.5">{build.title}</div>
                     <button
                       type="button"
                       aria-label={`Delete ${build.title}`}
@@ -213,7 +213,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment }: Props) {
                       &times;
                     </button>
                   </div>
-                  <div className="text-[11px] text-[var(--dpf-muted)]">
+                  <div className="text-xs text-[var(--dpf-muted)]">
                     {build.buildId} &middot; {build.phase}
                     {build.product && (
                       <span> &middot; v{build.product.version} &middot; {build.product.backlogCount} item{build.product.backlogCount !== 1 ? "s" : ""}</span>
@@ -357,7 +357,7 @@ function Step({ n, text }: { n: number; text: string }) {
       <span className="w-5 h-5 rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-white grid place-items-center shrink-0 mt-0.5">
         {n}
       </span>
-      <span className="text-[13px] text-[var(--dpf-text-secondary)] leading-snug">{text}</span>
+      <span className="text-sm text-[var(--dpf-text-secondary)] leading-snug">{text}</span>
     </div>
   );
 }

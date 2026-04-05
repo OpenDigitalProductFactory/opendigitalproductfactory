@@ -31,7 +31,7 @@ export function ScheduleStatusButtons({ scheduleId, currentStatus }: Props) {
         <button
           onClick={() => handleAction("paused")}
           disabled={loading}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-[#fbbf24]/40 text-[#fbbf24] hover:bg-[#fbbf24]/10 disabled:opacity-50 transition-colors"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-warning)]/40 text-[var(--dpf-warning)] hover:bg-[var(--dpf-warning)]/10 disabled:opacity-50 transition-colors"
         >
           Pause
         </button>
@@ -40,7 +40,7 @@ export function ScheduleStatusButtons({ scheduleId, currentStatus }: Props) {
         <button
           onClick={() => handleAction("active")}
           disabled={loading}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/10 disabled:opacity-50 transition-colors"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-success)]/40 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50 transition-colors"
         >
           Reactivate
         </button>
@@ -49,7 +49,7 @@ export function ScheduleStatusButtons({ scheduleId, currentStatus }: Props) {
         <button
           onClick={() => handleAction("cancelled")}
           disabled={loading}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/10 disabled:opacity-50 transition-colors"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-error)]/40 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50 transition-colors"
         >
           Cancel Schedule
         </button>

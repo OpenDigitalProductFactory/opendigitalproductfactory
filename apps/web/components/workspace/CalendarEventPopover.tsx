@@ -12,10 +12,10 @@ const EVENT_TYPES = [
 ];
 
 const CATEGORIES = [
-  { value: "hr", label: "HR", color: "#a78bfa" },
-  { value: "operations", label: "Operations", color: "#38bdf8" },
-  { value: "platform", label: "Platform", color: "#fb923c" },
-  { value: "personal", label: "Personal", color: "#4ade80" },
+  { value: "hr", label: "HR", color: "var(--dpf-accent)" },
+  { value: "operations", label: "Operations", color: "var(--dpf-info)" },
+  { value: "platform", label: "Platform", color: "var(--dpf-warning)" },
+  { value: "personal", label: "Personal", color: "var(--dpf-success)" },
 ];
 
 type Props = {
@@ -166,7 +166,7 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
         </div>
 
         {message && (
-          <p style={{ fontSize: 11, color: message.includes("required") || message.includes("Failed") ? "#ef4444" : "#4ade80", marginTop: 8 }}>
+          <p style={{ fontSize: 11, color: message.includes("required") || message.includes("Failed") ? "var(--dpf-error)" : "var(--dpf-success)", marginTop: 8 }}>
             {message}
           </p>
         )}

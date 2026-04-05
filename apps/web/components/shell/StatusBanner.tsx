@@ -9,9 +9,9 @@ type BannerMessage = {
 };
 
 const BANNER_COLORS = {
-  info: { bg: "rgba(124, 140, 248, 0.15)", border: "rgba(124, 140, 248, 0.3)", text: "#b0b8ff" },
-  warning: { bg: "rgba(251, 191, 36, 0.15)", border: "rgba(251, 191, 36, 0.3)", text: "#fbbf24" },
-  success: { bg: "rgba(74, 222, 128, 0.15)", border: "rgba(74, 222, 128, 0.3)", text: "#4ade80" },
+  info: { bg: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", border: "color-mix(in srgb, var(--dpf-accent) 30%, transparent)", text: "var(--dpf-accent)" },
+  warning: { bg: "color-mix(in srgb, var(--dpf-warning) 15%, transparent)", border: "color-mix(in srgb, var(--dpf-warning) 30%, transparent)", text: "var(--dpf-warning)" },
+  success: { bg: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", border: "color-mix(in srgb, var(--dpf-success) 30%, transparent)", text: "var(--dpf-success)" },
 };
 
 export function StatusBanner() {

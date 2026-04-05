@@ -36,19 +36,19 @@ interface CatalogStats {
 // ---------------------------------------------------------------------------
 
 const STATUS_COLOURS: Record<string, string> = {
-  discovered: "#8888a0",
+  discovered: "var(--dpf-muted)",
   evaluated: "#60a5fa",
-  approved: "#a78bfa",
-  installed: "#fbbf24",
-  active: "#4ade80",
-  deprecated: "#f87171",
+  approved: "var(--dpf-accent)",
+  installed: "var(--dpf-warning)",
+  active: "var(--dpf-success)",
+  deprecated: "var(--dpf-error)",
 };
 
 const RISK_COLOURS: Record<string, string> = {
-  low: "#4ade80",
-  medium: "#fbbf24",
+  low: "var(--dpf-success)",
+  medium: "var(--dpf-warning)",
   high: "#fb923c",
-  critical: "#f87171",
+  critical: "var(--dpf-error)",
 };
 
 // ---------------------------------------------------------------------------
@@ -103,8 +103,8 @@ export function SkillsCatalogView({
             key={s.status}
             className="px-3 py-1.5 rounded-md text-xs font-medium"
             style={{
-              background: `${STATUS_COLOURS[s.status] ?? "#8888a0"}18`,
-              color: STATUS_COLOURS[s.status] ?? "#8888a0",
+              background: `color-mix(in srgb, ${STATUS_COLOURS[s.status] ?? "var(--dpf-muted)"} 10%, transparent)`,
+              color: STATUS_COLOURS[s.status] ?? "var(--dpf-muted)",
             }}
           >
             {s.status}: {s._count}
@@ -164,7 +164,7 @@ export function SkillsCatalogView({
               key={skill.id}
               className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
               style={{
-                borderLeftColor: STATUS_COLOURS[skill.status] ?? "#8888a0",
+                borderLeftColor: STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)",
               }}
             >
               {/* Header */}
@@ -175,8 +175,8 @@ export function SkillsCatalogView({
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
                   style={{
-                    background: `${STATUS_COLOURS[skill.status] ?? "#8888a0"}20`,
-                    color: STATUS_COLOURS[skill.status] ?? "#8888a0",
+                    background: `color-mix(in srgb, ${STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)"} 13%, transparent)`,
+                    color: STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)",
                   }}
                 >
                   {skill.status}
@@ -196,8 +196,8 @@ export function SkillsCatalogView({
                 <span
                   className="px-1 py-0.5 rounded"
                   style={{
-                    background: `${RISK_COLOURS[skill.riskBand] ?? "#8888a0"}18`,
-                    color: RISK_COLOURS[skill.riskBand] ?? "#8888a0",
+                    background: `color-mix(in srgb, ${RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)"} 10%, transparent)`,
+                    color: RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)",
                   }}
                 >
                   {skill.riskBand} risk

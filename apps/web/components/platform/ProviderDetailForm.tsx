@@ -177,7 +177,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     { n: 5, label: "Ready" },
   ];
 
-  const statusColour = provider.status === "active" ? "#4ade80" : provider.status === "inactive" ? "#8888a0" : "#fbbf24";
+  const statusColour = provider.status === "active" ? "var(--dpf-success)" : provider.status === "inactive" ? "var(--dpf-muted)" : "var(--dpf-warning)";
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -205,13 +205,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           const isLastStep = s.n === STEPS.length;
           const done = step > s.n || (isLastStep && step === s.n);
           const current = step === s.n && !isLastStep;
-          const colour = done ? "#4ade80" : current ? "var(--dpf-accent)" : "var(--dpf-border)";
+          const colour = done ? "var(--dpf-success)" : current ? "var(--dpf-accent)" : "var(--dpf-border)";
           return (
             <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60 }}>
                 <div style={{
                   width: 24, height: 24, borderRadius: "50%",
-                  background: done ? "#4ade8030" : current ? "color-mix(in srgb, var(--dpf-accent) 20%, transparent)" : "var(--dpf-surface-1)",
+                  background: done ? "color-mix(in srgb, var(--dpf-success) 19%, transparent)" : current ? "color-mix(in srgb, var(--dpf-accent) 20%, transparent)" : "var(--dpf-surface-1)",
                   border: `2px solid ${colour}`,
                   display: "grid", placeItems: "center",
                   fontSize: 11, fontWeight: 600, color: colour,
@@ -221,7 +221,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 <span style={{ fontSize: 10, color: current ? "var(--dpf-text)" : "var(--dpf-muted)", marginTop: 4 }}>{s.label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div style={{ width: 32, height: 2, background: done ? "#4ade8060" : "var(--dpf-border)", marginBottom: 16 }} />
+                <div style={{ width: 32, height: 2, background: done ? "color-mix(in srgb, var(--dpf-success) 38%, transparent)" : "var(--dpf-border)", marginBottom: 16 }} />
               )}
             </div>
           );
@@ -308,7 +308,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           {isAnyAnthropic && (
             <div style={{
               background: "var(--dpf-surface-1)",
-              border: `1px solid ${isAnthropicSub ? "#4ade8030" : "var(--dpf-border)"}`,
+              border: `1px solid ${isAnthropicSub ? "color-mix(in srgb, var(--dpf-success) 19%, transparent)" : "var(--dpf-border)"}`,
               borderRadius: 6,
               padding: "10px 12px",
               marginBottom: 12,
@@ -318,7 +318,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             }}>
               {isAnthropicSub ? (
                 <>
-                  <div style={{ fontWeight: 600, color: "#4ade80", marginBottom: 4 }}>Claude Code / Max Subscription</div>
+                  <div style={{ fontWeight: 600, color: "var(--dpf-success)", marginBottom: 4 }}>Claude Code / Max Subscription</div>
                   <div>Uses your Claude Max subscription — no per-token cost.</div>
                   <div style={{ marginTop: 4 }}>
                     Run <code style={{ background: "var(--dpf-bg)", padding: "1px 4px", borderRadius: 2 }}>claude setup-token</code> in your terminal, then paste the token below.
@@ -337,7 +337,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <label style={labelStyle}>
             {isAnthropicSub ? "Subscription Token" : isAnthropicApi ? "API Key" : "API Key"}
             {credential?.secretHint && !secretRef && (
-              <span style={{ color: isAnthropicSub ? "#4ade80" : "var(--dpf-accent)", marginLeft: 8 }}>
+              <span style={{ color: isAnthropicSub ? "var(--dpf-success)" : "var(--dpf-accent)", marginLeft: 8 }}>
                 {credential.secretHint}
               </span>
             )}
@@ -357,14 +357,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             style={{
               ...inputStyle,
               fontFamily: "monospace",
-              ...(isAnthropicSub && secretRef ? { borderColor: "#4ade8060" } : {}),
-              ...(isAnthropicApi && secretRef ? { borderColor: "#7c8cf860" } : {}),
+              ...(isAnthropicSub && secretRef ? { borderColor: "color-mix(in srgb, var(--dpf-success) 38%, transparent)" } : {}),
+              ...(isAnthropicApi && secretRef ? { borderColor: "color-mix(in srgb, var(--dpf-accent) 38%, transparent)" } : {}),
             }}
           />
           {isAnyAnthropic && secretRef && (
             <div style={{ fontSize: 11, marginTop: 4, color:
               (isAnthropicSub && !secretRef.startsWith("sk-ant-oat")) || (isAnthropicApi && !secretRef.startsWith("sk-ant-api"))
-                ? "#f87171" : isAnthropicSub ? "#4ade80" : "#7c8cf8"
+                ? "var(--dpf-error)" : isAnthropicSub ? "var(--dpf-success)" : "var(--dpf-accent)"
             }}>
               {isAnthropicSub && secretRef.startsWith("sk-ant-oat")
                 ? "Subscription token — uses your Max plan"
@@ -400,7 +400,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             <label style={labelStyle}>
               Client Secret
               {credential?.clientSecretHint && !clientSecret && (
-                <span style={{ color: "#4ade80", marginLeft: 8 }}>{credential.clientSecretHint}</span>
+                <span style={{ color: "var(--dpf-success)", marginLeft: 8 }}>{credential.clientSecretHint}</span>
               )}
             </label>
             <input
@@ -444,7 +444,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           {credential?.status === "ok" && credential?.tokenExpiresAt ? (
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--dpf-success)", display: "inline-block" }} />
                 <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
                   Connected · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
                 </span>
@@ -460,14 +460,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   }
                   router.refresh();
                 })}
-                style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+                style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
               >
                 Disconnect
               </button>
             </div>
           ) : credential?.status === "expired" ? (
             <div>
-              <div style={{ color: "#f59e0b", fontSize: 13, marginBottom: 8 }}>
+              <div style={{ color: "var(--dpf-warning)", fontSize: 13, marginBottom: 8 }}>
                 Token expired — sign in again
               </div>
               <button
@@ -481,14 +481,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                     setTestResult({ ok: false, message: result.error });
                   }
                 })}
-                style={{ background: "#7c8cf8", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
               </button>
             </div>
           ) : (
             <div>
-              <div style={{ color: "#8888a0", fontSize: 13, marginBottom: 8 }}>
+              <div style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 8 }}>
                 No account linked
               </div>
               <button
@@ -502,7 +502,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                     setTestResult({ ok: false, message: result.error });
                   }
                 })}
-                style={{ background: "#7c8cf8", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
               </button>
@@ -543,7 +543,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleSave}
             disabled={isPending}
-            style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid #7c8cf8", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
             Save
           </button>
@@ -554,9 +554,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           >
             Test connection
           </button>
-          {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "#f87171" : "#4ade80" }}>{saveMessage}</span>}
+          {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "var(--dpf-error)" : "var(--dpf-success)" }}>{saveMessage}</span>}
           {testResult && (
-            <span style={{ fontSize: 12, color: testResult.ok ? "#4ade80" : "#f87171" }}>
+            <span style={{ fontSize: 12, color: testResult.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
               {testResult.ok ? "✓" : "✗"} {testResult.message}
             </span>
           )}
@@ -583,7 +583,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             </span>
           )}
           {discoveryResult && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: discoveryResult.error ? "#f87171" : "#4ade80" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: discoveryResult.error ? "var(--dpf-error)" : "var(--dpf-success)" }}>
               {discoveryResult.error
                 ? `Error: ${discoveryResult.error}`
                 : `${discoveryResult.discovered} model${discoveryResult.discovered !== 1 ? "s" : ""} discovered (${discoveryResult.newCount} new)`}
@@ -595,7 +595,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             </div>
           )}
           {profilingResult && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: profilingResult.error ? "#f87171" : "#4ade80" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: profilingResult.error ? "var(--dpf-error)" : "var(--dpf-success)" }}>
               {profilingResult.error
                 ? `Profiling error: ${profilingResult.error}`
                 : `${profilingResult.profiled} profiled, ${profilingResult.failed} failed`}

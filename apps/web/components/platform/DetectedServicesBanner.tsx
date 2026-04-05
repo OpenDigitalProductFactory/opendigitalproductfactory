@@ -32,14 +32,14 @@ export function DetectedServicesBanner({ detected }: Props) {
   }
 
   return (
-    <div className="mb-4 p-3 rounded-lg border border-[#38bdf8] bg-[#38bdf808]">
-      <p className="text-xs text-[#38bdf8] font-medium mb-2">
+    <div className="mb-4 p-3 rounded-lg border border-[var(--dpf-info)] bg-[color-mix(in_srgb,var(--dpf-info)_3%,transparent)]">
+      <p className="text-xs text-[var(--dpf-info)] font-medium mb-2">
         {remaining.length} new MCP service{remaining.length !== 1 ? "s" : ""} detected. Review and register.
       </p>
       <div className="space-y-2">
         {remaining.map((service) => (
           <div key={service.serverId} className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-[#38bdf8] shrink-0" title="detected" />
+            <span className="w-2 h-2 rounded-full bg-[var(--dpf-info)] shrink-0" title="detected" />
             <span className="text-xs text-[var(--dpf-text)] flex-1 truncate">{service.name}</span>
             <span className="text-[9px] text-[var(--dpf-muted)]">{service.source}</span>
             <button

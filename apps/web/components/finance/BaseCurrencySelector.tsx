@@ -49,7 +49,7 @@ export function BaseCurrencySelector({ currentCurrency, currencies }: Props) {
         <span className="text-[10px] text-[var(--dpf-muted)]">Saving...</span>
       )}
       {saved && !loading && (
-        <span className="text-[10px]" style={{ color: "#4ade80" }}>Saved</span>
+        <span className="text-[10px]" style={{ color: "var(--dpf-success)" }}>Saved</span>
       )}
     </div>
   );

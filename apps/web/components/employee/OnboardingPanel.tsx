@@ -9,9 +9,9 @@ import {
 import type { TaskRow } from "@/lib/onboarding-data";
 
 const STATUS_COLOURS: Record<string, string> = {
-  pending: "#38bdf8",
-  completed: "#4ade80",
-  skipped: "#8888a0",
+  pending: "var(--dpf-info)",
+  completed: "var(--dpf-success)",
+  skipped: "var(--dpf-muted)",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -62,7 +62,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
             {completedCount}/{tasks.length} done
           </span>
           {allRequiredDone && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/30">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30">
               Ready to advance
             </span>
           )}
@@ -79,7 +79,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
 
       <div className="space-y-2">
         {tasks.map((task) => {
-          const colour = STATUS_COLOURS[task.status] ?? "#8888a0";
+          const colour = STATUS_COLOURS[task.status] ?? "var(--dpf-muted)";
           return (
             <div
               key={task.id}
@@ -89,7 +89,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
               {/* Status indicator */}
               <div className="mt-0.5 shrink-0">
                 {task.status === "completed" ? (
-                  <span className="text-green-400 text-xs">&#10003;</span>
+                  <span className="text-[var(--dpf-success)] text-xs">&#10003;</span>
                 ) : task.status === "skipped" ? (
                   <span className="text-[var(--dpf-muted)] text-xs">&#8212;</span>
                 ) : (
@@ -107,7 +107,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
                     {task.title}
                   </span>
                   {task.required && task.status === "pending" && (
-                    <span className="text-[9px] text-red-400">required</span>
+                    <span className="text-[9px] text-[var(--dpf-error)]">required</span>
                   )}
                   {task.assigneeRole && (
                     <span className="text-[9px] px-1 rounded bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
@@ -132,7 +132,7 @@ export function OnboardingPanel({ tasks, checklistType }: Props) {
                     type="button"
                     disabled={isPending}
                     onClick={() => handleComplete(task.taskId)}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
+                    className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--dpf-success)]/30 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50"
                   >
                     Done
                   </button>

@@ -12,13 +12,13 @@ import {
 } from "@/lib/actions/improvements";
 
 const STATUS_COLOURS: Record<string, string> = {
-  proposed: "#38bdf8",
-  reviewed: "#a78bfa",
+  proposed: "var(--dpf-info)",
+  reviewed: "var(--dpf-accent)",
   prioritized: "#fb923c",
-  in_progress: "#fbbf24",
-  implemented: "#4ade80",
+  in_progress: "var(--dpf-warning)",
+  implemented: "var(--dpf-success)",
   verified: "#10b981",
-  rejected: "#ef4444",
+  rejected: "var(--dpf-error)",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -31,10 +31,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const SEVERITY_COLOURS: Record<string, string> = {
-  low: "#8888a0",
-  medium: "#38bdf8",
+  low: "var(--dpf-muted)",
+  medium: "var(--dpf-info)",
   high: "#fb923c",
-  critical: "#ef4444",
+  critical: "var(--dpf-error)",
 };
 
 const STATUS_FILTERS = ["all", "proposed", "reviewed", "prioritized", "in_progress", "implemented", "verified", "rejected"] as const;
@@ -103,13 +103,13 @@ export function ImprovementsClient({ proposals }: Props) {
                   <span className="text-[10px] font-mono text-[var(--dpf-muted)]">{p.proposalId}</span>
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                    style={{ background: `${STATUS_COLOURS[p.status] ?? "#888"}22`, color: STATUS_COLOURS[p.status] ?? "#888" }}
+                    style={{ background: `color-mix(in srgb, ${STATUS_COLOURS[p.status] ?? "var(--dpf-muted)"} 13%, transparent)`, color: STATUS_COLOURS[p.status] ?? "var(--dpf-muted)" }}
                   >
                     {p.status.replace("_", " ")}
                   </span>
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                    style={{ color: SEVERITY_COLOURS[p.severity] ?? "#888" }}
+                    style={{ color: SEVERITY_COLOURS[p.severity] ?? "var(--dpf-muted)" }}
                   >
                     {p.severity}
                   </span>
@@ -118,7 +118,7 @@ export function ImprovementsClient({ proposals }: Props) {
               </div>
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                style={{ background: "rgba(124,140,248,0.15)", color: "var(--dpf-accent)" }}
+                style={{ background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", color: "var(--dpf-accent)" }}
               >
                 {CATEGORY_LABELS[p.category] ?? p.category}
               </span>
@@ -144,7 +144,7 @@ export function ImprovementsClient({ proposals }: Props) {
 
             {/* Rejection reason */}
             {p.status === "rejected" && p.rejectionReason && (
-              <div className="text-[11px] text-red-400 mb-2">
+              <div className="text-[11px] text-[var(--dpf-error)] mb-2">
                 Rejected: {p.rejectionReason}
               </div>
             )}
@@ -172,7 +172,7 @@ export function ImprovementsClient({ proposals }: Props) {
                     type="button"
                     disabled={isPending}
                     onClick={() => setRejectId(rejectId === p.proposalId ? null : p.proposalId)}
-                    className="px-2.5 py-1 text-[11px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 transition-colors disabled:opacity-50"
                   >
                     Reject
                   </button>
@@ -193,7 +193,7 @@ export function ImprovementsClient({ proposals }: Props) {
                   type="button"
                   disabled={isPending}
                   onClick={() => handleAction(() => startImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 transition-colors disabled:opacity-50"
+                  className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-warning)]/40 text-[var(--dpf-warning)] hover:bg-[var(--dpf-warning)]/10 transition-colors disabled:opacity-50"
                 >
                   Start Work
                 </button>
@@ -203,7 +203,7 @@ export function ImprovementsClient({ proposals }: Props) {
                   type="button"
                   disabled={isPending}
                   onClick={() => handleAction(() => completeImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-50"
+                  className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-success)]/40 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 transition-colors disabled:opacity-50"
                 >
                   Mark Implemented
                 </button>
@@ -240,7 +240,7 @@ export function ImprovementsClient({ proposals }: Props) {
                       setRejectReason("");
                     });
                   }}
-                  className="px-2.5 py-1 text-[11px] rounded bg-red-500/20 border border-red-500/40 text-red-400 disabled:opacity-50"
+                  className="px-2.5 py-1 text-[11px] rounded bg-[var(--dpf-error)]/20 border border-[var(--dpf-error)]/40 text-[var(--dpf-error)] disabled:opacity-50"
                 >
                   Confirm Reject
                 </button>

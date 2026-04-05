@@ -4,8 +4,8 @@ import { useState } from "react";
 import type { FeedItem } from "@/lib/activity-feed-data";
 
 const SECTION_CONFIG = {
-  action: { label: "Action Required", color: "#fbbf24", defaultOpen: true },
-  awareness: { label: "Awareness", color: "#38bdf8", defaultOpen: true },
+  action: { label: "Action Required", color: "var(--dpf-warning)", defaultOpen: true },
+  awareness: { label: "Awareness", color: "var(--dpf-info)", defaultOpen: true },
   history: { label: "Recent History", color: "var(--dpf-muted)", defaultOpen: false },
 } as const;
 

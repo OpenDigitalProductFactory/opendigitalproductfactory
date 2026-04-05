@@ -18,7 +18,7 @@ export function StalenessIndicator({
   return (
     <span
       className="text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap font-medium"
-      style={{ backgroundColor: "#fbbf2422", color: "#fbbf24" }}
+      style={{ backgroundColor: "color-mix(in srgb, var(--dpf-warning) 13%, transparent)", color: "var(--dpf-warning)" }}
       title={`${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue for review`}
     >
       Review needed

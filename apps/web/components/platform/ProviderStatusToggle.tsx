@@ -5,9 +5,9 @@ import { toggleProviderStatus } from "@/lib/actions/ai-providers";
 import { useRouter } from "next/navigation";
 
 const STATUS_COLOURS: Record<string, string> = {
-  active: "#4ade80",
-  unconfigured: "#8888a0",
-  inactive: "#fbbf24",
+  active: "var(--dpf-success)",
+  unconfigured: "var(--dpf-muted)",
+  inactive: "var(--dpf-warning)",
 };
 
 type Props = {
@@ -19,7 +19,7 @@ export function ProviderStatusToggle({ providerId, initialStatus }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
-  const colour = STATUS_COLOURS[status] ?? "#8888a0";
+  const colour = STATUS_COLOURS[status] ?? "var(--dpf-muted)";
   const isUnconfigured = status === "unconfigured";
 
   function handleToggle() {

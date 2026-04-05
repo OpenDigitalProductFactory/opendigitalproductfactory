@@ -29,7 +29,7 @@ export function PortfolioTreeNodeItem({
 
   // Portfolio roots use their accent colour; deeper nodes inherit muted styling
   const colour =
-    depth === 0 ? (PORTFOLIO_COLOURS[node.nodeId] ?? "#7c8cf8") : undefined;
+    depth === 0 ? (PORTFOLIO_COLOURS[node.nodeId] ?? "var(--dpf-accent)") : undefined;
 
   const pl = `${DEPTH_PADDING[Math.min(depth, 3)] ?? 48}px`;
 
@@ -63,7 +63,7 @@ export function PortfolioTreeNodeItem({
         >
           <span
             className={`truncate ${depth === 0 ? "text-sm font-semibold" : "text-xs"}`}
-            style={{ color: isActive ? (colour ?? "#e2e2f0") : (colour ?? "#e2e2f0") }}
+            style={{ color: isActive ? (colour ?? "var(--dpf-text)") : (colour ?? "var(--dpf-text)") }}
           >
             {node.name}
           </span>
@@ -71,8 +71,8 @@ export function PortfolioTreeNodeItem({
             <span
               className="text-[8px] px-1.5 py-0.5 rounded-full flex-shrink-0"
               style={{
-                background: `${colour ?? "#7c8cf8"}20`,
-                color: colour ?? "#7c8cf8",
+                background: `color-mix(in srgb, ${colour ?? "var(--dpf-accent)"} 12%, transparent)`,
+                color: colour ?? "var(--dpf-accent)",
               }}
             >
               {node.totalCount}

@@ -101,9 +101,9 @@ export function CoworkerHealthStatus() {
         style={{
           padding: "8px 12px",
           fontSize: 11,
-          color: "var(--dpf-danger, #b91c1c)",
-          background: "color-mix(in srgb, var(--dpf-danger, #b91c1c) 10%, transparent)",
-          borderTop: "1px solid color-mix(in srgb, var(--dpf-danger, #b91c1c) 20%, transparent)",
+          color: "var(--dpf-error)",
+          background: "color-mix(in srgb, var(--dpf-error) 10%, transparent)",
+          borderTop: "1px solid color-mix(in srgb, var(--dpf-error) 20%, transparent)",
           textAlign: "center",
         }}
       >
@@ -125,9 +125,9 @@ export function CoworkerHealthStatus() {
       style={{
         padding: "4px 12px",
         fontSize: 10,
-        color: "var(--dpf-warning, #b45309)",
-        background: "color-mix(in srgb, var(--dpf-warning, #b45309) 8%, transparent)",
-        borderTop: "1px solid color-mix(in srgb, var(--dpf-warning, #b45309) 18%, transparent)",
+        color: "var(--dpf-warning)",
+        background: "color-mix(in srgb, var(--dpf-warning) 8%, transparent)",
+        borderTop: "1px solid color-mix(in srgb, var(--dpf-warning) 18%, transparent)",
       }}
     >
       {messages.join(" · ")}

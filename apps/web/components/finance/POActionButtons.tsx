@@ -62,7 +62,7 @@ export function POActionButtons({ poId, status }: Props) {
           </button>
         )}
       </div>
-      {error && <p className="text-xs text-[#ef4444]">{error}</p>}
+      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
     </div>
   );
 }

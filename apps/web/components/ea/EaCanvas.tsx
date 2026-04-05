@@ -557,8 +557,8 @@ export function EaCanvas({
             <span style={{
               fontSize: 10, padding: "2px 6px", borderRadius: 3,
               background: viewStatus === "approved" ? "#1e3a2f" : "#1a1a2e",
-              color: viewStatus === "approved" ? "#4ade80" : "#fbbf24",
-              border: `1px solid ${viewStatus === "approved" ? "#4ade80" : "#fbbf24"}`,
+              color: viewStatus === "approved" ? "var(--dpf-success)" : "var(--dpf-warning)",
+              border: `1px solid ${viewStatus === "approved" ? "var(--dpf-success)" : "var(--dpf-warning)"}`,
             }}>
               {viewStatus.toUpperCase()}
             </span>
@@ -575,8 +575,8 @@ export function EaCanvas({
                 style={{
                   fontSize: 10, padding: "2px 7px", borderRadius: 3, cursor: "pointer",
                   background: edgeVariant === v ? "#2a2a50" : "transparent",
-                  border: `1px solid ${edgeVariant === v ? "#7c8cf8" : "#2a2a40"}`,
-                  color: edgeVariant === v ? "#7c8cf8" : "#8888a0",
+                  border: `1px solid ${edgeVariant === v ? "var(--dpf-accent)" : "#2a2a40"}`,
+                  color: edgeVariant === v ? "var(--dpf-accent)" : "var(--dpf-muted)",
                 }}
               >
                 {EDGE_VARIANT_LABELS[v]}

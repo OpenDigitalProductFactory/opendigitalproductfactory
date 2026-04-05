@@ -386,7 +386,7 @@ export function SetupWizard({
             </label>
           </div>
 
-          {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
+          {error && <p style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</p>}
 
           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
             <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
@@ -477,7 +477,7 @@ export function SetupWizard({
           <input type="url" value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)}
             style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
         </label>
-        {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
           <button onClick={handleComplete} disabled={submitting || !orgName || !orgSlug}

@@ -50,7 +50,7 @@ export function BookingForm({
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
-      {error && <div style={{ color: "#dc2626", fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
       {[
         { name: "name", label: "Full name", type: "text" },
         { name: "email", label: "Email address", type: "email" },

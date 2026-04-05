@@ -407,7 +407,7 @@ export function EmployeeFormPanel({
               />
             )}
 
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
           </form>
 
           {/* Footer */}

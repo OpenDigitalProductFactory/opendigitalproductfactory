@@ -26,10 +26,10 @@ export function MetricGauge({
     numValue === null
       ? "var(--dpf-muted)"
       : numValue >= thresholds.critical
-        ? "#ef4444"
+        ? "var(--dpf-error)"
         : numValue >= thresholds.warning
-          ? "#f59e0b"
-          : "#22c55e";
+          ? "var(--dpf-warning)"
+          : "var(--dpf-success)";
 
   // SVG arc gauge
   const radius = 40;

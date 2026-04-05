@@ -271,7 +271,7 @@ export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: 
                   <button
                     type="button"
                     onClick={() => removeLineItem(idx)}
-                    className="text-[var(--dpf-muted)] hover:text-[#ef4444] text-xs transition-colors"
+                    className="text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] text-xs transition-colors"
                   >
                     ×
                   </button>
@@ -313,7 +313,7 @@ export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: 
         />
       </div>
 
-      {error && <p className="text-sm text-[#ef4444]">{error}</p>}
+      {error && <p className="text-sm text-[var(--dpf-error)]">{error}</p>}
 
       <div className="flex justify-end gap-3">
         <button

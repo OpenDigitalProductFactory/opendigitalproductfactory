@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -11,10 +12,10 @@ import { CalendarEventPopover } from "./CalendarEventPopover";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
-  hr: { label: "HR", color: "#a78bfa" },
-  operations: { label: "Operations", color: "#38bdf8" },
-  platform: { label: "Platform", color: "#fb923c" },
-  personal: { label: "Personal", color: "#4ade80" },
+  hr: { label: "HR", color: "var(--dpf-accent)" },
+  operations: { label: "Operations", color: "var(--dpf-info)" },
+  platform: { label: "Platform", color: "var(--dpf-warning)" },
+  personal: { label: "Personal", color: "var(--dpf-success)" },
   external: { label: "External", color: "var(--dpf-muted)" },
 };
 
@@ -24,18 +25,31 @@ type Props = {
 
 export function WorkspaceCalendar({ events: initialEvents }: Props) {
   const calendarRef = useRef<FullCalendar>(null);
-  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Restore hidden categories from URL on mount
+  const hiddenCategories = useMemo(() => {
+    const param = searchParams.get("hidden");
+    return param ? new Set(param.split(",")) : new Set<string>();
+  }, [searchParams]);
+
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
   const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
   const [fetching, setFetching] = useState(false);
 
   function toggleCategory(cat: string) {
-    setHiddenCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
+    const next = new Set(hiddenCategories);
+    if (next.has(cat)) next.delete(cat);
+    else next.add(cat);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next.size > 0) {
+      params.set("hidden", Array.from(next).join(","));
+    } else {
+      params.delete("hidden");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   // Refetch calendar events at the right density when the view or date range changes

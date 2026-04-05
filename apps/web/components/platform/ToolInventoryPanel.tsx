@@ -125,8 +125,8 @@ export function ToolInventoryPanel({ tools }: Props) {
                         style={{
                           fontSize: 9,
                           fontWeight: 700,
-                          color: t.type === "platform" ? "#7c8cf8" : "#a78bfa",
-                          background: t.type === "platform" ? "#7c8cf818" : "#a78bfa18",
+                          color: t.type === "platform" ? "var(--dpf-accent)" : "var(--dpf-accent)",
+                          background: t.type === "platform" ? "color-mix(in srgb, var(--dpf-accent) 9%, transparent)" : "color-mix(in srgb, var(--dpf-accent) 9%, transparent)",
                           padding: "1px 5px",
                           borderRadius: 3,
                           textTransform: "uppercase",
@@ -136,7 +136,7 @@ export function ToolInventoryPanel({ tools }: Props) {
                       </span>
                     </td>
                     <td style={{ padding: "6px 10px" }}>
-                      <span style={{ color: t.enabled ? "#4ade80" : "#8888a0", fontSize: 10 }}>
+                      <span style={{ color: t.enabled ? "var(--dpf-success)" : "var(--dpf-muted)", fontSize: 10 }}>
                         {t.enabled ? "Yes" : "No"}
                       </span>
                     </td>

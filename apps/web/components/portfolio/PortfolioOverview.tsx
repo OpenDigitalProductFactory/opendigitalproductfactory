@@ -15,11 +15,11 @@ type Props = {
 
 const STAGE_ORDER = ["plan", "design", "build", "production", "retirement"];
 const STAGE_COLOURS: Record<string, string> = {
-  plan: "#8888a0",
-  design: "#a78bfa",
-  build: "#fb923c",
-  production: "#4ade80",
-  retirement: "#64748b",
+  plan: "var(--dpf-muted)",
+  design: "var(--dpf-accent)",
+  build: "var(--dpf-warning)",
+  production: "var(--dpf-success)",
+  retirement: "var(--dpf-muted)",
 };
 
 export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Props) {
@@ -51,17 +51,17 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
           <SummaryCard
             label="Active"
             value={summary.activeProducts}
-            colour="#4ade80"
+            colour="var(--dpf-success)"
           />
           <SummaryCard
             label="Draft"
             value={summary.draftProducts}
-            colour="#fbbf24"
+            colour="var(--dpf-warning)"
           />
           <SummaryCard
             label="Open Backlog"
             value={summary.openBacklogItems}
-            colour={summary.openBacklogItems > 10 ? "#fbbf24" : "var(--dpf-text)"}
+            colour={summary.openBacklogItems > 10 ? "var(--dpf-warning)" : "var(--dpf-text)"}
             detail={summary.inProgressBacklogItems > 0 ? `${summary.inProgressBacklogItems} in progress` : undefined}
           />
           <SummaryCard
@@ -72,7 +72,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
           <SummaryCard
             label="AI Agents"
             value={summary.activeAgents}
-            colour="#7c8cf8"
+            colour="var(--dpf-accent)"
             detail={`of ${summary.totalAgents} total`}
           />
         </div>
@@ -93,7 +93,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {roots.map((root) => {
-            const colour = PORTFOLIO_COLOURS[root.nodeId] ?? "#7c8cf8";
+            const colour = PORTFOLIO_COLOURS[root.nodeId] ?? "var(--dpf-accent)";
             const ownerRole = PORTFOLIO_OWNER_ROLES[root.nodeId] ?? "--";
             return (
               <Link
@@ -170,7 +170,7 @@ function LifecycleBar({ stages, total }: { stages: Record<string, number>; total
               className="flex items-center justify-center text-[9px] font-bold text-white"
               style={{
                 width: `${pct}%`,
-                backgroundColor: STAGE_COLOURS[stage] ?? "#8888a0",
+                backgroundColor: STAGE_COLOURS[stage] ?? "var(--dpf-muted)",
                 minWidth: count > 0 ? "24px" : "0",
               }}
               title={`${LIFECYCLE_STAGE_LABELS[stage] ?? stage}: ${count}`}
@@ -189,7 +189,7 @@ function LifecycleBar({ stages, total }: { stages: Record<string, number>; total
             <div key={stage} className="flex items-center gap-1.5">
               <span
                 className="w-2.5 h-2.5 rounded-sm"
-                style={{ backgroundColor: STAGE_COLOURS[stage] ?? "#8888a0" }}
+                style={{ backgroundColor: STAGE_COLOURS[stage] ?? "var(--dpf-muted)" }}
               />
               <span className="text-[10px] text-[var(--dpf-muted)]">
                 {LIFECYCLE_STAGE_LABELS[stage] ?? stage} ({count})

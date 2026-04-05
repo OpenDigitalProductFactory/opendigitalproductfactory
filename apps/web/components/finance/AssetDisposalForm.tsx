@@ -45,7 +45,7 @@ export function AssetDisposalForm({ assetId, currentBookValue, currencySymbol }:
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="px-3 py-1.5 rounded-md text-xs font-medium border border-[#ef4444] text-[#ef4444] hover:bg-[#ef444420] transition-colors"
+        className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--dpf-error)] text-[var(--dpf-error)] hover:bg-[color-mix(in_srgb,var(--dpf-error)_12%,transparent)] transition-colors"
       >
         Dispose Asset
       </button>
@@ -53,11 +53,11 @@ export function AssetDisposalForm({ assetId, currentBookValue, currencySymbol }:
   }
 
   return (
-    <div className="p-4 rounded-lg border border-[#ef4444] bg-[var(--dpf-surface-1)] w-72">
+    <div className="p-4 rounded-lg border border-[var(--dpf-error)] bg-[var(--dpf-surface-1)] w-72">
       <p className="text-xs font-semibold text-[var(--dpf-text)] mb-3">Dispose Asset</p>
 
       {error && (
-        <div className="p-2 rounded border border-[#ef4444] bg-[#ef444420] text-[10px] text-[#ef4444] mb-3">
+        <div className="p-2 rounded border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_12%,transparent)] text-[10px] text-[var(--dpf-error)] mb-3">
           {error}
         </div>
       )}
@@ -92,7 +92,7 @@ export function AssetDisposalForm({ assetId, currentBookValue, currencySymbol }:
           <button
             type="submit"
             disabled={loading}
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#ef4444] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-error)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? "Disposing..." : "Confirm Disposal"}
           </button>

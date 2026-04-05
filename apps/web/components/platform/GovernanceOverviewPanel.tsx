@@ -22,9 +22,9 @@ type Props = {
 };
 
 const SUMMARY_CARDS: Array<{ key: keyof GovernanceSummary; label: string; accent: string }> = [
-  { key: "teams", label: "Teams", accent: "#38bdf8" },
+  { key: "teams", label: "Teams", accent: "var(--dpf-info)" },
   { key: "governedAgents", label: "Governed agents", accent: "#fb923c" },
-  { key: "activeGrants", label: "Active grants", accent: "#4ade80" },
+  { key: "activeGrants", label: "Active grants", accent: "var(--dpf-success)" },
   { key: "pendingApprovals", label: "Pending approvals", accent: "#facc15" },
 ];
 

@@ -40,9 +40,9 @@ const DIMENSIONS: Array<{ key: keyof ModelProfile; label: string }> = [
 ];
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-  low:    "#fbbf24",
-  medium: "#7c8cf8",
-  high:   "#4ade80",
+  low:    "var(--dpf-warning)",
+  medium: "var(--dpf-accent)",
+  high:   "var(--dpf-success)",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -52,15 +52,15 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active:   "#4ade80",
-  degraded: "#fbbf24",
-  retired:  "#8888a0",
+  active:   "var(--dpf-success)",
+  degraded: "var(--dpf-warning)",
+  retired:  "var(--dpf-muted)",
 };
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "#4ade80";
-  if (score >= 50) return "#fbbf24";
-  return "#ef4444";
+  if (score >= 80) return "var(--dpf-success)";
+  if (score >= 50) return "var(--dpf-warning)";
+  return "var(--dpf-error)";
 }
 
 function DimensionBar({ label, score }: { label: string; score: number }) {
@@ -96,8 +96,8 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
   const [message, setMessage] = useState<string | null>(null);
 
   const isRetired = profile.modelStatus === "retired";
-  const confidenceColor = CONFIDENCE_COLORS[profile.profileConfidence] ?? "#8888a0";
-  const statusColor = STATUS_COLORS[profile.modelStatus] ?? "#8888a0";
+  const confidenceColor = CONFIDENCE_COLORS[profile.profileConfidence] ?? "var(--dpf-muted)";
+  const statusColor = STATUS_COLORS[profile.modelStatus] ?? "var(--dpf-muted)";
   const sourceLabel = SOURCE_LABELS[profile.profileSource] ?? profile.profileSource;
 
   function handleRunEval() {
@@ -136,7 +136,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
 
   return (
     <div style={{
-      background: isRetired ? "#13131f" : "#161625",
+      background: isRetired ? "var(--dpf-surface-1)" : "var(--dpf-surface-2)",
       border: "1px solid var(--dpf-border)",
       borderRadius: 6,
       padding: 14,
@@ -145,7 +145,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
       {/* Model header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: isRetired ? "#8888a0" : "#e0e0ff", marginBottom: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: isRetired ? "var(--dpf-muted)" : "var(--dpf-text)", marginBottom: 2 }}>
             {profile.friendlyName || profile.modelId}
           </div>
           {profile.friendlyName && (
@@ -191,9 +191,9 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
                 padding: "3px 10px",
                 fontSize: 11,
                 borderRadius: 4,
-                border: "1px solid #7c8cf8",
-                background: isPending ? "#2a2a40" : "rgba(124,140,248,0.12)",
-                color: isPending ? "#8888a0" : "#7c8cf8",
+                border: "1px solid var(--dpf-accent)",
+                background: isPending ? "var(--dpf-surface-2)" : "color-mix(in srgb, var(--dpf-accent) 12%, transparent)",
+                color: isPending ? "var(--dpf-muted)" : "var(--dpf-accent)",
                 cursor: isPending ? "not-allowed" : "pointer",
               }}
             >
@@ -230,7 +230,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
           <span>Last eval: <span style={{ color: "var(--dpf-muted)" }}>{new Date(profile.lastEvalAt).toLocaleDateString()}</span></span>
         )}
         {profile.supportsToolUse && (
-          <span style={{ color: "#4ade80" }}>Tool use</span>
+          <span style={{ color: "var(--dpf-success)" }}>Tool use</span>
         )}
         {profile.maxContextTokens !== null && profile.maxContextTokens !== undefined && (
           <span>{(profile.maxContextTokens / 1000).toFixed(0)}k ctx</span>
@@ -245,7 +245,7 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
         <div style={{
           marginTop: 8,
           fontSize: 11,
-          color: message.startsWith("Failed") ? "#ef4444" : "#4ade80",
+          color: message.startsWith("Failed") ? "var(--dpf-error)" : "var(--dpf-success)",
           padding: "6px 10px",
           background: "var(--dpf-bg)",
           borderRadius: 4,
@@ -291,7 +291,7 @@ export default function RoutingProfilePanel({ endpointId, profiles }: Props) {
           color: "var(--dpf-muted)",
         }}>
           <span>
-            <span style={{ color: "#4ade80", fontWeight: 600 }}>{activeProfiles.length}</span> active
+            <span style={{ color: "var(--dpf-success)", fontWeight: 600 }}>{activeProfiles.length}</span> active
           </span>
           {retiredProfiles.length > 0 && (
             <span>

@@ -42,9 +42,9 @@ const PLATFORM_ROLES = [
 ];
 
 const STATUS_COLOUR: Record<string, string> = {
-  active: "#4ade80",
-  deprecated: "#fbbf24",
-  retired: "#8888a0",
+  active: "var(--dpf-success)",
+  deprecated: "var(--dpf-warning)",
+  retired: "var(--dpf-muted)",
 };
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
@@ -367,7 +367,7 @@ function CreateForm({
         )}
 
         {error && (
-          <p style={{ fontSize: 11, color: "#ef4444", margin: 0 }}>{error}</p>
+          <p style={{ fontSize: 11, color: "var(--dpf-error)", margin: 0 }}>{error}</p>
         )}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -425,8 +425,8 @@ function ModelCard({
   const [editDesc, setEditDesc] = useState(model.description ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const statusColour = STATUS_COLOUR[model.status] ?? "#8888a0";
-  const leftBorder = model.isBuiltIn ? "#7c8cf8" : statusColour;
+  const statusColour = STATUS_COLOUR[model.status] ?? "var(--dpf-muted)";
+  const leftBorder = model.isBuiltIn ? "var(--dpf-accent)" : statusColour;
 
   function handleSave() {
     setError(null);
@@ -498,7 +498,7 @@ function ModelCard({
             placeholder="Description (optional)"
           />
           {error && (
-            <p style={{ fontSize: 11, color: "#ef4444", margin: 0 }}>{error}</p>
+            <p style={{ fontSize: 11, color: "var(--dpf-error)", margin: 0 }}>{error}</p>
           )}
           <div style={{ display: "flex", gap: 6 }}>
             <button
@@ -559,8 +559,8 @@ function ModelCard({
                 <span
                   style={{
                     fontSize: 9,
-                    color: "#7c8cf8",
-                    background: "#7c8cf820",
+                    color: "var(--dpf-accent)",
+                    background: "color-mix(in srgb, var(--dpf-accent) 13%, transparent)",
                     borderRadius: 3,
                     padding: "1px 5px",
                   }}
@@ -573,7 +573,7 @@ function ModelCard({
                   style={{
                     fontSize: 9,
                     color: statusColour,
-                    background: `${statusColour}20`,
+                    background: `color-mix(in srgb, ${statusColour} 13%, transparent)`,
                     borderRadius: 3,
                     padding: "1px 5px",
                   }}
@@ -644,7 +644,7 @@ function ModelCard({
                   type="button"
                   onClick={handleDeprecate}
                   disabled={isPending}
-                  style={{ ...btnBase, color: "#fbbf24", borderColor: "#fbbf2440" }}
+                  style={{ ...btnBase, color: "var(--dpf-warning)", borderColor: "color-mix(in srgb, var(--dpf-warning) 25%, transparent)" }}
                 >
                   Deprecate
                 </button>
@@ -656,7 +656,7 @@ function ModelCard({
                 type="button"
                 onClick={handleRetire}
                 disabled={isPending}
-                style={{ ...btnBase, color: "#ef4444", borderColor: "#ef444440" }}
+                style={{ ...btnBase, color: "var(--dpf-error)", borderColor: "color-mix(in srgb, var(--dpf-error) 25%, transparent)" }}
               >
                 Retire
               </button>

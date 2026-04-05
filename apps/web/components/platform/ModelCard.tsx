@@ -40,17 +40,17 @@ type Props = {
 // ── Metadata confidence colours ──────────────────────────────────────────────
 
 const CONFIDENCE_COLOURS: Record<string, string> = {
-  high:   "#4ade80",
-  medium: "#fbbf24",
-  low:    "#f87171",
+  high:   "var(--dpf-success)",
+  medium: "var(--dpf-warning)",
+  low:    "var(--dpf-error)",
 };
 
 // ── EP-INF-012: Tier badge colours ──────────────────────────────────────────
 
 const TIER_COLOURS: Record<string, string> = {
-  frontier: "#a78bfa",
-  strong:   "#38bdf8",
-  adequate: "#4ade80",
+  frontier: "var(--dpf-accent)",
+  strong:   "var(--dpf-info)",
+  adequate: "var(--dpf-success)",
   basic:    "#94a3b8",
 };
 
@@ -163,9 +163,9 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "#4ade80";
-  if (score >= 50) return "#fbbf24";
-  return "#ef4444";
+  if (score >= 80) return "var(--dpf-success)";
+  if (score >= 50) return "var(--dpf-warning)";
+  return "var(--dpf-error)";
 }
 
 function DimensionBar({ label, score }: { label: string; score: number }) {
@@ -290,7 +290,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     const pricingData = profile.pricing as Record<string, unknown> | undefined;
     const pricingStr = formatPricing(pricingData);
     const capBadges = getCapabilityBadges(caps);
-    const confidenceColour = CONFIDENCE_COLOURS[profile.metadataConfidence ?? "low"] ?? "#f87171";
+    const confidenceColour = CONFIDENCE_COLOURS[profile.metadataConfidence ?? "low"] ?? "var(--dpf-error)";
     const hasRouting = routingProfile != null;
     const sourceLabel = hasRouting ? (SOURCE_LABELS[routingProfile.profileSource] ?? routingProfile.profileSource) : null;
     const isRetired = hasRouting && routingProfile.modelStatus === "retired";
@@ -321,7 +321,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
               }}
             />
             {isStale && (
-              <span style={{ color: "#fbbf24", fontSize: 10, whiteSpace: "nowrap" }}>
+              <span style={{ color: "var(--dpf-warning)", fontSize: 10, whiteSpace: "nowrap" }}>
                 Last seen: {model.lastSeenAt.toLocaleDateString()}
               </span>
             )}
@@ -414,9 +414,9 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                         padding: "3px 10px",
                         fontSize: 11,
                         borderRadius: 4,
-                        border: "1px solid #7c8cf8",
-                        background: isPending ? "#2a2a40" : "rgba(124,140,248,0.12)",
-                        color: isPending ? "#8888a0" : "#7c8cf8",
+                        border: "1px solid var(--dpf-accent)",
+                        background: isPending ? "var(--dpf-surface-2)" : "color-mix(in srgb, var(--dpf-accent) 12%, transparent)",
+                        color: isPending ? "var(--dpf-muted)" : "var(--dpf-accent)",
                         cursor: isPending ? "not-allowed" : "pointer",
                       }}
                     >
@@ -431,7 +431,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                     marginTop: 6,
                     fontSize: 10,
                     color: evalMessage.startsWith("Failed") || evalMessage.startsWith("Inconclusive")
-                      ? "#ef4444" : "#4ade80",
+                      ? "var(--dpf-error)" : "var(--dpf-success)",
                     padding: "4px 8px",
                     background: "var(--dpf-bg)",
                     borderRadius: 4,
@@ -495,7 +495,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                     >
                       {tierSaving ? "..." : "Set"}
                     </button>
-                    {tierSaved && <span style={{ fontSize: 10, color: "#4ade80" }}>Saved</span>}
+                    {tierSaved && <span style={{ fontSize: 10, color: "var(--dpf-success)" }}>Saved</span>}
                   </div>
                 )}
               </div>
@@ -517,12 +517,12 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
             <div style={{ color: "var(--dpf-text)", fontSize: 11, fontFamily: "monospace", wordBreak: "break-all" }}>
               {model.modelId}
             </div>
-            <div style={{ color: "#f87171", fontSize: 10, marginTop: 4 }}>
+            <div style={{ color: "var(--dpf-error)", fontSize: 10, marginTop: 4 }}>
               Profiling failed
             </div>
           </div>
           {isStale && (
-            <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
+            <span style={{ color: "var(--dpf-warning)", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
               Last seen: {model.lastSeenAt.toLocaleDateString()}
             </span>
           )}
@@ -557,7 +557,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           </div>
         </div>
         {isStale && (
-          <span style={{ color: "#fbbf24", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
+          <span style={{ color: "var(--dpf-warning)", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
             Last seen: {model.lastSeenAt.toLocaleDateString()}
           </span>
         )}

@@ -157,10 +157,10 @@ function isUserAllowed(
 }
 
 const HITL_COLOURS_EP: Record<number, string> = {
-  0: "#ef4444",
+  0: "var(--dpf-error)",
   1: "#f97316",
-  2: "#38bdf8",
-  3: "#4ade80",
+  2: "var(--dpf-info)",
+  3: "var(--dpf-success)",
 };
 
 const ESCALATION_LABELS_EP: Record<string, string> = {
@@ -324,10 +324,10 @@ export function EffectivePermissionsPanel({
           {allowedCount} of {totalCount} tools available
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="#4ade80" /> Allowed
+          <Dot color="var(--dpf-success)" /> Allowed
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="#ef4444" /> Blocked
+          <Dot color="var(--dpf-error)" /> Blocked
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
           <Dot color="#6b7280" /> N/A
@@ -391,9 +391,9 @@ export function EffectivePermissionsPanel({
                 {tool.requiredCapability === null ? (
                   <Dot color="#6b7280" />
                 ) : tool.userAllowed ? (
-                  <Dot color="#4ade80" />
+                  <Dot color="var(--dpf-success)" />
                 ) : (
-                  <Dot color="#ef4444" />
+                  <Dot color="var(--dpf-error)" />
                 )}
               </span>
 
@@ -402,18 +402,18 @@ export function EffectivePermissionsPanel({
                 {!TOOL_TO_GRANTS[tool.toolName] ? (
                   <Dot color="#6b7280" />
                 ) : tool.agentAllowed ? (
-                  <Dot color="#4ade80" />
+                  <Dot color="var(--dpf-success)" />
                 ) : (
-                  <Dot color="#ef4444" />
+                  <Dot color="var(--dpf-error)" />
                 )}
               </span>
 
               {/* Effective */}
               <span style={{ textAlign: "center" }}>
                 {tool.effective ? (
-                  <Dot color="#4ade80" />
+                  <Dot color="var(--dpf-success)" />
                 ) : (
-                  <Dot color="#ef4444" />
+                  <Dot color="var(--dpf-error)" />
                 )}
               </span>
 
@@ -499,7 +499,7 @@ export function EffectivePermissionsPanel({
             </div>
 
             {product.roles.map((r, i) => {
-              const tierColour = HITL_COLOURS_EP[r.hitlTierDefault] ?? "#8888a0";
+              const tierColour = HITL_COLOURS_EP[r.hitlTierDefault] ?? "var(--dpf-muted)";
               const escLabel = r.escalatesTo
                 ? (ESCALATION_LABELS_EP[r.escalatesTo] ?? r.escalatesTo)
                 : "—";

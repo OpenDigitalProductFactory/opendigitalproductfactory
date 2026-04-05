@@ -144,7 +144,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
             Progress
           </p>
           <p className="text-sm text-[var(--dpf-text)]">
-            <span style={{ color: "#4ade80" }}>{matchedCount}</span> of{" "}
+            <span style={{ color: "var(--dpf-success)" }}>{matchedCount}</span> of{" "}
             <span className="text-[var(--dpf-text)]">{initialTransactions.length}</span>{" "}
             matched
             {pendingCount > 0 && (
@@ -174,7 +174,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
               className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] overflow-hidden"
               style={
                 isMatched
-                  ? { borderColor: "#4ade8040", opacity: 0.6 }
+                  ? { borderColor: "color-mix(in srgb, var(--dpf-success) 25%, transparent)", opacity: 0.6 }
                   : isSkipped
                     ? { opacity: 0.5 }
                     : undefined
@@ -190,7 +190,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                     {isMatched && (
                       <span
                         className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                        style={{ color: "#4ade80", backgroundColor: "#4ade8020" }}
+                        style={{ color: "var(--dpf-success)", backgroundColor: "color-mix(in srgb, var(--dpf-success) 12%, transparent)" }}
                       >
                         matched
                       </span>
@@ -198,7 +198,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                     {isSkipped && (
                       <span
                         className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                        style={{ color: "#8888a0", backgroundColor: "#8888a020" }}
+                        style={{ color: "var(--dpf-muted)", backgroundColor: "color-mix(in srgb, var(--dpf-muted) 12%, transparent)" }}
                       >
                         skipped
                       </span>
@@ -218,7 +218,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                 <div className="flex items-center gap-3 shrink-0">
                   <p
                     className="text-base font-bold font-mono"
-                    style={{ color: amount >= 0 ? "#4ade80" : "#ef4444" }}
+                    style={{ color: amount >= 0 ? "var(--dpf-success)" : "var(--dpf-error)" }}
                   >
                     {amount >= 0 ? "+" : ""}
                     {formatMoney(amount)}
@@ -230,7 +230,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
               {error && (
                 <div
                   className="mx-4 mb-3 p-2 rounded text-xs"
-                  style={{ color: "#ef4444", backgroundColor: "#ef444410" }}
+                  style={{ color: "var(--dpf-error)", backgroundColor: "color-mix(in srgb, var(--dpf-error) 6%, transparent)" }}
                 >
                   {error}
                 </div>
@@ -243,10 +243,10 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                   {highConfidenceMatch && state === "suggestions-open" && (
                     <div
                       className="mb-3 p-3 rounded-lg border flex items-center justify-between gap-3"
-                      style={{ borderColor: "#4ade8040", backgroundColor: "#4ade8008" }}
+                      style={{ borderColor: "color-mix(in srgb, var(--dpf-success) 25%, transparent)", backgroundColor: "color-mix(in srgb, var(--dpf-success) 3%, transparent)" }}
                     >
                       <div>
-                        <p className="text-xs font-medium" style={{ color: "#4ade80" }}>
+                        <p className="text-xs font-medium" style={{ color: "var(--dpf-success)" }}>
                           High confidence match
                         </p>
                         <p className="text-[10px] text-[var(--dpf-muted)]">
@@ -257,7 +257,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                         onClick={() => confirmMatch(tx.id, highConfidenceMatch.id)}
                         disabled={false}
                         className="px-3 py-1.5 rounded-md text-xs font-medium text-white disabled:opacity-50"
-                        style={{ backgroundColor: "#4ade80", color: "#000" }}
+                        style={{ backgroundColor: "var(--dpf-success)", color: "#000" }}
                       >
                         OK — Match
                       </button>
@@ -329,7 +329,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                                 </p>
                                 <p
                                   className="text-[9px]"
-                                  style={{ color: c.confidence >= 70 ? "#4ade80" : c.confidence >= 40 ? "#fbbf24" : "#8888a0" }}
+                                  style={{ color: c.confidence >= 70 ? "var(--dpf-success)" : c.confidence >= 40 ? "var(--dpf-warning)" : "var(--dpf-muted)" }}
                                 >
                                   {c.confidence}% match
                                 </p>
@@ -344,10 +344,10 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                                   width: `${c.confidence}%`,
                                   backgroundColor:
                                     c.confidence >= 70
-                                      ? "#4ade80"
+                                      ? "var(--dpf-success)"
                                       : c.confidence >= 40
-                                        ? "#fbbf24"
-                                        : "#8888a0",
+                                        ? "var(--dpf-warning)"
+                                        : "var(--dpf-muted)",
                                 }}
                               />
                             </div>
@@ -359,7 +359,7 @@ export function ReconciliationFeed({ bankAccountId, initialTransactions, totalCo
                                   <span
                                     key={i}
                                     className="text-[9px] px-1.5 py-0.5 rounded-full"
-                                    style={{ color: "#8888a0", backgroundColor: "#8888a015" }}
+                                    style={{ color: "var(--dpf-muted)", backgroundColor: "color-mix(in srgb, var(--dpf-muted) 9%, transparent)" }}
                                   >
                                     {reason}
                                   </span>

@@ -22,9 +22,9 @@ const TYPE_LABELS: Record<string, string> = {
 
 const STATUS_STYLES: Record<string, { background: string; color: string }> = {
   pending: { background: "rgba(245,158,11,0.15)", color: "var(--dpf-warning, #f59e0b)" },
-  confirmed: { background: "rgba(34,197,94,0.15)", color: "var(--dpf-success, #22c55e)" },
+  confirmed: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success, #22c55e)" },
   completed: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent, #4f46e5)" },
-  cancelled: { background: "rgba(239,68,68,0.15)", color: "var(--dpf-error, #ef4444)" },
+  cancelled: { background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", color: "var(--dpf-error, #ef4444)" },
   "needs-reschedule": { background: "rgba(249,115,22,0.15)", color: "#f97316" },
 };
 

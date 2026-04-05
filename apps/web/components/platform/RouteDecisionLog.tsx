@@ -19,18 +19,18 @@ type Props = {
 };
 
 const TASK_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  chat:             { bg: "rgba(124,140,248,0.12)", text: "#7c8cf8", border: "rgba(124,140,248,0.3)" },
-  codegen:          { bg: "rgba(74,222,128,0.10)",  text: "#4ade80", border: "rgba(74,222,128,0.3)" },
-  reasoning:        { bg: "rgba(251,191,36,0.10)",  text: "#fbbf24", border: "rgba(251,191,36,0.3)" },
-  tool_use:         { bg: "rgba(56,189,248,0.10)",  text: "#38bdf8", border: "rgba(56,189,248,0.3)" },
+  chat:             { bg: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)", text: "var(--dpf-accent)", border: "color-mix(in srgb, var(--dpf-accent) 30%, transparent)" },
+  codegen:          { bg: "color-mix(in srgb, var(--dpf-success) 10%, transparent)",  text: "var(--dpf-success)", border: "color-mix(in srgb, var(--dpf-success) 30%, transparent)" },
+  reasoning:        { bg: "color-mix(in srgb, var(--dpf-warning) 10%, transparent)",  text: "var(--dpf-warning)", border: "color-mix(in srgb, var(--dpf-warning) 30%, transparent)" },
+  tool_use:         { bg: "color-mix(in srgb, var(--dpf-info) 10%, transparent)",  text: "var(--dpf-info)", border: "color-mix(in srgb, var(--dpf-info) 30%, transparent)" },
   structured_output:{ bg: "rgba(232,121,249,0.10)", text: "#e879f9", border: "rgba(232,121,249,0.3)" },
 };
 
 const SENSITIVITY_COLORS: Record<string, string> = {
-  public:       "#4ade80",
-  internal:     "#7c8cf8",
-  confidential: "#fbbf24",
-  restricted:   "#ef4444",
+  public:       "var(--dpf-success)",
+  internal:     "var(--dpf-accent)",
+  confidential: "var(--dpf-warning)",
+  restricted:   "var(--dpf-error)",
 };
 
 function relativeTime(iso: string): string {
@@ -44,20 +44,20 @@ function relativeTime(iso: string): string {
 }
 
 function fitnessColor(score: number): string {
-  if (score >= 0.8) return "#4ade80";
-  if (score >= 0.5) return "#fbbf24";
-  return "#ef4444";
+  if (score >= 0.8) return "var(--dpf-success)";
+  if (score >= 0.5) return "var(--dpf-warning)";
+  return "var(--dpf-error)";
 }
 
 function DecisionCard({ decision }: { decision: RouteDecision }) {
   const [expanded, setExpanded] = useState(false);
 
   const taskColor = TASK_TYPE_COLORS[decision.taskType] ?? {
-    bg: "rgba(136,136,160,0.10)",
-    text: "#8888a0",
-    border: "rgba(136,136,160,0.3)",
+    bg: "color-mix(in srgb, var(--dpf-muted) 10%, transparent)",
+    text: "var(--dpf-muted)",
+    border: "color-mix(in srgb, var(--dpf-muted) 30%, transparent)",
   };
-  const sensitivityColor = SENSITIVITY_COLORS[decision.sensitivity] ?? "#8888a0";
+  const sensitivityColor = SENSITIVITY_COLORS[decision.sensitivity] ?? "var(--dpf-muted)";
   const score = decision.fitnessScore;
   const truncatedReason = decision.reason.length > 200
     ? decision.reason.slice(0, 200) + "…"
@@ -115,9 +115,9 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
             fontSize: 10,
             padding: "2px 7px",
             borderRadius: 4,
-            background: "rgba(251,191,36,0.10)",
-            color: "#fbbf24",
-            border: "1px solid rgba(251,191,36,0.3)",
+            background: "color-mix(in srgb, var(--dpf-warning) 10%, transparent)",
+            color: "var(--dpf-warning)",
+            border: "1px solid color-mix(in srgb, var(--dpf-warning) 30%, transparent)",
           }}>
             shadow
           </span>

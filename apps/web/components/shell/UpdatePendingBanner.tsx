@@ -27,17 +27,17 @@ export async function UpdatePendingBanner() {
         alignItems: "center",
         justifyContent: "space-between",
         padding: "6px 16px",
-        background: "rgba(124, 140, 248, 0.15)",
-        borderBottom: "1px solid rgba(124, 140, 248, 0.3)",
+        background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
+        borderBottom: "1px solid color-mix(in srgb, var(--dpf-accent) 30%, transparent)",
         fontSize: 12,
-        color: "#b0b8ff",
+        color: "var(--dpf-accent)",
       }}
     >
       <span>
         Platform update v{config.pendingVersion} is ready. Your customisations are preserved.{" "}
         <Link
           href="/admin/platform-development"
-          style={{ color: "#b0b8ff", textDecoration: "underline" }}
+          style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}
         >
           Review in Admin &rarr; Platform Development
         </Link>

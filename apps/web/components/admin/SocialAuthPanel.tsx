@@ -103,8 +103,8 @@ function ProviderSection({
           <span
             className="text-[10px] px-2 py-0.5 rounded-full"
             style={{
-              background: allConfigured ? "#4ade8020" : "#fbbf2420",
-              color: allConfigured ? "#4ade80" : "#fbbf24",
+              background: allConfigured ? "color-mix(in srgb, var(--dpf-success) 13%, transparent)" : "color-mix(in srgb, var(--dpf-warning) 13%, transparent)",
+              color: allConfigured ? "var(--dpf-success)" : "var(--dpf-warning)",
             }}
           >
             {allConfigured ? "Ready" : "Setup needed"}
@@ -129,7 +129,7 @@ function ProviderSection({
           const data = keyData[cfg.key];
           const displayValue = savedValues[cfg.key] ?? data?.currentValue ?? null;
           const isConfigured = !!displayValue;
-          const statusColor = isConfigured ? "#4ade80" : "#fbbf24";
+          const statusColor = isConfigured ? "var(--dpf-success)" : "var(--dpf-warning)";
 
           return (
             <div
@@ -141,7 +141,7 @@ function ProviderSection({
                 <span className="text-sm font-semibold text-[var(--dpf-text)]">{cfg.label}</span>
                 <span
                   className="text-[10px] px-2 py-0.5 rounded-full"
-                  style={{ background: `${statusColor}20`, color: statusColor }}
+                  style={{ background: `color-mix(in srgb, ${statusColor} 13%, transparent)`, color: statusColor }}
                 >
                   {isConfigured ? "Configured" : "Not configured"}
                 </span>
@@ -254,8 +254,8 @@ export function SocialAuthPanel({ keyData }: Props) {
       </p>
 
       {anyReady && (
-        <div className="mb-4 p-3 rounded-lg bg-[#4ade8010] border border-[#4ade8030]">
-          <p className="text-xs text-[#4ade80]">
+        <div className="mb-4 p-3 rounded-lg border" style={{ background: "color-mix(in srgb, var(--dpf-success) 6%, transparent)", borderColor: "color-mix(in srgb, var(--dpf-success) 19%, transparent)" }}>
+          <p className="text-xs text-[var(--dpf-success)]">
             {googleReady && appleReady
               ? "Both Google and Apple are configured. Social sign-in is active on the customer portal."
               : googleReady
@@ -266,8 +266,8 @@ export function SocialAuthPanel({ keyData }: Props) {
       )}
 
       {!anyReady && (
-        <div className="mb-4 p-3 rounded-lg bg-[#fbbf2410] border border-[#fbbf2430]">
-          <p className="text-xs text-[#fbbf24]">
+        <div className="mb-4 p-3 rounded-lg border" style={{ background: "color-mix(in srgb, var(--dpf-warning) 6%, transparent)", borderColor: "color-mix(in srgb, var(--dpf-warning) 19%, transparent)" }}>
+          <p className="text-xs text-[var(--dpf-warning)]">
             Social sign-in is not active yet. Configure at least one provider below to enable it. We recommend starting with Google — it&apos;s free and takes about 10 minutes.
           </p>
         </div>

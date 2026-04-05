@@ -474,7 +474,7 @@ function DateStep({
         </div>
       )}
       {error && (
-        <div style={{ fontSize: 13, color: "var(--dpf-accent, #dc2626)" }}>{error}</div>
+        <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
       )}
     </div>
   );
@@ -513,7 +513,7 @@ function SlotStep({
         <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>Loading slots…</div>
       )}
       {error && (
-        <div style={{ fontSize: 13, color: "var(--dpf-accent, #dc2626)" }}>{error}</div>
+        <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
       )}
 
       {!loading && !error && slotsResult && (
@@ -766,7 +766,7 @@ function FormStep({
       {/* Contact form */}
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {error && (
-          <div style={{ fontSize: 13, color: "var(--dpf-accent, #dc2626)" }}>{error}</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
         )}
 
         <div style={fieldStyle}>

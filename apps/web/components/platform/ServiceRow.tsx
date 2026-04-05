@@ -8,9 +8,9 @@ import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 
 const STATUS_COLORS: Record<string, string> = {
-  active:       "#4ade80",
-  unconfigured: "#fbbf24",
-  inactive:     "#8888a0",
+  active:       "var(--dpf-success)",
+  unconfigured: "var(--dpf-warning)",
+  inactive:     "var(--dpf-muted)",
 };
 
 const ROUTING_DIMENSION_LABELS: Record<string, string> = {
@@ -24,15 +24,15 @@ const ROUTING_DIMENSION_LABELS: Record<string, string> = {
 };
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "rgba(74, 222, 128, 0.15)";
-  if (score >= 50) return "rgba(251, 191, 36, 0.15)";
-  return "rgba(239, 68, 68, 0.15)";
+  if (score >= 80) return "color-mix(in srgb, var(--dpf-success) 15%, transparent)";
+  if (score >= 50) return "color-mix(in srgb, var(--dpf-warning) 15%, transparent)";
+  return "color-mix(in srgb, var(--dpf-error) 15%, transparent)";
 }
 
 function scoreTextColor(score: number): string {
-  if (score >= 80) return "#4ade80";
-  if (score >= 50) return "#fbbf24";
-  return "#ef4444";
+  if (score >= 80) return "var(--dpf-success)";
+  if (score >= 50) return "var(--dpf-warning)";
+  return "var(--dpf-error)";
 }
 
 type RoutingScorePillsProps = {
@@ -86,7 +86,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  const statusColor = STATUS_COLORS[provider.status] ?? "#8888a0";
+  const statusColor = STATUS_COLORS[provider.status] ?? "var(--dpf-muted)";
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const billingLabel = getBillingLabel(provider);
 
@@ -148,8 +148,8 @@ export function ServiceRow({ pw, modelSummary }: Props) {
             fontSize: 9,
             fontWeight: 700,
             letterSpacing: "0.06em",
-            color: provider.endpointType === "service" ? "#a78bfa" : "#7c8cf8",
-            background: provider.endpointType === "service" ? "#a78bfa18" : "#7c8cf818",
+            color: "var(--dpf-accent)",
+            background: "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
             padding: "1px 5px",
             borderRadius: 3,
             textTransform: "uppercase",
@@ -277,7 +277,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
                   key={tag}
                   style={{
                     fontSize: 10,
-                    color: "#a0a0c0",
+                    color: "var(--dpf-muted)",
                     background: "#ffffff0a",
                     border: "1px solid var(--dpf-border)",
                     padding: "1px 6px",

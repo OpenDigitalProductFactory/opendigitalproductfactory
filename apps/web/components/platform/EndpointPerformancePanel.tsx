@@ -70,7 +70,7 @@ const CAPABILITY_COLORS: Record<string, string> = {
 
 function ScoreBar({ score, max = 5 }: { score: number; max?: number }) {
   const pct = Math.min(100, (score / max) * 100);
-  const color = score >= 4 ? "#4ade80" : score >= 3 ? "#fbbf24" : "#ef4444";
+  const color = score >= 4 ? "var(--dpf-success)" : score >= 3 ? "var(--dpf-warning)" : "var(--dpf-error)";
   return (
     <div className="flex items-center gap-2">
       <div className="w-20 h-2 rounded-full bg-[var(--dpf-surface-2)] overflow-hidden">

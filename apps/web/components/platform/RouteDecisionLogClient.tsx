@@ -22,17 +22,17 @@ function fmtScore(n: number): string {
 
 function sensitivityColor(s: string): string {
   switch (s) {
-    case "restricted":   return "#ef4444";
+    case "restricted":   return "var(--dpf-error)";
     case "confidential": return "#f97316";
     case "internal":     return "#facc15";
-    default:             return "#4ade80";
+    default:             return "var(--dpf-success)";
   }
 }
 
 function fitnessColor(score: number): string {
-  if (score >= 70) return "#4ade80";
+  if (score >= 70) return "var(--dpf-success)";
   if (score >= 40) return "#facc15";
-  return "#ef4444";
+  return "var(--dpf-error)";
 }
 
 // ── Candidate table ───────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
                 opacity: c.excluded ? 0.5 : 1,
               }}
             >
-              <td style={{ padding: "4px 8px", color: c.excluded ? "#8888a0" : "#fff" }}>
+              <td style={{ padding: "4px 8px", color: c.excluded ? "var(--dpf-muted)" : "var(--dpf-text)" }}>
                 <span style={{ fontFamily: "monospace" }}>{c.modelId || c.endpointId}</span>
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right", color: fitnessColor(c.fitnessScore), fontFamily: "monospace" }}>
@@ -77,7 +77,7 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
                   {c.dimensionScores[d] ?? "—"}
                 </td>
               ))}
-              <td style={{ padding: "4px 8px", color: "#ef4444", fontSize: 10 }}>
+              <td style={{ padding: "4px 8px", color: "var(--dpf-error)", fontSize: 10 }}>
                 {c.excludedReason ?? ""}
               </td>
             </tr>
@@ -149,7 +149,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
         <span style={{
           fontSize: 12,
           fontWeight: 600,
-          color: isNone ? "#ef4444" : fitnessColor(row.fitnessScore),
+          color: isNone ? "var(--dpf-error)" : fitnessColor(row.fitnessScore),
           fontFamily: "monospace",
         }}>
           {isNone ? "—" : fmtScore(row.fitnessScore)}
@@ -158,7 +158,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
         {/* Selected model */}
         <span style={{
           fontSize: 11,
-          color: isNone ? "#ef4444" : "#e2e8f0",
+          color: isNone ? "var(--dpf-error)" : "var(--dpf-text)",
           fontFamily: "monospace",
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -207,7 +207,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
           {/* Excluded only */}
           {row.excludedTrace.length > 0 && (
             <>
-              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 11, fontWeight: 600, color: "#ef4444" }}>
+              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 11, fontWeight: 600, color: "var(--dpf-error)" }}>
                 Excluded ({row.excludedTrace.length})
               </div>
               <CandidateTable candidates={row.excludedTrace} />
@@ -268,9 +268,9 @@ export function RouteDecisionLogClient({ rows }: Props) {
               borderRadius: 4,
               border: "1px solid",
               cursor: "pointer",
-              borderColor: taskFilter === t ? "#7c8cf8" : "#2a2a40",
-              background: taskFilter === t ? "#1e1e3a" : "transparent",
-              color: taskFilter === t ? "#7c8cf8" : "#8888a0",
+              borderColor: taskFilter === t ? "var(--dpf-accent)" : "var(--dpf-border)",
+              background: taskFilter === t ? "var(--dpf-surface-2)" : "transparent",
+              color: taskFilter === t ? "var(--dpf-accent)" : "var(--dpf-muted)",
             }}
           >
             {t === "all" ? `All (${rows.length})` : t}

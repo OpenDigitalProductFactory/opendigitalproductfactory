@@ -151,7 +151,7 @@ export function ToolExecutionLogClient({ executions }: Props) {
                       width: 8,
                       height: 8,
                       borderRadius: "50%",
-                      background: e.success ? "#4ade80" : "#ef4444",
+                      background: e.success ? "var(--dpf-success)" : "var(--dpf-error)",
                     }} />
                   </span>
                   <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
@@ -197,7 +197,7 @@ export function ToolExecutionLogClient({ executions }: Props) {
                       margin: 0,
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-all",
-                      color: e.success ? "var(--dpf-text)" : "#ef4444",
+                      color: e.success ? "var(--dpf-text)" : "var(--dpf-error)",
                       fontSize: 11,
                       lineHeight: 1.5,
                       background: "#12121e",

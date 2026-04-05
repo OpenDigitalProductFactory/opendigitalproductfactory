@@ -65,8 +65,8 @@ export function ScheduledJobsTable({ jobs, canWrite }: Props) {
             <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>{formatDate(job.lastRunAt)}</td>
             <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>{formatDate(job.nextRunAt)}</td>
             <td style={{ padding: "6px 8px" }}>
-              {job.lastStatus === "ok"    && <span style={{ color: "#4ade80" }}>✓ ok</span>}
-              {job.lastStatus === "error" && <span style={{ color: "#f87171" }}>✗ error</span>}
+              {job.lastStatus === "ok"    && <span style={{ color: "var(--dpf-success)" }}>✓ ok</span>}
+              {job.lastStatus === "error" && <span style={{ color: "var(--dpf-error)" }}>✗ error</span>}
               {!job.lastStatus            && <span style={{ color: "var(--dpf-muted)" }}>—</span>}
             </td>
             <td style={{ padding: "6px 8px", textAlign: "right" }}>

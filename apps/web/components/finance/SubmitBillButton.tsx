@@ -36,7 +36,7 @@ export function SubmitBillButton({ billId }: Props) {
         {loading ? "Submitting…" : "Submit for Approval"}
       </button>
       {error && (
-        <p className="mt-2 text-xs text-[#ef4444]">{error}</p>
+        <p className="mt-2 text-xs text-[var(--dpf-error)]">{error}</p>
       )}
     </div>
   );

@@ -45,7 +45,7 @@ export function DonationForm({ orgSlug }: { orgSlug: string }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 480 }}>
-      {error && <div style={{ color: "#dc2626", fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
       <div>
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Select amount</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

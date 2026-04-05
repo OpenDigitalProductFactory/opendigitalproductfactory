@@ -65,7 +65,7 @@ export function InquiryForm({
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
-      {error && <div style={{ color: "#dc2626", fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
       {formSchema.map((field) => (
         <div key={field.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 500, color: "var(--dpf-text)" }}>

@@ -29,8 +29,8 @@ type Props = {
 };
 
 const CTA_BADGES: Record<string, { color: string; label: string }> = {
-  booking: { color: "#a78bfa", label: "Booking" },
-  purchase: { color: "#4ade80", label: "Purchase" },
+  booking: { color: "var(--dpf-accent)", label: "Booking" },
+  purchase: { color: "var(--dpf-success)", label: "Purchase" },
   inquiry: { color: "#fb923c", label: "Inquiry" },
   donation: { color: "#f472b6", label: "Donation" },
 };
@@ -216,7 +216,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
       {/* Item cards */}
       <div className="space-y-2">
         {filtered.map((item, idx) => {
-          const badge = CTA_BADGES[item.ctaType] ?? { color: "#8888a0", label: item.ctaType };
+          const badge = CTA_BADGES[item.ctaType] ?? { color: "var(--dpf-muted)", label: item.ctaType };
           return (
             <div
               key={item.id}
@@ -267,7 +267,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
                 <button
                   onClick={() => toggleActive(item.id, !item.isActive)}
                   className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  style={{ color: item.isActive ? "#4ade80" : "var(--dpf-muted)" }}
+                  style={{ color: item.isActive ? "var(--dpf-success)" : "var(--dpf-muted)" }}
                   title={item.isActive ? "Deactivate" : "Activate"}
                 >
                   {item.isActive ? "On" : "Off"}

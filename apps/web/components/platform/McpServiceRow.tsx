@@ -6,11 +6,11 @@ import Link from "next/link";
 import type { McpServerGridRow } from "@/lib/ai-provider-types";
 
 const HEALTH_COLORS: Record<string, string> = {
-  healthy:     "#4ade80",
-  degraded:    "#fbbf24",
-  unhealthy:   "#ef4444",
-  unreachable: "#ef4444",
-  unknown:     "#8888a0",
+  healthy:     "var(--dpf-success)",
+  degraded:    "var(--dpf-warning)",
+  unhealthy:   "var(--dpf-error)",
+  unreachable: "var(--dpf-error)",
+  unknown:     "var(--dpf-muted)",
 };
 
 const TRANSPORT_LABELS: Record<string, string> = {
@@ -80,8 +80,8 @@ export function McpServiceRow({ server }: { server: McpServerGridRow }) {
               fontSize: 9,
               fontWeight: 700,
               letterSpacing: "0.06em",
-              color: "#a78bfa",
-              background: "#a78bfa18",
+              color: "var(--dpf-accent)",
+              background: "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
               padding: "1px 5px",
               borderRadius: 3,
               textTransform: "uppercase",
@@ -157,7 +157,7 @@ export function McpServiceRow({ server }: { server: McpServerGridRow }) {
                   key={tag}
                   style={{
                     fontSize: 10,
-                    color: "#a0a0c0",
+                    color: "var(--dpf-muted)",
                     background: "#ffffff0a",
                     border: "1px solid var(--dpf-border)",
                     padding: "1px 6px",

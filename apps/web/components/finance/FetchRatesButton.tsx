@@ -31,10 +31,10 @@ export function FetchRatesButton() {
   return (
     <div className="flex items-center gap-2">
       {message && (
-        <span className="text-[10px]" style={{ color: "#4ade80" }}>{message}</span>
+        <span className="text-[10px]" style={{ color: "var(--dpf-success)" }}>{message}</span>
       )}
       {error && (
-        <span className="text-[10px]" style={{ color: "#ef4444" }}>{error}</span>
+        <span className="text-[10px]" style={{ color: "var(--dpf-error)" }}>{error}</span>
       )}
       <button
         type="button"

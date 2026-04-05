@@ -75,7 +75,7 @@ export function ExpenseClaimActions({ claimId, status, approvalToken }: Props) {
               onClick={handleApprove}
               disabled={isDisabled}
               className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "#4ade80", color: "#000" }}
+              style={{ backgroundColor: "var(--dpf-success)", color: "#000" }}
             >
               {loading === "approve" ? "Approving…" : "Approve"}
             </button>
@@ -83,7 +83,7 @@ export function ExpenseClaimActions({ claimId, status, approvalToken }: Props) {
               onClick={handleReject}
               disabled={isDisabled}
               className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "#ef4444" }}
+              style={{ backgroundColor: "var(--dpf-error)" }}
             >
               {loading === "reject" ? "Rejecting…" : "Reject"}
             </button>
@@ -96,13 +96,13 @@ export function ExpenseClaimActions({ claimId, status, approvalToken }: Props) {
           onClick={handleReimburse}
           disabled={isDisabled}
           className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-          style={{ backgroundColor: "#22c55e" }}
+          style={{ backgroundColor: "var(--dpf-success)" }}
         >
           {loading === "reimburse" ? "Marking…" : "Mark as Reimbursed"}
         </button>
       )}
 
-      {error && <p className="text-xs text-[#ef4444]">{error}</p>}
+      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
     </div>
   );
 }

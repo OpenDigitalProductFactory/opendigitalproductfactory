@@ -127,7 +127,7 @@ export function OllamaManagement({ canWrite }: Props) {
           {running.length > 0 && (
             <div>
               <span style={{ color: "var(--dpf-muted)" }}>VRAM: </span>
-              <span style={{ color: "#4ade80", fontWeight: 500 }}>{totalVramGb.toFixed(1)} GB</span>
+              <span style={{ color: "var(--dpf-success)", fontWeight: 500 }}>{totalVramGb.toFixed(1)} GB</span>
               <span style={{ color: "var(--dpf-muted)" }}> ({running.length} loaded)</span>
             </div>
           )}
@@ -135,7 +135,7 @@ export function OllamaManagement({ canWrite }: Props) {
       )}
 
       {error && (
-        <div style={{ color: "#ef4444", fontSize: 11, marginBottom: 12 }}>{error}</div>
+        <div style={{ color: "var(--dpf-error)", fontSize: 11, marginBottom: 12 }}>{error}</div>
       )}
 
       {pullStatus && (
@@ -144,9 +144,9 @@ export function OllamaManagement({ canWrite }: Props) {
           padding: "6px 10px",
           borderRadius: 4,
           marginBottom: 12,
-          background: pullStatus.startsWith("Failed") ? "rgba(239,68,68,0.1)" : "rgba(74,222,128,0.1)",
-          color: pullStatus.startsWith("Failed") ? "#ef4444" : "#4ade80",
-          border: `1px solid ${pullStatus.startsWith("Failed") ? "rgba(239,68,68,0.3)" : "rgba(74,222,128,0.3)"}`,
+          background: pullStatus.startsWith("Failed") ? "color-mix(in srgb, var(--dpf-error) 10%, transparent)" : "color-mix(in srgb, var(--dpf-success) 10%, transparent)",
+          color: pullStatus.startsWith("Failed") ? "var(--dpf-error)" : "var(--dpf-success)",
+          border: `1px solid ${pullStatus.startsWith("Failed") ? "color-mix(in srgb, var(--dpf-error) 30%, transparent)" : "color-mix(in srgb, var(--dpf-success) 30%, transparent)"}`,
         }}>
           {isPending && pullStatus.startsWith("Pulling") ? (
             <span className="animate-pulse">{pullStatus}</span>
@@ -183,9 +183,9 @@ export function OllamaManagement({ canWrite }: Props) {
               fontSize: 11,
               padding: "6px 14px",
               borderRadius: 4,
-              border: "1px solid rgba(74,222,128,0.4)",
-              background: "rgba(74,222,128,0.1)",
-              color: "#4ade80",
+              border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)",
+              background: "color-mix(in srgb, var(--dpf-success) 10%, transparent)",
+              color: "var(--dpf-success)",
               cursor: "pointer",
               opacity: isPending || !pullName.trim() ? 0.5 : 1,
             }}
@@ -222,8 +222,8 @@ export function OllamaManagement({ canWrite }: Props) {
                   gap: 8,
                   padding: "8px 10px",
                   borderRadius: 6,
-                  background: isRunning ? "rgba(74,222,128,0.05)" : "transparent",
-                  border: `1px solid ${isRunning ? "rgba(74,222,128,0.2)" : "var(--dpf-border)"}`,
+                  background: isRunning ? "color-mix(in srgb, var(--dpf-success) 5%, transparent)" : "transparent",
+                  border: `1px solid ${isRunning ? "color-mix(in srgb, var(--dpf-success) 20%, transparent)" : "var(--dpf-border)"}`,
                 }}
               >
                 {/* Status dot */}
@@ -231,7 +231,7 @@ export function OllamaManagement({ canWrite }: Props) {
                   width: 6,
                   height: 6,
                   borderRadius: "50%",
-                  background: isRunning ? "#4ade80" : "#555",
+                  background: isRunning ? "var(--dpf-success)" : "#555",
                   flexShrink: 0,
                 }} />
 
@@ -242,7 +242,7 @@ export function OllamaManagement({ canWrite }: Props) {
                       {m.name}
                     </span>
                     {isRunning && (
-                      <span style={{ fontSize: 9, color: "#4ade80", padding: "1px 4px", borderRadius: 3, background: "rgba(74,222,128,0.15)" }}>
+                      <span style={{ fontSize: 9, color: "var(--dpf-success)", padding: "1px 4px", borderRadius: 3, background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)" }}>
                         loaded
                       </span>
                     )}
@@ -251,7 +251,7 @@ export function OllamaManagement({ canWrite }: Props) {
                     {m.parameterSize && <span>{m.parameterSize}</span>}
                     {m.quantization && <span>{m.quantization}</span>}
                     <span>{m.sizeGb} GB</span>
-                    {runInfo && <span style={{ color: "#4ade80" }}>VRAM: {runInfo.sizeVramGb} GB</span>}
+                    {runInfo && <span style={{ color: "var(--dpf-success)" }}>VRAM: {runInfo.sizeVramGb} GB</span>}
                   </div>
                 </div>
 
@@ -267,9 +267,9 @@ export function OllamaManagement({ canWrite }: Props) {
                           fontSize: 10,
                           padding: "3px 8px",
                           borderRadius: 3,
-                          border: "1px solid rgba(239,68,68,0.5)",
-                          background: "rgba(239,68,68,0.2)",
-                          color: "#ef4444",
+                          border: "1px solid color-mix(in srgb, var(--dpf-error) 50%, transparent)",
+                          background: "color-mix(in srgb, var(--dpf-error) 20%, transparent)",
+                          color: "var(--dpf-error)",
                           cursor: "pointer",
                         }}
                       >
@@ -300,9 +300,9 @@ export function OllamaManagement({ canWrite }: Props) {
                         fontSize: 10,
                         padding: "3px 8px",
                         borderRadius: 3,
-                        border: "1px solid rgba(239,68,68,0.2)",
+                        border: "1px solid color-mix(in srgb, var(--dpf-error) 20%, transparent)",
                         background: "transparent",
-                        color: "#ef4444",
+                        color: "var(--dpf-error)",
                         cursor: "pointer",
                         opacity: 0.6,
                       }}

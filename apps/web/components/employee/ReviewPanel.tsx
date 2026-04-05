@@ -7,15 +7,15 @@ import { useRouter } from "next/navigation";
 import { DatePicker } from "@/components/ui/DatePicker";
 
 const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  active: "#38bdf8",
-  completed: "#4ade80",
+  draft: "var(--dpf-muted)",
+  active: "var(--dpf-info)",
+  completed: "var(--dpf-success)",
 };
 
 const FEEDBACK_COLOURS: Record<string, string> = {
-  praise: "#4ade80",
+  praise: "var(--dpf-success)",
   constructive: "#fb923c",
-  observation: "#38bdf8",
+  observation: "var(--dpf-info)",
 };
 
 type Props = {
@@ -123,7 +123,7 @@ export function ReviewPanel({ cycles, feedback }: Props) {
         ) : (
           <div className="space-y-2">
             {cycles.map((c) => {
-              const colour = STATUS_COLOURS[c.status] ?? "#8888a0";
+              const colour = STATUS_COLOURS[c.status] ?? "var(--dpf-muted)";
               return (
                 <div key={c.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colour }} />
@@ -141,7 +141,7 @@ export function ReviewPanel({ cycles, feedback }: Props) {
                       type="button"
                       disabled={isPending}
                       onClick={() => handleActivate(c.cycleId)}
-                      className="text-[10px] px-2 py-0.5 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
+                      className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-success)]/30 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50"
                     >
                       Activate
                     </button>
@@ -167,7 +167,7 @@ export function ReviewPanel({ cycles, feedback }: Props) {
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className="text-[9px] px-1.5 py-0.5 rounded"
-                    style={{ background: `${FEEDBACK_COLOURS[f.feedbackType] ?? "#888"}15`, color: FEEDBACK_COLOURS[f.feedbackType] ?? "#888" }}
+                    style={{ background: `color-mix(in srgb, ${FEEDBACK_COLOURS[f.feedbackType] ?? "var(--dpf-muted)"} 8%, transparent)`, color: FEEDBACK_COLOURS[f.feedbackType] ?? "var(--dpf-muted)" }}
                   >
                     {f.feedbackType}
                   </span>

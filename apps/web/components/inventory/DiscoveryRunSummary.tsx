@@ -55,7 +55,7 @@ export function DiscoveryRunSummary({
             {isPending ? "Running..." : "Run Sweep"}
           </button>
           {run && (
-            <span className="rounded-full bg-[#4ade8020] px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[#4ade80]">
+            <span className="rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--dpf-success)]" style={{ background: "color-mix(in srgb, var(--dpf-success) 13%, transparent)" }}>
               {run.status}
             </span>
           )}
@@ -73,7 +73,7 @@ export function DiscoveryRunSummary({
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
             Stale
           </p>
-          <p className="mt-1 text-xl font-semibold text-[#fbbf24]">{health.staleEntities}</p>
+          <p className="mt-1 text-xl font-semibold text-[var(--dpf-warning)]">{health.staleEntities}</p>
         </div>
         <div className="rounded-lg bg-[var(--dpf-surface-2)] p-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
