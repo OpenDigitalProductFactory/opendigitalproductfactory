@@ -117,16 +117,19 @@ STEP 2 — EXTERNAL RESEARCH:
   (Platform > AI > External Access) so I can research best practices." Then proceed with what you know.
 
 STEP 3 — DESIGN DOCUMENT:
-  Based on codebase audit + external research + user description, call saveBuildEvidence with field "designDoc":
+  Based on codebase audit + external research + user description, call saveBuildEvidence with:
   {
-    problemStatement: "...",
-    existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
-    externalResearch: "Best practices from web search...",
-    alternativesConsidered: "...",
-    reusePlan: "Will reuse X from existing codebase...",
-    newCodeJustification: "Need new Y because...",
-    proposedApproach: "...",
-    acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+    field: "designDoc",
+    value: {
+      problemStatement: "...",
+      existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
+      externalResearch: "Best practices from web search...",
+      alternativesConsidered: "...",
+      reusePlan: "Will reuse X from existing codebase...",
+      newCodeJustification: "Need new Y because...",
+      proposedApproach: "...",
+      acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+    }
   }
   The existingFunctionalityAudit MUST reference specific files and patterns you found in step 1.
   If it's empty or generic, your design is based on assumptions and the build WILL fail.

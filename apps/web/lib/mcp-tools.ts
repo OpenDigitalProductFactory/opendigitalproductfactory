@@ -2122,6 +2122,15 @@ export async function executeTool(
       const field = String(params.field ?? "");
       const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"];
       if (!allowedFields.includes(field)) return { success: false, error: `Invalid field: ${field}`, message: `Field must be one of: ${allowedFields.join(", ")}` };
+      const topLevelValue = Object.fromEntries(
+        Object.entries(params).filter(([key]) => key !== "field" && key !== "value"),
+      );
+      const normalizedValue =
+        params.value !== undefined
+          ? params.value
+          : Object.keys(topLevelValue).length > 0
+            ? topLevelValue
+            : undefined;
 
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
@@ -2133,7 +2142,7 @@ export async function executeTool(
       // Reject design docs that skip codebase research — they lead to builds
       // with wrong auth patterns, wrong field names, and wrong imports.
       if (field === "designDoc") {
-        const doc = params.value as Record<string, unknown> | null;
+        const doc = normalizedValue as Record<string, unknown> | null;
         const audit = String(doc?.existingFunctionalityAudit ?? "");
         if (!audit || audit.length < 20) {
           return {
@@ -2150,7 +2159,7 @@ export async function executeTool(
       // silently falls back to a single agent doing everything — no data architect,
       // no frontend engineer, no QA. Reject malformed plans early.
       if (field === "buildPlan") {
-        const plan = params.value as Record<string, unknown> | null;
+        const plan = normalizedValue as Record<string, unknown> | null;
         const fileStructure = plan?.fileStructure;
         const tasks = plan?.tasks;
 
@@ -2190,7 +2199,7 @@ export async function executeTool(
 
       // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
       // The AI often omits it, causing the gate to treat null as false.
-      let fieldValue = params.value as Record<string, unknown>;
+      let fieldValue = normalizedValue as Record<string, unknown>;
       if (field === "verificationOut" && typeof fieldValue === "object" && fieldValue !== null) {
         if (fieldValue.typecheckPassed === undefined || fieldValue.typecheckPassed === null) {
           fieldValue = { ...fieldValue, typecheckPassed: true };
@@ -2204,7 +2213,7 @@ export async function executeTool(
       if (field === "designDoc") {
         const currentBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { brief: true, title: true, phase: true } });
         if (currentBuild && !currentBuild.brief) {
-          const doc = params.value as Record<string, unknown> | null;
+          const doc = normalizedValue as Record<string, unknown> | null;
           updateData.brief = {
             title: currentBuild.title,
             description: (doc?.problemStatement as string) ?? currentBuild.title,
