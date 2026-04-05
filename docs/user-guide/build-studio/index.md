@@ -10,12 +10,15 @@ updatedBy: Claude (Software Engineer)
 
 Build Studio is the platform's feature development environment. It guides a new capability from initial idea through to a shipped, tested, and deployed feature using a five-phase pipeline. AI agents assist at each phase, handling research, planning, code generation, and deployment while keeping a human in control of decisions.
 
+Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
+
 ## Key Concepts
 
 - **Phases** — The five stages every feature moves through: Ideate (define the problem), Plan (design the solution), Build (generate and test code), Review (quality gates), Ship (deploy to production).
 - **Feature Brief** — The structured output of the Ideate phase. It captures the problem, desired outcome, constraints, and acceptance criteria. Everything downstream is built from this.
 - **AI Coworker** — The Software Engineer agent that works with you through each phase. It searches the codebase, writes code, runs tests, and deploys features. You guide it with plain language.
 - **Sandbox** — An isolated execution environment where generated code runs safely without affecting the production platform. Each sandbox has its own database, file system, and network.
+- **Shared Workspace** — The durable source workspace for this install. Build Studio reads and writes here, and in customizable installs VS Code uses the same codebase.
 - **Live Preview** — During the Build phase, a real-time preview shows the generated UI in an iframe. The preview updates automatically as the AI Coworker writes code.
 - **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, test results, typecheck).
 - **Promotion** — The process of moving a completed feature from the sandbox into production. Includes database backup, image rebuild, health check, and automatic rollback on failure.
@@ -55,3 +58,4 @@ The AI Coworker registers the feature as a digital product, creates a promotion 
 ## Related
 
 - [Feature Deployment](deployment) — How the deployment pipeline works, safety guarantees, and rollback
+- [Development Workspace](../development-workspace) — How Build Studio, VS Code, policy states, and validation environments fit together

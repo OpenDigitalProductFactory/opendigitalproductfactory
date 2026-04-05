@@ -516,7 +516,9 @@ export function getBuildContextSection(ctx: BuildContext): string {
   if (ctx.contributionMode) {
     lines.push("");
     if (ctx.phase === "ideate" || ctx.phase === "plan") {
-      const modeExplain = ctx.contributionMode === "contribute_all"
+      const modeExplain = ctx.contributionMode === "policy_pending"
+        ? "production promotion and upstream contribution stay blocked until platform development policy is configured in the portal"
+        : ctx.contributionMode === "contribute_all"
         ? "contributions are sent upstream by default — flag any proprietary data models or trade secrets in your design"
         : ctx.contributionMode === "selective"
         ? "the user will be asked whether to contribute each feature"

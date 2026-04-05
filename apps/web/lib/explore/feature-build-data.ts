@@ -208,7 +208,7 @@ export async function getFeatureBuildForContext(
     where: { id: "singleton" },
     select: { contributionMode: true },
   });
-  const contributionMode = devConfig?.contributionMode ?? "selective";
+  const contributionMode = devConfig?.contributionMode ?? "policy_pending";
 
   // Resolve taxonomy path and sibling products for richer context
   let taxonomyContext: { path: string; siblingProducts: string[] } | undefined;

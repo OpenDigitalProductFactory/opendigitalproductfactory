@@ -596,7 +596,7 @@ export async function sendMessage(input: {
       // Ship phase: inject contribution mode context for STEP 5 advisory
       try {
         const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
-        const mode = devConfig?.contributionMode ?? "fork_only";
+        const mode = devConfig?.contributionMode ?? "policy_pending";
         const hasRepo = !!devConfig?.gitRemoteUrl;
         const hasDco = !!devConfig?.dcoAcceptedAt;
 
@@ -605,6 +605,14 @@ export async function sendMessage(input: {
           `## Platform Contribution Mode: ${mode}`,
           "",
         ];
+
+        if (mode === "policy_pending") {
+          modeContext.push(
+            "Platform Development policy is not configured yet.",
+            "The user can keep testing and validating, but production promotion and upstream contribution should stay blocked until Admin > Platform Development is completed.",
+            "",
+          );
+        }
 
         if (mode === "fork_only" && !hasRepo) {
           const untrackedCount = await prisma.featureBuild.count({

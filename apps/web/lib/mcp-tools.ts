@@ -3083,6 +3083,21 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
 
+      const devConfig = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: { contributionMode: true, gitRemoteUrl: true },
+      });
+      const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
+      const policyState = getPlatformDevPolicyState(devConfig);
+      if (policyState === "policy_pending") {
+        return {
+          success: false,
+          error: "Platform development policy not configured.",
+          message:
+            "Build Studio can keep editing and validating in the shared workspace, but production promotion stays blocked until Platform Development is configured in the portal. Go to Admin > Platform Development and choose whether this install stays private or can contribute upstream.",
+        };
+      }
+
       // Extract diff from sandbox
       const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/sandbox-promotion");
       const extracted = await extractAndCategorizeDiff(build.sandboxId);
@@ -3154,7 +3169,6 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       // Contribution mode awareness (EP-BUILD-HANDOFF-002 Phase 2e extension)
       let contributionModeInfo = "";
       try {
-        const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
         const mode = devConfig?.contributionMode ?? "fork_only";
 
         if (mode === "fork_only" && !devConfig?.gitRemoteUrl) {
@@ -3810,6 +3824,29 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
+      const devConfig = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true },
+      });
+      const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
+      const policyState = getPlatformDevPolicyState(devConfig);
+      if (policyState === "policy_pending") {
+        return {
+          success: false,
+          error: "Platform development policy not configured.",
+          message:
+            "Contribution is blocked until Platform Development is configured in the portal. Finish that setup first, then decide whether this install stays private or contributes governed changes upstream.",
+        };
+      }
+      if (devConfig?.contributionMode === "fork_only") {
+        return {
+          success: false,
+          error: "Install is configured for private development only.",
+          message:
+            "This install is configured to keep shipped features private. Change Platform Development settings if you want Build Studio to create upstream contributions.",
+        };
+      }
+
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
         select: {
@@ -3865,7 +3902,6 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       // Create upstream PR if configured (EP-BUILD-HANDOFF-002 contribution mode)
       let prUrl: string | null = null;
       try {
-        const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
         const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
         const hasDco = !!devConfig?.dcoAcceptedAt;
 

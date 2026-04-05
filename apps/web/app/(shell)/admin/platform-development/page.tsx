@@ -1,9 +1,15 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
-import { getPlatformDevConfig, getUntrackedFeatureCount, hasGitBackupCredential } from "@/lib/actions/platform-dev-config";
+import {
+  getPlatformDevConfig,
+  getUntrackedFeatureCount,
+  hasGitBackupCredential,
+} from "@/lib/actions/platform-dev-config";
+import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
+  const policyState: PlatformDevPolicyState = config?.policyState ?? "policy_pending";
   const untrackedCount = config?.contributionMode === "fork_only"
     ? await getUntrackedFeatureCount()
     : 0;
@@ -17,6 +23,7 @@ export default async function AdminPlatformDevelopmentPage() {
       </div>
       <AdminTabNav />
       <PlatformDevelopmentForm
+        policyState={policyState}
         currentMode={(config?.contributionMode as "fork_only" | "selective" | "contribute_all") ?? null}
         configuredAt={config?.configuredAt?.toISOString() ?? null}
         configuredByEmail={config?.configuredBy?.email ?? null}

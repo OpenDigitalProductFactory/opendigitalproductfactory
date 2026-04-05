@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "DPF: Dev Server",
+      "label": "DPF: Shared Workspace Dev Server",
       "type": "shell",
       "command": "cmd",
       "args": [
@@ -45,16 +45,16 @@
       "problemMatcher": "$tsc"
     },
     {
-      "label": "DPF: Dev Infrastructure",
+      "label": "DPF: Shared Workspace Infrastructure",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose up -d postgres neo4j qdrant portal-init sandbox"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
-      "detail": "Start databases + sandbox only (for local pnpm dev)"
+      "detail": "Start databases + validation services for shared-workspace development"
     },
     {
-      "label": "DPF: Start",
+      "label": "DPF: Start Production Runtime",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose up -d"],
@@ -63,7 +63,7 @@
       "detail": "Start full Docker stack including portal"
     },
     {
-      "label": "DPF: Stop",
+      "label": "DPF: Stop Production Runtime",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose down"],
@@ -71,7 +71,7 @@
       "problemMatcher": []
     },
     {
-      "label": "DPF: Restart",
+      "label": "DPF: Restart Production Runtime",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose down && docker compose up -d"],
@@ -79,7 +79,7 @@
       "problemMatcher": []
     },
     {
-      "label": "DPF: Logs",
+      "label": "DPF: Production Runtime Logs",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose logs -f --tail 50"],
@@ -87,14 +87,14 @@
       "problemMatcher": []
     },
     {
-      "label": "DPF: Rebuild Portal",
+      "label": "DPF: Rebuild Production Runtime",
       "type": "shell",
       "command": "cmd",
       "args": ["/c", "docker compose build portal portal-init && docker compose up -d portal-init && docker compose up -d portal"],
       "options": { "cwd": "${workspaceFolder}" },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Rebuild portal image from source and restart (includes migrations)"
+      "detail": "Rebuild the production runtime image from source and restart it (includes migrations)"
     },
     {
       "label": "DPF: Rebuild All",
@@ -107,7 +107,7 @@
       "detail": "Rebuild all images and restart full stack"
     },
     {
-      "label": "DPF: Publish Release",
+      "label": "DPF: Publish Release (Maintainer)",
       "type": "shell",
       "command": "$latest = git tag --sort=-version:refname | Select-Object -First 1; Write-Host \"Last release: $latest\" -ForegroundColor Cyan; $tag = Read-Host 'Enter version tag'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\" -ForegroundColor Green",
       "options": {

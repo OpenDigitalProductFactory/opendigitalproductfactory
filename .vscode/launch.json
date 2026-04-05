@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Next.js: dev server",
+      "name": "Next.js: shared workspace dev server",
       "type": "node-terminal",
       "request": "launch",
       "command": "pnpm --filter web dev",

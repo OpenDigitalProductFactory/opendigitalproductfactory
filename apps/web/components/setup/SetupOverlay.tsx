@@ -34,12 +34,13 @@ const STEP_WELCOME: Record<string, string> = {
     "If your business serves customers directly, you can configure the storefront here. If not, you can skip this and come back if you need it later.\n\n" +
     "When enabled, the welcome page will show a Customer Portal login option alongside the Employee & Admin login.",
   "platform-development":
-    "This is the Platform Development configuration. Here you decide how customisations made in Build Studio are handled after they're shipped.\n\n" +
-    "You have three choices: keep everything private on your platform, share selectively when the AI suggests it, or contribute everything back to the community by default.\n\n" +
+    "This is the Platform Development configuration. Here you decide how features from your shared development workspace are governed when they move toward production or community contribution.\n\n" +
+    "Build Studio always uses this policy, and in customizable installs VS Code works from the same codebase too. The choice here controls whether shipped changes stay private, are shared selectively, or are contributed by default.\n\n" +
     "Pick whichever feels right — you can change this at any time from Admin > Platform Development.",
   "build-studio":
     "This is the Build Studio — one of the most powerful features of the platform.\n\n" +
     "If you need something the platform doesn't have out of the box, you can describe what you need and the AI workforce will help build it: new workflows, reports, integrations, custom pages — whatever your business requires.\n\n" +
+    "Build Studio works from the same shared codebase used by this install. In customizable mode, that means Build Studio and VS Code stay aligned instead of creating separate copies of the platform.\n\n" +
     "Anything you build can be kept private or donated back to the community so other businesses benefit too.",
   "workspace":
     "This is your workspace — where you and your team do day-to-day work.\n\n" +

@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -47,13 +48,20 @@ export async function savePlatformDevConfig(mode: ContributionMode) {
 }
 
 export async function getPlatformDevConfig() {
-  return prisma.platformDevConfig.findUnique({
+  const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     include: {
       configuredBy: { select: { email: true } },
       dcoAcceptedBy: { select: { email: true } },
     },
   });
+
+  if (!config) return null;
+
+  return {
+    ...config,
+    policyState: getPlatformDevPolicyState(config),
+  };
 }
 
 export async function acceptDco(): Promise<{ accepted: boolean; error?: string }> {
