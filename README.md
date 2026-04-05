@@ -44,10 +44,10 @@ The installer asks one question: **Ready to go** or **Customizable**.
 
 | Mode | Who it's for | What happens |
 |------|-------------|--------------|
-| **Ready to go** | Business users, anyone who wants to run it | Pulls pre-built images. No source code, no build step. Running in minutes. |
-| **Customizable** | Developers, power users who want to modify the platform | Clones the full source and builds locally. Your changes live on a custom branch. |
+| **Ready to go** | Business users, anyone who wants to run it | Pulls pre-built images. Build Studio is the guided interface for extending the platform. |
+| **Customizable** | Developers, power users who want to modify the platform | Clones the full source and builds locally. Build Studio and VS Code use the same shared workspace. |
 
-Both modes include the full platform with AI co-workers, Build Studio sandbox, and all features. The difference is whether you have source code to modify.
+Both modes include the full platform with AI co-workers, Build Studio sandbox, and all features. The difference is whether direct VS Code access is part of the supported workflow. Contribution policy is configured later in the portal for both modes.
 
 ### Quick Start (Windows)
 
@@ -75,13 +75,25 @@ That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI mo
 
 | | Ready to go | Customizable |
 |---|---|---|
-| **Source code** | No (pre-built images from GHCR) | Yes (full git clone) |
+| **Shared workspace** | Yes, used through Build Studio | Yes, used through Build Studio and VS Code |
+| **Source code checkout** | No local checkout required | Yes (full git clone) |
 | **Docker build** | No (`docker compose pull`) | Yes (`docker compose build`) |
 | **Git required** | No | Yes |
-| **Modify the platform** | Via Build Studio (in-app) | Build Studio + direct code changes |
-| **Contribute upstream** | Via in-app PR workflow (coming soon) | Git branch + PR |
+| **Modify the platform** | Via Build Studio (in-app) | Build Studio + direct code changes in the same workspace |
+| **Contribution setup** | Configured later in the portal | Configured later in the portal |
 | **Install time** | ~5 minutes (mostly download) | ~10 minutes (includes build) |
 | **Disk footprint** | ~2 GB (images only) | ~5 GB (source + images) |
+
+### Shared Workspace Model
+
+Self-developing installs use one shared workspace per install.
+
+- Build Studio always works from that workspace
+- in customizable installs, VS Code works from that same workspace too
+- production promotion remains governed through the portal
+- contribution mode is introduced during install but configured later in the portal
+
+See [docs/user-guide/development-workspace.md](docs/user-guide/development-workspace.md) for the full operating model.
 
 ---
 
@@ -209,14 +221,10 @@ Login: `admin@dpf.local` / `changeme123`
 - Pre-installed extensions: ESLint, Prisma, Tailwind CSS, Prettier
 - Hot-reload Next.js dev server
 
-#### For Non-Technical Users
-
-The dev environment is also accessible from the production portal's Build Studio. AI co-workers can develop and test features against the dev environment without VS Code.
-
 #### Important Notes
 
-- Build Studio is read-only in the dev environment (builds are managed from production)
-- Changes made in dev are promoted to production through a governed process (coming soon)
+- Build Studio and VS Code should be treated as complementary interfaces, not separate source trees
+- Production promotion still belongs to the portal's governed workflow
 - The sanitized clone runs on first startup -- production must be running as the data source
 
 ---

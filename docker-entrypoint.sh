@@ -46,8 +46,15 @@ echo "[5/5] Bootstrapping source volume..."
 WORKSPACE=/workspace
 IMAGE_VERSION=$(cat /app/.dpf-image-version 2>/dev/null | tr -cd '[:alnum:]._-')
 IMAGE_VERSION=${IMAGE_VERSION:-dev}
+USER_MANAGED_WORKSPACE=false
 
-if [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
+if [ -d "$WORKSPACE/.git" ] && [ -f "$WORKSPACE/package.json" ]; then
+  USER_MANAGED_WORKSPACE=true
+fi
+
+if [ "$USER_MANAGED_WORKSPACE" = "true" ]; then
+  echo "  -- Existing user-managed workspace detected at /workspace, skipping bootstrap"
+elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   echo "  Bootstrapping source volume from image version $IMAGE_VERSION..."
 
   # Copy source from image to volume

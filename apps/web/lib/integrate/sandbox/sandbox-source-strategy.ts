@@ -29,6 +29,34 @@ export function buildTarExcludeFlags(): string[] {
   return TAR_EXCLUDES.map((p) => `--exclude=${p}`);
 }
 
+type SourcePaths = {
+  rootConfigDir: string;
+  packagesDir: string;
+  webAppDir: string;
+};
+
+export function buildSourcePaths(activeRoot: string | null | undefined): SourcePaths {
+  const normalizedRoot = activeRoot?.trim();
+  if (normalizedRoot) {
+    return {
+      rootConfigDir: normalizedRoot,
+      packagesDir: `${normalizedRoot}/packages`,
+      webAppDir: `${normalizedRoot}/apps/web`,
+    };
+  }
+
+  return {
+    rootConfigDir: "/app",
+    packagesDir: "/app/packages-src",
+    webAppDir: "/app/apps/web-src",
+  };
+}
+
+export function buildWorkspaceRootProbeCommand(portalContainer: string): string {
+  const projectRootVar = "${PROJECT_ROOT}";
+  return `docker exec ${portalContainer} sh -lc "if [ -n \\"${projectRootVar}\\" ] && [ -f \\"${projectRootVar}/package.json\\" ]; then printf %s \\"${projectRootVar}\\"; elif [ -f /workspace/package.json ]; then printf %s /workspace; fi"`;
+}
+
 // ─── LocalSourceStrategy ──────────────────────────────────────────────────────
 
 export class LocalSourceStrategy implements SandboxSourceStrategy {
@@ -41,22 +69,37 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
       if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
     } catch { /* fallback */ }
 
-    // 1. Copy root config files from portal image
+    let activeWorkspaceRoot: string | null = null;
+    try {
+      const { stdout } = await exec(
+        buildWorkspaceRootProbeCommand(portalContainer),
+        { timeout: 10_000 },
+      );
+      activeWorkspaceRoot = stdout.trim() || null;
+    } catch {
+      activeWorkspaceRoot = null;
+    }
+
+    const sourcePaths = buildSourcePaths(activeWorkspaceRoot);
+
+    // 1. Copy root config files from the active workspace when available,
+    //    otherwise fall back to the image-bundled source.
     const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
     for (const f of rootFiles) {
       await exec(
-        `docker exec ${portalContainer} tar -cf - -C /app ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
+        `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.rootConfigDir} ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
         { timeout: 10_000 },
       ).catch(() => console.log(`[source-strategy] ${f} not found, skipping`));
     }
 
-    // 2. Copy full source from -src paths (not standalone output)
+    // 2. Copy full source from the active shared workspace when present.
+    //    If the portal is running from an image-only bootstrap, fall back to -src paths.
     await exec(
-      `docker exec ${portalContainer} tar -cf - -C /app/packages-src . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`,
+      `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.packagesDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`,
       { timeout: 60_000 },
     );
     await exec(
-      `docker exec ${portalContainer} tar -cf - -C /app/apps/web-src . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
+      `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.webAppDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
       { timeout: 60_000 },
     );
 

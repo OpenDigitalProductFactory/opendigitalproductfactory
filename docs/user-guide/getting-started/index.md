@@ -22,6 +22,8 @@ The Digital Product Factory (DPF) is an integrated platform for managing your or
 - **Build Studio** — Develop new features through a guided 5-phase pipeline with AI assistance
 - **Operations** — Manage your delivery backlog with epics, priorities, and status tracking
 
+If you installed in customizable mode, Build Studio and VS Code are intended to complement each other from the same shared workspace. Production promotion and community contribution still flow through the portal's governed process. See the [Development Workspace](../development-workspace) guide for details.
+
 ## Navigation
 
 The top navigation bar shows the areas you have access to based on your role:
@@ -46,3 +48,4 @@ Every page has an AI coworker available via the floating action button in the bo
 
 - [Roles & Access](roles-and-access) — Understand platform roles and what each one can do
 - [AI Coworker](ai-coworker) — Learn how to work with the AI assistant
+- [Development Workspace](../development-workspace) — Learn how Build Studio, VS Code, policy states, and validation environments fit together

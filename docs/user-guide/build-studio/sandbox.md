@@ -8,7 +8,9 @@ updatedBy: Claude (Software Engineer)
 
 ## Overview
 
-The sandbox is an isolated development environment where your AI Coworker builds, tests, and refines features before they reach production. Each sandbox has its own database, file system, and runtime — completely separated from the live platform. Nothing the AI Coworker does in the sandbox can affect your production system.
+The sandbox is an isolated execution environment where your AI Coworker builds, tests, and refines features before they reach production. Each sandbox has its own database, file system, and runtime — completely separated from the live platform. Nothing the AI Coworker does in the sandbox can affect your production system.
+
+The sandbox is not the long-lived source of truth for your code. It starts from the install's shared workspace, runs validation work safely, and can be recreated whenever needed.
 
 This isolation is what makes it safe for the AI to experiment freely: modifying code, running database migrations, restarting services, and iterating on your feedback without risk.
 
@@ -17,7 +19,7 @@ This isolation is what makes it safe for the AI to experiment freely: modifying 
 When you create a new feature in Build Studio and the AI Coworker begins the Build phase, the platform:
 
 1. **Acquires a sandbox slot** from the pool of available containers
-2. **Copies the full project source** from the running portal into the sandbox workspace
+2. **Copies the active shared project source** from the running portal workspace into the sandbox workspace
 3. **Installs dependencies** (`pnpm install`, Prisma client generation)
 4. **Runs database migrations** against the sandbox's own PostgreSQL instance
 5. **Seeds the sandbox database** with a copy of your production data so the AI works with realistic information
@@ -104,7 +106,17 @@ When the feature is ready to ship, the AI Coworker (or you) triggers the `deploy
 
 Once approved, the autonomous promotion pipeline takes over. It builds a new portal image that includes the sandbox changes, swaps it into production, runs health checks, and rolls back automatically if anything fails. See [Feature Deployment](deployment.md) for the full eleven-step pipeline.
 
-The key insight is that the sandbox diff contains only the changes the AI Coworker made — not the entire codebase. The promoter starts from the current production source and overlays just the modified files, ensuring a clean, minimal deployment.
+The key insight is that the sandbox diff contains only the changes needed for that validation run — not the entire codebase. The sandbox exists to execute and verify work safely, not to replace the install's shared development workspace.
+
+## Shared Workspace Relationship
+
+Build Studio uses the install's shared workspace as its authoring source:
+
+- in ready-to-go installs, Build Studio is the guided interface over that workspace
+- in customizable installs, Build Studio and VS Code use the same workspace and branch
+- the sandbox starts from that shared workspace, then adds isolation for preview, tests, and migration rehearsal
+
+See [Development Workspace](../development-workspace) for the full operating model.
 
 ## What the AI Coworker Can and Cannot Do
 

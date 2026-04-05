@@ -45,6 +45,7 @@ const DCO_PLAIN = [
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface PlatformDevelopmentFormProps {
+  policyState: "policy_pending" | "private" | "contributing";
   currentMode: ContributionMode | null;
   configuredAt: string | null;
   configuredByEmail: string | null;
@@ -155,12 +156,24 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {/* Header */}
       <div>
         <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-1">
-          How do you want to manage your customisations?
+          Platform development policy
         </h2>
         <p className="text-xs text-[var(--dpf-muted)]">
-          This controls what happens when Build Studio ships a feature.
+          This governs how features move from the shared development workspace into production and, if enabled, into community contribution workflows.
         </p>
       </div>
+
+      {props.policyState === "policy_pending" && (
+        <div className="rounded-lg border border-[var(--dpf-accent)]/30 bg-[var(--dpf-accent)]/5 p-4">
+          <h3 className="text-sm font-semibold text-[var(--dpf-text)] mb-1">
+            Finish this before shipping features
+          </h3>
+          <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
+            Build Studio and, in customizable installs, VS Code can both work in the same shared workspace before this is configured.
+            Production promotion and Hive Mind contribution stay blocked until you choose how this install should be governed.
+          </p>
+        </div>
+      )}
 
       {/* Mode Selection — always visible */}
       <div className="space-y-3">
@@ -184,10 +197,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             />
             <div>
               <span className="text-sm font-medium text-[var(--dpf-text)]">{opt.label}</span>
-              <p className="text-xs text-[var(--dpf-muted)] mt-0.5">{opt.description}</p>
-            </div>
-          </label>
-        ))}
+            <p className="text-xs text-[var(--dpf-muted)] mt-0.5">{opt.description}</p>
+          </div>
+        </label>
+      ))}
       </div>
 
       {/* ─── Fork Only: Git Backup ──────────────────────────────────────── */}
@@ -263,10 +276,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {/* ─── Contribution Modes: Guided Wizard ──────────────────────────── */}
       {isContributionMode && wizardStep === "mode" && !isAlreadySetUp && (
         <div className="rounded-lg border border-[var(--dpf-accent)]/30 bg-[var(--dpf-accent)]/5 p-4">
-          <p className="text-sm text-[var(--dpf-text)] mb-3">
+            <p className="text-sm text-[var(--dpf-text)] mb-3">
             To share features with the community, we need to connect your platform
-            to GitHub (a service that manages code contributions).
-            This takes about 5 minutes.
+            to GitHub. Your code still lives in this install's shared workspace;
+            GitHub is only used when you choose to contribute governed changes upstream.
           </p>
           <button
             onClick={handleStartWizard}
@@ -288,6 +301,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             <p>
               When the AI Coworker finishes building a feature for you, it can
               propose sharing that feature with the wider community of platform users.
+              The shared workspace for this install remains your system of local record.
             </p>
             <p>
               Shared features are submitted as a <strong>proposed change</strong> to

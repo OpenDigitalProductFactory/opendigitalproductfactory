@@ -4,6 +4,8 @@
 import { describe, it, expect } from "vitest";
 import {
   buildTarExcludeFlags,
+  buildSourcePaths,
+  buildWorkspaceRootProbeCommand,
   LocalSourceStrategy,
   getSourceStrategy,
 } from "./sandbox-source-strategy";
@@ -71,6 +73,42 @@ describe("LocalSourceStrategy", () => {
     expect(result).toBeInstanceOf(Promise);
     // Swallow the rejection so vitest doesn't flag an unhandled rejection
     result.catch(() => {});
+  });
+});
+
+describe("buildSourcePaths", () => {
+  it("uses the active workspace when provided", () => {
+    expect(buildSourcePaths("/workspace")).toEqual({
+      rootConfigDir: "/workspace",
+      packagesDir: "/workspace/packages",
+      webAppDir: "/workspace/apps/web",
+    });
+  });
+
+  it("trims the active workspace path", () => {
+    expect(buildSourcePaths("  /custom/root  ")).toEqual({
+      rootConfigDir: "/custom/root",
+      packagesDir: "/custom/root/packages",
+      webAppDir: "/custom/root/apps/web",
+    });
+  });
+
+  it("falls back to image-bundled source when no active workspace is set", () => {
+    expect(buildSourcePaths(null)).toEqual({
+      rootConfigDir: "/app",
+      packagesDir: "/app/packages-src",
+      webAppDir: "/app/apps/web-src",
+    });
+  });
+});
+
+describe("buildWorkspaceRootProbeCommand", () => {
+  it("keeps PROJECT_ROOT as a shell variable instead of JS interpolation", () => {
+    expect(buildWorkspaceRootProbeCommand("dpf-portal-1")).toContain("${PROJECT_ROOT}");
+  });
+
+  it("targets the requested portal container", () => {
+    expect(buildWorkspaceRootProbeCommand("portal-123")).toContain("docker exec portal-123 sh -lc");
   });
 });
 
