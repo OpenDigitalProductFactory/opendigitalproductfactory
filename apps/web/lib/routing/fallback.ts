@@ -178,7 +178,7 @@ export async function callWithFallbackChain(
             );
 
           // EP-INF-004: Schedule auto-recovery
-          scheduleRecovery(entry.providerId, entry.modelId, retryMs);
+          scheduleRecovery(entry.providerId, entry.modelId);
 
         } else if (e.code === "model_not_found") {
           // EP-INF-004: Retire the specific model, not the provider

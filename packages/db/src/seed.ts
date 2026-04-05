@@ -1308,6 +1308,34 @@ async function seedAgentModelDefaults(): Promise<void> {
   console.log(`  Seeded ${seeded} agent model defaults (${existed} already configured)`);
 }
 
+async function seedWorkQueues(): Promise<void> {
+  await prisma.workQueue.upsert({
+    where: { queueId: "triage-default" },
+    create: {
+      queueId: "triage-default",
+      name: "Triage",
+      queueType: "triage",
+      routingPolicy: { mode: "manual", considerAvailability: false, considerPerformance: false, maxConcurrentPerWorker: 10 },
+      isActive: true,
+    },
+    update: {},
+  });
+
+  await prisma.workQueue.upsert({
+    where: { queueId: "escalation-default" },
+    create: {
+      queueId: "escalation-default",
+      name: "Escalation",
+      queueType: "escalation",
+      routingPolicy: { mode: "manual", considerAvailability: false, considerPerformance: false, maxConcurrentPerWorker: 10 },
+      isActive: true,
+    },
+    update: {},
+  });
+
+  console.log("  Work queues: triage-default, escalation-default");
+}
+
 async function main(): Promise<void> {
   console.log("Starting seed...");
   await seedGeographicData(prisma);
@@ -1346,6 +1374,7 @@ async function main(): Promise<void> {
   await seedAgentModelDefaults();
   await seedPlatformConfig();
   await seedStorefrontArchetypes(prisma);
+  await seedWorkQueues();
   console.log("Seed complete.");
 }
 

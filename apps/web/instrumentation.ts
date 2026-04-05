@@ -3,7 +3,11 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { startDiscoveryScheduler } = await import("@/lib/operate/discovery-scheduler");
-    startDiscoveryScheduler();
+    // Register ScheduledJob rows so the calendar shows discovery events.
+    // Actual execution handled by Inngest cron functions (lib/queue/functions/).
+    const { registerScheduledJobs } = await import("@/lib/operate/discovery-scheduler");
+    registerScheduledJobs().catch((err) =>
+      console.error("[instrumentation] Failed to register discovery jobs:", err),
+    );
   }
 }
