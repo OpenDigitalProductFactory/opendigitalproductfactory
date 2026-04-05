@@ -66,6 +66,24 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [selectedView, setSelectedView] = useState<GraphViewName>(autoView);
   const viewConfig = VIEW_CONFIGS[selectedView];
 
+  // Subnet filter (for subnet-topology view)
+  const [subnetFilter, setSubnetFilter] = useState<string>("all");
+  const availableSubnets = useMemo(() => {
+    if (selectedView !== "subnet-topology") return [];
+    return data.nodes
+      .filter((n) => {
+        const ct = (n as Record<string, unknown>).ciType;
+        return ct === "subnet" || ct === "vlan";
+      })
+      .map((n) => ({ id: n.id, name: n.name }))
+      .sort((a, b) => {
+        const aDocker = a.name.startsWith("Docker:");
+        const bDocker = b.name.startsWith("Docker:");
+        if (aDocker !== bDocker) return aDocker ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [data.nodes, selectedView]);
+
   // Layout computation
   const layoutResult = useGraphLayout(data, viewConfig, focusNodeId, dimensions);
 
@@ -78,6 +96,27 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const filteredData = useMemo(() => {
     let nodes = data.nodes.filter((n) => viewConfig.nodeTypesShown.has(n.label));
     let links = data.links.filter((l) => viewConfig.edgesShown.has(l.type));
+
+    // Subnet isolation filter
+    if (selectedView === "subnet-topology" && subnetFilter !== "all") {
+      // Find all entities that are MEMBER_OF the selected subnet
+      const memberIds = new Set<string>();
+      memberIds.add(subnetFilter); // include the subnet node itself
+      for (const link of links) {
+        if (link.type === "MEMBER_OF" && link.target === subnetFilter) {
+          memberIds.add(link.source);
+        }
+      }
+      // Also include gateways connected via ROUTES_THROUGH
+      for (const link of links) {
+        if (link.type === "ROUTES_THROUGH" && link.source === subnetFilter) {
+          memberIds.add(link.target);
+        }
+      }
+      nodes = nodes.filter((n) => memberIds.has(n.id));
+      const nodeIdSet = new Set(nodes.map((n) => n.id));
+      links = links.filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target));
+    }
 
     // Hop filtering when a focus node is set
     if (focusNodeId && maxHops > 0) {
@@ -106,7 +145,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     }
 
     return { nodes, links };
-  }, [data, viewConfig, focusNodeId, maxHops]);
+  }, [data, viewConfig, focusNodeId, maxHops, selectedView, subnetFilter]);
 
   // ─── Force simulation (exploration view only) ──────────────────────────
   const simulate = useCallback(() => {
@@ -378,25 +417,29 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     setHoveredNode(found);
   }
 
-  // ─── Scroll to zoom ──────────────────────────────────────────────────
-  function handleWheel(e: React.WheelEvent<HTMLCanvasElement>) {
-    e.preventDefault();
+  // ─── Scroll to zoom (native handler to prevent page scroll) ─────────
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(5, Math.max(0.1, zoom * zoomFactor));
-
-    // Zoom toward cursor position
-    setPan({
-      x: mouseX - (mouseX - pan.x) * (newZoom / zoom),
-      y: mouseY - (mouseY - pan.y) * (newZoom / zoom),
-    });
-    setZoom(newZoom);
-  }
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = canvas!.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      setZoom((prev) => {
+        const next = Math.max(0.2, Math.min(5, prev * zoomFactor));
+        setPan((p) => ({
+          x: mouseX - (mouseX - p.x) * (next / prev),
+          y: mouseY - (mouseY - p.y) * (next / prev),
+        }));
+        return next;
+      });
+    }
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, []);
 
   // ─── Mouse down/up for panning ────────────────────────────────────────
   function handleMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
@@ -474,6 +517,23 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           )}
         </div>
 
+        {/* Subnet filter (only for subnet-topology view) */}
+        {selectedView === "subnet-topology" && availableSubnets.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-[var(--dpf-muted)]">Subnet:</span>
+            <select
+              value={subnetFilter}
+              onChange={(e) => setSubnetFilter(e.target.value)}
+              className="text-[10px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-1.5 py-0.5 text-[var(--dpf-text)]"
+            >
+              <option value="all">All subnets</option>
+              {availableSubnets.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Hop depth (only for exploration and impact views) */}
         {(selectedView === "exploration" || selectedView === "impact-blast-radius") && (
           <div className="flex items-center gap-1.5">
@@ -510,7 +570,6 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { setHoveredNode(null); isPanningRef.current = false; }}
-          onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
           style={{
             width: "100%",
