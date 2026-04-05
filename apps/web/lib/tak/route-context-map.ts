@@ -297,8 +297,19 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     routePrefix: "/build",
     domain: "Build Studio",
     sensitivity: "internal",
-    domainContext:
-      "This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ship. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.",
+    domainContext: `This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ship. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.
+
+FRONTEND DESIGN SYSTEM — DPF Tokens:
+When generating or reviewing UI code, enforce these rules:
+- Colors: NEVER hardcode hex. Use CSS variables: var(--dpf-text), var(--dpf-text-secondary), var(--dpf-muted), var(--dpf-bg), var(--dpf-surface-1/2/3), var(--dpf-border), var(--dpf-accent), var(--dpf-success), var(--dpf-warning), var(--dpf-error), var(--dpf-info). Only exception: white text on accent buttons.
+- Elevation: shadow-dpf-xs, shadow-dpf-sm, shadow-dpf-md, shadow-dpf-lg (Tailwind classes).
+- Animation: animate-fade-in (200ms), animate-slide-up (250ms), animate-scale-in (200ms).
+- Layout: Tailwind utility classes, no component library (no shadcn/Radix/MUI). Responsive via sm:/md:/lg: breakpoints.
+- Semantic HTML: <nav>, <main>, <section>, <button> — never <span role="button"> or <div onClick>.
+- Accessibility: aria-labels on all interactive elements, focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)], role="tablist"/role="tab" for tab panels, min 44px touch targets.
+- Loading: spinner pattern: w-N h-N border-2 border-[var(--dpf-accent)] border-t-transparent rounded-full animate-spin. Skeleton: animate-pulse bg-[var(--dpf-surface-2)] rounded.
+- Contrast: var(--dpf-muted) is labels only (3.5:1). Body text must use var(--dpf-text-secondary) (5.8:1) or var(--dpf-text) (full contrast).
+- Forms: vanilla HTML inputs — globals.css provides base styling via @layer components. No form library.`,
     domainTools: [
       // Feature brief and backlog
       "update_feature_brief",
@@ -357,6 +368,54 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Review build progress",
         capability: "view_platform",
         prompt: "What's the status of my current build?",
+      },
+      {
+        label: "Design a component",
+        description: "Create a polished UI component with DPF design tokens",
+        capability: "view_platform",
+        taskType: "code_generation",
+        prompt: "I want to design a new UI component. Before writing code: ask me what the component does, what states it needs (loading, empty, error, populated), and where it fits in the layout. Then generate the component using the DPF design system: CSS variable tokens for all colors (never hardcode hex), Tailwind utility classes for layout, semantic HTML elements, accessible names on all interactive elements, focus-visible rings, and loading/skeleton states. Use animate-slide-up for entrance. Read an existing similar component first with read_project_file to match patterns.",
+      },
+      {
+        label: "Build a page",
+        description: "Scaffold a complete page with layout, data loading, and responsive design",
+        capability: "view_platform",
+        taskType: "code_generation",
+        prompt: "I want to build a new page. Ask me: what data does it display, what actions can users take, and which route should it live under. Then scaffold the full page: server component for data loading, client components for interactivity, responsive layout (sidebar + content or single-column with breakpoints), proper loading.tsx skeleton, error.tsx boundary, and semantic HTML landmarks (nav, main, section). Use read_project_file on an existing page under app/(shell)/ to match the layout pattern. All colors must use var(--dpf-*) tokens.",
+      },
+      {
+        label: "Review UI quality",
+        description: "Audit the current build for design system compliance and accessibility",
+        capability: "view_platform",
+        taskType: "analysis",
+        prompt: "Audit the UI code in this build for quality. Use list_sandbox_files to find all .tsx component files, then read_sandbox_file on each. Check for: (1) hardcoded hex colors — must use var(--dpf-*) tokens, (2) missing aria-labels on buttons/inputs, (3) <span role='button'> instead of <button>, (4) no loading/skeleton states for async operations, (5) missing focus-visible rings on interactive elements, (6) text using var(--dpf-muted) for body content (should be var(--dpf-text-secondary) for 4.5:1 contrast), (7) fixed widths without responsive breakpoints. Report each issue with file:line and a one-line fix. Then ask if I want you to fix them.",
+      },
+      {
+        label: "Add dark/light mode",
+        description: "Ensure components work in both color schemes",
+        capability: "view_platform",
+        taskType: "code_generation",
+        prompt: "Check if the current build's components properly support both light and dark mode. Use list_sandbox_files and read_sandbox_file to audit all .tsx files for: hardcoded colors that won't adapt (#fff, #000, #1a1a2e, etc.), backgrounds that assume dark mode, text colors that assume light backgrounds. The DPF design tokens auto-switch via CSS variables — any component using only var(--dpf-*) tokens will work automatically. Fix any issues found by replacing hardcoded values with the appropriate token.",
+      },
+      {
+        label: "Polish interactions",
+        description: "Add animations, hover states, and micro-interactions",
+        capability: "view_platform",
+        taskType: "code_generation",
+        prompt: "Polish the UI interactions in this build. Use list_sandbox_files and read_sandbox_file to find components, then enhance: (1) add hover states — hover:bg-[var(--dpf-surface-2)] and hover:shadow-dpf-xs on clickable cards, (2) add entrance animations — animate-slide-up with staggered delays on list items, animate-fade-in on content panels, animate-scale-in on modals, (3) add transition-colors/transition-all on interactive elements, (4) add disabled states — disabled:opacity-50 disabled:cursor-not-allowed, (5) add loading spinners on async buttons. Use edit_sandbox_file for each change.",
+      },
+      {
+        label: "Make responsive",
+        description: "Add mobile and tablet support with Tailwind breakpoints",
+        capability: "view_platform",
+        taskType: "code_generation",
+        prompt: "Make this build's UI responsive. Use list_sandbox_files and read_sandbox_file to find layout components, then fix: (1) fixed-width sidebars need w-full lg:w-[360px] with a collapse toggle, (2) grid layouts need grid-cols-1 md:grid-cols-2 lg:grid-cols-3, (3) text sizes need responsive scaling — text-sm lg:text-base, (4) touch targets must be minimum 44px on mobile, (5) tables need horizontal scroll wrappers on small screens, (6) modals/panels need max-w-[calc(100vw-2rem)] on mobile. Apply fixes with edit_sandbox_file.",
+      },
+      {
+        label: "Ship feature",
+        description: "Deploy the completed feature",
+        capability: "view_platform",
+        prompt: "I'm ready to ship this feature",
       },
       {
         label: "Report an issue",
