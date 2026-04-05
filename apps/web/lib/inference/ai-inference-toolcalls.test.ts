@@ -4,6 +4,7 @@ import {
   extractOpenAIToolCalls,
   formatMessageForAnthropic,
   formatMessageForOpenAI,
+  formatMessageForResponses,
 } from "./ai-inference";
 import type { ChatMessage } from "./ai-inference";
 
@@ -132,6 +133,43 @@ describe("formatMessagesForProvider", () => {
       const msg: ChatMessage = { role: "user", content: "hello" };
       const formatted = formatMessageForOpenAI(msg);
       expect(formatted).toEqual({ role: "user", content: "hello" });
+    });
+  });
+
+  describe("Responses API", () => {
+    it("formats assistant tool calls as separate function_call items", () => {
+      const msg: ChatMessage = {
+        role: "assistant",
+        content: "Searching...",
+        toolCalls: [{ id: "call_abc", name: "search", arguments: { q: "agent" } }],
+      };
+
+      expect(formatMessageForResponses(msg)).toEqual([
+        { role: "assistant", content: "Searching..." },
+        {
+          type: "function_call",
+          call_id: "call_abc",
+          name: "search",
+          arguments: '{"q":"agent"}',
+        },
+      ]);
+    });
+
+    it("formats tool role message as function_call_output", () => {
+      const msg: ChatMessage = {
+        role: "tool",
+        content: "Found 3 files",
+        toolCallId: "call_abc",
+      };
+
+      expect(formatMessageForResponses(msg)).toEqual([
+        { type: "function_call_output", call_id: "call_abc", output: "Found 3 files" },
+      ]);
+    });
+
+    it("passes plain messages through as a single input item", () => {
+      const msg: ChatMessage = { role: "user", content: "hello" };
+      expect(formatMessageForResponses(msg)).toEqual([{ role: "user", content: "hello" }]);
     });
   });
 });

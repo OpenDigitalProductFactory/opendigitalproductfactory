@@ -7,7 +7,7 @@ import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEn
 import {
   InferenceError,
   classifyHttpError,
-  formatMessageForOpenAI,
+  formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 
@@ -141,7 +141,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const body: Record<string, unknown> = {
       model: modelId,
-      input: messages.map((message) => formatMessageForOpenAI(message)),
+      input: messages.flatMap((message) => formatMessageForResponses(message)),
       store: false,
     };
 
