@@ -109,6 +109,25 @@ vi.mock("@/lib/ai-inference", () => {
     return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
   }
 
+  function formatMessageForResponses(msg: ChatMessage) {
+    const textContent = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+    if (msg.role === "tool" && msg.toolCallId) {
+      return [{ type: "function_call_output", call_id: msg.toolCallId, output: textContent }];
+    }
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      return [
+        ...(textContent ? [{ role: "assistant", content: textContent }] : []),
+        ...msg.toolCalls.map((tc: { id: string; name: string; arguments: Record<string, unknown> }) => ({
+          type: "function_call",
+          call_id: tc.id,
+          name: tc.name,
+          arguments: JSON.stringify(tc.arguments),
+        })),
+      ];
+    }
+    return [{ role: msg.role, content: textContent }];
+  }
+
   return {
     InferenceError,
     classifyHttpError,
@@ -116,6 +135,7 @@ vi.mock("@/lib/ai-inference", () => {
     extractOpenAIToolCalls,
     formatMessageForAnthropic,
     formatMessageForOpenAI,
+    formatMessageForResponses,
   };
 });
 
@@ -652,6 +672,57 @@ describe("chatAdapter", () => {
 
     expect(result.text).toBe("Subscription fallback works.");
     expect(result.usage).toEqual({ inputTokens: 8, outputTokens: 5 });
+  });
+
+  it("ChatGPT: formats tool history as Responses items instead of nested tool_calls", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => [
+        'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":12,"output_tokens":4}}}',
+        "data: [DONE]",
+      ].join("\n"),
+      headers: new Headers(),
+    });
+
+    await chatAdapter.execute(makeRequest({
+      providerId: "chatgpt",
+      modelId: "gpt-5.4",
+      plan: makePlan({
+        providerId: "chatgpt",
+        modelId: "gpt-5.4",
+      }),
+      provider: {
+        baseUrl: "https://chatgpt.com/backend-api",
+        headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+      },
+      messages: [
+        { role: "user", content: "Find the complaint tracker." },
+        {
+          role: "assistant",
+          content: "Searching...",
+          toolCalls: [{ id: "call_search_1", name: "search_project_files", arguments: { query: "complaint tracker" } }],
+        },
+        { role: "tool", content: "[\"app/complaints/page.tsx\"]", toolCallId: "call_search_1" },
+      ],
+    }));
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.input).toEqual([
+      { role: "user", content: "Find the complaint tracker." },
+      { role: "assistant", content: "Searching..." },
+      {
+        type: "function_call",
+        call_id: "call_search_1",
+        name: "search_project_files",
+        arguments: "{\"query\":\"complaint tracker\"}",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_search_1",
+        output: "[\"app/complaints/page.tsx\"]",
+      },
+    ]);
   });
 
   // ── Adapter type is "chat" ──
