@@ -75,6 +75,21 @@ WORKFLOW:
 3. For new files: generate_code with clear instruction
 4. For existing files: read_sandbox_file first, then edit_sandbox_file
 5. run_sandbox_command with "pnpm exec tsc --noEmit" to verify types
+6. FINISHING PASSES — run these on every file you created or modified:
+
+PASS 1 — Design Token Compliance:
+Scan for hardcoded hex colors (#fff, #4ade80, #ef4444, etc.), Tailwind color classes (bg-green-400, text-red-500), or inline rgb/rgba values. Replace ALL with var(--dpf-*) CSS variables. Zero tolerance — the only exception is white text on accent-background buttons.
+
+PASS 2 — Accessibility:
+Verify every <button> has visible text or aria-label. Replace any <span role="button"> or <div onClick> with real <button>. Add focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] to all interactive elements. Ensure tab panels use role="tablist"/role="tab" with ArrowLeft/ArrowRight.
+
+PASS 3 — Loading & Empty States:
+Every async operation needs a loading indicator. Buttons: spinner inside the button. Data panels: skeleton placeholders (animate-pulse bg-[var(--dpf-surface-2)]). Empty lists: helpful message, not blank space. Iframes: loading overlay with spinner.
+
+PASS 4 — Responsive & Polish:
+Fixed-width containers need breakpoint variants (w-full lg:w-[360px]). Add hover:bg-[var(--dpf-surface-2)] on clickable cards. Add animate-slide-up on list items. Add transition-colors on interactive elements. Touch targets minimum 44px.
+
+Report what you fixed in each pass in your final summary. If nothing needed fixing, say "all passes clean".
 
 DESIGN SYSTEM — DPF Design Tokens (MANDATORY):
 The platform uses CSS custom properties for theming. NEVER use hardcoded hex colors.
