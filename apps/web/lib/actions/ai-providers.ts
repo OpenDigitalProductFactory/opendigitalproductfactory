@@ -23,6 +23,7 @@ import {
   backfillModelCards,
   seedAllRecipes,
 } from "@/lib/ai-provider-internals";
+import { KNOWN_PROVIDER_MODELS } from "@/lib/routing/known-provider-models";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -452,6 +453,14 @@ export async function discoverModels(
   providerId: string,
 ): Promise<{ discovered: number; newCount: number; error?: string }> {
   await requireManageProviders();
+  if (KNOWN_PROVIDER_MODELS[providerId]) {
+    const seeded = await autoDiscoverAndProfile(providerId);
+    return {
+      discovered: seeded.discovered,
+      newCount: seeded.discovered,
+      error: seeded.error,
+    };
+  }
   return discoverModelsInternal(providerId);
 }
 
