@@ -122,6 +122,15 @@ function stubFetchOk(body: Record<string, unknown>) {
   });
 }
 
+function stubFetchText(body: string) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    text: async () => body,
+    headers: new Headers(),
+  });
+}
+
 describe("responsesAdapter", () => {
   beforeEach(() => {
     mockFetch = vi.fn();
@@ -177,14 +186,12 @@ describe("responsesAdapter", () => {
   });
 
   it("uses the ChatGPT backend responses path for chatgpt subscription providers", async () => {
-    stubFetchOk({
-      output: [
-        { type: "message", content: [{ type: "output_text", text: "Subscription OK." }] },
-      ],
-      usage: { input_tokens: 3, output_tokens: 2 },
-    });
+    stubFetchText([
+      'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"Subscription OK."}]}],"usage":{"input_tokens":3,"output_tokens":2}}}',
+      "data: [DONE]",
+    ].join("\n"));
 
-    await responsesAdapter.execute(
+    const result = await responsesAdapter.execute(
       makeRequest({
         providerId: "chatgpt",
         modelId: "gpt-5.4",
@@ -195,8 +202,11 @@ describe("responsesAdapter", () => {
       }),
     );
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url, fetchOpts] = mockFetch.mock.calls[0];
     expect(url).toBe("https://chatgpt.com/backend-api/codex/responses");
+    expect(JSON.parse(fetchOpts.body).stream).toBe(true);
+    expect(result.text).toBe("Subscription OK.");
+    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2 });
   });
 
   it("extracts function_call output items as tool calls", async () => {
