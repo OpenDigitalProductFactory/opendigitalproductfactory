@@ -48,11 +48,11 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
           {config.tagline && <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>{config.tagline}</div>}
         </div>
         <a href={`/s/${config.orgSlug}`} target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 13, color: "var(--dpf-accent, #4f46e5)", textDecoration: "none" }}>
+          style={{ fontSize: 13, color: "var(--dpf-accent)", textDecoration: "none" }}>
           View Live ↗
         </a>
         <button onClick={togglePublish} disabled={toggling}
-          style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: published ? "#ef4444" : "var(--dpf-accent, #4f46e5)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+          style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: published ? "var(--dpf-error)" : "var(--dpf-accent)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           {toggling ? "..." : published ? "Unpublish" : "Publish"}
         </button>
       </div>
@@ -64,9 +64,9 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
       </div>
 
       <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
-        Status: <strong style={{ color: published ? "#16a34a" : "#6b7280" }}>{published ? "Published" : "Unpublished"}</strong>
+        Status: <strong style={{ color: published ? "var(--dpf-success)" : "var(--dpf-muted)" }}>{published ? "Published" : "Unpublished"}</strong>
         {" · "} Archetype: {config.archetypeId}
-        {" · "} <a href="/admin/storefront/settings" style={{ color: "var(--dpf-accent, #4f46e5)" }}>Edit settings</a>
+        {" · "} <a href="/admin/storefront/settings" style={{ color: "var(--dpf-accent)" }}>Edit settings</a>
       </div>
     </div>
   );

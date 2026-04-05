@@ -13,13 +13,13 @@ type Product = {
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  active: "#4ade80",
-  draft: "#fbbf24",
-  inactive: "#8888a0",
+  active: "var(--dpf-success)",
+  draft: "var(--dpf-warning)",
+  inactive: "var(--dpf-muted)",
 };
 
 export function ProductHeader({ product }: { product: Product }) {
-  const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#8888a0";
+  const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "var(--dpf-muted)";
 
   return (
     <div className="mb-4">
@@ -49,7 +49,7 @@ export function ProductHeader({ product }: { product: Product }) {
         <span
           className="text-[10px] rounded px-2 py-0.5"
           style={{
-            background: `${statusColour}20`,
+            background: `color-mix(in srgb, ${statusColour} 12%, transparent)`,
             color: statusColour,
           }}
         >

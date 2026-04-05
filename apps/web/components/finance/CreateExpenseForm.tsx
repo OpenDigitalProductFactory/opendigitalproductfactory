@@ -150,7 +150,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
                   <button
                     type="button"
                     onClick={() => removeItem(idx)}
-                    className="text-xs text-[var(--dpf-muted)] hover:text-[#ef4444] transition-colors"
+                    className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] transition-colors"
                   >
                     Remove
                   </button>
@@ -245,7 +245,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
         />
       </div>
 
-      {error && <p className="text-sm text-[#ef4444]">{error}</p>}
+      {error && <p className="text-sm text-[var(--dpf-error)]">{error}</p>}
 
       {/* Action buttons */}
       <div className="flex justify-end gap-3">

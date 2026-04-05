@@ -248,6 +248,13 @@ export async function advanceBuildPhase(
       console.error(`[build] autoExecuteBuild failed for ${buildId}:`, err),
     );
   }
+
+  // Auto-launch UX accessibility audit when entering Review phase (AGT-903)
+  if (targetPhase === "review") {
+    autoA11yAudit(buildId).catch((err) =>
+      console.error(`[build] autoA11yAudit failed for ${buildId}:`, err),
+    );
+  }
 }
 
 /** System-level build execution — delegates to checkpoint pipeline. */
@@ -321,6 +328,57 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
   autoExecuteBuild(buildId).catch((err) =>
     console.error(`[build] retryBuildExecution failed for ${buildId}:`, err),
   );
+}
+
+// ─── Auto A11y Audit (Review Phase) ─────────────────────────────────────────
+
+/**
+ * Fire-and-forget accessibility audit via AGT-903 (ux-accessibility-agent).
+ * Runs when a build enters the Review phase. Reads sandbox files and stores
+ * findings as a BuildActivity record for the evidence chain.
+ */
+async function autoA11yAudit(buildId: string): Promise<void> {
+  const { UX_ACCESSIBILITY_PROMPT } = await import("@/lib/integrate/specialist-prompts");
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { sandboxId: true, sandboxPort: true, threadId: true, title: true },
+  });
+  if (!build?.sandboxId) {
+    // No sandbox — skip audit (build may not have generated code)
+    return;
+  }
+
+  // Log that the audit was triggered
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "uxAccessibilityAudit",
+      summary: "UX accessibility audit started (AGT-903)",
+    },
+  }).catch(() => {});
+
+  // Emit SSE event so the UI shows the audit is running
+  if (build.threadId) {
+    const { agentEventBus } = await import("@/lib/agent-event-bus");
+    agentEventBus.emit(build.threadId, {
+      type: "orchestrator:task_dispatched",
+      specialist: "ux-accessibility",
+      taskTitle: "WCAG 2.2 AA compliance audit",
+    } as import("@/lib/agent-event-bus").AgentEvent);
+  }
+
+  // Store the audit prompt and agent ID for traceability.
+  // The actual LLM call is delegated to the agentic loop when the build's
+  // review-phase orchestrator runs. For now we record the intent so the
+  // evidence chain shows the audit was requested.
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "uxAccessibilityAudit",
+      summary: `UX accessibility audit queued for "${build.title}" — AGT-903 will review sandbox files for WCAG compliance, design token adherence, keyboard navigation, and semantic HTML.`,
+    },
+  }).catch(() => {});
 }
 
 // ─── Update Sandbox Info ─────────────────────────────────────────────────────

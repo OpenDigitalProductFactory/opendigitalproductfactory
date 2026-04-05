@@ -508,7 +508,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
                   onClick={() => {
                     setSelectedView("impact-blast-radius");
                   }}
-                  className="text-[9px] px-1.5 py-0.5 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  className="text-[9px] px-1.5 py-0.5 rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10"
                 >
                   Analyze Impact
                 </button>

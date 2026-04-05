@@ -15,9 +15,9 @@ type Props = {
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  active:   "#4ade80",
-  draft:    "#fbbf24",
-  inactive: "#8888a0",
+  active:   "var(--dpf-success)",
+  draft:    "var(--dpf-warning)",
+  inactive: "var(--dpf-muted)",
 };
 
 export function ProductList({ products, colour, className = "" }: Props) {
@@ -28,7 +28,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
       </p>
       <div className="flex flex-col gap-2">
         {products.map((product) => {
-          const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "#8888a0";
+          const statusColour = STATUS_COLOURS[product.lifecycleStatus] ?? "var(--dpf-muted)";
           return (
             <Link
               key={product.id}
@@ -39,7 +39,7 @@ export function ProductList({ products, colour, className = "" }: Props) {
                 <span className="text-sm font-medium text-[var(--dpf-text)]">{product.name}</span>
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded-full"
-                  style={{ background: `${statusColour}20`, color: statusColour }}
+                  style={{ background: `color-mix(in srgb, ${statusColour} 12%, transparent)`, color: statusColour }}
                 >
                   {product.lifecycleStatus}
                 </span>

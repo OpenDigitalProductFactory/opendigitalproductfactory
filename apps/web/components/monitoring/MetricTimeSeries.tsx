@@ -64,7 +64,7 @@ export function MetricTimeSeries({
   const maxVal = Math.max(...allValues);
   const range = maxVal - minVal || 1;
 
-  const colors = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
+  const colors = ["var(--dpf-info)", "var(--dpf-success)", "var(--dpf-warning)", "var(--dpf-error)", "var(--dpf-accent)"];
 
   // Time range
   const firstTs = series[0]!.values[0]!.ts;

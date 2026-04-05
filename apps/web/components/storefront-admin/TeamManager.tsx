@@ -49,7 +49,7 @@ function StatusBadge({ active }: { active: boolean }) {
       fontWeight: 600,
       padding: "2px 7px",
       borderRadius: 10,
-      background: active ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
+      background: active ? "color-mix(in srgb, var(--dpf-success) 15%, transparent)" : "rgba(148,163,184,0.15)",
       color: active ? "var(--dpf-success, #22c55e)" : "var(--dpf-muted)",
     }}>
       {active ? "Active" : "Inactive"}

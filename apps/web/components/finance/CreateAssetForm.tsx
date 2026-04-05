@@ -67,7 +67,7 @@ export function CreateAssetForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="p-3 rounded-lg border border-[#ef4444] bg-[#ef444420] text-xs text-[#ef4444]">
+        <div className="p-3 rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_12%,transparent)] text-xs text-[var(--dpf-error)]">
           {error}
         </div>
       )}

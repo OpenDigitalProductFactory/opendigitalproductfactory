@@ -34,8 +34,8 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 mb-4">
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-yellow-400 mb-3">
+    <div className="rounded-lg border border-[var(--dpf-warning)]/30 bg-[var(--dpf-warning)]/5 p-4 mb-4">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-warning)] mb-3">
         Pending Timesheet Approvals ({pendingTimesheets.length})
       </h3>
       <div className="space-y-3">
@@ -51,7 +51,7 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[var(--dpf-text)] font-semibold">{ts.totalHours}h</span>
                 {ts.overtimeHours > 0 && (
-                  <span className="text-[10px] text-yellow-400">{ts.overtimeHours}h OT</span>
+                  <span className="text-[10px] text-[var(--dpf-warning)]">{ts.overtimeHours}h OT</span>
                 )}
               </div>
             </div>
@@ -78,7 +78,7 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
                 type="button"
                 disabled={isPending}
                 onClick={() => handleApprove(ts.periodId)}
-                className="text-[10px] px-2.5 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
+                className="text-[10px] px-2.5 py-1 rounded border border-[var(--dpf-success)]/30 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50"
               >
                 Approve
               </button>
@@ -86,7 +86,7 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
                 type="button"
                 disabled={isPending}
                 onClick={() => handleReject(ts.periodId)}
-                className="text-[10px] px-2.5 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                className="text-[10px] px-2.5 py-1 rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50"
               >
                 Reject
               </button>

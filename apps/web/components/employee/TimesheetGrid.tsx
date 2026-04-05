@@ -9,9 +9,9 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
-  submitted: "#fbbf24",
-  approved: "#4ade80",
-  rejected: "#ef4444",
+  submitted: "var(--dpf-warning)",
+  approved: "var(--dpf-success)",
+  rejected: "var(--dpf-error)",
 };
 
 type EntryState = {
@@ -163,7 +163,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
 
       {/* Rejection reason */}
       {existingPeriod?.status === "rejected" && existingPeriod.rejectionReason && (
-        <div className="mb-3 p-2 rounded border border-red-500/30 bg-red-500/5 text-xs text-red-400">
+        <div className="mb-3 p-2 rounded border border-[var(--dpf-error)]/30 bg-[var(--dpf-error)]/5 text-xs text-[var(--dpf-error)]">
           Rejected: {existingPeriod.rejectionReason}
         </div>
       )}
@@ -235,7 +235,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
 
       {/* Overtime indicator */}
       {overtimeHours > 0 && (
-        <div className="mt-2 text-[11px] text-yellow-400 flex items-center gap-1">
+        <div className="mt-2 text-[11px] text-[var(--dpf-warning)] flex items-center gap-1">
           <span>&#9888;</span>
           {overtimeHours}h overtime (threshold: {overtimeThreshold}h/week)
         </div>
@@ -275,7 +275,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
           </>
         )}
         {message && (
-          <span className={`text-[11px] ${message.includes("fail") || message.includes("Cannot") ? "text-red-400" : "text-green-400"}`}>
+          <span className={`text-[11px] ${message.includes("fail") || message.includes("Cannot") ? "text-[var(--dpf-error)]" : "text-[var(--dpf-success)]"}`}>
             {message}
           </span>
         )}
@@ -283,7 +283,7 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
 
       {/* Approved info */}
       {existingPeriod?.status === "approved" && existingPeriod.approvedByName && (
-        <div className="mt-2 text-[10px] text-green-400">
+        <div className="mt-2 text-[10px] text-[var(--dpf-success)]">
           Approved by {existingPeriod.approvedByName} on {new Date(existingPeriod.approvedAt!).toLocaleDateString()}
         </div>
       )}

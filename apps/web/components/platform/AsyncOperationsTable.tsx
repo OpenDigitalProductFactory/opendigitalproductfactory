@@ -4,12 +4,12 @@
 import type { AsyncOpRow } from "@/lib/ai-provider-types";
 
 const STATUS_CONFIG: Record<string, { emoji: string; color: string; label: string }> = {
-  pending:   { emoji: "⏳", color: "#8888a0", label: "Pending" },
+  pending:   { emoji: "⏳", color: "var(--dpf-muted)", label: "Pending" },
   running:   { emoji: "🔵", color: "#3b82f6", label: "Running" },
-  completed: { emoji: "✅", color: "#4ade80", label: "Completed" },
-  failed:    { emoji: "❌", color: "#ef4444", label: "Failed" },
-  expired:   { emoji: "⏰", color: "#fbbf24", label: "Expired" },
-  cancelled: { emoji: "🚫", color: "#8888a0", label: "Cancelled" },
+  completed: { emoji: "✅", color: "var(--dpf-success)", label: "Completed" },
+  failed:    { emoji: "❌", color: "var(--dpf-error)", label: "Failed" },
+  expired:   { emoji: "⏰", color: "var(--dpf-warning)", label: "Expired" },
+  cancelled: { emoji: "🚫", color: "var(--dpf-muted)", label: "Cancelled" },
 };
 
 function formatRelative(iso: string): string {
@@ -77,7 +77,7 @@ export function AsyncOperationsTable({ operations }: Props) {
           </thead>
           <tbody>
             {operations.map((op) => {
-              const cfg = STATUS_CONFIG[op.status] ?? STATUS_CONFIG["pending"] ?? { emoji: "⏳", color: "#8888a0", label: "Pending" };
+              const cfg = STATUS_CONFIG[op.status] ?? STATUS_CONFIG["pending"] ?? { emoji: "⏳", color: "var(--dpf-muted)", label: "Pending" };
               return (
                 <tr key={op.id} style={{ borderBottom: "1px solid var(--dpf-border)" }}>
                   <td style={{ padding: "6px 10px", color: "var(--dpf-muted)", fontFamily: "monospace", fontSize: 10 }}>
@@ -105,7 +105,7 @@ export function AsyncOperationsTable({ operations }: Props) {
                     ) : op.progressMessage ? (
                       <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>{op.progressMessage}</span>
                     ) : op.status === "failed" && op.errorMessage ? (
-                      <span style={{ color: "#ef4444", fontSize: 10 }} title={op.errorMessage}>
+                      <span style={{ color: "var(--dpf-error)", fontSize: 10 }} title={op.errorMessage}>
                         {op.errorMessage.slice(0, 50)}{op.errorMessage.length > 50 ? "..." : ""}
                       </span>
                     ) : (

@@ -193,12 +193,12 @@ export function BankRulesManager({ initialRules }: Props) {
 
           {/* Form feedback */}
           {formError && (
-            <p className="text-xs mb-3" style={{ color: "#ef4444" }}>
+            <p className="text-xs mb-3" style={{ color: "var(--dpf-error)" }}>
               {formError}
             </p>
           )}
           {formSuccess && (
-            <p className="text-xs mb-3" style={{ color: "#4ade80" }}>
+            <p className="text-xs mb-3" style={{ color: "var(--dpf-success)" }}>
               Rule created successfully.
             </p>
           )}
@@ -279,7 +279,7 @@ export function BankRulesManager({ initialRules }: Props) {
                       {rule.hitCount > 0 ? (
                         <span
                           className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ color: "#38bdf8", backgroundColor: "#38bdf820" }}
+                          style={{ color: "var(--dpf-info)", backgroundColor: "color-mix(in srgb, var(--dpf-info) 12%, transparent)" }}
                         >
                           {rule.hitCount}
                         </span>
@@ -291,8 +291,8 @@ export function BankRulesManager({ initialRules }: Props) {
                       <span
                         className="text-[9px] px-1.5 py-0.5 rounded-full"
                         style={{
-                          color: rule.isActive ? "#4ade80" : "#8888a0",
-                          backgroundColor: rule.isActive ? "#4ade8020" : "#8888a020",
+                          color: rule.isActive ? "var(--dpf-success)" : "var(--dpf-muted)",
+                          backgroundColor: rule.isActive ? "color-mix(in srgb, var(--dpf-success) 12%, transparent)" : "color-mix(in srgb, var(--dpf-muted) 12%, transparent)",
                         }}
                       >
                         {rule.isActive ? "active" : "inactive"}
@@ -302,7 +302,7 @@ export function BankRulesManager({ initialRules }: Props) {
                       <button
                         onClick={() => handleDelete(rule.id)}
                         disabled={deleteInProgress === rule.id}
-                        className="text-[10px] text-[var(--dpf-muted)] hover:text-[#ef4444] transition-colors disabled:opacity-40"
+                        className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] transition-colors disabled:opacity-40"
                       >
                         {deleteInProgress === rule.id ? "…" : "Delete"}
                       </button>

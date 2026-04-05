@@ -29,10 +29,10 @@ type DelegationChainProps = {
 };
 
 const HITL_COLORS: Record<number, string> = {
-  0: "#ef4444",
+  0: "var(--dpf-error)",
   1: "#f97316",
   2: "#3b82f6",
-  3: "#4ade80",
+  3: "var(--dpf-success)",
 };
 
 const HITL_LABELS: Record<number, string> = {
@@ -43,7 +43,7 @@ const HITL_LABELS: Record<number, string> = {
 };
 
 function HitlBadge({ tier }: { tier: number }) {
-  const color = HITL_COLORS[tier] ?? "#8888a0";
+  const color = HITL_COLORS[tier] ?? "var(--dpf-muted)";
   const label = HITL_LABELS[tier] ?? `HITL-${tier}`;
   return (
     <span
@@ -413,7 +413,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
                 {bmrNodes
                   ?.filter((n) => n.escalatesTo === group.supervisorId)
                   .map((n, i) => {
-                    const tierColour = HITL_COLORS[n.hitlTierDefault] ?? "#8888a0";
+                    const tierColour = HITL_COLORS[n.hitlTierDefault] ?? "var(--dpf-muted)";
                     return (
                       <div
                         key={`bmr-${group.supervisorId}-${i}`}
@@ -431,7 +431,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
                         <span style={{ display: "inline-block", width: 12, fontSize: 9, textAlign: "center", color: "var(--dpf-muted)" }}>
                           ◈
                         </span>
-                        <span style={{ fontFamily: "monospace", fontSize: 9, color: "#38bdf8", minWidth: 90 }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 9, color: "var(--dpf-info)", minWidth: 90 }}>
                           BMR
                         </span>
                         <span style={{ flex: 1 }}>

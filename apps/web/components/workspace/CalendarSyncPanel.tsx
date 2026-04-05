@@ -102,7 +102,7 @@ export function CalendarSyncPanel() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--dpf-success)]" />
               <span className="text-xs text-[var(--dpf-text)]">{syncStatus.name ?? "iCal Feed"}</span>
               <span className="text-[10px] text-[var(--dpf-muted)]">{syncStatus.eventCount} events</span>
             </div>
@@ -125,7 +125,7 @@ export function CalendarSyncPanel() {
               type="button"
               disabled={isPending}
               onClick={handleRemove}
-              className="text-[10px] px-2 py-0.5 rounded border border-red-500/20 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+              className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-error)]/20 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50"
             >
               Remove
             </button>
@@ -172,7 +172,7 @@ export function CalendarSyncPanel() {
 
       {/* Status message */}
       {message && (
-        <p className={`text-[10px] mt-2 ${message.includes("fail") || message.includes("Failed") || message.includes("Invalid") || message.includes("No events") ? "text-red-400" : "text-green-400"}`}>
+        <p className={`text-[10px] mt-2 ${message.includes("fail") || message.includes("Failed") || message.includes("Invalid") || message.includes("No events") ? "text-[var(--dpf-error)]" : "text-[var(--dpf-success)]"}`}>
           {isPending ? <span className="animate-pulse">{message}</span> : message}
         </p>
       )}

@@ -49,7 +49,7 @@ export function ManualRateForm({ currencies }: Props) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
       {error && (
-        <div className="w-full p-2 rounded border border-[#ef4444] bg-[#ef444420] text-[10px] text-[#ef4444]">
+        <div className="w-full p-2 rounded border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_12%,transparent)] text-[10px] text-[var(--dpf-error)]">
           {error}
         </div>
       )}
@@ -105,7 +105,7 @@ export function ManualRateForm({ currencies }: Props) {
       </button>
 
       {saved && (
-        <span className="text-[10px] pb-2" style={{ color: "#4ade80" }}>Saved</span>
+        <span className="text-[10px] pb-2" style={{ color: "var(--dpf-success)" }}>Saved</span>
       )}
     </form>
   );

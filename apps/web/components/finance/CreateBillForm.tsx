@@ -346,7 +346,7 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, d
                   <button
                     type="button"
                     onClick={() => removeLineItem(idx)}
-                    className="text-[var(--dpf-muted)] hover:text-[#ef4444] text-xs transition-colors"
+                    className="text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] text-xs transition-colors"
                   >
                     ×
                   </button>
@@ -383,7 +383,7 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, d
       </div>
 
       {error && (
-        <p className="text-sm text-[#ef4444]">{error}</p>
+        <p className="text-sm text-[var(--dpf-error)]">{error}</p>
       )}
 
       <div className="flex justify-end gap-3">

@@ -5,9 +5,9 @@ import { useState } from "react";
 import type { RecipeGridRow } from "@/lib/ai-provider-types";
 
 const STATUS_COLORS: Record<string, string> = {
-  champion:   "#4ade80",
-  challenger: "#fbbf24",
-  retired:    "#8888a0",
+  champion:   "var(--dpf-success)",
+  challenger: "var(--dpf-warning)",
+  retired:    "var(--dpf-muted)",
 };
 
 const ADAPTER_LABELS: Record<string, string> = {
@@ -119,8 +119,8 @@ export function RecipePanel({ recipes }: Props) {
                       style={{
                         fontSize: 9,
                         fontWeight: 700,
-                        color: STATUS_COLORS[r.status] ?? "#8888a0",
-                        background: `${STATUS_COLORS[r.status] ?? "#8888a0"}18`,
+                        color: STATUS_COLORS[r.status] ?? "var(--dpf-muted)",
+                        background: `color-mix(in srgb, ${STATUS_COLORS[r.status] ?? "var(--dpf-muted)"} 9%, transparent)`,
                         padding: "1px 5px",
                         borderRadius: 3,
                       }}

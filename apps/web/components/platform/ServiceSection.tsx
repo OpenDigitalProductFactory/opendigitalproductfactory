@@ -4,9 +4,9 @@ import { useState } from "react";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 
 const STATUS_COLORS = {
-  active:       "#4ade80",
-  unconfigured: "#fbbf24",
-  inactive:     "#8888a0",
+  active:       "var(--dpf-success)",
+  unconfigured: "var(--dpf-warning)",
+  inactive:     "var(--dpf-muted)",
 } as const;
 
 type Props = {
@@ -29,7 +29,7 @@ export function ServiceSection({ endpointType, displayName, providers, children 
     <div
       style={{
         marginBottom: 8,
-        border: "1px solid var(--dpf-border, #2a2a40)",
+        border: "1px solid var(--dpf-border)",
         borderRadius: 6,
         overflow: "hidden",
       }}
@@ -44,7 +44,7 @@ export function ServiceSection({ endpointType, displayName, providers, children 
           alignItems: "center",
           gap: 8,
           padding: "7px 10px",
-          background: "var(--dpf-surface-2, #1a1a2e)",
+          background: "var(--dpf-surface-2)",
           border: "none",
           cursor: "pointer",
           textAlign: "left",
@@ -53,7 +53,7 @@ export function ServiceSection({ endpointType, displayName, providers, children 
         {/* Expand/collapse arrow */}
         <span
           style={{
-            color: "var(--dpf-muted, #8888a0)",
+            color: "var(--dpf-muted)",
             fontSize: 10,
             transition: "transform 0.15s",
             transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
@@ -70,8 +70,8 @@ export function ServiceSection({ endpointType, displayName, providers, children 
             fontSize: 9,
             fontWeight: 700,
             letterSpacing: "0.06em",
-            color: endpointType === "service" ? "#a78bfa" : "#7c8cf8",
-            background: endpointType === "service" ? "#a78bfa18" : "#7c8cf818",
+            color: endpointType === "service" ? "var(--dpf-accent)" : "var(--dpf-accent)",
+            background: endpointType === "service" ? "color-mix(in srgb, var(--dpf-accent) 9%, transparent)" : "color-mix(in srgb, var(--dpf-accent) 9%, transparent)",
             padding: "1px 5px",
             borderRadius: 3,
             textTransform: "uppercase",
@@ -107,7 +107,7 @@ export function ServiceSection({ endpointType, displayName, providers, children 
 
       {/* Collapsible body */}
       {expanded && (
-        <div style={{ background: "var(--dpf-surface-1, #13131f)" }}>
+        <div style={{ background: "var(--dpf-surface-1)" }}>
           {children}
         </div>
       )}

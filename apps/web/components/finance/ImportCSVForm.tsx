@@ -173,7 +173,7 @@ export function ImportCSVForm({ bankAccountId, accountName }: Props) {
               {detectedFormat && (
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded-full"
-                  style={{ color: "#38bdf8", backgroundColor: "#38bdf820" }}
+                  style={{ color: "var(--dpf-info)", backgroundColor: "color-mix(in srgb, var(--dpf-info) 12%, transparent)" }}
                 >
                   {detectedFormat} format
                 </span>
@@ -230,7 +230,7 @@ export function ImportCSVForm({ bankAccountId, accountName }: Props) {
       {errorMsg && (
         <div
           className="mb-4 p-3 rounded-lg border text-xs"
-          style={{ borderColor: "#ef4444", color: "#ef4444", backgroundColor: "#ef444410" }}
+          style={{ borderColor: "var(--dpf-error)", color: "var(--dpf-error)", backgroundColor: "color-mix(in srgb, var(--dpf-error) 6%, transparent)" }}
         >
           {errorMsg}
         </div>
@@ -269,7 +269,7 @@ export function ImportCSVForm({ bankAccountId, accountName }: Props) {
             <div>
               <p
                 className="text-sm font-semibold mb-1"
-                style={{ color: "#4ade80" }}
+                style={{ color: "var(--dpf-success)" }}
               >
                 Import complete
               </p>
@@ -281,7 +281,7 @@ export function ImportCSVForm({ bankAccountId, accountName }: Props) {
                   <>
                     {" "}
                     with{" "}
-                    <span style={{ color: "#ef4444" }}>{result.errors.length}</span>{" "}
+                    <span style={{ color: "var(--dpf-error)" }}>{result.errors.length}</span>{" "}
                     error{result.errors.length !== 1 ? "s" : ""}
                   </>
                 )}
@@ -329,7 +329,7 @@ export function ImportCSVForm({ bankAccountId, accountName }: Props) {
                           <td className="px-4 py-2 font-mono text-[var(--dpf-muted)]">
                             {err.row}
                           </td>
-                          <td className="px-4 py-2" style={{ color: "#ef4444" }}>
+                          <td className="px-4 py-2" style={{ color: "var(--dpf-error)" }}>
                             {err.message}
                           </td>
                         </tr>

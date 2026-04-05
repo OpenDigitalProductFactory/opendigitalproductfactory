@@ -27,7 +27,7 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 360 }}>
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {error && <div style={{ color: "#dc2626", fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 500 }}>Email address</label>
           <input

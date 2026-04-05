@@ -52,9 +52,9 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
               onClick={() => setTab(t)}
               style={{
                 fontSize: 10, padding: "2px 8px", borderRadius: 3, cursor: "pointer",
-                background: tab === t ? "#2a2a50" : "transparent",
-                border: `1px solid ${tab === t ? "#7c8cf8" : "#2a2a40"}`,
-                color: tab === t ? "#7c8cf8" : "#8888a0",
+                background: tab === t ? "var(--dpf-surface-2)" : "transparent",
+                border: `1px solid ${tab === t ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+                color: tab === t ? "var(--dpf-accent)" : "var(--dpf-muted)",
               }}
             >
               {t === "provider" ? "By Provider" : "By Agent"}
@@ -79,7 +79,7 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
                   {formatTokens(r.totalInputTokens)} in · {formatTokens(r.totalOutputTokens)} out
                 </div>
                 <div style={{ height: 4, background: "var(--dpf-border)", borderRadius: 2, marginTop: 6 }}>
-                  <div style={{ height: 4, background: "#4ade80", borderRadius: 2, width: `${pct}%` }} />
+                  <div style={{ height: 4, background: "var(--dpf-success)", borderRadius: 2, width: `${pct}%` }} />
                 </div>
               </div>
             );

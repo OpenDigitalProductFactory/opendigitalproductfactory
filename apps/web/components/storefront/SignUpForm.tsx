@@ -56,7 +56,7 @@ export function SignUpForm({
   return (
     <form onSubmit={handleSubmit}
       style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 360 }}>
-      {error && <div style={{ color: "#dc2626", fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <label style={{ fontSize: 13, fontWeight: 500 }}>Full name</label>
         <input

@@ -7,18 +7,18 @@ import { submitLeaveRequest, approveLeaveRequest, rejectLeaveRequest } from "@/l
 import { DatePicker } from "@/components/ui/DatePicker";
 
 const LEAVE_COLOURS: Record<string, string> = {
-  vacation: "#38bdf8",
+  vacation: "var(--dpf-info)",
   sick: "#fb923c",
-  personal: "#a78bfa",
+  personal: "var(--dpf-accent)",
   parental: "#f472b6",
-  unpaid: "#8888a0",
+  unpaid: "var(--dpf-muted)",
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  pending: "#fbbf24",
-  approved: "#4ade80",
-  rejected: "#ef4444",
-  cancelled: "#8888a0",
+  pending: "var(--dpf-warning)",
+  approved: "var(--dpf-success)",
+  rejected: "var(--dpf-error)",
+  cancelled: "var(--dpf-muted)",
 };
 
 type Props = {
@@ -77,7 +77,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {balances.map((b) => {
-              const colour = LEAVE_COLOURS[b.leaveType] ?? "#8888a0";
+              const colour = LEAVE_COLOURS[b.leaveType] ?? "var(--dpf-muted)";
               return (
                 <div key={b.id} className="p-2 rounded border border-[var(--dpf-border)]">
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: colour }}>
@@ -96,8 +96,8 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
 
       {/* Manager: Pending Approvals */}
       {isManager && pendingApprovals && pendingApprovals.length > 0 && (
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-yellow-400 mb-3">
+        <div className="rounded-lg border border-[var(--dpf-warning)]/30 bg-[var(--dpf-warning)]/5 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-warning)] mb-3">
             Pending Approvals ({pendingApprovals.length})
           </h3>
           <div className="space-y-2">
@@ -113,7 +113,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                   type="button"
                   disabled={isPending}
                   onClick={() => handleApprove(r.requestId)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
+                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-success)]/30 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50"
                 >
                   Approve
                 </button>
@@ -121,7 +121,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                   type="button"
                   disabled={isPending}
                   onClick={() => handleReject(r.requestId)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50"
                 >
                   Reject
                 </button>
@@ -212,7 +212,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
         ) : (
           <div className="space-y-2">
             {requests.map((r) => {
-              const colour = STATUS_COLOURS[r.status] ?? "#8888a0";
+              const colour = STATUS_COLOURS[r.status] ?? "var(--dpf-muted)";
               return (
                 <div key={r.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colour }} />
@@ -224,7 +224,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                   </div>
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded"
-                    style={{ background: `${colour}15`, color: colour }}
+                    style={{ background: `color-mix(in srgb, ${colour} 8%, transparent)`, color: colour }}
                   >
                     {r.status}
                   </span>

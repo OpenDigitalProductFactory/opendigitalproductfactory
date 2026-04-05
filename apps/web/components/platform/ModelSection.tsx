@@ -181,10 +181,10 @@ export function ModelSection({
             marginBottom: 10,
             fontSize: 11,
             color: profilingResult.error
-              ? "#f87171"
+              ? "var(--dpf-error)"
               : profilingResult.failed > 0
-              ? "#fbbf24"
-              : "#4ade80",
+              ? "var(--dpf-warning)"
+              : "var(--dpf-success)",
           }}
         >
           {profilingResult.error
@@ -240,7 +240,7 @@ export function ModelSection({
               padding: "4px 10px",
               background: "transparent",
               border: "1px solid var(--dpf-border)",
-              color: clampedPage === 0 ? "#8888a0" : "#e0e0ff",
+              color: clampedPage === 0 ? "var(--dpf-muted)" : "var(--dpf-text)",
               borderRadius: 4,
               fontSize: 11,
               cursor: clampedPage === 0 ? "not-allowed" : "pointer",
@@ -260,7 +260,7 @@ export function ModelSection({
               padding: "4px 10px",
               background: "transparent",
               border: "1px solid var(--dpf-border)",
-              color: clampedPage >= totalPages - 1 ? "#8888a0" : "#e0e0ff",
+              color: clampedPage >= totalPages - 1 ? "var(--dpf-muted)" : "var(--dpf-text)",
               borderRadius: 4,
               fontSize: 11,
               cursor: clampedPage >= totalPages - 1 ? "not-allowed" : "pointer",

@@ -1,4 +1,5 @@
 // apps/web/app/(shell)/workspace/page.tsx
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getWorkspaceTiles } from "@/lib/permissions";
@@ -273,7 +274,9 @@ export default async function WorkspacePage() {
           <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
             Calendar
           </p>
-          <WorkspaceCalendar events={calendarEvents} />
+          <Suspense fallback={null}>
+            <WorkspaceCalendar events={calendarEvents} />
+          </Suspense>
         </div>
         <div>
           <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">

@@ -44,14 +44,14 @@ export function InvoiceSendButton({ invoiceId, status }: Props) {
         disabled={sending}
         className={
           canSend
-            ? "px-3 py-1.5 text-xs font-medium rounded bg-[#22c55e] text-black hover:bg-[#16a34a] transition-colors disabled:opacity-50"
-            : "px-3 py-1.5 text-xs font-medium rounded border border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e] hover:text-black transition-colors disabled:opacity-50"
+            ? "px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-success)] text-black hover:opacity-90 transition-colors disabled:opacity-50"
+            : "px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-success)] text-[var(--dpf-success)] hover:bg-[var(--dpf-success)] hover:text-black transition-colors disabled:opacity-50"
         }
       >
         {sending ? "Sending…" : canSend ? "Send Invoice" : "Resend"}
       </button>
       {error && (
-        <span className="text-[10px] text-red-400 ml-2">{error}</span>
+        <span className="text-[10px] text-[var(--dpf-error)] ml-2">{error}</span>
       )}
     </>
   );

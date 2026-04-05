@@ -205,7 +205,7 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
               </span>
               . This action cannot be undone.
             </p>
-            {error && <p className="text-xs text-[#ef4444] mb-4">{error}</p>}
+            {error && <p className="text-xs text-[var(--dpf-error)] mb-4">{error}</p>}
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirming(false)}

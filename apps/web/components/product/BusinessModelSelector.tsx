@@ -26,8 +26,8 @@ type Props = {
 };
 
 const HITL_COLOURS: Record<string, string> = {
-  true: "#7c8cf8",
-  false: "#fbbf24",
+  true: "var(--dpf-accent)",
+  false: "var(--dpf-warning)",
 };
 
 export function BusinessModelSelector({ productId, availableModels, assignedModels }: Props) {
@@ -74,7 +74,7 @@ export function BusinessModelSelector({ productId, availableModels, assignedMode
               >
                 <span style={{ color: "var(--dpf-text)", fontWeight: 500 }}>{a.businessModel.name}</span>
                 {a.businessModel.isBuiltIn && (
-                  <span style={{ fontSize: 9, color: colour, background: `${colour}20`, borderRadius: 3, padding: "1px 4px" }}>
+                  <span style={{ fontSize: 9, color: colour, background: `color-mix(in srgb, ${colour} 12%, transparent)`, borderRadius: 3, padding: "1px 4px" }}>
                     built-in
                   </span>
                 )}

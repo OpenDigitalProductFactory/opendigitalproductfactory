@@ -13,9 +13,26 @@ type Props = {
   diffSummary: string | null;
   attachments?: AttachmentInfo[];
   build?: FeatureBuildRow;
+  loading?: boolean;
 };
 
-export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, build }: Props) {
+export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, build, loading }: Props) {
+  if (loading) {
+    return (
+      <div className="p-4 flex flex-col gap-3 animate-fade-in">
+        <div className="h-4 w-32 bg-[var(--dpf-surface-2)] rounded animate-pulse" />
+        <div className="flex flex-col gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex flex-col gap-1.5">
+              <div className="h-2.5 w-20 bg-[var(--dpf-surface-2)] rounded animate-pulse" />
+              <div className="h-3.5 bg-[var(--dpf-surface-2)] rounded animate-pulse" style={{ width: `${60 + i * 8}%` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "review" || phase === "ship" || phase === "complete") {
     return (
       <div className="p-4">
@@ -25,7 +42,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
             {diffSummary}
           </pre>
         ) : (
-          <p className="text-[13px] text-[var(--dpf-muted)]">No changes recorded.</p>
+          <p className="text-sm text-[var(--dpf-muted)]">No changes recorded.</p>
         )}
         {phase === "review" && build && (
           <div className="mt-4">
@@ -39,7 +56,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   if (!brief) {
     return (
       <div className="p-4">
-        <p className="text-[13px] text-[var(--dpf-muted)]">
+        <p className="text-sm text-[var(--dpf-muted)]">
           Describe your feature idea in the conversation panel. The AI will build a Feature Brief from your description.
         </p>
       </div>
@@ -56,19 +73,19 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
       <Section label="Data Needs" value={safeRenderValue(brief.dataNeeds) || "Not set"} />
       {Array.isArray(brief.acceptanceCriteria) && brief.acceptanceCriteria.length > 0 && (
         <div>
-          <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">
+          <span className="text-xs text-[var(--dpf-muted)] uppercase tracking-wider">
             Acceptance Criteria
           </span>
           <ul className="mt-1 pl-4 list-disc">
             {brief.acceptanceCriteria.map((c, i) => (
-              <li key={i} className="text-[13px] text-[var(--dpf-text-secondary)] leading-relaxed">{safeRenderValue(c)}</li>
+              <li key={i} className="text-sm text-[var(--dpf-text-secondary)] leading-relaxed">{safeRenderValue(c)}</li>
             ))}
           </ul>
         </div>
       )}
       {attachments && attachments.length > 0 && (
         <div>
-          <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">
+          <span className="text-xs text-[var(--dpf-muted)] uppercase tracking-wider">
             Attachments
           </span>
           <div className="mt-1">
@@ -85,8 +102,8 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
 function Section({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-[11px] text-[var(--dpf-muted)] uppercase tracking-wider">{label}</span>
-      <p className="text-[13px] text-[var(--dpf-text-secondary)] mt-0.5 leading-snug">{value}</p>
+      <span className="text-xs text-[var(--dpf-muted)] uppercase tracking-wider">{label}</span>
+      <p className="text-sm text-[var(--dpf-text-secondary)] mt-0.5 leading-snug">{value}</p>
     </div>
   );
 }

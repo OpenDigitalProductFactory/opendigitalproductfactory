@@ -66,7 +66,7 @@ export function PlatformKeysPanel({ keyData }: Props) {
           const data = keyData[cfg.key];
           const displayValue = savedValues[cfg.key] ?? data?.currentValue ?? null;
           const isConfigured = !!displayValue;
-          const statusColor = isConfigured ? "#4ade80" : "#fbbf24";
+          const statusColor = isConfigured ? "var(--dpf-success)" : "var(--dpf-warning)";
 
           return (
             <div
@@ -78,7 +78,7 @@ export function PlatformKeysPanel({ keyData }: Props) {
                 <span className="text-sm font-semibold text-[var(--dpf-text)]">{cfg.label}</span>
                 <span
                   className="text-[10px] px-2 py-0.5 rounded-full"
-                  style={{ background: `${statusColor}20`, color: statusColor }}
+                  style={{ background: `color-mix(in srgb, ${statusColor} 13%, transparent)`, color: statusColor }}
                 >
                   {isConfigured ? "Configured" : "Not configured"}
                 </span>

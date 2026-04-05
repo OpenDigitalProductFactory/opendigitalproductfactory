@@ -48,10 +48,10 @@ type Props = {
 };
 
 const HITL_COLOURS: Record<number, string> = {
-  0: "#ef4444",
-  1: "#f97316",
-  2: "#38bdf8",
-  3: "#4ade80",
+  0: "var(--dpf-error)",
+  1: "var(--dpf-warning)",
+  2: "var(--dpf-info)",
+  3: "var(--dpf-success)",
 };
 
 const ESCALATION_NAMES: Record<string, string> = {
@@ -126,7 +126,7 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
                   {a.businessModel.name}
                 </span>
                 {a.businessModel.isBuiltIn && (
-                  <span style={{ fontSize: 9, color: "#7c8cf8", background: "#7c8cf820", borderRadius: 3, padding: "1px 5px", marginLeft: 6 }}>
+                  <span style={{ fontSize: 9, color: "var(--dpf-accent)", background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)", borderRadius: 3, padding: "1px 5px", marginLeft: 6 }}>
                     built-in
                   </span>
                 )}
@@ -142,7 +142,7 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
               <div style={{ padding: "8px 14px 12px" }}>
                 {a.businessModel.roles.map((role) => {
                   const activeAssignment = role.assignments.find((asn) => asn.revokedAt === null);
-                  const tierColour = HITL_COLOURS[role.hitlTierDefault] ?? "#8888a0";
+                  const tierColour = HITL_COLOURS[role.hitlTierDefault] ?? "var(--dpf-muted)";
                   const escalationName = role.escalatesTo ? (ESCALATION_NAMES[role.escalatesTo] ?? role.escalatesTo) : null;
 
                   return (
@@ -166,7 +166,7 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
                           <span
                             style={{
                               fontSize: 9,
-                              background: `${tierColour}20`,
+                              background: `color-mix(in srgb, ${tierColour} 12%, transparent)`,
                               color: tierColour,
                               borderRadius: 3,
                               padding: "1px 5px",

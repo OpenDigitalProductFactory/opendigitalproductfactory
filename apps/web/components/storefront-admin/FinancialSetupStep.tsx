@@ -192,7 +192,7 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
         </label>
 
         {error && (
-          <p style={{ color: "#ef4444", fontSize: 13, margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--dpf-error)", fontSize: 13, margin: 0 }}>{error}</p>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>

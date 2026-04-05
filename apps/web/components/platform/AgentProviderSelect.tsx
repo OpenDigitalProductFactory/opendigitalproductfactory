@@ -58,7 +58,7 @@ export function AgentProviderSelect({ agentId, currentProviderId, providers }: P
           </option>
         ))}
       </select>
-      {saved && <span style={{ fontSize: 10, color: "#4ade80" }}>Saved</span>}
+      {saved && <span style={{ fontSize: 10, color: "var(--dpf-success)" }}>Saved</span>}
       {isPending && <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>...</span>}
     </div>
   );

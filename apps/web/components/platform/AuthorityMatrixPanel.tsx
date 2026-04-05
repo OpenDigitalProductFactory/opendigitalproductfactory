@@ -53,10 +53,10 @@ function getMatchingGrants(grants: string[], category: string): string[] {
 }
 
 const HITL_COLOURS: Record<number, string> = {
-  0: "#ef4444",
+  0: "var(--dpf-error)",
   1: "#f97316",
-  2: "#38bdf8",
-  3: "#4ade80",
+  2: "var(--dpf-info)",
+  3: "var(--dpf-success)",
 };
 
 const ESCALATION_LABELS: Record<string, string> = {
@@ -182,7 +182,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
                       key={cat}
                       style={{
                         padding: "6px 4px",
-                        background: hasAccess ? "#4ade80" : "var(--dpf-surface-2)",
+                        background: hasAccess ? "var(--dpf-success)" : "var(--dpf-surface-2)",
                         opacity: hasAccess ? 1 : 0.6,
                         display: "flex",
                         alignItems: "center",
@@ -324,7 +324,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
         alignItems: "center",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 2, background: "#4ade80" }} />
+          <div style={{ width: 12, height: 12, borderRadius: 2, background: "var(--dpf-success)" }} />
           <span>Has grants</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -373,7 +373,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
           {/* Rows */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             {bmrRows.map((row, i) => {
-              const tierColour = HITL_COLOURS[row.hitlTierDefault] ?? "#8888a0";
+              const tierColour = HITL_COLOURS[row.hitlTierDefault] ?? "var(--dpf-muted)";
               const escLabel = row.escalatesTo
                 ? (ESCALATION_LABELS[row.escalatesTo] ?? row.escalatesTo)
                 : "—";
@@ -399,7 +399,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
                       {row.modelName}
                     </span>
                     {row.isBuiltIn && (
-                      <span style={{ fontSize: 8, color: "#7c8cf8", background: "#7c8cf820", borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
+                      <span style={{ fontSize: 8, color: "var(--dpf-accent)", background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)", borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
                         built-in
                       </span>
                     )}

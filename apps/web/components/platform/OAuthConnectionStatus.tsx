@@ -54,7 +54,7 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
             width: 8,
             height: 8,
             borderRadius: "50%",
-            background: isConnected && !isExpired ? "#4ade80" : "#fbbf24",
+            background: isConnected && !isExpired ? "var(--dpf-success)" : "var(--dpf-warning)",
             flexShrink: 0,
           }}
         />
@@ -73,8 +73,8 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
           <span
             style={{
               fontSize: 9,
-              color: "#4ade80",
-              background: "#4ade8018",
+              color: "var(--dpf-success)",
+              background: "color-mix(in srgb, var(--dpf-success) 10%, transparent)",
               padding: "1px 5px",
               borderRadius: 3,
             }}

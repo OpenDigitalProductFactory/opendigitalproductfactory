@@ -9,10 +9,10 @@ type Props = {
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  proposed: "#7c8cf8",
-  executed: "#4ade80",
-  rejected: "#ef4444",
-  failed: "#fbbf24",
+  proposed: "var(--dpf-accent)",
+  executed: "var(--dpf-success)",
+  rejected: "var(--dpf-error)",
+  failed: "var(--dpf-warning)",
 };
 
 function formatAction(actionType: string): string {
@@ -116,7 +116,7 @@ export function ProposalHistoryClient({ proposals }: Props) {
           {/* Rows */}
           {filtered.map((p) => {
             const isExpanded = expandedId === p.proposalId;
-            const statusColour = STATUS_COLOURS[p.status] ?? "#8888a0";
+            const statusColour = STATUS_COLOURS[p.status] ?? "var(--dpf-muted)";
 
             return (
               <div key={p.proposalId}>
@@ -196,11 +196,11 @@ export function ProposalHistoryClient({ proposals }: Props) {
                     {p.resultEntityId && (
                       <div style={{ marginTop: 8 }}>
                         <span style={{ color: "#666", fontSize: 11 }}>Created: </span>
-                        <span style={{ color: "#4ade80", fontSize: 11 }}>{p.resultEntityId}</span>
+                        <span style={{ color: "var(--dpf-success)", fontSize: 11 }}>{p.resultEntityId}</span>
                       </div>
                     )}
                     {p.resultError && (
-                      <div style={{ marginTop: 8, color: "#ef4444", fontSize: 11 }}>
+                      <div style={{ marginTop: 8, color: "var(--dpf-error)", fontSize: 11 }}>
                         {p.resultError}
                       </div>
                     )}
