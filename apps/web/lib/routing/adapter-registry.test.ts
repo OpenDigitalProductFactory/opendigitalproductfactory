@@ -122,6 +122,22 @@ describe("adapter-registry", () => {
       expect(card.metadataConfidence).toBe("low");
       expect(card.metadataSource).toBe("inferred");
     });
+
+    it("preserves curated known-catalog metadata for non-discoverable providers", () => {
+      const card = extractModelCardWithFallback("codex", "gpt-5-codex", {
+        id: "gpt-5-codex",
+        source: "known_catalog",
+      });
+
+      expect(card.modelClass).toBe("code");
+      expect(card.capabilities.toolUse).toBe(true);
+      expect(card.capabilities.streaming).toBe(true);
+      expect(card.capabilities.structuredOutput).toBe(true);
+      expect(card.maxInputTokens).toBe(128_000);
+      expect(card.maxOutputTokens).toBe(16_384);
+      expect(card.metadataSource).toBe("curated");
+      expect(card.metadataConfidence).toBe("medium");
+    });
   });
 
   // ── metadata hash (via extractModelCardWithFallback) ────────────────
