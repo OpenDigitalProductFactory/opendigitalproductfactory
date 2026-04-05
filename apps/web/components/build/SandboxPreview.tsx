@@ -12,9 +12,11 @@ type Props = {
 
 export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const isRunning = sandboxPort !== null && (phase === "build" || phase === "review" || phase === "ship");
 
   const handleRefresh = useCallback(() => {
+    setIframeLoaded(false);
     setRefreshKey(k => k + 1);
   }, []);
 
@@ -38,25 +40,35 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
   const previewUrl = `/api/sandbox/preview?buildId=${encodeURIComponent(buildId)}&path=/&_t=${refreshKey}`;
 
   return (
-    <div className="flex-1 flex flex-col rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+    <div className="flex-1 flex flex-col rounded-lg border border-[var(--dpf-border)] overflow-hidden shadow-dpf-sm">
       <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--dpf-surface-2)] border-b border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
-        <span className="w-2 h-2 rounded-full bg-[#4ade80]" />
+        <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" />
         Live Preview
         <button
           onClick={handleRefresh}
           className="ml-auto px-2 py-0.5 rounded text-[10px] border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
           title="Refresh preview"
+          aria-label="Refresh live preview"
         >
           ↻ Refresh
         </button>
       </div>
-      <iframe
-        key={refreshKey}
-        src={previewUrl}
-        title="Sandbox Preview"
-        className="flex-1 border-none min-h-[400px]"
-        style={{ background: "#1a1a2e" }}
-      />
+      <div className="flex-1 relative min-h-[400px]">
+        {!iframeLoaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--dpf-surface-2)] animate-fade-in">
+            <div className="w-6 h-6 border-2 border-[var(--dpf-accent)] border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-[var(--dpf-muted)]">Loading preview...</span>
+          </div>
+        )}
+        <iframe
+          key={refreshKey}
+          src={previewUrl}
+          title="Sandbox Preview"
+          className="w-full h-full border-none"
+          style={{ background: "var(--dpf-surface-1)" }}
+          onLoad={() => setIframeLoaded(true)}
+        />
+      </div>
     </div>
   );
 }

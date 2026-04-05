@@ -27,11 +27,11 @@ export function TestRunnerPanel({ steps }: { steps: TestStep[] }) {
         <div key={i}>
           <button
             onClick={() => setExpandedStep(expandedStep === i ? null : i)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-left cursor-pointer hover:border-[var(--dpf-accent)] transition-colors"
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded border text-left cursor-pointer hover:border-[var(--dpf-accent)] transition-colors ${s.passed ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-border)]" : "bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-2))] border-[color-mix(in_srgb,var(--dpf-error)_25%,var(--dpf-border))]"}`}
           >
             <span
               className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: s.passed ? "#4ade80" : "#f87171" }}
+              style={{ background: s.passed ? "var(--dpf-success)" : "var(--dpf-error)" }}
             />
             <span className="text-xs text-[var(--dpf-text)] flex-1">{s.step}</span>
             <span className="text-[10px] text-[var(--dpf-muted)]">{s.passed ? "PASS" : "FAIL"}</span>
@@ -42,7 +42,7 @@ export function TestRunnerPanel({ steps }: { steps: TestStep[] }) {
                 <img src={s.screenshotUrl} alt={`Step ${i + 1}`} className="rounded border border-[var(--dpf-border)] mb-2 max-w-full" />
               )}
               {s.error && (
-                <pre className="text-[10px] text-[#f87171] whitespace-pre-wrap">{s.error}</pre>
+                <pre className="text-[10px] text-[var(--dpf-error)] whitespace-pre-wrap">{s.error}</pre>
               )}
               {!s.screenshotUrl && !s.error && (
                 <span className="text-[10px] text-[var(--dpf-muted)]">No details available</span>

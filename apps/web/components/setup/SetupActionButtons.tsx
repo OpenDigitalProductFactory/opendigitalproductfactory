@@ -10,57 +10,25 @@ export function SetupActionButtons({ isLastStep = false }: { isLastStep?: boolea
   };
 
   return (
-    <div style={{
-      display: "flex",
-      gap: 8,
-      padding: "8px 12px",
-      marginTop: 4,
-      marginBottom: 8,
-    }}>
+    <div className="flex gap-2 px-3 py-2 mt-1 mb-2">
       <button
         type="button"
         onClick={() => dispatch("continue")}
-        style={{
-          flex: 1,
-          background: "rgba(124, 140, 248, 0.2)",
-          border: "1px solid rgba(124, 140, 248, 0.4)",
-          borderRadius: 6,
-          padding: "8px 12px",
-          fontSize: 12,
-          fontWeight: 500,
-          color: "var(--dpf-accent)",
-          cursor: "pointer",
-        }}
+        className="flex-1 rounded-md px-3 py-2 text-xs font-medium bg-[var(--dpf-accent)]/20 border border-[var(--dpf-accent)]/40 text-[var(--dpf-accent)] cursor-pointer hover:bg-[var(--dpf-accent)]/30 focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 transition-colors"
       >
         {isLastStep ? "Finish Setup" : "Continue"}
       </button>
       <button
         type="button"
         onClick={() => dispatch("skip")}
-        style={{
-          background: "rgba(136, 136, 160, 0.15)",
-          border: "1px solid rgba(136, 136, 160, 0.3)",
-          borderRadius: 6,
-          padding: "8px 12px",
-          fontSize: 12,
-          color: "var(--dpf-muted)",
-          cursor: "pointer",
-        }}
+        className="rounded-md px-3 py-2 text-xs text-[var(--dpf-muted)] bg-[var(--dpf-muted)]/10 border border-[var(--dpf-muted)]/25 cursor-pointer hover:bg-[var(--dpf-muted)]/20 focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 transition-colors"
       >
         Skip
       </button>
       <button
         type="button"
         onClick={() => dispatch("pause")}
-        style={{
-          background: "transparent",
-          border: "1px solid rgba(136, 136, 160, 0.2)",
-          borderRadius: 6,
-          padding: "8px 12px",
-          fontSize: 12,
-          color: "var(--dpf-muted)",
-          cursor: "pointer",
-        }}
+        className="rounded-md px-3 py-2 text-xs text-[var(--dpf-muted)] bg-transparent border border-[var(--dpf-muted)]/15 cursor-pointer hover:bg-[var(--dpf-muted)]/10 focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 transition-colors"
       >
         Later
       </button>

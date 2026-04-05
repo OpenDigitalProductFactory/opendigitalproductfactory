@@ -2024,13 +2024,13 @@
       "agent_name": "ux-accessibility-agent",
       "tier": "cross-cutting",
       "value_stream": "cross-cutting",
-      "capability_domain": "Reviews UI code and live pages for WCAG 2.2 AA compliance, contrast ratios, font sizing, dark-theme usability, CSS variable usage, keyboard navigation, and semantic HTML. Invokable during code review and Build Studio review phase to flag accessibility regressions. References docs/platform-usability-standards.md and docs/dark-theme-development-guidelines.md.",
+      "capability_domain": "Reviews UI code and live pages for WCAG 2.2 AA compliance, contrast ratios, font sizing, dark-theme usability, CSS variable usage, keyboard navigation, semantic HTML, and DPF design system token adherence. Invokable during code review and Build Studio review phase to flag accessibility and design system regressions. System prompt defined in specialist-prompts.ts (UX_ACCESSIBILITY_PROMPT).",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 3,
       "delegates_to": [],
       "escalates_to": "HR-300",
       "it4it_sections": [],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-haiku-4-5-20251001",
@@ -2050,6 +2050,7 @@
         },
         "tool_grants": [
           "file_read",
+          "sandbox_execute",
           "registry_read",
           "backlog_write",
           "decision_record_create"

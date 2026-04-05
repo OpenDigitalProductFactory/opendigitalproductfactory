@@ -241,7 +241,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             border: "1px solid var(--dpf-border)",
-            boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 40%, transparent)",
+            boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 50%, transparent), 0 2px 8px rgba(0,0,0,0.15)",
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",

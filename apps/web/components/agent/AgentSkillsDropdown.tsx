@@ -48,7 +48,7 @@ const skillButtonStyle: React.CSSProperties = {
 };
 
 function handleHoverIn(e: React.MouseEvent<HTMLButtonElement>) {
-  e.currentTarget.style.background = "rgba(124, 140, 248, 0.15)";
+  e.currentTarget.style.background = "color-mix(in srgb, var(--dpf-accent) 15%, transparent)";
 }
 
 function handleHoverOut(e: React.MouseEvent<HTMLButtonElement>) {
@@ -186,7 +186,7 @@ export function AgentSkillsDropdown({
             WebkitBackdropFilter: "blur(12px)",
             border: "1px solid var(--dpf-border)",
             borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.15)",
             zIndex: 60,
             padding: "4px 0",
             paddingTop: 8,
@@ -264,7 +264,7 @@ export function AgentSkillsDropdown({
               }}
               style={{
                 ...skillButtonStyle,
-                color: "rgba(124, 140, 248, 0.85)",
+                color: "var(--dpf-accent)",
                 fontSize: 11,
               }}
               onMouseEnter={handleHoverIn}
