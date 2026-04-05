@@ -18,7 +18,7 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/inventory": getInventoryContext,
   "/employee": getEmployeeContext,
   "/build": getBuildContext,
-  "/storefront": getStorefrontMarketingContext,
+  "/admin/storefront": getStorefrontMarketingContext,
   "/customer/funnel": getCustomerFunnelContext,
 };
 

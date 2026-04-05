@@ -514,8 +514,8 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
-  "/storefront": {
-    routePrefix: "/storefront",
+  "/admin/storefront": {
+    routePrefix: "/admin/storefront",
     domain: "Business Portal & Engagement",
     sensitivity: "confidential",
     domainContext:
