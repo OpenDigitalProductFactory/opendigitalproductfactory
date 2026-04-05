@@ -224,4 +224,27 @@ describe("responsesAdapter", () => {
       { id: "call_123", name: "read_file", arguments: { path: "README.md" } },
     ]);
   });
+
+  it("accepts plain text content parts from responses backends", async () => {
+    stubFetchOk({
+      output: [
+        { type: "message", content: [{ type: "text", text: "Plain text works." }] },
+      ],
+      usage: { input_tokens: 6, output_tokens: 4 },
+    });
+
+    const result = await responsesAdapter.execute(
+      makeRequest({
+        providerId: "chatgpt",
+        modelId: "gpt-5.4",
+        provider: {
+          baseUrl: "https://chatgpt.com/backend-api",
+          headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+        },
+      }),
+    );
+
+    expect(result.text).toBe("Plain text works.");
+    expect(result.usage).toEqual({ inputTokens: 6, outputTokens: 4 });
+  });
 });

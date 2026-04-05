@@ -33,6 +33,28 @@ interface GeminiPart {
   codeExecutionResult?: { outcome: string; output: string };
 }
 
+type ResponsesMessagePart = {
+  type?: string;
+  text?: string;
+};
+
+function extractResponsesText(
+  output: Array<{
+    type?: string;
+    content?: ResponsesMessagePart[];
+  }> | undefined,
+  outputText?: string,
+): string {
+  const text = (output ?? [])
+    .filter((item) => item.type === "message")
+    .flatMap((item) => item.content ?? [])
+    .filter((part) => part.type === "output_text" || part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("");
+
+  return text || outputText || "";
+}
+
 // ─── Chat Adapter ────────────────────────────────────────────────────────────
 
 export const chatAdapter: ExecutionAdapterHandler = {
@@ -310,14 +332,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // { output: [{ type: "message", content: [{ type: "output_text", text }] }] }
       const output = data.output as Array<{
         type?: string;
-        content?: Array<{ type?: string; text?: string }>;
+        content?: ResponsesMessagePart[];
       }> | undefined;
-      const messageParts = output?.filter((item) => item.type === "message") ?? [];
-      text = messageParts
-        .flatMap((item) => item.content ?? [])
-        .filter((c) => c.type === "output_text")
-        .map((c) => c.text ?? "")
-        .join("");
+      const outputText = typeof data.output_text === "string" ? data.output_text : undefined;
+      text = extractResponsesText(output, outputText);
 
       const usage = typeof data.usage === "object" && data.usage !== null
         ? data.usage as Record<string, number>
