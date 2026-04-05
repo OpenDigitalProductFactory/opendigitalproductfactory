@@ -164,14 +164,12 @@ describe("responsesAdapter", () => {
   });
 
   it("uses the ChatGPT backend responses path for codex OAuth providers", async () => {
-    stubFetchOk({
-      output: [
-        { type: "message", content: [{ type: "output_text", text: "OAuth OK." }] },
-      ],
-      usage: { input_tokens: 4, output_tokens: 2 },
-    });
+    stubFetchText([
+      'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"OAuth OK."}]}],"usage":{"input_tokens":4,"output_tokens":2}}}',
+      "data: [DONE]",
+    ].join("\n"));
 
-    await responsesAdapter.execute(
+    const result = await responsesAdapter.execute(
       makeRequest({
         providerId: "codex",
         provider: {
@@ -181,8 +179,12 @@ describe("responsesAdapter", () => {
       }),
     );
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url, fetchOpts] = mockFetch.mock.calls[0];
     expect(url).toBe("https://chatgpt.com/backend-api/codex/responses");
+    const sentBody = JSON.parse(fetchOpts.body);
+    expect(sentBody.stream).toBe(true);
+    expect(sentBody.max_output_tokens).toBeUndefined();
+    expect(result.text).toBe("OAuth OK.");
   });
 
   it("uses the ChatGPT backend responses path for chatgpt subscription providers", async () => {
@@ -204,7 +206,9 @@ describe("responsesAdapter", () => {
 
     const [url, fetchOpts] = mockFetch.mock.calls[0];
     expect(url).toBe("https://chatgpt.com/backend-api/codex/responses");
-    expect(JSON.parse(fetchOpts.body).stream).toBe(true);
+    const sentBody = JSON.parse(fetchOpts.body);
+    expect(sentBody.stream).toBe(true);
+    expect(sentBody.max_output_tokens).toBeUndefined();
     expect(result.text).toBe("Subscription OK.");
     expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2 });
   });
@@ -236,12 +240,10 @@ describe("responsesAdapter", () => {
   });
 
   it("accepts plain text content parts from responses backends", async () => {
-    stubFetchOk({
-      output: [
-        { type: "message", content: [{ type: "text", text: "Plain text works." }] },
-      ],
-      usage: { input_tokens: 6, output_tokens: 4 },
-    });
+    stubFetchText([
+      'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"text","text":"Plain text works."}]}],"usage":{"input_tokens":6,"output_tokens":4}}}',
+      "data: [DONE]",
+    ].join("\n"));
 
     const result = await responsesAdapter.execute(
       makeRequest({

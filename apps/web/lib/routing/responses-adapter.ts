@@ -152,7 +152,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     if (systemPrompt) {
       body.instructions = systemPrompt;
     }
-    if (plan.maxTokens) {
+    if (plan.maxTokens && !isChatGptBackend(providerId, provider.baseUrl)) {
       body.max_output_tokens = plan.maxTokens;
     }
     if (plan.temperature !== undefined) {
