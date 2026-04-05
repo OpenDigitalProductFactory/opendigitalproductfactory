@@ -231,7 +231,21 @@ function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
     ? messages
     : [messages[0]!, ...messages.slice(-(MAX_AGENTIC_HISTORY_MESSAGES - 1))];
 
-  return scopedMessages.map((message) => {
+  const retainedToolCallIds = new Set(
+    scopedMessages.flatMap((message) =>
+      message.role === "assistant" && message.toolCalls
+        ? message.toolCalls.map((toolCall) => toolCall.id)
+        : [],
+    ),
+  );
+
+  return scopedMessages
+    .filter((message) =>
+      message.role !== "tool" ||
+      !message.toolCallId ||
+      retainedToolCallIds.has(message.toolCallId),
+    )
+    .map((message) => {
     if (typeof message.content !== "string") return message;
     if (message.role === "tool") {
       return {
@@ -243,7 +257,7 @@ function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
       ...message,
       content: truncateMessageContent(message.content, MAX_TEXT_MESSAGE_CHARS, "message context"),
     };
-  });
+    });
 }
 
 export async function runAgenticLoop(params: {

@@ -345,4 +345,46 @@ describe("runAgenticLoop", () => {
     expect(firstCallMessages[0]!.content).toBe("message-0");
     expect(firstCallMessages[firstCallMessages.length - 1]!.content).toBe("message-39");
   });
+
+  it("drops orphaned tool outputs when compaction removes the matching tool call", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content:
+        "I finished reviewing the existing complaint flow patterns and can continue with the design without replaying stale tool output into the next model call.",
+      inputTokens: 120,
+      outputTokens: 80,
+    }));
+
+    const historyWithTrimmedToolPair = [
+      { role: "user" as const, content: "message-0" },
+      { role: "assistant" as const, content: "message-1" },
+      {
+        role: "assistant" as const,
+        content: "",
+        toolCalls: [{ id: "call_abc", name: "search_project_files", arguments: { query: "complaint" } }],
+      },
+      {
+        role: "tool" as const,
+        content: "old tool result",
+        toolCallId: "call_abc",
+      },
+      ...Array.from({ length: 22 }, (_, idx) => ({
+        role: idx % 2 === 0 ? "user" as const : "assistant" as const,
+        content: `filler-${idx}`,
+      })),
+    ];
+
+    await runAgenticLoop({
+      ...baseParams,
+      chatHistory: historyWithTrimmedToolPair,
+      tools: [],
+      toolsForProvider: undefined,
+    });
+
+    const firstCallMessages = mockRoute.mock.calls[0]![0];
+    const orphanedTool = firstCallMessages.find((m: any) => m.role === "tool" && m.toolCallId === "call_abc");
+
+    expect(orphanedTool).toBeUndefined();
+  });
 });
