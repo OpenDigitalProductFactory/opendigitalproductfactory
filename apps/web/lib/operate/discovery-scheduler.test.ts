@@ -1,47 +1,26 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   executeBootstrapDiscovery: vi.fn().mockResolvedValue({}),
-  prisma: {},
+  prisma: {
+    scheduledJob: {
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+    },
+  },
 }));
 
 // Must import after mock setup
-import { startDiscoveryScheduler, stopDiscoveryScheduler, runPrometheusTargetCheck, runFullDiscoverySweep } from "./discovery-scheduler";
+import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs } from "./discovery-scheduler";
 
-describe("discovery-scheduler", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    stopDiscoveryScheduler();
-  });
+describe("registerScheduledJobs", () => {
+  it("upserts both ScheduledJob rows", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    upsert.mockClear();
 
-  afterEach(() => {
-    stopDiscoveryScheduler();
-    vi.useRealTimers();
-  });
-
-  it("startDiscoveryScheduler sets intervals", () => {
-    const spy = vi.spyOn(globalThis, "setInterval");
-    startDiscoveryScheduler();
-    // 2 intervals (prometheus poll + full sweep) + 1 setTimeout for initial check
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-  });
-
-  it("stopDiscoveryScheduler clears intervals", () => {
-    startDiscoveryScheduler();
-    const spy = vi.spyOn(globalThis, "clearInterval");
-    stopDiscoveryScheduler();
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-  });
-
-  it("does not start twice", () => {
-    const spy = vi.spyOn(globalThis, "setInterval");
-    startDiscoveryScheduler();
-    const callCount = spy.mock.calls.length;
-    startDiscoveryScheduler(); // second call
-    expect(spy.mock.calls.length).toBe(callCount); // no new intervals
-    spy.mockRestore();
+    await registerScheduledJobs();
+    expect(upsert).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -56,7 +35,7 @@ describe("runPrometheusTargetCheck", () => {
     expect(result.newTargets).toEqual([]);
   });
 
-  it("detects new targets", async () => {
+  it("returns target keys when prometheus responds", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -74,25 +53,12 @@ describe("runPrometheusTargetCheck", () => {
 });
 
 describe("runFullDiscoverySweep", () => {
-  it("skips if sweep already in progress", async () => {
+  it("calls executeBootstrapDiscovery", async () => {
     const { executeBootstrapDiscovery } = await import("@dpf/db");
     const mockExec = executeBootstrapDiscovery as ReturnType<typeof vi.fn>;
     mockExec.mockClear();
 
-    // Start a slow sweep
-    let resolveFirst!: () => void;
-    mockExec.mockImplementationOnce(() => new Promise<void>((r) => { resolveFirst = r; }));
-
-    const first = runFullDiscoverySweep();
-    // Give the first sweep time to set the flag
-    await new Promise((r) => setTimeout(r, 0));
-    const second = runFullDiscoverySweep(); // should skip
-
-    resolveFirst();
-    await first;
-    await second;
-
-    // Only called once (second was skipped)
+    await runFullDiscoverySweep();
     expect(mockExec).toHaveBeenCalledTimes(1);
   });
 });

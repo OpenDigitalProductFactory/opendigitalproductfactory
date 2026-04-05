@@ -59,6 +59,8 @@ model User {
   agentModelConfigs            AgentModelConfig[]            @relation("AgentModelConfiguredBy")
   knowledgeArticles            KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
   knowledgeRevisions           KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
+  workItemAssignments          WorkItem[]                    @relation("WorkItemAssignee")
+  workSchedule                 WorkSchedule?
 }
 
 model UserGroup {
@@ -464,6 +466,7 @@ model Portfolio {
   portfolioQualityIssues PortfolioQualityIssue[]
   knowledgeArticles      KnowledgeArticlePortfolio[]
   valueStreamTeams       ValueStreamTeam[]
+  workQueues             WorkQueue[]
 }
 
 model DigitalProduct {
@@ -494,6 +497,7 @@ model DigitalProduct {
   businessModels               ProductBusinessModel[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
   knowledgeArticles            KnowledgeArticleProduct[]
+  workQueues                   WorkQueue[]
 }
 
 model BusinessModel {
@@ -1257,6 +1261,8 @@ model Agent {
   promptContext       AgentPromptContext?
   knowledgeArticles      KnowledgeArticle[]            @relation("KnowledgeArticleAgentAuthor")
   valueStreamTeamRoles   ValueStreamTeamRole[]
+  workItemAssignments    WorkItem[]                    @relation("WorkItemAgent")
+  workSchedule           WorkSchedule?                 @relation("WorkScheduleAgent")
 }
 
 model AgentOwnership {
@@ -3044,6 +3050,7 @@ model CalendarEvent {
   complianceEntityId   String?
   complianceEntityType String?
   ownerEmployee        EmployeeProfile @relation(fields: [ownerEmployeeId], references: [id])
+  workItems            WorkItem[]
 
   @@index([ownerEmployeeId])
   @@index([startAt, endAt])
@@ -4855,6 +4862,8 @@ model ValueStreamTeam {
   portfolio           Portfolio?            @relation(fields: [portfolioId], references: [id])
   roles               ValueStreamTeamRole[]
   hitlGates           ValueStreamHitlGate[]
+  queues              WorkQueue[]
+  workItems           WorkItem[]
   isActive            Boolean               @default(true)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
@@ -4931,5 +4940,114 @@ model DiscoveryConnection {
 
   @@index([collectorType])
   @@index([status])
+}
+
+// ---- Collaborative Work Queue (EP-CWQ-001) ----
+
+model WorkQueue {
+  id               String           @id @default(cuid())
+  queueId          String           @unique @default(cuid())
+  name             String
+  queueType        String           // team | personal | triage | escalation
+  teamId           String?
+  team             ValueStreamTeam? @relation(fields: [teamId], references: [id])
+  routingPolicy    Json
+  slaMinutes       Json?
+  isActive         Boolean          @default(true)
+  portfolioId      String?
+  portfolio        Portfolio?       @relation(fields: [portfolioId], references: [id])
+  digitalProductId String?
+  digitalProduct   DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
+  items            WorkItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([teamId])
+  @@index([portfolioId])
+  @@index([queueType, isActive])
+}
+
+model WorkItem {
+  id                String          @id @default(cuid())
+  itemId            String          @unique @default(cuid())
+  sourceType        String
+  sourceId          String?
+  title             String
+  description       String          @db.Text
+  urgency           String          @default("routine")
+  effortClass       String          @default("medium")
+  workerConstraint  Json
+  teamId            String?
+  team              ValueStreamTeam? @relation(fields: [teamId], references: [id])
+  queueId           String
+  queue             WorkQueue       @relation(fields: [queueId], references: [id])
+  status            String          @default("queued")
+  assignedToType    String?
+  assignedToUserId  String?
+  assignedToUser    User?           @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
+  assignedToAgentId String?
+  assignedToAgent   Agent?          @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
+  assignedThreadId  String?
+  claimedAt         DateTime?
+  dueAt             DateTime?
+  calendarEventId   String?
+  calendarEvent     CalendarEvent?  @relation(fields: [calendarEventId], references: [id])
+  evidence          Json?
+  parentItemId      String?
+  parentItem        WorkItem?       @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
+  childItems        WorkItem[]      @relation("WorkItemHierarchy")
+  a2aTaskId         String?
+  messages          WorkItemMessage[]
+  routingDecision   Json?
+  completedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([queueId, status])
+  @@index([assignedToUserId, status])
+  @@index([assignedToAgentId, status])
+  @@index([teamId, status])
+  @@index([parentItemId])
+  @@index([sourceType, sourceId])
+  @@index([urgency, status])
+  @@index([dueAt])
+}
+
+model WorkItemMessage {
+  id                String    @id @default(cuid())
+  messageId         String    @unique @default(cuid())
+  workItemId        String
+  workItem          WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  senderType        String
+  senderUserId      String?
+  senderAgentId     String?
+  messageType       String
+  body              String    @db.Text
+  structuredPayload Json?
+  channel           String    @default("in-app")
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  respondedAt       DateTime?
+  response          Json?
+  createdAt         DateTime  @default(now())
+
+  @@index([workItemId, createdAt])
+  @@index([senderUserId])
+}
+
+model WorkSchedule {
+  id              String   @id @default(cuid())
+  workerType      String
+  userId          String?  @unique
+  user            User?    @relation(fields: [userId], references: [id])
+  agentId         String?  @unique
+  agent           Agent?   @relation("WorkScheduleAgent", fields: [agentId], references: [id])
+  timezone        String   @default("UTC")
+  workingHours    Json
+  maxConcurrent   Int      @default(5)
+  autoAccept      Boolean  @default(false)
+  notificationPrefs Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 

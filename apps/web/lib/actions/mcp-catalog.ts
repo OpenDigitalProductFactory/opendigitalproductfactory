@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { runMcpCatalogSync } from "@/lib/mcp-catalog-sync";
+import { inngest } from "@/lib/queue/inngest-client";
 import { computeNextRunAt, type ScheduleValue } from "@/lib/ai-provider-types";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
@@ -39,18 +39,11 @@ export async function triggerMcpCatalogSync(): Promise<{ ok: boolean; message: s
     data: { lastRunAt: new Date(), lastStatus: "running" },
   }).catch(() => {});
 
-  // Fire-and-forget: client subscribes to SSE on sync.id for real-time progress
-  void runMcpCatalogSync(sync.id).then(async () => {
-    const job = await prisma.scheduledJob.findUnique({ where: { jobId: "mcp-catalog-sync" } });
-    await prisma.scheduledJob.update({
-      where: { jobId: "mcp-catalog-sync" },
-      data: {
-        lastStatus: "completed",
-        lastRunAt: new Date(),
-        nextRunAt: job ? computeNextRunAt(job.schedule, new Date()) : null,
-      },
-    }).catch(() => {});
-  }).catch(() => {});
+  // Dispatch to Inngest for durable execution with retry
+  void inngest.send({
+    name: "ops/mcp-catalog.sync",
+    data: { syncId: sync.id },
+  });
 
   return { ok: true, message: "Sync started.", syncId: sync.id };
 }
@@ -124,10 +117,8 @@ export async function runMcpCatalogSyncIfDue(): Promise<void> {
     where: { jobId: "mcp-catalog-sync" },
     data: { lastRunAt: new Date(), lastStatus: "running" },
   });
-  void runMcpCatalogSync(sync.id).then(async () => {
-    await prisma.scheduledJob.update({
-      where: { jobId: "mcp-catalog-sync" },
-      data: { lastStatus: "completed", nextRunAt: computeNextRunAt(job.schedule, new Date()) },
-    }).catch(() => {});
-  }).catch(() => {});
+  void inngest.send({
+    name: "ops/mcp-catalog.sync",
+    data: { syncId: sync.id },
+  });
 }

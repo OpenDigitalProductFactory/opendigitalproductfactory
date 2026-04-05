@@ -32,7 +32,16 @@ export type AgentEvent =
   | { type: "orchestrator:task_dispatched"; buildId: string; taskTitle: string; specialist: string }
   | { type: "orchestrator:task_complete"; buildId: string; taskTitle: string; specialist: string; outcome: string; status?: string }
   | { type: "orchestrator:phase_summary"; buildId: string; completed: number; total: number; summary: string }
-  | { type: "orchestrator:specialist_retry"; buildId: string; specialist: string; reason: string; attempt: number };
+  | { type: "orchestrator:specialist_retry"; buildId: string; specialist: string; reason: string; attempt: number }
+  // EP-CWQ-001: Collaborative work queue events
+  | { type: "queue:item_created"; workItemId: string; sourceType: string; urgency: string }
+  | { type: "queue:item_assigned"; workItemId: string; workerType: string; workerId: string }
+  | { type: "queue:item_claimed"; workItemId: string; workerType: string; workerId: string }
+  | { type: "queue:item_status_changed"; workItemId: string; fromStatus: string; toStatus: string }
+  | { type: "queue:item_completed"; workItemId: string; outcome: "success" | "failed" | "cancelled" }
+  | { type: "queue:escalation"; workItemId: string; fromWorker: string; toWorker: string; reason: string }
+  | { type: "queue:sla_warning"; workItemId: string; minutesRemaining: number }
+  | { type: "queue:message"; workItemId: string; messageType: string; senderId: string };
 
 type Handler = (event: AgentEvent) => void;
 

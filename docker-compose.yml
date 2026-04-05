@@ -10,6 +10,7 @@ services:
       POSTGRES_DB: dpf
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-inngest-db.sh:/docker-entrypoint-initdb.d/20-create-inngest-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dpf}"]
       interval: 5s
@@ -95,11 +96,17 @@ services:
       PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      INNGEST_DEV: ${INNGEST_DEV:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
     depends_on:
       portal-init:
         condition: service_completed_successfully
+      inngest:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -439,9 +446,46 @@ services:
       postgres:
         condition: service_healthy
 
+  # ─── Durable Execution (Inngest + Redis) ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+
+  inngest:
+    image: inngest/inngest:latest
+    command: "inngest start"
+    ports:
+      - "8288:8288"
+      - "8289:8289"
+    environment:
+      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:-deadbeefcafebabe}
+      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      - INNGEST_POSTGRES_URI=postgres://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/inngest
+      - INNGEST_REDIS_URI=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8288/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 volumes:
   pgdata:
   neo4jdata:
+  redis_data:
   qdrant_data:
   dpf-source-code:
   playwright_scripts:

@@ -80,33 +80,11 @@ export async function runInfraPruneNow(): Promise<{ ok: boolean; marked: number;
 
 /**
  * Called from the platform sync page server component on each load.
- * Ensures the job record exists and runs the prune if it is due.
+ * Ensures the job record exists. Actual pruning is handled by Inngest cron
+ * (see lib/queue/functions/infra-prune.ts).
  */
 export async function runInfraPruneIfDue(): Promise<void> {
-  const job = await ensureInfraPruneJob();
-  if (
-    job.schedule !== "disabled" &&
-    job.nextRunAt != null &&
-    job.nextRunAt < new Date()
-  ) {
-    // Fire-and-forget — page load should not block on the prune
-    void pruneStaleInfraCIs({
-      markDecommissionedAfterDays: MARK_AFTER_DAYS,
-      deleteAfterDays:             DELETE_AFTER_DAYS,
-    }).then(async () => {
-      const now = new Date();
-      await prisma.scheduledJob.update({
-        where: { jobId: JOB_ID },
-        data:  { lastRunAt: now, lastStatus: "ok", lastError: null, nextRunAt: computeNextRunAt(job.schedule, now) },
-      }).catch(() => {});
-    }).catch(async (err: unknown) => {
-      const error = err instanceof Error ? err.message : String(err);
-      await prisma.scheduledJob.update({
-        where: { jobId: JOB_ID },
-        data:  { lastRunAt: new Date(), lastStatus: "error", lastError: error },
-      }).catch(() => {});
-    });
-  }
+  await ensureInfraPruneJob();
 }
 
 /** Update the schedule for the infra prune job. */
