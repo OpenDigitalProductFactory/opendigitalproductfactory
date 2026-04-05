@@ -52,28 +52,28 @@ vi.mock("@/lib/ai-inference", () => {
     toolCallId?: string;
   };
 
-  function formatMessageForOpenAI(msg: ChatMessage) {
+  function formatMessageForResponses(msg: ChatMessage) {
     if (msg.role === "tool" && msg.toolCallId) {
-      return { role: "tool", tool_call_id: msg.toolCallId, content: msg.content };
+      return [{ type: "function_call_output", call_id: msg.toolCallId, output: msg.content }];
     }
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-      return {
-        role: "assistant",
-        content: msg.content,
-        tool_calls: msg.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function",
-          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+      return [
+        ...(msg.content ? [{ role: "assistant", content: msg.content }] : []),
+        ...msg.toolCalls.map((tc) => ({
+          type: "function_call",
+          call_id: tc.id,
+          name: tc.name,
+          arguments: JSON.stringify(tc.arguments),
         })),
-      };
+      ];
     }
-    return { role: msg.role, content: msg.content };
+    return [{ role: msg.role, content: msg.content }];
   }
 
   return {
     InferenceError,
     classifyHttpError,
-    formatMessageForOpenAI,
+    formatMessageForResponses,
   };
 });
 
@@ -236,6 +236,49 @@ describe("responsesAdapter", () => {
     expect(result.text).toBe("Checking...");
     expect(result.toolCalls).toEqual([
       { id: "call_123", name: "read_file", arguments: { path: "README.md" } },
+    ]);
+  });
+
+  it("formats tool history using Responses input items instead of nested tool_calls", async () => {
+    stubFetchOk({
+      output: [
+        { type: "message", content: [{ type: "output_text", text: "Done." }] },
+      ],
+      usage: { input_tokens: 14, output_tokens: 7 },
+    });
+
+    await responsesAdapter.execute(
+      makeRequest({
+        tools: [{ type: "function", function: { name: "search_project_files", description: "Search files", parameters: {} } }],
+        messages: [
+          { role: "user", content: "Find the customer complaint tracker files." },
+          {
+            role: "assistant",
+            content: "Searching the repo.",
+            toolCalls: [{ id: "call_search_1", name: "search_project_files", arguments: { query: "customer complaint tracker" } }],
+          },
+          { role: "tool", content: "[\"app/complaints/page.tsx\"]", toolCallId: "call_search_1" },
+          { role: "user", content: "Summarize what you found." },
+        ],
+      }),
+    );
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.input).toEqual([
+      { role: "user", content: "Find the customer complaint tracker files." },
+      { role: "assistant", content: "Searching the repo." },
+      {
+        type: "function_call",
+        call_id: "call_search_1",
+        name: "search_project_files",
+        arguments: "{\"query\":\"customer complaint tracker\"}",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_search_1",
+        output: "[\"app/complaints/page.tsx\"]",
+      },
+      { role: "user", content: "Summarize what you found." },
     ]);
   });
 

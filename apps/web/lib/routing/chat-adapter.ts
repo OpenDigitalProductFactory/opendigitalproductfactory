@@ -20,6 +20,7 @@ import {
   extractOpenAIToolCalls,
   formatMessageForAnthropic,
   formatMessageForOpenAI,
+  formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
@@ -162,7 +163,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       chatUrl = `${baseUrl}/codex/responses`;
 
       // Responses API format: input array + instructions (system prompt)
-      const input = messages.map((m) => formatMessageForOpenAI(m));
+      const input = messages.flatMap((m) => formatMessageForResponses(m));
 
       body = {
         model: modelId,

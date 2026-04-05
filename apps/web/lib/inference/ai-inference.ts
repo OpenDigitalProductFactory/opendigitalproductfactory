@@ -222,6 +222,29 @@ export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown
   return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
 }
 
+/** Format a ChatMessage for the OpenAI Responses API input array */
+export function formatMessageForResponses(msg: ChatMessage): Array<Record<string, unknown>> {
+  const textContent = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+
+  if (msg.role === "tool" && msg.toolCallId) {
+    return [{ type: "function_call_output", call_id: msg.toolCallId, output: textContent }];
+  }
+
+  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+    return [
+      ...(textContent ? [{ role: "assistant", content: textContent }] : []),
+      ...msg.toolCalls.map((tc) => ({
+        type: "function_call",
+        call_id: tc.id,
+        name: tc.name,
+        arguments: JSON.stringify(tc.arguments),
+      })),
+    ];
+  }
+
+  return [{ role: msg.role, content: textContent }];
+}
+
 // ─── callProvider ────────────────────────────────────────────────────────────
 
 export async function callProvider(
