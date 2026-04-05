@@ -53,7 +53,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [enabledFamilies, setEnabledFamilies]       = useState<string[]>(provider.enabledFamilies);
   const [testResult, setTestResult]                 = useState<{ ok: boolean; message: string } | null>(null);
   const [saveMessage, setSaveMessage]               = useState<string | null>(null);
-  const [discoveryResult, setDiscoveryResult]       = useState<{ discovered: number; newCount: number; error?: string } | null>(null);
+  const [discoveryResult, setDiscoveryResult]       = useState<{ discovered: number; newCount: number; error?: string; warning?: string } | null>(null);
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
   const [pipelineStatus, setPipelineStatus]         = useState<string | null>(null);
 
@@ -588,6 +588,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 ? `Error: ${discoveryResult.error}`
                 : `${discoveryResult.discovered} model${discoveryResult.discovered !== 1 ? "s" : ""} discovered (${discoveryResult.newCount} new)`}
             </span>
+          )}
+          {discoveryResult?.warning && (
+            <div style={{ marginTop: 6, fontSize: 12, color: "var(--dpf-muted)" }}>
+              {discoveryResult.warning}
+            </div>
           )}
           {profilingResult && (
             <span style={{ marginLeft: 8, fontSize: 12, color: profilingResult.error ? "#f87171" : "#4ade80" }}>
