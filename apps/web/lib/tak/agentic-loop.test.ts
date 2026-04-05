@@ -345,4 +345,40 @@ describe("runAgenticLoop", () => {
     expect(firstCallMessages[0]!.content).toBe("message-0");
     expect(firstCallMessages[firstCallMessages.length - 1]!.content).toBe("message-39");
   });
+
+  it("drops orphaned tool outputs when compaction removes the matching tool call", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Done.",
+    }));
+
+    const longHistory = [
+      { role: "user" as const, content: "message-0" },
+      ...Array.from({ length: 15 }, (_, idx) => ({
+        role: idx % 2 === 0 ? "assistant" as const : "user" as const,
+        content: `filler-${idx + 1}`,
+      })),
+      {
+        role: "assistant" as const,
+        content: "Running search",
+        toolCalls: [{ id: "call_orphan", name: "search_project", arguments: { query: "complaints" } }],
+      },
+      { role: "tool" as const, content: "Found files", toolCallId: "call_orphan" },
+      ...Array.from({ length: 22 }, (_, idx) => ({
+        role: idx % 2 === 0 ? "user" as const : "assistant" as const,
+        content: `tail-${idx + 18}`,
+      })),
+    ];
+
+    await runAgenticLoop({
+      ...baseParams,
+      chatHistory: longHistory,
+      tools: [],
+      toolsForProvider: undefined,
+    });
+
+    const firstCallMessages = mockRoute.mock.calls[0]![0];
+    expect(firstCallMessages.some((m: any) => m.role === "tool" && m.toolCallId === "call_orphan")).toBe(false);
+  });
 });
