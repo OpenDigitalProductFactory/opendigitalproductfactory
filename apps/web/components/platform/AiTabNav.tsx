@@ -11,6 +11,7 @@ const TABS = [
   { label: "Action History", href: "/platform/ai/history" },
   { label: "Model Assignment", href: "/platform/ai/model-assignment" },
   { label: "Authority", href: "/platform/ai/authority" },
+  { label: "Skills", href: "/platform/ai/skills" },
 ];
 
 export function AiTabNav() {
