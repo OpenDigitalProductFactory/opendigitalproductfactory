@@ -307,7 +307,7 @@ BRANDING CONTEXT: The platform supports a full branding system. Theme tokens (pa
       defaultBudgetClass: "balanced",
     },
   },
-  "/storefront": {
+  "/admin/storefront": {
     agentId: "marketing-specialist",
     agentName: "Marketing Specialist",
     agentDescription: "Archetype-aware marketing strategy, campaigns, and growth",
