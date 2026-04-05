@@ -28,8 +28,12 @@ type ResponsesMessagePart = {
   text?: string;
 };
 
+function isChatGptBackend(providerId: string, baseUrl: string): boolean {
+  return providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api");
+}
+
 function buildResponsesUrl(providerId: string, baseUrl: string): string {
-  if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
+  if (isChatGptBackend(providerId, baseUrl)) {
     return `${baseUrl}/codex/responses`;
   }
   const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
@@ -82,6 +86,52 @@ function parseResponsesOutput(
   return { text, toolCalls };
 }
 
+async function readResponsesPayload(
+  res: Response,
+  providerId: string,
+  baseUrl: string,
+): Promise<{
+  output?: ResponsesOutputItem[];
+  output_text?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}> {
+  if (!isChatGptBackend(providerId, baseUrl)) {
+    return await res.json() as {
+      output?: ResponsesOutputItem[];
+      output_text?: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+  }
+
+  const rawText = await res.text();
+  const lines = rawText.split("\n");
+  let lastCompleted: Record<string, unknown> | null = null;
+  let lastDelta = "";
+
+  for (const line of lines) {
+    if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+    try {
+      const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
+      if (parsed.type === "response.completed" && parsed.response) {
+        lastCompleted = parsed.response as Record<string, unknown>;
+      }
+      if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
+        lastDelta += parsed.delta;
+      }
+    } catch {
+      // Ignore malformed SSE lines and keep scanning for the completed payload.
+    }
+  }
+
+  return (lastCompleted ?? {
+    output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }],
+  }) as {
+    output?: ResponsesOutputItem[];
+    output_text?: string;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+}
+
 export const responsesAdapter: ExecutionAdapterHandler = {
   type: "responses",
 
@@ -94,6 +144,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       input: messages.map((message) => formatMessageForOpenAI(message)),
       store: false,
     };
+
+    if (isChatGptBackend(providerId, provider.baseUrl)) {
+      body.stream = true;
+    }
 
     if (systemPrompt) {
       body.instructions = systemPrompt;
@@ -135,11 +189,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       throw classifyHttpError(res.status, providerId, errBody, res.headers);
     }
 
-    const data = await res.json() as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+    const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
 
     return {
