@@ -23,6 +23,11 @@ type ResponsesOutputItem =
       arguments?: string;
     };
 
+type ResponsesMessagePart = {
+  type?: string;
+  text?: string;
+};
+
 function buildResponsesUrl(providerId: string, baseUrl: string): string {
   if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
     return `${baseUrl}/codex/responses`;
@@ -47,13 +52,22 @@ function toResponsesTools(tools?: Array<Record<string, unknown>>): Array<Record<
   });
 }
 
-function parseResponsesOutput(output: ResponsesOutputItem[] | undefined): { text: string; toolCalls: ToolCallEntry[] } {
+function extractResponsesText(output: ResponsesOutputItem[] | undefined, outputText?: string): string {
   const text = (output ?? [])
     .filter((item) => item.type === "message")
     .flatMap((item) => "content" in item ? item.content ?? [] : [])
-    .filter((part) => part.type === "output_text")
+    .filter((part): part is ResponsesMessagePart => part.type === "output_text" || part.type === "text")
     .map((part) => part.text ?? "")
     .join("");
+
+  return text || outputText || "";
+}
+
+function parseResponsesOutput(
+  output: ResponsesOutputItem[] | undefined,
+  outputText?: string,
+): { text: string; toolCalls: ToolCallEntry[] } {
+  const text = extractResponsesText(output, outputText);
 
   const toolCalls = (output ?? [])
     .filter((item) => item.type === "function_call" && "name" in item && item.name)
@@ -123,9 +137,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const data = await res.json() as {
       output?: ResponsesOutputItem[];
+      output_text?: string;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
-    const parsed = parseResponsesOutput(data.output);
+    const parsed = parseResponsesOutput(data.output, data.output_text);
 
     return {
       text: parsed.text,

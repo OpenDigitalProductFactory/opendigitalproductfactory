@@ -624,6 +624,36 @@ describe("chatAdapter", () => {
     expect(result.toolCalls[0]).toEqual({ id: "call_abc", name: "get_weather", arguments: { city: "London" } });
   });
 
+  it("ChatGPT: accepts plain text content parts from completed SSE responses", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => [
+        'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"text","text":"Subscription fallback works."}]}],"usage":{"input_tokens":8,"output_tokens":5}}}',
+        "data: [DONE]",
+      ].join("\n"),
+      headers: new Headers(),
+    });
+
+    const req = makeRequest({
+      providerId: "chatgpt",
+      modelId: "gpt-5.4",
+      plan: makePlan({
+        providerId: "chatgpt",
+        modelId: "gpt-5.4",
+      }),
+      provider: {
+        baseUrl: "https://chatgpt.com/backend-api",
+        headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+      },
+    });
+
+    const result = await chatAdapter.execute(req);
+
+    expect(result.text).toBe("Subscription fallback works.");
+    expect(result.usage).toEqual({ inputTokens: 8, outputTokens: 5 });
+  });
+
   // ── Adapter type is "chat" ──
 
   it("adapter type is 'chat'", () => {
