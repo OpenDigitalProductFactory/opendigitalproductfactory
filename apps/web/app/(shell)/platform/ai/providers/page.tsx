@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers, getProviderModelSummaries, getToolInventory } from "@/lib/ai-provider-data";
-import { syncProviderRegistry, detectMcpServers } from "@/lib/actions/ai-providers";
+import { syncProviderRegistry, detectMcpServers, runProviderCatalogReconciliationIfDue } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
@@ -39,6 +39,7 @@ export default async function ProvidersPage() {
 
   // Passive health check for bundled Ollama (may change provider status)
   await checkBundledProviders();
+  await runProviderCatalogReconciliationIfDue();
 
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };

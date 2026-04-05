@@ -37,7 +37,9 @@ Pre-evaluated profiles are protected from being overwritten by dynamic discovery
 
 **Cloud providers (manual):** Cloud provider models are discovered when an admin clicks "Discover Models" on the provider detail form. This calls the provider's model list API (e.g., Anthropic `/v1/models`), creates discovery records, then profiles each model. Models that don't match the provider's `modelRestrictions` allowlist are automatically retired with the reason "Model not accessible with provider credential type."
 
-There is currently no scheduled automatic discovery for cloud providers. If a provider releases a new model family, it will not appear until an admin manually triggers discovery. A weekly scheduled discovery job is planned (see backlog).
+There is currently no scheduled automatic discovery for cloud providers that support normal model listing APIs. If a provider releases a new model family, it will not appear until an admin manually triggers discovery.
+
+Non-discoverable providers are handled differently. For providers such as Codex that cannot use `/v1/models`, the platform uses a curated known-model catalog plus a scheduled catalog reconciliation pass. The reconciler checks official provider documentation for candidate model IDs and deprecation signals, reseeds the runtime model catalog from the curated entries, and reports any new official candidates that are not yet approved for routing. Documentation makes a model a candidate; runtime probe and seeded metadata make it routable.
 
 ## Quality Tiers
 

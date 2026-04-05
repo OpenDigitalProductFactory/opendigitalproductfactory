@@ -13,6 +13,10 @@ const {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    scheduledJob: {
+      upsert: vi.fn(),
+      update: vi.fn(),
+    },
     credentialEntry: {
       findUnique: vi.fn(),
     },
@@ -49,7 +53,11 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   seedAllRecipes: vi.fn(),
 }));
 
-import { discoverModels, testProviderAuth } from "./ai-providers";
+import {
+  discoverModels,
+  runProviderCatalogReconciliationIfDue,
+  testProviderAuth,
+} from "./ai-providers";
 
 describe("testProviderAuth", () => {
   beforeEach(() => {
@@ -64,6 +72,13 @@ describe("testProviderAuth", () => {
     });
     mockCan.mockReturnValue(true);
     mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockPrisma.scheduledJob.upsert.mockResolvedValue({
+      jobId: "provider-catalog-reconciliation",
+      schedule: "weekly",
+      lastRunAt: null,
+      nextRunAt: new Date("2026-04-04T00:00:00.000Z"),
+    });
+    mockPrisma.scheduledJob.update.mockResolvedValue({});
     mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 1, profiled: 1 });
     vi.stubGlobal(
       "fetch",
@@ -276,7 +291,33 @@ describe("discoverModels", () => {
 
     const result = await discoverModels("codex");
 
-    expect(result).toEqual({ discovered: 2, newCount: 2, error: undefined });
+    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+});
+
+describe("runProviderCatalogReconciliationIfDue", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+    mockPrisma.scheduledJob.upsert.mockResolvedValue({
+      jobId: "provider-catalog-reconciliation",
+      schedule: "weekly",
+      lastRunAt: null,
+      nextRunAt: new Date("2026-04-04T00:00:00.000Z"),
+    });
+    mockPrisma.scheduledJob.update.mockResolvedValue({});
+  });
+
+  it("upserts and runs the provider catalog reconciliation job when due", async () => {
+    await runProviderCatalogReconciliationIfDue();
+
+    expect(mockPrisma.scheduledJob.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { jobId: "provider-catalog-reconciliation" },
+      }),
+    );
+    expect(mockPrisma.scheduledJob.update).toHaveBeenCalled();
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
   });
 });

@@ -24,6 +24,10 @@ import {
   seedAllRecipes,
 } from "@/lib/ai-provider-internals";
 import { KNOWN_PROVIDER_MODELS } from "@/lib/routing/known-provider-models";
+import {
+  collectProviderCatalogSignals,
+  summarizeCatalogSignal,
+} from "@/lib/provider-catalog-reconciliation";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -451,17 +455,80 @@ export async function toggleProviderStatus(
 
 export async function discoverModels(
   providerId: string,
-): Promise<{ discovered: number; newCount: number; error?: string }> {
+): Promise<{ discovered: number; newCount: number; error?: string; warning?: string }> {
   await requireManageProviders();
   if (KNOWN_PROVIDER_MODELS[providerId]) {
+    const signal = await collectProviderCatalogSignals(providerId);
     const seeded = await autoDiscoverAndProfile(providerId);
     return {
       discovered: seeded.discovered,
       newCount: seeded.discovered,
       error: seeded.error,
+      warning: signal.warning,
     };
   }
   return discoverModelsInternal(providerId);
+}
+
+const PROVIDER_CATALOG_RECONCILIATION_JOB_ID = "provider-catalog-reconciliation";
+const PROVIDER_CATALOG_RECONCILIATION_JOB_NAME = "Provider Catalog Reconciliation";
+
+async function runProviderCatalogReconciliationInternal(): Promise<string[]> {
+  const summaries: string[] = [];
+  for (const providerId of Object.keys(KNOWN_PROVIDER_MODELS)) {
+    const signal = await collectProviderCatalogSignals(providerId);
+    const seeded = await autoDiscoverAndProfile(providerId);
+    const baseSummary = summarizeCatalogSignal(signal);
+    summaries.push(
+      `${baseSummary} seeded=${seeded.discovered}/${seeded.profiled}${seeded.error ? ` seed_error=${seeded.error}` : ""}`,
+    );
+  }
+  return summaries;
+}
+
+export async function runProviderCatalogReconciliationIfDue(): Promise<void> {
+  const now = new Date();
+  const job = await prisma.scheduledJob.upsert({
+    where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+    create: {
+      jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID,
+      name: PROVIDER_CATALOG_RECONCILIATION_JOB_NAME,
+      schedule: "weekly",
+      nextRunAt: now,
+    },
+    update: {},
+  });
+  if (job.schedule === "disabled") return;
+
+  const neverRun = !job.lastRunAt;
+  const isDue = job.nextRunAt && job.nextRunAt <= now;
+  if (!neverRun && !isDue) return;
+
+  await prisma.scheduledJob.update({
+    where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+    data: { lastRunAt: now, lastStatus: "running" },
+  });
+
+  try {
+    const summaries = await runProviderCatalogReconciliationInternal();
+    await prisma.scheduledJob.update({
+      where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+      data: {
+        lastStatus: "ok",
+        lastError: summaries.join(" | ").slice(0, 1000),
+        nextRunAt: computeNextRunAt(job.schedule, now),
+      },
+    });
+  } catch (err) {
+    await prisma.scheduledJob.update({
+      where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+      data: {
+        lastStatus: "error",
+        lastError: err instanceof Error ? err.message.slice(0, 1000) : "Provider catalog reconciliation failed",
+        nextRunAt: computeNextRunAt(job.schedule, now),
+      },
+    });
+  }
 }
 
 // ─── Scheduled jobs ───────────────────────────────────────────────────────────
@@ -470,10 +537,13 @@ export async function updateScheduledJob(input: { jobId: string; schedule: strin
   await requireManageProviders();
   const nextRunAt = computeNextRunAt(input.schedule, new Date());
   // infra-ci-prune may not exist yet — upsert so the first schedule change creates it
-  if (input.jobId === "infra-ci-prune") {
+  if (input.jobId === "infra-ci-prune" || input.jobId === PROVIDER_CATALOG_RECONCILIATION_JOB_ID) {
+    const name = input.jobId === "infra-ci-prune"
+      ? "Infrastructure CI Prune"
+      : PROVIDER_CATALOG_RECONCILIATION_JOB_NAME;
     await prisma.scheduledJob.upsert({
-      where:  { jobId: "infra-ci-prune" },
-      create: { jobId: "infra-ci-prune", name: "Infrastructure CI Prune", schedule: input.schedule, nextRunAt },
+      where:  { jobId: input.jobId },
+      create: { jobId: input.jobId, name, schedule: input.schedule, nextRunAt },
       update: { schedule: input.schedule, nextRunAt },
     });
     return;
@@ -498,6 +568,10 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
   if (jobId === "infra-ci-prune") {
     const { runInfraPruneNow } = await import("@/lib/actions/infra-prune");
     await runInfraPruneNow();
+    return;
+  }
+  if (jobId === PROVIDER_CATALOG_RECONCILIATION_JOB_ID) {
+    await runProviderCatalogReconciliationIfDue();
     return;
   }
   console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);
