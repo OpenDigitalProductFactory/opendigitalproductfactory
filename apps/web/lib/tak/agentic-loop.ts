@@ -31,6 +31,9 @@ const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen (fronti
 const MAX_DURATION_PLAN_MS = 300_000;     // 5 min — ideate/plan phases (evidence + search)
 const MAX_DURATION_REVIEW_MS = 240_000;   // 4 min — review (tests + gate checks)
 const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship (deploy + promotion pipeline)
+const MAX_AGENTIC_HISTORY_MESSAGES = 24;
+const MAX_TOOL_RESULT_CHARS = 1_500;
+const MAX_TEXT_MESSAGE_CHARS = 4_000;
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -216,6 +219,33 @@ function enrichToolDescriptions(
   });
 }
 
+function truncateMessageContent(content: string, maxChars: number, label: string): string {
+  if (content.length <= maxChars) return content;
+  const omitted = content.length - maxChars;
+  const suffix = `\n...[truncated ${omitted} chars of earlier ${label}]`;
+  return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
+}
+
+function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
+  const scopedMessages = messages.length <= MAX_AGENTIC_HISTORY_MESSAGES
+    ? messages
+    : [messages[0]!, ...messages.slice(-(MAX_AGENTIC_HISTORY_MESSAGES - 1))];
+
+  return scopedMessages.map((message) => {
+    if (typeof message.content !== "string") return message;
+    if (message.role === "tool") {
+      return {
+        ...message,
+        content: truncateMessageContent(message.content, MAX_TOOL_RESULT_CHARS, "tool output"),
+      };
+    }
+    return {
+      ...message,
+      content: truncateMessageContent(message.content, MAX_TEXT_MESSAGE_CHARS, "message context"),
+    };
+  });
+}
+
 export async function runAgenticLoop(params: {
   chatHistory: ChatMessage[];
   systemPrompt: string;
@@ -373,7 +403,7 @@ export async function runAgenticLoop(params: {
         },
       ];
       // Allow one more iteration for the model to respond with a summary, then exit
-      const summaryResult = await routeAndCall(messages, systemPrompt, sensitivity, routeOptions);
+      const summaryResult = await routeAndCall(compactAgenticMessages(messages), systemPrompt, sensitivity, routeOptions);
       return {
         content: summaryResult.content || "I got stuck in a loop. Here's what I have so far — please check the build evidence.",
         providerId: summaryResult.providerId,
@@ -395,7 +425,7 @@ export async function runAgenticLoop(params: {
     };
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
-    const result = await routeAndCall(messages, systemPrompt, sensitivity, enrichedRouteOptions);
+    const result = await routeAndCall(compactAgenticMessages(messages), systemPrompt, sensitivity, enrichedRouteOptions);
 
     // First iteration: check if the routed model matches the preferred model.
     // If not, warn — the agent may not be able to orchestrate tools effectively.

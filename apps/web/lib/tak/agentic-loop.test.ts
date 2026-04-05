@@ -282,4 +282,67 @@ describe("runAgenticLoop", () => {
     expect(toolMsgs[0]!.toolCallId).toBe("toolu_01A");
     expect(toolMsgs[1]!.toolCallId).toBe("toolu_01B");
   });
+
+  it("compacts oversized tool history before the next routing call", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Reading files.",
+        toolCalls: [{ id: "toolu_01A", name: "read_project_file", arguments: { path: "big-file.ts" } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Finished reading the file and condensed the key findings into a short summary so the next step can continue without replaying the entire raw payload back into the model context window. The important pieces are the exported handler, the request validation branch, and the persistence logic, which is enough context for the agent to move forward without carrying the whole file contents.",
+      }));
+
+    mockExecuteTool.mockResolvedValueOnce({
+      success: true,
+      message: "Large file contents",
+      data: {
+        file: "x".repeat(20_000),
+      },
+    });
+
+    await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "read_project_file", description: "Read", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "read_project_file", description: "Read", parameters: {} } },
+      ],
+    });
+
+    const secondCallMessages = mockRoute.mock.calls[1]![0];
+    const toolMsg = secondCallMessages.find((m: any) => m.role === "tool");
+    expect(toolMsg).toBeDefined();
+    expect(toolMsg!.content.length).toBeLessThanOrEqual(1500);
+    expect(toolMsg!.content).toContain("[truncated");
+  });
+
+  it("caps long agentic history before routing", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Done.",
+    }));
+
+    const longHistory = Array.from({ length: 40 }, (_, idx) => ({
+      role: idx % 2 === 0 ? "user" as const : "assistant" as const,
+      content: `message-${idx}`,
+    }));
+
+    await runAgenticLoop({
+      ...baseParams,
+      chatHistory: longHistory,
+      tools: [],
+      toolsForProvider: undefined,
+    });
+
+    const firstCallMessages = mockRoute.mock.calls[0]![0];
+    expect(firstCallMessages.length).toBeLessThanOrEqual(24);
+    expect(firstCallMessages[0]!.content).toBe("message-0");
+    expect(firstCallMessages[firstCallMessages.length - 1]!.content).toBe("message-39");
+  });
 });
