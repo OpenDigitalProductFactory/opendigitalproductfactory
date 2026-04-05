@@ -35,6 +35,15 @@
 - The `portal-init` container runs once (migrations, seed, hardware detect) then exits.
 - `.dockerignore` excludes `node_modules`, `.next`, `.git`, `.env`, `docs/` — keep it maintained.
 
+## Git Workflow
+
+- **Customizable (Option 2) mode:** The primary working directory is the cloned repo (e.g., `D:\DPF`). All development uses **feature branches and pull requests** — never commit directly to `main`.
+- **Branch naming:** `feat/<short-name>`, `fix/<short-name>`, `refactor/<short-name>`
+- **PR flow:** Create branch, commit work, push, open PR via `gh pr create`, merge after review.
+- **Always push** after committing — local-only commits are invisible to the build pipeline and other agents.
+- **Feature branches are expected.** Don't avoid branching — it's the standard workflow.
+- The `main` branch is the release branch. PRs are the gate.
+
 ## Strongly-Typed String Enums — MANDATORY COMPLIANCE
 
 String fields that carry a fixed set of valid values are **canonical enums** even though the DB column is `String`. Using non-canonical values causes silent data corruption, broken filters, and UI display failures downstream.
