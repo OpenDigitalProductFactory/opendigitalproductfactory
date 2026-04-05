@@ -242,6 +242,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "fetch_public_website",
@@ -257,6 +258,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "analyze_public_website_branding",
