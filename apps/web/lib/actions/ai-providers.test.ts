@@ -49,7 +49,7 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   seedAllRecipes: vi.fn(),
 }));
 
-import { testProviderAuth } from "./ai-providers";
+import { discoverModels, testProviderAuth } from "./ai-providers";
 
 describe("testProviderAuth", () => {
   beforeEach(() => {
@@ -255,5 +255,28 @@ describe("testProviderAuth", () => {
       message: "No API key configured",
     });
     expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("discoverModels", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({
+      user: {
+        id: "user-1",
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("uses known-model seeding for Codex instead of raw live discovery", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+
+    const result = await discoverModels("codex");
+
+    expect(result).toEqual({ discovered: 2, newCount: 2, error: undefined });
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
   });
 });
