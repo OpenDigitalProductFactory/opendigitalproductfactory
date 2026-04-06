@@ -675,7 +675,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
-    buildPhases: ["plan", "build", "review"],
+    buildPhases: ["ideate", "plan", "build", "review"],
   },
   {
     name: "validate_schema",
