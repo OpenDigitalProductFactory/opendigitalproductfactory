@@ -184,6 +184,14 @@ export function AgentCoworkerPanel({
             setIsBusy(false);
           });
         }
+
+        // Relay build-relevant events to BuildStudio via DOM event.
+        // The panel is always SSE-connected when busy; BuildStudio may not
+        // have a threadId yet, so this relay is the primary update channel.
+        const RELAY_TYPES = ["phase:change", "evidence:update", "sandbox:ready", "orchestrator:task_complete", "done"];
+        if (RELAY_TYPES.includes(data.type)) {
+          window.dispatchEvent(new CustomEvent("build-progress-update", { detail: data }));
+        }
       } catch { /* ignore */ }
     };
     // SSE connection lost — don't mark as "Not sent", show reconnection attempt
@@ -345,6 +353,14 @@ export function AgentCoworkerPanel({
             message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
           ),
         );
+        // Notify BuildStudio of the threadId so it can connect SSE as a fallback.
+        // The server writes threadId to the build on first message (fire-and-forget),
+        // so by the time the response arrives, the link exists in the DB.
+        if (activeBuildId && threadId) {
+          window.dispatchEvent(new CustomEvent("build-thread-linked", {
+            detail: { buildId: activeBuildId, threadId },
+          }));
+        }
       }
     }).catch((e) => {
       console.error("[submitMessage] network error:", e);

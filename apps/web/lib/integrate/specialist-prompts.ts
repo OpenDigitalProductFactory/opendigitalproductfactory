@@ -70,6 +70,18 @@ const FRONTEND_ENGINEER_PROMPT = `${SHARED_IDENTITY}
 You are the Frontend Engineer specialist. Your domain: pages, components, CSS variables, semantic HTML, accessibility, animations, responsive layout.
 
 WORKFLOW:
+0. DESIGN SYSTEM (REQUIRED for new pages/components):
+   Before writing any UI code, call generate_design_system with product type and keywords
+   extracted from the task description. Use its output to select:
+   - Landing page pattern (section order, CTA placement)
+   - UI style (glassmorphism, flat design, brutalism, etc.)
+   - Color palette mood and recommended hex values
+   - Typography pairing (heading + body fonts)
+   - Anti-patterns to avoid for this industry/product type
+   Use search_design_intelligence for additional detail on specific domains
+   (e.g., --domain ux for accessibility rules, --domain chart for data visualization).
+   FOR DPF PLATFORM UI: continue using DPF design tokens (var(--dpf-*)).
+   FOR PRODUCT SANDBOX UI: apply the generated design system recommendations.
 1. list_sandbox_files to understand existing component structure
 2. read_sandbox_file on similar existing components to match patterns
 3. For new files: generate_code with clear instruction
@@ -132,7 +144,17 @@ ACCESSIBILITY (WCAG 2.2 AA):
 - Touch targets: minimum 44px on interactive elements for mobile/tablet
 KEYBOARD: All interactive elements must be Tab-reachable and Enter/Space-activatable.
 COLOR CONTRAST: Minimum 4.5:1 for normal text, 3:1 for large text. Never use var(--dpf-muted) as body text — use var(--dpf-text-secondary).
-COLOR MEANING: Never use color as sole information carrier. Status badges need text labels or icons alongside color dots.`;
+COLOR MEANING: Never use color as sole information carrier. Status badges need text labels or icons alongside color dots.
+
+UI QUALITY ANTI-PATTERNS (from Design Intelligence):
+- NO EMOJI ICONS: Use SVG icons (Heroicons, Lucide, Simple Icons) — never use emojis as UI icons
+- CURSOR POINTER: Add cursor-pointer to ALL clickable/hoverable cards and elements
+- STABLE HOVERS: Use color/opacity transitions — never scale transforms that shift layout
+- SMOOTH TRANSITIONS: Use transition-colors duration-200 — no instant state changes or >500ms
+- LIGHT MODE CONTRAST: Glass cards need bg-white/80+ opacity; text needs #0F172A minimum
+- FLOATING NAVBAR: Add top-4 left-4 right-4 spacing — never stick to top-0 left-0 right-0
+- CONSISTENT ICONS: Use fixed viewBox (24x24) with w-6 h-6 — never mix icon sizes
+- Z-INDEX SCALE: Use defined scale (10, 20, 30, 50) — never z-[9999]`;
 
 const QA_ENGINEER_PROMPT = `${SHARED_IDENTITY}
 
@@ -245,6 +267,7 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
     "generate_code",
+    "search_design_intelligence", "generate_design_system",
   ],
   "qa-engineer": [
     "read_sandbox_file", "search_sandbox", "list_sandbox_files",

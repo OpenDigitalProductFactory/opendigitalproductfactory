@@ -930,6 +930,44 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── Design Intelligence Tools (UI UX Pro Max) ────────────────────────────
+  {
+    name: "search_design_intelligence",
+    description: "Search the design intelligence database for UI/UX recommendations. Returns style guides, color palettes, typography pairings, UX best practices, landing page patterns, chart types, or product-type recommendations based on keyword matching.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search keywords (e.g., 'SaaS dashboard', 'glassmorphism dark mode', 'elegant luxury serif')" },
+        domain: {
+          type: "string",
+          enum: ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning"],
+          description: "Which design domain to search: style (67 UI styles), color (palettes by industry), typography (57 font pairings), ux (99 guidelines), landing (page patterns), chart (25 chart types), product (industry recommendations), reasoning (161 design rules)",
+        },
+        max_results: { type: "number", description: "Maximum results to return (default 5)" },
+      },
+      required: ["query", "domain"],
+    },
+    requiredCapability: null, // Read-only design reference — no capability gate
+    sideEffect: false,
+    buildPhases: ["build", "review"],
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "generate_design_system",
+    description: "Generate a complete design system recommendation for a product. Searches across product types, styles, colors, typography, and landing page patterns, then applies industry-specific reasoning rules. Returns: recommended pattern, style, color palette, font pairing, effects, anti-patterns to avoid, and a pre-delivery checklist.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Product description and keywords (e.g., 'beauty spa wellness service', 'fintech banking dashboard', 'SaaS analytics tool')" },
+        project_name: { type: "string", description: "Optional project name for the design system header" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null, // Read-only design reference — no capability gate
+    sideEffect: false,
+    buildPhases: ["build"],
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
   {
     name: "generate_codebase_manifest",
@@ -4219,6 +4257,27 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         message: summary || "No versions found.",
         data: { versions: rows },
       };
+    }
+
+    // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
+    case "search_design_intelligence": {
+      const { searchDesignDomain, formatSearchResults } = await import("@/lib/design-intelligence");
+      const query = String(params.query ?? "");
+      const domain = String(params.domain ?? "style") as import("@/lib/design-intelligence").DesignDomain;
+      const maxResults = Number(params.max_results ?? 5);
+      if (!query) return { success: false, error: "Query is required.", message: "Provide search keywords." };
+      const results = searchDesignDomain(query, domain, maxResults);
+      const formatted = formatSearchResults(results, query, domain);
+      return { success: true, message: formatted };
+    }
+
+    case "generate_design_system": {
+      const { generateDesignSystem } = await import("@/lib/design-intelligence");
+      const query = String(params.query ?? "");
+      const projectName = params.project_name ? String(params.project_name) : undefined;
+      if (!query) return { success: false, error: "Query is required.", message: "Provide product description and keywords." };
+      const designSystem = generateDesignSystem(query, projectName);
+      return { success: true, message: designSystem };
     }
 
     case "generate_codebase_manifest": {
