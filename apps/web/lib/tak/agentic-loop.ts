@@ -54,6 +54,7 @@ export const PERMISSION_SEEKING_PATTERN = /(?:should I (?:proceed|continue|go ah
 // is actively using tools and reporting on results.
 export const FRUSTRATION_PATTERN = /(?:I (?:apologize|cannot|can't|am unable|don't have (?:access|the ability))|(?:unfortunately|regrettably),? I|I'm (?:not able|having (?:trouble|difficulty)|sorry)|(?:beyond|outside) my (?:capabilities|ability)|I (?:don't|do not) (?:currently )?have (?:a |the )?(?:tool|capability|access|ability)|I (?:was|am) unable to)/i;
 const STATUS_ONLY_PROGRESS_PATTERN = /(?:next step|ready to (?:proceed|start|draft|implement|build)|no (?:other )?progress|haven't made (?:tangible )?progress|so far|I (?:inspected|reviewed|checked|scanned|confirmed|looked for|tried searching|pulled up|started digging))/i;
+const READ_FAILURE_STALL_PATTERN = /(?:file read command kept failing|could not read|can't read|unable to read|read .* failed|kept failing|I'll pause there|I will pause there|I'll reattempt|I will reattempt)/i;
 const BUILD_ROUTE_PATTERN = /^\/build(?:$|[/?#])/i;
 
 // Tools that actually build/write — not just read/search
@@ -542,8 +543,22 @@ export async function runAgenticLoop(params: {
       });
 
       const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
-      const hasConcreteBuildProgress = executedTools.some((t) => BUILD_PROGRESS_TOOL_NAMES.has(t.name));
+      const hasConcreteBuildProgress = executedTools.some((t) => t.result.success && BUILD_PROGRESS_TOOL_NAMES.has(t.name));
       const looksStatusOnly = STATUS_ONLY_PROGRESS_PATTERN.test(trimmed);
+      const looksReadFailureStall = READ_FAILURE_STALL_PATTERN.test(trimmed);
+      if (!result.toolsStripped && isBuildRoute && executedTools.length > 0 && !hasConcreteBuildProgress && looksReadFailureStall) {
+        continuationNudges++;
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content:
+              "Do not pause after a failed read. Keep executing with fallback steps now: use list_sandbox_files to locate the path, then read_sandbox_file with offset/limit or describe_model to inspect schema fields. Continue implementing and report concrete changes or a specific blocker.",
+          },
+        ];
+        continue;
+      }
       if (!result.toolsStripped && isBuildRoute && executedTools.length > 0 && !hasConcreteBuildProgress && looksStatusOnly) {
         continuationNudges++;
         messages = [
