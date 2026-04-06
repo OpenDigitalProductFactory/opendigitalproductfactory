@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bumpVersion } from "@/lib/feature-build-types";
 import { getBuildPhasePrompt, getBuildContextSection } from "./build-agent-prompts";
+import { SPECIALIST_TOOLS } from "./specialist-prompts";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 
 describe("bumpVersion", () => {
@@ -57,6 +58,21 @@ describe("getBuildPhasePrompt", () => {
   it("returns empty string for terminal phases", () => {
     expect(getBuildPhasePrompt("complete")).toBe("");
     expect(getBuildPhasePrompt("failed")).toBe("");
+  });
+});
+
+describe("SPECIALIST_TOOLS", () => {
+  it("software-engineer has describe_model for schema lookups", () => {
+    expect(SPECIALIST_TOOLS["software-engineer"]).toContain("describe_model");
+  });
+  it("data-architect has both describe_model and validate_schema", () => {
+    expect(SPECIALIST_TOOLS["data-architect"]).toContain("describe_model");
+    expect(SPECIALIST_TOOLS["data-architect"]).toContain("validate_schema");
+  });
+  it("all specialists have read_sandbox_file", () => {
+    for (const [role, tools] of Object.entries(SPECIALIST_TOOLS)) {
+      expect(tools, `${role} missing read_sandbox_file`).toContain("read_sandbox_file");
+    }
   });
 });
 
