@@ -246,11 +246,12 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   }, useUnified);
 
-  // Build inference context: short recent window + semantic recall for older context.
-  // Keep only last 8 messages as raw history — Qdrant semantic recall fills in
-  // relevant older context. This prevents long confused conversations from poisoning
-  // the response and keeps the context window focused.
-  const RECENT_WINDOW = 8;
+  // Build inference context: recent window + semantic recall for older context.
+  // Build phases need more context (research findings, schema details, tool results)
+  // because the agentic loop's tool call results aren't persisted in messages.
+  // Conversation phases use a shorter window to prevent context poisoning.
+  const isBuildPhase = input.routeContext === "/build";
+  const RECENT_WINDOW = isBuildPhase ? 20 : 8;
   const recentMessages = await prisma.agentMessage.findMany({
     where: { threadId: input.threadId },
     orderBy: { createdAt: "desc" },
