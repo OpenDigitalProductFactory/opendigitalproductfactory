@@ -107,13 +107,31 @@
       "detail": "Rebuild all images and restart full stack"
     },
     {
-      "label": "DPF: Publish Release (Maintainer)",
+      "label": "DPF: Release Minor",
       "type": "shell",
-      "command": "$latest = git tag --sort=-version:refname | Select-Object -First 1; Write-Host \"Last release: $latest\" -ForegroundColor Cyan; $tag = Read-Host 'Enter version tag'; if (-not $tag) { Write-Host 'No tag entered'; exit 1 }; git tag $tag; git push origin main; git push origin $tag; Write-Host \"Published $tag to GHCR\" -ForegroundColor Green",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": []
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "minor"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Pull latest main, bump minor version (v0.85.0 -> v0.86.0), tag and push"
+    },
+    {
+      "label": "DPF: Release Patch",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "patch"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Pull latest main, bump patch version (v0.85.0 -> v0.85.1), tag and push"
+    },
+    {
+      "label": "DPF: Release Major",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "major"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push"
     }
   ]
 }
