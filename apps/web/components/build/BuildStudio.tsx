@@ -75,6 +75,20 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
     };
   }, [activeBuild?.threadId, activeBuild?.buildId]);
 
+  // Poll for threadId + phase changes until SSE connects.
+  // The coworker writes threadId to the build on first message, but SSE
+  // can't connect until we know it. Also catches phase changes while
+  // SSE is disconnected (before threadId is set).
+  useEffect(() => {
+    if (!activeBuild) return;
+    if (activeBuild.threadId && activeBuild.phase !== "ideate" && activeBuild.phase !== "plan") return;
+    const interval = setInterval(async () => {
+      const fresh = await getFeatureBuild(activeBuild.buildId);
+      if (fresh) setActiveBuild(fresh);
+    }, 2_000);
+    return () => clearInterval(interval);
+  }, [activeBuild?.buildId, activeBuild?.threadId, activeBuild?.phase]);
+
   // Poll for sandbox port when phase is "build" or "review" but port is unknown.
   // This covers the gap between phase transition and sandbox allocation.
   useEffect(() => {
