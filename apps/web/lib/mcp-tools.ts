@@ -2087,15 +2087,16 @@ export async function executeTool(
       const latestBuild = await prisma.featureBuild.findFirst({
         where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
         orderBy: { updatedAt: "desc" },
-        select: { buildId: true, phase: true },
+        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
-      // Write to the existing PhaseHandoff relational model (schema line 2154)
+      // Determine the next phase
       const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
       const idx = phaseOrder.indexOf(latestBuild.phase);
       const toPhase = idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete";
 
+      // Write the handoff record
       await prisma.phaseHandoff.create({
         data: {
           buildId: latestBuild.buildId,
@@ -2112,6 +2113,35 @@ export async function executeTool(
           gateResult: {},
         },
       });
+
+      // Actually advance the phase — the agent calls this as its last action
+      // before transitioning, so this is the right place to do the DB update.
+      // Gate check ensures we don't skip required evidence.
+      try {
+        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
+          const gate = checkPhaseGate(
+            latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
+            toPhase as import("@/lib/feature-build-types").BuildPhase,
+            {
+              designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
+              buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
+              verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
+              uxTestResults: latestBuild.uxTestResults,
+            },
+          );
+          if (gate.allowed) {
+            await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+            const { agentEventBus } = await import("@/lib/agent-event-bus");
+            if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
+            logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
+            return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
+          }
+          return { success: true, message: `Phase handoff saved but gate blocked advance: ${gate.reason}. Evidence may be incomplete.` };
+        }
+      } catch (err) {
+        console.error("[save_phase_handoff] auto-advance failed:", err);
+      }
 
       return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
     }
