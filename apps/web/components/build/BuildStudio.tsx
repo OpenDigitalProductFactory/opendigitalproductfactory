@@ -40,26 +40,56 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
     };
   }, [activeBuild?.buildId]);
 
-  // SSE subscription for live refresh when agent updates the build.
-  // Phase-change events refresh immediately; other events are debounced
-  // to avoid excessive DB queries during rapid tool execution.
+  // ─── Primary update channel: DOM relay from CoworkerPanel ───────────────
+  // The panel is always SSE-connected when the agent is busy. It relays
+  // build-relevant events (phase:change, evidence:update, sandbox:ready,
+  // orchestrator:task_complete, done) as DOM CustomEvents. This is instant
+  // and doesn't require a threadId on the build.
   useEffect(() => {
-    if (!activeBuild?.threadId) return;
-    const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!activeBuild) return;
     const refetch = async () => {
       const fresh = await getFeatureBuild(activeBuild.buildId);
       if (fresh) setActiveBuild(fresh);
     };
+    const handleProgressUpdate = () => { refetch(); };
+    window.addEventListener("build-progress-update", handleProgressUpdate);
+    return () => window.removeEventListener("build-progress-update", handleProgressUpdate);
+  }, [activeBuild?.buildId]);
+
+  // ─── Thread linking: panel tells us the threadId ───────────────────────
+  // When the coworker sends its first message for a build, it dispatches
+  // this event so we can connect fallback SSE without polling.
+  useEffect(() => {
+    if (!activeBuild || activeBuild.threadId) return;
+    const handleThreadLinked = (e: Event) => {
+      const { buildId, threadId } = (e as CustomEvent<{ buildId: string; threadId: string }>).detail;
+      if (buildId === activeBuild.buildId && threadId) {
+        setActiveBuild((prev) => prev ? { ...prev, threadId } : prev);
+      }
+    };
+    window.addEventListener("build-thread-linked", handleThreadLinked);
+    return () => window.removeEventListener("build-thread-linked", handleThreadLinked);
+  }, [activeBuild?.buildId, activeBuild?.threadId]);
+
+  // ─── Fallback SSE: direct connection when panel is closed ──────────────
+  // Only activates once threadId is known (via relay or DB poll).
+  // The panel relay is the primary channel; this catches updates when
+  // the panel is closed or the build was started by an external agent.
+  useEffect(() => {
+    if (!activeBuild?.threadId) return;
+    const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
+    const refetch = async () => {
+      const fresh = await getFeatureBuild(activeBuild.buildId);
+      if (fresh) setActiveBuild(fresh);
+    };
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     es.onmessage = async (e) => {
-      // Phase changes and evidence saves refresh immediately — user should
-      // see progress the moment it happens, not after a debounce delay.
       let isUrgent = false;
       try {
         const data = JSON.parse(e.data);
-        isUrgent = data.type === "phase:change" || data.type === "evidence:saved"
+        isUrgent = data.type === "phase:change" || data.type === "evidence:update"
           || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready";
-      } catch { /* non-JSON event — debounce */ }
+      } catch { /* non-JSON — debounce */ }
 
       if (isUrgent) {
         if (debounceTimer) clearTimeout(debounceTimer);
@@ -75,32 +105,19 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
     };
   }, [activeBuild?.threadId, activeBuild?.buildId]);
 
-  // Poll for threadId + phase changes until SSE connects.
-  // The coworker writes threadId to the build on first message, but SSE
-  // can't connect until we know it. Also catches phase changes while
-  // SSE is disconnected (before threadId is set).
+  // ─── Ultimate fallback: DB poll when panel is closed AND no threadId ───
+  // Only runs when we have no other update channel. 10-second interval
+  // to avoid hammering the DB. Covers: external agent builds, panel closed
+  // before first message.
   useEffect(() => {
     if (!activeBuild) return;
-    if (activeBuild.threadId && activeBuild.phase !== "ideate" && activeBuild.phase !== "plan") return;
+    if (activeBuild.threadId) return; // SSE fallback will handle it
     const interval = setInterval(async () => {
       const fresh = await getFeatureBuild(activeBuild.buildId);
       if (fresh) setActiveBuild(fresh);
-    }, 2_000);
+    }, 10_000);
     return () => clearInterval(interval);
-  }, [activeBuild?.buildId, activeBuild?.threadId, activeBuild?.phase]);
-
-  // Poll for sandbox port when phase is "build" or "review" but port is unknown.
-  // This covers the gap between phase transition and sandbox allocation.
-  useEffect(() => {
-    if (!activeBuild) return;
-    if (activeBuild.phase !== "build" && activeBuild.phase !== "review") return;
-    if (activeBuild.sandboxPort !== null) return;
-    const interval = setInterval(async () => {
-      const fresh = await getFeatureBuild(activeBuild.buildId);
-      if (fresh) setActiveBuild(fresh);
-    }, 3_000);
-    return () => clearInterval(interval);
-  }, [activeBuild?.buildId, activeBuild?.phase, activeBuild?.sandboxPort]);
+  }, [activeBuild?.buildId, activeBuild?.threadId]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;
