@@ -2130,7 +2130,9 @@ export async function executeTool(
       const normalizedValue =
         params.value !== undefined
           ? params.value
-          : (Object.keys(topLevelValue).length > 0 ? topLevelValue : undefined);
+          : Object.keys(topLevelValue).length > 0
+            ? topLevelValue
+            : undefined;
 
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });

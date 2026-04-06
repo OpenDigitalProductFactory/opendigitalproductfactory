@@ -350,35 +350,104 @@ describe("runAgenticLoop", () => {
     const mockRoute = vi.mocked(routeAndCall);
 
     mockRoute.mockResolvedValueOnce(mockResult({
-      content: "Done.",
+      content:
+        "I finished reviewing the existing complaint flow patterns and can continue with the design without replaying stale tool output into the next model call.",
+      inputTokens: 120,
+      outputTokens: 80,
     }));
 
-    const longHistory = [
+    const historyWithTrimmedToolPair = [
       { role: "user" as const, content: "message-0" },
-      ...Array.from({ length: 15 }, (_, idx) => ({
-        role: idx % 2 === 0 ? "assistant" as const : "user" as const,
-        content: `filler-${idx + 1}`,
-      })),
+      { role: "assistant" as const, content: "message-1" },
       {
         role: "assistant" as const,
-        content: "Running search",
-        toolCalls: [{ id: "call_orphan", name: "search_project", arguments: { query: "complaints" } }],
+        content: "",
+        toolCalls: [{ id: "call_abc", name: "search_project_files", arguments: { query: "complaint" } }],
       },
-      { role: "tool" as const, content: "Found files", toolCallId: "call_orphan" },
+      {
+        role: "tool" as const,
+        content: "old tool result",
+        toolCallId: "call_abc",
+      },
       ...Array.from({ length: 22 }, (_, idx) => ({
         role: idx % 2 === 0 ? "user" as const : "assistant" as const,
-        content: `tail-${idx + 18}`,
+        content: `filler-${idx}`,
       })),
     ];
 
     await runAgenticLoop({
       ...baseParams,
-      chatHistory: longHistory,
+      chatHistory: historyWithTrimmedToolPair,
       tools: [],
       toolsForProvider: undefined,
     });
 
     const firstCallMessages = mockRoute.mock.calls[0]![0];
-    expect(firstCallMessages.some((m: any) => m.role === "tool" && m.toolCallId === "call_orphan")).toBe(false);
+    const orphanedTool = firstCallMessages.find((m: any) => m.role === "tool" && m.toolCallId === "call_abc");
+
+    expect(orphanedTool).toBeUndefined();
+  });
+
+  it("allows revised build plans after failed review instead of treating them as repetition", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    const buildPlanV1 = {
+      fileStructure: [{ path: "packages/db/prisma/schema.prisma", action: "modify", purpose: "Add complaint model" }],
+      tasks: [
+        { title: "Add complaint model", testFirst: "schema test", implement: "edit schema", verify: "prisma validate" },
+      ],
+    };
+
+    const buildPlanV2 = {
+      fileStructure: [{ path: "packages/db/prisma/schema.prisma", action: "modify", purpose: "Add complaint model" }],
+      tasks: [
+        { title: "Add complaint model", testFirst: "schema test", implement: "edit schema", verify: "prisma validate" },
+        { title: "Add complaint indexes", testFirst: "index test", implement: "add indexes", verify: "prisma validate" },
+      ],
+    };
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Saving the first plan draft.",
+        toolCalls: [{ id: "toolu_01A", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: buildPlanV1 } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing the first plan draft.",
+        toolCalls: [{ id: "toolu_01B", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Splitting the oversized task and saving the revised plan.",
+        toolCalls: [{ id: "toolu_01C", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: buildPlanV2 } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing the revised plan.",
+        toolCalls: [{ id: "toolu_01D", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Implementation plan ready — 1 file, 2 tasks. I split the oversized complaint work into separate schema and indexing tasks, reran the plan review, and the revised plan is now properly scoped for the build phase.",
+      }));
+
+    mockExecuteTool
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: fail. Task 1 is too large and needs to be broken down into smaller efforts.", data: { review: { decision: "fail", summary: "Task 1 is too large and needs to be broken down into smaller efforts." } } })
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: pass. The tasks are now properly scoped.", data: { review: { decision: "pass", summary: "The tasks are now properly scoped." } } });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "reviewBuildPlan", description: "Review build plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "saveBuildEvidence", description: "Save evidence", parameters: {} } },
+        { type: "function", function: { name: "reviewBuildPlan", description: "Review build plan", parameters: {} } },
+      ],
+    });
+
+    expect(result.content).toContain("Implementation plan ready — 1 file, 2 tasks.");
+    expect(mockExecuteTool).toHaveBeenCalledTimes(4);
+    expect(mockExecuteTool.mock.calls[2]?.[1]).toMatchObject({ field: "buildPlan", value: buildPlanV2 });
   });
 });

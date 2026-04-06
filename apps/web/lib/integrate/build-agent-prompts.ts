@@ -210,6 +210,12 @@ STEP 3: Call reviewBuildPlan to review it.
     call saveBuildEvidence with the revised buildPlan, then call reviewBuildPlan again.
     Do NOT proceed to step 4 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
 
+If reviewBuildPlan returns fail:
+- Read the review feedback carefully.
+- Revise the existing buildPlan to address the specific issue.
+- Break oversized tasks into smaller 2-5 minute tasks instead of resaving the same plan.
+- Call saveBuildEvidence with field "buildPlan" once for the revised plan, then call reviewBuildPlan again.
+
 STEP 4: Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] files, [N] tasks."
   Do NOT show the full plan unless Dev mode is enabled.
 
