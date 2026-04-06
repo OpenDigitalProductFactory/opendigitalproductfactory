@@ -76,12 +76,77 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       signal: AbortSignal.timeout(5_000),
     });
 
+    const contentType = upstream.headers.get("Content-Type") ?? "text/html";
+
+    // For HTML responses: inject a navigation interceptor so links stay inside
+    // the sandbox proxy instead of escaping to the main portal.
+    if (contentType.includes("text/html")) {
+      let html = await upstream.text();
+
+      // Script intercepts clicks on <a> tags and client-side navigation,
+      // rewriting them to go through the proxy endpoint.
+      const navScript = `<script data-sandbox-nav>
+(function(){
+  var bid = ${JSON.stringify(buildId)};
+  var proxyBase = "/api/sandbox/preview?buildId=" + encodeURIComponent(bid) + "&path=";
+  var blocked = ["/build", "/platform"];
+
+  function rewrite(path) {
+    if (blocked.some(function(b){ return path.indexOf(b) === 0; })) path = "/";
+    return proxyBase + encodeURIComponent(path);
+  }
+
+  // Intercept link clicks
+  document.addEventListener("click", function(e) {
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a) return;
+    var href = a.getAttribute("href");
+    if (!href || href.indexOf("://") !== -1 || href.indexOf("mailto:") === 0 || href.indexOf("#") === 0) return;
+    if (href.indexOf("/api/sandbox/preview") === 0) return;
+    e.preventDefault();
+    window.location.href = rewrite(href);
+  }, true);
+
+  // Intercept history.pushState / replaceState (Next.js client nav)
+  var origPush = history.pushState;
+  var origReplace = history.replaceState;
+  history.pushState = function(s, t, url) {
+    if (url && typeof url === "string" && url.indexOf("/api/sandbox/preview") === -1) {
+      window.location.href = rewrite(url);
+      return;
+    }
+    return origPush.apply(this, arguments);
+  };
+  history.replaceState = function(s, t, url) {
+    if (url && typeof url === "string" && url.indexOf("/api/sandbox/preview") === -1) {
+      window.location.href = rewrite(url);
+      return;
+    }
+    return origReplace.apply(this, arguments);
+  };
+})();
+</script>`;
+
+      // Inject before </head> or at start of <body>
+      if (html.includes("</head>")) {
+        html = html.replace("</head>", navScript + "</head>");
+      } else if (html.includes("<body")) {
+        html = html.replace(/<body([^>]*)>/, "<body$1>" + navScript);
+      } else {
+        html = navScript + html;
+      }
+
+      return new NextResponse(html, {
+        status: upstream.status,
+        headers: { "Content-Type": contentType },
+      });
+    }
+
+    // Non-HTML (CSS, JS, images) — pass through as-is
     const body = await upstream.arrayBuffer();
     return new NextResponse(body, {
       status: upstream.status,
-      headers: {
-        "Content-Type": upstream.headers.get("Content-Type") ?? "text/html",
-      },
+      headers: { "Content-Type": contentType },
     });
   } catch {
     // Sandbox exists but no web server is running yet — auto-refresh until it's up
