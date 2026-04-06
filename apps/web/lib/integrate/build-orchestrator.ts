@@ -74,14 +74,40 @@ export type SpecialistOutcome =
   | "BLOCKED"             // Task cannot proceed — needs human or dependency resolution
   | "NEEDS_CONTEXT";      // Task needs additional information from orchestrator
 
+/** Error patterns that indicate infrastructure issues vs. task-level failures. */
+export const INFRA_ERROR_PATTERNS = [
+  "sandbox not running", "sandbox initialization failed", "all sandbox slots",
+  "sandbox container not found", "no sandbox", "could not initialize sandbox",
+];
+export const MISSING_PREREQUISITE_PATTERNS = [
+  "not found in schema", "file not found", "no model named",
+];
+
 /** Classify a specialist's agentic result into a structured outcome. */
-function classifyOutcome(result: AgenticResult, role: SpecialistRole): SpecialistOutcome {
+export function classifyOutcome(result: AgenticResult, role: SpecialistRole): SpecialistOutcome {
   const content = result.content.toLowerCase();
   const calledBuildTools = result.executedTools.some(t =>
-    t.name !== "read_sandbox_file" && t.name !== "search_sandbox" && t.name !== "list_sandbox_files"
+    t.name !== "read_sandbox_file" && t.name !== "search_sandbox" && t.name !== "list_sandbox_files" && t.name !== "describe_model"
   );
   const hasErrors = result.executedTools.some(t => !t.result.success);
   const isQA = role === "qa-engineer";
+
+  // Check tool errors for infrastructure blockers (sandbox down, slots exhausted)
+  const toolErrors = result.executedTools
+    .filter(t => !t.result.success)
+    .map(t => (t.result.error ?? "").toLowerCase());
+  const hasInfraError = toolErrors.some(err =>
+    INFRA_ERROR_PATTERNS.some(pat => err.includes(pat))
+  );
+  if (hasInfraError) return "BLOCKED";
+
+  // Check for missing prerequisites (model/file doesn't exist yet)
+  // Only classify as BLOCKED if ALL tool calls failed with prerequisite errors
+  // (the agent couldn't find what it needed and made no successful mutations)
+  const hasMissingPrereq = toolErrors.some(err =>
+    MISSING_PREREQUISITE_PATTERNS.some(pat => err.includes(pat))
+  );
+  if (hasMissingPrereq && !calledBuildTools) return "BLOCKED";
 
   // Blocked: explicit blocker signals or no tools called (stalled)
   if (content.includes("blocked") || content.includes("cannot proceed") || content.includes("missing prerequisite")) {

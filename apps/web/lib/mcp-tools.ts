@@ -3026,8 +3026,25 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "describe_model": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!dmBuild?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      let dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+
+      // Auto-init sandbox if not running (same pattern as file tools above)
+      if (!dmBuild?.sandboxId) {
+        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
+        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
+        await initializePool().catch(() => {});
+        const slot = await acquireSandbox(buildId, userId);
+        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available. Try again shortly." };
+        const running = await isSandboxRunning(slot.containerId).catch(() => false);
+        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
+        try { await sbInit(slot.containerId); } catch (e) { console.error(`[describe_model] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
+        try {
+          const { startSandboxDevServer } = await import("@/lib/sandbox");
+          await startSandboxDevServer(slot.containerId);
+        } catch { /* non-fatal */ }
+        dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+        if (!dmBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
+      }
 
       const modelName = String(params.model_name ?? "");
       if (!modelName) return { success: false, error: "model_name is required.", message: "Provide the model name (PascalCase)." };
@@ -3042,7 +3059,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
         const desc = describeModel(schemaContent, modelName);
 
         if (!desc) {
-          return { success: false, error: `Model "${modelName}" not found in schema.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase).` };
+          return { success: false, error: `Model "${modelName}" not found in schema.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase). Use read_sandbox_file on packages/db/prisma/schema.prisma to see available models.` };
         }
 
         const formatted = formatModelDescription(desc);
@@ -3055,8 +3072,25 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "validate_schema": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!vsBuild?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      let vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+
+      // Auto-init sandbox if not running (same pattern as file tools above)
+      if (!vsBuild?.sandboxId) {
+        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
+        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
+        await initializePool().catch(() => {});
+        const slot = await acquireSandbox(buildId, userId);
+        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available. Try again shortly." };
+        const running = await isSandboxRunning(slot.containerId).catch(() => false);
+        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
+        try { await sbInit(slot.containerId); } catch (e) { console.error(`[validate_schema] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
+        try {
+          const { startSandboxDevServer } = await import("@/lib/sandbox");
+          await startSandboxDevServer(slot.containerId);
+        } catch { /* non-fatal */ }
+        vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+        if (!vsBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
+      }
 
       try {
         const { execInSandbox } = await import("@/lib/sandbox");
