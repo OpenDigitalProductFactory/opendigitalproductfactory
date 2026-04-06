@@ -239,7 +239,7 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
   "software-engineer": [
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
-    "generate_code",
+    "generate_code", "describe_model",
   ],
   "frontend-engineer": [
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
