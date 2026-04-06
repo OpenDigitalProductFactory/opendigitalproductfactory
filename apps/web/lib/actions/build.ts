@@ -135,6 +135,19 @@ export async function advanceBuildPhase(
     data: { phase: targetPhase },
   });
 
+  // Notify the UI immediately so progress indicators update without waiting for debounce
+  try {
+    const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { threadId: true } });
+    if (updatedBuild?.threadId) {
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      agentEventBus.emit(updatedBuild.threadId, {
+        type: "phase:change",
+        buildId,
+        phase: targetPhase,
+      } as import("@/lib/agent-event-bus").AgentEvent);
+    }
+  } catch { /* best-effort — don't block phase transition */ }
+
   // Write PhaseHandoff document — structured context for the next phase's agent
   try {
     const PHASE_AGENT: Record<string, string> = {
