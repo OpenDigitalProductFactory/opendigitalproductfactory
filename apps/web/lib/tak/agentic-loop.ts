@@ -268,6 +268,12 @@ export async function runAgenticLoop(params: {
   /** @deprecated V2 routing is handled internally by routeAndCall. Ignored. */
   routeDecision?: unknown;
   onProgress?: (event: import("./agent-event-bus").AgentEvent) => void;
+  /**
+   * When true, fail fast if no tool-capable endpoint is available instead of
+   * silently stripping tools. Set by Build Studio routes where tools are
+   * required for correct task execution.
+   */
+  requireTools?: boolean;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -282,6 +288,7 @@ export async function runAgenticLoop(params: {
     taskType,
     modelRequirements,
     onProgress,
+    requireTools,
   } = params;
 
   // EP-INF-012: Load admin-configured model assignment for this agent.
@@ -321,6 +328,7 @@ export async function runAgenticLoop(params: {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     taskType: taskType ?? "conversation",
     ...effectiveConfig,
+    ...(requireTools ? { requireTools: true } : {}),
   };
 
   let messages = [...chatHistory];

@@ -29,6 +29,8 @@ describe("getBuildPhasePrompt", () => {
     const prompt = getBuildPhasePrompt("ideate");
     expect(prompt).toContain("search_project_files");
     expect(prompt).toContain("saveBuildEvidence");
+    expect(prompt).toContain('field: "designDoc"');
+    expect(prompt).toContain("value:");
   });
   it("returns plan prompt for plan phase", () => {
     const prompt = getBuildPhasePrompt("plan");

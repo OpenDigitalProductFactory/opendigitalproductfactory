@@ -117,21 +117,28 @@ STEP 2 — EXTERNAL RESEARCH:
   (Platform > AI > External Access) so I can research best practices." Then proceed with what you know.
 
 STEP 3 — DESIGN DOCUMENT:
-  Based on codebase audit + external research + user description, call saveBuildEvidence with field "designDoc":
+  Based on codebase audit + external research + user description, call saveBuildEvidence with:
   {
-    problemStatement: "...",
-    existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
-    externalResearch: "Best practices from web search...",
-    alternativesConsidered: "...",
-    reusePlan: "Will reuse X from existing codebase...",
-    newCodeJustification: "Need new Y because...",
-    proposedApproach: "...",
-    acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+    field: "designDoc",
+    value: {
+      problemStatement: "...",
+      existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
+      externalResearch: "Best practices from web search...",
+      alternativesConsidered: "...",
+      reusePlan: "Will reuse X from existing codebase...",
+      newCodeJustification: "Need new Y because...",
+      proposedApproach: "...",
+      acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+    }
   }
   The existingFunctionalityAudit MUST reference specific files and patterns you found in step 1.
   If it's empty or generic, your design is based on assumptions and the build WILL fail.
 
 STEP 4: Call reviewDesignDoc to review it.
+  - If the review PASSES: proceed to step 5.
+  - If the review FAILS: read the blocking issues in the response, revise the designDoc to address them,
+    call saveBuildEvidence with the revised designDoc, then call reviewDesignDoc again.
+    Do NOT proceed to step 5 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
 
 STEP 5: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
   Do NOT show the design document text unless the user has Dev mode enabled.
@@ -198,6 +205,10 @@ STEP 2 — SAVE THE PLAN:
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
 
 STEP 3: Call reviewBuildPlan to review it.
+  - If the review PASSES: proceed to step 4.
+  - If the review FAILS: read the blocking issues in the response, revise the buildPlan to address them,
+    call saveBuildEvidence with the revised buildPlan, then call reviewBuildPlan again.
+    Do NOT proceed to step 4 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
 
 STEP 4: Present a PLAIN LANGUAGE summary: "Implementation plan ready — [N] files, [N] tasks."
   Do NOT show the full plan unless Dev mode is enabled.
