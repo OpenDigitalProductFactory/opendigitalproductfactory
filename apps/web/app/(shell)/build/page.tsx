@@ -5,6 +5,21 @@ import { getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import Link from "next/link";
+import { execSync } from "child_process";
+
+function getProjectBranch(): string | null {
+  try {
+    // /workspace is the source volume (bootstrapped or user-managed)
+    return execSync("git -C /workspace rev-parse --abbrev-ref HEAD", { encoding: "utf-8", timeout: 2000 }).trim() || null;
+  } catch {
+    try {
+      // Shared workspace mode: CWD is the repo
+      return execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf-8", timeout: 2000 }).trim() || null;
+    } catch {
+      return null;
+    }
+  }
+}
 
 export default async function BuildPage() {
   const session = await auth();
@@ -40,10 +55,12 @@ export default async function BuildPage() {
     getPortfoliosForSelect(),
   ]);
 
+  const projectBranch = getProjectBranch();
+
   // Break out of the shell's max-w-7xl + p-6 container for full-bleed layout
   return (
     <div className="fixed inset-0 top-[48px]">
-      <BuildStudio builds={builds} portfolios={portfolios} dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"} />
+      <BuildStudio builds={builds} portfolios={portfolios} dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"} projectBranch={projectBranch} />
     </div>
   );
 }
