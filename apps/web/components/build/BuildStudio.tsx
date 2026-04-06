@@ -41,18 +41,33 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   }, [activeBuild?.buildId]);
 
   // SSE subscription for live refresh when agent updates the build.
-  // Debounced: refetches on any event type (not just phase changes) so that
-  // sandbox port allocation and file generation are picked up promptly.
+  // Phase-change events refresh immediately; other events are debounced
+  // to avoid excessive DB queries during rapid tool execution.
   useEffect(() => {
     if (!activeBuild?.threadId) return;
     const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    es.onmessage = async () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(async () => {
-        const fresh = await getFeatureBuild(activeBuild.buildId);
-        if (fresh) setActiveBuild(fresh);
-      }, 2_000);
+    const refetch = async () => {
+      const fresh = await getFeatureBuild(activeBuild.buildId);
+      if (fresh) setActiveBuild(fresh);
+    };
+    es.onmessage = async (e) => {
+      // Phase changes and evidence saves refresh immediately — user should
+      // see progress the moment it happens, not after a debounce delay.
+      let isUrgent = false;
+      try {
+        const data = JSON.parse(e.data);
+        isUrgent = data.type === "phase:change" || data.type === "evidence:saved"
+          || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready";
+      } catch { /* non-JSON event — debounce */ }
+
+      if (isUrgent) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        await refetch();
+      } else {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(refetch, 800);
+      }
     };
     return () => {
       es.close();
