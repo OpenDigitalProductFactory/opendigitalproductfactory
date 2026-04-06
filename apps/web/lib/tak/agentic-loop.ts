@@ -428,6 +428,7 @@ export async function runAgenticLoop(params: {
         if (evidenceSignature) keyParts.push(evidenceSignature);
       } else if (args?.field) keyParts.push(String(args.field));
       if (args?.query) keyParts.push(String(args.query).slice(0, 50));
+      if (args?.glob) keyParts.push(String(args.glob).slice(0, 80));
       if (args?.path) keyParts.push(String(args.path));
       if (args?.offset != null) keyParts.push(`offset=${args.offset}`);
       if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));

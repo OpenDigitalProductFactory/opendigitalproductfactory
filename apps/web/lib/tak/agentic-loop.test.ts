@@ -450,4 +450,45 @@ describe("runAgenticLoop", () => {
     expect(mockExecuteTool).toHaveBeenCalledTimes(4);
     expect(mockExecuteTool.mock.calls[2]?.[1]).toMatchObject({ field: "buildPlan", value: buildPlanV2 });
   });
+
+  it("does not treat scoped search_sandbox calls as repetition when glob changes", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    for (let idx = 0; idx < 7; idx++) {
+      mockRoute.mockResolvedValueOnce(mockResult({
+        content: `Searching complaint scope ${idx}.`,
+        toolCalls: [
+          {
+            id: `toolu_search_${idx}`,
+            name: "search_sandbox",
+            arguments: { pattern: "complaint", glob: `apps/web/scope-${idx}/**/*`, maxResults: 20 },
+          },
+        ],
+      }));
+    }
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content:
+        "Completed complaint schema research across multiple codebase scopes and confirmed the implementation boundaries. I am ready to proceed directly with schema, API, and UI wiring without repeating the same discovery calls.",
+    }));
+
+    for (let idx = 0; idx < 7; idx++) {
+      mockExecuteTool.mockResolvedValueOnce({ success: true, message: `Search results scope ${idx}` });
+    }
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "search_sandbox", description: "Search sandbox", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "search_sandbox", description: "Search sandbox", parameters: {} } },
+      ],
+    });
+
+    expect(result.content).toContain("Completed complaint schema research across multiple codebase scopes");
+    expect(result.executedTools).toHaveLength(7);
+    expect(mockRoute).toHaveBeenCalledTimes(8);
+  });
 });
