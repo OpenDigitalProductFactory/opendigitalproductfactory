@@ -135,6 +135,10 @@ STEP 3 — DESIGN DOCUMENT:
   If it's empty or generic, your design is based on assumptions and the build WILL fail.
 
 STEP 4: Call reviewDesignDoc to review it.
+  - If the review PASSES: proceed to step 5.
+  - If the review FAILS: read the blocking issues in the response, revise the designDoc to address them,
+    call saveBuildEvidence with the revised designDoc, then call reviewDesignDoc again.
+    Do NOT proceed to step 5 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
 
 STEP 5: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
   Do NOT show the design document text unless the user has Dev mode enabled.
@@ -201,6 +205,10 @@ STEP 2 — SAVE THE PLAN:
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
 
 STEP 3: Call reviewBuildPlan to review it.
+  - If the review PASSES: proceed to step 4.
+  - If the review FAILS: read the blocking issues in the response, revise the buildPlan to address them,
+    call saveBuildEvidence with the revised buildPlan, then call reviewBuildPlan again.
+    Do NOT proceed to step 4 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
 
 If reviewBuildPlan returns fail:
 - Read the review feedback carefully.

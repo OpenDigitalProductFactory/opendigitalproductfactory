@@ -333,6 +333,7 @@ async function stepGenerateCode(
     agentId: "build-architect",
     threadId,
     taskType: "code_generation",
+    requireTools: true,
     onProgress: (event) => {
       if (thread?.id) agentEventBus.emit(thread.id, event);
     },
