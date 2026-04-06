@@ -2276,9 +2276,10 @@ export async function executeTool(
         };
       }
 
-      // Passed review → auto-advance if gate is satisfied
+      // Passed review → auto-advance if gate is satisfied.
+      // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
+      // has no HTTP request context inside the agentic loop. Direct DB update instead.
       try {
-        const { advanceBuildPhase } = await import("@/lib/actions/build");
         const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
         const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
         if (updatedBuild && updatedBuild.phase === "ideate" && canTransitionPhase("ideate", "plan")) {
@@ -2286,7 +2287,7 @@ export async function executeTool(
             designDoc: updatedBuild.designDoc, designReview: updatedBuild.designReview,
           });
           if (gate.allowed) {
-            await advanceBuildPhase(buildId, "plan");
+            await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
           }
@@ -2328,9 +2329,10 @@ export async function executeTool(
         };
       }
 
-      // Passed review → auto-advance if gate is satisfied
+      // Passed review → auto-advance if gate is satisfied.
+      // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
+      // has no HTTP request context inside the agentic loop. Direct DB update instead.
       try {
-        const { advanceBuildPhase } = await import("@/lib/actions/build");
         const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
         const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
         if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
@@ -2338,7 +2340,7 @@ export async function executeTool(
             buildPlan: updatedBuild.buildPlan, planReview: updatedBuild.planReview,
           });
           if (gate.allowed) {
-            await advanceBuildPhase(buildId, "build");
+            await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build");
           }
