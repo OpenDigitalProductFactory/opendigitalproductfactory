@@ -111,6 +111,11 @@ STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
   You MUST call at least 3 research tools before proceeding to step 2.
   If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
 
+STEP 1b — DESIGN INTELLIGENCE (if feature has UI):
+  Call generate_design_system with product keywords from the user's description.
+  This returns industry-specific recommendations: UI style, color palette, typography, layout pattern, and anti-patterns.
+  Include the design system output in the design document (step 3). This is a free data lookup — no LLM call.
+
 STEP 2 — EXTERNAL RESEARCH:
   Use search_public_web to find best practices and open source precedents.
   If search_public_web is NOT available, tell the user: "I recommend enabling external web access
@@ -351,7 +356,7 @@ You are performing the role of the release-acceptance-agent (AGT-132): validatin
 RELEASE GATE CHECKS (all must pass before shipping):
 
 1. Run unit tests and typecheck: call run_sandbox_tests. All tests must pass, typecheck must be clean.
-2. Run UX acceptance tests: call generate_ux_test then run_ux_test. These verify accessibility, contrast, focus visibility, and CSS variable compliance.
+2. Run UX acceptance tests: call run_ux_test. This uses AI-powered browser automation (browser-use) to verify accessibility, visual correctness, and acceptance criteria against the live sandbox.
 3. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.
 4. Check deployment readiness: call check_deployment_windows to see if a deployment window is available.
 5. Present a PLAIN LANGUAGE summary to the user:
@@ -480,6 +485,8 @@ export type BuildContext = {
   contributionMode?: string;
   phaseHandoffs?: PhaseHandoffSummary[];
   taxonomyContext?: { path: string; siblingProducts: string[] };
+  /** Pre-generated design system from storefront config or prior phase. */
+  designSystem?: string;
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -514,6 +521,19 @@ export function getBuildContextSection(ctx: BuildContext): string {
     lines.push("");
     lines.push("--- Running Spec (accumulated from conversation) ---");
     lines.push(JSON.stringify(ctx.plan, null, 2).slice(0, 4000));
+  }
+
+  // Design intelligence: inject pre-generated design system if available.
+  // This is a pure-data recommendation (no LLM call) — works at any model tier.
+  if (ctx.designSystem) {
+    lines.push("");
+    lines.push("--- Design System (from Design Intelligence) ---");
+    lines.push(ctx.designSystem.slice(0, 3000));
+    lines.push("Apply these recommendations when building UI components. For DPF platform UI, use DPF design tokens (var(--dpf-*)) instead of the palette above.");
+  } else if (ctx.phase === "ideate" || ctx.phase === "plan" || ctx.phase === "build") {
+    lines.push("");
+    lines.push("--- Design Intelligence Available ---");
+    lines.push("No design system has been generated yet. Call generate_design_system with product keywords from the brief to get industry-specific style, color, typography, and layout recommendations. This is a data lookup (no LLM cost) that works at any model tier.");
   }
 
   // Cross-phase memory: inject handoff briefings from previous phases.

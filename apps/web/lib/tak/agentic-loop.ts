@@ -63,7 +63,7 @@ const BUILD_TOOL_NAMES = new Set([
   "launch_sandbox", "generate_code", "iterate_sandbox",
   "edit_sandbox_file", "read_sandbox_file", "run_sandbox_command",
   "search_sandbox", "list_sandbox_files",
-  "run_sandbox_tests", "deploy_feature", "generate_ux_test", "run_ux_test",
+  "run_sandbox_tests", "deploy_feature", "run_ux_test",
   "propose_file_change", "update_feature_brief", "create_backlog_item",
   "check_deployment_windows", "schedule_promotion", "create_release_bundle", "get_release_status",
   "run_release_gate", "schedule_release_bundle",
@@ -413,7 +413,7 @@ export async function runAgenticLoop(params: {
         (t.args as Record<string, unknown> | undefined)?.field === "buildPlan")
     );
     const hasReviewTools = executedTools.some(t =>
-      t.name === "generate_ux_test" || t.name === "run_ux_test" ||
+      t.name === "run_ux_test" || t.name === "evaluate_page" ||
       t.name === "check_deployment_windows"
     );
     const hasShipTools = executedTools.some(t =>

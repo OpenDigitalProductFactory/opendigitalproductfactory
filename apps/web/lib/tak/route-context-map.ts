@@ -335,7 +335,6 @@ When generating or reviewing UI code, enforce these rules:
       "run_sandbox_command",
       "run_sandbox_tests",
       // Review and UX testing
-      "generate_ux_test",
       "run_ux_test",
       // Ship and release pipeline
       "deploy_feature",

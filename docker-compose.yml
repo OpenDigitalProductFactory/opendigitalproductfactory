@@ -243,15 +243,32 @@ services:
     profiles: ["promote"]
     restart: "no"
 
-  # ─── Playwright (UX test runner for Build Studio) ──────────────────────
-  playwright:
-    image: mcr.microsoft.com/playwright:v1.52.0-noble
+  # ─── Browser-Use (AI-powered browser automation, replaces Playwright) ──
+  browser-use:
+    build:
+      context: ./services/browser-use
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    profiles: ["browser-use"]
+    ports:
+      - "8500:8500"
     volumes:
-      - playwright_scripts:/scripts
-      - playwright_results:/results
-    network_mode: host  # Access sandbox containers on mapped ports
-    profiles: ["build-images"]
-    command: ["sleep", "infinity"]  # Kept alive, tests executed on demand
+      - browser_evidence:/evidence
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+      LLM_MODEL: ${BROWSER_USE_MODEL:-gpt-4o}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-not-needed-for-local}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PORT: "8500"
+      SESSION_TIMEOUT_SECONDS: "600"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8500/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ─── Dev Environment (isolated databases for development) ──────────────────
   dev-postgres:
@@ -488,8 +505,7 @@ volumes:
   redis_data:
   qdrant_data:
   dpf-source-code:
-  playwright_scripts:
-  playwright_results:
+  browser_evidence:
   dev_pgdata:
   dev_neo4jdata:
   dev_qdrant_data:

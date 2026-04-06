@@ -257,11 +257,13 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
     "validate_schema", "describe_model",
+    "search_design_intelligence", "generate_design_system",
   ],
   "software-engineer": [
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
     "generate_code", "describe_model",
+    "search_design_intelligence", "generate_design_system",
   ],
   "frontend-engineer": [
     "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
@@ -272,6 +274,7 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
   "qa-engineer": [
     "read_sandbox_file", "search_sandbox", "list_sandbox_files",
     "run_sandbox_command", "run_sandbox_tests",
+    "search_design_intelligence",
   ],
 };
 
