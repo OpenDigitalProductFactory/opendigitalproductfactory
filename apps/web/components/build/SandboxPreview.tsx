@@ -26,46 +26,65 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
     setCurrentPath("/");
   }, []);
 
-  // Track iframe navigation and block recursive paths (e.g. /build inside sandbox)
+  // Track iframe navigation and extract the sandbox path from proxy URLs
   const handleIframeLoad = useCallback(() => {
     setIframeLoaded(true);
     try {
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
-      const path = win.location.pathname;
-      setCurrentPath(path);
+      const fullPath = win.location.pathname;
 
-      // Block Build Studio and Platform admin inside sandbox — they cause infinite recursion
-      if (BLOCKED_PATHS.some(bp => path.startsWith(bp))) {
-        win.location.replace("/");
-        setCurrentPath("/");
-        return;
+      // Extract sandbox path from proxy URL query param
+      let displayPath: string;
+      if (fullPath.startsWith("/api/sandbox/preview")) {
+        const params = new URLSearchParams(win.location.search);
+        displayPath = params.get("path") ?? "/";
+      } else {
+        displayPath = fullPath;
       }
+      setCurrentPath(displayPath);
     } catch {
       // Cross-origin or security restriction — ignore
     }
   }, []);
 
-  // Poll for path changes from in-iframe navigation (clicks, form submits)
+  // Poll for path changes from in-iframe navigation (clicks, form submits).
+  // The injected nav script routes clicks through the proxy, but this catches
+  // any escapes (client-side routing, direct URL changes) and updates the address bar.
   useEffect(() => {
     if (!iframeLoaded || !iframeRef.current) return;
+    const proxyPrefix = "/api/sandbox/preview";
     const interval = setInterval(() => {
       try {
-        const path = iframeRef.current?.contentWindow?.location.pathname;
-        if (path && path !== currentPath) {
-          if (BLOCKED_PATHS.some(bp => path.startsWith(bp))) {
-            iframeRef.current?.contentWindow?.location.replace("/");
-            setCurrentPath("/");
-          } else {
-            setCurrentPath(path);
+        const win = iframeRef.current?.contentWindow;
+        if (!win) return;
+        const fullPath = win.location.pathname;
+        const search = win.location.search;
+
+        // If iframe is on a proxy URL, extract the sandbox path from ?path=
+        let displayPath: string;
+        if (fullPath.startsWith(proxyPrefix)) {
+          const params = new URLSearchParams(search);
+          displayPath = params.get("path") ?? "/";
+        } else {
+          // Iframe escaped the proxy — redirect it back through the proxy
+          displayPath = fullPath;
+          if (BLOCKED_PATHS.some(bp => fullPath.startsWith(bp))) {
+            displayPath = "/";
           }
+          const proxyUrl = `${proxyPrefix}?buildId=${encodeURIComponent(buildId)}&path=${encodeURIComponent(displayPath)}`;
+          win.location.replace(proxyUrl);
+        }
+
+        if (displayPath !== currentPath) {
+          setCurrentPath(displayPath);
         }
       } catch {
         // Cross-origin — ignore
       }
     }, 500);
     return () => clearInterval(interval);
-  }, [iframeLoaded, currentPath]);
+  }, [iframeLoaded, currentPath, buildId]);
 
   if (!isRunning) {
     return (
