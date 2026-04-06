@@ -198,15 +198,23 @@ export function checkPhaseGate(
 
   if (from === "ideate" && to === "plan") {
     if (!evidence.designDoc) return { allowed: false, reason: "A design document is required before planning." };
-    // Review is informational — presence is sufficient, decision doesn't block
     if (!evidence.designReview) return { allowed: false, reason: "Design review is required before planning." };
+    // Review must pass — a failed review blocks advancement until revision + re-review
+    const designReview = evidence.designReview as { decision?: string };
+    if (designReview.decision === "fail") {
+      return { allowed: false, reason: "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing." };
+    }
     return { allowed: true };
   }
 
   if (from === "plan" && to === "build") {
     if (!evidence.buildPlan) return { allowed: false, reason: "An implementation plan is required before building." };
-    // Review is informational — presence is sufficient, decision doesn't block
     if (!evidence.planReview) return { allowed: false, reason: "Plan review is required before building." };
+    // Review must pass — a failed review blocks advancement until revision + re-review
+    const planReview = evidence.planReview as { decision?: string };
+    if (planReview.decision === "fail") {
+      return { allowed: false, reason: "Plan review failed. Revise the implementation plan and re-run reviewBuildPlan before advancing." };
+    }
     return { allowed: true };
   }
 
