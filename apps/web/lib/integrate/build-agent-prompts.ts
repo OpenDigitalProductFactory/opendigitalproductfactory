@@ -268,7 +268,9 @@ WORKFLOW FOR NEW FEATURES:
 6. run_sandbox_tests for full verification
 
 WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
-1. read_sandbox_file on packages/db/prisma/schema.prisma to see existing models
+1. Use describe_model to look up existing models you need as reference (e.g. describe_model("User"), describe_model("ExpenseClaim")).
+   DO NOT read the full schema file — it is 1500+ lines and will overwhelm your context.
+   If you need to see where to insert a new model, use read_sandbox_file with offset/limit to read just the END of the schema (e.g. offset 1480 limit 50).
 2. edit_sandbox_file to add/modify models — ALWAYS include:
    - Inverse relations on BOTH sides (e.g., if Complaint has createdBy User, User MUST have complaintsCreated Complaint[])
    - @@index on every foreign key field (xxxId fields)
