@@ -36,11 +36,13 @@ describe("getBuildPhasePrompt", () => {
     const prompt = getBuildPhasePrompt("plan");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("testFirst");
+    expect(prompt).toContain("If reviewBuildPlan returns fail");
+    expect(prompt).toContain("Break oversized tasks into smaller 2-5 minute tasks");
   });
   it("returns build prompt for build phase", () => {
     const prompt = getBuildPhasePrompt("build");
-    expect(prompt).toContain("buildPlan");
-    expect(prompt).toContain("review");
+    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("run_sandbox_tests");
   });
   it("returns review prompt for review phase", () => {
     const prompt = getBuildPhasePrompt("review");
