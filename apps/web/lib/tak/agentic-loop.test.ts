@@ -549,4 +549,66 @@ describe("runAgenticLoop", () => {
     const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
     expect(lastUserMessage?.content).toContain("Do not pause with status-only updates");
   });
+
+  it("nudges build agent to use fallback steps after failed read stalls", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Trying to read Prisma schema.",
+        toolCalls: [
+          {
+            id: "toolu_02A",
+            name: "run_sandbox_command",
+            arguments: { command: "cat /workspace/packages/db/prisma/schema.prisma" },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "I inspected the API folder layout and tried reading the Prisma schema to confirm complaint model updates, but the file read command kept failing, so I'll pause there. Next I'll reattempt schema access.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Applying schema scaffolding now.",
+        toolCalls: [
+          {
+            id: "toolu_02B",
+            name: "edit_sandbox_file",
+            arguments: {
+              path: "packages/db/prisma/schema.prisma",
+              old_text: "model User {",
+              new_text: "enum ComplaintSeverity {\\n  low\\n  medium\\n  high\\n}\\n\\nmodel User {",
+            },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "Added initial complaint severity enum scaffolding and resumed implementation with concrete schema updates instead of pausing on read retries.",
+      }));
+
+    mockExecuteTool
+      .mockResolvedValueOnce({ success: false, message: "Could not read schema.prisma", error: "File not found: packages/db/prisma/schema.prisma" })
+      .mockResolvedValueOnce({ success: true, message: "Updated schema.prisma" });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      tools: [
+        { name: "run_sandbox_command", description: "Run sandbox command", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "edit_sandbox_file", description: "Edit sandbox file", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "run_sandbox_command", description: "Run sandbox command", parameters: {} } },
+        { type: "function", function: { name: "edit_sandbox_file", description: "Edit sandbox file", parameters: {} } },
+      ],
+    });
+
+    expect(result.executedTools).toHaveLength(2);
+    expect(result.content).toContain("Added initial complaint severity enum scaffolding");
+    const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
+    const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
+    expect(lastUserMessage?.content).toContain("Do not pause after a failed read");
+  });
 });
