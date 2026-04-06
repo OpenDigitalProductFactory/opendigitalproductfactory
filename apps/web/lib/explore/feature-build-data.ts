@@ -251,6 +251,22 @@ export async function getFeatureBuildForContext(
     }
   }
 
+  // Look up design system from linked storefront (if any) or build evidence
+  let designSystem: string | undefined;
+  try {
+    // Check if there's a storefront with a design system for this org
+    const storefront = await prisma.storefrontConfig.findFirst({
+      select: { designSystem: true },
+    });
+    if (storefront?.designSystem) {
+      designSystem = typeof storefront.designSystem === "string"
+        ? storefront.designSystem
+        : JSON.stringify(storefront.designSystem);
+    }
+  } catch {
+    // Non-fatal — proceed without design system
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -261,6 +277,7 @@ export async function getFeatureBuildForContext(
     contributionMode,
     phaseHandoffs: r.phaseHandoffs,
     taxonomyContext,
+    designSystem,
   };
 }
 

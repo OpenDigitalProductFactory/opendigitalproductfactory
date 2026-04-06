@@ -285,6 +285,19 @@ async function stepGenerateCode(
   const brief = build.brief as import("@/lib/feature-build-types").FeatureBrief;
   const plan = (build.plan ?? {}) as Record<string, unknown>;
 
+  // Look up design system from storefront (if available)
+  let designSystem: string | undefined;
+  try {
+    const storefront = await prisma.storefrontConfig.findFirst({
+      select: { designSystem: true },
+    });
+    if (storefront?.designSystem) {
+      designSystem = typeof storefront.designSystem === "string"
+        ? storefront.designSystem
+        : JSON.stringify(storefront.designSystem);
+    }
+  } catch { /* non-fatal */ }
+
   // Build the system prompt with build context (same as the coworker uses)
   const buildContext = getBuildContextSection({
     buildId,
@@ -293,6 +306,7 @@ async function stepGenerateCode(
     brief,
     portfolioId: build.portfolioId,
     plan,
+    designSystem,
   });
   const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
 

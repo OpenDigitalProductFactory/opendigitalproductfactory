@@ -69,7 +69,6 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // UX / Page evaluation
   evaluate_page: ["file_read"],
-  generate_ux_test: ["file_read"],
   run_ux_test: ["file_read"],
 
   // Codebase access

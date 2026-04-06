@@ -8,4 +8,4 @@ export * from "./health-probe-bridge";
 export * from "./quality-queue";
 export * from "./endpoint-test-registry";
 export * from "./endpoint-test-runner";
-export * from "./playwright-runner";
+export * from "./browser-use-client";

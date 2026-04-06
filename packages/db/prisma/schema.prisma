@@ -3758,6 +3758,7 @@ model StorefrontConfig {
   contactEmail   String?
   contactPhone   String?
   socialLinks    Json?
+  designSystem   Json?
   isPublished    Boolean              @default(false)
   customDomain   String?
   timezone       String               @default("Europe/London")

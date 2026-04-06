@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { nanoid } from "nanoid";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
+import { generateDesignSystem } from "@/lib/design-intelligence";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -82,6 +83,20 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true },
   });
+
+  // Generate design system recommendation from archetype metadata (pure TypeScript, no LLM call)
+  try {
+    const tags = Array.isArray(archetype.tags) ? (archetype.tags as string[]).join(" ") : "";
+    const query = `${archetype.category} ${archetype.name} ${tags}`.trim();
+    const designSystemText = generateDesignSystem(query, orgName);
+    await prisma.storefrontConfig.update({
+      where: { id: config.id },
+      data: { designSystem: designSystemText },
+    });
+  } catch (e) {
+    // Non-fatal — storefront works without design system
+    console.warn("[storefront-setup] design system generation failed:", (e as Error).message?.slice(0, 200));
+  }
 
   // Seed default provider, availability, and booking config from template scheduling defaults
   const template = ALL_ARCHETYPES.find((a: { archetypeId: string }) => a.archetypeId === archetypeId);

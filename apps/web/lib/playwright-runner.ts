@@ -1,2 +1,2 @@
-// Shim — moved to lib/operate/playwright-runner.ts (Phase 9 refactoring)
-export * from "./operate/playwright-runner";
+// Shim — playwright-runner replaced by browser-use-client (browser-use integration)
+export * from "./operate/browser-use-client";
