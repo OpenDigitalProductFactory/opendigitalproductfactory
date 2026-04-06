@@ -35,6 +35,18 @@
 - The `portal-init` container runs once (migrations, seed, hardware detect) then exits.
 - `.dockerignore` excludes `node_modules`, `.next`, `.git`, `.env`, `docs/` — keep it maintained.
 
+## Browser Automation (browser-use)
+
+- **browser-use** replaces Playwright as the primary browser automation layer.
+- Service lives in `services/browser-use/` — Python 3.11 + browser-use library + Chromium.
+- Exposed as an MCP server at `http://browser-use:8500/mcp` (HTTP JSON-RPC transport).
+- Profile-gated: start with `docker compose --profile browser-use up -d`.
+- MCP tools: `browse_open`, `browse_act`, `browse_extract`, `browse_screenshot`, `browse_run_tests`, `browse_close`.
+- Tool handlers in `apps/web/lib/mcp-tools.ts` (`evaluate_page`, `run_ux_test`) call browser-use, not Playwright.
+- Client utilities in `apps/web/lib/operate/browser-use-client.ts`.
+- LLM backend configurable via `BROWSER_USE_MODEL` env var (default: `gpt-4o`).
+- Design spec: `docs/superpowers/specs/2026-04-06-browser-use-integration-design.md`.
+
 ## Git Workflow
 
 - **Customizable (Option 2) mode:** The primary working directory is the cloned repo (e.g., `D:\DPF`). All development uses **feature branches and pull requests** — never commit directly to `main`.

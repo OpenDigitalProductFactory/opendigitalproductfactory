@@ -717,9 +717,19 @@ async function seedMcpServers(): Promise<void> {
         notes: "Free, open-source (MIT). Requires a free GitHub Personal Access Token. Safe for portal execution — communicates with external GitHub API only, no local file or DB access.",
       },
     },
-    // Playwright is NOT needed as an MCP server — the platform already has a
-    // dedicated Playwright Docker container (mcr.microsoft.com/playwright) with
-    // built-in tools (generate_ux_test, run_ux_test) that shell into it directly.
+    {
+      serverId: "mcp-browser-use",
+      name: "Browser-Use (AI Browser Automation)",
+      transport: "http",
+      category: "development",
+      tags: ["browser-automation", "web-interaction", "ui-testing", "qa", "data-extraction"],
+      config: {
+        url: "http://browser-use:8500/mcp",
+        transport: "http",
+        executionScope: "external",
+        notes: "Free, open-source (MIT). AI-powered browser automation via browser-use. Replaces Playwright with LLM-driven navigation, self-healing selectors, and evidence capture. Requires --profile browser-use to start.",
+      },
+    },
   ];
 
   for (const server of defaultServers) {

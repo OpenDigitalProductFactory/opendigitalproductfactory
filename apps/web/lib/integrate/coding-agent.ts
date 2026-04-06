@@ -95,6 +95,14 @@ export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unk
 
   parts.push(
     "",
+    "## Design Intelligence",
+    "- If a design system recommendation is included in the build context (from generate_design_system), follow its style, color palette, typography, and anti-pattern guidance.",
+    "- For DPF platform UI: always use DPF design tokens (var(--dpf-*)). For product sandbox UI: apply the design system recommendations.",
+    "- UI anti-patterns: no emoji icons (use SVG), cursor-pointer on all clickables, smooth transitions (150-300ms), z-index scale (10/20/30/50).",
+  );
+
+  parts.push(
+    "",
     "## Rules",
     "- Write all files to /workspace",
     "- Use TypeScript strict mode",
