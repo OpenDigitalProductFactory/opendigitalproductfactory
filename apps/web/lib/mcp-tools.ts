@@ -835,7 +835,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "evaluate_page",
-    description: "Evaluate a live page for UX and accessibility issues using axe-core + Playwright. Returns structured findings with WCAG references, severity, and recommendations. Works on production pages (default) or sandbox pages (if URL provided).",
+    description: "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
     inputSchema: {
       type: "object",
       properties: {
@@ -848,18 +848,18 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["review"],
   },
   {
-    name: "generate_ux_test",
-    description: "Generate a Playwright test script from acceptance criteria for the sandbox.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false, // Writes test script to sandbox — available in advise mode
-    buildPhases: ["review"],
-  },
-  {
     name: "run_ux_test",
-    description: "Execute the Playwright UX test against the sandbox. Returns step-by-step results with screenshots.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tests: {
+          type: "array",
+          items: { type: "string" },
+          description: "Natural-language test assertions. If omitted, auto-generates from acceptance criteria.",
+        },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -949,12 +949,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null, // Read-only design reference — no capability gate
     sideEffect: false,
-    buildPhases: ["build", "review"],
+    buildPhases: ["ideate", "plan", "build", "review"],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
     name: "generate_design_system",
-    description: "Generate a complete design system recommendation for a product. Searches across product types, styles, colors, typography, and landing page patterns, then applies industry-specific reasoning rules. Returns: recommended pattern, style, color palette, font pairing, effects, anti-patterns to avoid, and a pre-delivery checklist.",
+    description: "Generate a complete design system recommendation for a product. Searches across product types, styles, colors, typography, and landing page patterns, then applies industry-specific reasoning rules. Returns: recommended pattern, style, color palette, font pairing, effects, anti-patterns to avoid, and a pre-delivery checklist. This is a pure data lookup — no LLM call, works at any model tier.",
     inputSchema: {
       type: "object",
       properties: {
@@ -965,7 +965,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null, // Read-only design reference — no capability gate
     sideEffect: false,
-    buildPhases: ["build"],
+    buildPhases: ["ideate", "plan", "build", "review"],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
@@ -4092,103 +4092,167 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (!targetUrl) return { success: false, error: "No URL to evaluate.", message: "Provide a URL or navigate to a page first." };
 
       try {
-        const { categorizeAxeViolation, groupFindingsByCategory } = await import("@/lib/page-evaluator");
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
-        const exec = promisify(execCb);
+        const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
 
-        // Run axe-core via Playwright in the existing playwright-mcp container.
-        // Uses heredoc syntax to avoid shell escaping issues (same pattern as generate_ux_test).
-        const axeScript = [
-          "const { chromium } = require('playwright');",
-          "const { AxeBuilder } = require('@axe-core/playwright');",
-          "(async () => {",
-          "  const browser = await chromium.launch();",
-          "  const page = await browser.newPage();",
-          `  await page.goto(${JSON.stringify(targetUrl)}, { timeout: 30000 });`,
-          "  await page.waitForLoadState('networkidle');",
-          "  const results = await new AxeBuilder({ page }).analyze();",
-          "  console.log(JSON.stringify(results.violations));",
-          "  await browser.close();",
-          "})();",
-        ].join("\n");
+        // Use browser-use to evaluate the page with AI-powered analysis
+        const extractRes = await fetch(BROWSER_USE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "browse_open",
+              arguments: { url: targetUrl },
+            },
+          }),
+          signal: AbortSignal.timeout(60000),
+        });
+        const openResult = await extractRes.json();
+        const openContent = JSON.parse(openResult?.result?.content?.[0]?.text ?? "{}");
+        const sessionId = openContent.session_id;
+        if (!sessionId) throw new Error("Failed to open browser session");
 
-        const scriptId = `axe-${Date.now()}`;
-        const { stdout } = await exec(
-          `docker exec playwright sh -c 'cat > /tmp/${scriptId}.js << SCRIPT_EOF\n${axeScript}\nSCRIPT_EOF\nnode /tmp/${scriptId}.js'`,
-          { timeout: 60000 },
-        );
+        // Extract accessibility and UX findings using AI analysis
+        const evalRes = await fetch(BROWSER_USE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: {
+              name: "browse_extract",
+              arguments: {
+                session_id: sessionId,
+                query: "Analyze this page for UX and accessibility issues. Check for: missing alt text, low contrast text, missing form labels, heading hierarchy issues, keyboard navigation problems, focus indicators, semantic HTML usage. Return a JSON array of findings, each with: severity (critical/important/minor), category (contrast/accessibility/focus/semantic-html/responsive), element (CSS selector or description), issue (what's wrong), recommendation (how to fix), wcagRef (WCAG guideline reference if applicable).",
+              },
+            },
+          }),
+          signal: AbortSignal.timeout(120000),
+        });
+        const evalResult = await evalRes.json();
+        const evalContent = JSON.parse(evalResult?.result?.content?.[0]?.text ?? "{}");
 
-        const violations = JSON.parse(stdout) as Array<Record<string, unknown>>;
-        const findings = violations.map((v) => categorizeAxeViolation(v as any));
-        const grouped = groupFindingsByCategory(findings);
+        // Get screenshot
+        const ssRes = await fetch(BROWSER_USE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 3,
+            method: "tools/call",
+            params: {
+              name: "browse_screenshot",
+              arguments: { session_id: sessionId },
+            },
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        const ssResult = await ssRes.json();
+        const ssContent = JSON.parse(ssResult?.result?.content?.[0]?.text ?? "{}");
+
+        // Close session
+        await fetch(BROWSER_USE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 4,
+            method: "tools/call",
+            params: { name: "browse_close", arguments: { session_id: sessionId } },
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        // Parse findings — the AI extraction returns structured data
+        let findings: Array<Record<string, unknown>> = [];
+        try {
+          const rawData = typeof evalContent.data === "string" ? JSON.parse(evalContent.data) : evalContent.data;
+          findings = Array.isArray(rawData) ? rawData : [];
+        } catch {
+          findings = [];
+        }
 
         return {
           success: true,
-          message: `Found ${findings.length} accessibility issues across ${Object.keys(grouped).length} categories.`,
-          data: { url: targetUrl, screenshot: null, axeViolationCount: violations.length, findings },
+          message: `Found ${findings.length} UX/accessibility issues on ${targetUrl}.`,
+          data: {
+            url: targetUrl,
+            screenshot: ssContent.screenshot_base64 ?? null,
+            findingCount: findings.length,
+            findings,
+          },
         };
       } catch (e) {
-        // Fallback: return error, agent can still do code-only analysis
         return {
           success: false,
           error: e instanceof Error ? e.message : String(e),
-          message: "Could not launch browser for live page evaluation. Try code-only analysis using read_project_file instead.",
+          message: "Could not launch browser-use for live page evaluation. Ensure the browser-use service is running (docker compose --profile browser-use up -d). Try code-only analysis using read_project_file instead.",
         };
       }
-    }
-
-    case "generate_ux_test": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxPort: true, brief: true } });
-      if (!build?.sandboxPort || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
-      const { generateTestScript } = await import("@/lib/playwright-runner");
-      const brief = build.brief as { acceptanceCriteria?: string[] };
-      const script = generateTestScript(`http://localhost:${build.sandboxPort}`, brief.acceptanceCriteria ?? [], buildId);
-      const { exec: execCb } = await import("child_process");
-      const { promisify } = await import("util");
-      const exec = promisify(execCb);
-      try {
-        await exec(`docker exec playwright sh -c 'mkdir -p /scripts && cat > /scripts/${buildId}.spec.ts << SCRIPT_EOF\n${script}\nSCRIPT_EOF'`);
-      } catch (err) {
-        const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
-        if (msg.includes("No such container") || msg.includes("is not running")) {
-          return { success: false, error: "Playwright container not running.", message: "The Playwright test container is not available. UX tests are optional — you can skip this step and proceed with the review." };
-        }
-        return { success: false, error: `UX test generation failed: ${msg}`, message: `Could not generate UX test: ${msg}. You can skip this step and proceed.` };
-      }
-      return { success: true, message: "UX test script generated.", data: { script } };
     }
 
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      let steps;
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxPort: true, brief: true } });
+      if (!build?.sandboxPort || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
+
+      const brief = build.brief as { acceptanceCriteria?: string[] };
+      const testCases = (params.tests as string[] | undefined) ?? brief.acceptanceCriteria ?? [];
+      if (testCases.length === 0) return { success: false, error: "No test cases.", message: "No acceptance criteria or test cases to run." };
+
       try {
-        const { runPlaywrightTest } = await import("@/lib/playwright-runner");
-        steps = await runPlaywrightTest(buildId);
+        const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
+        const sandboxUrl = `http://localhost:${build.sandboxPort}`;
+
+        const testRes = await fetch(BROWSER_USE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "browse_run_tests",
+              arguments: { url: sandboxUrl, tests: testCases },
+            },
+          }),
+          signal: AbortSignal.timeout(300000), // 5 min for full test suite
+        });
+        const testResult = await testRes.json();
+        const testContent = JSON.parse(testResult?.result?.content?.[0]?.text ?? "{}");
+
+        // Convert to UxTestStep format for storage
+        const steps = (testContent.results ?? []).map((r: Record<string, unknown>, i: number) => ({
+          step: (r.test as string) ?? `Test ${i + 1}`,
+          passed: r.status === "pass",
+          screenshotUrl: null, // Screenshots are base64 in the result, not URLs
+          error: r.status !== "pass" ? ((r.detail as string) ?? null) : null,
+        }));
+
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        for (let i = 0; i < steps.length; i++) {
+          if (context?.threadId) {
+            agentEventBus.emit(context.threadId, {
+              type: "test:step",
+              stepIndex: i,
+              description: steps[i]!.step,
+              passed: steps[i]!.passed,
+            });
+          }
+        }
+        await prisma.featureBuild.update({ where: { buildId }, data: { uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "uxTestResults" });
+        const passed = steps.filter((s: { passed: boolean }) => s.passed).length;
+        logBuildActivity(buildId, "run_ux_test", `UX tests: ${passed}/${steps.length} passed (browser-use).`);
+        return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps, browserUseResults: testContent } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
-        return { success: false, error: `UX test run failed: ${msg}`, message: `Could not run UX tests — Playwright container may not be available. You can skip UX tests and proceed with the review.` };
+        return { success: false, error: `UX test run failed: ${msg}`, message: `Could not run UX tests. Ensure the browser-use service is running (docker compose --profile browser-use up -d). You can skip UX tests and proceed with the review.` };
       }
-      const { agentEventBus } = await import("@/lib/agent-event-bus");
-      for (let i = 0; i < steps.length; i++) {
-        if (context?.threadId) {
-          agentEventBus.emit(context.threadId, {
-            type: "test:step",
-            stepIndex: i,
-            description: steps[i]!.step,
-            screenshot: steps[i]!.screenshotUrl ?? undefined,
-            passed: steps[i]!.passed,
-          });
-        }
-      }
-      await prisma.featureBuild.update({ where: { buildId }, data: { uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue } });
-      if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "uxTestResults" });
-      const passed = steps.filter((s) => s.passed).length;
-      logBuildActivity(buildId, "run_ux_test", `UX tests: ${passed}/${steps.length} passed.`);
-      return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps } };
     }
 
     case "list_project_directory": {
