@@ -43,6 +43,8 @@ describe("getBuildPhasePrompt", () => {
     const prompt = getBuildPhasePrompt("build");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("run_sandbox_tests");
+    expect(prompt).toContain("Do NOT ask for go-ahead during build tasks");
+    expect(prompt).toContain('Do NOT send status-only updates like "next step" or "ready to proceed."');
   });
   it("returns review prompt for review phase", () => {
     const prompt = getBuildPhasePrompt("review");
