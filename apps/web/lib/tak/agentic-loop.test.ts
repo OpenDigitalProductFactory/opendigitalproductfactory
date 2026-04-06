@@ -470,7 +470,7 @@ describe("runAgenticLoop", () => {
 
     mockRoute.mockResolvedValueOnce(mockResult({
       content:
-        "Completed complaint schema research across multiple codebase scopes and confirmed the implementation boundaries. I am ready to proceed directly with schema, API, and UI wiring without repeating the same discovery calls.",
+        "Completed complaint schema research across multiple codebase scopes and confirmed the implementation boundaries for schema, API, and UI wiring without repeating the same discovery calls. I mapped where Prisma models belong, identified the API route conventions for intake and triage, and captured the UI handoff points needed to replace placeholder state with persisted complaint workflow data end to end.",
     }));
 
     for (let idx = 0; idx < 7; idx++) {
@@ -490,5 +490,63 @@ describe("runAgenticLoop", () => {
     expect(result.content).toContain("Completed complaint schema research across multiple codebase scopes");
     expect(result.executedTools).toHaveLength(7);
     expect(mockRoute).toHaveBeenCalledTimes(8);
+  });
+
+  it("nudges status-only build updates to continue implementation", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Inspecting schema and searching complaint references.",
+        toolCalls: [
+          {
+            id: "toolu_01A",
+            name: "search_sandbox",
+            arguments: { pattern: "complaint", glob: "packages/db/prisma/schema.prisma", maxResults: 20 },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "I confirmed there is no complaint model yet and the next step is defining enums and relations. Ready to proceed when you confirm.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Creating schema changes now.",
+        toolCalls: [
+          {
+            id: "toolu_01B",
+            name: "edit_sandbox_file",
+            arguments: { path: "packages/db/prisma/schema.prisma", old_text: "model User {", new_text: "enum ComplaintStatus {\\n  open\\n}\\n\\nmodel User {" },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "Implemented the complaint schema enum scaffolding and started wiring relations. Next I can continue with API routes and verification.",
+      }));
+
+    mockExecuteTool
+      .mockResolvedValueOnce({ success: true, message: "Search results for complaint" })
+      .mockResolvedValueOnce({ success: true, message: "Updated schema.prisma" });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      tools: [
+        { name: "search_sandbox", description: "Search sandbox", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "edit_sandbox_file", description: "Edit sandbox file", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "search_sandbox", description: "Search sandbox", parameters: {} } },
+        { type: "function", function: { name: "edit_sandbox_file", description: "Edit sandbox file", parameters: {} } },
+      ],
+    });
+
+    expect(result.executedTools).toHaveLength(2);
+    expect(result.content).toContain("Implemented the complaint schema enum scaffolding");
+    const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
+    const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
+    expect(lastUserMessage?.content).toContain("Do not pause with status-only updates");
   });
 });

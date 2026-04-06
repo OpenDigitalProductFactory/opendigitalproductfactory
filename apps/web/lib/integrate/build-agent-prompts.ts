@@ -322,6 +322,8 @@ RULES:
 - For new code: check existing patterns first, then generate, then verify.
 - If tests fail, follow the WHEN TESTS FAIL recovery workflow above.
 - If 3+ fix attempts fail, tell the user and ask for guidance.
+- Do NOT ask for go-ahead during build tasks. Keep executing until you have concrete file/code/test progress or a specific blocker.
+- Do NOT send status-only updates like "next step" or "ready to proceed." Continue working and report larger chunks of completed work.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. NEVER narrate code.
 - NEVER claim a command failed, timed out, or the sandbox is unresponsive WITHOUT actually calling the tool first. Always run the command and report the ACTUAL result. If a command failed before, try it again — the issue may be fixed.
 - SCHEMA QUESTIONS: NEVER ask the user what fields a model has. Call describe_model({ model_name: "ModelName" }) to look it up yourself. This works for any Prisma model in the sandbox schema.

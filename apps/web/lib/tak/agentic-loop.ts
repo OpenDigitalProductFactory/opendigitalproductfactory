@@ -53,6 +53,8 @@ export const PERMISSION_SEEKING_PATTERN = /(?:should I (?:proceed|continue|go ah
 // Only checked in the no-tool-calls branch, so this won't fire when the agent
 // is actively using tools and reporting on results.
 export const FRUSTRATION_PATTERN = /(?:I (?:apologize|cannot|can't|am unable|don't have (?:access|the ability))|(?:unfortunately|regrettably),? I|I'm (?:not able|having (?:trouble|difficulty)|sorry)|(?:beyond|outside) my (?:capabilities|ability)|I (?:don't|do not) (?:currently )?have (?:a |the )?(?:tool|capability|access|ability)|I (?:was|am) unable to)/i;
+const STATUS_ONLY_PROGRESS_PATTERN = /(?:next step|ready to (?:proceed|start|draft|implement|build)|no (?:other )?progress|haven't made (?:tangible )?progress|so far|I (?:inspected|reviewed|checked|scanned|confirmed|looked for|tried searching|pulled up|started digging))/i;
+const BUILD_ROUTE_PATTERN = /^\/build(?:$|[/?#])/i;
 
 // Tools that actually build/write — not just read/search
 const BUILD_TOOL_NAMES = new Set([
@@ -65,6 +67,21 @@ const BUILD_TOOL_NAMES = new Set([
   "check_deployment_windows", "schedule_promotion", "create_release_bundle", "get_release_status",
   "run_release_gate", "schedule_release_bundle",
   "assess_contribution", "contribute_to_hive",
+]);
+
+// Tools that count as concrete implementation progress in build mode.
+// Read/search-only cycles should not keep pausing the user with "next step" updates.
+const BUILD_PROGRESS_TOOL_NAMES = new Set([
+  "launch_sandbox",
+  "generate_code",
+  "iterate_sandbox",
+  "write_sandbox_file",
+  "edit_sandbox_file",
+  "run_sandbox_command",
+  "run_sandbox_tests",
+  "validate_schema",
+  "saveBuildEvidence",
+  "propose_file_change",
 ]);
 
 /** Detect when the agent claims completion or narrates code without having called build tools. */
@@ -523,6 +540,23 @@ export async function runAgenticLoop(params: {
         responseLength: trimmed.length,
         responseText: trimmed,
       });
+
+      const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
+      const hasConcreteBuildProgress = executedTools.some((t) => BUILD_PROGRESS_TOOL_NAMES.has(t.name));
+      const looksStatusOnly = STATUS_ONLY_PROGRESS_PATTERN.test(trimmed);
+      if (!result.toolsStripped && isBuildRoute && executedTools.length > 0 && !hasConcreteBuildProgress && looksStatusOnly) {
+        continuationNudges++;
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content:
+              "Do not pause with status-only updates. Continue implementing now in a larger chunk: create or modify files, run verification commands, and report concrete changes or a specific blocker.",
+          },
+        ];
+        continue;
+      }
 
       if (shouldNudgeNow) {
         // Preserve the best text-only response before nudging, in case the
