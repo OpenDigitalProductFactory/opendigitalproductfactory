@@ -1253,7 +1253,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     pinnedProviderId?: string;
     pinnedModelId?: string;
   }> = [
-      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedProviderId: "codex" },
+      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
