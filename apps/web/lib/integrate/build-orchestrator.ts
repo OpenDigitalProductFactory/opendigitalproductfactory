@@ -191,6 +191,7 @@ async function dispatchSpecialist(params: {
       agentId,
       threadId: thread.id,
       modelRequirements: modelReqs,
+      requireTools: true,
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
 

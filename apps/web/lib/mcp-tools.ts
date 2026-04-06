@@ -242,6 +242,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "fetch_public_website",
@@ -257,6 +258,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate"],
   },
   {
     name: "analyze_public_website_branding",
@@ -2236,36 +2238,10 @@ export async function executeTool(
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field });
       logBuildActivity(buildId, "saveBuildEvidence", `Evidence "${field}" saved.`);
 
-      // Auto-advance phase when evidence satisfies the next gate
-      try {
-        const { advanceBuildPhase } = await import("@/lib/actions/build");
-        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
-        const build = await prisma.featureBuild.findUnique({ where: { buildId } });
-        if (build) {
-          const current = build.phase as string;
-          // Auto-advance when evidence satisfies the gate.
-          const NEXT_PHASE: Record<string, string> = { ideate: "plan", plan: "build", build: "review", review: "ship" };
-          const next = NEXT_PHASE[current];
-          console.log(`[saveBuildEvidence] auto-advance check: current=${current} next=${next ?? "none"} field=${field}`);
-          if (next && canTransitionPhase(current as any, next as any)) {
-            const gate = checkPhaseGate(current as any, next as any, {
-              designDoc: build.designDoc, designReview: build.designReview,
-              buildPlan: build.buildPlan, planReview: build.planReview,
-              taskResults: build.taskResults, verificationOut: build.verificationOut,
-              acceptanceMet: build.acceptanceMet,
-              uxTestResults: (build as Record<string, unknown>).uxTestResults,
-            });
-            console.log(`[saveBuildEvidence] gate: allowed=${gate.allowed} reason=${gate.reason ?? "ok"}`);
-            if (gate.allowed) {
-              await advanceBuildPhase(buildId, next as any);
-              if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: next });
-              logBuildActivity(buildId, "phase:advance", `Phase advanced: ${current} → ${next}`);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[saveBuildEvidence] auto-advance failed:", err);
-      }
+      // Phase advancement is handled by explicit review tool handlers
+      // (reviewDesignDoc, reviewBuildPlan) and advanceBuildPhase(), not here.
+      // Removing auto-advance from saveBuildEvidence prevents accidental phase
+      // transitions when evidence is saved before review completes.
 
       return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
     }
@@ -2287,7 +2263,20 @@ export async function executeTool(
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
 
-      // Auto-advance: design review saved → check if we can advance to plan
+      // Failed review → structured recovery instructions, no auto-advance
+      if (review.decision === "fail") {
+        const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
+        const issueList = criticalIssues.length > 0
+          ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
+          : review.summary;
+        return {
+          success: true,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.`,
+          data: { review, blocked: true, action: "revise_and_resubmit" },
+        };
+      }
+
+      // Passed review → auto-advance if gate is satisfied
       try {
         const { advanceBuildPhase } = await import("@/lib/actions/build");
         const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
@@ -2326,7 +2315,20 @@ export async function executeTool(
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
 
-      // Auto-advance: plan review saved → check if we can advance to build
+      // Failed review → structured recovery instructions, no auto-advance
+      if (review.decision === "fail") {
+        const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
+        const issueList = criticalIssues.length > 0
+          ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
+          : review.summary;
+        return {
+          success: true,
+          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.`,
+          data: { review, blocked: true, action: "revise_and_resubmit" },
+        };
+      }
+
+      // Passed review → auto-advance if gate is satisfied
       try {
         const { advanceBuildPhase } = await import("@/lib/actions/build");
         const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");

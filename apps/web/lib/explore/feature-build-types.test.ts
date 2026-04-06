@@ -147,10 +147,27 @@ describe("canTransitionPhase — review→build backward transition", () => {
 });
 
 describe("checkPhaseGate", () => {
-  it("blocks ideate to plan without designDoc and designReview pass", () => {
+  it("blocks ideate to plan without designDoc", () => {
     const result = checkPhaseGate("ideate", "plan", {});
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("design");
+    expect(result.reason).toContain("design document");
+  });
+
+  it("blocks ideate to plan without designReview", () => {
+    const result = checkPhaseGate("ideate", "plan", {
+      designDoc: { problemStatement: "test" },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Design review is required");
+  });
+
+  it("blocks ideate to plan when design review failed", () => {
+    const result = checkPhaseGate("ideate", "plan", {
+      designDoc: { problemStatement: "test" },
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "Missing reuse audit" }], summary: "Needs revision" },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Design review failed");
   });
 
   it("allows ideate to plan with designDoc and passing review", () => {
@@ -161,10 +178,27 @@ describe("checkPhaseGate", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("blocks plan to build without buildPlan and planReview pass", () => {
+  it("blocks plan to build without buildPlan", () => {
     const result = checkPhaseGate("plan", "build", {});
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("plan");
+    expect(result.reason).toContain("implementation plan");
+  });
+
+  it("blocks plan to build without planReview", () => {
+    const result = checkPhaseGate("plan", "build", {
+      buildPlan: { fileStructure: [], tasks: [] },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Plan review is required");
+  });
+
+  it("blocks plan to build when plan review failed", () => {
+    const result = checkPhaseGate("plan", "build", {
+      buildPlan: { fileStructure: [], tasks: [] },
+      planReview: { decision: "fail", issues: [{ severity: "critical", description: "No test-first steps" }], summary: "Needs revision" },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Plan review failed");
   });
 
   it("allows plan to build with buildPlan and passing review", () => {
@@ -188,12 +222,19 @@ describe("checkPhaseGate", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("blocks build to review when tests fail", () => {
+  it("allows build to review with test failures (informational — typecheck is the hard gate)", () => {
     const result = checkPhaseGate("build", "review", {
       verificationOut: { testsPassed: 4, testsFailed: 1, typecheckPassed: true, fullOutput: "", timestamp: "" },
     });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("blocks build to review when typecheck fails", () => {
+    const result = checkPhaseGate("build", "review", {
+      verificationOut: { testsPassed: 5, testsFailed: 0, typecheckPassed: false, fullOutput: "", timestamp: "" },
+    });
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("tests");
+    expect(result.reason).toContain("Typecheck");
   });
 
   it("blocks review to ship without all evidence", () => {

@@ -87,6 +87,13 @@ export interface RouteAndCallOptions {
   maxDurationMs?: number;
   /** Persist the route decision to the audit log. Default: true. */
   persistDecision?: boolean;
+  /**
+   * When true, tool stripping is forbidden. If no tool-capable endpoint is
+   * available, throw NoEligibleEndpointsError instead of silently degrading
+   * to generic no-tool chat. Use for Build Studio and other tool-dependent
+   * workflows where removing tools changes the task semantics.
+   */
+  requireTools?: boolean;
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -157,7 +164,19 @@ export async function routeAndCall(
   // support, retry without the tools requirement. The model can still converse —
   // it just won't have tool calling. This is critical for Ollama-only setups
   // where the coworker injects tools but the local model can't use them.
+  //
+  // EXCEPTION: When requireTools is set (Build Studio, coding agents), tool
+  // stripping destroys task semantics. Fail fast instead of silently degrading.
   if (!decision.selectedEndpoint && contract.requiresTools) {
+    if (options?.requireTools) {
+      throw new NoEligibleEndpointsError(
+        taskType,
+        `No tool-capable endpoint available. Build Studio requires tool support — ` +
+        `cannot fall back to generic chat. Configure a tool-capable provider (OpenAI, Anthropic, Gemini) ` +
+        `or check that existing providers are active.`,
+        decision.excludedCount,
+      );
+    }
     const allToolExclusions = decision.candidates.every(
       (c) => c.excluded && c.excludedReason?.includes("toolUse"),
     );

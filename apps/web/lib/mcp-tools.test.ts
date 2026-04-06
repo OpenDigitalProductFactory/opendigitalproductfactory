@@ -25,6 +25,14 @@ describe("mcp tools", () => {
     expect(tools.some((tool) => tool.name === "analyze_public_website_branding")).toBe(true);
   });
 
+  it("makes public web search available during Build Studio ideation", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: true });
+    const tool = tools.find((t) => t.name === "search_public_web");
+
+    expect(tool).toBeDefined();
+    expect(tool!.buildPhases).toContain("ideate");
+  });
+
   it("includes build tools for platform users", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
     const toolNames = tools.map((t) => t.name);
