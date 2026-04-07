@@ -61,6 +61,7 @@ model User {
   knowledgeRevisions           KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
   workItemAssignments          WorkItem[]                    @relation("WorkItemAssignee")
   workSchedule                 WorkSchedule?
+  adminActivities              AdminActivity[]
 }
 
 model UserGroup {
@@ -2035,6 +2036,22 @@ model ToolEvaluation {
   @@index([toolName, status])
   @@index([status])
   @@index([reEvaluateAfter])
+}
+
+model AdminActivity {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  toolName    String
+  parameters  Json
+  result      String   // "success" | "blocked" | "confirmed" | "denied"
+  summary     String?
+  tier        Int      // 1, 2, or 3
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([toolName])
 }
 
 model ToolExecution {

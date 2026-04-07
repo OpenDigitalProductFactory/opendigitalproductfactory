@@ -450,8 +450,15 @@ When generating or reviewing UI code, enforce these rules:
     domain: "Administration",
     sensitivity: "restricted",
     domainContext:
-      "This page handles user management, role assignments, branding configuration, and platform settings. Data here is classified as restricted — it includes access control rules, credentials, and security configuration. All changes are auditable.",
+      "This page handles user management, role assignments, branding configuration, platform settings, and infrastructure administration. The admin coworker has tools to view logs, query the database, restart services, run migrations, and execute project-level commands. All tool calls are audit-logged to AdminActivity.",
     domainTools: [
+      "admin_view_logs",
+      "admin_query_db",
+      "admin_read_file",
+      "admin_restart_service",
+      "admin_run_migration",
+      "admin_run_seed",
+      "admin_run_command",
       "analyze_brand_document",
       "analyze_public_website_branding",
       "fetch_public_website",
