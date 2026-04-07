@@ -487,6 +487,7 @@ export async function runAgenticLoop(params: {
         const evidenceSignature = buildSaveEvidenceSignature(args);
         if (evidenceSignature) keyParts.push(evidenceSignature);
       } else if (args?.field) keyParts.push(String(args.field));
+      if (args?.model_name) keyParts.push(String(args.model_name));
       if (args?.query) keyParts.push(String(args.query).slice(0, 50));
       if (args?.glob) keyParts.push(String(args.glob).slice(0, 80));
       if (args?.path) keyParts.push(String(args.path));
