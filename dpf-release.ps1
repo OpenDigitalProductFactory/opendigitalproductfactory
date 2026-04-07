@@ -17,8 +17,13 @@ $branch = git rev-parse --abbrev-ref HEAD
 $stashed = $false
 if ($branch -ne "main") {
     Write-Host "Switching from $branch to main..." -ForegroundColor Cyan
+    # Use SilentlyContinue locally so git informational stderr (e.g. "Ignoring path ...")
+    # does not trip PowerShell's error handling when ErrorActionPreference = Stop.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
     git stash --include-untracked -q 2>$null
     $stashed = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $prev
     git checkout main -q
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Could not switch to main." -ForegroundColor Red

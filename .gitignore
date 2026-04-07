@@ -11,3 +11,4 @@ packages/db/generated/
 .playwright-mcp/
 .pnpm-store/
 docker-compose.override.yml
+backups/
