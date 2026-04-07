@@ -108,8 +108,12 @@ export function detectFabrication(
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
 // Nudging these responses toward tools breaks legitimate HR / data-entry flows
-// (e.g. "What's the employee's last name?" after "add John as employee").
-const CLARIFYING_QUESTION_PATTERN = /^[^.!]*\?[\s]*$/;
+// (e.g. "What's the employee's last name?" after "add John as employee") and
+// ideate-phase conversational gates where the model asks one clarifying question
+// before starting research (e.g. "Happy to help. Who is the primary user?").
+// The old strict pattern required the entire response to be a bare question —
+// that rejected valid mixed responses. The new check: short + contains "?".
+const CLARIFYING_QUESTION_PATTERN = /\?/;
 
 export function shouldNudge(params: {
   continuationNudges: number;

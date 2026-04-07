@@ -96,8 +96,21 @@ const PHASE_PROMPTS: Record<string, string> = {
 
 ${PROJECT_CONTEXT}
 
-DO THIS NOW — no questions, no asking for clarification.
-Execute these steps IN ORDER. Do NOT skip steps. Do NOT save the design doc before completing steps 1-2.
+STEP 0 — INTENT GATE (do this FIRST, before any tools):
+  Ask yourself: do I have enough to design from?
+  You need at minimum: (a) what problem this solves or who uses it, AND (b) roughly what it does.
+
+  IF NOT ENOUGH — user gave a vague, exploratory, or one-line message:
+    Ask ONE clarifying question. Max 2 sentences. Do NOT call any tools yet.
+    Pick the question that unlocks the most: who uses it, what triggers it, or what success looks like.
+    Examples:
+      "Who uses this — internal staff, external customers, or both?"
+      "What triggers this — a user action or an automated/external event?"
+      "What does success look like — what can someone do after this that they can't do today?"
+    Wait for the answer before proceeding to Step 1.
+
+  IF ENOUGH — user gave context, answered your question, or said "just build it" / "make assumptions":
+    Skip to Step 1 immediately.
 
 STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
   a) Call search_project_files to find existing features similar to what the user wants.
