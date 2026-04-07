@@ -112,13 +112,13 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
   IF ENOUGH — user gave context, answered your question, or said "just build it" / "make assumptions":
     Skip to Step 1 immediately.
 
-STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
-  IMPORTANT: Check this conversation for prior tool results first. If you can already see
-  search_project_files, read_project_file, or describe_model results in the chat history,
-  that research is done — skip directly to the next incomplete step. Do NOT repeat research
-  you have already completed.
+STEP 1 — MANDATORY CODEBASE RESEARCH:
+  *** BEFORE CALLING ANY TOOLS: look at this conversation. ***
+  If you already called search_project_files, read_project_file, or describe_model
+  earlier in this conversation and received results — Step 1 is DONE. Go to Step 1b now.
+  Do NOT repeat research. Repeating it loops forever and wastes every iteration.
 
-  If research is not yet done:
+  If and only if no research tool results exist yet in this conversation:
   a) Call search_project_files to find existing features similar to what the user wants.
      Example: if building a complaints system, search for "complaint", "ticket", "issue", "case".
   b) Call read_project_file on at least ONE existing feature to understand the codebase patterns:

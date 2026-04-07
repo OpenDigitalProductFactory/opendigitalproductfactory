@@ -125,9 +125,12 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
 }): boolean {
-  // Permission-seeking gets up to 3 nudges; other nudge types get 1
+  // Permission-seeking and narration both get up to 3 nudges.
+  // One nudge isn't enough when the model calls the wrong tool (because the nudge
+  // listed it) and then narrates again — it needs a second chance with better guidance.
   const isPermission = params.responseText ? PERMISSION_SEEKING_PATTERN.test(params.responseText) : false;
-  const maxNudges = isPermission ? 3 : 1;
+  const isNarration = params.responseText ? NARRATION_PATTERN.test(params.responseText) : false;
+  const maxNudges = (isPermission || isNarration) ? 3 : 1;
   if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
@@ -611,8 +614,18 @@ export async function runAgenticLoop(params: {
           continue;
         }
 
-        const toolNames = tools.slice(0, 5).map((t) => t.name).join(", ");
-        console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response)`);
+        // If the narration names a specific tool, call it out explicitly in the nudge
+        // so the model doesn't pick a wrong tool from a generic list.
+        const allToolNames = tools.map((t) => t.name);
+        const mentionedTool = allToolNames.find((n) =>
+          trimmed.toLowerCase().includes(n.toLowerCase().replace(/_/g, " ")) ||
+          trimmed.includes(n),
+        );
+        const toolListStr = allToolNames.slice(0, 10).join(", ");
+        const nudgeContent = mentionedTool
+          ? `Stop narrating — call ${mentionedTool} now. Do not respond with text.`
+          : `You have tools available — call one directly instead of describing what you want to do. Available: ${toolListStr}. Call the most relevant one now.`;
+        console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response, mentioned=${mentionedTool ?? "none"})`);
         messages = [
           ...messages,
           ...(trimmed.length > 0
@@ -620,7 +633,7 @@ export async function runAgenticLoop(params: {
             : []),
           {
             role: "user" as const,
-            content: `You have tools available — use them directly instead of responding with text. Your available tools include: ${toolNames}. Call the most relevant one now to complete the task.`,
+            content: nudgeContent,
           },
         ];
         continue;
