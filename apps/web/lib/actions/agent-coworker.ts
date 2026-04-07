@@ -729,10 +729,9 @@ export async function sendMessage(input: {
     const activeBuild = await prisma.featureBuild.findFirst({
       where: { createdById: user.id!, phase: "build" },
       orderBy: { updatedAt: "desc" },
-      select: { buildId: true, plan: true },
+      select: { buildId: true, buildPlan: true },
     });
-    const plan = activeBuild?.plan as Record<string, unknown> | null;
-    const buildPlan = plan?.buildPlan as import("@/lib/explore/feature-build-types").BuildPlanDoc | undefined;
+    const buildPlan = activeBuild?.buildPlan as import("@/lib/explore/feature-build-types").BuildPlanDoc | undefined;
 
     if (activeBuild && !buildPlan?.tasks?.length) {
       console.warn(`[orchestrator] SKIPPED for ${activeBuild.buildId}: buildPlan missing "tasks" array. Plan keys: ${buildPlan ? Object.keys(buildPlan).join(", ") : "null"}. Falling back to single-agent mode — no specialist dispatch.`);
