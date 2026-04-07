@@ -158,8 +158,13 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     if (plan.temperature !== undefined) {
       body.temperature = plan.temperature;
     }
+    // EP-INF-013: explicit reasoning_effort takes precedence; fall back to effort.
     if (typeof plan.providerSettings?.reasoning_effort === "string") {
       body.reasoning = { effort: plan.providerSettings.reasoning_effort };
+    } else if (typeof plan.providerSettings?.effort === "string" && plan.providerSettings.effort !== "low") {
+      const effortMap: Record<string, string> = { medium: "medium", high: "high", max: "high" };
+      const mapped = effortMap[plan.providerSettings.effort];
+      if (mapped) body.reasoning = { effort: mapped };
     }
     const responseTools = toResponsesTools(tools);
     if (responseTools) {
