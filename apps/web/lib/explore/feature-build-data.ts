@@ -251,10 +251,11 @@ export async function getFeatureBuildForContext(
     }
   }
 
-  // Look up design system from linked storefront (if any) or build evidence
+  // Look up design system from linked storefront (if any), or generate from brief.
+  // Pre-generating here means the ideate agent always has design recommendations
+  // available without needing to call generate_design_system as a tool call.
   let designSystem: string | undefined;
   try {
-    // Check if there's a storefront with a design system for this org
     const storefront = await prisma.storefrontConfig.findFirst({
       select: { designSystem: true },
     });
@@ -264,7 +265,20 @@ export async function getFeatureBuildForContext(
         : JSON.stringify(storefront.designSystem);
     }
   } catch {
-    // Non-fatal — proceed without design system
+    // Non-fatal — proceed without storefront design system
+  }
+
+  if (!designSystem) {
+    try {
+      const { generateDesignSystem } = await import("@/lib/design-intelligence");
+      const brief = r.brief as { description?: string; title?: string } | null;
+      const query = brief?.description ?? brief?.title ?? r.title;
+      if (query) {
+        designSystem = generateDesignSystem(query, r.title ?? undefined);
+      }
+    } catch {
+      // Non-fatal — proceed without generated design system
+    }
   }
 
   return {
