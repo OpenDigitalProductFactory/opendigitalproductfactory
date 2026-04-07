@@ -3096,44 +3096,47 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "describe_model": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      let dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-
-      // Auto-init sandbox if not running (same pattern as file tools above)
-      if (!dmBuild?.sandboxId) {
-        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
-        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
-        await initializePool().catch(() => {});
-        const slot = await acquireSandbox(buildId, userId);
-        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available. Try again shortly." };
-        const running = await isSandboxRunning(slot.containerId).catch(() => false);
-        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
-        try { await sbInit(slot.containerId); } catch (e) { console.error(`[describe_model] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        try {
-          const { startSandboxDevServer } = await import("@/lib/sandbox");
-          await startSandboxDevServer(slot.containerId);
-        } catch { /* non-fatal */ }
-        dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-        if (!dmBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
-      }
 
       const modelName = String(params.model_name ?? "");
       if (!modelName) return { success: false, error: "model_name is required.", message: "Provide the model name (PascalCase)." };
 
+      // Read the schema. During ideate/plan phases no sandbox exists yet, so try
+      // the project filesystem first (same root as read_project_file). Fall back
+      // to the sandbox only if the build has one already provisioned.
+      const { describeModel, formatModelDescription } = await import("@/lib/integrate/schema-validator");
+
+      const tryDirectRead = async (): Promise<string | null> => {
+        try {
+          const { resolve } = await import("path");
+          const { readFile } = await import("fs/promises");
+          const root = process.env.PROJECT_ROOT
+            ? resolve(process.env.PROJECT_ROOT)
+            : resolve(process.cwd(), "..", "..");
+          return await readFile(resolve(root, "packages/db/prisma/schema.prisma"), "utf-8");
+        } catch {
+          return null;
+        }
+      };
+
+      const directSchema = await tryDirectRead();
+      if (directSchema) {
+        const desc = describeModel(directSchema, modelName);
+        if (!desc) return { success: false, error: `Model "${modelName}" not found.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase).` };
+        return { success: true, message: formatModelDescription(desc), data: desc as unknown as Record<string, unknown> };
+      }
+
+      // Fallback: use sandbox if one is already provisioned for this build.
+      const dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      if (!dmBuild?.sandboxId) {
+        return { success: false, error: "Schema not accessible.", message: "Could not read schema — sandbox not provisioned and project root is unavailable. Try read_project_file on packages/db/prisma/schema.prisma instead." };
+      }
+
       try {
         const { execInSandbox } = await import("@/lib/sandbox");
-        const schemaContent = await execInSandbox(
-          dmBuild.sandboxId,
-          "cat /workspace/packages/db/prisma/schema.prisma",
-        );
-        const { describeModel, formatModelDescription } = await import("@/lib/integrate/schema-validator");
+        const schemaContent = await execInSandbox(dmBuild.sandboxId, "cat /workspace/packages/db/prisma/schema.prisma");
         const desc = describeModel(schemaContent, modelName);
-
-        if (!desc) {
-          return { success: false, error: `Model "${modelName}" not found in schema.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase). Use read_sandbox_file on packages/db/prisma/schema.prisma to see available models.` };
-        }
-
-        const formatted = formatModelDescription(desc);
-        return { success: true, message: formatted, data: desc as unknown as Record<string, unknown> };
+        if (!desc) return { success: false, error: `Model "${modelName}" not found.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase).` };
+        return { success: true, message: formatModelDescription(desc), data: desc as unknown as Record<string, unknown> };
       } catch (err) {
         return { success: false, error: "Schema read error", message: err instanceof Error ? err.message : "Failed to read schema" };
       }
