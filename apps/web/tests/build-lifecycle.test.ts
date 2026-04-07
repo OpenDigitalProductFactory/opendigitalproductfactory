@@ -292,8 +292,8 @@ describe("Build Studio full lifecycle", () => {
       return;
     }
 
-    const promotion = await prisma.promotion.findFirst({
-      where: { digitalProductId: build.digitalProductId },
+    const promotion = await prisma.changePromotion.findFirst({
+      where: { productVersion: { digitalProductId: build.digitalProductId } },
       orderBy: { createdAt: "desc" },
       select: { id: true },
     });
