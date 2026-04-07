@@ -173,51 +173,6 @@ services:
       sandbox-init:
         condition: service_completed_successfully
 
-  sandbox-2:
-    build:
-      context: .
-      dockerfile: Dockerfile.sandbox
-    restart: unless-stopped
-    ports:
-      - "3037:3000"
-    volumes:
-      - sandbox_workspace_2:/workspace
-    environment:
-      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
-      AUTH_TRUST_HOST: "true"
-      APP_URL: http://localhost:3037
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j/dpf_dev}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
-      NODE_ENV: development
-    depends_on:
-      sandbox-init:
-        condition: service_completed_successfully
-
-  sandbox-3:
-    build:
-      context: .
-      dockerfile: Dockerfile.sandbox
-    restart: unless-stopped
-    ports:
-      - "3038:3000"
-    volumes:
-      - sandbox_workspace_3:/workspace
-    environment:
-      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
-      AUTH_TRUST_HOST: "true"
-      APP_URL: http://localhost:3038
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j/dpf_dev}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
-      NODE_ENV: development
-    depends_on:
-      sandbox-init:
-        condition: service_completed_successfully
 
   # ─── Promoter (autonomous deployment pipeline) ─────────────────────────
   # One-shot container that builds new portal images from sandbox source.
@@ -512,7 +467,5 @@ volumes:
   dev_node_modules:
   sandbox_pgdata:
   sandbox_workspace:
-  sandbox_workspace_2:
-  sandbox_workspace_3:
   prometheus_data:
   grafana_data:
