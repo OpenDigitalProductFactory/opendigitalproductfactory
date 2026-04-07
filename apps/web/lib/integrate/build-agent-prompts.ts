@@ -113,14 +113,17 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
     Skip to Step 1 immediately.
 
 STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
-  a) Call search_project_files to find existing features similar to what the user wants.
-     Example: if building a complaints system, search for "complaint", "ticket", "issue", "case".
-  b) Call read_project_file on at least ONE existing feature to understand the codebase patterns:
+  a) SCHEMA FIRST — search for existing models before proposing any new ones:
+     Call search_project_files with the feature's keywords AND glob "**/*.prisma".
+     Example: if building a training feature, search "training", "course", "registration", "voucher"
+     with glob "**/*.prisma". If matches exist, read that section — you may be extending, not creating.
+     NEVER propose a new Prisma model without first confirming it doesn't already exist in schema.prisma.
+  b) Call search_project_files (without glob, searching *.ts) to find existing UI/API for the same domain.
+  c) Call read_project_file on at least ONE similar existing feature for code patterns:
      - How are API routes structured? (read an existing route.ts)
      - How does auth work? (look for auth() imports)
      - What fields does the User model have? (read packages/db/prisma/schema.prisma lines 10-62)
-  c) Call describe_model on a similar existing model (e.g. "ExpenseClaim", "PlatformIssueReport")
-     to see the field patterns, relation naming, and index conventions.
+  d) Call describe_model on the closest existing model to see field and relation conventions.
      If describe_model fails, use read_project_file on packages/db/prisma/schema.prisma instead.
   You MUST call at least 3 research tools before proceeding to step 2.
   If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
@@ -194,12 +197,16 @@ DO THIS NOW — execute steps IN ORDER. Do NOT skip research.
 
 STEP 1 — MANDATORY CODEBASE RESEARCH (before writing the plan):
   Read the design doc's existingFunctionalityAudit. Then verify by reading actual files:
-  a) Call list_sandbox_files to see the existing file structure in the areas you'll modify.
-  b) Call read_sandbox_file on at least ONE similar existing feature to understand:
+  a) SCHEMA CONFLICT CHECK — before listing ANY new models in the plan:
+     Call search_sandbox_files (or read_sandbox_file on packages/db/prisma/schema.prisma)
+     and search for the feature's domain keywords. If models already exist, the plan must
+     EXTEND them, not create duplicates. Duplicate models will break Prisma and waste the
+     entire build. This check is non-negotiable.
+  b) Call list_sandbox_files to see the existing file structure in the areas you'll modify.
+  c) Call read_sandbox_file on at least ONE similar existing feature to understand:
      - Route file structure and auth pattern (e.g. read an existing route.ts in apps/web/app/api/)
      - Component structure (e.g. read an existing page.tsx under apps/web/app/(shell)/)
-     - Schema patterns (e.g. read_sandbox_file on packages/db/prisma/schema.prisma offset 10 limit 60 for User model)
-  c) Call describe_model on the closest existing model to understand field conventions.
+  d) Call describe_model on the closest existing model to understand field conventions.
   You MUST reference the ACTUAL file paths and patterns you found when building the plan.
 
 STEP 2 — SAVE THE PLAN:
