@@ -206,12 +206,8 @@ STEP 1 — MANDATORY CODEBASE RESEARCH (before writing the plan):
   c) Call read_sandbox_file on at least ONE similar existing feature to understand:
      - Route file structure and auth pattern (e.g. read an existing route.ts in apps/web/app/api/)
      - Component structure (e.g. read an existing page.tsx under apps/web/app/(shell)/)
-  d) Call describe_model on the closest existing model to understand field conventions.
-  e) RELATION CHECK — for every new relation you plan to add (e.g. trainerId on CourseInstance
-     pointing to EmployeeProfile): call describe_model on the TARGET model too. Prisma requires
-     both sides of a relation to be declared. If the target model doesn't have the inverse field,
-     your schema edit MUST add it or the migration will fail. Never add a relation without reading
-     the full target model first.
+  d) Call describe_model on ONE closest existing model to understand field conventions.
+     Do not call describe_model on multiple models — one reference is enough to understand patterns.
   You MUST reference the ACTUAL file paths and patterns you found when building the plan.
 
 STEP 2 — SAVE THE PLAN:
@@ -298,7 +294,9 @@ WORKFLOW FOR NEW FEATURES:
 6. run_sandbox_tests for full verification
 
 WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
-1. Use describe_model to look up existing models you need as reference (e.g. describe_model("User"), describe_model("ExpenseClaim")).
+1. Use describe_model to look up ONE existing model you need as reference (e.g. describe_model("User")).
+   Call describe_model AT MOST ONCE — one reference model is enough to see field/relation conventions.
+   DO NOT call describe_model on multiple models in a row — the repetition guard will break the loop.
    DO NOT read the full schema file — it is 1500+ lines and will overwhelm your context.
    If you need to see where to insert a new model, use read_sandbox_file with offset/limit to read just the END of the schema (e.g. offset 1480 limit 50).
 2. edit_sandbox_file to add/modify models — ALWAYS include:
