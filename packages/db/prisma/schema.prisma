@@ -2184,6 +2184,7 @@ model FeatureBuild {
   phase                 String            @default("ideate")
   sandboxId             String?
   sandboxPort           Int?
+  buildBranch           String?           // git branch in sandbox: "build/<buildId>"
   diffSummary           String?
   diffPatch             String?
   codingProvider        String?

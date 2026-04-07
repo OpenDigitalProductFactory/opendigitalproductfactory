@@ -509,42 +509,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["plan"],
   },
   {
-    name: "launch_sandbox",
-    description: "Launch a Docker sandbox container for code generation. Sandbox is isolated, resource-limited, and auto-destroyed after 30 minutes.",
+    name: "start_build",
+    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', STOP and tell the user to run: docker compose up -d sandbox",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
-    executionMode: "immediate", // Sandbox is isolated — no HITL needed
-    sideEffect: false, // Sandbox is isolated from production — safe in any mode
-    buildPhases: ["build"],
-  },
-  {
-    name: "generate_code",
-    description: "Send a code generation instruction to the coding agent inside the sandbox.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instruction: { type: "string", description: "What to generate or change" },
-      },
-      required: ["instruction"],
-    },
-    requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: false, // Writes to sandbox only, not production — available in advise mode
-    buildPhases: ["build", "review"],
-  },
-  {
-    name: "iterate_sandbox",
-    description: "Send a refinement instruction to the coding agent in the sandbox.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instruction: { type: "string", description: "Refinement instruction" },
-      },
-      required: ["instruction"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false, // Writes to sandbox only, not production — available in advise mode
+    sideEffect: false,
     buildPhases: ["build"],
   },
   {
@@ -563,7 +533,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "read_sandbox_file",
-    description: "Read a file from the sandbox workspace. Returns contents with line numbers. Use offset and limit for large files. Always read a file before editing it.",
+    description: "Read a file from the project workspace. Returns contents with line numbers. Use offset and limit for large files. Always read a file before editing it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2420,60 +2390,48 @@ export async function executeTool(
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
     }
 
-    case "launch_sandbox": {
+    case "start_build": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
-      // Acquire a sandbox slot from the pool
-      const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
-      const { isSandboxRunning, initializeSandboxWorkspace } = await import("@/lib/sandbox");
+      const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
 
-      // Ensure pool is initialized
-      await initializePool().catch(() => {});
-
-      const slot = await acquireSandbox(buildId, userId);
-      if (!slot) {
-        return { success: false, error: "All sandbox slots are in use. Try again when a slot becomes available.", message: "No sandbox slots available. Other builds are using all slots." };
+      const available = await isSandboxAvailable();
+      if (!available) {
+        return {
+          success: false,
+          error: "Sandbox container is not running.",
+          message: "The sandbox container (dpf-sandbox-1) is not running. STOP — do not retry. Tell the user to run: docker compose up -d sandbox",
+        };
       }
 
-      // Check if the assigned container is running
-      const running = await isSandboxRunning(slot.containerId).catch(() => false);
-      if (!running) {
-        return { success: false, error: `Sandbox container ${slot.containerId} is not running. Run: docker compose up -d`, message: `Container ${slot.containerId} not found.` };
-      }
+      await startBuildBranch(buildId);
 
-      // Initialize workspace if not already done
-      const { exec: execCb } = await import("child_process");
-      const { promisify } = await import("util");
-      const exec = promisify(execCb);
-      try {
-        const { stdout } = await exec(`docker exec ${slot.containerId} ls /workspace/package.json 2>&1`);
-        if (!stdout.includes("package.json")) throw new Error("no files");
-        console.log(`[launch_sandbox] workspace already initialized in ${slot.containerId}`);
-      } catch {
-        console.log(`[launch_sandbox] initializing workspace in ${slot.containerId}...`);
-        try {
-          await initializeSandboxWorkspace(slot.containerId);
-        } catch (initErr) {
-          console.error(`[launch_sandbox] workspace init failed: ${(initErr as Error).message?.slice(0, 200)}`);
-        }
-      }
-
-      // Start preview server so Live Preview shows the mockup (or "building..." spinner)
       try {
         const { startSandboxDevServer } = await import("@/lib/sandbox");
-        await startSandboxDevServer(slot.containerId);
+        await startSandboxDevServer(process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1");
       } catch (devErr) {
-        console.log(`[launch_sandbox] preview server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
+        console.log(`[start_build] preview server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
       }
 
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-      logBuildActivity(buildId, "launch_sandbox", `Sandbox ready: ${slot.containerId} on port ${slot.port}.`);
-      return { success: true, message: `Sandbox ready on port ${slot.port} (slot ${slot.slotIndex}). You can generate code now.`, entityId: buildId, data: { containerId: slot.containerId, port: slot.port, slotIndex: slot.slotIndex } };
+      logBuildActivity(buildId, "start_build", `Build branch ready for ${buildId}.`);
+      return {
+        success: true,
+        message: `Build workspace ready. Sandbox is running on port ${process.env.SANDBOX_PORT ?? "3035"}. Start writing files.`,
+        entityId: buildId,
+        data: { containerId: process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1", port: Number(process.env.SANDBOX_PORT ?? "3035") },
+      };
     }
 
-    case "generate_code": {
+    case "generate_code":
+    case "iterate_sandbox":
+      // Removed: these tools caused runaway loops by spawning nested LLM calls.
+      // Use write_sandbox_file / edit_sandbox_file / run_sandbox_command directly.
+      return { success: false, error: "Tool removed.", message: "generate_code and iterate_sandbox have been removed. Use write_sandbox_file, edit_sandbox_file, and run_sandbox_command directly to build the feature." };
+
+    case "_generate_code_removed": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
@@ -2637,7 +2595,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       return { success: true, message: `Generated ${files.length} files in sandbox. Dev server starting on port 3000 — preview will update shortly.`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
     }
 
-    case "iterate_sandbox": {
+    case "_iterate_sandbox_removed": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
@@ -2721,13 +2679,17 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "run_sandbox_tests": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+
+      const { isSandboxAvailable: rstAvail } = await import("@/lib/integrate/sandbox/build-branch");
+      if (!(await rstAvail())) {
+        return { success: false, error: "Sandbox not running.", message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first." };
+      }
+      const rstSandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
       const { runSandboxTests, diagnoseTestFailures } = await import("@/lib/coding-agent");
       const autoFix = params.auto_fix === true;
       const MAX_FIX_ATTEMPTS = 3;
 
-      let results = await runSandboxTests(build.sandboxId);
+      let results = await runSandboxTests(rstSandboxId);
       let fixAttempts = 0;
 
       // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test
@@ -2758,7 +2720,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
               readFiles.add(filePath!);
               try {
                 const content = await execInSandbox(
-                  build.sandboxId,
+                  rstSandboxId,
                   `cat "/workspace/${filePath}" 2>/dev/null | head -100 || echo "[not found]"`,
                 );
                 if (!content.includes("[not found]")) {
@@ -2806,9 +2768,9 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
             while ((fixMatch = filePattern.exec(fixResult.content)) !== null) {
               const cleanPath = fixMatch[1]!.trim().replace(/^\/?workspace\//, "");
               const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-              if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
+              if (dir) await execInSandbox(rstSandboxId, `mkdir -p '/workspace/${dir}'`);
               const encoded = Buffer.from(fixMatch[2]!).toString("base64");
-              await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
+              await execInSandbox(rstSandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
               filesFixed++;
             }
 
@@ -2820,7 +2782,7 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
           }
 
           // Re-run tests
-          results = await runSandboxTests(build.sandboxId);
+          results = await runSandboxTests(rstSandboxId);
         }
       }
 
@@ -2858,39 +2820,22 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "run_sandbox_command": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      let sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
 
-      // Auto-init sandbox via pool if not launched OR workspace is empty
-      const { isSandboxRunning, initializeSandboxWorkspace: sbInit, execInSandbox: sbExec } = await import("@/lib/sandbox");
-      let needsInit = !sbBuild?.sandboxId;
-      if (!needsInit && sbBuild?.sandboxId) {
-        try {
-          await sbExec(sbBuild.sandboxId, "test -f /workspace/package.json");
-        } catch {
-          needsInit = true;
-          console.log(`[${toolName}] sandboxId set but workspace empty — re-initializing...`);
-        }
-      }
-      if (needsInit) {
-        console.log(`[${toolName}] Auto-initializing sandbox via pool...`);
-        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
-        await initializePool().catch(() => {});
-        const slot = await acquireSandbox(buildId, userId);
-        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available." };
-        const running = await isSandboxRunning(slot.containerId).catch(() => false);
-        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
-        try { await sbInit(slot.containerId); } catch (e) { console.error(`[${toolName}] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        // Start preview server so the Live Preview pane has something to show
-        try {
-          const { startSandboxDevServer } = await import("@/lib/sandbox");
-          await startSandboxDevServer(slot.containerId);
-        } catch { /* non-fatal — preview will show "building" spinner */ }
-        sbBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-        if (!sbBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
+      // Simple availability check — no slot management, no pool acquisition.
+      // If the sandbox container is running, it is available. Period.
+      const { isSandboxAvailable } = await import("@/lib/integrate/sandbox/build-branch");
+      const { execInSandbox: sbExec } = await import("@/lib/sandbox");
+      const available = await isSandboxAvailable();
+      if (!available) {
+        return {
+          success: false,
+          error: "Sandbox container is not running.",
+          message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first, or if that also fails, tell the user to run: docker compose up -d sandbox",
+        };
       }
 
       const execInSandbox = sbExec;
-      const sandboxId = sbBuild!.sandboxId!;
+      const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
       // ── Dispatch to specific tool ──
       // ── Direct filesystem tools (via shared Docker volume at /sandbox-workspace) ──
@@ -3145,30 +3090,23 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
     case "validate_schema": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      let vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
 
-      // Auto-init sandbox if not running (same pattern as file tools above)
-      if (!vsBuild?.sandboxId) {
-        const { isSandboxRunning, initializeSandboxWorkspace: sbInit } = await import("@/lib/sandbox");
-        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
-        await initializePool().catch(() => {});
-        const slot = await acquireSandbox(buildId, userId);
-        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available. Try again shortly." };
-        const running = await isSandboxRunning(slot.containerId).catch(() => false);
-        if (!running) return { success: false, error: `Sandbox ${slot.containerId} not running.`, message: "Sandbox container not found." };
-        try { await sbInit(slot.containerId); } catch (e) { console.error(`[validate_schema] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        try {
-          const { startSandboxDevServer } = await import("@/lib/sandbox");
-          await startSandboxDevServer(slot.containerId);
-        } catch { /* non-fatal */ }
-        vsBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
-        if (!vsBuild?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
+      // Simple availability check — no slot management
+      const { isSandboxAvailable } = await import("@/lib/integrate/sandbox/build-branch");
+      const vsAvailable = await isSandboxAvailable();
+      if (!vsAvailable) {
+        return {
+          success: false,
+          error: "Sandbox container is not running.",
+          message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first.",
+        };
       }
+      const vsSandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
       try {
         const { execInSandbox } = await import("@/lib/sandbox");
         const schemaContent = await execInSandbox(
-          vsBuild.sandboxId,
+          vsSandboxId,
           "cat /workspace/packages/db/prisma/schema.prisma",
         );
         const { validatePrismaSchema, formatSchemaValidation } = await import("@/lib/integrate/schema-validator");
