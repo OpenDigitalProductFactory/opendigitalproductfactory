@@ -7,7 +7,7 @@ import { prisma } from "@dpf/db";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-const POOL_SIZE = Number(process.env.DPF_SANDBOX_POOL_SIZE) || 3;
+const POOL_SIZE = Number(process.env.DPF_SANDBOX_POOL_SIZE) || 1;
 
 /**
  * Docker Compose container names and ports for the sandbox pool.
