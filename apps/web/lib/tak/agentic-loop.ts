@@ -15,22 +15,22 @@ import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-ti
 // runaway loops. The model decides when it's done.
 // Safety nets — the loop exits naturally when the model responds with text-only.
 // These prevent infinite loops from bugs, not from normal workflows.
-const MAX_ITERATIONS = 100;
+const MAX_ITERATIONS = 20;
+
+// Hard cap on inference calls per loop invocation. Each call to a frontier model
+// is expensive — this prevents runaway costs if the iteration counter is gamed.
+const MAX_INFERENCE_CALLS = 15;
 
 // ─── Duration limits by task type ──────────────────────────────────────────
-// Claude Code's ULTRAPLAN gives Opus 30 minutes for planning. We don't need
-// that extreme, but weaker models (Haiku, local) need more time per iteration
-// to produce the same quality — especially for ideate/plan phases where the
-// model must search, reason, and compose structured evidence.
-//
-// Architecture: similar to Claude Code's model-per-task routing, but tuned
-// for our narrower use case (digital product factory, not general coding).
+// Tighter limits than before — runaway loops burned significant API budget.
+// The orchestrator dispatches specialists in parallel; each specialist should
+// complete a focused task quickly, not run for 10 minutes.
 
 const MAX_DURATION_MS = 120_000;          // 2 min — normal conversation
-const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen (frontier models)
-const MAX_DURATION_PLAN_MS = 300_000;     // 5 min — ideate/plan phases (evidence + search)
-const MAX_DURATION_REVIEW_MS = 240_000;   // 4 min — review (tests + gate checks)
-const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship (deploy + promotion pipeline)
+const MAX_DURATION_BUILD_MS = 180_000;    // 3 min — sandbox code gen per specialist
+const MAX_DURATION_PLAN_MS = 180_000;     // 3 min — ideate/plan phases
+const MAX_DURATION_REVIEW_MS = 120_000;   // 2 min — review
+const MAX_DURATION_SHIP_MS = 180_000;     // 3 min — ship
 const MAX_AGENTIC_HISTORY_MESSAGES = 24;
 const MAX_TOOL_RESULT_CHARS = 1_500;
 const MAX_TEXT_MESSAGE_CHARS = 4_000;
@@ -125,12 +125,12 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
 }): boolean {
-  // Permission-seeking and narration both get up to 3 nudges.
-  // One nudge isn't enough when the model calls the wrong tool (because the nudge
-  // listed it) and then narrates again — it needs a second chance with better guidance.
+  // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
+  // to one targeted nudge, it won't respond to more and will just burn tokens.
   const isPermission = params.responseText ? PERMISSION_SEEKING_PATTERN.test(params.responseText) : false;
   const isNarration = params.responseText ? NARRATION_PATTERN.test(params.responseText) : false;
-  const maxNudges = (isPermission || isNarration) ? 3 : 1;
+  void isPermission; void isNarration; // retained for future use
+  const maxNudges = 1;
   if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
@@ -402,6 +402,8 @@ export async function runAgenticLoop(params: {
   let frustrationCount = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
+  let inferenceCallCount = 0;
+  let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
@@ -409,6 +411,29 @@ export async function runAgenticLoop(params: {
       agentEventBus.clearCancel(threadId);
       console.log(`[agentic-loop] cancelled by user at iteration ${iteration}`);
       break;
+    }
+
+    // Hard inference call budget — prevents cost runaway regardless of iteration count
+    if (inferenceCallCount >= MAX_INFERENCE_CALLS) {
+      console.warn(`[agentic-loop] hit MAX_INFERENCE_CALLS (${MAX_INFERENCE_CALLS}). Stopping to prevent cost overrun.`);
+      break;
+    }
+
+    // Sandbox circuit breaker — if sandbox is consistently unavailable, stop trying sandbox tools
+    // and surface the error so the user can start a sandbox rather than spinning expensively.
+    if (sandboxUnavailableCount >= 2) {
+      console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
+      return {
+        content: "The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.",
+        providerId: lastResult?.providerId ?? "",
+        modelId: lastResult?.modelId ?? "",
+        downgraded: lastResult?.downgraded ?? false,
+        downgradeMessage: lastResult?.downgradeMessage ?? null,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -505,6 +530,7 @@ export async function runAgenticLoop(params: {
     };
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
+    inferenceCallCount++;
     const result = await routeAndCall(compactAgenticMessages(messages), systemPrompt, sensitivity, enrichedRouteOptions);
 
     // First iteration: check if the routed model matches the preferred model.
@@ -776,6 +802,11 @@ export async function runAgenticLoop(params: {
           durationMs: Date.now() - toolStartMs,
         },
       }).catch(() => {});
+
+      // Sandbox circuit breaker: track consecutive unavailable responses
+      if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {
+        sandboxUnavailableCount++;
+      }
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       iterationResults.push({ tc, toolResult });
