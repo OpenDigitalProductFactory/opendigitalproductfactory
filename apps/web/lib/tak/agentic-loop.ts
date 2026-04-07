@@ -41,8 +41,9 @@ const MAX_TEXT_MESSAGE_CHARS = 4_000;
 const COMPLETION_CLAIM_PATTERN = /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched|starting up|initializing|applying|generating)\b|tests?\s+pass/i;
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
-// Includes preamble narration ("Let me check", "I need to fix") that sub-agents produce.
-const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to add|change|pattern)|add (?:this |the following )|insert (?:this |before )|exact (?:lines|code|changes)|manually|copy[- ]paste|(?:let me|I (?:need to|should|will|'ll|can see)) (?:check|fix|add|read|look|verify|update|create|modify|examine|review|search))/i;
+// Includes preamble narration ("Let me check", "I need to fix") and intent announcements
+// ("I'd like to generate...", "I would like to call...") that precede but do not replace tool use.
+const NARRATION_PATTERN = /(?:here(?:'s| is) (?:the |exactly |what )|code (?:to add|change|pattern)|add (?:this |the following )|insert (?:this |before )|exact (?:lines|code|changes)|manually|copy[- ]paste|(?:let me|I (?:need to|should|will|'ll|can see)) (?:check|fix|add|read|look|verify|update|create|modify|examine|review|search|generate|call|run|fetch)|(?:I(?:'d| would) like to|I(?:'m going to| am going to)) (?:check|fix|add|read|look|verify|update|create|modify|examine|review|search|generate|call|run|fetch|use|get|pull|grab|query|scan|find|load|save|send))/i;
 
 // Permission-seeking patterns: agent asks user to approve each step instead of acting.
 // During build phases, the agent should proceed autonomously — not ask "should I?" every step.
