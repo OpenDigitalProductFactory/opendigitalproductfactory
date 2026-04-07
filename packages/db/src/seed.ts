@@ -949,6 +949,52 @@ async function seedPlatformConfig(): Promise<void> {
 }
 
 /**
+ * Generate a stable anonymous client identity at first install.
+ * Called every seed — only writes if clientId is not already set.
+ *
+ * Identity design for 10,000-client hive:
+ * - name:  "dpf-agent"  — identical for every client (indistinguishable in upstream log)
+ * - email: agent-<sha256(clientId)[:16]>@hive.dpf — unique per install, reveals nothing
+ *
+ * The SHA256 hash of the clientId means:
+ * - The same install always produces the same email (stable across restarts)
+ * - Two installs never collide (UUID entropy)
+ * - The upstream repo sees a pseudonymous contributor, not a real identity
+ * - The email cannot be reverse-engineered to reveal the client or their org
+ */
+async function seedClientIdentity(): Promise<void> {
+  const existing = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { clientId: true, gitAgentEmail: true },
+  });
+
+  // Already initialized — never regenerate (would change git author history)
+  if (existing?.clientId && existing?.gitAgentEmail) {
+    console.log(`[seed] Client identity already set: ${existing.gitAgentEmail}`);
+    return;
+  }
+
+  const clientId = crypto.randomUUID();
+  const hash = crypto.createHash("sha256").update(clientId).digest("hex").slice(0, 16);
+  const gitAgentEmail = `agent-${hash}@hive.dpf`;
+
+  await prisma.platformDevConfig.upsert({
+    where: { id: "singleton" },
+    create: {
+      id: "singleton",
+      clientId,
+      gitAgentEmail,
+    },
+    update: {
+      clientId,
+      gitAgentEmail,
+    },
+  });
+
+  console.log(`[seed] Client identity generated: dpf-agent <${gitAgentEmail}>`);
+}
+
+/**
  * Discover and profile local LLM models from Docker Model Runner.
  * Runs at seed time so the routing system has endpoints immediately
  * without waiting for a page visit to trigger checkBundledProviders().
@@ -1383,6 +1429,7 @@ async function main(): Promise<void> {
   await ensureBuildStudioModelConfig();
   await seedAgentModelDefaults();
   await seedPlatformConfig();
+  await seedClientIdentity();
   await seedStorefrontArchetypes(prisma);
   await seedWorkQueues();
   console.log("Seed complete.");

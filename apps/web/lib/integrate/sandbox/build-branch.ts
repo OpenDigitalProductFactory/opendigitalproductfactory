@@ -1,13 +1,17 @@
 // apps/web/lib/integrate/sandbox/build-branch.ts
 // Git branch management for isolated builds inside the sandbox container.
 //
-// Each build gets its own branch: build/<buildId>
-// The sandbox container is stateless — if it is running, it is available.
-// No slot management, no DB pool, no "in_use" state.
+// Branch model (10,000-client hive):
+//   client/<clientId>   — persistent per-install branch, never deleted
+//       └── build/<buildId>  — per-feature branch, merges into client/<clientId> on promotion
 //
-// File I/O still uses the shared Docker volume mount (fast, no docker exec).
-// Shell commands (prisma migrate, tsc, pnpm build) use docker exec.
-// Git branches keep builds isolated and promotion clean.
+// Git author identity:
+//   name:  dpf-agent                              (identical across all installs)
+//   email: agent-<sha256(clientId)[:16]>@hive.dpf (unique per install, anonymous)
+//
+// This makes every client's contributions indistinguishable by name in the
+// upstream log but traceable and conflict-free by email. The hash cannot be
+// reversed to identify the client or their organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
 import { prisma } from "@dpf/db";
@@ -16,33 +20,82 @@ const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
 
+// ─── Client Identity ─────────────────────────────────────────────────────────
+
+type ClientIdentity = {
+  clientId: string;
+  gitAgentEmail: string;
+  clientBranch: string; // "client/<clientId>"
+};
+
+let _cachedIdentity: ClientIdentity | null = null;
+
+/**
+ * Returns the stable client identity from PlatformDevConfig.
+ * Cached in memory after first read — identity never changes.
+ */
+export async function getClientIdentity(): Promise<ClientIdentity> {
+  if (_cachedIdentity) return _cachedIdentity;
+
+  const config = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { clientId: true, gitAgentEmail: true },
+  });
+
+  if (!config?.clientId || !config?.gitAgentEmail) {
+    throw new Error(
+      "Client identity not initialized. Re-run the seed: docker compose restart portal-init"
+    );
+  }
+
+  _cachedIdentity = {
+    clientId: config.clientId,
+    gitAgentEmail: config.gitAgentEmail,
+    clientBranch: `client/${config.clientId}`,
+  };
+
+  return _cachedIdentity;
+}
+
+// ─── Sandbox Availability ─────────────────────────────────────────────────────
+
 /**
  * Returns true if the sandbox container is running and reachable.
- * Uses a 5-second timeout so the agentic loop fails fast instead of hanging.
+ * 5-second timeout — fails fast instead of hanging the agentic loop.
  */
 export async function isSandboxAvailable(): Promise<boolean> {
   return isSandboxRunning(SANDBOX_CONTAINER).catch(() => false);
 }
 
+// ─── Git Baseline ────────────────────────────────────────────────────────────
+
 /**
- * Ensures the sandbox workspace has a git repo and a baseline commit.
- * Safe to call multiple times — no-ops if already initialized.
+ * Configures git identity and ensures a baseline commit exists.
+ * Safe to call multiple times.
  */
-async function ensureGitBaseline(): Promise<void> {
+async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
+  // Configure identity first (idempotent)
+  await execInSandbox(
+    SANDBOX_CONTAINER,
+    [
+      `git -C ${WORKSPACE} config user.name "dpf-agent"`,
+      `git -C ${WORKSPACE} config user.email "${identity.gitAgentEmail}"`,
+    ].join(" && "),
+  ).catch(() => {});
+
   const isRepo = await execInSandbox(
     SANDBOX_CONTAINER,
     `git -C ${WORKSPACE} rev-parse --is-inside-work-tree 2>/dev/null && echo yes || echo no`,
   ).catch(() => "no");
 
   if (isRepo.trim() !== "yes") {
-    // First time: init + baseline commit so diffs are clean
     await execInSandbox(
       SANDBOX_CONTAINER,
       [
         `cd ${WORKSPACE}`,
-        `git config user.email sandbox@dpf.local`,
-        `git config user.name sandbox`,
         `git init`,
+        `git config user.name "dpf-agent"`,
+        `git config user.email "${identity.gitAgentEmail}"`,
         `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
         `git commit -m 'sandbox baseline' --allow-empty`,
       ].join(" && "),
@@ -50,7 +103,7 @@ async function ensureGitBaseline(): Promise<void> {
     return;
   }
 
-  // Repo exists — ensure there is at least one commit (required for worktrees / branch ops)
+  // Ensure at least one commit exists
   const commitCount = await execInSandbox(
     SANDBOX_CONTAINER,
     `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
@@ -61,8 +114,8 @@ async function ensureGitBaseline(): Promise<void> {
       SANDBOX_CONTAINER,
       [
         `cd ${WORKSPACE}`,
-        `git config user.email sandbox@dpf.local`,
-        `git config user.name sandbox`,
+        `git config user.name "dpf-agent"`,
+        `git config user.email "${identity.gitAgentEmail}"`,
         `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
         `git commit -m 'sandbox baseline' --allow-empty`,
       ].join(" && "),
@@ -71,45 +124,73 @@ async function ensureGitBaseline(): Promise<void> {
 }
 
 /**
- * Creates (or re-uses) a git branch for this build inside the sandbox.
- * Updates the FeatureBuild record with sandboxId and sandboxPort so that
- * deploy_feature, the preview proxy, and the promoter all work unchanged.
+ * Ensures the persistent client branch exists.
+ * Creates it from HEAD if missing.
+ */
+async function ensureClientBranch(identity: ClientIdentity): Promise<void> {
+  const exists = await execInSandbox(
+    SANDBOX_CONTAINER,
+    `git -C ${WORKSPACE} branch --list "${identity.clientBranch}" | grep -q . && echo yes || echo no`,
+  ).catch(() => "no");
+
+  if (exists.trim() !== "yes") {
+    await execInSandbox(
+      SANDBOX_CONTAINER,
+      `git -C ${WORKSPACE} checkout -b "${identity.clientBranch}"`,
+    );
+    console.log(`[build-branch] Created persistent client branch: ${identity.clientBranch}`);
+  }
+}
+
+// ─── Build Branch Lifecycle ──────────────────────────────────────────────────
+
+/**
+ * Creates (or re-uses) a build branch for this feature.
+ * Branch is forked from the client branch: client/<clientId>
+ * Updates FeatureBuild with sandboxId/sandboxPort so deploy_feature,
+ * the preview proxy, and the promoter all work unchanged.
  */
 export async function startBuildBranch(buildId: string): Promise<void> {
-  await ensureGitBaseline();
+  const identity = await getClientIdentity();
+
+  await ensureGitBaseline(identity);
+  await ensureClientBranch(identity);
+
+  // Switch to client branch before forking the build branch
+  await execInSandbox(
+    SANDBOX_CONTAINER,
+    `git -C ${WORKSPACE} checkout "${identity.clientBranch}"`,
+  );
 
   const branchName = `build/${buildId}`;
 
-  // Check if branch already exists
   const branchExists = await execInSandbox(
     SANDBOX_CONTAINER,
-    `git -C ${WORKSPACE} branch --list ${branchName} | grep -q . && echo yes || echo no`,
+    `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . && echo yes || echo no`,
   ).catch(() => "no");
 
   if (branchExists.trim() === "yes") {
-    // Switch to existing branch (resuming a build)
     await execInSandbox(
       SANDBOX_CONTAINER,
-      `cd ${WORKSPACE} && git checkout ${branchName}`,
+      `git -C ${WORKSPACE} checkout "${branchName}"`,
     );
+    console.log(`[build-branch] Resumed build branch: ${branchName}`);
   } else {
-    // Create new branch from current HEAD
     await execInSandbox(
       SANDBOX_CONTAINER,
-      `cd ${WORKSPACE} && git checkout -b ${branchName}`,
+      `git -C ${WORKSPACE} checkout -b "${branchName}"`,
     );
+    console.log(`[build-branch] Created build branch: ${branchName} from ${identity.clientBranch}`);
   }
 
-  // Record the sandbox assignment on the build so downstream tools work
   await prisma.featureBuild.update({
     where: { buildId },
     data: {
       sandboxId: SANDBOX_CONTAINER,
       sandboxPort: SANDBOX_PORT,
+      buildBranch: branchName,
     },
   });
-
-  console.log(`[build-branch] Build ${buildId} on branch ${branchName} in ${SANDBOX_CONTAINER}`);
 }
 
 /**
@@ -128,37 +209,38 @@ export async function currentSandboxBranch(): Promise<string | null> {
 }
 
 /**
- * Merges the build branch into main inside the sandbox.
- * Called from the promotion flow after deploy_feature extracts the diff.
+ * Merges the build branch into the client branch after promotion.
+ * The client branch accumulates all promoted features.
+ * Upstream contribution (client/<id> → upstream main) is a separate step.
  */
 export async function promoteBuildBranch(buildId: string): Promise<void> {
+  const identity = await getClientIdentity();
   const branchName = `build/${buildId}`;
-  const baseBranch = process.env.SANDBOX_BASE_BRANCH ?? "main";
 
   await execInSandbox(
     SANDBOX_CONTAINER,
     [
       `cd ${WORKSPACE}`,
-      `git checkout ${baseBranch}`,
-      `git merge --no-ff ${branchName} -m "Merge ${branchName}"`,
+      `git checkout "${identity.clientBranch}"`,
+      `git merge --no-ff "${branchName}" -m "feat: promote ${branchName}"`,
     ].join(" && "),
   );
 
-  console.log(`[build-branch] Merged ${branchName} → ${baseBranch}`);
+  console.log(`[build-branch] Promoted ${branchName} → ${identity.clientBranch}`);
 }
 
 /**
- * Switches the sandbox back to main without deleting the build branch.
- * The branch is preserved in git for audit / recovery.
+ * Switches the sandbox back to the client branch without deleting the build branch.
+ * The build branch is preserved in git for audit / recovery.
  */
 export async function abandonBuildBranch(buildId: string): Promise<void> {
-  const baseBranch = process.env.SANDBOX_BASE_BRANCH ?? "main";
+  const identity = await getClientIdentity();
   try {
     await execInSandbox(
       SANDBOX_CONTAINER,
-      `cd ${WORKSPACE} && git checkout ${baseBranch}`,
+      `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );
-    console.log(`[build-branch] Abandoned build/${buildId} — switched back to ${baseBranch}`);
+    console.log(`[build-branch] Abandoned build/${buildId} — back on ${identity.clientBranch}`);
   } catch (err) {
     console.warn(`[build-branch] abandon failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
   }

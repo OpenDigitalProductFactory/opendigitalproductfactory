@@ -2431,6 +2431,11 @@ model PlatformDevConfig {
   dcoAcceptedById   String?
   dcoAcceptedBy     User?    @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
   upstreamRemoteUrl String?
+  // Client identity — generated once at install, never changes.
+  // Used as the git author for all agent commits so contributions are
+  // indistinguishable by name but unique and traceable by email hash.
+  clientId         String?  // UUID, generated at first seed
+  gitAgentEmail    String?  // agent-<sha256(clientId)[:16]>@hive.dpf
 }
 
 model EaNotation {
