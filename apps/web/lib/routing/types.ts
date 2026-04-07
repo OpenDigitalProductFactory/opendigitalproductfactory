@@ -3,6 +3,8 @@
  * See: docs/superpowers/specs/2026-03-18-ai-routing-and-profiling-design.md
  */
 
+import type { QualityTier } from "./quality-tiers";
+
 // ── Sensitivity ──
 
 export type SensitivityLevel = "public" | "internal" | "confidential" | "restricted";
@@ -48,6 +50,9 @@ export interface EndpointManifest {
 
   // Lifecycle
   retiredAt: Date | null;
+
+  // EP-INF-012: Quality tier (frontier / strong / adequate / basic)
+  qualityTier?: QualityTier;
 
   // EP-INF-003: ModelCard fields
   modelClass: string;

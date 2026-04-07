@@ -10,6 +10,7 @@ import type {
   EndpointOverride,
   SensitivityLevel,
 } from "./types";
+import type { QualityTier } from "./quality-tiers";
 import type { ModelCardCapabilities, ModelCardPricing } from "./model-card-types";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 
@@ -64,6 +65,7 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
     profileSource: mp.profileSource as EndpointManifest["profileSource"],
     profileConfidence: mp.profileConfidence as EndpointManifest["profileConfidence"],
     retiredAt: mp.retiredAt,
+    qualityTier: (mp.qualityTier as QualityTier | null) ?? undefined,
 
     // EP-INF-003: ModelCard fields
     modelClass: mp.modelClass ?? "chat",
