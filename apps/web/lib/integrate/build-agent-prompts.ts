@@ -207,6 +207,11 @@ STEP 1 — MANDATORY CODEBASE RESEARCH (before writing the plan):
      - Route file structure and auth pattern (e.g. read an existing route.ts in apps/web/app/api/)
      - Component structure (e.g. read an existing page.tsx under apps/web/app/(shell)/)
   d) Call describe_model on the closest existing model to understand field conventions.
+  e) RELATION CHECK — for every new relation you plan to add (e.g. trainerId on CourseInstance
+     pointing to EmployeeProfile): call describe_model on the TARGET model too. Prisma requires
+     both sides of a relation to be declared. If the target model doesn't have the inverse field,
+     your schema edit MUST add it or the migration will fail. Never add a relation without reading
+     the full target model first.
   You MUST reference the ACTUAL file paths and patterns you found when building the plan.
 
 STEP 2 — SAVE THE PLAN:
