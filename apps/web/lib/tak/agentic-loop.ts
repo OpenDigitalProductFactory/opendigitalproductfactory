@@ -500,21 +500,15 @@ export async function runAgenticLoop(params: {
     const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
     if (repeatedTool && iteration > 5) {
       console.warn(`[agentic-loop] tool repetition: ${repeatedTool[0]} called ${repeatedTool[1]} times. Breaking loop.`);
-      messages = [
-        ...messages,
-        {
-          role: "user" as const,
-          content: `You've called ${repeatedTool[0]} ${repeatedTool[1]} times. Stop retrying and give the user a summary of what you accomplished so far. If something isn't working, say so honestly.`,
-        },
-      ];
-      // Allow one more iteration for the model to respond with a summary, then exit
-      const summaryResult = await routeAndCall(compactAgenticMessages(messages), systemPrompt, sensitivity, routeOptions);
+      // Return immediately with a canned message — do NOT make another inference call here.
+      // The summary inference call was the source of 300s hangs when the preferred provider
+      // was unavailable. The executedTools list already contains the full work history.
       return {
-        content: summaryResult.content || "I got stuck in a loop. Here's what I have so far — please check the build evidence.",
-        providerId: summaryResult.providerId,
-        modelId: summaryResult.modelId,
-        downgraded: summaryResult.downgraded,
-        downgradeMessage: summaryResult.downgradeMessage,
+        content: `I called ${repeatedTool[0]} ${repeatedTool[1]} times and got stuck. Check the build evidence for what was completed.`,
+        providerId: lastResult?.providerId ?? "",
+        modelId: lastResult?.modelId ?? "",
+        downgraded: lastResult?.downgraded ?? false,
+        downgradeMessage: lastResult?.downgradeMessage ?? null,
         totalInputTokens,
         totalOutputTokens,
         executedTools,
