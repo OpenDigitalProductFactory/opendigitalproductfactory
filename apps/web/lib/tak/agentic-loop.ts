@@ -346,6 +346,11 @@ export async function runAgenticLoop(params: {
         budgetClass: agentModelConfig.budgetClass as "minimize_cost" | "balanced" | "quality_first",
         preferredProviderId: agentModelConfig.pinnedProviderId ?? undefined,
         preferredModelId: agentModelConfig.pinnedModelId ?? undefined,
+        // EP-INF-013: defaultEffort not yet in AgentModelConfig schema (EP-INF-013b).
+        // Fall through to code-level default when DB row exists.
+        ...(modelRequirements && typeof modelRequirements === "object" && "defaultEffort" in modelRequirements
+          ? { effort: modelRequirements.defaultEffort as "low" | "medium" | "high" | "max" }
+          : {}),
       }
     : {
         // Fall back to code-level modelRequirements (defaultMinimumTier / legacy)
@@ -364,6 +369,10 @@ export async function runAgenticLoop(params: {
           : {}),
         ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
           ? { preferredModelId: modelRequirements.preferredModelId as string }
+          : {}),
+        // EP-INF-013: Read defaultEffort from code-level modelRequirements
+        ...(modelRequirements && typeof modelRequirements === "object" && "defaultEffort" in modelRequirements
+          ? { effort: modelRequirements.defaultEffort as "low" | "medium" | "high" | "max" }
           : {}),
       };
 

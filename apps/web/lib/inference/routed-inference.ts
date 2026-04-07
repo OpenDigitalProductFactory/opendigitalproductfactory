@@ -94,6 +94,16 @@ export interface RouteAndCallOptions {
    * workflows where removing tools changes the task semantics.
    */
   requireTools?: boolean;
+  /**
+   * EP-INF-013: Reasoning effort hint for the selected model.
+   *   low    — no extended thinking; fast and cheap (default when omitted)
+   *   medium — moderate thinking budget (~8k tokens for Anthropic)
+   *   high   — extended thinking (~32k tokens; recommended for code-gen / Build Studio)
+   *   max    — maximum budget (~64k tokens; Opus-only)
+   * Translated per-provider: Anthropic → thinking.budget_tokens, OpenAI → reasoning_effort.
+   * Ignored by providers that do not support extended reasoning.
+   */
+  effort?: "low" | "medium" | "high" | "max";
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -159,6 +169,20 @@ export async function routeAndCall(
   // 3. V2 routing
   let decision = await routeEndpointV2(manifests, contract, policies, overrides);
   let toolsStripped = false;
+
+  // EP-INF-013: Inject effort into the execution plan so adapters can translate it
+  // to provider-specific parameters (Anthropic thinking, OpenAI reasoning_effort).
+  // Effort is injected here — after routing but before dispatch — so it flows
+  // through callWithFallbackChain into every adapter in the fallback chain.
+  if (options?.effort && decision.executionPlan) {
+    decision.executionPlan = {
+      ...decision.executionPlan,
+      providerSettings: {
+        ...decision.executionPlan.providerSettings,
+        effort: options.effort,
+      },
+    };
+  }
 
   // Graceful degradation: if all endpoints were excluded because they lack tool
   // support, retry without the tools requirement. The model can still converse —

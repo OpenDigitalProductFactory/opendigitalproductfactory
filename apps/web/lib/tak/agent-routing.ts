@@ -272,6 +272,8 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       defaultMinimumTier: "frontier",
       defaultBudgetClass: "quality_first",
       preferredProviderId: "codex",
+      // EP-INF-013: Multi-step code-gen needs extended thinking to reduce tool-loop failures
+      defaultEffort: "high" as const,
     },
   },
   "/admin": {
@@ -410,6 +412,8 @@ WHAT YOU DO NOT DO:
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "balanced",
+      // EP-INF-013: Routine oversight work — fast responses, no extended thinking needed
+      defaultEffort: "low" as const,
     },
   },
 };
