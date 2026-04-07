@@ -113,6 +113,12 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
     Skip to Step 1 immediately.
 
 STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
+  IMPORTANT: Check this conversation for prior tool results first. If you can already see
+  search_project_files, read_project_file, or describe_model results in the chat history,
+  that research is done — skip directly to the next incomplete step. Do NOT repeat research
+  you have already completed.
+
+  If research is not yet done:
   a) Call search_project_files to find existing features similar to what the user wants.
      Example: if building a complaints system, search for "complaint", "ticket", "issue", "case".
   b) Call read_project_file on at least ONE existing feature to understand the codebase patterns:
@@ -121,7 +127,8 @@ STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
      - What fields does the User model have? (read packages/db/prisma/schema.prisma lines 10-62)
   c) Call describe_model on a similar existing model (e.g. "ExpenseClaim", "PlatformIssueReport")
      to see the field patterns, relation naming, and index conventions.
-  You MUST call at least 3 research tools before proceeding to step 2.
+     If describe_model fails, use read_project_file on packages/db/prisma/schema.prisma instead.
+  You MUST call at least 3 research tools before proceeding to step 2 (or have prior results in chat).
   If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
 
 STEP 1b — DESIGN INTELLIGENCE (if feature has UI):
