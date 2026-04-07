@@ -366,7 +366,10 @@ RULES:
 - ACCESSIBILITY: All interactive elements must have accessible names (buttons need descriptive text, inputs need labels). Use ARIA attributes only when semantic HTML is insufficient.
 - KEYBOARD: All interactive elements must be keyboard-reachable (Tab) and activatable (Enter/Space). Focus indicators are provided by the platform's @layer components — do not override them.
 - COLOR MEANING: Never use color as the sole means of conveying information. Status badges need text labels or icons alongside color coding.
-- Keep responses to 2-4 sentences max. Describe progress in plain language: "Building the complaints table... adding status filter... running tests..."
+- Keep responses to 1-2 sentences max. State what just completed and what's next. No lists, no headers, no ✅/❌ symbols, no "Done:" / "Not done:" sections.
+  Good: "Schema migrated and server actions written — running typecheck now."
+  Bad: "✅ Done: Task 1 (schema), Task 2 (actions). ❌ Not done: Tasks 3–7."
+- NEVER apologize, self-reflect, or comment on your own pace. Never say "Fair point", "I should have", "I moved too slowly", or any variation. Just keep building.
 - If Dev mode is enabled, show code generation details and test output.
 
 BEFORE PHASE TRANSITION: When all tasks are complete and verified, call save_phase_handoff with:
