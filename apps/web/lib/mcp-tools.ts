@@ -2431,250 +2431,6 @@ export async function executeTool(
       // Use write_sandbox_file / edit_sandbox_file / run_sandbox_command directly.
       return { success: false, error: "Tool removed.", message: "generate_code and iterate_sandbox have been removed. Use write_sandbox_file, edit_sandbox_file, and run_sandbox_command directly to build the feature." };
 
-    case "_generate_code_removed": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      let build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
-      if (!build?.brief) return { success: false, error: "No feature brief.", message: "Save brief first." };
-
-      // Auto-initialize sandbox via pool if not yet launched
-      if (!build.sandboxId) {
-        console.log("[generate_code] No sandbox — acquiring pool slot...");
-        const { acquireSandbox, initializePool } = await import("@/lib/sandbox-pool");
-        const { isSandboxRunning, initializeSandboxWorkspace: autoInit } = await import("@/lib/sandbox");
-        await initializePool().catch(() => {});
-        const slot = await acquireSandbox(buildId, userId);
-        if (!slot) return { success: false, error: "All sandbox slots are in use.", message: "No sandbox slots available." };
-        const running = await isSandboxRunning(slot.containerId).catch(() => false);
-        if (!running) return { success: false, error: `Sandbox ${slot.containerId} is not running.`, message: "Sandbox container not found." };
-        try { await autoInit(slot.containerId); } catch (e) { console.error(`[generate_code] auto-init failed: ${(e as Error).message?.slice(0, 200)}`); }
-        build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
-        if (!build?.sandboxId) return { success: false, error: "Sandbox initialization failed.", message: "Could not initialize sandbox." };
-        const { agentEventBus } = await import("@/lib/agent-event-bus");
-        if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-      }
-
-      const { buildCodeGenPrompt, gatherCodeContext } = await import("@/lib/coding-agent");
-      const { execInSandbox, initializeSandboxWorkspace } = await import("@/lib/sandbox");
-      const instruction = String(params.instruction ?? "");
-
-      // Ensure workspace is initialized (has node_modules)
-      try {
-        await execInSandbox(build.sandboxId, "test -d /workspace/node_modules/.pnpm");
-      } catch {
-        console.log("[generate_code] workspace not initialized, running init...");
-        try {
-          await initializeSandboxWorkspace(build.sandboxId);
-        } catch (initErr) {
-          console.log(`[generate_code] init failed: ${(initErr as Error).message?.slice(0, 100)}`);
-        }
-      }
-
-      // Gather existing code context before generating
-      const plan = (build.buildPlan ?? {}) as Record<string, unknown>;
-      let codeContext = "";
-      try {
-        codeContext = await gatherCodeContext(build.sandboxId, plan);
-      } catch (ctxErr) {
-        console.log(`[generate_code] context gathering failed (non-fatal): ${(ctxErr as Error).message?.slice(0, 100)}`);
-      }
-
-      // Build the codegen prompt from brief + plan + instruction + context
-      const prompt = buildCodeGenPrompt(
-        build.brief as Parameters<typeof buildCodeGenPrompt>[0],
-        plan,
-        instruction,
-      ) + codeContext;
-
-      // Call an LLM to generate the actual code files
-      const { routeAndCall } = await import("@/lib/routed-inference");
-      const codeResult = await routeAndCall(
-        [{ role: "user", content: prompt }],
-        "You are a code generation agent. Output ONLY code files in this format:\n### FILE: <path>\n```typescript\n<content>\n```\n\nNo explanations. Just files.",
-        "internal",
-        { taskType: "codegen" },
-      );
-
-      // Parse generated files from the LLM response
-      const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
-      const files: Array<{ path: string; content: string }> = [];
-      let match;
-      while ((match = filePattern.exec(codeResult.content)) !== null) {
-        files.push({ path: match[1].trim(), content: match[2] });
-      }
-
-      if (files.length === 0) {
-        // Save the raw response as a prompt file for manual review
-        const encodedPrompt = Buffer.from(codeResult.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encodedPrompt} | base64 -d > /tmp/codegen-output.txt`);
-        logBuildActivity(buildId, "generate_code", `LLM responded but no parseable files found. Raw output saved to /tmp/codegen-output.txt`);
-        return { success: true, message: `Code generation produced text but no parseable files. Instruction: ${instruction}. Check /tmp/codegen-output.txt in sandbox.`, data: { instruction, filesGenerated: 0 } };
-      }
-
-      // Write each file to the sandbox (strip any leading /workspace/ to avoid double-path)
-      // GUARD: refuse to overwrite existing files — agent must use edit_sandbox_file instead
-      const skippedExisting: string[] = [];
-      for (const file of files) {
-        const cleanPath = file.path.replace(/^\/?workspace\//, "");
-        try {
-          await execInSandbox(build.sandboxId, `test -f '/workspace/${cleanPath}'`);
-          // File exists — skip it, tell the agent to use edit_sandbox_file
-          skippedExisting.push(cleanPath);
-          continue;
-        } catch {
-          // File doesn't exist — safe to create
-        }
-        const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-        if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
-        const encoded = Buffer.from(file.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
-      }
-      if (skippedExisting.length > 0) {
-        return {
-          success: false,
-          error: `Cannot overwrite existing files with generate_code. Use read_sandbox_file + edit_sandbox_file instead.`,
-          message: `These files already exist and were NOT overwritten: ${skippedExisting.join(", ")}. To modify existing files, first use read_sandbox_file to see the current content, then edit_sandbox_file for surgical changes.`,
-          data: { skippedFiles: skippedExisting, newFilesWritten: files.length - skippedExisting.length },
-        };
-      }
-
-      logBuildActivity(buildId, "generate_code", `Generated ${files.length} files: ${files.map(f => f.path).join(", ")}`);
-
-      // Generate a visual HTML preview mockup for the Live Preview panel.
-      // This shows the business user what their feature looks like without
-      // needing a full Next.js build.
-      try {
-        const brief = build.brief as { title?: string; description?: string; acceptanceCriteria?: string[] } | null;
-        const previewPrompt = `Generate a compact self-contained HTML file previewing: ${brief?.title ?? "Feature"}
-
-KEEP IT UNDER 4000 CHARACTERS TOTAL. Be concise with CSS (use minimal styles).
-
-Show these sections with REAL sample data:
-1. Header with feature name and nav tabs (Catalog | Registrations | Admin)
-2. Course catalog: 4 cards showing TOGAF L1 ($1,195, Apr 23, Virtual), IT4IT Foundation ($1,195, May 12), ArchiMate ($1,295, May 19, London), TOGAF L2 ($1,795, Jun 2)
-3. A registration form with fields: name, email, phone, company, country, role + Register button
-4. A registrations table with 3 sample rows
-
-Make tabs switch views with simple JS. Form shows "Registration confirmed!" on submit.
-Colors: bg #1a1a2e, surface #252540, text #e0e0e0, accent #7c8cf8, border #333.
-
-Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
-
-        const previewResult = await routeAndCall(
-          [{ role: "user", content: previewPrompt }],
-          "You generate realistic HTML UI mockups. Output only valid HTML.",
-          "internal",
-          { taskType: "codegen" },
-        );
-
-        // Extract HTML from response (might be wrapped in code blocks)
-        let html = previewResult.content;
-        const htmlMatch = html.match(/<!DOCTYPE html>[\s\S]*/i);
-        if (htmlMatch) html = htmlMatch[0];
-        // Strip trailing markdown code block if present
-        html = html.replace(/```\s*$/, "");
-
-        if (html.includes("<!DOCTYPE") || html.includes("<html")) {
-          await execInSandbox(build.sandboxId, "mkdir -p /workspace/_preview");
-          const previewEncoded = Buffer.from(html).toString("base64");
-          await execInSandbox(build.sandboxId, `echo ${previewEncoded} | base64 -d > /workspace/_preview/index.html`);
-          console.log("[generate_code] visual preview generated");
-        }
-      } catch (previewErr) {
-        console.log(`[generate_code] preview generation failed (non-fatal): ${(previewErr as Error).message?.slice(0, 100)}`);
-      }
-
-      // Start the preview server so the Live Preview shows the mockup
-      try {
-        const { startSandboxDevServer } = await import("@/lib/sandbox");
-        await startSandboxDevServer(build.sandboxId);
-      } catch (devErr) {
-        console.log(`[generate_code] preview server start failed (non-fatal): ${(devErr as Error).message?.slice(0, 100)}`);
-      }
-
-      return { success: true, message: `Generated ${files.length} files in sandbox. Dev server starting on port 3000 — preview will update shortly.`, data: { instruction, filesGenerated: files.length, files: files.map(f => f.path) } };
-    }
-
-    case "_iterate_sandbox_removed": {
-      const buildId = await resolveActiveBuildId(userId);
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, brief: true, buildPlan: true } });
-      if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
-
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const { buildCodeGenPrompt, gatherCodeContext } = await import("@/lib/coding-agent");
-      const { routeAndCall } = await import("@/lib/routed-inference");
-
-      const instruction = String(params.instruction ?? "");
-      if (!instruction.trim()) return { success: false, error: "No instruction provided.", message: "Provide a refinement instruction." };
-
-      // Gather current code context from sandbox
-      const plan = (build.buildPlan ?? {}) as Record<string, unknown>;
-      let codeContext = "";
-      try {
-        codeContext = await gatherCodeContext(build.sandboxId, plan);
-      } catch {
-        // Non-fatal — proceed without context
-      }
-
-      // Also get the current git diff to show what's already been changed
-      let currentDiff = "";
-      try {
-        currentDiff = await execInSandbox(build.sandboxId, "cd /workspace && git diff --stat 2>/dev/null || true");
-        if (currentDiff.trim()) {
-          codeContext += `\n## Current Changes\n\`\`\`\n${currentDiff.slice(0, 2000)}\n\`\`\`\n`;
-        }
-      } catch {
-        // Non-fatal
-      }
-
-      // Build prompt with refinement instruction + context
-      const brief = build.brief as Parameters<typeof buildCodeGenPrompt>[0] | null;
-      const promptParts = [
-        brief ? buildCodeGenPrompt(brief, plan, instruction) : `## Refinement Instruction\n${instruction}`,
-        codeContext,
-      ];
-
-      // Call LLM with full context for the refinement
-      const result = await routeAndCall(
-        [{ role: "user", content: promptParts.join("\n") }],
-        "You are a code generation agent. Apply the refinement instruction to the existing code. Output ONLY the changed files in this format:\n### FILE: <path>\n```typescript\n<content>\n```\n\nNo explanations. Just files.",
-        "internal",
-        { taskType: "codegen" },
-      );
-
-      // Parse and write files (same pattern as generate_code)
-      const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
-      const files: Array<{ path: string; content: string }> = [];
-      let match;
-      while ((match = filePattern.exec(result.content)) !== null) {
-        files.push({ path: match[1]!.trim(), content: match[2]! });
-      }
-
-      if (files.length === 0) {
-        const encoded = Buffer.from(result.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > /tmp/iterate-output.txt`);
-        logBuildActivity(buildId, "iterate_sandbox", `Refinement produced no parseable files. Raw output saved to /tmp/iterate-output.txt`);
-        return { success: true, message: `Refinement produced text but no parseable files. Check /tmp/iterate-output.txt in sandbox.`, data: { instruction, filesChanged: 0 } };
-      }
-
-      // Write refined files to sandbox
-      for (const file of files) {
-        const cleanPath = file.path.replace(/^\/?workspace\//, "");
-        const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-        if (dir) await execInSandbox(build.sandboxId, `mkdir -p '/workspace/${dir}'`);
-        const encoded = Buffer.from(file.content).toString("base64");
-        await execInSandbox(build.sandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
-      }
-
-      logBuildActivity(buildId, "iterate_sandbox", `Refinement applied to ${files.length} files: ${files.map(f => f.path).join(", ")}. Instruction: ${instruction.slice(0, 200)}`);
-
-      return {
-        success: true,
-        message: `Refinement applied to ${files.length} file(s): ${files.map(f => f.path).join(", ")}. Run run_sandbox_tests to verify.`,
-        data: { instruction, filesChanged: files.length, files: files.map(f => f.path) },
-      };
-    }
 
     case "run_sandbox_tests": {
       const buildId = await resolveActiveBuildId(userId);
@@ -2989,6 +2745,38 @@ Output ONLY the HTML. Start with <!DOCTYPE html>. NO markdown.`;
       if (toolName === "run_sandbox_command") {
         const command = String(params.command ?? "");
         if (!command) return { success: false, error: "command is required.", message: "Provide a command to run." };
+
+        // ── Command safety blocklist ─────────────────────────────────────────
+        // Commands run inside the sandbox container (docker exec), not the host OS.
+        // The container is isolated, but we still block commands that could:
+        //   - Destroy the workspace beyond git recovery
+        //   - Exfiltrate files to the internet
+        //   - Escape the container or affect the host Docker daemon
+        //   - Execute arbitrary code piped from the network
+        const BLOCKED_PATTERNS = [
+          /rm\s+-rf\s+\/(?!workspace)/i,       // rm -rf outside /workspace
+          /rm\s+-rf\s+\/workspace\s*$/i,        // rm -rf /workspace itself
+          /curl\s+.*\|\s*(ba)?sh/i,             // curl | sh (remote code exec)
+          /wget\s+.*\|\s*(ba)?sh/i,             // wget | sh
+          /curl\s+.*\|\s*node/i,                // curl | node
+          /docker\s+(run|exec|build|rm|rmi)/i,  // docker escape attempts
+          /--privileged/i,                       // container privilege escalation
+          /\/proc\/\d+\/fd/i,                   // procfs fd access
+          /nsenter/i,                            // namespace escape
+          /chroot/i,                             // chroot escape
+          /mount\b/i,                            // mount syscall
+          /chmod\s+[0-7]*7[0-7]*\s+\/(?!workspace)/i, // chmod outside workspace
+        ];
+        const blocked = BLOCKED_PATTERNS.find(p => p.test(command));
+        if (blocked) {
+          console.warn(`[run_sandbox_command] BLOCKED: ${command.slice(0, 200)}`);
+          return {
+            success: false,
+            error: "Command blocked by safety policy.",
+            message: `This command is not permitted: "${command.slice(0, 100)}". Commands must operate within /workspace. Destructive operations outside the workspace, remote code execution, and container escape attempts are blocked.`,
+          };
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         // Smart output truncation: keep errors (at the end) rather than progress noise (at the start)
         const truncateOutput = (raw: string, limit: number = 15000): string => {
