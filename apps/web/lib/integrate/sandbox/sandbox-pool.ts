@@ -40,6 +40,13 @@ export function getPoolConfig() {
  * Ensures all sandbox slots exist in the database.
  * Safe to call multiple times (upserts by slotIndex).
  * Called during portal startup and seed.
+ *
+ * Slots are reset to available on every init. There is no reliable way for
+ * the portal to know whether a previous session's in_use assignments are
+ * still valid after a restart — containers stay running but the portal's
+ * in-memory state is gone. Stale in_use slots block every new build until
+ * manually cleared. Resetting on startup is safe: if a build genuinely needs
+ * a slot it will re-acquire one on the next tool call.
  */
 export async function initializePool(): Promise<void> {
   const config = getPoolConfig();
@@ -55,7 +62,9 @@ export async function initializePool(): Promise<void> {
       update: {
         containerId: slot.containerId,
         port: slot.port,
-        // Don't overwrite status — preserve in_use slots across restarts
+        status: "available",
+        buildId: null,
+        userId: null,
       },
     });
   }
