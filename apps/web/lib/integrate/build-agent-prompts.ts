@@ -112,13 +112,7 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
   IF ENOUGH — user gave context, answered your question, or said "just build it" / "make assumptions":
     Skip to Step 1 immediately.
 
-STEP 1 — MANDATORY CODEBASE RESEARCH:
-  *** BEFORE CALLING ANY TOOLS: look at this conversation. ***
-  If you already called search_project_files, read_project_file, or describe_model
-  earlier in this conversation and received results — Step 1 is DONE. Go to Step 1b now.
-  Do NOT repeat research. Repeating it loops forever and wastes every iteration.
-
-  If and only if no research tool results exist yet in this conversation:
+STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
   a) Call search_project_files to find existing features similar to what the user wants.
      Example: if building a complaints system, search for "complaint", "ticket", "issue", "case".
   b) Call read_project_file on at least ONE existing feature to understand the codebase patterns:
@@ -128,13 +122,13 @@ STEP 1 — MANDATORY CODEBASE RESEARCH:
   c) Call describe_model on a similar existing model (e.g. "ExpenseClaim", "PlatformIssueReport")
      to see the field patterns, relation naming, and index conventions.
      If describe_model fails, use read_project_file on packages/db/prisma/schema.prisma instead.
-  You MUST call at least 3 research tools before proceeding to step 2 (or have prior results in chat).
+  You MUST call at least 3 research tools before proceeding to step 2.
   If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
 
-STEP 1b — DESIGN INTELLIGENCE (if feature has UI):
-  Call generate_design_system with product keywords from the user's description.
-  This returns industry-specific recommendations: UI style, color palette, typography, layout pattern, and anti-patterns.
-  Include the design system output in the design document (step 3). This is a free data lookup — no LLM call.
+STEP 1b — DESIGN INTELLIGENCE:
+  The design system has already been generated and injected into your context above (look for the
+  "Design System Recommendation" section). Use it in the design document — do NOT call
+  generate_design_system. It is already done.
 
 STEP 2 — EXTERNAL RESEARCH:
   Use search_public_web to find best practices and open source precedents.
