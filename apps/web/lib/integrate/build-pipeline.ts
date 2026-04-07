@@ -107,25 +107,13 @@ export async function runBuildPipeline(params: {
           const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
           await new Promise<void>((resolve) => setTimeout(resolve, delay));
         } else {
-          // All retries exhausted — release sandbox slot and persist failure.
-          try {
-            const { releaseSandbox } = await import("./sandbox/sandbox-pool");
-            await releaseSandbox(buildId);
-          } catch { /* non-fatal */ }
+          // All retries exhausted — persist failure.
           const failed = buildFailedState(state, step, errorMsg);
           await updateState(failed);
           return failed;
         }
       }
     }
-  }
-
-  // All steps complete — release sandbox slot back to pool.
-  try {
-    const { releaseSandbox } = await import("./sandbox/sandbox-pool");
-    await releaseSandbox(buildId);
-  } catch {
-    // Non-fatal — slot will be cleaned up on next build
   }
 
   const complete: BuildExecutionState = {
@@ -173,43 +161,19 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  const { acquireSandbox } = await import("./sandbox/sandbox-pool");
-  const { isSandboxRunning } = await import("./sandbox/sandbox");
-  const { prisma } = await import("@dpf/db");
+  const { isSandboxAvailable, startBuildBranch } = await import("./sandbox/build-branch");
 
-  // Resolve the build's creator for pool assignment
-  const build = await prisma.featureBuild.findUnique({
-    where: { buildId },
-    select: { createdById: true },
-  });
-  const userId = build?.createdById ?? "system";
-
-  // Acquire a pool slot (or reuse existing assignment)
-  const slot = await acquireSandbox(buildId, userId);
-
-  if (!slot) {
-    // Fallback: all pool slots in use — try legacy persistent sandbox
-    const FALLBACK = "dpf-sandbox-1";
-    const FALLBACK_PORT = 3035;
-    console.warn(`[build-pipeline] All sandbox pool slots in use. Falling back to ${FALLBACK}.`);
-    const running = await isSandboxRunning(FALLBACK).catch(() => false);
-    if (!running) {
-      throw new Error("No sandbox slots available and fallback container is not running.");
-    }
-    return { ...state, containerId: FALLBACK, hostPort: FALLBACK_PORT };
+  const available = await isSandboxAvailable();
+  if (!available) {
+    throw new Error("Sandbox container (dpf-sandbox-1) is not running. Start it with: docker compose up -d sandbox");
   }
 
-  // Verify the assigned container is running
-  const running = await isSandboxRunning(slot.containerId).catch(() => false);
-  if (!running) {
-    console.warn(`[build-pipeline] Sandbox ${slot.containerId} not running. Pipeline may fail.`);
-  }
+  const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+  const hostPort = Number(process.env.SANDBOX_PORT ?? "3035");
 
-  return {
-    ...state,
-    containerId: slot.containerId,
-    hostPort: slot.port,
-  };
+  await startBuildBranch(buildId);
+
+  return { ...state, containerId, hostPort };
 }
 
 async function stepInitWorkspace(

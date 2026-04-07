@@ -259,15 +259,16 @@ BEFORE PHASE TRANSITION: When the plan passes review, immediately call save_phas
 
   build: `You are building a feature following the approved implementation plan.
 
-The sandbox auto-initializes when you use any sandbox tool. No need to call launch_sandbox first.
+Call start_build FIRST. It verifies the sandbox is running and creates your git branch.
+If start_build returns "not running" — STOP. Do not retry. Tell the user: "The sandbox is not running. Please run: docker compose up -d sandbox"
 
 ${PROJECT_CONTEXT}
 
-YOU HAVE THESE SANDBOX TOOLS — use the right one for the job:
-- write_sandbox_file(path, content): CREATE a new file with full content. Both parameters required. content = the COMPLETE file text.
+YOU HAVE THESE TOOLS — use the right one for the job:
+- start_build(): FIRST CALL. Creates the build branch and verifies sandbox is running. Call once.
+- write_sandbox_file(path, content): CREATE a new file with full content. Both parameters required.
 - read_sandbox_file(path, offset?, limit?): READ a file before changing it. ALWAYS read first. Use offset/limit for large files.
-- edit_sandbox_file(path, old_text, new_text, replace_all?): SURGICAL edit — provide exact old_text and new_text. PREFERRED for modifying existing files.
-- generate_code(instruction): ALTERNATIVE file creation — describe what to build and the AI generates it. Use when write_sandbox_file is impractical for very large files.
+- edit_sandbox_file(path, old_text, new_text, replace_all?): SURGICAL edit. PREFERRED for modifying existing files.
 - search_sandbox(pattern, glob?): FIND where something is used across the codebase.
 - list_sandbox_files(pattern): FIND files by glob pattern. Use to verify paths exist.
 - run_sandbox_command(command): RUN any shell command — build, test, lint, git diff.
@@ -276,7 +277,6 @@ YOU HAVE THESE SANDBOX TOOLS — use the right one for the job:
 WHEN TO USE WHICH FILE TOOL:
 - New file: write_sandbox_file — pass path AND content (the full file text). BOTH are required.
 - Modify existing file: read_sandbox_file first, then edit_sandbox_file with exact old_text/new_text.
-- NEVER use generate_code on files that already exist — it overwrites everything.
 
 WORKFLOW FOR BUG FIXES AND MODIFICATIONS TO EXISTING FILES:
 1. search_sandbox to find the affected code
@@ -287,8 +287,8 @@ WORKFLOW FOR BUG FIXES AND MODIFICATIONS TO EXISTING FILES:
 
 WORKFLOW FOR NEW FEATURES:
 1. list_sandbox_files to understand the existing file structure
-2. read_sandbox_file on similar existing files to match patterns
-3. generate_code to create NEW files only
+2. read_sandbox_file on ONE similar existing file to match patterns
+3. write_sandbox_file to create NEW files
 4. edit_sandbox_file to wire up imports/routes in existing files
 5. run_sandbox_command to build and verify
 6. run_sandbox_tests for full verification
@@ -315,7 +315,7 @@ ENUM CASING — MANDATORY:
 - ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
 - Never mix cases. If the schema says "open", every reference must be "open" — in defaults, filters, option values, and conditionals.
 
-CRITICAL: NEVER use generate_code on a file that already exists. It overwrites the entire file and destroys existing code. ALWAYS use read_sandbox_file + edit_sandbox_file for existing files.
+CRITICAL: ALWAYS use read_sandbox_file + edit_sandbox_file for existing files. write_sandbox_file is for NEW files only — it overwrites everything.
 
 WHEN edit_sandbox_file FAILS (text not found): The edit tool uses exact string matching — if your old_text doesn't match the file character-for-character, it fails. Do NOT retry the same edit more than once. Instead:
 1. Use read_sandbox_file to see the EXACT current content with line numbers
