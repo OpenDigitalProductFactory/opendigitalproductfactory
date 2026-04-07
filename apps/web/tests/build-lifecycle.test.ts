@@ -122,9 +122,7 @@ describe("Build Studio full lifecycle", () => {
       // Clean up digital product if created
       const build = await prisma.featureBuild.findUnique({ where: { buildId: testBuildId }, select: { digitalProductId: true } });
       if (build?.digitalProductId) {
-        await prisma.backlogItem.deleteMany({ where: { epic: { digitalProductId: build.digitalProductId } } });
-        await prisma.epic.deleteMany({ where: { digitalProductId: build.digitalProductId } });
-        await prisma.promotion.deleteMany({ where: { digitalProductId: build.digitalProductId } });
+        await prisma.backlogItem.deleteMany({ where: { digitalProductId: build.digitalProductId } });
         await prisma.digitalProduct.delete({ where: { id: build.digitalProductId } }).catch(() => {});
       }
       await prisma.featureBuild.delete({ where: { buildId: testBuildId } });

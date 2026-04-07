@@ -156,7 +156,7 @@ describe("routeTask — Stage 1: Hard Filter", () => {
 
   const endpoints = [
     makeEndpoint({ id: "ep-active",      name: "Active",               status: "active",   qualityTier: "frontier" }),
-    makeEndpoint({ id: "ep-inactive",    name: "Inactive",             status: "inactive", qualityTier: "frontier" }),
+    makeEndpoint({ id: "ep-inactive",    name: "Inactive",             status: "disabled", qualityTier: "frontier" }),
     makeEndpoint({ id: "ep-retired",     name: "Retired",              retiredAt: new Date(), qualityTier: "frontier" }),
     makeEndpoint({ id: "ep-noclearance", name: "No Clearance",         sensitivityClearance: ["internal"], qualityTier: "frontier" }),
     makeEndpoint({ id: "ep-notool",      name: "No Tool Support",      supportsToolUse: false, qualityTier: "frontier" }),

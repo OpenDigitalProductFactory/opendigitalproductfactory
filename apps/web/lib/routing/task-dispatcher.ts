@@ -13,8 +13,6 @@ import {
   InferenceError,
   type ChatMessage,
 } from "@/lib/ai-inference";
-import { observe } from "@/lib/process-observer";
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** The payload passed to callProvider for each attempt. */
@@ -90,7 +88,7 @@ export async function callWithFallbackChain(
             : decision.reason,
       };
 
-      const decisionLog = await persistDecision(finalDecision, candidate, context, fallbacksUsed);
+      await persistDecision(finalDecision, candidate, context, fallbacksUsed);
 
       await logTokenUsage({
         agentId: context.agentId,
@@ -100,8 +98,6 @@ export async function callWithFallbackChain(
         outputTokens: result.outputTokens,
         inferenceMs: result.inferenceMs,
       });
-
-      observe("ai_call_succeeded", { decisionLogId: decisionLog.id });
 
       return result;
     } catch (error) {
