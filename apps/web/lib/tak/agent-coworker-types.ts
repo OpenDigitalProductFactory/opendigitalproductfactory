@@ -63,6 +63,16 @@ export type AgentModelRequirements = {
   defaultMinimumTier?: "frontier" | "strong" | "adequate" | "basic";
   /** EP-INF-012: Default budget class (fallback when no DB config exists). */
   defaultBudgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  /**
+   * EP-INF-013: Default reasoning effort for this agent.
+   * Maps to Anthropic thinking.budget_tokens and OpenAI reasoning_effort.
+   *   low    — no extended thinking; fast and cheap (COO, status agents)
+   *   medium — moderate thinking budget (data extraction, moderate reasoning)
+   *   high   — extended thinking (code-gen, multi-step tool use, Build Studio)
+   *   max    — maximum budget; Opus-only (reserved for future deep-reasoning agents)
+   * Omit to use the platform default (equivalent to "low").
+   */
+  defaultEffort?: "low" | "medium" | "high" | "max";
 };
 
 /** Entry in the route-to-agent map. */

@@ -81,12 +81,31 @@ export const chatAdapter: ExecutionAdapterHandler = {
           .map((m) => formatMessageForAnthropic(m)),
       };
 
-      // Apply thinking config
+      // EP-INF-013: Map effort → extended thinking for Anthropic.
+      // effort="low" (or absent) → no thinking parameter (default, fast).
+      // effort="medium/high/max" → enable thinking with a token budget.
+      // Explicit providerSettings.thinking takes precedence over effort.
+      const effortBudgets: Record<string, number> = { medium: 8_000, high: 32_000, max: 64_000 };
+      const effort = plan.providerSettings?.effort as string | undefined;
       if (plan.providerSettings?.thinking) {
+        // Explicit thinking config overrides effort
         (body as Record<string, unknown>).thinking = plan.providerSettings.thinking;
+        // Ensure max_tokens accommodates the explicitly set budget
+        const explicitBudget = (plan.providerSettings.thinking as { budget_tokens?: number }).budget_tokens ?? 0;
+        body.max_tokens = Math.max(plan.maxTokens, explicitBudget + 2_048);
+        // Anthropic rejects temperature when thinking is enabled
+        delete (body as Record<string, unknown>).temperature;
+      } else if (effort && effort !== "low" && effortBudgets[effort]) {
+        const budget = effortBudgets[effort]!;
+        (body as Record<string, unknown>).thinking = { type: "enabled", budget_tokens: budget };
+        // max_tokens must be >= budget_tokens; add 2 048 for output headroom
+        body.max_tokens = Math.max(plan.maxTokens, budget + 2_048);
+        // Anthropic rejects temperature when thinking is enabled
+        delete (body as Record<string, unknown>).temperature;
       }
-      // Apply temperature
-      if (plan.temperature !== undefined) {
+
+      // Apply temperature (only when thinking is NOT enabled — handled above)
+      if (plan.temperature !== undefined && !(body as Record<string, unknown>).thinking) {
         (body as Record<string, unknown>).temperature = plan.temperature;
       }
 
@@ -210,9 +229,15 @@ export const chatAdapter: ExecutionAdapterHandler = {
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
       }
-      // Apply reasoning_effort
+      // Apply reasoning_effort (explicit setting takes precedence over effort)
+      // EP-INF-013: fall back to deriving from effort when not explicitly set.
+      // OpenAI o-series models support "low"/"medium"/"high"; max → "high".
       if (plan.providerSettings?.reasoning_effort) {
         (body as Record<string, unknown>).reasoning_effort = plan.providerSettings.reasoning_effort;
+      } else if (plan.providerSettings?.effort) {
+        const effortMap: Record<string, string> = { low: "low", medium: "medium", high: "high", max: "high" };
+        const mapped = effortMap[plan.providerSettings.effort as string];
+        if (mapped) (body as Record<string, unknown>).reasoning_effort = mapped;
       }
       // Apply tool_choice
       if (plan.toolPolicy?.toolChoice && tools && tools.length > 0) {
