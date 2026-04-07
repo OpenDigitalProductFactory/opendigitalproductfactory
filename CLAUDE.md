@@ -49,12 +49,10 @@
 
 ## Git Workflow
 
-- **Customizable (Option 2) mode:** The primary working directory is the cloned repo (e.g., `D:\DPF`). All development uses **feature branches and pull requests** — never commit directly to `main`.
-- **Branch naming:** `feat/<short-name>`, `fix/<short-name>`, `refactor/<short-name>`
-- **PR flow:** Create branch, commit work, push, open PR via `gh pr create`, merge after review.
+- **Solo dev mode (current):** Commit directly to `main` and push. No feature branches, no PRs.
 - **Always push** after committing — local-only commits are invisible to the build pipeline and other agents.
-- **Feature branches are expected.** Don't avoid branching — it's the standard workflow.
-- The `main` branch is the release branch. PRs are the gate.
+- **Future — customer branch model:** When customers contribute, each customer gets one persistent branch (`customer/<id>`). Branches are not named by fix or feature — they are named by who owns them. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale when there are thousands of contributors.
+- **Do not create `feat/`, `fix/`, or `refactor/` branches** — these add noise without value for a solo developer.
 
 ## Strongly-Typed String Enums — MANDATORY COMPLIANCE
 
