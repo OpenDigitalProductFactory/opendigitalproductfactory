@@ -1,0 +1,198 @@
+// apps/web/lib/integrate/codex-dispatch.ts
+// Dispatch build tasks to OpenAI Codex CLI running inside the sandbox container.
+//
+// Instead of our custom agentic loop (routeAndCall → adapter → SSE parser → tool extraction),
+// Codex CLI handles everything internally: file reads, writes, edits, command execution.
+// We just pass it the task description and capture the result.
+//
+// Equivalent to running: codex -q -a full-auto -m o4-mini "task description"
+// inside the sandbox container via docker exec.
+
+import { execInSandbox } from "./sandbox/sandbox";
+import type { AssignedTask } from "./task-dependency-graph";
+import type { SpecialistRole } from "./task-dependency-graph";
+
+const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+
+// Codex model — configurable, defaults to o4-mini (fast, tool-capable)
+const CODEX_MODEL = process.env.CODEX_MODEL ?? "o4-mini";
+
+// Timeout for a single Codex task (10 minutes — generous for complex tasks)
+const CODEX_TASK_TIMEOUT_MS = 600_000;
+
+export type CodexResult = {
+  content: string;       // Codex CLI stdout (summary of what it did)
+  success: boolean;
+  executedTools: Array<{ name: string; args: unknown; result: { success: boolean } }>;
+  durationMs: number;
+};
+
+/**
+ * Build context instructions for Codex based on the specialist role.
+ * Codex has its own tools (file read/write/edit, shell exec) — we just
+ * need to tell it about the project structure and conventions.
+ */
+function buildCodexInstructions(
+  role: SpecialistRole,
+  buildContext: string,
+  priorResults?: string,
+): string {
+  const roleInstructions: Record<SpecialistRole, string> = {
+    "data-architect": `You are a data architect working on a Prisma schema.
+Key files:
+- Schema: packages/db/prisma/schema.prisma
+- Validate with: pnpm --filter @dpf/db exec prisma validate
+- After changes: pnpm --filter @dpf/db exec prisma migrate dev --name <descriptive_name>
+- Then: pnpm --filter @dpf/db exec prisma generate
+- Enums use LOWERCASE values. Multi-word statuses use hyphens: "in-progress" not "in_progress".
+- Every foreign key field (xxxId) needs @@index.
+- Relations need inverse on BOTH sides.`,
+
+    "software-engineer": `You are a software engineer building Next.js server actions and API routes.
+Key patterns:
+- Server actions: apps/web/lib/actions/<feature>.ts — "use server" directive, prisma queries
+- API routes: apps/web/app/api/<feature>/route.ts — GET/POST/PATCH/DELETE handlers
+- Always read an existing similar file first to match patterns.
+- Typecheck with: pnpm exec tsc --noEmit`,
+
+    "frontend-engineer": `You are a frontend engineer building Next.js pages and React components.
+Key patterns:
+- Pages: apps/web/app/(shell)/<feature>/page.tsx — server components with prisma queries
+- Components: apps/web/components/<feature>/ — client components with "use client"
+- Use Tailwind CSS. Match existing design patterns.
+- Read an existing page first to understand the layout structure.
+- Typecheck with: pnpm exec tsc --noEmit`,
+
+    "qa-engineer": `You are a QA engineer verifying the build.
+- Run tests: pnpm exec vitest run --reporter=verbose
+- Run typecheck: pnpm exec tsc --noEmit
+- Check for runtime errors in the build output
+- Report specific failures with file paths and line numbers`,
+  };
+
+  const parts = [
+    roleInstructions[role],
+    "",
+    "PROJECT CONTEXT:",
+    buildContext.slice(0, 3000), // Truncate to avoid exceeding Codex's context
+  ];
+
+  if (priorResults) {
+    parts.push("", "RESULTS FROM PRIOR TASKS:", priorResults.slice(0, 2000));
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * Dispatch a single build task to Codex CLI inside the sandbox container.
+ *
+ * Runs: codex -q -a full-auto -m <model> "<prompt>"
+ * in /workspace inside the sandbox container.
+ *
+ * Codex handles all file I/O and command execution natively.
+ * We capture stdout as the result.
+ */
+export async function dispatchCodexTask(params: {
+  task: AssignedTask;
+  buildId: string;
+  buildContext: string;
+  priorResults?: string;
+}): Promise<CodexResult> {
+  const { task, buildContext, priorResults } = params;
+  const role = task.specialist;
+
+  const instructions = buildCodexInstructions(role, buildContext, priorResults);
+
+  // Build the task prompt
+  const taskFiles = task.files
+    .map(f => `- ${f.path} (${f.action}): ${f.purpose}`)
+    .join("\n");
+
+  const taskPrompt = [
+    instructions,
+    "",
+    `TASK: ${task.title}`,
+    "",
+    task.task.implement || "",
+    "",
+    taskFiles ? `FILES:\n${taskFiles}` : "",
+    "",
+    task.task.testFirst ? `TEST FIRST: ${task.task.testFirst}` : "",
+    task.task.verify ? `VERIFY: ${task.task.verify}` : "",
+  ].filter(Boolean).join("\n");
+
+  // Escape the prompt for shell
+  const escapedPrompt = taskPrompt
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/`/g, "\\`");
+
+  const startMs = Date.now();
+
+  try {
+    // Run Codex CLI in quiet mode with full-auto approval
+    // Working directory is /workspace (the sandbox project root)
+    const command = `cd /workspace && CODEX_QUIET_MODE=1 codex -q -a full-auto -m ${CODEX_MODEL} "${escapedPrompt}" 2>&1`;
+
+    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
+
+    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+    const { promisify } = await import(/* turbopackIgnore: true */ "util");
+    const execAsync = promisify(execCb);
+
+    const { stdout } = await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c ${JSON.stringify(command)}`,
+      {
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+        timeout: CODEX_TASK_TIMEOUT_MS,
+      },
+    );
+
+    const durationMs = Date.now() - startMs;
+    const content = stdout.trim();
+
+    console.log(`[codex-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)`);
+
+    return {
+      content: content || "Task completed with no output.",
+      success: true,
+      executedTools: [], // Codex handles tools internally — we don't have tool-level visibility
+      durationMs,
+    };
+  } catch (err) {
+    const durationMs = Date.now() - startMs;
+    const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: number; killed?: boolean };
+    const output = (execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "");
+
+    if (execErr.killed) {
+      console.warn(`[codex-dispatch] Task "${task.title}" killed after ${CODEX_TASK_TIMEOUT_MS / 1000}s timeout`);
+      return {
+        content: `Task timed out after ${CODEX_TASK_TIMEOUT_MS / 1000}s. Partial output:\n${output.slice(-2000)}`,
+        success: false,
+        executedTools: [],
+        durationMs,
+      };
+    }
+
+    // Non-zero exit code — Codex ran but the task had issues
+    if (output.trim()) {
+      console.log(`[codex-dispatch] Task "${task.title}" exited with code ${execErr.code}. Output: ${output.slice(0, 200)}`);
+      return {
+        content: output.trim().slice(-5000),
+        success: execErr.code === 0,
+        executedTools: [],
+        durationMs,
+      };
+    }
+
+    console.error(`[codex-dispatch] Task "${task.title}" failed: ${execErr.message?.slice(0, 200)}`);
+    return {
+      content: `Codex CLI error: ${execErr.message?.slice(0, 1000) ?? "Unknown error"}`,
+      success: false,
+      executedTools: [],
+      durationMs,
+    };
+  }
+}

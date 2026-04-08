@@ -20,6 +20,12 @@ import {
 } from "./specialist-prompts";
 import type { SpecialistRole } from "./task-dependency-graph";
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
+import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
+
+// Use Codex CLI for build tasks instead of the custom agentic loop.
+// Codex handles file I/O and command execution natively inside the sandbox.
+// Set CODEX_DISPATCH=false to fall back to the agentic loop.
+const USE_CODEX_CLI = process.env.CODEX_DISPATCH !== "false";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -83,17 +89,34 @@ export const MISSING_PREREQUISITE_PATTERNS = [
   "not found in schema", "file not found", "no model named",
 ];
 
-/** Classify a specialist's agentic result into a structured outcome. */
-export function classifyOutcome(result: AgenticResult, role: SpecialistRole): SpecialistOutcome {
+/** Classify a specialist's result into a structured outcome. Works with both AgenticResult and CodexResult. */
+export function classifyOutcome(result: AgenticResult | CodexResult, role: SpecialistRole): SpecialistOutcome {
   const content = result.content.toLowerCase();
-  const calledBuildTools = result.executedTools.some(t =>
+
+  // For CodexResult: success is determined by Codex CLI exit code
+  if ("durationMs" in result && !("providerId" in result)) {
+    // CodexResult path
+    if (!result.success) {
+      if (content.includes("timed out")) return "BLOCKED";
+      if (content.includes("error") || content.includes("failed")) return "DONE_WITH_CONCERNS";
+      return "BLOCKED";
+    }
+    // Codex succeeded — check content for concerns
+    if (content.includes("error") || content.includes("failed") || content.includes("warning")) {
+      return "DONE_WITH_CONCERNS";
+    }
+    return "DONE";
+  }
+
+  // AgenticResult path (original logic)
+  const agenticResult = result as AgenticResult;
+  const calledBuildTools = agenticResult.executedTools.some(t =>
     t.name !== "read_sandbox_file" && t.name !== "search_sandbox" && t.name !== "list_sandbox_files" && t.name !== "describe_model"
   );
-  const hasErrors = result.executedTools.some(t => !t.result.success);
+  const hasErrors = agenticResult.executedTools.some(t => !t.result.success);
   const isQA = role === "qa-engineer";
 
-  // Check tool errors for infrastructure blockers (sandbox down, slots exhausted)
-  const toolErrors = result.executedTools
+  const toolErrors = agenticResult.executedTools
     .filter(t => !t.result.success)
     .map(t => (t.result.error ?? "").toLowerCase());
   const hasInfraError = toolErrors.some(err =>
@@ -101,40 +124,22 @@ export function classifyOutcome(result: AgenticResult, role: SpecialistRole): Sp
   );
   if (hasInfraError) return "BLOCKED";
 
-  // Check for missing prerequisites (model/file doesn't exist yet)
-  // Only classify as BLOCKED if ALL tool calls failed with prerequisite errors
-  // (the agent couldn't find what it needed and made no successful mutations)
   const hasMissingPrereq = toolErrors.some(err =>
     MISSING_PREREQUISITE_PATTERNS.some(pat => err.includes(pat))
   );
   if (hasMissingPrereq && !calledBuildTools) return "BLOCKED";
 
-  // Blocked: explicit blocker signals or no tools called (stalled)
   if (content.includes("blocked") || content.includes("cannot proceed") || content.includes("missing prerequisite")) {
     return "BLOCKED";
   }
-
-  // Needs context: agent asked for more info
   if (content.includes("need more information") || content.includes("please clarify") || content.includes("which ")) {
     return "NEEDS_CONTEXT";
   }
-
-  // QA always counts as done (test results are informational)
   if (isQA && calledBuildTools) {
     return hasErrors ? "DONE_WITH_CONCERNS" : "DONE";
   }
-
-  // Build tools called with no errors = done
-  if (calledBuildTools && !hasErrors) {
-    return "DONE";
-  }
-
-  // Build tools called but some errors = concerns
-  if (calledBuildTools && hasErrors) {
-    return "DONE_WITH_CONCERNS";
-  }
-
-  // No build tools called = blocked (stalled agent)
+  if (calledBuildTools && !hasErrors) return "DONE";
+  if (calledBuildTools && hasErrors) return "DONE_WITH_CONCERNS";
   return "BLOCKED";
 }
 
@@ -142,7 +147,7 @@ export function classifyOutcome(result: AgenticResult, role: SpecialistRole): Sp
 
 type SpecialistResult = {
   task: AssignedTask;
-  result: AgenticResult;
+  result: AgenticResult | CodexResult;
   outcome: SpecialistOutcome;
   success: boolean;
   retries: number;
@@ -160,28 +165,59 @@ async function dispatchSpecialist(params: {
 }): Promise<SpecialistResult> {
   const { task, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId, priorResults } = params;
   const role = task.specialist;
+
+  // Emit dispatch event
+  agentEventBus.emit(parentThreadId, {
+    type: "orchestrator:task_dispatched",
+    buildId,
+    taskTitle: task.title,
+    specialist: ROLE_LABELS[role],
+  });
+
+  // ─── Codex CLI path: dispatch task to Codex running inside the sandbox ───
+  if (USE_CODEX_CLI) {
+    const codexResult = await dispatchCodexTask({
+      task,
+      buildId,
+      buildContext,
+      priorResults,
+    });
+
+    const outcome = classifyOutcome(codexResult, role);
+
+    agentEventBus.emit(parentThreadId, {
+      type: "orchestrator:task_complete",
+      buildId,
+      taskTitle: task.title,
+      specialist: ROLE_LABELS[role],
+      outcome: codexResult.success ? "DONE" : "BLOCKED",
+    });
+
+    return {
+      task,
+      result: codexResult,
+      outcome,
+      success: outcome === "DONE" || outcome === "DONE_WITH_CONCERNS",
+      retries: 0,
+    };
+  }
+
+  // ─── Agentic loop path (legacy fallback) ─────────────────────────────────
   const agentId = SPECIALIST_AGENT_IDS[role];
   const modelReqs = SPECIALIST_MODEL_REQS[role];
   const allowedToolNames = new Set(SPECIALIST_TOOLS[role]);
 
-  // Create isolated thread — upsert guards against re-trigger on the same build
   const thread = await prisma.agentThread.upsert({
     where: { userId_contextKey: { userId, contextKey: `build:${buildId}:${role}:${task.taskIndex}` } },
     update: {},
     create: { userId, contextKey: `build:${buildId}:${role}:${task.taskIndex}` },
   });
 
-  // Get tools scoped to this specialist's allowed set.
-  // UserContext shape: { userId, platformRole, isSuperuser } — see lib/govern/permissions.ts
   const userContext = { userId, platformRole, isSuperuser };
-  const allTools = await getAvailableTools(
-    userContext,
-    { mode: "act", agentId },
-  );
+  const allTools = await getAvailableTools(userContext, { mode: "act", agentId });
   const scopedTools = allTools.filter(t => allowedToolNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(scopedTools);
 
-  // Build the specialist's system prompt
   const systemPrompt = buildSpecialistPrompt({
     role,
     taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${task.files.map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
@@ -189,7 +225,6 @@ async function dispatchSpecialist(params: {
     priorResults,
   });
 
-  // Dispatch with retries
   let lastResult: AgenticResult | null = null;
   let retries = 0;
 
@@ -197,14 +232,6 @@ async function dispatchSpecialist(params: {
     const taskPrompt = attempt === 0
       ? task.task.implement || task.title
       : `RETRY (attempt ${attempt + 1}): The previous attempt had issues:\n${lastResult?.content?.slice(0, 500) ?? "Unknown error"}\n\nTry a different approach. Original task: ${task.task.implement || task.title}`;
-
-    // Emit dispatch event
-    agentEventBus.emit(parentThreadId, {
-      type: "orchestrator:task_dispatched",
-      buildId,
-      taskTitle: task.title,
-      specialist: ROLE_LABELS[role],
-    });
 
     lastResult = await runAgenticLoop({
       chatHistory: [{ role: "user", content: taskPrompt }],
@@ -221,7 +248,6 @@ async function dispatchSpecialist(params: {
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
 
-    // Classify outcome using structured protocol
     const outcome = classifyOutcome(lastResult, role);
 
     if (outcome === "DONE" || outcome === "DONE_WITH_CONCERNS") {
@@ -388,8 +414,8 @@ export async function runBuildOrchestrator(params: {
   // Synthesize final result
   const completedTasks = allResults.filter(r => r.success).length;
   const failedTasks = allResults.filter(r => !r.success).length;
-  const totalInputTokens = allResults.reduce((sum, r) => sum + r.result.totalInputTokens, 0);
-  const totalOutputTokens = allResults.reduce((sum, r) => sum + r.result.totalOutputTokens, 0);
+  const totalInputTokens = allResults.reduce((sum, r) => sum + ("totalInputTokens" in r.result ? r.result.totalInputTokens : 0), 0);
+  const totalOutputTokens = allResults.reduce((sum, r) => sum + ("totalOutputTokens" in r.result ? r.result.totalOutputTokens : 0), 0);
 
   const summary: BuildSummary = {
     totalTasks,
