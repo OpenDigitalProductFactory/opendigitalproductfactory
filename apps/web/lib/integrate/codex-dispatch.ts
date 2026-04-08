@@ -11,6 +11,7 @@
 
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
+import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -38,7 +39,6 @@ export type CodexResult = {
  * used for ChatGPT Responses API calls (flat-rate subscription billing).
  */
 async function injectCodexAuth(): Promise<void> {
-  const { getDecryptedCredential } = await import(/* turbopackIgnore: true */ "@/lib/inference/ai-provider-internals");
   const credential = await getDecryptedCredential("codex");
   if (!credential?.cachedToken) {
     throw new Error("No Codex OAuth token available. Log in via Admin > AI Workforce > OpenAI/Codex.");
