@@ -566,6 +566,24 @@ export async function runAgenticLoop(params: {
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
 
+      // Empty response guard: if the model returns empty content AND zero tool calls,
+      // it can't handle the request (wrong tool format, model doesn't support tools, etc).
+      // Don't nudge — break immediately with a clear error.
+      if (trimmed.length === 0 && executedTools.length === 0) {
+        console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
+        return {
+          content: `The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`,
+          providerId: result.providerId,
+          modelId: result.modelId,
+          downgraded: result.downgraded,
+          downgradeMessage: result.downgradeMessage,
+          totalInputTokens,
+          totalOutputTokens,
+          executedTools,
+          proposal: null,
+        };
+      }
+
       // Safety net: nudge the model to use tools if it responded with text-only.
       // Catches both mid-workflow stalls AND first-iteration zero-tool responses.
       // Skip nudging entirely when tools were stripped by routing degradation —
