@@ -143,6 +143,7 @@ export function AgentCoworkerPanel({
         const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         if (data.type === "orchestrator:build_started") {
           setOrchestratorStatus(`Building: ${data.taskCount} tasks`);
+          setBuildTasks(new Map());
           setBuildProgress({ completed: 0, total: data.taskCount });
         }
         if (data.type === "orchestrator:task_dispatched") {
@@ -194,8 +195,8 @@ export function AgentCoworkerPanel({
         if (data.type === "done") {
           setCurrentTool(null);
           setOrchestratorStatus(null);
-          setBuildTasks(new Map());
-          setBuildProgress(null);
+          // Keep buildTasks and buildProgress visible as a record of what was done.
+          // They clear on the next build start or conversation clear.
 
           // Apply ephemeral data not stored in DB
           if (data.providerInfo) {
@@ -496,6 +497,8 @@ export function AgentCoworkerPanel({
         return;
       }
       setMessages([]);
+      setBuildTasks(new Map());
+      setBuildProgress(null);
       onConversationCleared?.();
     });
   }
@@ -551,9 +554,10 @@ export function AgentCoworkerPanel({
         })}
         {/* Setup action buttons — shown when setup overlay is active */}
         <SetupActionButtonsWrapper isPending={isBusy} />
-        {(isBusy || isClearing) && (
+        {(isBusy || isClearing || buildTasks.size > 0) && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-            {/* Pulsing agent avatar */}
+            {/* Pulsing agent avatar (only while busy) */}
+            {(isBusy || isClearing) && (
             <div
               style={{
                 width: 28,
@@ -571,6 +575,7 @@ export function AgentCoworkerPanel({
             >
               {agent.agentName.charAt(0)}
             </div>
+            )}
             <div
               style={{
                 padding: "8px 14px",
@@ -585,7 +590,8 @@ export function AgentCoworkerPanel({
                 minWidth: 0,
               }}
             >
-              {/* Current status line */}
+              {/* Current status line — only while busy */}
+              {(isBusy || isClearing) && (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 11 }}>
                 {isClearing
@@ -642,6 +648,7 @@ export function AgentCoworkerPanel({
                 </button>
               )}
             </div>
+              )}
               {/* Task status board — each task shows its latest state */}
               {buildTasks.size > 0 && (
                 <div

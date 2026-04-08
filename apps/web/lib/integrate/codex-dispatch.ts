@@ -219,8 +219,11 @@ export async function dispatchCodexTask(params: {
     // --skip-git-repo-check: sandbox workspace may not have git init yet
     // Model: omitted when empty (ChatGPT auth assigns the model server-side)
     const modelFlag = CODEX_MODEL ? `-m ${CODEX_MODEL}` : "";
+    // Capture only stdout (the final agent message). Stderr has progress/banner
+    // noise ("Reading prompt from stdin...", "OpenAI Codex v0.118.0", etc.)
+    // that pollutes results. Redirect stderr to /dev/null inside the shell.
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt 2>&1"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CODEX_TASK_TIMEOUT_MS,
