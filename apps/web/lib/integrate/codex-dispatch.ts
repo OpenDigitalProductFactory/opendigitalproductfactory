@@ -44,15 +44,16 @@ async function injectCodexAuth(): Promise<void> {
     throw new Error("No Codex OAuth token available. Log in via Admin > AI Workforce > OpenAI/Codex.");
   }
 
+  // Auth.json format verified from nearai/ironclaw (src/llm/codex_auth.rs)
+  // which reads/writes ~/.codex/auth.json for headless Codex CLI usage.
+  // ChatGPT mode uses "chatgpt" (not "chatgptAuthTokens") and only needs
+  // access_token + refresh_token. No id_token or account_id required.
   const authJson = JSON.stringify({
-    auth_mode: "chatgptAuthTokens",
+    auth_mode: "chatgpt",
     tokens: {
       access_token: credential.cachedToken,
       refresh_token: credential.refreshToken ?? "",
-      id_token: credential.cachedToken,
-      account_id: null,
     },
-    last_refresh: new Date().toISOString(),
   });
 
   const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
