@@ -21,11 +21,24 @@ import {
 import type { SpecialistRole } from "./task-dependency-graph";
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
 import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
+import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
 
-// Use Codex CLI for build tasks instead of the custom agentic loop.
-// Codex handles file I/O and command execution natively inside the sandbox.
-// Set CODEX_DISPATCH=false to fall back to the agentic loop.
-const USE_CODEX_CLI = process.env.CODEX_DISPATCH !== "false";
+// CLI dispatch provider: which CLI agent runs build tasks in the sandbox.
+//   "codex"   — OpenAI Codex CLI (default, backward compatible)
+//   "claude"  — Anthropic Claude Code CLI
+//   "agentic" — custom agentic loop (legacy fallback)
+//   "false"   — same as "agentic" (backward compat with old CODEX_DISPATCH=false)
+type CliDispatchProvider = "codex" | "claude" | "agentic";
+
+function resolveProvider(): CliDispatchProvider {
+  const raw = process.env.CLI_DISPATCH_PROVIDER ?? process.env.CODEX_DISPATCH;
+  if (raw === "claude") return "claude";
+  if (raw === "false" || raw === "agentic") return "agentic";
+  // Default: codex (preserves current behavior, including when CODEX_DISPATCH was unset or "true")
+  return "codex";
+}
+
+const CLI_DISPATCH_PROVIDER = resolveProvider();
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -186,8 +199,8 @@ export const MISSING_PREREQUISITE_PATTERNS = [
   "not found in schema", "file not found", "no model named",
 ];
 
-/** Classify a specialist's result into a structured outcome. Works with both AgenticResult and CodexResult. */
-export function classifyOutcome(result: AgenticResult | CodexResult, role: SpecialistRole): SpecialistOutcome {
+/** Classify a specialist's result into a structured outcome. Works with AgenticResult, CodexResult, and ClaudeResult. */
+export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResult, role: SpecialistRole): SpecialistOutcome {
   const content = result.content.toLowerCase();
 
   // For CodexResult: success is determined by Codex CLI exit code
@@ -244,7 +257,7 @@ export function classifyOutcome(result: AgenticResult | CodexResult, role: Speci
 
 type SpecialistResult = {
   task: AssignedTask;
-  result: AgenticResult | CodexResult;
+  result: AgenticResult | CodexResult | ClaudeResult;
   outcome: SpecialistOutcome;
   success: boolean;
   retries: number;
@@ -271,28 +284,25 @@ async function dispatchSpecialist(params: {
     specialist: ROLE_LABELS[role],
   });
 
-  // ─── Codex CLI path: dispatch task to Codex running inside the sandbox ───
-  if (USE_CODEX_CLI) {
-    const codexResult = await dispatchCodexTask({
-      task,
-      buildId,
-      buildContext,
-      priorResults,
-    });
+  // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
+  if (CLI_DISPATCH_PROVIDER === "codex" || CLI_DISPATCH_PROVIDER === "claude") {
+    const cliResult = CLI_DISPATCH_PROVIDER === "claude"
+      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults })
+      : await dispatchCodexTask({ task, buildId, buildContext, priorResults });
 
-    const outcome = classifyOutcome(codexResult, role);
+    const outcome = classifyOutcome(cliResult, role);
 
     agentEventBus.emit(parentThreadId, {
       type: "orchestrator:task_complete",
       buildId,
       taskTitle: task.title,
       specialist: ROLE_LABELS[role],
-      outcome: codexResult.success ? "DONE" : "BLOCKED",
+      outcome: cliResult.success ? "DONE" : "BLOCKED",
     });
 
     return {
       task,
-      result: codexResult,
+      result: cliResult,
       outcome,
       success: outcome === "DONE" || outcome === "DONE_WITH_CONCERNS",
       retries: 0,
