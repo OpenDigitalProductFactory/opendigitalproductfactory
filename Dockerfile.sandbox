@@ -1,6 +1,9 @@
 FROM node:20-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN apk add --no-cache git postgresql16-client curl
+# Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
+# Used by the Build Studio orchestrator to execute build tasks autonomously.
+RUN npm install -g @openai/codex
 RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
 WORKDIR /workspace
