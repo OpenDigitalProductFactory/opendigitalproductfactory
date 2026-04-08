@@ -132,6 +132,15 @@
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
       "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push"
+    },
+    {
+      "label": "DPF: Factory Reset (WIPES ALL DATA)",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "echo WARNING: This will destroy ALL data including the database, users, OAuth tokens, sandbox workspace, and all configuration. Press Ctrl+C to cancel, or && pause && docker compose down -v --remove-orphans && docker compose build && docker compose up -d"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "DESTRUCTIVE: Stops all containers, deletes ALL volumes (database, sandbox, neo4j, qdrant, redis), rebuilds all images from source, and starts fresh. You will need to reconfigure everything: admin user, OAuth providers, branding, etc."
     }
   ]
 }
