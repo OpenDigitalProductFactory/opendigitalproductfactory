@@ -5,10 +5,10 @@
 // Codex CLI handles everything internally: file reads, writes, edits, command execution.
 // We just pass it the task description and capture the result.
 //
-// Equivalent to running: codex -q -a full-auto -m o4-mini "task description"
-// inside the sandbox container via docker exec.
+// Auth: uses the existing OAuth token from the ChatGPT provider (flat-rate subscription).
+// The token is fetched from the portal's credential store and injected into the docker exec
+// environment. No manual API key configuration needed.
 
-import { execInSandbox } from "./sandbox/sandbox";
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 
@@ -28,9 +28,20 @@ export type CodexResult = {
 };
 
 /**
+ * Get the OAuth bearer token for OpenAI/Codex from the portal's credential store.
+ * This is the same token used for ChatGPT Responses API calls — flat-rate subscription billing.
+ */
+async function getCodexToken(): Promise<string> {
+  const { getProviderBearerToken } = await import(/* turbopackIgnore: true */ "@/lib/inference/ai-provider-internals");
+  const result = await getProviderBearerToken("codex");
+  if ("error" in result) {
+    throw new Error(`Cannot get Codex OAuth token: ${result.error}. Configure OpenAI OAuth in Admin > AI Workforce.`);
+  }
+  return result.token;
+}
+
+/**
  * Build context instructions for Codex based on the specialist role.
- * Codex has its own tools (file read/write/edit, shell exec) — we just
- * need to tell it about the project structure and conventions.
  */
 function buildCodexInstructions(
   role: SpecialistRole,
@@ -74,7 +85,7 @@ Key patterns:
     roleInstructions[role],
     "",
     "PROJECT CONTEXT:",
-    buildContext.slice(0, 3000), // Truncate to avoid exceeding Codex's context
+    buildContext.slice(0, 3000),
   ];
 
   if (priorResults) {
@@ -87,11 +98,11 @@ Key patterns:
 /**
  * Dispatch a single build task to Codex CLI inside the sandbox container.
  *
- * Runs: codex -q -a full-auto -m <model> "<prompt>"
- * in /workspace inside the sandbox container.
- *
- * Codex handles all file I/O and command execution natively.
- * We capture stdout as the result.
+ * Flow:
+ * 1. Get OAuth token from portal credential store
+ * 2. Write prompt to a temp file in the sandbox (avoids shell escaping issues)
+ * 3. Run: OPENAI_API_KEY=<token> codex exec --full-auto -m <model> < /tmp/prompt.txt
+ * 4. Capture stdout as the result
  */
 export async function dispatchCodexTask(params: {
   task: AssignedTask;
@@ -102,9 +113,21 @@ export async function dispatchCodexTask(params: {
   const { task, buildContext, priorResults } = params;
   const role = task.specialist;
 
+  // Get OAuth token from the portal's credential store
+  let token: string;
+  try {
+    token = await getCodexToken();
+  } catch (err) {
+    return {
+      content: `Auth error: ${(err as Error).message}`,
+      success: false,
+      executedTools: [],
+      durationMs: 0,
+    };
+  }
+
   const instructions = buildCodexInstructions(role, buildContext, priorResults);
 
-  // Build the task prompt
   const taskFiles = task.files
     .map(f => `- ${f.path} (${f.action}): ${f.purpose}`)
     .join("\n");
@@ -122,32 +145,30 @@ export async function dispatchCodexTask(params: {
     task.task.verify ? `VERIFY: ${task.task.verify}` : "",
   ].filter(Boolean).join("\n");
 
-  // Escape the prompt for shell
-  const escapedPrompt = taskPrompt
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, "\\$")
-    .replace(/`/g, "\\`");
-
   const startMs = Date.now();
 
   try {
-    // Run Codex CLI non-interactively with full-auto approval
-    // codex exec: non-interactive mode (replaces the old -q flag)
-    // --full-auto: workspace-write sandbox, no approval prompts
-    // --skip-git-repo-check: sandbox workspace may not have a git repo yet
-    const command = `cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} "${escapedPrompt}" 2>&1`;
-
-    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
-
     const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
     const { promisify } = await import(/* turbopackIgnore: true */ "util");
     const execAsync = promisify(execCb);
 
+    // Write prompt to temp file in sandbox (avoids all shell escaping issues)
+    const promptB64 = Buffer.from(taskPrompt).toString("base64");
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/codex-prompt.txt"`,
+      { timeout: 5_000 },
+    );
+
+    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
+
+    // Run Codex CLI with OAuth token injected as env var
+    // --full-auto: workspace-write sandbox, no approval prompts
+    // --skip-git-repo-check: sandbox workspace may not have git init yet
+    // Prompt read from temp file via stdin to avoid shell escaping
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c ${JSON.stringify(command)}`,
+      `docker exec -e OPENAI_API_KEY=${token} ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} < /tmp/codex-prompt.txt 2>&1"`,
       {
-        maxBuffer: 10 * 1024 * 1024, // 10MB
+        maxBuffer: 10 * 1024 * 1024,
         timeout: CODEX_TASK_TIMEOUT_MS,
       },
     );
@@ -160,7 +181,7 @@ export async function dispatchCodexTask(params: {
     return {
       content: content || "Task completed with no output.",
       success: true,
-      executedTools: [], // Codex handles tools internally — we don't have tool-level visibility
+      executedTools: [],
       durationMs,
     };
   } catch (err) {
@@ -178,7 +199,6 @@ export async function dispatchCodexTask(params: {
       };
     }
 
-    // Non-zero exit code — Codex ran but the task had issues
     if (output.trim()) {
       console.log(`[codex-dispatch] Task "${task.title}" exited with code ${execErr.code}. Output: ${output.slice(0, 200)}`);
       return {
