@@ -269,7 +269,7 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
     modelRequirements: {
-      defaultMinimumTier: "frontier",
+      defaultMinimumTier: "strong",
       defaultBudgetClass: "quality_first",
       preferredProviderId: "codex",
       // EP-INF-013: Multi-step code-gen needs extended thinking to reduce tool-loop failures
