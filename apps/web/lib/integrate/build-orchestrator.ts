@@ -409,6 +409,39 @@ export async function runBuildOrchestrator(params: {
   const { buildId, plan, userId, platformRole, isSuperuser, parentThreadId, buildContext } = params;
   const startTime = Date.now();
 
+  // ─── Pre-flight check: verify CLI dispatch auth is available ─────────────
+  // Catch missing OAuth tokens BEFORE dispatching 14 tasks that all fail with
+  // the same auth error. One clear message is better than 14 cryptic ones.
+  if (CLI_DISPATCH_PROVIDER === "codex") {
+    try {
+      const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+      const cred = await getDecryptedCredential("codex");
+      if (!cred?.cachedToken) {
+        return {
+          content: "Build cannot start — the OpenAI/Codex provider is not connected.\n\nGo to Admin > AI Workforce, find OpenAI/Codex, and click Connect to log in. Once connected, try the build again.",
+          totalTasks: 0, completedTasks: 0, failedTasks: 0,
+          specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
+        };
+      }
+    } catch {
+      return {
+        content: "Build cannot start — could not verify AI provider credentials.\n\nGo to Admin > AI Workforce and ensure at least one code generation provider (OpenAI/Codex or Claude) is connected.",
+        totalTasks: 0, completedTasks: 0, failedTasks: 0,
+        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
+      };
+    }
+  }
+  if (CLI_DISPATCH_PROVIDER === "claude") {
+    const hasKey = !!process.env.ANTHROPIC_API_KEY;
+    if (!hasKey) {
+      return {
+        content: "Build cannot start — the Anthropic API key is not configured.\n\nSet ANTHROPIC_API_KEY in your environment or switch to Codex dispatch (CLI_DISPATCH_PROVIDER=codex).",
+        totalTasks: 0, completedTasks: 0, failedTasks: 0,
+        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
+      };
+    }
+  }
+
   // Build dependency graph from plan
   const phases = buildDependencyGraph(
     plan.fileStructure ?? [],
