@@ -271,8 +271,10 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "quality_first",
-      preferredProviderId: "codex",
-      // EP-INF-013: Multi-step code-gen needs extended thinking to reduce tool-loop failures
+      // No preferredProviderId — let the routing pipeline pick the best available provider.
+      // Previously pinned to "codex" but gpt-5-codex returns empty responses with tools.
+      // The pipeline will rank by cost-per-success and capability, picking anthropic when
+      // available or falling back to gemini/haiku automatically.
       defaultEffort: "high" as const,
     },
   },
