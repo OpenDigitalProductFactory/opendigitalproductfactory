@@ -119,19 +119,16 @@ export function AgentCoworkerPanel({
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [orchestratorStatus, setOrchestratorStatus] = useState<string | null>(null);
-  const [buildLog, setBuildLog] = useState<Array<{ time: string; text: string; status?: string }>>([]);
+  // Task status board: keyed by taskTitle, updated in place as events arrive
+  type TaskStatus = { specialist: string; status: "pending" | "working" | "done" | "concern" | "blocked" | "retry"; time: string };
+  const [buildTasks, setBuildTasks] = useState<Map<string, TaskStatus>>(new Map());
+  const [buildProgress, setBuildProgress] = useState<{ completed: number; total: number } | null>(null);
   const buildLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!isBusy) { setThinkingSeconds(0); return; }
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [isBusy]);
-  // Auto-scroll build log to bottom when new entries arrive
-  useEffect(() => {
-    if (buildLogRef.current) {
-      buildLogRef.current.scrollTop = buildLogRef.current.scrollHeight;
-    }
-  }, [buildLog.length]);
 
   // SSE for tool-level progress, orchestrator status, and async completion
   useEffect(() => {
@@ -142,33 +139,45 @@ export function AgentCoworkerPanel({
         const data = JSON.parse(event.data);
         if (data.type === "tool:start") setCurrentTool(data.tool);
         if (data.type === "tool:complete") setCurrentTool(null);
-        // Orchestrator progress — show specialist status + append to scrolling log
-        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        // Orchestrator progress — update task status board in place
+        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         if (data.type === "orchestrator:build_started") {
-          const text = `Build started: ${data.taskCount} tasks, ${data.specialists.length} specialists`;
-          setOrchestratorStatus(text);
-          setBuildLog((prev) => [...prev, { time: now, text }]);
+          setOrchestratorStatus(`Building: ${data.taskCount} tasks`);
+          setBuildProgress({ completed: 0, total: data.taskCount });
         }
         if (data.type === "orchestrator:task_dispatched") {
-          const text = `${data.specialist} working on: ${data.taskTitle}`;
-          setOrchestratorStatus(text);
-          setBuildLog((prev) => [...prev, { time: now, text, status: "working" }]);
+          setOrchestratorStatus(`${data.specialist} working on: ${data.taskTitle}`);
+          setBuildTasks((prev) => {
+            const next = new Map(prev);
+            next.set(data.taskTitle, { specialist: data.specialist, status: "working", time: now });
+            return next;
+          });
         }
         if (data.type === "orchestrator:task_complete") {
-          const status = data.status === "DONE" ? "done" : data.status === "DONE_WITH_CONCERNS" ? "concern" : "blocked";
-          const text = `${data.specialist}: ${data.taskTitle}`;
+          const status = data.status === "DONE" ? "done" as const : data.status === "DONE_WITH_CONCERNS" ? "concern" as const : "blocked" as const;
           setOrchestratorStatus(`${data.specialist} complete`);
-          setBuildLog((prev) => [...prev, { time: now, text, status }]);
+          setBuildTasks((prev) => {
+            const next = new Map(prev);
+            next.set(data.taskTitle, { specialist: data.specialist, status, time: now });
+            return next;
+          });
         }
         if (data.type === "orchestrator:phase_summary") {
-          const text = `Phase complete: ${data.completed}/${data.total} tasks done`;
-          setOrchestratorStatus(text);
-          setBuildLog((prev) => [...prev, { time: now, text, status: "phase" }]);
+          setOrchestratorStatus(`${data.completed}/${data.total} tasks done`);
+          setBuildProgress({ completed: data.completed, total: data.total });
         }
         if (data.type === "orchestrator:specialist_retry") {
-          const text = `Retrying ${data.specialist} (attempt ${data.attempt})`;
-          setOrchestratorStatus(text);
-          setBuildLog((prev) => [...prev, { time: now, text, status: "retry" }]);
+          setOrchestratorStatus(`Retrying ${data.specialist}`);
+          setBuildTasks((prev) => {
+            const next = new Map(prev);
+            // Find the task this specialist is working on and mark retry
+            for (const [title, task] of next) {
+              if (task.specialist === data.specialist && task.status === "working") {
+                next.set(title, { ...task, status: "retry", time: now });
+              }
+            }
+            return next;
+          });
         }
         // EP-ASYNC-COWORKER-001: error event — show in chat
         if (data.type === "error") {
@@ -185,7 +194,8 @@ export function AgentCoworkerPanel({
         if (data.type === "done") {
           setCurrentTool(null);
           setOrchestratorStatus(null);
-          setBuildLog([]);
+          setBuildTasks(new Map());
+          setBuildProgress(null);
 
           // Apply ephemeral data not stored in DB
           if (data.providerInfo) {
@@ -632,37 +642,75 @@ export function AgentCoworkerPanel({
                 </button>
               )}
             </div>
-              {/* Scrolling build activity log */}
-              {buildLog.length > 0 && (
+              {/* Task status board — each task shows its latest state */}
+              {buildTasks.size > 0 && (
                 <div
                   ref={buildLogRef}
                   style={{
-                    maxHeight: 160,
+                    maxHeight: 200,
                     overflowY: "auto",
                     borderTop: "1px solid color-mix(in srgb, var(--dpf-border) 50%, transparent)",
                     paddingTop: 6,
                     marginTop: 2,
                     display: "flex",
                     flexDirection: "column",
-                    gap: 2,
+                    gap: 3,
                   }}
                 >
-                  {buildLog.map((entry, i) => {
-                    const dot = entry.status === "done" ? "\u2713"
-                      : entry.status === "concern" ? "!"
-                      : entry.status === "blocked" ? "\u2717"
-                      : entry.status === "retry" ? "\u21BB"
-                      : entry.status === "phase" ? "\u2500"
-                      : "\u2022";
-                    const color = entry.status === "done" ? "var(--dpf-success)"
-                      : entry.status === "concern" ? "var(--dpf-warning, #e5a100)"
-                      : entry.status === "blocked" ? "var(--dpf-error)"
+                  {/* Progress bar */}
+                  {buildProgress && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <div style={{
+                        flex: 1, height: 3, borderRadius: 2,
+                        background: "color-mix(in srgb, var(--dpf-border) 50%, transparent)",
+                        overflow: "hidden",
+                      }}>
+                        <div style={{
+                          height: "100%", borderRadius: 2,
+                          background: "var(--dpf-accent)",
+                          width: `${buildProgress.total > 0 ? (buildProgress.completed / buildProgress.total) * 100 : 0}%`,
+                          transition: "width 0.5s ease",
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 9, color: "var(--dpf-muted)", flexShrink: 0 }}>
+                        {buildProgress.completed}/{buildProgress.total}
+                      </span>
+                    </div>
+                  )}
+                  {Array.from(buildTasks).map(([title, task]) => {
+                    const icon = task.status === "done" ? "\u2713"
+                      : task.status === "concern" ? "!"
+                      : task.status === "blocked" ? "\u2717"
+                      : task.status === "retry" ? "\u21BB"
+                      : task.status === "working" ? "\u25CB"
+                      : "\u00B7";
+                    const color = task.status === "done" ? "var(--dpf-success)"
+                      : task.status === "concern" ? "var(--dpf-warning, #e5a100)"
+                      : task.status === "blocked" ? "var(--dpf-error)"
+                      : task.status === "working" ? "var(--dpf-accent)"
                       : "var(--dpf-muted)";
+                    const isActive = task.status === "working";
                     return (
-                      <div key={i} style={{ display: "flex", gap: 6, fontSize: 10, lineHeight: 1.4, color: "var(--dpf-muted)" }}>
-                        <span style={{ color: "color-mix(in srgb, var(--dpf-muted) 60%, transparent)", flexShrink: 0 }}>{entry.time}</span>
-                        <span style={{ color, flexShrink: 0, width: 10, textAlign: "center" }}>{dot}</span>
-                        <span style={{ color: "var(--dpf-text-secondary, var(--dpf-muted))" }}>{entry.text}</span>
+                      <div key={title} style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        fontSize: 10, lineHeight: 1.4,
+                        opacity: task.status === "done" ? 0.7 : 1,
+                      }}>
+                        <span style={{
+                          color, flexShrink: 0, width: 12, textAlign: "center",
+                          fontWeight: isActive ? 700 : 400,
+                          animation: isActive ? "dpf-pulse 2s ease-in-out infinite" : "none",
+                        }}>{icon}</span>
+                        <span style={{
+                          flex: 1, minWidth: 0,
+                          color: isActive ? "var(--dpf-text)" : "var(--dpf-text-secondary, var(--dpf-muted))",
+                          fontWeight: isActive ? 500 : 400,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>{title}</span>
+                        <span style={{
+                          fontSize: 9, color: "color-mix(in srgb, var(--dpf-muted) 60%, transparent)",
+                          flexShrink: 0,
+                        }}>{task.specialist}</span>
                       </div>
                     );
                   })}
