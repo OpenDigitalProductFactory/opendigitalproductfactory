@@ -60,6 +60,21 @@ export type BuildSummary = {
 function sanitizeSpecialistOutput(raw: string): string {
   // Common system prompt fragments that leak through Codex CLI output
   const NOISE_PATTERNS = [
+    // Codex CLI stderr banner (captured when 2>&1 was used; safety net)
+    /Reading (?:additional )?(?:input|prompt) from stdin\.{0,3}\s*/gi,
+    /OpenAI Codex v[\d.]+[^]*?(?=\n\n|codex\n|user\n)/gi,
+    /^-{4,}$/gm,
+    /^workdir:.*$/gm,
+    /^model:.*$/gm,
+    /^provider:.*$/gm,
+    /^approval:.*$/gm,
+    /^sandbox:.*$/gm,
+    /^reasoning (?:effort|summaries):.*$/gm,
+    /^session id:.*$/gm,
+    /^user$/gm,
+    /^codex$/gm,
+    /^warning:.*bubblewrap.*$/gmi,
+    // System prompt fragments that leak through
     /You are a (?:data architect|software engineer|frontend engineer|QA engineer)[^]*?(?=\n\n|\n[A-Z])/gi,
     /HEURISTICS:[\s\S]*?(?=\n\n[A-Z]|\n---|\n\n$)/gi,
     /--- Running Spec[\s\S]*/gi,
