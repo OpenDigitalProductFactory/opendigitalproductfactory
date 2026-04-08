@@ -2,9 +2,14 @@
 // Dispatch build tasks to Claude Code CLI running inside the sandbox container.
 //
 // Mirrors codex-dispatch.ts exactly but for Anthropic's Claude Code CLI.
-// Auth: uses OAuth token from Claude Max subscription (flat-rate, no per-token cost).
-// The token is fetched from the portal's credential store and injected as
-// CLAUDE_CODE_OAUTH_TOKEN env var on the docker exec command.
+// Supports two auth modes:
+//   "oauth" (default) — Claude Max subscription. Flat-rate billing, ~20x more
+//     economical than API keys. Uses CLAUDE_CODE_OAUTH_TOKEN env var.
+//   "apikey" — Standard Anthropic API key. Per-token billing ($100 burns in hours).
+//     Uses ANTHROPIC_API_KEY env var. Only use for testing or when Max is unavailable.
+//
+// Set CLAUDE_CODE_AUTH_MODE=oauth|apikey to choose. Default: oauth.
+// Credential store providerId: "claude-code" (both modes read from the same entry).
 
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
@@ -18,6 +23,12 @@ const CLAUDE_CODE_MODEL = process.env.CLAUDE_CODE_MODEL ?? "sonnet";
 // Timeout for a single Claude Code task (10 minutes — generous for complex tasks)
 const CLAUDE_TASK_TIMEOUT_MS = 600_000;
 
+// Auth mode: "oauth" for Max Plan (flat-rate), "apikey" for per-token API billing.
+// Default to oauth — dramatically more economical for build workloads.
+type ClaudeAuthMode = "oauth" | "apikey";
+const CLAUDE_AUTH_MODE: ClaudeAuthMode =
+  process.env.CLAUDE_CODE_AUTH_MODE === "apikey" ? "apikey" : "oauth";
+
 export type ClaudeResult = {
   content: string;       // Claude's response text
   success: boolean;
@@ -26,24 +37,41 @@ export type ClaudeResult = {
 };
 
 /**
- * Build the CLAUDE_CODE_OAUTH_TOKEN JSON string from the credential store.
+ * Auth credentials resolved from the credential store.
  *
- * Claude Code CLI reads auth from the CLAUDE_CODE_OAUTH_TOKEN env var.
- * Format: { accessToken, refreshToken, expiresAt }
+ * OAuth mode (Max Plan): flat-rate subscription, ~20x cheaper than API keys
+ *   for sustained build workloads. Injects CLAUDE_CODE_OAUTH_TOKEN env var.
+ * API key mode: per-token billing via ANTHROPIC_API_KEY. Burns fast —
+ *   $100 in a few hours vs. 5+ days on Max Plan.
  */
-async function buildClaudeAuthToken(): Promise<string> {
+type ClaudeAuth =
+  | { mode: "oauth"; tokenJson: string }
+  | { mode: "apikey"; apiKey: string };
+
+async function resolveClaudeAuth(): Promise<ClaudeAuth> {
   const credential = await getDecryptedCredential("claude-code");
-  if (!credential?.cachedToken) {
-    throw new Error("No Claude Code OAuth token available. Log in via Admin > AI Workforce > Claude Code.");
+
+  if (CLAUDE_AUTH_MODE === "apikey") {
+    // API key mode: read from secretRef (the standard API key field) or cachedToken
+    const apiKey = credential?.secretRef ?? credential?.cachedToken;
+    if (!apiKey) {
+      throw new Error("No Anthropic API key available. Configure via Admin > AI Workforce > Claude Code (set API key in the secret field).");
+    }
+    return { mode: "apikey", apiKey };
   }
 
-  const oauthToken = JSON.stringify({
+  // OAuth mode (default): Max Plan subscription token
+  if (!credential?.cachedToken) {
+    throw new Error("No Claude Code OAuth token available. Log in via Admin > AI Workforce > Claude Code. (Tip: set CLAUDE_CODE_AUTH_MODE=apikey to use an API key instead.)");
+  }
+
+  const tokenJson = JSON.stringify({
     accessToken: credential.cachedToken,
     refreshToken: credential.refreshToken ?? "",
     expiresAt: credential.tokenExpiresAt?.toISOString() ?? "",
   });
 
-  return oauthToken;
+  return { mode: "oauth", tokenJson };
 }
 
 /**
@@ -105,10 +133,14 @@ Key patterns:
 /**
  * Dispatch a single build task to Claude Code CLI inside the sandbox container.
  *
+ * Auth modes (set CLAUDE_CODE_AUTH_MODE env var):
+ *   "oauth" (default) — Max Plan subscription. Flat-rate, ~20x cheaper for builds.
+ *   "apikey" — Per-token API billing. Fast to set up, expensive at scale.
+ *
  * Flow:
- * 1. Get OAuth token from portal credential store
+ * 1. Resolve auth from portal credential store (OAuth token or API key)
  * 2. Write prompt to a temp file in the sandbox (avoids shell escaping issues)
- * 3. Run: CLAUDE_CODE_OAUTH_TOKEN=<json> claude --bare -p - --dangerously-skip-permissions --output-format json --model <model>
+ * 3. Inject auth env var + run: claude --bare -p - --dangerously-skip-permissions --output-format json
  * 4. Parse JSON output, extract .result field for content
  */
 export async function dispatchClaudeTask(params: {
@@ -120,10 +152,10 @@ export async function dispatchClaudeTask(params: {
   const { task, buildContext, priorResults } = params;
   const role = task.specialist;
 
-  // Build OAuth token JSON for CLAUDE_CODE_OAUTH_TOKEN env var
-  let oauthTokenJson: string;
+  // Resolve auth credentials (OAuth for Max Plan, or API key for per-token billing)
+  let auth: ClaudeAuth;
   try {
-    oauthTokenJson = await buildClaudeAuthToken();
+    auth = await resolveClaudeAuth();
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -166,16 +198,25 @@ export async function dispatchClaudeTask(params: {
       { timeout: 5_000 },
     );
 
-    // Write OAuth token to temp file (avoids shell escaping of JSON in -e flag)
-    const tokenB64 = Buffer.from(oauthTokenJson).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.json"`,
-      { timeout: 5_000 },
-    );
+    // Inject auth credentials into the sandbox container
+    let authEnvFragment: string;
+    if (auth.mode === "oauth") {
+      // OAuth (Max Plan): write token JSON to temp file, read at exec time
+      const tokenB64 = Buffer.from(auth.tokenJson).toString("base64");
+      await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.json"`,
+        { timeout: 5_000 },
+      );
+      authEnvFragment = "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.json)";
+    } else {
+      // API key: inject directly as env var (simple string, no escaping issues)
+      authEnvFragment = `ANTHROPIC_API_KEY=${auth.apiKey}`;
+    }
 
-    console.log(`[claude-dispatch] Starting task "${task.title}" with ${CLAUDE_CODE_MODEL} in ${SANDBOX_CONTAINER}`);
+    const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
+    console.log(`[claude-dispatch] Starting task "${task.title}" with ${CLAUDE_CODE_MODEL} [${modeLabel}] in ${SANDBOX_CONTAINER}`);
 
-    // Run Claude Code CLI with OAuth token from temp file.
+    // Run Claude Code CLI.
     // --bare: skips local hooks, MCP configs, CLAUDE.md (clean for containers)
     // -p -: read prompt from stdin (piped from temp file)
     // --dangerously-skip-permissions: Docker IS the sandbox
@@ -183,7 +224,7 @@ export async function dispatchClaudeTask(params: {
     // --model: explicit model selection (sonnet/opus/haiku)
     // Stderr redirected to /dev/null to avoid progress noise in output.
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.json) claude --bare -p - --dangerously-skip-permissions --output-format json --model ${CLAUDE_CODE_MODEL} < /tmp/claude-prompt.txt 2>/dev/null"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude --bare -p - --dangerously-skip-permissions --output-format json --model ${CLAUDE_CODE_MODEL} < /tmp/claude-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CLAUDE_TASK_TIMEOUT_MS,

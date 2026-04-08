@@ -33,7 +33,17 @@ Portal (build-orchestrator.ts)
 
 ### Authentication
 
-Claude Code CLI supports OAuth via `CLAUDE_CODE_OAUTH_TOKEN` environment variable:
+Two auth modes are supported, controlled by `CLAUDE_CODE_AUTH_MODE` env var:
+
+#### OAuth Mode (default) — Claude Max Plan
+
+**Strongly recommended.** Flat-rate subscription billing. ~20x more economical than API keys for sustained build workloads ($100 lasts 5+ days vs. a few hours with API keys).
+
+```bash
+CLAUDE_CODE_AUTH_MODE=oauth   # default, can be omitted
+```
+
+Uses `CLAUDE_CODE_OAUTH_TOKEN` environment variable:
 
 ```json
 {
@@ -52,12 +62,30 @@ Claude Code CLI supports OAuth via `CLAUDE_CODE_OAUTH_TOKEN` environment variabl
 3. At dispatch time, `getDecryptedCredential("claude-code")` decrypts the token
 4. Token is injected into sandbox as `CLAUDE_CODE_OAUTH_TOKEN` env var on the `docker exec` command
 
-**Auth precedence in Claude Code CLI** (from docs):
+#### API Key Mode — Per-Token Billing
+
+For quick testing or when Max Plan is unavailable. **Expensive at scale** — $100 can burn in a few hours of build activity.
+
+```bash
+CLAUDE_CODE_AUTH_MODE=apikey
+```
+
+Uses `ANTHROPIC_API_KEY` environment variable (standard Anthropic API key).
+
+**Credential flow:**
+
+1. Get API key from console.anthropic.com
+2. Store in DPF credential store under providerId `"claude-code"` with:
+   - `secretRef` = the API key (sk-ant-api03-...) — OR use `cachedToken` field
+3. At dispatch time, key is injected as `ANTHROPIC_API_KEY` env var on the `docker exec` command
+
+#### Auth precedence in Claude Code CLI (from docs)
+
 1. Cloud provider creds (Bedrock/Vertex/Foundry) — not used
 2. `ANTHROPIC_AUTH_TOKEN` — not used
-3. `ANTHROPIC_API_KEY` — fallback if configured (separate API billing)
+3. `ANTHROPIC_API_KEY` — used in apikey mode
 4. `apiKeyHelper` script — not used
-5. **Subscription OAuth from `CLAUDE_CODE_OAUTH_TOKEN`** ← what we use
+5. **Subscription OAuth from `CLAUDE_CODE_OAUTH_TOKEN`** — used in oauth mode (default)
 
 ### CLI Invocation
 
