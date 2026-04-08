@@ -259,6 +259,17 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
 
+    // Always log for codex/chatgpt until the tool issue is resolved
+    if ((providerId === "codex" || providerId === "chatgpt") && !parsed.text && parsed.toolCalls.length === 0) {
+      console.warn(
+        `[responses-adapter] ${providerId}/${modelId} returned empty text + 0 tool calls. ` +
+        `output items: ${data.output?.length ?? "null"}, ` +
+        `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
+        `raw keys: [${Object.keys(data).join(", ")}], ` +
+        `raw preview: ${JSON.stringify(data).slice(0, 500)}`,
+      );
+    }
+
     return {
       text: parsed.text,
       toolCalls: parsed.toolCalls,
