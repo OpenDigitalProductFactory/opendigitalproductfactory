@@ -2697,8 +2697,8 @@ export async function executeTool(
       // ── Dispatch to specific tool ──
       // ── Direct filesystem tools (via shared Docker volume at /sandbox-workspace) ──
       // These use Node.js fs operations — no docker exec, no shell escaping.
-      const { readFile, writeFile, mkdir, stat } = await import("fs/promises");
-      const { join, dirname } = await import("path");
+      const { readFile, writeFile, mkdir, stat } = await import(/* turbopackIgnore: true */ "fs/promises");
+      const { join, dirname } = await import(/* turbopackIgnore: true */ "path");
       const SANDBOX_MOUNT = "/sandbox-workspace";
 
       const resolveSandboxPath = (p: string) => {
@@ -2795,8 +2795,8 @@ export async function executeTool(
         const max = Number(params.maxResults) || 20;
         try {
           // Use grep on the mounted volume — runs in portal, not sandbox container
-          const { exec: execCb } = await import("child_process");
-          const { promisify } = await import("util");
+          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+          const { promisify } = await import(/* turbopackIgnore: true */ "util");
           const execAsync = promisify(execCb);
           const { stdout } = await execAsync(
             `grep -rn --include='${globFilter}' '${pattern.replace(/'/g, "'\\''")}' ${SANDBOX_MOUNT}/apps/ ${SANDBOX_MOUNT}/packages/ 2>/dev/null | head -${max}`,
@@ -2824,8 +2824,8 @@ export async function executeTool(
       if (toolName === "list_sandbox_files") {
         const pattern = String(params.pattern ?? "**/*");
         try {
-          const { exec: execCb } = await import("child_process");
-          const { promisify } = await import("util");
+          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+          const { promisify } = await import(/* turbopackIgnore: true */ "util");
           const execAsync = promisify(execCb);
           const findPattern = pattern.startsWith("/") ? pattern : `${SANDBOX_MOUNT}/${pattern}`;
           const { stdout } = await execAsync(
@@ -2941,8 +2941,8 @@ export async function executeTool(
 
       const tryDirectRead = async (): Promise<string | null> => {
         try {
-          const { resolve } = await import("path");
-          const { readFile } = await import("fs/promises");
+          const { resolve } = await import(/* turbopackIgnore: true */ "path");
+          const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
           const root = process.env.PROJECT_ROOT
             ? resolve(process.env.PROJECT_ROOT)
             : resolve(process.cwd(), "..", "..");
@@ -3309,10 +3309,10 @@ export async function executeTool(
       const promoBuildId = promoDetail?.productVersion?.featureBuild?.buildId;
       if (!sandboxId) return { success: false, error: "No sandbox", message: "No sandbox linked to this promotion." };
 
-      const { execFile: execFileCb } = await import("child_process");
-      const { promisify } = await import("util");
+      const { execFile: execFileCb } = await import(/* turbopackIgnore: true */ "child_process");
+      const { promisify } = await import(/* turbopackIgnore: true */ "util");
       const execFileAsync = promisify(execFileCb);
-      const execAsync = promisify((await import("child_process")).exec);
+      const execAsync = promisify((await import(/* turbopackIgnore: true */ "child_process")).exec);
 
       // Start promoter container (array form — no shell injection)
       try {
@@ -5153,8 +5153,8 @@ export async function executeTool(
     }
 
     case "apply_platform_update": {
-      const { exec: execCbUpdate } = await import("child_process");
-      const { promisify: promisifyUpdate } = await import("util");
+      const { exec: execCbUpdate } = await import(/* turbopackIgnore: true */ "child_process");
+      const { promisify: promisifyUpdate } = await import(/* turbopackIgnore: true */ "util");
       const execUpdate = promisifyUpdate(execCbUpdate);
 
       const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
@@ -5173,7 +5173,7 @@ export async function executeTool(
       try {
         // Check for in-progress merge from a previous interrupted run
         const { existsSync } = await import("fs");
-        const { resolve: resolvePath } = await import("path");
+        const { resolve: resolvePath } = await import(/* turbopackIgnore: true */ "path");
         if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
           // Return existing conflict list
           const { stdout: conflicted } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
@@ -5222,7 +5222,7 @@ export async function executeTool(
         if (conflictedFiles.trim()) {
           const conflicts = [];
           const { readFileSync } = await import("fs");
-          const { resolve: rp } = await import("path");
+          const { resolve: rp } = await import(/* turbopackIgnore: true */ "path");
           for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
             const content = readFileSync(rp(workspace, file), "utf-8");
             const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
@@ -5247,7 +5247,7 @@ export async function executeTool(
 
         // Update version sentinel
         const { writeFileSync } = await import("fs");
-        const { resolve: rp2 } = await import("path");
+        const { resolve: rp2 } = await import(/* turbopackIgnore: true */ "path");
         writeFileSync(rp2(workspace, ".dpf-version"), pendingVersion, "utf-8");
 
         // Clear update pending flag
@@ -5521,8 +5521,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
         const execAsync = promisify(execCb);
         const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
           cwd: process.env.PROJECT_ROOT || "/app",
@@ -5565,8 +5565,8 @@ export async function executeTool(
     case "admin_read_file": {
       const filePath = String(params.path ?? "");
       if (!filePath) return { success: false, error: "path is required.", message: "Provide a file path." };
-      const { resolve, join } = await import("path");
-      const { readFile } = await import("fs/promises");
+      const { resolve, join } = await import(/* turbopackIgnore: true */ "path");
+      const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
       const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(process.cwd(), "..", "..");
       const resolved = resolve(join(root, filePath));
       if (!resolved.startsWith(root)) {
@@ -5601,8 +5601,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_restart_service", { service }, "success", 2, `Restarting ${service}`);
         const { stdout } = await execAsync(`docker compose restart ${service} 2>&1`, {
@@ -5618,8 +5618,8 @@ export async function executeTool(
 
     case "admin_run_migration": {
       try {
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
         const { stdout, stderr } = await execAsync(
@@ -5636,8 +5636,8 @@ export async function executeTool(
 
     case "admin_run_seed": {
       try {
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
         const { stdout, stderr } = await execAsync(
@@ -5689,8 +5689,8 @@ export async function executeTool(
       }
 
       try {
-        const { exec: execCb } = await import("child_process");
-        const { promisify } = await import("util");
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
         const { stdout, stderr } = await execAsync(command + " 2>&1", {
