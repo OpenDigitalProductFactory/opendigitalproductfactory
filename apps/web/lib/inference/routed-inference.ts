@@ -270,10 +270,16 @@ export async function routeAndCall(
       decision.selectedEndpoint = preferredCandidate.endpointId;
       decision.selectedModelId = preferredCandidate.modelId;
       decision.reason = `Agent preference override: ${options.preferredProviderId} (was: ${origSelected}). ${decision.reason}`;
-      // Keep original + existing chain as fallbacks
+      // Keep original + existing chain as fallbacks, excluding the preferred provider's
+      // endpoints so the chain has provider diversity (different providers as fallbacks).
+      const preferredEndpointIds = new Set(
+        decision.candidates
+          .filter(c => c.providerId === options.preferredProviderId && !c.excluded)
+          .map(c => c.endpointId),
+      );
       decision.fallbackChain = [
         ...(origSelected ? [origSelected] : []),
-        ...decision.fallbackChain.filter(id => id !== options.preferredProviderId && id !== origSelected),
+        ...decision.fallbackChain.filter(id => !preferredEndpointIds.has(id) && id !== origSelected),
       ];
     }
   }
