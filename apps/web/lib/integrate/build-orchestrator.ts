@@ -49,25 +49,107 @@ export type BuildSummary = {
   totalTasks: number;
   completedTasks: number;
   failedTasks: number;
-  specialistSummaries: Array<{ role: SpecialistRole; outcome: string; status: SpecialistOutcome }>;
+  specialistSummaries: Array<{ role: SpecialistRole; taskTitle: string; outcome: string; status: SpecialistOutcome }>;
 };
 
-export function formatBuildCompleteMessage(summary: BuildSummary): string {
-  const status = `${summary.completedTasks}/${summary.totalTasks} tasks done`;
-  const failNote = summary.failedTasks > 0 ? `, ${summary.failedTasks} failed` : "";
-  const hasConcerns = summary.specialistSummaries.some(s => s.status === "DONE_WITH_CONCERNS");
-  const hasBlocked = summary.specialistSummaries.some(s => s.status === "BLOCKED" || s.status === "NEEDS_CONTEXT");
-  const outcomes = summary.specialistSummaries
-    .map(s => `- ${ROLE_LABELS[s.role]} [${s.status}]: ${s.outcome}`)
-    .join("\n");
+/**
+ * Sanitize raw Codex CLI / agentic loop output for user display.
+ * Strips leaked system prompt fragments, internal instructions, and
+ * token usage lines — extracts only the meaningful result summary.
+ */
+function sanitizeSpecialistOutput(raw: string): string {
+  // Common system prompt fragments that leak through Codex CLI output
+  const NOISE_PATTERNS = [
+    /You are a (?:data architect|software engineer|frontend engineer|QA engineer)[^]*?(?=\n\n|\n[A-Z])/gi,
+    /HEURISTICS:[\s\S]*?(?=\n\n[A-Z]|\n---|\n\n$)/gi,
+    /--- Running Spec[\s\S]*/gi,
+    /Decomposition:.*$/gm,
+    /Test-driven thinking:.*$/gm,
+    /Pattern reuse:.*$/gm,
+    /Key (?:files|patterns):[\s\S]*?(?=\n\n|\n[A-Z])/gi,
+    /Validate with:.*$/gm,
+    /After changes:.*$/gm,
+    /Then:?\s*pnpm.*$/gm,
+    /pnpm --filter.*$/gm,
+    /MAX \d+ SHORT SENTENCES.*$/gm,
+    /Never mention internal IDs.*$/gm,
+    /Lead the user through the phases.*$/gm,
+    /→ Review → Ship.*$/gm,
+    /tokens used[\s\S]*$/gi,
+  ];
 
-  if (hasBlocked || summary.failedTasks > 0) {
-    return `Build incomplete. ${status}${failNote}.\n${outcomes}\n\nSome tasks need attention before proceeding.`;
+  let cleaned = raw;
+  for (const pat of NOISE_PATTERNS) {
+    cleaned = cleaned.replace(pat, "");
   }
-  if (hasConcerns) {
-    return `Build complete with concerns. ${status}.\n${outcomes}\n\nReview flagged concerns before proceeding.`;
+  // Collapse multiple blank lines and trim
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
+  // If cleaning left almost nothing, fall back to last meaningful line
+  if (cleaned.length < 10 && raw.length > 10) {
+    const lines = raw.split("\n").filter(l => l.trim().length > 5);
+    cleaned = lines[lines.length - 1] ?? "Completed";
   }
-  return `Build complete. ${status}.\n${outcomes}\n\nReady for review?`;
+
+  return cleaned;
+}
+
+export function formatBuildCompleteMessage(summary: BuildSummary): string {
+  const { completedTasks, totalTasks, failedTasks } = summary;
+  const hasBlocked = summary.specialistSummaries.some(s => s.status === "BLOCKED" || s.status === "NEEDS_CONTEXT");
+
+  // Group tasks by status
+  const done = summary.specialistSummaries.filter(s => s.status === "DONE");
+  const concerns = summary.specialistSummaries.filter(s => s.status === "DONE_WITH_CONCERNS");
+  const blocked = summary.specialistSummaries.filter(s => s.status === "BLOCKED" || s.status === "NEEDS_CONTEXT");
+
+  const parts: string[] = [];
+
+  // Header
+  if (hasBlocked || failedTasks > 0) {
+    parts.push(`Build needs attention — ${completedTasks} of ${totalTasks} tasks completed, ${failedTasks} need review.`);
+  } else if (concerns.length > 0) {
+    parts.push(`Build completed with ${concerns.length} item${concerns.length > 1 ? "s" : ""} to review (${completedTasks}/${totalTasks} tasks done).`);
+  } else {
+    parts.push(`Build completed successfully — all ${totalTasks} tasks done.`);
+  }
+
+  // Completed tasks (concise list)
+  if (done.length > 0) {
+    parts.push("\nCompleted:");
+    for (const s of done) {
+      parts.push(`  - ${s.taskTitle}`);
+    }
+  }
+
+  // Concerns (show task title + sanitized detail)
+  if (concerns.length > 0) {
+    parts.push("\nNeeds review:");
+    for (const s of concerns) {
+      const detail = sanitizeSpecialistOutput(s.outcome);
+      parts.push(`  - ${s.taskTitle}${detail && detail !== s.taskTitle ? ` — ${detail.slice(0, 120)}` : ""}`);
+    }
+  }
+
+  // Blocked
+  if (blocked.length > 0) {
+    parts.push("\nBlocked:");
+    for (const s of blocked) {
+      const detail = sanitizeSpecialistOutput(s.outcome);
+      parts.push(`  - ${s.taskTitle}${detail ? ` — ${detail.slice(0, 120)}` : ""}`);
+    }
+  }
+
+  // Call to action
+  if (hasBlocked || failedTasks > 0) {
+    parts.push("\nSome tasks need attention before proceeding.");
+  } else if (concerns.length > 0) {
+    parts.push("\nReady for review?");
+  } else {
+    parts.push("\nReady for review?");
+  }
+
+  return parts.join("\n");
 }
 
 // ─── Specialist Outcome Protocol (Superpowers-inspired) ────────────────────
@@ -351,13 +433,9 @@ export async function runBuildOrchestrator(params: {
       allResults.push(sr);
 
       const roleLabel = ROLE_LABELS[sr.task.specialist];
-      const outcomeText = sr.outcome === "DONE"
-        ? sr.result.content.slice(0, 300)
-        : sr.outcome === "DONE_WITH_CONCERNS"
-          ? `[CONCERNS] ${sr.result.content.slice(0, 280)}`
-          : sr.outcome === "NEEDS_CONTEXT"
-            ? `[NEEDS_CONTEXT] ${sr.result.content.slice(0, 270)}`
-            : `[BLOCKED] after ${sr.retries} retries: ${sr.result.content.slice(0, 250)}`;
+      // Clean outcome for user-facing events; raw content stays in priorResultsSummary
+      // for downstream specialists who need the technical detail.
+      const cleanOutcome = sanitizeSpecialistOutput(sr.result.content.slice(0, 300));
 
       // Emit completion event with structured outcome
       agentEventBus.emit(parentThreadId, {
@@ -365,12 +443,12 @@ export async function runBuildOrchestrator(params: {
         buildId,
         taskTitle: sr.task.title,
         specialist: roleLabel,
-        outcome: outcomeText,
+        outcome: cleanOutcome,
         status: sr.outcome,
       });
 
-      // Accumulate context for downstream specialists (include status for awareness)
-      priorResultsSummary += `\n${roleLabel} [${sr.outcome}] (${sr.task.title}): ${outcomeText}`;
+      // Accumulate raw context for downstream specialists (they need the technical detail)
+      priorResultsSummary += `\n${roleLabel} [${sr.outcome}] (${sr.task.title}): ${sr.result.content.slice(0, 300)}`;
     }
 
     // Emit phase summary
@@ -423,14 +501,9 @@ export async function runBuildOrchestrator(params: {
     failedTasks,
     specialistSummaries: allResults.map(r => ({
       role: r.task.specialist,
+      taskTitle: r.task.title,
       status: r.outcome,
-      outcome: r.outcome === "DONE"
-        ? r.result.content.slice(0, 200)
-        : r.outcome === "DONE_WITH_CONCERNS"
-          ? `Completed with concerns: ${r.result.content.slice(0, 180)}`
-          : r.outcome === "NEEDS_CONTEXT"
-            ? `Needs context: ${r.result.content.slice(0, 180)}`
-            : `Blocked: ${r.result.content.slice(0, 180)}`,
+      outcome: sanitizeSpecialistOutput(r.result.content.slice(0, 300)),
     })),
   };
 

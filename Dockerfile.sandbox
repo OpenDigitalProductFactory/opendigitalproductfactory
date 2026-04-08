@@ -1,11 +1,17 @@
 FROM node:20-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache git postgresql16-client curl
+RUN apk add --no-cache git postgresql16-client curl bubblewrap
 # Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
 # Used by the Build Studio orchestrator to execute build tasks autonomously.
 RUN npm install -g @openai/codex
 RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
+# Codex CLI defaults: bypass internal sandbox (Docker IS the sandbox),
+# no approval prompts for non-interactive use.
+RUN mkdir -p /root/.codex && printf '%s\n' \
+  'sandbox_mode = "danger-full-access"' \
+  'approval_policy = "never"' \
+  > /root/.codex/config.toml
 WORKDIR /workspace
 # No secrets, no Docker socket
 # Resource limits applied at container creation

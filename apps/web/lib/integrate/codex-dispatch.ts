@@ -15,8 +15,10 @@ import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
-// Codex model — configurable, defaults to o4-mini (fast, tool-capable)
-const CODEX_MODEL = process.env.CODEX_MODEL ?? "o4-mini";
+// Codex model — configurable. When using ChatGPT auth, the backend assigns
+// the model (currently gpt-5.4); explicit model selection is rejected.
+// Set CODEX_MODEL="" to use the ChatGPT default, or "o4-mini" etc for API key auth.
+const CODEX_MODEL = process.env.CODEX_MODEL ?? "";
 
 // Timeout for a single Codex task (10 minutes — generous for complex tasks)
 const CODEX_TASK_TIMEOUT_MS = 600_000;
@@ -48,12 +50,17 @@ async function injectCodexAuth(): Promise<void> {
   //   TokenData { id_token: IdTokenInfo, access_token, refresh_token, account_id? }
   //   id_token serializes as a raw JWT string (custom serde: serialize_id_token)
   //   On deserialization, id_token JWT is parsed for claims: email, chatgpt_plan_type, etc.
-  //   Tests (token_data_tests.rs) show a minimal JWT with just {"sub":"x"} is accepted.
   //
-  // AuthDotJson { auth_mode: "chatgpt", tokens: TokenData }
+  // AuthDotJson { auth_mode, tokens: TokenData, last_refresh? }
   //
-  // If the access_token is already a JWT (which it is from OpenAI OAuth), use it directly.
-  // Otherwise construct a minimal JWT that satisfies the parser.
+  // auth_mode values (from binary): "chatgpt" | "chatgptAuthTokens" | "chatgptDeviceCode" | "apiKey"
+  //   - "chatgpt": browser-based login, expects refresh_token for token renewal
+  //   - "chatgptAuthTokens": externally-provided tokens, used as-is (what we need)
+  //   - "apiKey": OPENAI_API_KEY env var or auth.json OPENAI_API_KEY field
+  //
+  // The access_token from ChatGPT OAuth is a JWT with chatgpt_plan_type claim.
+  // Using "chatgptAuthTokens" tells Codex CLI to use the tokens directly without
+  // attempting refresh (which fails when refresh_token is empty).
   const accessToken = credential.cachedToken;
   const isJwt = accessToken.split(".").length === 3;
   const idToken = isJwt
@@ -63,13 +70,14 @@ async function injectCodexAuth(): Promise<void> {
       + ".";
 
   const authJson = JSON.stringify({
-    auth_mode: "chatgpt",
+    auth_mode: "chatgptAuthTokens",
     tokens: {
       access_token: accessToken,
       refresh_token: credential.refreshToken ?? "",
       id_token: idToken,
       account_id: null,
     },
+    last_refresh: new Date().toISOString(),
   });
 
   const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
@@ -202,14 +210,17 @@ export async function dispatchCodexTask(params: {
       { timeout: 5_000 },
     );
 
-    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
+    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL || "ChatGPT default"} in ${SANDBOX_CONTAINER}`);
 
     // Run Codex CLI with auth from ~/.codex/auth.json (written by injectCodexAuth)
-    // --full-auto: workspace-write sandbox, no approval prompts
+    // --dangerously-bypass-approvals-and-sandbox (--yolo): the sandbox container IS
+    //   the security boundary; bubblewrap fails without unprivileged user namespaces
+    //   in Docker, so we bypass Codex's internal sandbox entirely.
     // --skip-git-repo-check: sandbox workspace may not have git init yet
-    // Prompt read from temp file via stdin to avoid shell escaping
+    // Model: omitted when empty (ChatGPT auth assigns the model server-side)
+    const modelFlag = CODEX_MODEL ? `-m ${CODEX_MODEL}` : "";
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} < /tmp/codex-prompt.txt 2>&1"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt 2>&1"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CODEX_TASK_TIMEOUT_MS,
