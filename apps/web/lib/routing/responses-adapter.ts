@@ -83,6 +83,12 @@ function parseResponsesOutput(
         : {},
     }));
 
+  // Debug: log when output items exist but no tool calls matched
+  if (output && output.length > 0 && toolCalls.length === 0 && !text) {
+    const itemTypes = output.map(i => i.type).join(", ");
+    console.warn(`[responses-adapter] Output has ${output.length} items [${itemTypes}] but 0 tool calls and empty text.`);
+  }
+
   return { text, toolCalls };
 }
 
@@ -121,6 +127,19 @@ async function readResponsesPayload(
     } catch {
       // Ignore malformed SSE lines and keep scanning for the completed payload.
     }
+  }
+
+  // Log what we got so we can debug empty responses from codex/chatgpt
+  const eventTypes = lines
+    .filter(l => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map(l => { try { return (JSON.parse(l.slice(6)) as Record<string, unknown>).type; } catch { return "parse_error"; } });
+  const uniqueTypes = [...new Set(eventTypes)];
+  if (!lastCompleted && !lastDelta) {
+    console.warn(
+      `[responses-adapter] Empty response from ${providerId}. ` +
+      `SSE lines: ${lines.length}, event types: [${uniqueTypes.join(", ")}]. ` +
+      `First 500 chars: ${rawText.slice(0, 500)}`,
+    );
   }
 
   return (lastCompleted ?? {
