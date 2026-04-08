@@ -22,23 +22,7 @@ import type { SpecialistRole } from "./task-dependency-graph";
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
 import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
 import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
-
-// CLI dispatch provider: which CLI agent runs build tasks in the sandbox.
-//   "codex"   — OpenAI Codex CLI (default, backward compatible)
-//   "claude"  — Anthropic Claude Code CLI
-//   "agentic" — custom agentic loop (legacy fallback)
-//   "false"   — same as "agentic" (backward compat with old CODEX_DISPATCH=false)
-type CliDispatchProvider = "codex" | "claude" | "agentic";
-
-function resolveProvider(): CliDispatchProvider {
-  const raw = process.env.CLI_DISPATCH_PROVIDER ?? process.env.CODEX_DISPATCH;
-  if (raw === "claude") return "claude";
-  if (raw === "false" || raw === "agentic") return "agentic";
-  // Default: codex (preserves current behavior, including when CODEX_DISPATCH was unset or "true")
-  return "codex";
-}
-
-const CLI_DISPATCH_PROVIDER = resolveProvider();
+import { getBuildStudioConfig } from "./build-studio-config";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -285,10 +269,12 @@ async function dispatchSpecialist(params: {
   });
 
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
-  if (CLI_DISPATCH_PROVIDER === "codex" || CLI_DISPATCH_PROVIDER === "claude") {
-    const cliResult = CLI_DISPATCH_PROVIDER === "claude"
-      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults })
-      : await dispatchCodexTask({ task, buildId, buildContext, priorResults });
+  const config = await getBuildStudioConfig();
+
+  if (config.provider === "codex" || config.provider === "claude") {
+    const cliResult = config.provider === "claude"
+      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel })
+      : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel });
 
     const outcome = classifyOutcome(cliResult, role);
 
@@ -412,30 +398,29 @@ export async function runBuildOrchestrator(params: {
   // ─── Pre-flight check: verify CLI dispatch auth is available ─────────────
   // Catch missing OAuth tokens BEFORE dispatching 14 tasks that all fail with
   // the same auth error. One clear message is better than 14 cryptic ones.
-  if (CLI_DISPATCH_PROVIDER === "codex") {
+  const preflightConfig = await getBuildStudioConfig();
+
+  if (preflightConfig.provider === "codex" || preflightConfig.provider === "claude") {
     try {
       const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
-      const cred = await getDecryptedCredential("codex");
-      if (!cred?.cachedToken) {
+      const providerId = preflightConfig.provider === "claude"
+        ? preflightConfig.claudeProviderId
+        : preflightConfig.codexProviderId;
+      const cred = await getDecryptedCredential(providerId);
+      const hasAuth = preflightConfig.provider === "claude"
+        ? !!(cred?.cachedToken || cred?.secretRef)
+        : !!cred?.cachedToken;
+      if (!hasAuth) {
+        const label = preflightConfig.provider === "claude" ? "Claude / Anthropic" : "OpenAI / Codex";
         return {
-          content: "Build cannot start — the OpenAI/Codex provider is not connected.\n\nGo to Admin > AI Workforce, find OpenAI/Codex, and click Connect to log in. Once connected, try the build again.",
+          content: `Build cannot start — the ${label} provider "${providerId}" is not connected.\n\nGo to Admin > AI Workforce > External Services and configure credentials, or switch providers in Build Studio.`,
           totalTasks: 0, completedTasks: 0, failedTasks: 0,
           specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
         };
       }
     } catch {
       return {
-        content: "Build cannot start — could not verify AI provider credentials.\n\nGo to Admin > AI Workforce and ensure at least one code generation provider (OpenAI/Codex or Claude) is connected.",
-        totalTasks: 0, completedTasks: 0, failedTasks: 0,
-        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
-      };
-    }
-  }
-  if (CLI_DISPATCH_PROVIDER === "claude") {
-    const hasKey = !!process.env.ANTHROPIC_API_KEY;
-    if (!hasKey) {
-      return {
-        content: "Build cannot start — the Anthropic API key is not configured.\n\nSet ANTHROPIC_API_KEY in your environment or switch to Codex dispatch (CLI_DISPATCH_PROVIDER=codex).",
+        content: "Build cannot start — could not verify AI provider credentials.\n\nGo to Admin > AI Workforce and ensure at least one code generation provider is connected.",
         totalTasks: 0, completedTasks: 0, failedTasks: 0,
         specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
       };

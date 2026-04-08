@@ -17,17 +17,8 @@ import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
-// Claude Code model — configurable via env var. Default: sonnet (best cost/quality for builds).
-const CLAUDE_CODE_MODEL = process.env.CLAUDE_CODE_MODEL ?? "sonnet";
-
 // Timeout for a single Claude Code task (10 minutes — generous for complex tasks)
 const CLAUDE_TASK_TIMEOUT_MS = 600_000;
-
-// Auth mode: "oauth" for Max Plan (flat-rate), "apikey" for per-token API billing.
-// Default to oauth — dramatically more economical for build workloads.
-type ClaudeAuthMode = "oauth" | "apikey";
-const CLAUDE_AUTH_MODE: ClaudeAuthMode =
-  process.env.CLAUDE_CODE_AUTH_MODE === "apikey" ? "apikey" : "oauth";
 
 export type ClaudeResult = {
   content: string;       // Claude's response text
@@ -48,21 +39,24 @@ type ClaudeAuth =
   | { mode: "oauth"; tokenJson: string }
   | { mode: "apikey"; apiKey: string };
 
-async function resolveClaudeAuth(): Promise<ClaudeAuth> {
-  const credential = await getDecryptedCredential("claude-code");
+async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
+  const credential = await getDecryptedCredential(providerId);
 
-  if (CLAUDE_AUTH_MODE === "apikey") {
-    // API key mode: read from secretRef (the standard API key field) or cachedToken
+  // Auth mode is implicit in the provider ID:
+  //   "anthropic-sub" → OAuth (Max Plan subscription, flat-rate)
+  //   "anthropic"     → API key (per-token billing)
+  const isOAuth = providerId === "anthropic-sub";
+
+  if (!isOAuth) {
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
-      throw new Error("No Anthropic API key available. Configure via Admin > AI Workforce > Claude Code (set API key in the secret field).");
+      throw new Error(`No Anthropic API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
     }
     return { mode: "apikey", apiKey };
   }
 
-  // OAuth mode (default): Max Plan subscription token
   if (!credential?.cachedToken) {
-    throw new Error("No Claude Code OAuth token available. Log in via Admin > AI Workforce > Claude Code. (Tip: set CLAUDE_CODE_AUTH_MODE=apikey to use an API key instead.)");
+    throw new Error(`No OAuth token for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
   }
 
   const tokenJson = JSON.stringify({
@@ -148,14 +142,18 @@ export async function dispatchClaudeTask(params: {
   buildId: string;
   buildContext: string;
   priorResults?: string;
+  providerId?: string;
+  model?: string;
 }): Promise<ClaudeResult> {
   const { task, buildContext, priorResults } = params;
+  const providerId = params.providerId ?? "anthropic-sub";
+  const model = params.model ?? "sonnet";
   const role = task.specialist;
 
   // Resolve auth credentials (OAuth for Max Plan, or API key for per-token billing)
   let auth: ClaudeAuth;
   try {
-    auth = await resolveClaudeAuth();
+    auth = await resolveClaudeAuth(providerId);
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -214,7 +212,7 @@ export async function dispatchClaudeTask(params: {
     }
 
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
-    console.log(`[claude-dispatch] Starting task "${task.title}" with ${CLAUDE_CODE_MODEL} [${modeLabel}] in ${SANDBOX_CONTAINER}`);
+    console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}] in ${SANDBOX_CONTAINER}`);
 
     // Run Claude Code CLI.
     // --bare: skips local hooks, MCP configs, CLAUDE.md (clean for containers)
@@ -224,7 +222,7 @@ export async function dispatchClaudeTask(params: {
     // --model: explicit model selection (sonnet/opus/haiku)
     // Stderr redirected to /dev/null to avoid progress noise in output.
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude --bare -p - --dangerously-skip-permissions --output-format json --model ${CLAUDE_CODE_MODEL} < /tmp/claude-prompt.txt 2>/dev/null"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude --bare -p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CLAUDE_TASK_TIMEOUT_MS,

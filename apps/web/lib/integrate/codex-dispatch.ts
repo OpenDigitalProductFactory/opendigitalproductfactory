@@ -15,11 +15,6 @@ import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
-// Codex model — configurable. When using ChatGPT auth, the backend assigns
-// the model (currently gpt-5.4); explicit model selection is rejected.
-// Set CODEX_MODEL="" to use the ChatGPT default, or "o4-mini" etc for API key auth.
-const CODEX_MODEL = process.env.CODEX_MODEL ?? "";
-
 // Timeout for a single Codex task (10 minutes — generous for complex tasks)
 const CODEX_TASK_TIMEOUT_MS = 600_000;
 
@@ -40,10 +35,10 @@ export type CodexResult = {
  * We populate it with the OAuth tokens from the portal's credential store — the same tokens
  * used for ChatGPT Responses API calls (flat-rate subscription billing).
  */
-async function injectCodexAuth(): Promise<void> {
-  const credential = await getDecryptedCredential("codex");
+async function injectCodexAuth(providerId: string): Promise<void> {
+  const credential = await getDecryptedCredential(providerId);
   if (!credential?.cachedToken) {
-    throw new Error("No Codex OAuth token available. Log in via Admin > AI Workforce > OpenAI/Codex.");
+    throw new Error(`No OAuth token for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
   }
 
   // Auth.json format from openai/codex source (codex-rs/login/src/token_data.rs):
@@ -161,13 +156,17 @@ export async function dispatchCodexTask(params: {
   buildId: string;
   buildContext: string;
   priorResults?: string;
+  providerId?: string;
+  model?: string;
 }): Promise<CodexResult> {
   const { task, buildContext, priorResults } = params;
+  const providerId = params.providerId ?? "chatgpt";
+  const model = params.model ?? "";
   const role = task.specialist;
 
   // Write OAuth tokens to ~/.codex/auth.json in the sandbox container
   try {
-    await injectCodexAuth();
+    await injectCodexAuth(providerId);
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -210,7 +209,7 @@ export async function dispatchCodexTask(params: {
       { timeout: 5_000 },
     );
 
-    console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL || "ChatGPT default"} in ${SANDBOX_CONTAINER}`);
+    console.log(`[codex-dispatch] Starting task "${task.title}" with ${model || "ChatGPT default"} in ${SANDBOX_CONTAINER}`);
 
     // Run Codex CLI with auth from ~/.codex/auth.json (written by injectCodexAuth)
     // --dangerously-bypass-approvals-and-sandbox (--yolo): the sandbox container IS
@@ -218,7 +217,7 @@ export async function dispatchCodexTask(params: {
     //   in Docker, so we bypass Codex's internal sandbox entirely.
     // --skip-git-repo-check: sandbox workspace may not have git init yet
     // Model: omitted when empty (ChatGPT auth assigns the model server-side)
-    const modelFlag = CODEX_MODEL ? `-m ${CODEX_MODEL}` : "";
+    const modelFlag = model ? `-m ${model}` : "";
     // Capture only stdout (the final agent message). Stderr has progress/banner
     // noise ("Reading prompt from stdin...", "OpenAI Codex v0.118.0", etc.)
     // that pollutes results. Redirect stderr to /dev/null inside the shell.
