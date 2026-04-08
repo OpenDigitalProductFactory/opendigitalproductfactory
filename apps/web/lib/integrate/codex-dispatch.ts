@@ -28,16 +28,42 @@ export type CodexResult = {
 };
 
 /**
- * Get the OAuth bearer token for OpenAI/Codex from the portal's credential store.
- * This is the same token used for ChatGPT Responses API calls — flat-rate subscription billing.
+ * Write Codex CLI auth.json into the sandbox container.
+ *
+ * Codex CLI reads auth from ~/.codex/auth.json (source: codex-rs/login/src/auth/manager.rs).
+ * The JSON structure (from AuthDotJson struct):
+ *   { auth_mode, openai_api_key?, tokens?: { access_token, refresh_token, account_id? }, last_refresh? }
+ *
+ * We populate it with the OAuth tokens from the portal's credential store — the same tokens
+ * used for ChatGPT Responses API calls (flat-rate subscription billing).
  */
-async function getCodexToken(): Promise<string> {
-  const { getProviderBearerToken } = await import(/* turbopackIgnore: true */ "@/lib/inference/ai-provider-internals");
-  const result = await getProviderBearerToken("codex");
-  if ("error" in result) {
-    throw new Error(`Cannot get Codex OAuth token: ${result.error}. Configure OpenAI OAuth in Admin > AI Workforce.`);
+async function injectCodexAuth(): Promise<void> {
+  const { getDecryptedCredential } = await import(/* turbopackIgnore: true */ "@/lib/inference/ai-provider-internals");
+  const credential = await getDecryptedCredential("codex");
+  if (!credential?.cachedToken) {
+    throw new Error("No Codex OAuth token available. Log in via Admin > AI Workforce > OpenAI/Codex.");
   }
-  return result.token;
+
+  const authJson = JSON.stringify({
+    auth_mode: "ChatgptAuthTokens",
+    tokens: {
+      access_token: credential.cachedToken,
+      refresh_token: credential.refreshToken ?? "",
+      account_id: null,
+    },
+    last_refresh: new Date().toISOString(),
+  });
+
+  const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+  const { promisify } = await import(/* turbopackIgnore: true */ "util");
+  const execAsync = promisify(execCb);
+
+  // Write auth.json to ~/.codex/ in the sandbox container
+  const authB64 = Buffer.from(authJson).toString("base64");
+  await execAsync(
+    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.codex && echo '${authB64}' | base64 -d > /root/.codex/auth.json"`,
+    { timeout: 5_000 },
+  );
 }
 
 /**
@@ -113,10 +139,9 @@ export async function dispatchCodexTask(params: {
   const { task, buildContext, priorResults } = params;
   const role = task.specialist;
 
-  // Get OAuth token from the portal's credential store
-  let token: string;
+  // Write OAuth tokens to ~/.codex/auth.json in the sandbox container
   try {
-    token = await getCodexToken();
+    await injectCodexAuth();
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -161,12 +186,12 @@ export async function dispatchCodexTask(params: {
 
     console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
 
-    // Run Codex CLI with OAuth token injected as env var
+    // Run Codex CLI with auth from ~/.codex/auth.json (written by injectCodexAuth)
     // --full-auto: workspace-write sandbox, no approval prompts
     // --skip-git-repo-check: sandbox workspace may not have git init yet
     // Prompt read from temp file via stdin to avoid shell escaping
     const { stdout } = await execAsync(
-      `docker exec -e OPENAI_API_KEY=${token} ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} < /tmp/codex-prompt.txt 2>&1"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} < /tmp/codex-prompt.txt 2>&1"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CODEX_TASK_TIMEOUT_MS,
