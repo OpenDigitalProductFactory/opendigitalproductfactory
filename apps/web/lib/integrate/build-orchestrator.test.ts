@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
+import type { ClaudeResult } from "./claude-dispatch";
 
 function mockResult(overrides: Partial<AgenticResult> = {}): AgenticResult {
   return {
@@ -93,6 +94,42 @@ describe("classifyOutcome", () => {
       ],
     });
     expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+});
+
+describe("classifyOutcome — ClaudeResult (CLI dispatch)", () => {
+  function mockClaudeResult(overrides: Partial<ClaudeResult> = {}): ClaudeResult {
+    return {
+      content: overrides.content ?? "",
+      success: overrides.success ?? true,
+      executedTools: overrides.executedTools ?? [],
+      durationMs: overrides.durationMs ?? 1000,
+    };
+  }
+
+  it("returns DONE when Claude CLI succeeds with clean output", () => {
+    const result = mockClaudeResult({ content: "Created API routes and wired imports.", success: true });
+    expect(classifyOutcome(result, "software-engineer")).toBe("DONE");
+  });
+
+  it("returns DONE_WITH_CONCERNS when Claude CLI succeeds but output mentions errors", () => {
+    const result = mockClaudeResult({ content: "Applied migration but got a warning about missing index.", success: true });
+    expect(classifyOutcome(result, "data-architect")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("returns BLOCKED when Claude CLI fails with timeout", () => {
+    const result = mockClaudeResult({ content: "Task timed out after 600s.", success: false });
+    expect(classifyOutcome(result, "frontend-engineer")).toBe("BLOCKED");
+  });
+
+  it("returns DONE_WITH_CONCERNS when Claude CLI fails but output has error details", () => {
+    const result = mockClaudeResult({ content: "Typecheck failed with 3 errors.", success: false });
+    expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("returns BLOCKED when Claude CLI fails with no useful content", () => {
+    const result = mockClaudeResult({ content: "Auth token expired.", success: false });
+    expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
   });
 });
 

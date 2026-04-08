@@ -4,6 +4,9 @@ RUN apk add --no-cache git postgresql16-client curl bubblewrap
 # Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
 # Used by the Build Studio orchestrator to execute build tasks autonomously.
 RUN npm install -g @openai/codex
+# Claude Code CLI: Anthropic's coding agent.
+# Used alongside Codex CLI for Build Studio task dispatch.
+RUN npm install -g @anthropic-ai/claude-code
 RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
 # Codex CLI defaults: bypass internal sandbox (Docker IS the sandbox),
