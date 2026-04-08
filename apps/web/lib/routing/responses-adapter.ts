@@ -233,6 +233,18 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       body.tools = responseTools;
     }
 
+    // Debug: log the request for ChatGPT backend to diagnose empty tool responses
+    if (isChatGptBackend(providerId, provider.baseUrl)) {
+      const toolCount = (body.tools as unknown[] | undefined)?.length ?? 0;
+      const toolNames = (body.tools as Array<Record<string, unknown>> | undefined)?.map(t => t.name).slice(0, 5).join(", ") ?? "none";
+      const inputPreview = JSON.stringify(body.input).slice(0, 300);
+      console.log(
+        `[responses-adapter] REQUEST to ${responsesUrl} | model=${body.model} | ` +
+        `tools=${toolCount} [${toolNames}] | stream=${body.stream} | ` +
+        `input=${inputPreview}`,
+      );
+    }
+
     const startMs = Date.now();
     let res: Response;
     try {
@@ -259,15 +271,21 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
 
-    // Always log for codex/chatgpt until the tool issue is resolved
-    if ((providerId === "codex" || providerId === "chatgpt") && !parsed.text && parsed.toolCalls.length === 0) {
-      console.warn(
-        `[responses-adapter] ${providerId}/${modelId} returned empty text + 0 tool calls. ` +
-        `output items: ${data.output?.length ?? "null"}, ` +
-        `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
-        `raw keys: [${Object.keys(data).join(", ")}], ` +
-        `raw preview: ${JSON.stringify(data).slice(0, 500)}`,
-      );
+    // Always log for chatgpt backend until the tool issue is resolved
+    if (isChatGptBackend(providerId, provider.baseUrl)) {
+      if (!parsed.text && parsed.toolCalls.length === 0) {
+        console.warn(
+          `[responses-adapter] EMPTY RESPONSE from ${providerId}/${modelId}. ` +
+          `output items: ${data.output?.length ?? "null"}, ` +
+          `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
+          `raw: ${JSON.stringify(data).slice(0, 1000)}`,
+        );
+      } else {
+        console.log(
+          `[responses-adapter] OK from ${providerId}/${modelId}: ` +
+          `text=${parsed.text.length} chars, tools=${parsed.toolCalls.length} [${parsed.toolCalls.map(t => t.name).join(", ")}]`,
+        );
+      }
     }
 
     return {
