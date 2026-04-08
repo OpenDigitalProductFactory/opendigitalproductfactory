@@ -26,7 +26,7 @@
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
     "@prisma/adapter-pg": "^7.5.0",
-    "@prisma/client": "^7.5.0",
+    "@prisma/client": "^7.7.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.0",
     "i18n-iso-countries": "^7.14.0",
@@ -39,7 +39,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/pg": "^8.11.0",
-    "prisma": "^7.5.0",
+    "prisma": "^7.7.0",
     "tsx": "^4.15.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
