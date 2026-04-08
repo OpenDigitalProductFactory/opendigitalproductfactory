@@ -90,11 +90,11 @@
       "label": "DPF: Rebuild Production Runtime",
       "type": "shell",
       "command": "cmd",
-      "args": ["/c", "docker compose build portal portal-init && docker compose up -d portal-init && docker compose up -d portal"],
+      "args": ["/c", "docker compose build portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"],
       "options": { "cwd": "${workspaceFolder}" },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Rebuild the production runtime image from source and restart it (includes migrations)"
+      "detail": "Rebuild portal + sandbox images from source and restart (includes migrations)"
     },
     {
       "label": "DPF: Rebuild All",
