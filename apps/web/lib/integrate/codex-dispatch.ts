@@ -49,6 +49,7 @@ async function injectCodexAuth(): Promise<void> {
     tokens: {
       access_token: credential.cachedToken,
       refresh_token: credential.refreshToken ?? "",
+      id_token: credential.cachedToken,
       account_id: null,
     },
     last_refresh: new Date().toISOString(),
