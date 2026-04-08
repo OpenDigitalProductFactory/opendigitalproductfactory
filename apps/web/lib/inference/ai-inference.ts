@@ -137,13 +137,9 @@ async function resolveExecutionBaseUrl(
   providerId: string,
   provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
 ): Promise<string | null> {
-  if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
-    const chatgptProvider = await prisma.modelProvider.findUnique({
-      where: { providerId: "chatgpt" },
-      select: { baseUrl: true, endpoint: true },
-    });
-    return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
-  }
+  // Codex uses api.openai.com/v1 directly (standard Chat Completions API).
+  // Previously this redirected codex to chatgpt.com/backend-api which broke
+  // tool use — the SSE event parser didn't handle function call events.
   return provider.baseUrl ?? provider.endpoint;
 }
 
