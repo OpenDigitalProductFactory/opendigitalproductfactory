@@ -113,6 +113,8 @@ async function readResponsesPayload(
   const lines = rawText.split("\n");
   let lastCompleted: Record<string, unknown> | null = null;
   let lastDelta = "";
+  // Collect function call argument deltas keyed by output_index
+  const funcCallDeltas = new Map<string, { callId: string; name: string; args: string }>();
 
   for (const line of lines) {
     if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
@@ -124,17 +126,30 @@ async function readResponsesPayload(
       if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
         lastDelta += parsed.delta;
       }
+      // Capture function call events from the SSE stream
+      if (parsed.type === "response.output_item.added") {
+        const item = parsed.item as Record<string, unknown> | undefined;
+        if (item?.type === "function_call" && item.name) {
+          const idx = String(parsed.output_index ?? "0");
+          funcCallDeltas.set(idx, { callId: String(item.call_id ?? ""), name: String(item.name), args: "" });
+        }
+      }
+      if (parsed.type === "response.function_call_arguments.delta" && typeof parsed.delta === "string") {
+        const idx = String(parsed.output_index ?? "0");
+        const existing = funcCallDeltas.get(idx);
+        if (existing) existing.args += parsed.delta;
+      }
     } catch {
       // Ignore malformed SSE lines and keep scanning for the completed payload.
     }
   }
 
-  // Log what we got so we can debug empty responses from codex/chatgpt
+  // Log what we got for diagnostics
   const eventTypes = lines
     .filter(l => l.startsWith("data: ") && l !== "data: [DONE]")
     .map(l => { try { return (JSON.parse(l.slice(6)) as Record<string, unknown>).type; } catch { return "parse_error"; } });
   const uniqueTypes = [...new Set(eventTypes)];
-  if (!lastCompleted && !lastDelta) {
+  if (!lastCompleted && !lastDelta && funcCallDeltas.size === 0) {
     console.warn(
       `[responses-adapter] Empty response from ${providerId}. ` +
       `SSE lines: ${lines.length}, event types: [${uniqueTypes.join(", ")}]. ` +
@@ -142,9 +157,37 @@ async function readResponsesPayload(
     );
   }
 
-  return (lastCompleted ?? {
-    output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }],
-  }) as {
+  // Prefer response.completed (contains full output with tool calls).
+  // If not present, reconstruct output from collected deltas.
+  if (lastCompleted) {
+    return lastCompleted as {
+      output?: ResponsesOutputItem[];
+      output_text?: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+  }
+
+  // Build synthetic output from collected function call deltas
+  const syntheticOutput: ResponsesOutputItem[] = [];
+  for (const [, fc] of funcCallDeltas) {
+    syntheticOutput.push({
+      type: "function_call",
+      call_id: fc.callId,
+      name: fc.name,
+      arguments: fc.args,
+    } as unknown as ResponsesOutputItem);
+  }
+  if (lastDelta || syntheticOutput.length === 0) {
+    syntheticOutput.push({
+      type: "message",
+      content: [{ type: "output_text", text: lastDelta }],
+    } as unknown as ResponsesOutputItem);
+  }
+
+  return {
+    output: syntheticOutput,
+    output_text: lastDelta || undefined,
+  } as {
     output?: ResponsesOutputItem[];
     output_text?: string;
     usage?: { input_tokens?: number; output_tokens?: number };
