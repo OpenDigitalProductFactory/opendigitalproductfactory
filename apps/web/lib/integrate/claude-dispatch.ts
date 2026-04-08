@@ -36,7 +36,7 @@ export type ClaudeResult = {
  *   $100 in a few hours vs. 5+ days on Max Plan.
  */
 type ClaudeAuth =
-  | { mode: "oauth"; tokenJson: string }
+  | { mode: "oauth"; tokenJson: string }  // raw access token string (sk-ant-oat01-...)
   | { mode: "apikey"; apiKey: string };
 
 async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
@@ -59,13 +59,9 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
     throw new Error(`No OAuth token for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
   }
 
-  const tokenJson = JSON.stringify({
-    accessToken: credential.cachedToken,
-    refreshToken: credential.refreshToken ?? "",
-    expiresAt: credential.tokenExpiresAt?.toISOString() ?? "",
-  });
-
-  return { mode: "oauth", tokenJson };
+  // CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string (sk-ant-oat01-...),
+  // NOT a JSON object. The JSON format is for ~/.claude/.credentials.json only.
+  return { mode: "oauth", tokenJson: credential.cachedToken };
 }
 
 /**
@@ -189,40 +185,48 @@ export async function dispatchClaudeTask(params: {
     const { promisify } = await import(/* turbopackIgnore: true */ "util");
     const execAsync = promisify(execCb);
 
-    // Write prompt to temp file in sandbox (avoids all shell escaping issues)
+    // Write prompt to temp file in sandbox (avoids all shell escaping issues).
+    // chmod 644 so the non-root node user can read it.
     const promptB64 = Buffer.from(taskPrompt).toString("base64");
     await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/claude-prompt.txt"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/claude-prompt.txt && chmod 644 /tmp/claude-prompt.txt"`,
       { timeout: 5_000 },
     );
 
-    // Inject auth credentials into the sandbox container
+    // Inject auth credentials into the sandbox container.
+    // Claude Code CLI must run as non-root (--dangerously-skip-permissions refuses root).
+    // OAuth mode: CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string, NOT JSON.
+    //   --bare is NOT used — it disables OAuth (only allows ANTHROPIC_API_KEY).
+    // API key mode: ANTHROPIC_API_KEY with --bare for clean isolation.
     let authEnvFragment: string;
+    let useBareflag: boolean;
     if (auth.mode === "oauth") {
-      // OAuth (Max Plan): write token JSON to temp file, read at exec time
+      // OAuth (Max Plan): write raw token to temp file, read at exec time
       const tokenB64 = Buffer.from(auth.tokenJson).toString("base64");
       await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.json"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.txt && chmod 644 /tmp/claude-oauth-token.txt"`,
         { timeout: 5_000 },
       );
-      authEnvFragment = "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.json)";
+      authEnvFragment = "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.txt)";
+      useBareflag = false;  // --bare disables OAuth
     } else {
       // API key: inject directly as env var (simple string, no escaping issues)
       authEnvFragment = `ANTHROPIC_API_KEY=${auth.apiKey}`;
+      useBareflag = true;   // --bare is safe with API key
     }
 
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
+    const bareFlag = useBareflag ? "--bare " : "";
     console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}] in ${SANDBOX_CONTAINER}`);
 
-    // Run Claude Code CLI.
-    // --bare: skips local hooks, MCP configs, CLAUDE.md (clean for containers)
+    // Run Claude Code CLI as non-root user (node, uid 1000).
     // -p -: read prompt from stdin (piped from temp file)
-    // --dangerously-skip-permissions: Docker IS the sandbox
+    // --dangerously-skip-permissions: Docker IS the sandbox (refuses root)
     // --output-format json: structured JSON output with { result, session_id, usage }
     // --model: explicit model selection (sonnet/opus/haiku)
     // Stderr redirected to /dev/null to avoid progress noise in output.
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude --bare -p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
+      `docker exec --user node ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude ${bareFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CLAUDE_TASK_TIMEOUT_MS,
