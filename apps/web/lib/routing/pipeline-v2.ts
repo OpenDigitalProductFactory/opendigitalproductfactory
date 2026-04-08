@@ -347,7 +347,28 @@ export async function routeEndpointV2(
 
   // ── Stage 6: Select winner + build fallback chain ──────────────────────
   const winner = ranked[0]!;
-  const fallbackEntries = ranked.slice(1, 4); // up to 3 fallbacks
+  // Select up to 3 fallbacks, preferring provider diversity.
+  // If all top-ranked endpoints are from the same provider and that provider
+  // goes down (or runs out of credits), retrying the same provider is useless.
+  const fallbackEntries: typeof ranked = [];
+  const seenProviders = new Set([winner.endpoint.providerId]);
+  for (const candidate of ranked.slice(1)) {
+    if (fallbackEntries.length >= 3) break;
+    // Prefer a new provider; if we haven't found 3 diverse ones, accept same-provider
+    if (!seenProviders.has(candidate.endpoint.providerId)) {
+      fallbackEntries.push(candidate);
+      seenProviders.add(candidate.endpoint.providerId);
+    }
+  }
+  // If we didn't fill 3 slots from diverse providers, fill remainder from same-provider
+  if (fallbackEntries.length < 3) {
+    for (const candidate of ranked.slice(1)) {
+      if (fallbackEntries.length >= 3) break;
+      if (!fallbackEntries.includes(candidate)) {
+        fallbackEntries.push(candidate);
+      }
+    }
+  }
 
   // EP-INF-005b/006: Recipe lookup with exploration selection
   const { recipe, explorationMode } = await selectRecipeWithExploration(
