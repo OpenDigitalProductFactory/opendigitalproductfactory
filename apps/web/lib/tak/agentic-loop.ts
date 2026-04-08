@@ -15,11 +15,14 @@ import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-ti
 // runaway loops. The model decides when it's done.
 // Safety nets — the loop exits naturally when the model responds with text-only.
 // These prevent infinite loops from bugs, not from normal workflows.
-const MAX_ITERATIONS = 20;
+const MAX_ITERATIONS = 25;
 
 // Hard cap on inference calls per loop invocation. Each call to a frontier model
 // is expensive — this prevents runaway costs if the iteration counter is gamed.
-const MAX_INFERENCE_CALLS = 15;
+// Phase-aware: ideate/plan do heavy research (many reads, few writes) and need more room.
+// Build specialists should complete focused tasks quickly.
+const MAX_INFERENCE_CALLS_DEFAULT = 20;
+const MAX_INFERENCE_CALLS_BUILD = 15;  // tighter for build specialists
 
 // ─── Duration limits by task type ──────────────────────────────────────────
 // Tighter limits than before — runaway loops burned significant API budget.
@@ -413,9 +416,14 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Hard inference call budget — prevents cost runaway regardless of iteration count
-    if (inferenceCallCount >= MAX_INFERENCE_CALLS) {
-      console.warn(`[agentic-loop] hit MAX_INFERENCE_CALLS (${MAX_INFERENCE_CALLS}). Stopping to prevent cost overrun.`);
+    // Hard inference call budget — phase-aware. Build specialists get tighter limits;
+    // ideate/plan phases need more calls for research (many file reads, schema lookups).
+    const inferenceLimit = executedTools.some(t =>
+      t.name === "launch_sandbox" || t.name === "start_build" || t.name === "generate_code" ||
+      t.name === "write_sandbox_file" || t.name === "edit_sandbox_file"
+    ) ? MAX_INFERENCE_CALLS_BUILD : MAX_INFERENCE_CALLS_DEFAULT;
+    if (inferenceCallCount >= inferenceLimit) {
+      console.warn(`[agentic-loop] hit MAX_INFERENCE_CALLS (${inferenceLimit}). Stopping to prevent cost overrun.`);
       break;
     }
 
