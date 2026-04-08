@@ -29,7 +29,7 @@ const USE_CODEX_CLI = process.env.CODEX_DISPATCH !== "false";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const MAX_DURATION_ORCHESTRATOR_MS = 1_200_000; // 20 minutes
+const MAX_DURATION_ORCHESTRATOR_MS = 2_400_000; // 40 minutes — tasks average 2 min, 14-task builds need ~30 min
 const MAX_SPECIALIST_RETRIES = 2;
 
 // ─── Communication Templates ────────────────────────────────────────────────
@@ -502,6 +502,29 @@ export async function runBuildOrchestrator(params: {
     } catch (err) {
       console.error("[orchestrator] Failed to save verification evidence:", err);
     }
+  }
+
+  // Persist task results to the FeatureBuild so partial completions are recorded
+  // and the phase gate can evaluate even after a timeout.
+  try {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    await executeTool("saveBuildEvidence", {
+      field: "taskResults",
+      value: {
+        completedTasks: allResults.filter(r => r.success).length,
+        totalTasks,
+        timedOut: Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS,
+        tasks: allResults.map(r => ({
+          title: r.task.title,
+          specialist: r.task.specialist,
+          outcome: r.outcome,
+          durationMs: "durationMs" in r.result ? r.result.durationMs : 0,
+        })),
+        timestamp: new Date().toISOString(),
+      },
+    }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+  } catch (err) {
+    console.error("[orchestrator] Failed to save task results:", err);
   }
 
   // Synthesize final result
