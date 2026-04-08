@@ -45,7 +45,7 @@ async function injectCodexAuth(): Promise<void> {
   }
 
   const authJson = JSON.stringify({
-    auth_mode: "ChatgptAuthTokens",
+    auth_mode: "chatgptAuthTokens",
     tokens: {
       access_token: credential.cachedToken,
       refresh_token: credential.refreshToken ?? "",
