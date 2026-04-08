@@ -15,14 +15,11 @@ import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-ti
 // runaway loops. The model decides when it's done.
 // Safety nets — the loop exits naturally when the model responds with text-only.
 // These prevent infinite loops from bugs, not from normal workflows.
-const MAX_ITERATIONS = 25;
-
-// Hard cap on inference calls per loop invocation. Each call to a frontier model
-// is expensive — this prevents runaway costs if the iteration counter is gamed.
-// Phase-aware: ideate/plan do heavy research (many reads, few writes) and need more room.
-// Build specialists should complete focused tasks quickly.
-const MAX_INFERENCE_CALLS_DEFAULT = 20;
-const MAX_INFERENCE_CALLS_BUILD = 15;  // tighter for build specialists
+// Safety ceiling — the loop exits naturally when the model responds with text-only
+// (no tool calls). This limit only catches true infinite loops from bugs.
+// The actual guardrails are: sandbox circuit breaker, repetition detector, duration
+// limits, and nudge caps. Not arbitrary iteration/inference caps.
+const MAX_ITERATIONS = 200;
 
 // ─── Duration limits by task type ──────────────────────────────────────────
 // Tighter limits than before — runaway loops burned significant API budget.
@@ -30,10 +27,10 @@ const MAX_INFERENCE_CALLS_BUILD = 15;  // tighter for build specialists
 // complete a focused task quickly, not run for 10 minutes.
 
 const MAX_DURATION_MS = 120_000;          // 2 min — normal conversation
-const MAX_DURATION_BUILD_MS = 180_000;    // 3 min — sandbox code gen per specialist
-const MAX_DURATION_PLAN_MS = 180_000;     // 3 min — ideate/plan phases
-const MAX_DURATION_REVIEW_MS = 120_000;   // 2 min — review
-const MAX_DURATION_SHIP_MS = 180_000;     // 3 min — ship
+const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen
+const MAX_DURATION_PLAN_MS = 600_000;     // 10 min — ideate/plan (heavy research)
+const MAX_DURATION_REVIEW_MS = 300_000;   // 5 min — review
+const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship
 const MAX_AGENTIC_HISTORY_MESSAGES = 24;
 const MAX_TOOL_RESULT_CHARS = 1_500;
 const MAX_TEXT_MESSAGE_CHARS = 4_000;
@@ -416,16 +413,12 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Hard inference call budget — phase-aware. Build specialists get tighter limits;
-    // ideate/plan phases need more calls for research (many file reads, schema lookups).
-    const inferenceLimit = executedTools.some(t =>
-      t.name === "launch_sandbox" || t.name === "start_build" || t.name === "generate_code" ||
-      t.name === "write_sandbox_file" || t.name === "edit_sandbox_file"
-    ) ? MAX_INFERENCE_CALLS_BUILD : MAX_INFERENCE_CALLS_DEFAULT;
-    if (inferenceCallCount >= inferenceLimit) {
-      console.warn(`[agentic-loop] hit MAX_INFERENCE_CALLS (${inferenceLimit}). Stopping to prevent cost overrun.`);
-      break;
-    }
+    // No artificial inference call cap. The loop exits when the model responds with
+    // text-only (natural completion). Runaway protection comes from:
+    // - Sandbox circuit breaker (2 failures → immediate abort)
+    // - Repetition detector (same tool+args 3x → break with message)
+    // - Duration limits (phase-aware time ceilings)
+    // - Nudge cap (1 nudge max, then accept the response)
 
     // Sandbox circuit breaker — if sandbox is consistently unavailable, stop trying sandbox tools
     // and surface the error so the user can start a sandbox rather than spinning expensively.
