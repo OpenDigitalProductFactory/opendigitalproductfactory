@@ -14,10 +14,8 @@ export function isOpenAI(providerId: string): boolean {
 }
 
 export function usesResponsesApi(providerId: string): boolean {
-  // Only chatgpt uses the Responses API (chatgpt.com/backend-api).
-  // Codex uses api.openai.com/v1 which supports standard Chat Completions
-  // with tool use — the same format as GPT-4o. Routing codex through the
-  // Responses API caused empty responses because the SSE event parser
-  // didn't capture function call events from the ChatGPT backend.
-  return providerId === "chatgpt";
+  // Both codex and chatgpt use the Responses API via chatgpt.com/backend-api.
+  // This routes through the ChatGPT subscription (flat-rate billing) rather
+  // than the per-token API. The SSE parser now captures function call events.
+  return providerId === "codex" || providerId === "chatgpt";
 }
