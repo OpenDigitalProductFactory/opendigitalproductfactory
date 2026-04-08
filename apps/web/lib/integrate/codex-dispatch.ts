@@ -44,15 +44,31 @@ async function injectCodexAuth(): Promise<void> {
     throw new Error("No Codex OAuth token available. Log in via Admin > AI Workforce > OpenAI/Codex.");
   }
 
-  // Auth.json format verified from nearai/ironclaw (src/llm/codex_auth.rs)
-  // which reads/writes ~/.codex/auth.json for headless Codex CLI usage.
-  // ChatGPT mode uses "chatgpt" (not "chatgptAuthTokens") and only needs
-  // access_token + refresh_token. No id_token or account_id required.
+  // Auth.json format from openai/codex source (codex-rs/login/src/token_data.rs):
+  //   TokenData { id_token: IdTokenInfo, access_token, refresh_token, account_id? }
+  //   id_token serializes as a raw JWT string (custom serde: serialize_id_token)
+  //   On deserialization, id_token JWT is parsed for claims: email, chatgpt_plan_type, etc.
+  //   Tests (token_data_tests.rs) show a minimal JWT with just {"sub":"x"} is accepted.
+  //
+  // AuthDotJson { auth_mode: "chatgpt", tokens: TokenData }
+  //
+  // If the access_token is already a JWT (which it is from OpenAI OAuth), use it directly.
+  // Otherwise construct a minimal JWT that satisfies the parser.
+  const accessToken = credential.cachedToken;
+  const isJwt = accessToken.split(".").length === 3;
+  const idToken = isJwt
+    ? accessToken
+    : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
+      + "." + Buffer.from('{"sub":"dpf"}').toString("base64url")
+      + ".";
+
   const authJson = JSON.stringify({
     auth_mode: "chatgpt",
     tokens: {
-      access_token: credential.cachedToken,
+      access_token: accessToken,
       refresh_token: credential.refreshToken ?? "",
+      id_token: idToken,
+      account_id: null,
     },
   });
 
