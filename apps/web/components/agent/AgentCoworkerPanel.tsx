@@ -119,11 +119,19 @@ export function AgentCoworkerPanel({
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [orchestratorStatus, setOrchestratorStatus] = useState<string | null>(null);
+  const [buildLog, setBuildLog] = useState<Array<{ time: string; text: string; status?: string }>>([]);
+  const buildLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!isBusy) { setThinkingSeconds(0); return; }
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [isBusy]);
+  // Auto-scroll build log to bottom when new entries arrive
+  useEffect(() => {
+    if (buildLogRef.current) {
+      buildLogRef.current.scrollTop = buildLogRef.current.scrollHeight;
+    }
+  }, [buildLog.length]);
 
   // SSE for tool-level progress, orchestrator status, and async completion
   useEffect(() => {
@@ -134,21 +142,33 @@ export function AgentCoworkerPanel({
         const data = JSON.parse(event.data);
         if (data.type === "tool:start") setCurrentTool(data.tool);
         if (data.type === "tool:complete") setCurrentTool(null);
-        // Orchestrator progress — show specialist status to user
+        // Orchestrator progress — show specialist status + append to scrolling log
+        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         if (data.type === "orchestrator:build_started") {
-          setOrchestratorStatus(`Starting build: ${data.taskCount} tasks across ${data.specialists.length} specialists`);
+          const text = `Build started: ${data.taskCount} tasks, ${data.specialists.length} specialists`;
+          setOrchestratorStatus(text);
+          setBuildLog((prev) => [...prev, { time: now, text }]);
         }
         if (data.type === "orchestrator:task_dispatched") {
-          setOrchestratorStatus(`${data.specialist} working on: ${data.taskTitle}`);
+          const text = `${data.specialist} working on: ${data.taskTitle}`;
+          setOrchestratorStatus(text);
+          setBuildLog((prev) => [...prev, { time: now, text, status: "working" }]);
         }
         if (data.type === "orchestrator:task_complete") {
+          const status = data.status === "DONE" ? "done" : data.status === "DONE_WITH_CONCERNS" ? "concern" : "blocked";
+          const text = `${data.specialist}: ${data.taskTitle}`;
           setOrchestratorStatus(`${data.specialist} complete`);
+          setBuildLog((prev) => [...prev, { time: now, text, status }]);
         }
         if (data.type === "orchestrator:phase_summary") {
-          setOrchestratorStatus(`${data.completed}/${data.total} tasks done`);
+          const text = `Phase complete: ${data.completed}/${data.total} tasks done`;
+          setOrchestratorStatus(text);
+          setBuildLog((prev) => [...prev, { time: now, text, status: "phase" }]);
         }
         if (data.type === "orchestrator:specialist_retry") {
-          setOrchestratorStatus(`Retrying ${data.specialist} (attempt ${data.attempt})`);
+          const text = `Retrying ${data.specialist} (attempt ${data.attempt})`;
+          setOrchestratorStatus(text);
+          setBuildLog((prev) => [...prev, { time: now, text, status: "retry" }]);
         }
         // EP-ASYNC-COWORKER-001: error event — show in chat
         if (data.type === "error") {
@@ -165,6 +185,7 @@ export function AgentCoworkerPanel({
         if (data.type === "done") {
           setCurrentTool(null);
           setOrchestratorStatus(null);
+          setBuildLog([]);
 
           // Apply ephemeral data not stored in DB
           if (data.providerInfo) {
@@ -548,10 +569,14 @@ export function AgentCoworkerPanel({
                 background: "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
                 color: "var(--dpf-muted)",
                 display: "flex",
-                alignItems: "center",
+                flexDirection: "column",
                 gap: 6,
+                maxWidth: "100%",
+                minWidth: 0,
               }}
             >
+              {/* Current status line */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 11 }}>
                 {isClearing
                   ? "Clearing conversation"
@@ -607,6 +632,42 @@ export function AgentCoworkerPanel({
                 </button>
               )}
             </div>
+              {/* Scrolling build activity log */}
+              {buildLog.length > 0 && (
+                <div
+                  ref={buildLogRef}
+                  style={{
+                    maxHeight: 160,
+                    overflowY: "auto",
+                    borderTop: "1px solid color-mix(in srgb, var(--dpf-border) 50%, transparent)",
+                    paddingTop: 6,
+                    marginTop: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  {buildLog.map((entry, i) => {
+                    const dot = entry.status === "done" ? "\u2713"
+                      : entry.status === "concern" ? "!"
+                      : entry.status === "blocked" ? "\u2717"
+                      : entry.status === "retry" ? "\u21BB"
+                      : entry.status === "phase" ? "\u2500"
+                      : "\u2022";
+                    const color = entry.status === "done" ? "var(--dpf-success)"
+                      : entry.status === "concern" ? "var(--dpf-warning, #e5a100)"
+                      : entry.status === "blocked" ? "var(--dpf-error)"
+                      : "var(--dpf-muted)";
+                    return (
+                      <div key={i} style={{ display: "flex", gap: 6, fontSize: 10, lineHeight: 1.4, color: "var(--dpf-muted)" }}>
+                        <span style={{ color: "color-mix(in srgb, var(--dpf-muted) 60%, transparent)", flexShrink: 0 }}>{entry.time}</span>
+                        <span style={{ color, flexShrink: 0, width: 10, textAlign: "center" }}>{dot}</span>
+                        <span style={{ color: "var(--dpf-text-secondary, var(--dpf-muted))" }}>{entry.text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             <style>{`
               @keyframes dpf-bounce {
                 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
@@ -617,6 +678,7 @@ export function AgentCoworkerPanel({
                 50% { opacity: 1; transform: scale(1.05); }
               }
             `}</style>
+            </div>
           </div>
         )}
         <div ref={messagesEndRef} />
