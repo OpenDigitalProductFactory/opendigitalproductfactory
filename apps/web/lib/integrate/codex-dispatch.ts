@@ -132,9 +132,11 @@ export async function dispatchCodexTask(params: {
   const startMs = Date.now();
 
   try {
-    // Run Codex CLI in quiet mode with full-auto approval
-    // Working directory is /workspace (the sandbox project root)
-    const command = `cd /workspace && CODEX_QUIET_MODE=1 codex -q -a full-auto -m ${CODEX_MODEL} "${escapedPrompt}" 2>&1`;
+    // Run Codex CLI non-interactively with full-auto approval
+    // codex exec: non-interactive mode (replaces the old -q flag)
+    // --full-auto: workspace-write sandbox, no approval prompts
+    // --skip-git-repo-check: sandbox workspace may not have a git repo yet
+    const command = `cd /workspace && codex exec --full-auto --skip-git-repo-check -m ${CODEX_MODEL} "${escapedPrompt}" 2>&1`;
 
     console.log(`[codex-dispatch] Starting task "${task.title}" with ${CODEX_MODEL} in ${SANDBOX_CONTAINER}`);
 
