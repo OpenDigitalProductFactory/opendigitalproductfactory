@@ -1,7 +1,7 @@
 # Build Studio Configuration Tab
 
 **Date:** 2026-04-08
-**Status:** Draft
+**Status:** Implemented
 **Author:** Mark Bodman + Claude
 **Depends on:** Claude Code CLI Dispatch (2026-04-08-claude-code-cli-dispatch-design.md)
 
