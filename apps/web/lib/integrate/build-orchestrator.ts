@@ -639,20 +639,42 @@ export async function runBuildOrchestrator(params: {
 
   // Persist task results to the FeatureBuild so partial completions are recorded
   // and the phase gate can evaluate even after a timeout.
+  // IMPORTANT: Merge newly dispatched results with previously completed (skipped) tasks
+  // so a resume run doesn't overwrite prior successes with an empty list.
   try {
     const { executeTool } = await import("@/lib/mcp-tools");
+
+    // Build combined task list: skipped tasks (from prior run) + newly dispatched tasks
+    const newTaskResults = allResults.map(r => ({
+      title: r.task.title,
+      specialist: r.task.specialist,
+      outcome: r.outcome,
+      durationMs: "durationMs" in r.result ? r.result.durationMs : 0,
+    }));
+    const newTaskTitles = new Set(newTaskResults.map(t => t.title));
+
+    // Re-read stored results to preserve skipped tasks
+    let priorTasks: StoredTaskResult[] = [];
+    try {
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { taskResults: true },
+      });
+      const stored = build?.taskResults as { tasks?: StoredTaskResult[] } | null;
+      // Keep prior tasks that weren't re-dispatched this run
+      priorTasks = (stored?.tasks ?? []).filter(t => !newTaskTitles.has(t.title));
+    } catch { /* ignore — just save what we have */ }
+
+    const mergedTasks = [...priorTasks, ...newTaskResults];
+    const completedCount = mergedTasks.filter(t => t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS").length;
+
     await executeTool("saveBuildEvidence", {
       field: "taskResults",
       value: {
-        completedTasks: allResults.filter(r => r.success).length,
+        completedTasks: completedCount,
         totalTasks,
         timedOut: Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS,
-        tasks: allResults.map(r => ({
-          title: r.task.title,
-          specialist: r.task.specialist,
-          outcome: r.outcome,
-          durationMs: "durationMs" in r.result ? r.result.durationMs : 0,
-        })),
+        tasks: mergedTasks,
         timestamp: new Date().toISOString(),
       },
     }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
