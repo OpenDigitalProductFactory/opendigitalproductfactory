@@ -57,7 +57,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
         // only support Codex's built-in tools (apply_patch, shell, etc.), not
         // custom function tools. Setting toolUse=false prevents the routing
         // pipeline from selecting codex for tasks that need custom tools.
-        toolUse: false,
+        toolUse: true,
         streaming: true,
         structuredOutput: true,
       },
@@ -71,8 +71,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$$",
       bestFor: ["coding", "reasoning"],
       avoidFor: ["conversation", "custom-tool-use"],
-      defaultStatus: "disabled",
-      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
+      defaultStatus: "active",
       scores: {
         reasoning: 88,
         codegen: 96,
@@ -91,7 +90,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       qualityTier: "strong",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        toolUse: false,
+        toolUse: true,
         streaming: true,
         structuredOutput: true,
       },
@@ -126,7 +125,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        toolUse: false,
+        toolUse: true,
         streaming: true,
         structuredOutput: true,
       },
@@ -140,8 +139,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$$$",
       bestFor: ["coding", "reasoning"],
       avoidFor: ["custom-tool-use"],
-      defaultStatus: "disabled",
-      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
+      defaultStatus: "active",
       scores: {
         reasoning: 95,
         codegen: 97,
@@ -165,7 +163,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
         ...EMPTY_CAPABILITIES,
         // toolUse: false — ChatGPT backend /codex/responses does not support
         // custom function tools. Only Codex's built-in tools work.
-        toolUse: false,
+        toolUse: true,
         structuredOutput: true,
         streaming: true,
         imageInput: true,
@@ -180,8 +178,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "subscription",
       bestFor: ["conversation", "coding", "reasoning"],
       avoidFor: ["custom-tool-use"],
-      defaultStatus: "disabled",
-      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
+      defaultStatus: "active",
       scores: {
         reasoning: 85,
         codegen: 90,
