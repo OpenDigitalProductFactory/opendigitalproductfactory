@@ -980,12 +980,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "search_project_files",
-    description: "Search the project codebase for a text pattern. Returns matching file paths, line numbers, and context.",
+    description: "Search the project codebase for a text pattern. The query parameter is the text to search for (e.g. 'voucher', 'student'). The glob parameter is an OPTIONAL file type filter (e.g. '*.ts'). Do NOT combine them — use query='voucher' and glob='*.prisma' as separate parameters, NOT query='voucher:*.prisma'.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Text or regex pattern to search for" },
-        glob: { type: "string", description: "File glob filter, e.g. '*.ts' or '*.tsx'" },
+        query: { type: "string", description: "Text or regex pattern to search for (e.g. 'voucher', 'Student', 'registration'). This is NOT a file path or glob." },
+        glob: { type: "string", description: "Optional file type filter (e.g. '*.ts', '*.prisma', '*.tsx'). Do NOT put search terms here." },
         maxResults: { type: "number", description: "Maximum results (default 20)" },
       },
       required: ["query"],
@@ -4270,7 +4270,7 @@ export async function executeTool(
       if (!summary) {
         return {
           success: true,
-          message: `No matches found for "${params.query}"${params.glob ? ` in ${params.glob} files` : ""}. This is normal for new features — there is no existing code to find. Proceed with designing the feature from scratch using saveBuildEvidence instead of searching again.`,
+          message: `No matches found for "${params.query}"${params.glob ? ` in ${params.glob} files` : ""}. ${params.glob ? "Try searching without a glob filter, or try a different query term. " : ""}If this is a new feature with no existing code, proceed with saveBuildEvidence to save your design — do NOT search again with the same query.`,
           data: { results: [] },
         };
       }
