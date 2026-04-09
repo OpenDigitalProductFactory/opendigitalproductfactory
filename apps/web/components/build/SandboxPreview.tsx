@@ -1,7 +1,7 @@
 // apps/web/components/build/SandboxPreview.tsx
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { type BuildPhase } from "@/lib/feature-build-types";
 
 type Props = {
@@ -10,81 +10,20 @@ type Props = {
   sandboxPort: number | null;
 };
 
-/** Paths that must not be accessible inside the sandbox preview. */
-const BLOCKED_PATHS = ["/build", "/platform"];
-
 export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [currentPath, setCurrentPath] = useState("/");
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isRunning = sandboxPort !== null && (phase === "build" || phase === "review" || phase === "ship");
 
   const handleRefresh = useCallback(() => {
     setIframeLoaded(false);
     setRefreshKey(k => k + 1);
-    setCurrentPath("/");
   }, []);
 
-  // Track iframe navigation and extract the sandbox path from proxy URLs
   const handleIframeLoad = useCallback(() => {
     setIframeLoaded(true);
-    try {
-      const win = iframeRef.current?.contentWindow;
-      if (!win) return;
-      const fullPath = win.location.pathname;
-
-      // Extract sandbox path from proxy URL query param
-      let displayPath: string;
-      if (fullPath.startsWith("/api/sandbox/preview")) {
-        const params = new URLSearchParams(win.location.search);
-        displayPath = params.get("path") ?? "/";
-      } else {
-        displayPath = fullPath;
-      }
-      setCurrentPath(displayPath);
-    } catch {
-      // Cross-origin or security restriction — ignore
-    }
   }, []);
-
-  // Poll for path changes from in-iframe navigation (clicks, form submits).
-  // The injected nav script routes clicks through the proxy, but this catches
-  // any escapes (client-side routing, direct URL changes) and updates the address bar.
-  useEffect(() => {
-    if (!iframeLoaded || !iframeRef.current) return;
-    const proxyPrefix = "/api/sandbox/preview";
-    const interval = setInterval(() => {
-      try {
-        const win = iframeRef.current?.contentWindow;
-        if (!win) return;
-        const fullPath = win.location.pathname;
-        const search = win.location.search;
-
-        // If iframe is on a proxy URL, extract the sandbox path from ?path=
-        let displayPath: string;
-        if (fullPath.startsWith(proxyPrefix)) {
-          const params = new URLSearchParams(search);
-          displayPath = params.get("path") ?? "/";
-        } else {
-          // Iframe escaped the proxy — redirect it back through the proxy
-          displayPath = fullPath;
-          if (BLOCKED_PATHS.some(bp => fullPath.startsWith(bp))) {
-            displayPath = "/";
-          }
-          const proxyUrl = `${proxyPrefix}?buildId=${encodeURIComponent(buildId)}&path=${encodeURIComponent(displayPath)}`;
-          win.location.replace(proxyUrl);
-        }
-
-        if (displayPath !== currentPath) {
-          setCurrentPath(displayPath);
-        }
-      } catch {
-        // Cross-origin — ignore
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [iframeLoaded, currentPath, buildId]);
 
   if (!isRunning) {
     return (
@@ -103,7 +42,11 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
     );
   }
 
-  const previewUrl = `/api/sandbox/preview?buildId=${encodeURIComponent(buildId)}&path=/&_t=${refreshKey}`;
+  // Point iframe directly at the sandbox dev server on the host-mapped port.
+  // This avoids the broken proxy approach where assets from /_next/static/
+  // resolved against the portal origin instead of the sandbox.
+  const sandboxOrigin = `http://localhost:${sandboxPort}`;
+  const previewUrl = `${sandboxOrigin}/?_t=${refreshKey}`;
 
   return (
     <div className="flex-1 flex flex-col rounded-lg border border-[var(--dpf-border)] overflow-hidden shadow-dpf-sm">
@@ -111,12 +54,12 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
       <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--dpf-surface-2)] border-b border-[var(--dpf-border)] text-xs">
         <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)] flex-shrink-0" />
         <span className="font-medium text-[var(--dpf-text)] flex-shrink-0">Sandbox</span>
-        {/* Address bar */}
+        {/* Address bar — shows sandbox origin (cross-origin prevents reading iframe path) */}
         <div
           className="flex-1 px-2 py-0.5 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-muted)] font-mono truncate min-w-0"
-          title={currentPath}
+          title={sandboxOrigin}
         >
-          {currentPath}
+          localhost:{sandboxPort}
         </div>
         <button
           onClick={handleRefresh}
@@ -126,6 +69,16 @@ export function SandboxPreview({ buildId, phase, sandboxPort }: Props) {
         >
           &#8635; Refresh
         </button>
+        <a
+          href={sandboxOrigin}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 px-2 py-0.5 rounded text-[10px] border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors no-underline"
+          title="Open sandbox in new tab"
+          aria-label="Open sandbox in new tab"
+        >
+          &#8599; New Tab
+        </a>
       </div>
       <div className="flex-1 relative min-h-[400px]">
         {!iframeLoaded && (
