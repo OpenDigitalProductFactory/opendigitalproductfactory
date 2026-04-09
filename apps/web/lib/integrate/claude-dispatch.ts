@@ -188,6 +188,14 @@ export async function dispatchClaudeTask(params: {
     const { promisify } = await import(/* turbopackIgnore: true */ "util");
     const execAsync = promisify(execCb);
 
+    // Ensure /workspace is writable by the node user (uid 1000).
+    // Files may be root-owned from bootstrap or prior Codex runs.
+    // Also set git config for node user (Claude Code may run git commands).
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "chown -R node:node /workspace && su -s /bin/sh node -c 'git config --global user.email sandbox@dpf.local && git config --global user.name DPF-Sandbox' 2>/dev/null"`,
+      { timeout: 15_000 },
+    );
+
     // Write prompt to temp file in sandbox (avoids all shell escaping issues).
     // chmod 644 so the non-root node user can read it.
     const promptB64 = Buffer.from(taskPrompt).toString("base64");
