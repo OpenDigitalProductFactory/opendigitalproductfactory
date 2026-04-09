@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
+import { ReviewPanel } from "./ReviewPanel";
 import { SandboxPreview } from "./SandboxPreview";
 import { ClaimBadge } from "./ClaimBadge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
@@ -324,7 +325,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                           borderBottom: buildView === tab ? "2px solid var(--dpf-accent)" : "2px solid transparent",
                         }}
                       >
-                        {tab === "preview" ? "Live Preview" : "Build Details"}
+                        {tab === "preview" ? "Live Preview" : (activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Build Details"}
                       </button>
                     ))}
                   </div>
@@ -337,13 +338,17 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                       sandboxPort={activeBuild.sandboxPort}
                     />
                   ) : (
-                    <div className="flex-1">
-                      <FeatureBriefPanel
-                        brief={activeBuild.brief}
-                        phase={activeBuild.phase}
-                        diffSummary={activeBuild.diffSummary}
-                        build={activeBuild}
-                      />
+                    <div className="flex-1 overflow-auto">
+                      {activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete" ? (
+                        <ReviewPanel build={activeBuild} />
+                      ) : (
+                        <FeatureBriefPanel
+                          brief={activeBuild.brief}
+                          phase={activeBuild.phase}
+                          diffSummary={activeBuild.diffSummary}
+                          build={activeBuild}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
