@@ -391,6 +391,23 @@ export async function sendMessage(input: {
       const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
       if (buildCtx) {
         promptSections.push(getBuildContextSection(buildCtx));
+
+        // Detect if the reusability question was already asked and answered.
+        // The ideate prompt says "Ask ONE question about reusability" but the model
+        // re-reads this instruction every call and re-asks. Inject a guard.
+        if (buildCtx.phase === "ideate" && chatHistory.length > 2) {
+          const assistantMsgs = chatHistory.filter(m => m.role === "assistant").map(m => typeof m.content === "string" ? m.content : "");
+          const askedReusability = assistantMsgs.some(msg =>
+            /reusab|other.*provider|other.*certification|configurable|generic/i.test(msg)
+          );
+          if (askedReusability) {
+            promptSections.push(
+              "\n--- IMPORTANT: Reusability question already asked ---\n" +
+              "You have ALREADY asked the user about reusability/scope. The user answered in the conversation history above. " +
+              "Do NOT ask again. Skip Step 2 of the ideate process. Proceed directly to Step 3 (design document) using the user's answer."
+            );
+          }
+        }
       }
 
       // Inject live build execution progress so the user can interact mid-build
