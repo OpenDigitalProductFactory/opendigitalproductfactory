@@ -744,7 +744,20 @@ export async function sendMessage(input: {
       && storedResults.completedTasks >= storedResults.totalTasks;
 
     if (buildAlreadyComplete) {
-      console.log(`[orchestrator] Build ${activeBuild!.buildId} already completed (${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks). Skipping re-dispatch.`);
+      console.log(`[orchestrator] Build ${activeBuild!.buildId} already completed (${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks). Skipping re-dispatch, advancing to review.`);
+
+      // Auto-advance to review phase if still in build
+      try {
+        await prisma.featureBuild.update({
+          where: { buildId: activeBuild!.buildId, phase: "build" },
+          data: { phase: "review" },
+        });
+      } catch { /* already advanced or concurrent update — fine */ }
+
+      responseContent = `Build already completed — all ${storedResults!.totalTasks} tasks done. Moving to review phase.\n\nI'll review the changes in the sandbox and prepare a summary. You can check the build results in the task board above.`;
+      responseProviderId = "orchestrator";
+      responseModelId = "multi-specialist";
+      // Fall through to message persistence below
     }
 
     if (activeBuild && !buildPlan?.tasks?.length) {
