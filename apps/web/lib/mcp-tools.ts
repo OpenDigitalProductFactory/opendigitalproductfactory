@@ -4262,10 +4262,21 @@ export async function executeTool(
 
     case "search_project_files": {
       const { searchProjectFiles } = await import("@/lib/codebase-tools");
+      let query = String(params.query ?? "");
       const opts: { glob?: string; maxResults?: number } = {};
-      if (typeof params.glob === "string") opts.glob = params.glob;
+
+      // Auto-fix: model often combines query and glob into one string
+      // e.g. "registration:**/*.prisma" or "voucher:*.ts"
+      const colonGlobMatch = query.match(/^([^:]+):(\*\*?\/.+|\*\.[a-z]+)$/);
+      if (colonGlobMatch) {
+        query = colonGlobMatch[1]!.trim();
+        opts.glob = colonGlobMatch[2]!.trim();
+        console.log(`[search_project_files] Auto-split combined query: "${params.query}" → query="${query}" glob="${opts.glob}"`);
+      }
+
+      if (typeof params.glob === "string" && !opts.glob) opts.glob = params.glob;
       if (typeof params.maxResults === "number") opts.maxResults = params.maxResults;
-      const result = await searchProjectFiles(String(params.query ?? ""), opts);
+      const result = await searchProjectFiles(query, opts);
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
       if (!summary) {
