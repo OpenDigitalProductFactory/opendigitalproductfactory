@@ -29,6 +29,17 @@ export type ReviewResult = {
   summary: string;
 };
 
+export type ReusabilityAnalysis = {
+  scope: "one_off" | "parameterizable" | "already_generic";
+  domainEntities: Array<{
+    hardcodedValue: string;       // e.g. "ITIL"
+    parameterName: string;        // e.g. "trainingAuthority"
+    otherInstances: string[];     // e.g. ["OpenGroup", "BIAN", "PMI"]
+  }>;
+  abstractionBoundary: string;    // What is generic vs. instance config
+  contributionReadiness: "high" | "medium" | "low";
+};
+
 export type BuildDesignDoc = {
   problemStatement: string;
   existingFunctionalityAudit: string;
@@ -37,6 +48,7 @@ export type BuildDesignDoc = {
   newCodeJustification: string;
   proposedApproach: string;
   acceptanceCriteria: string[];
+  reusabilityAnalysis?: ReusabilityAnalysis;
 };
 
 export type BuildPlanDoc = {

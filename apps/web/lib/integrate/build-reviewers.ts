@@ -17,6 +17,7 @@ Reuse Plan: ${doc.reusePlan}
 New Code Justification: ${doc.newCodeJustification}
 Proposed Approach: ${doc.proposedApproach}
 Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : doc.acceptanceCriteria ?? "Not specified"}
+${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalysis.scope}, Entities=${doc.reusabilityAnalysis.domainEntities.map((e) => `${e.hardcodedValue}->${e.parameterName}`).join(", ") || "none"}, Boundary="${doc.reusabilityAnalysis.abstractionBoundary}", Readiness=${doc.reusabilityAnalysis.contributionReadiness}` : ""}
 
 PROJECT CONTEXT:
 ${projectContext}
@@ -30,6 +31,7 @@ REVIEW CHECKLIST:
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
 8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)
+9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
