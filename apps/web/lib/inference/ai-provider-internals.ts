@@ -242,86 +242,13 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  // Agent providers (Codex) and ChatGPT subscription use the ChatGPT backend
-  // /backend-api/models endpoint instead of standard /v1/models.
+  // Codex and ChatGPT subscription providers use the ChatGPT backend
+  // /codex/responses endpoint which does NOT support platform inference
+  // (custom function tools, generic chat). Models are seeded as disabled
+  // via KNOWN_PROVIDER_MODELS. Skip discovery to prevent re-activating them.
   if (provider.authMethod === "oauth2_authorization_code" &&
       (provider.category === "agent" || providerId === "chatgpt")) {
-    const tokenResult = await getProviderBearerToken(providerId);
-    if ("error" in tokenResult) {
-      return { discovered: 0, newCount: 0, error: `OAuth token: ${tokenResult.error}` };
-    }
-    const chatgptProvider = await prisma.modelProvider.findUnique({
-      where: { providerId: "chatgpt" },
-      select: { baseUrl: true },
-    });
-    const backendUrl = chatgptProvider?.baseUrl ?? "https://chatgpt.com/backend-api";
-    const backendHeaders = {
-      Authorization: `Bearer ${tokenResult.token}`,
-      "Content-Type": "application/json",
-    };
-    const result = await discoverChatGptBackendModels(providerId, backendHeaders, backendUrl);
-    if (result.error || result.models.length === 0) {
-      // Dynamic discovery failed — caller (autoDiscoverAndProfile) will
-      // fall back to KNOWN_PROVIDER_MODELS catalog.
-      return { discovered: 0, newCount: 0, error: result.error ?? "No models returned" };
-    }
-
-    // Store discovered models (same logic as standard discovery below)
-    let newCount = 0;
-    const freshModelIds = new Set(result.models.map(m => m.modelId));
-    for (const m of result.models) {
-      const existing = await prisma.discoveredModel.findUnique({
-        where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      });
-      if (existing) {
-        await prisma.discoveredModel.update({
-          where: { id: existing.id },
-          data: {
-            rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue,
-            lastSeenAt: new Date(),
-            missedDiscoveryCount: 0,
-          },
-        });
-      } else {
-        await prisma.discoveredModel.create({
-          data: {
-            providerId,
-            modelId: m.modelId,
-            rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue,
-            lastSeenAt: new Date(),
-          },
-        });
-        newCount++;
-      }
-    }
-
-    // Retire models no longer listed
-    const allKnown = await prisma.discoveredModel.findMany({
-      where: { providerId },
-      select: { id: true, modelId: true, missedDiscoveryCount: true },
-    });
-    for (const known of allKnown) {
-      if (!freshModelIds.has(known.modelId)) {
-        const newMissedCount = known.missedDiscoveryCount + 1;
-        await prisma.discoveredModel.update({
-          where: { id: known.id },
-          data: { missedDiscoveryCount: newMissedCount },
-        });
-        if (newMissedCount >= 2) {
-          await prisma.modelProfile.updateMany({
-            where: { providerId, modelId: known.modelId },
-            data: {
-              modelStatus: "retired",
-              retiredAt: new Date(),
-              retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
-            },
-          });
-          console.log(`[discovery] Retired model ${known.modelId} from ${providerId} (missed ${newMissedCount} discoveries)`);
-        }
-      }
-    }
-
-    return { discovered: result.models.length, newCount };
+    return { discovered: 0, newCount: 0 };
   }
 
   const providerRow = {
