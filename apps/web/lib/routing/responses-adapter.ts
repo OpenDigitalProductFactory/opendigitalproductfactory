@@ -217,21 +217,18 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools, previousResponseId } = request;
     const responsesUrl = buildResponsesUrl(providerId, provider.baseUrl);
 
-    // When chaining with previous_response_id, only send new messages (the last
-    // user message + any tool results), not the full history. The server has the
-    // rest. When no previousResponseId, send the full conversation.
-    const inputMessages = previousResponseId
-      ? messages.slice(-1)  // just the latest message
-      : messages;
-
     const body: Record<string, unknown> = {
       model: modelId,
-      input: inputMessages.flatMap((message) => formatMessageForResponses(message)),
-      store: true,  // required for previous_response_id chaining
+      input: messages.flatMap((message) => formatMessageForResponses(message)),
+      store: false,
     };
 
+    // Responses API conversation chaining: when we have a previous response ID
+    // from an earlier iteration in the same agentic loop, chain to it.
+    // The ChatGPT backend supports this for within-session continuity.
     if (previousResponseId) {
       body.previous_response_id = previousResponseId;
+      body.store = true;  // chaining requires stored responses
     }
 
     if (isChatGptBackend(providerId, provider.baseUrl)) {
