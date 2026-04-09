@@ -2359,6 +2359,7 @@ export async function executeTool(
       // ── designDoc quality gate ──────────────────────────────────────────
       // Reject design docs that skip codebase research — they lead to builds
       // with wrong auth patterns, wrong field names, and wrong imports.
+      // Accept "no existing code found" as valid research for new features.
       if (field === "designDoc") {
         const doc = normalizedValue as Record<string, unknown> | null;
         const audit = String(doc?.existingFunctionalityAudit ?? "");
@@ -2366,7 +2367,7 @@ export async function executeTool(
           return {
             success: false,
             error: "Design doc missing codebase research.",
-            message: "REJECTED: existingFunctionalityAudit is empty or too short. You MUST research the codebase BEFORE saving the design doc. Use search_project_files, read_project_file, and describe_model to understand existing patterns (auth, routes, models), then include specific findings in existingFunctionalityAudit.",
+            message: "REJECTED: existingFunctionalityAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
           };
         }
       }
