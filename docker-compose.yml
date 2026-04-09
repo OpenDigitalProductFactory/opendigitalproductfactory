@@ -169,6 +169,7 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j/dpf_dev}
       QDRANT_INTERNAL_URL: http://qdrant:6333
       NODE_ENV: development
+      DPF_ENVIRONMENT: sandbox
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
