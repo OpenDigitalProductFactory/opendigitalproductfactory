@@ -22,22 +22,6 @@ function getProjectBranch(): string | null {
 }
 
 export default async function BuildPage() {
-  // Sandbox instances must not render Build Studio — it would create
-  // infinite iframe nesting (Build Studio embeds sandbox preview which
-  // contains Build Studio which embeds sandbox preview...).
-  if (process.env.DPF_ENVIRONMENT === "sandbox") {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center max-w-md space-y-4">
-          <div className="text-4xl opacity-30">&#128736;</div>
-          <p className="text-sm text-[var(--dpf-muted)]">
-            Build Studio is not available in the sandbox environment.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const session = await auth();
   if (!session?.user?.id) return null;
 
