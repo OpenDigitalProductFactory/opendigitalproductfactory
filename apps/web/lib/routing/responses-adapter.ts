@@ -157,17 +157,7 @@ async function readResponsesPayload(
     );
   }
 
-  // Prefer response.completed (contains full output with tool calls).
-  // If not present, reconstruct output from collected deltas.
-  if (lastCompleted) {
-    return lastCompleted as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
-  }
-
-  // Build synthetic output from collected function call deltas
+  // Build synthetic output from collected SSE deltas (text + function calls).
   const syntheticOutput: ResponsesOutputItem[] = [];
   for (const [, fc] of funcCallDeltas) {
     syntheticOutput.push({
@@ -177,10 +167,36 @@ async function readResponsesPayload(
       arguments: fc.args,
     } as unknown as ResponsesOutputItem);
   }
-  if (lastDelta || syntheticOutput.length === 0) {
+  if (lastDelta) {
     syntheticOutput.push({
       type: "message",
       content: [{ type: "output_text", text: lastDelta }],
+    } as unknown as ResponsesOutputItem);
+  }
+
+  // If response.completed exists, use it for usage data — but prefer
+  // synthetic output when the completed event has an empty output array.
+  // The ChatGPT backend often sends text/tools via SSE deltas while the
+  // completed event's output[] is empty.
+  if (lastCompleted) {
+    const completedOutput = (lastCompleted as { output?: unknown[] }).output ?? [];
+    const useCompleted = completedOutput.length > 0;
+    return {
+      output: useCompleted ? completedOutput : syntheticOutput,
+      output_text: useCompleted ? (lastCompleted as { output_text?: string }).output_text : (lastDelta || undefined),
+      usage: (lastCompleted as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+    } as {
+      output?: ResponsesOutputItem[];
+      output_text?: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+  }
+
+  // No completed event — return synthetic output only
+  if (syntheticOutput.length === 0) {
+    syntheticOutput.push({
+      type: "message",
+      content: [{ type: "output_text", text: "" }],
     } as unknown as ResponsesOutputItem);
   }
 
