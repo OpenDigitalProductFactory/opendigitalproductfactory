@@ -17,6 +17,7 @@ type Step = 1 | 2 | 3 | 4 | "custom";
 
 type SetupWizardProps = {
   archetypes: Archetype[];
+  orgNameFromDb?: string | null;
   suggestedArchetypeId?: string | null;
   suggestedArchetypeName?: string | null;
   archetypeConfidence?: "high" | "medium" | null;
@@ -63,8 +64,70 @@ const CTA_OPTIONS = [
   { value: "donation", label: "Donation", description: "Supporters donate to a cause" },
 ];
 
+const COMPANY_SIZE_OPTIONS = [
+  { value: "solo", label: "Solo", description: "Just me" },
+  { value: "small", label: "Small", description: "2-10 people" },
+  { value: "medium", label: "Medium", description: "11-50 people" },
+  { value: "large", label: "Large", description: "50+ people" },
+];
+
+const GEOGRAPHIC_SCOPE_OPTIONS = [
+  { value: "local", label: "Local", description: "City or neighborhood" },
+  { value: "regional", label: "Regional", description: "State or region" },
+  { value: "national", label: "National", description: "Entire country" },
+  { value: "international", label: "International", description: "Multiple countries" },
+];
+
+const CATEGORY_PLACEHOLDERS: Record<string, { description: string; targetMarket: string }> = {
+  "healthcare-wellness": {
+    description: "We provide quality healthcare services to improve our patients' wellbeing.",
+    targetMarket: "Individuals and families seeking healthcare",
+  },
+  "beauty-personal-care": {
+    description: "We help clients look and feel their best with professional beauty services.",
+    targetMarket: "Individuals seeking personal care and beauty treatments",
+  },
+  "trades-maintenance": {
+    description: "We provide reliable trade and maintenance services for homes and businesses.",
+    targetMarket: "Homeowners and property managers",
+  },
+  "professional-services": {
+    description: "We deliver expert professional services tailored to our clients' needs.",
+    targetMarket: "Businesses and individuals seeking professional expertise",
+  },
+  "education-training": {
+    description: "We empower learners with courses, training, and educational programs.",
+    targetMarket: "Students, professionals, and lifelong learners",
+  },
+  "pet-services": {
+    description: "We provide caring, professional services for pets and their owners.",
+    targetMarket: "Pet owners in your local area",
+  },
+  "food-hospitality": {
+    description: "We serve great food and memorable hospitality experiences.",
+    targetMarket: "Diners, event planners, and food enthusiasts",
+  },
+  "retail-goods": {
+    description: "We sell quality products that our customers love.",
+    targetMarket: "Shoppers looking for quality goods",
+  },
+  "fitness-recreation": {
+    description: "We help people stay active and healthy through fitness and recreation.",
+    targetMarket: "Fitness enthusiasts and active individuals",
+  },
+  "nonprofit-community": {
+    description: "We serve our community through programs, outreach, and support services.",
+    targetMarket: "Community members and supporters",
+  },
+  "hoa-property-management": {
+    description: "We manage properties and communities to keep things running smoothly.",
+    targetMarket: "Residents, tenants, and property owners",
+  },
+};
+
 export function SetupWizard({
   archetypes,
+  orgNameFromDb,
   suggestedArchetypeId,
   suggestedArchetypeName,
   archetypeConfidence,
@@ -74,10 +137,14 @@ export function SetupWizard({
   const [step, setStep] = useState<Step>(1);
   const [selected, setSelected] = useState<Archetype | null>(null);
   const [search, setSearch] = useState("");
-  const [orgName, setOrgName] = useState(suggestedCompanyName ?? "");
+  const [orgName, setOrgName] = useState(orgNameFromDb ?? suggestedCompanyName ?? "");
   const [orgSlug, setOrgSlug] = useState("store");
   const [tagline, setTagline] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [businessDescription, setBusinessDescription] = useState("");
+  const [targetMarket, setTargetMarket] = useState("");
+  const [companySize, setCompanySize] = useState<string | null>(null);
+  const [geographicScope, setGeographicScope] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +177,17 @@ export function SetupWizard({
       const res = await fetch("/api/storefront/admin/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archetypeId: selected!.archetypeId, orgName, orgSlug, tagline, heroImageUrl: heroImageUrl || null }),
+        body: JSON.stringify({
+          archetypeId: selected!.archetypeId,
+          orgName,
+          orgSlug,
+          tagline,
+          heroImageUrl: heroImageUrl || null,
+          businessDescription: businessDescription || null,
+          targetMarket: targetMarket || null,
+          companySize,
+          geographicScope,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -445,17 +522,22 @@ export function SetupWizard({
 
   // ─── Step 3: Business Identity ────────────────────────────────────────
 
+  const placeholders = CATEGORY_PLACEHOLDERS[selected?.category ?? ""] ?? {
+    description: "Describe what your business does in 1-2 sentences",
+    targetMarket: "Who are your ideal customers?",
+  };
+
   return (
-    <div style={{ maxWidth: 480, color: "var(--dpf-text)" }}>
+    <div style={{ maxWidth: 520, color: "var(--dpf-text)" }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Your business identity</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Business name *</div>
           <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)}
             required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
-          {suggestedCompanyName && (
+          {(orgNameFromDb || suggestedCompanyName) && (
             <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
-              Pre-filled from your branding URL — edit if needed
+              {orgNameFromDb ? "Pre-filled from your account" : "Pre-filled from your branding URL"} — edit if your storefront uses a different name
             </div>
           )}
         </label>
@@ -472,6 +554,55 @@ export function SetupWizard({
           <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)}
             style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
         </label>
+        <label style={{ fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>What does your business do?</div>
+          <textarea value={businessDescription} onChange={(e) => setBusinessDescription(e.target.value)}
+            placeholder={placeholders.description}
+            rows={2} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)", resize: "none" }} />
+          <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+            This helps your AI coworker understand your business when building features
+          </div>
+        </label>
+        <label style={{ fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Who are your customers?</div>
+          <input type="text" value={targetMarket} onChange={(e) => setTargetMarket(e.target.value)}
+            placeholder={placeholders.targetMarket}
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+        </label>
+        <div style={{ fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Company size</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+            {COMPANY_SIZE_OPTIONS.map((o) => (
+              <button key={o.value} type="button" onClick={() => setCompanySize(companySize === o.value ? null : o.value)}
+                style={{
+                  padding: "8px 4px", textAlign: "center", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                  border: companySize === o.value ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                  background: companySize === o.value ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
+                  color: "var(--dpf-text)",
+                }}>
+                <div style={{ fontWeight: 600 }}>{o.label}</div>
+                <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{o.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Geographic reach</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+            {GEOGRAPHIC_SCOPE_OPTIONS.map((o) => (
+              <button key={o.value} type="button" onClick={() => setGeographicScope(geographicScope === o.value ? null : o.value)}
+                style={{
+                  padding: "8px 4px", textAlign: "center", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                  border: geographicScope === o.value ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                  background: geographicScope === o.value ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
+                  color: "var(--dpf-text)",
+                }}>
+                <div style={{ fontWeight: 600 }}>{o.label}</div>
+                <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{o.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
         <label style={{ fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Hero image URL</div>
           <input type="url" value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)}
