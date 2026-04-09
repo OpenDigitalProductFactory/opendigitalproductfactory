@@ -440,6 +440,17 @@ export async function runBuildOrchestrator(params: {
   const { buildId, plan, userId, platformRole, isSuperuser, parentThreadId, buildContext } = params;
   const startTime = Date.now();
 
+  // ─── Ensure sandbox metadata is on the build record ─────────────────────
+  // The preview iframe needs sandboxPort to render. Set it if missing.
+  const sandboxContainer = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+  const sandboxPort = Number(process.env.SANDBOX_PORT ?? "3035");
+  try {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { sandboxId: sandboxContainer, sandboxPort },
+    });
+  } catch { /* non-fatal — preview just won't show */ }
+
   // ─── Layer 2: Task checkpointing — resume from prior results ─────────────
   // Read previously completed task results from the FeatureBuild record.
   // Tasks with outcome DONE or DONE_WITH_CONCERNS are skipped on re-run.
@@ -680,6 +691,26 @@ export async function runBuildOrchestrator(params: {
     }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
   } catch (err) {
     console.error("[orchestrator] Failed to save task results:", err);
+  }
+
+  // Auto-advance build → review if the phase gate is satisfied.
+  // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
+  // has no HTTP request context inside the agentic loop. Direct DB update instead.
+  try {
+    const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+    const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+    if (updatedBuild && updatedBuild.phase === "build" && canTransitionPhase("build", "review")) {
+      const gate = checkPhaseGate("build", "review", {
+        verificationOut: updatedBuild.verificationOut,
+      });
+      if (gate.allowed) {
+        await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
+        agentEventBus.emit(parentThreadId, { type: "phase:change", buildId, phase: "review" });
+        prisma.buildActivity.create({ data: { buildId, tool: "phase:advance", summary: "Phase advanced: build → review" } }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[orchestrator] Failed to auto-advance to review:", err);
   }
 
   // Synthesize final result (include skipped tasks in completed count)
