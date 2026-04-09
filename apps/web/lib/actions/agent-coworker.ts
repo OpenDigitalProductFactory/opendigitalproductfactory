@@ -241,7 +241,7 @@ export async function sendMessage(input: {
   const useUnified = await isUnifiedCoworkerEnabled();
 
   // Resolve agent
-  const agent = resolveAgentForRoute(input.routeContext, {
+  const agent = await resolveAgentForRoute(input.routeContext, {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
@@ -350,7 +350,7 @@ export async function sendMessage(input: {
       ? selectedDomain + "\n\n" + selectedKnowledge
       : selectedDomain;
 
-    populatedPrompt = assembleSystemPrompt({
+    populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
       deniedCapabilities: denied,
@@ -390,7 +390,7 @@ export async function sendMessage(input: {
     if (resolvedBuildId) {
       const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
       if (buildCtx) {
-        promptSections.push(getBuildContextSection(buildCtx));
+        promptSections.push(await getBuildContextSection(buildCtx));
 
         // Detect if the reusability question was already asked and answered.
         // The ideate prompt says "Ask ONE question about reusability" but the model
@@ -889,6 +889,83 @@ export async function sendMessage(input: {
     responseContent = result.content;
     responseProviderId = result.providerId;
     responseModelId = result.modelId;
+
+    // ── Ideate research dispatch: if the agentic loop called start_ideate_research,
+    // dispatch the research to Codex CLI and save the result ──
+    if (activeBuildPhase === "ideate" && resolvedBuildId) {
+      const buildForResearch = await prisma.featureBuild.findUnique({
+        where: { buildId: resolvedBuildId },
+        select: { buildExecState: true, title: true, description: true },
+      });
+      const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
+      if (execState?.ideateResearchRequested) {
+        console.log(`[coworker] Ideate research requested — dispatching to Codex CLI`);
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
+
+        try {
+          const { dispatchIdeateResearch } = await import("@/lib/integrate/ideate-dispatch");
+          const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
+          const config = await getBuildStudioConfig();
+
+          // Build context for the research
+          const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
+          const ideateResult = await dispatchIdeateResearch({
+            featureTitle: buildForResearch?.title ?? "Untitled Feature",
+            featureDescription: buildForResearch?.description ?? "",
+            reusabilityScope: String(execState.reusabilityScope ?? "parameterizable"),
+            userContext: String(execState.userContext ?? ""),
+            businessContext: buildCtx?.businessContext ?? undefined,
+            providerId: config.codexProviderId,
+            model: config.codexModel,
+          });
+
+          agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: ideateResult.success });
+
+          if (ideateResult.success && ideateResult.designDoc) {
+            // Save design doc via the same tool handler
+            const { executeTool } = await import("@/lib/mcp-tools");
+            const saveResult = await executeTool(
+              "saveBuildEvidence",
+              { field: "designDoc", value: ideateResult.designDoc },
+              user.id!,
+              input.routeContext,
+            );
+
+            if (saveResult.success) {
+              // Run the design doc review
+              agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+              const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, input.routeContext);
+              agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+
+              // Build a user-friendly summary
+              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").slice(0, 300);
+              responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach}\n\n${
+                reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+              } Ready to move to the planning phase?`;
+            } else {
+              responseContent = `Research completed but the design doc was rejected: ${saveResult.error ?? "Unknown error"}. I'll revise the approach.`;
+            }
+          } else {
+            responseContent = ideateResult.error
+              ? `Research encountered an issue: ${ideateResult.error}`
+              : "Research completed but I couldn't generate a structured design. Let me try a different approach.";
+          }
+
+          // Clear the research request
+          await prisma.featureBuild.update({
+            where: { buildId: resolvedBuildId },
+            data: {
+              buildExecState: { ideateResearchRequested: false },
+            },
+          });
+        } catch (err) {
+          console.error(`[coworker] Ideate research dispatch failed:`, err);
+          agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: false });
+          // Fall through with the agentic loop's response
+        }
+      }
+    }
 
     // Log token usage (fire-and-forget with error logging)
     logTokenUsage({
