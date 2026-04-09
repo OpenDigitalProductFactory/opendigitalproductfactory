@@ -237,6 +237,50 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
   return "BLOCKED";
 }
 
+// ─── Task Resume Logic ─────────────────────────────────────────────────────
+
+/** Stored task result shape from saveBuildEvidence("taskResults", ...) */
+export type StoredTaskResult = {
+  title: string;
+  specialist: string;
+  outcome: string;
+  durationMs?: number;
+};
+
+/**
+ * Determine which tasks can be skipped based on prior stored results.
+ * Returns a Set of task titles that completed successfully (DONE or DONE_WITH_CONCERNS).
+ */
+export function getCompletedTaskTitles(
+  storedTasks: StoredTaskResult[] | undefined | null,
+): Set<string> {
+  const completed = new Set<string>();
+  if (!storedTasks?.length) return completed;
+  for (const t of storedTasks) {
+    if (t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS") {
+      completed.add(t.title);
+    }
+  }
+  return completed;
+}
+
+/**
+ * Build a prior results summary string from stored task results,
+ * providing downstream context for tasks that depend on completed work.
+ */
+export function buildStoredResultsSummary(
+  storedTasks: StoredTaskResult[] | undefined | null,
+): string {
+  if (!storedTasks?.length) return "";
+  let summary = "";
+  for (const t of storedTasks) {
+    if (t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS") {
+      summary += `\n${t.specialist} [${t.outcome}] (${t.title}): completed in prior run`;
+    }
+  }
+  return summary;
+}
+
 // ─── Specialist Dispatch ────────────────────────────────────────────────────
 
 type SpecialistResult = {
@@ -256,8 +300,9 @@ async function dispatchSpecialist(params: {
   buildContext: string;
   parentThreadId: string;
   priorResults?: string;
+  sessionId?: string;
 }): Promise<SpecialistResult> {
-  const { task, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId, priorResults } = params;
+  const { task, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId, priorResults, sessionId } = params;
   const role = task.specialist;
 
   // Emit dispatch event
@@ -273,7 +318,7 @@ async function dispatchSpecialist(params: {
 
   if (config.provider === "codex" || config.provider === "claude") {
     const cliResult = config.provider === "claude"
-      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel })
+      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel, sessionId })
       : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel });
 
     const outcome = classifyOutcome(cliResult, role);
@@ -395,6 +440,31 @@ export async function runBuildOrchestrator(params: {
   const { buildId, plan, userId, platformRole, isSuperuser, parentThreadId, buildContext } = params;
   const startTime = Date.now();
 
+  // ─── Layer 2: Task checkpointing — resume from prior results ─────────────
+  // Read previously completed task results from the FeatureBuild record.
+  // Tasks with outcome DONE or DONE_WITH_CONCERNS are skipped on re-run.
+  let completedTaskTitles = new Set<string>();
+  let priorStoredResults: string = "";
+
+  try {
+    const build = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { taskResults: true },
+    });
+    const stored = build?.taskResults as {
+      tasks?: StoredTaskResult[];
+    } | null;
+
+    completedTaskTitles = getCompletedTaskTitles(stored?.tasks);
+    priorStoredResults = buildStoredResultsSummary(stored?.tasks);
+
+    if (completedTaskTitles.size > 0) {
+      console.log(`[orchestrator] Resuming build ${buildId}: ${completedTaskTitles.size} tasks already completed, will skip`);
+    }
+  } catch (err) {
+    console.warn("[orchestrator] Could not read prior task results, starting fresh:", err);
+  }
+
   // ─── Pre-flight check: verify CLI dispatch auth is available ─────────────
   // Catch missing OAuth tokens BEFORE dispatching 14 tasks that all fail with
   // the same auth error. One clear message is better than 14 cryptic ones.
@@ -435,18 +505,29 @@ export async function runBuildOrchestrator(params: {
 
   const totalTasks = phases.reduce((sum, p) => sum + p.tasks.length, 0);
 
-  // Emit build started
+  // Emit build started (report resume status if applicable)
   const specialists = [...new Set(phases.flatMap(p => p.tasks.map(t => ROLE_LABELS[t.specialist])))];
+  const pendingTaskCount = totalTasks - completedTaskTitles.size;
   agentEventBus.emit(parentThreadId, {
     type: "orchestrator:build_started",
     buildId,
     taskCount: totalTasks,
     specialists,
+    ...(completedTaskTitles.size > 0 && {
+      resuming: true,
+      skippedTasks: completedTaskTitles.size,
+      pendingTasks: pendingTaskCount,
+    }),
   });
 
   // Execute phases sequentially; tasks within a phase run in parallel
   const allResults: SpecialistResult[] = [];
-  let priorResultsSummary = "";
+  let priorResultsSummary = priorStoredResults;
+
+  // Layer 1: CLI session continuity — generate a deterministic session ID per build
+  // so all Claude Code tasks share conversation context (files read/written, patterns learned).
+  // Codex CLI does not support sessions — only Claude Code benefits.
+  const claudeSessionId = `build-${buildId}`;
 
   for (const phase of phases) {
     // Timeout check
@@ -455,9 +536,31 @@ export async function runBuildOrchestrator(params: {
       break;
     }
 
-    // Dispatch all tasks in this phase in parallel
+    // Filter out already-completed tasks (Layer 2: resume)
+    const pendingTasks = phase.tasks.filter(task => {
+      if (completedTaskTitles.has(task.title)) {
+        console.log(`[orchestrator] Skipping completed task: "${task.title}"`);
+        agentEventBus.emit(parentThreadId, {
+          type: "orchestrator:task_complete",
+          buildId,
+          taskTitle: task.title,
+          specialist: ROLE_LABELS[task.specialist],
+          outcome: "Skipped (completed in prior run)",
+          status: "DONE",
+        });
+        return false;
+      }
+      return true;
+    });
+
+    // Skip phase entirely if all tasks are already done
+    if (pendingTasks.length === 0) {
+      continue;
+    }
+
+    // Dispatch pending tasks in this phase in parallel
     const phaseResults = await Promise.all(
-      phase.tasks.map(task =>
+      pendingTasks.map(task =>
         dispatchSpecialist({
           task,
           userId,
@@ -467,6 +570,7 @@ export async function runBuildOrchestrator(params: {
           buildContext,
           parentThreadId,
           priorResults: priorResultsSummary || undefined,
+          sessionId: claudeSessionId,
         })
       ),
     );
@@ -555,8 +659,8 @@ export async function runBuildOrchestrator(params: {
     console.error("[orchestrator] Failed to save task results:", err);
   }
 
-  // Synthesize final result
-  const completedTasks = allResults.filter(r => r.success).length;
+  // Synthesize final result (include skipped tasks in completed count)
+  const completedTasks = allResults.filter(r => r.success).length + completedTaskTitles.size;
   const failedTasks = allResults.filter(r => !r.success).length;
   const totalInputTokens = allResults.reduce((sum, r) => sum + ("totalInputTokens" in r.result ? r.result.totalInputTokens : 0), 0);
   const totalOutputTokens = allResults.reduce((sum, r) => sum + ("totalOutputTokens" in r.result ? r.result.totalOutputTokens : 0), 0);

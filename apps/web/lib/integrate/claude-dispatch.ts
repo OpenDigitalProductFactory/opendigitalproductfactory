@@ -25,6 +25,7 @@ export type ClaudeResult = {
   success: boolean;
   executedTools: Array<{ name: string; args: unknown; result: { success: boolean } }>;
   durationMs: number;
+  sessionId?: string;    // Claude Code session ID (for session continuity across tasks)
 };
 
 /**
@@ -140,10 +141,12 @@ export async function dispatchClaudeTask(params: {
   priorResults?: string;
   providerId?: string;
   model?: string;
+  sessionId?: string;   // Reuse a Claude Code session for cross-task context continuity
 }): Promise<ClaudeResult> {
   const { task, buildContext, priorResults } = params;
   const providerId = params.providerId ?? "anthropic-sub";
   const model = params.model ?? "sonnet";
+  const sessionId = params.sessionId;
   const role = task.specialist;
 
   // Resolve auth credentials (OAuth for Max Plan, or API key for per-token billing)
@@ -217,7 +220,8 @@ export async function dispatchClaudeTask(params: {
 
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
     const bareFlag = useBareflag ? "--bare " : "";
-    console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}] in ${SANDBOX_CONTAINER}`);
+    const sessionFlag = sessionId ? `--session-id ${sessionId} ` : "";
+    console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER}`);
 
     // Run Claude Code CLI as non-root user (node, uid 1000).
     // -p -: read prompt from stdin (piped from temp file)
@@ -226,7 +230,7 @@ export async function dispatchClaudeTask(params: {
     // --model: explicit model selection (sonnet/opus/haiku)
     // Stderr redirected to /dev/null to avoid progress noise in output.
     const { stdout } = await execAsync(
-      `docker exec --user node ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude ${bareFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
+      `docker exec --user node ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: CLAUDE_TASK_TIMEOUT_MS,
@@ -237,21 +241,24 @@ export async function dispatchClaudeTask(params: {
 
     // Parse JSON output — Claude Code --output-format json returns { result, session_id, ... }
     let content: string;
+    let returnedSessionId: string | undefined;
     try {
       const parsed = JSON.parse(stdout.trim());
       content = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
+      returnedSessionId = parsed.session_id ?? undefined;
     } catch {
       // If JSON parsing fails, use raw stdout (might be plain text on older versions)
       content = stdout.trim();
     }
 
-    console.log(`[claude-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)`);
+    console.log(`[claude-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)${returnedSessionId ? ` [session: ${returnedSessionId}]` : ""}`);
 
     return {
       content: content || "Task completed with no output.",
       success: true,
       executedTools: [],
       durationMs,
+      sessionId: returnedSessionId,
     };
   } catch (err) {
     const durationMs = Date.now() - startMs;

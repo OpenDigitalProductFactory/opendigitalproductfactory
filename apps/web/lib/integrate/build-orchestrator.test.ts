@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome } from "./build-orchestrator";
+import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary } from "./build-orchestrator";
+import type { StoredTaskResult } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
 import type { ClaudeResult } from "./claude-dispatch";
 
@@ -172,5 +173,77 @@ describe("orchestrator communication templates", () => {
     expect(msg).toContain("1 need review");
     expect(msg).toContain("Create API routes");
     expect(msg).not.toContain("Ready for review");
+  });
+});
+
+// ─── Task Resume Logic ─────────────────────────────────────────────────────
+
+describe("getCompletedTaskTitles", () => {
+  it("returns empty set for null/undefined input", () => {
+    expect(getCompletedTaskTitles(null)).toEqual(new Set());
+    expect(getCompletedTaskTitles(undefined)).toEqual(new Set());
+    expect(getCompletedTaskTitles([])).toEqual(new Set());
+  });
+
+  it("includes DONE and DONE_WITH_CONCERNS tasks", () => {
+    const tasks: StoredTaskResult[] = [
+      { title: "Add Complaint model", specialist: "data-architect", outcome: "DONE" },
+      { title: "Create API routes", specialist: "software-engineer", outcome: "DONE_WITH_CONCERNS" },
+      { title: "Build UI page", specialist: "frontend-engineer", outcome: "BLOCKED" },
+      { title: "Run verification", specialist: "qa-engineer", outcome: "NEEDS_CONTEXT" },
+    ];
+    const completed = getCompletedTaskTitles(tasks);
+    expect(completed.size).toBe(2);
+    expect(completed.has("Add Complaint model")).toBe(true);
+    expect(completed.has("Create API routes")).toBe(true);
+    expect(completed.has("Build UI page")).toBe(false);
+    expect(completed.has("Run verification")).toBe(false);
+  });
+
+  it("handles all tasks completed", () => {
+    const tasks: StoredTaskResult[] = [
+      { title: "Task A", specialist: "data-architect", outcome: "DONE" },
+      { title: "Task B", specialist: "software-engineer", outcome: "DONE" },
+    ];
+    const completed = getCompletedTaskTitles(tasks);
+    expect(completed.size).toBe(2);
+  });
+
+  it("handles all tasks failed/blocked", () => {
+    const tasks: StoredTaskResult[] = [
+      { title: "Task A", specialist: "data-architect", outcome: "BLOCKED" },
+      { title: "Task B", specialist: "software-engineer", outcome: "NEEDS_CONTEXT" },
+    ];
+    const completed = getCompletedTaskTitles(tasks);
+    expect(completed.size).toBe(0);
+  });
+});
+
+describe("buildStoredResultsSummary", () => {
+  it("returns empty string for null/undefined input", () => {
+    expect(buildStoredResultsSummary(null)).toBe("");
+    expect(buildStoredResultsSummary(undefined)).toBe("");
+    expect(buildStoredResultsSummary([])).toBe("");
+  });
+
+  it("includes only completed tasks in summary", () => {
+    const tasks: StoredTaskResult[] = [
+      { title: "Add model", specialist: "data-architect", outcome: "DONE" },
+      { title: "Build UI", specialist: "frontend-engineer", outcome: "BLOCKED" },
+      { title: "Create API", specialist: "software-engineer", outcome: "DONE_WITH_CONCERNS" },
+    ];
+    const summary = buildStoredResultsSummary(tasks);
+    expect(summary).toContain("data-architect [DONE] (Add model)");
+    expect(summary).toContain("software-engineer [DONE_WITH_CONCERNS] (Create API)");
+    expect(summary).not.toContain("Build UI");
+    expect(summary).not.toContain("BLOCKED");
+  });
+
+  it("includes 'completed in prior run' marker", () => {
+    const tasks: StoredTaskResult[] = [
+      { title: "Task A", specialist: "data-architect", outcome: "DONE" },
+    ];
+    const summary = buildStoredResultsSummary(tasks);
+    expect(summary).toContain("completed in prior run");
   });
 });
