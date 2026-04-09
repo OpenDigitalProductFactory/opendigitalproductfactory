@@ -401,6 +401,24 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate"],
   },
   {
+    name: "analyze_reusability",
+    description: "Analyze a feature for reusability potential. Identifies hardcoded domain concepts that could be parameterized and rates contribution readiness. Call after codebase research, before saving the design doc.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        featureDescription: { type: "string", description: "What the feature does." },
+        domainConcepts: { type: "array", items: { type: "string" }, description: "Key domain concepts mentioned (e.g. 'ITIL', 'ABC Plumbing', 'quarterly')." },
+        userScope: { type: "string", enum: ["one_off", "parameterizable", "already_generic"], description: "User's stated intent for reusability." },
+        abstractionBoundary: { type: "string", description: "What is generic structure vs. instance-specific config." },
+      },
+      required: ["featureDescription", "domainConcepts", "userScope"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate"],
+  },
+  {
     name: "propose_decomposition",
     description: "Generate an epic + feature set breakdown for a complex idea.",
     inputSchema: {
@@ -2145,6 +2163,65 @@ export async function executeTool(
       return { success: true, message: `${plan.epicTitle} — ${plan.featureSets.length} feature set${plan.featureSets.length !== 1 ? "s" : ""}.`, data: plan as unknown as Record<string, unknown> };
     }
 
+    case "analyze_reusability": {
+      const featureDescription = String(params["featureDescription"] ?? "");
+      const domainConcepts = Array.isArray(params["domainConcepts"]) ? (params["domainConcepts"] as string[]).map(String) : [];
+      const userScope = String(params["userScope"] ?? "one_off") as "one_off" | "parameterizable" | "already_generic";
+      const abstractionBoundary = String(params["abstractionBoundary"] ?? "");
+
+      // Heuristic: proper nouns, acronyms, and specific vendor/standard names suggest parameterizable instances
+      const properNounPattern = /^[A-Z][a-zA-Z]*(?:\s[A-Z][a-zA-Z]*)*$/;
+      const acronymPattern = /^[A-Z]{2,}$/;
+
+      const domainEntities: Array<{ hardcodedValue: string; parameterName: string; otherInstances: string[] }> = [];
+
+      for (const concept of domainConcepts) {
+        const trimmed = concept.trim();
+        if (!trimmed) continue;
+
+        const isProperNoun = properNounPattern.test(trimmed);
+        const isAcronym = acronymPattern.test(trimmed);
+
+        if (isProperNoun || isAcronym) {
+          // Suggest a parameter name by converting to camelCase category
+          const parameterName = trimmed.length <= 5
+            ? trimmed.toLowerCase() + "Type"
+            : trimmed.replace(/\s+/g, "").charAt(0).toLowerCase() + trimmed.replace(/\s+/g, "").slice(1) + "Type";
+
+          domainEntities.push({
+            hardcodedValue: trimmed,
+            parameterName,
+            otherInstances: [], // Agent fills these from user conversation
+          });
+        }
+      }
+
+      // Score contribution readiness based on scope and entity count
+      let contributionReadiness: "high" | "medium" | "low";
+      if (userScope === "already_generic") {
+        contributionReadiness = "high";
+      } else if (userScope === "parameterizable") {
+        contributionReadiness = domainEntities.length > 0 ? "medium" : "high";
+      } else {
+        contributionReadiness = "low";
+      }
+
+      const analysis = {
+        scope: userScope,
+        domainEntities,
+        abstractionBoundary: abstractionBoundary || (userScope === "one_off"
+          ? "Feature is designed for a single use case."
+          : "Domain-specific values should be stored as configuration rather than hardcoded."),
+        contributionReadiness,
+      };
+
+      return {
+        success: true,
+        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.`,
+        data: analysis as unknown as Record<string, unknown>,
+      };
+    }
+
     case "register_tech_debt": {
       const { createTechDebtItem } = await import("@/lib/decomposition");
       const item = createTechDebtItem({ title: String(params["title"] ?? ""), description: String(params["description"] ?? ""), severity: String(params["severity"] ?? "medium") });
@@ -2587,6 +2664,63 @@ export async function executeTool(
             }
           }
 
+          // On retry attempts, gather deeper context: follow imports and find
+          // codebase patterns. The first attempt has the error + source file.
+          // If that wasn't enough, the LLM needs to see HOW the imported modules
+          // work and how other files solve similar problems.
+          const deepContext: string[] = [];
+          if (fixAttempts >= 2) {
+            // 1. Follow imports: extract import paths from failing files, read their exports
+            for (const filePath of readFiles) {
+              try {
+                const importLines = await execInSandbox(
+                  rstSandboxId,
+                  `grep -n "^import" "/workspace/${filePath}" 2>/dev/null || true`,
+                );
+                for (const line of importLines.split("\n")) {
+                  // Match package imports like @dpf/db, @/lib/foo
+                  const pkgMatch = line.match(/from\s+["'](@dpf\/[^"']+|@\/[^"']+)["']/);
+                  if (!pkgMatch) continue;
+                  const importPath = pkgMatch[1]!;
+                  // Resolve to a file path
+                  let resolvedPath = "";
+                  if (importPath.startsWith("@dpf/db")) {
+                    resolvedPath = "packages/db/src/index.ts";
+                  } else if (importPath.startsWith("@/")) {
+                    resolvedPath = `apps/web/${importPath.replace("@/", "lib/")}.ts`;
+                  }
+                  if (resolvedPath && !readFiles.has(resolvedPath)) {
+                    readFiles.add(resolvedPath);
+                    const modContent = await execInSandbox(
+                      rstSandboxId,
+                      `cat "/workspace/${resolvedPath}" 2>/dev/null | head -50 || echo "[not found]"`,
+                    );
+                    if (!modContent.includes("[not found]")) {
+                      deepContext.push(`### ${resolvedPath} (imported by ${filePath})\n\`\`\`\n${modContent}\n\`\`\``);
+                    }
+                  }
+                }
+              } catch { /* skip */ }
+            }
+
+            // 2. Find codebase patterns: how do other files handle similar imports?
+            if (!results.typeCheckPassed && results.typeCheckOutput) {
+              // Extract the problematic symbol from the error (e.g. "'Prisma'")
+              const symbolMatch = results.typeCheckOutput.match(/['"](\w+)['"]\s+cannot be used as a value/);
+              if (symbolMatch) {
+                try {
+                  const grepResult = await execInSandbox(
+                    rstSandboxId,
+                    `grep -rn "import.*${symbolMatch[1]}" /workspace/apps/web/lib/ 2>/dev/null | grep -v node_modules | head -10 || true`,
+                  );
+                  if (grepResult.trim()) {
+                    deepContext.push(`### How other files import "${symbolMatch[1]}"\n\`\`\`\n${grepResult}\n\`\`\``);
+                  }
+                } catch { /* skip */ }
+              }
+            }
+          }
+
           // Ask LLM to produce a fix
           const fixPrompt = [
             "The following tests are failing. Diagnose and fix the SOURCE files (not the tests).",
@@ -2602,6 +2736,14 @@ export async function executeTool(
             "",
             "## Relevant Files",
             ...fileContents,
+            ...(deepContext.length > 0 ? [
+              "",
+              "## Import Chain & Codebase Patterns (follow these — they show how the project actually works)",
+              ...deepContext,
+            ] : []),
+            "",
+            "IMPORTANT: If an import is type-only (export type) but used as a value, find an alternative approach.",
+            "Look at how other files in this codebase solve the same problem.",
             "",
             "Output ONLY the fixed files in this format:",
             "### FILE: <path>",
@@ -2662,6 +2804,7 @@ export async function executeTool(
         ? `All tests pass, typecheck clean.${fixAttempts > 0 ? ` Fixed after ${fixAttempts} attempt(s).` : ""}`
         : `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
       logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
+
       return { success: true, message: statusMsg, data: verificationData };
     }
 
@@ -3664,7 +3807,7 @@ export async function executeTool(
         select: {
           title: true, brief: true, buildPlan: true, diffPatch: true, diffSummary: true,
           phase: true, portfolioId: true, digitalProductId: true,
-          verificationOut: true, sandboxId: true,
+          verificationOut: true, sandboxId: true, designDoc: true,
         },
       });
       if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
@@ -3672,6 +3815,8 @@ export async function executeTool(
       const brief = build.brief as Record<string, unknown> | null;
       const plan = build.buildPlan as Record<string, unknown> | null;
       const diff = (build.diffPatch ?? build.diffSummary ?? "") as string;
+      const designDoc = build.designDoc as Record<string, unknown> | null;
+      const reusability = designDoc?.reusabilityAnalysis as { scope?: string; contributionReadiness?: string } | undefined;
 
       // Parse diff to understand scope
       const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
@@ -3697,11 +3842,22 @@ export async function executeTool(
       const broadRoles = targetRoles.length === 0 || targetRoles.includes("All") || targetRoles.length >= 3;
       const acceptanceCriteria = Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria : [];
       const isGeneral = !description.match(/\b(acme|our company|internal|proprietary|specific to)\b/i);
-      const communityScore = broadRoles && isGeneral ? "high" : isGeneral ? "medium" : "low";
+      let communityScore = broadRoles && isGeneral ? "high" : isGeneral ? "medium" : "low";
+
+      // Enhance community value scoring with ideate-time reusability analysis
+      if (reusability) {
+        if (reusability.scope === "already_generic" || (reusability.scope === "parameterizable" && reusability.contributionReadiness === "high")) {
+          communityScore = "high";
+        } else if (reusability.scope === "parameterizable" && communityScore !== "high") {
+          communityScore = "medium";
+        }
+        // one_off: leave existing heuristic scoring — user explicitly chose single-use
+      }
+
       const communityReasoning = communityScore === "high"
-        ? `Targets ${broadRoles ? "broad roles" : targetRoles.join(", ")} with ${acceptanceCriteria.length} general acceptance criteria.`
+        ? `Targets ${broadRoles ? "broad roles" : targetRoles.join(", ")} with ${acceptanceCriteria.length} general acceptance criteria.${reusability?.scope === "parameterizable" ? " Feature was designed with parameterization for reusability." : reusability?.scope === "already_generic" ? " Feature was designed as generic from the start." : ""}`
         : communityScore === "medium"
-          ? `Targets specific roles (${targetRoles.join(", ")}) but the functionality appears generalizable.`
+          ? `Targets specific roles (${targetRoles.join(", ")}) but the functionality appears generalizable.${reusability?.scope === "parameterizable" ? " Parameterization was planned but may need completion before contributing." : ""}`
           : "Contains organization-specific language or targets a narrow use case.";
 
       // ── Criterion 3: Augmentation vs Innovation ──

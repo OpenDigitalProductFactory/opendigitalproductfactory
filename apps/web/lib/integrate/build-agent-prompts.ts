@@ -100,7 +100,14 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
   Ask yourself: do I have enough to design from?
   You need at minimum: (a) what problem this solves or who uses it, AND (b) roughly what it does.
 
-  IF NOT ENOUGH — user gave a vague, exploratory, or one-line message:
+  CHECK the Business Context section in the Build Studio Context below — it tells you the
+  industry, target market, CTA type, revenue model, and what the company does. Use this to
+  fill in gaps rather than asking. For example, if the user says "I need a loyalty program"
+  and Business Context says "pet-services, booking, pet owners" — you already know who uses
+  it (pet owners), what triggers it (repeat bookings), and what success looks like (increased
+  rebooking rate). Do NOT ask clarifying questions that Business Context already answers.
+
+  IF NOT ENOUGH — even with Business Context, the request is still too vague to act on:
     Ask ONE clarifying question. Max 2 sentences. Do NOT call any tools yet.
     Pick the question that unlocks the most: who uses it, what triggers it, or what success looks like.
     Examples:
@@ -138,8 +145,34 @@ STEP 2 — EXTERNAL RESEARCH:
   If search_public_web is NOT available, tell the user: "I recommend enabling external web access
   (Platform > AI > External Access) so I can research best practices." Then proceed with what you know.
 
+STEP 2b — REUSABILITY CHECK:
+  Before writing the design doc, check if this feature names specific instances of broader concepts.
+
+  a) Look at the key domain concepts (entities, vendors, standards, process types).
+     Is the user naming a SPECIFIC INSTANCE of a broader category?
+     Examples: "ITIL" = instance of "training authority"; "ABC Plumbing" = instance of "subcontractor";
+     "quarterly review" = instance of "review cadence"
+
+  b) IF the feature names specific instances that could be parameters:
+     Ask ONE question: "Should this work only for [specific], or would you want it to handle
+     [2-3 other examples] too? That way it's reusable later."
+     Wait for the answer.
+     IF the user says "just [specific thing]" — set scope to one_off. Proceed.
+     IF the user says "make it generic" or names other instances — set scope to parameterizable.
+
+  c) IF the feature is already described generically (no specific instances named):
+     Skip the question. Set scope to already_generic.
+
+  d) Call analyze_reusability with the feature description, domain concepts, and the user's stated scope.
+     Save the returned reusabilityAnalysis in your working context for use in Step 3.
+
+  RULES for this step:
+  - Do NOT ask if Business Context already makes the answer obvious.
+  - ONE question max 2 sentences. If user says "just build it", default to one_off and move on.
+  - This adds at most ONE conversational turn.
+
 STEP 3 — DESIGN DOCUMENT:
-  Based on codebase audit + external research + user description, call saveBuildEvidence with:
+  Based on codebase audit + external research + reusability analysis + user description, call saveBuildEvidence with:
   {
     field: "designDoc",
     value: {
@@ -150,11 +183,20 @@ STEP 3 — DESIGN DOCUMENT:
       reusePlan: "Will reuse X from existing codebase...",
       newCodeJustification: "Need new Y because...",
       proposedApproach: "...",
-      acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"]
+      acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"],
+      reusabilityAnalysis: {
+        scope: "one_off | parameterizable | already_generic",
+        domainEntities: [{ hardcodedValue: "ITIL", parameterName: "trainingAuthority", otherInstances: ["OpenGroup", "BIAN"] }],
+        abstractionBoundary: "The authority name and certification levels are parameters. The enrollment workflow is structural.",
+        contributionReadiness: "high | medium | low"
+      }
     }
   }
   The existingFunctionalityAudit MUST reference specific files and patterns you found in step 1.
   If it's empty or generic, your design is based on assumptions and the build WILL fail.
+  If scope is "parameterizable", the proposedApproach MUST describe how domain-specific values will
+  be stored as configuration (Json field, lookup table, or enum) rather than hardcoded in code.
+  Reference the existing customVocabulary pattern on StorefrontArchetype as the canonical example.
 
 STEP 4: Call reviewDesignDoc to review it.
   - If the review PASSES: proceed to step 5.
@@ -184,7 +226,7 @@ RULES:
 
 BEFORE PHASE TRANSITION: When the user approves the design and you're ready to move to plan phase, call save_phase_handoff with:
 - summary: What was designed and the core approach
-- decisionsMade: Key design decisions and the reasoning behind each
+- decisionsMade: Key design decisions including reusability scope (one_off vs parameterizable vs already_generic) and what domain entities are parameterized
 - openIssues: Any unresolved questions or risks
 - userPreferences: Any constraints or preferences the user expressed
 This briefing will be injected into the plan agent's context so it understands WHY you made these choices.`,
@@ -514,6 +556,8 @@ export type BuildContext = {
   taxonomyContext?: { path: string; siblingProducts: string[] };
   /** Pre-generated design system from storefront config or prior phase. */
   designSystem?: string;
+  /** Organization business context — industry, target market, revenue model, etc. */
+  businessContext?: string;
 };
 
 export function getBuildContextSection(ctx: BuildContext): string {
@@ -532,6 +576,13 @@ export function getBuildContextSection(ctx: BuildContext): string {
     }
   } else if (ctx.portfolioId) {
     lines.push(`Portfolio: ${ctx.portfolioId}`);
+  }
+
+  if (ctx.businessContext) {
+    lines.push("");
+    lines.push("--- Business Context ---");
+    lines.push(ctx.businessContext);
+    lines.push("Use this context to inform design decisions. Do NOT ask the user questions that are already answered here.");
   }
 
   if (ctx.brief) {
