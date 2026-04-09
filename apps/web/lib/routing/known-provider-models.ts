@@ -71,7 +71,8 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$$",
       bestFor: ["coding", "reasoning"],
       avoidFor: ["conversation", "custom-tool-use"],
-      defaultStatus: "active",
+      defaultStatus: "disabled",
+      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
       scores: {
         reasoning: 88,
         codegen: 96,
@@ -139,7 +140,8 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "$$$$",
       bestFor: ["coding", "reasoning"],
       avoidFor: ["custom-tool-use"],
-      defaultStatus: "active",
+      defaultStatus: "disabled",
+      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
       scores: {
         reasoning: 95,
         codegen: 97,
@@ -178,7 +180,8 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       costTier: "subscription",
       bestFor: ["conversation", "coding", "reasoning"],
       avoidFor: ["custom-tool-use"],
-      defaultStatus: "active",
+      defaultStatus: "disabled",
+      retiredReason: "ChatGPT backend /codex/responses does not support platform inference — use Codex CLI directly.",
       scores: {
         reasoning: 85,
         codegen: 90,

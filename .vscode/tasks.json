@@ -90,7 +90,7 @@
       "label": "DPF: Rebuild Production Runtime",
       "type": "shell",
       "command": "cmd",
-      "args": ["/c", "docker compose build portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"],
+      "args": ["/c", "docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"],
       "options": { "cwd": "${workspaceFolder}" },
       "group": "build",
       "problemMatcher": [],
