@@ -221,12 +221,19 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       body.temperature = plan.temperature;
     }
     // EP-INF-013: explicit reasoning_effort takes precedence; fall back to effort.
+    // Codex models (gpt-5.3-codex, gpt-5.4 via ChatGPT backend) require reasoning
+    // enabled to produce any output. Default to "low" when no effort is specified.
     if (typeof plan.providerSettings?.reasoning_effort === "string") {
       body.reasoning = { effort: plan.providerSettings.reasoning_effort };
     } else if (typeof plan.providerSettings?.effort === "string" && plan.providerSettings.effort !== "low") {
       const effortMap: Record<string, string> = { medium: "medium", high: "high", max: "high" };
       const mapped = effortMap[plan.providerSettings.effort];
       if (mapped) body.reasoning = { effort: mapped };
+    }
+    // Ensure reasoning is always set for the Responses API — models like
+    // gpt-5.3-codex return empty output when reasoning.effort is "none".
+    if (!body.reasoning) {
+      body.reasoning = { effort: "low" };
     }
     const responseTools = toResponsesTools(tools);
     if (responseTools) {
