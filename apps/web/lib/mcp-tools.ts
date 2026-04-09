@@ -962,6 +962,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan"],
   },
   {
+    name: "start_ideate_research",
+    description: "Signal that you have enough context from the user to begin codebase research and draft the design document. Call this AFTER the user answers your questions (intent gate, reusability scope). The system will search the codebase, analyze patterns, and draft the design doc automatically. You do NOT need to call search_project_files or read_project_file yourself — this tool handles all research.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reusabilityScope: { type: "string", enum: ["one_off", "parameterizable", "already_generic"], description: "The user's reusability preference" },
+        userContext: { type: "string", description: "Summary of what the user wants, including any answers to clarifying questions" },
+      },
+      required: ["reusabilityScope", "userContext"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate"],
+  },
+  {
     name: "read_project_file",
     description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
     inputSchema: {
@@ -4258,6 +4274,40 @@ export async function executeTool(
       const result = await readProjectFile(String(params.path ?? ""), opts);
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       return { success: true, message: result.content, data: { content: result.content } };
+    }
+
+    case "start_ideate_research": {
+      // This tool is a signal — the actual research dispatch happens in
+      // agent-coworker.ts after the agentic loop returns. We just persist
+      // the user context so the dispatch knows what to research.
+      const scope = String(params.reusabilityScope ?? "parameterizable");
+      const context = String(params.userContext ?? "");
+
+      // Store the research request on the build record
+      const activeBuild = await prisma.featureBuild.findFirst({
+        where: { phase: "ideate" },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+      });
+      if (activeBuild) {
+        await prisma.featureBuild.update({
+          where: { buildId: activeBuild.buildId },
+          data: {
+            buildExecState: {
+              ideateResearchRequested: true,
+              reusabilityScope: scope,
+              userContext: context,
+              requestedAt: new Date().toISOString(),
+            },
+          },
+        });
+      }
+
+      return {
+        success: true,
+        message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now.",
+        data: { reusabilityScope: scope, userContext: context },
+      };
     }
 
     case "search_project_files": {

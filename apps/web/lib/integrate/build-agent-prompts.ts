@@ -1,5 +1,6 @@
 import type { BuildPhase, FeatureBrief } from "@/lib/feature-build-types";
 import { PROJECT_CONTEXT } from "./build-project-context";
+import { loadPrompt } from "@/lib/tak/prompt-loader";
 
 // ─── IT4IT Value Stream Mapping ─────────────────────────────────────────────
 // Each build phase maps to an IT4IT value stream stage and responsible agents.
@@ -119,103 +120,49 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
   IF ENOUGH — user gave context, answered your question, or said "just build it" / "make assumptions":
     Skip to Step 1 immediately.
 
-STEP 1 — MANDATORY CODEBASE RESEARCH (do this FIRST, before anything else):
-  a) SCHEMA FIRST — search for existing models before proposing any new ones:
-     Call search_project_files with the feature's keywords AND glob "**/*.prisma".
-     Example: if building a training feature, search "training", "course", "registration", "voucher"
-     with glob "**/*.prisma". If matches exist, read that section — you may be extending, not creating.
-     NEVER propose a new Prisma model without first confirming it doesn't already exist in schema.prisma.
-  b) Call search_project_files (without glob, searching *.ts) to find existing UI/API for the same domain.
-  c) Call read_project_file on at least ONE similar existing feature for code patterns:
-     - How are API routes structured? (read an existing route.ts)
-     - How does auth work? (look for auth() imports)
-     - What fields does the User model have? (read packages/db/prisma/schema.prisma lines 10-62)
-  d) Call describe_model on the closest existing model to see field and relation conventions.
-     If describe_model fails, use read_project_file on packages/db/prisma/schema.prisma instead.
-  You MUST call at least 3 research tools before proceeding to step 2.
-  If you skip research, your design will have wrong auth patterns, wrong field names, and wrong imports.
-
-STEP 1b — DESIGN INTELLIGENCE:
-  The design system has already been generated and injected into your context above (look for the
-  "Design System Recommendation" section). Use it in the design document — do NOT call
-  generate_design_system. It is already done.
-
-STEP 2 — EXTERNAL RESEARCH:
-  Use search_public_web to find best practices and open source precedents.
-  If search_public_web is NOT available, tell the user: "I recommend enabling external web access
-  (Platform > AI > External Access) so I can research best practices." Then proceed with what you know.
-
-STEP 2b — REUSABILITY CHECK:
-  Before writing the design doc, check if this feature names specific instances of broader concepts.
+STEP 1 — REUSABILITY CHECK:
+  Check if this feature names specific instances of broader concepts.
 
   a) Look at the key domain concepts (entities, vendors, standards, process types).
      Is the user naming a SPECIFIC INSTANCE of a broader category?
-     Examples: "ITIL" = instance of "training authority"; "ABC Plumbing" = instance of "subcontractor";
-     "quarterly review" = instance of "review cadence"
+     Examples: "ITIL" = instance of "training authority"; "ABC Plumbing" = instance of "subcontractor"
 
   b) IF the feature names specific instances that could be parameters:
      Ask ONE question: "Should this work only for [specific], or would you want it to handle
      [2-3 other examples] too? That way it's reusable later."
      Wait for the answer.
-     IF the user says "just [specific thing]" — set scope to one_off. Proceed.
+     IF the user says "just [specific thing]" — set scope to one_off.
      IF the user says "make it generic" or names other instances — set scope to parameterizable.
 
   c) IF the feature is already described generically (no specific instances named):
      Skip the question. Set scope to already_generic.
-
-  d) Call analyze_reusability with the feature description, domain concepts, and the user's stated scope.
-     Save the returned reusabilityAnalysis in your working context for use in Step 3.
 
   RULES for this step:
   - Do NOT ask if Business Context already makes the answer obvious.
   - ONE question max 2 sentences. If user says "just build it", default to one_off and move on.
   - This adds at most ONE conversational turn.
 
-STEP 3 — DESIGN DOCUMENT:
-  Based on codebase audit + external research + reusability analysis + user description, call saveBuildEvidence with:
-  {
-    field: "designDoc",
-    value: {
-      problemStatement: "...",
-      existingFunctionalityAudit: "Found ExpenseClaim model with X pattern, API routes use auth() from @/lib/auth, User has email/platformRole...",
-      externalResearch: "Best practices from web search...",
-      alternativesConsidered: "...",
-      reusePlan: "Will reuse X from existing codebase...",
-      newCodeJustification: "Need new Y because...",
-      proposedApproach: "...",
-      acceptanceCriteria: ["...", "All interactions keyboard navigable", "WCAG AA compliant"],
-      reusabilityAnalysis: {
-        scope: "one_off | parameterizable | already_generic",
-        domainEntities: [{ hardcodedValue: "ITIL", parameterName: "trainingAuthority", otherInstances: ["OpenGroup", "BIAN"] }],
-        abstractionBoundary: "The authority name and certification levels are parameters. The enrollment workflow is structural.",
-        contributionReadiness: "high | medium | low"
-      }
-    }
-  }
-  The existingFunctionalityAudit MUST reference specific files and patterns you found in step 1.
-  If it's empty or generic, your design is based on assumptions and the build WILL fail.
-  If scope is "parameterizable", the proposedApproach MUST describe how domain-specific values will
-  be stored as configuration (Json field, lookup table, or enum) rather than hardcoded in code.
-  Reference the existing customVocabulary pattern on StorefrontArchetype as the canonical example.
+STEP 2 — START RESEARCH:
+  After the user answers (or if no question was needed), call start_ideate_research with:
+  - reusabilityScope: the scope from step 1 ("one_off", "parameterizable", or "already_generic")
+  - userContext: a brief summary of the feature and the user's preferences
 
-STEP 4: Call reviewDesignDoc to review it.
-  - If the review PASSES: proceed to step 5.
-  - If the review FAILS: read the blocking issues in the response, revise the designDoc to address them,
-    call saveBuildEvidence with the revised designDoc, then call reviewDesignDoc again.
-    Do NOT proceed to step 5 until the review passes. Do NOT ask the user to fix review issues — fix them yourself.
+  The system will automatically search the codebase, analyze patterns, and draft the design document.
+  You do NOT need to call search_project_files, read_project_file, or describe_model yourself.
 
-STEP 5: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
+  While research is running, tell the user: "Researching the codebase and drafting the design — this takes about a minute."
+
+STEP 3: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
   Do NOT show the design document text unless the user has Dev mode enabled.
 
 RULES:
 - Do NOT ask technical questions. Make reasonable assumptions and act.
-- Do NOT repeat yourself. If you already searched, move to the next step.
-- Do NOT describe code. Use tools to save evidence.
+- Do NOT repeat yourself or re-ask questions the user already answered.
 - Maximum 2 sentences per response. Act, don't explain.
 - If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
 - If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.
 
-6. After the user approves the design, call suggest_taxonomy_placement.
+STEP 4: After the user approves the design, call suggest_taxonomy_placement.
    This analyzes the brief and suggests where the feature belongs in the portfolio taxonomy.
    - If high confidence: state the recommendation and ask "Sound right?"
    - If multiple candidates: present the top 2-3 options and ask which fits
@@ -531,8 +478,10 @@ GUARDRAILS:
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
-export function getBuildPhasePrompt(phase: BuildPhase): string {
-  return PHASE_PROMPTS[phase] ?? "";
+export async function getBuildPhasePrompt(phase: BuildPhase): Promise<string> {
+  const hardcoded = PHASE_PROMPTS[phase] ?? "";
+  if (!hardcoded) return "";
+  return loadPrompt("build-phase", phase, hardcoded);
 }
 
 export type PhaseHandoffSummary = {
@@ -560,7 +509,7 @@ export type BuildContext = {
   businessContext?: string;
 };
 
-export function getBuildContextSection(ctx: BuildContext): string {
+export async function getBuildContextSection(ctx: BuildContext): Promise<string> {
   const lines: string[] = [
     "",
     "--- Build Studio Context ---",
@@ -629,7 +578,7 @@ export function getBuildContextSection(ctx: BuildContext): string {
   }
 
   lines.push("");
-  lines.push(getBuildPhasePrompt(ctx.phase));
+  lines.push(await getBuildPhasePrompt(ctx.phase));
 
   // Contribution mode awareness for all phases — agent should know this for design decisions
   if (ctx.contributionMode) {
