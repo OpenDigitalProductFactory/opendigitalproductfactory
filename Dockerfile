@@ -1,6 +1,6 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.32.0 --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
