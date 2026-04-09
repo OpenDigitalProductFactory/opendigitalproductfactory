@@ -36,6 +36,8 @@ export interface RoutedInferenceResult {
   downgradeMessage: string | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
+  /** Responses API: the response ID for chaining subsequent calls. */
+  responseId?: string;
   /** The V2 route decision that selected this endpoint (for audit/metadata). */
   routeDecision: RouteDecision;
   /** EP-INF-009d: Set when interactionMode is "background". Poll via pollAsyncOperation(). */
@@ -104,6 +106,8 @@ export interface RouteAndCallOptions {
    * Ignored by providers that do not support extended reasoning.
    */
   effort?: "low" | "medium" | "high" | "max";
+  /** Responses API: chain to a previous response for conversation state. */
+  previousResponseId?: string;
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -312,6 +316,7 @@ export async function routeAndCall(
       systemPrompt,
       toolsStripped ? undefined : options?.tools,
       decision.executionPlan,
+      options?.previousResponseId,
     );
 
     // If the adapter returned an operation ID (async adapter), create tracking record
@@ -365,6 +370,7 @@ export async function routeAndCall(
     systemPrompt,
     toolsStripped ? undefined : options?.tools,
     decision.executionPlan,
+    options?.previousResponseId,
   );
 
   // 6. Normalize result to RoutedInferenceResult
@@ -379,5 +385,6 @@ export async function routeAndCall(
     downgradeMessage: result.downgradeMessage,
     toolsStripped,
     routeDecision: decision,
+    responseId: result.responseId,
   };
 }

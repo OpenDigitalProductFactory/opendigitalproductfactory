@@ -49,6 +49,8 @@ export type InferenceResult = {
   outputTokens: number;
   inferenceMs: number;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  /** Responses API: chain subsequent calls with this ID for conversation state. */
+  responseId?: string;
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -256,6 +258,7 @@ export async function callProvider(
   systemPrompt: string,
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
+  previousResponseId?: string,
 ): Promise<InferenceResult> {
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -290,6 +293,7 @@ export async function callProvider(
       messages,
       systemPrompt,
       tools,
+      previousResponseId,
     });
     endTimer();
   } catch (err) {
@@ -310,6 +314,7 @@ export async function callProvider(
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
+    responseId: result.responseId,
   };
 }
 

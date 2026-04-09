@@ -29,6 +29,8 @@ export interface AdapterRequest {
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
+  /** Responses API: chain to a previous response for multi-turn conversation state. */
+  previousResponseId?: string;
 }
 
 /** Normalized output from an execution adapter */
@@ -38,6 +40,8 @@ export interface AdapterResult {
   usage: { inputTokens: number; outputTokens: number };
   inferenceMs: number;
   raw?: Record<string, unknown>;
+  /** Responses API: the response ID for chaining subsequent calls. */
+  responseId?: string;
 }
 
 /** Contract every execution adapter implements */

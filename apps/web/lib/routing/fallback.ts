@@ -24,6 +24,7 @@ export interface FallbackResult {
   tokenUsage?: { inputTokens: number; outputTokens: number };
   downgraded: boolean;
   downgradeMessage: string | null;
+  responseId?: string;
 }
 
 /**
@@ -36,6 +37,7 @@ export async function callWithFallbackChain(
   systemPrompt: string,
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
+  previousResponseId?: string,
 ): Promise<FallbackResult> {
   if (!decision.selectedEndpoint) {
     throw new Error(
@@ -96,6 +98,7 @@ export async function callWithFallbackChain(
         systemPrompt,
         tools,
         i === 0 ? plan : undefined,
+        i === 0 ? previousResponseId : undefined,
       );
 
       // EP-INF-004: Record successful request for rate tracking
@@ -135,6 +138,7 @@ export async function callWithFallbackChain(
             ? `${decision.reason?.split(". ")[0]}. Using ${provider.name} instead. Check AI Workforce settings to fix.`
             : `Switched to ${provider.name} after the preferred endpoint was unavailable.`
           : null,
+        responseId: result.responseId,
       };
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
