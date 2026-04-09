@@ -177,6 +177,16 @@ Begin the ideation phase. Explore the codebase to understand what exists, then s
     stream: true,
   }));
 
+  // Test 6: Exact yesterday format — no reasoning field, build tools
+  results.push(await callResponses(token, "Yesterday format: NO reasoning field + build tools", {
+    model: "gpt-5.3-codex",
+    input: [{ role: "user", content: "I just created a new feature called 'student registry'. Help me define it." }],
+    instructions: buildSystemPrompt,
+    tools: buildTools,
+    store: false,
+    stream: true,
+  }));
+
   const passed = results.filter(r => r.pass).length;
   const failed = results.filter(r => !r.pass).length;
 

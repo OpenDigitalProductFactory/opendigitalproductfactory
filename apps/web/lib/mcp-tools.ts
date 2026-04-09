@@ -4267,7 +4267,14 @@ export async function executeTool(
       const result = await searchProjectFiles(String(params.query ?? ""), opts);
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
-      return { success: true, message: summary || "No matches found", data: { results: result.results } };
+      if (!summary) {
+        return {
+          success: true,
+          message: `No matches found for "${params.query}"${params.glob ? ` in ${params.glob} files` : ""}. This is normal for new features — there is no existing code to find. Proceed with designing the feature from scratch using saveBuildEvidence instead of searching again.`,
+          data: { results: [] },
+        };
+      }
+      return { success: true, message: summary, data: { results: result.results } };
     }
 
     case "query_version_history": {
