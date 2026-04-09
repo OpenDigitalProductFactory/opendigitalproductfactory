@@ -13,8 +13,22 @@ export const config = {
 };
 
 
+/** Routes blocked when running as a sandbox instance (DPF_ENVIRONMENT=sandbox). */
+const SANDBOX_BLOCKED_PREFIXES = ["/build", "/platform", "/admin"];
+const isSandbox = process.env.DPF_ENVIRONMENT === "sandbox";
+
 export default auth(async function proxy(req: NextAuthRequest) {
   const { pathname } = req.nextUrl;
+
+  // Sandbox instances exist for feature preview only — block admin,
+  // platform config, and Build Studio to prevent infinite iframe nesting
+  // and accidental configuration of a throwaway instance.
+  if (isSandbox && SANDBOX_BLOCKED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/sandbox-restricted";
+    return NextResponse.rewrite(url);
+  }
+
   const routeClass = classifyRoute(pathname);
 
   // ── Always public ─────────────────────────────────────────────────────────
