@@ -729,15 +729,29 @@ export async function sendMessage(input: {
     const activeBuild = await prisma.featureBuild.findFirst({
       where: { createdById: user.id!, phase: "build" },
       orderBy: { updatedAt: "desc" },
-      select: { buildId: true, buildPlan: true },
+      select: { buildId: true, buildPlan: true, taskResults: true },
     });
     const buildPlan = activeBuild?.buildPlan as import("@/lib/explore/feature-build-types").BuildPlanDoc | undefined;
+
+    // Guard: don't re-trigger orchestrator if all tasks already completed.
+    // Without this, any user message (e.g. "yes" to "Ready for review?")
+    // while phase is still "build" re-dispatches the entire build.
+    const storedResults = activeBuild?.taskResults as { completedTasks?: number; totalTasks?: number } | null;
+    const buildAlreadyComplete = storedResults
+      && typeof storedResults.completedTasks === "number"
+      && typeof storedResults.totalTasks === "number"
+      && storedResults.totalTasks > 0
+      && storedResults.completedTasks >= storedResults.totalTasks;
+
+    if (buildAlreadyComplete) {
+      console.log(`[orchestrator] Build ${activeBuild!.buildId} already completed (${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks). Skipping re-dispatch.`);
+    }
 
     if (activeBuild && !buildPlan?.tasks?.length) {
       console.warn(`[orchestrator] SKIPPED for ${activeBuild.buildId}: buildPlan missing "tasks" array. Plan keys: ${buildPlan ? Object.keys(buildPlan).join(", ") : "null"}. Falling back to single-agent mode — no specialist dispatch.`);
     }
 
-    if (activeBuild && buildPlan?.tasks?.length) {
+    if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
       const { runBuildOrchestrator } = await import("@/lib/integrate/build-orchestrator");
       const { agentEventBus } = await import("@/lib/agent-event-bus");
 
