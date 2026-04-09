@@ -89,13 +89,13 @@ describe("callProvider", () => {
 
     await callProvider(
       "codex",
-      "gpt-5-codex",
+      "gpt-5.3-codex",
       [{ role: "user", content: "Build it" }],
       "You are helpful.",
       undefined,
       {
         providerId: "codex",
-        modelId: "gpt-5-codex",
+        modelId: "gpt-5.3-codex",
         recipeId: null,
         contractFamily: "sync.code-gen",
         executionAdapter: "responses",

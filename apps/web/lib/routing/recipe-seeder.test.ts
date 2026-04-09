@@ -216,7 +216,7 @@ describe("buildSeedRecipe – responses-backed providers", () => {
   it("routes codex models through the responses adapter", () => {
     const result = buildSeedRecipe(
       "codex",
-      "gpt-5-codex",
+      "gpt-5.3-codex",
       "sync.code-gen",
       baseModelCard({ modelClass: "code" }),
       baseContract(),

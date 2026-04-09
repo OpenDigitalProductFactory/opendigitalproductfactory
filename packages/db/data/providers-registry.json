@@ -505,7 +505,8 @@
     "authHeader": "Authorization",
     "costModel": "token",
     "families": [
-      "gpt-5-codex",
+      "gpt-5.4",
+      "gpt-5.3-codex",
       "codex-mini"
     ],
     "inputPricePerMToken": 1.5,
@@ -519,7 +520,7 @@
     "tokenUrl": "https://auth.openai.com/oauth/token",
     "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
     "oauthRedirectUri": "http://localhost:1455/auth/callback",
-    "supportsToolUse": true
+    "supportsToolUse": false
   },
   {
     "providerId": "chatgpt",
@@ -557,7 +558,7 @@
       "setupDifficulty": "automatic",
       "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": false
   },
   {
     "providerId": "openrouter",

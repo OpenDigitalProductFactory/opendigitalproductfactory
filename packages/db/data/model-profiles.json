@@ -223,7 +223,7 @@
   },
     {
       "providerId": "codex",
-      "modelId": "gpt-5-codex",
+      "modelId": "gpt-5.3-codex",
       "friendlyName": "GPT-5 Codex",
       "modelStatus": "active",
       "capabilityTier": "advanced",

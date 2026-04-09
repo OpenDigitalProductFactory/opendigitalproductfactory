@@ -160,6 +160,78 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
   }
 }
 
+// ─── ChatGPT Backend Model Discovery ────────────────────────────────────────
+
+/**
+ * Discover models from the ChatGPT backend `/backend-api/models` endpoint.
+ * Works with OAuth subscription tokens (codex, chatgpt providers).
+ * Returns the same shape as parseModelsResponse for consistency.
+ */
+
+// Response shape from chatgpt.com/backend-api/models
+interface ChatGptModelEntry {
+  slug?: string;
+  max_tokens?: number;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  capabilities?: Record<string, unknown>;
+  product_features?: Record<string, unknown>;
+}
+
+interface ChatGptModelsResponse {
+  models?: ChatGptModelEntry[];
+  categories?: Array<{
+    category?: string;
+    human_category_name?: string;
+    default_model?: string;
+  }>;
+}
+
+export async function discoverChatGptBackendModels(
+  providerId: string,
+  headers: Record<string, string>,
+  baseUrl?: string,
+): Promise<{ models: { modelId: string; rawMetadata: Record<string, unknown> }[]; error?: string }> {
+  const backend = baseUrl ?? "https://chatgpt.com/backend-api";
+  const modelsUrl = `${backend}/models`;
+
+  try {
+    const res = await fetch(modelsUrl, {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      return { models: [], error: `HTTP ${res.status} from ${modelsUrl}` };
+    }
+
+    const json = await res.json() as ChatGptModelsResponse;
+    const entries = json.models ?? [];
+
+    const models = entries
+      .filter((m) => typeof m.slug === "string" && m.slug.length > 0)
+      .map((m) => ({
+        modelId: m.slug!,
+        rawMetadata: {
+          ...m as Record<string, unknown>,
+          id: m.slug,
+          source: "chatgpt_backend_discovery",
+        },
+      }));
+
+    console.log(
+      `[discovery] ChatGPT backend returned ${models.length} models for ${providerId}: ` +
+      `[${models.map(m => m.modelId).join(", ")}]`,
+    );
+
+    return { models };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Fetch error";
+    console.warn(`[discovery] ChatGPT backend discovery failed for ${providerId}: ${msg}`);
+    return { models: [], error: msg };
+  }
+}
+
 // ─── Exported internal functions (no auth guard) ─────────────────────────────
 
 
@@ -170,12 +242,86 @@ export async function discoverModelsInternal(
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
-  // Agent providers (Codex) and ChatGPT subscription can't list models via
-  // standard /v1/models — subscription tokens don't have platform API access.
-  // Models for these providers are seeded, not discovered.
+  // Agent providers (Codex) and ChatGPT subscription use the ChatGPT backend
+  // /backend-api/models endpoint instead of standard /v1/models.
   if (provider.authMethod === "oauth2_authorization_code" &&
       (provider.category === "agent" || providerId === "chatgpt")) {
-    return { discovered: 0, newCount: 0 };
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) {
+      return { discovered: 0, newCount: 0, error: `OAuth token: ${tokenResult.error}` };
+    }
+    const chatgptProvider = await prisma.modelProvider.findUnique({
+      where: { providerId: "chatgpt" },
+      select: { baseUrl: true },
+    });
+    const backendUrl = chatgptProvider?.baseUrl ?? "https://chatgpt.com/backend-api";
+    const backendHeaders = {
+      Authorization: `Bearer ${tokenResult.token}`,
+      "Content-Type": "application/json",
+    };
+    const result = await discoverChatGptBackendModels(providerId, backendHeaders, backendUrl);
+    if (result.error || result.models.length === 0) {
+      // Dynamic discovery failed — caller (autoDiscoverAndProfile) will
+      // fall back to KNOWN_PROVIDER_MODELS catalog.
+      return { discovered: 0, newCount: 0, error: result.error ?? "No models returned" };
+    }
+
+    // Store discovered models (same logic as standard discovery below)
+    let newCount = 0;
+    const freshModelIds = new Set(result.models.map(m => m.modelId));
+    for (const m of result.models) {
+      const existing = await prisma.discoveredModel.findUnique({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      });
+      if (existing) {
+        await prisma.discoveredModel.update({
+          where: { id: existing.id },
+          data: {
+            rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue,
+            lastSeenAt: new Date(),
+            missedDiscoveryCount: 0,
+          },
+        });
+      } else {
+        await prisma.discoveredModel.create({
+          data: {
+            providerId,
+            modelId: m.modelId,
+            rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue,
+            lastSeenAt: new Date(),
+          },
+        });
+        newCount++;
+      }
+    }
+
+    // Retire models no longer listed
+    const allKnown = await prisma.discoveredModel.findMany({
+      where: { providerId },
+      select: { id: true, modelId: true, missedDiscoveryCount: true },
+    });
+    for (const known of allKnown) {
+      if (!freshModelIds.has(known.modelId)) {
+        const newMissedCount = known.missedDiscoveryCount + 1;
+        await prisma.discoveredModel.update({
+          where: { id: known.id },
+          data: { missedDiscoveryCount: newMissedCount },
+        });
+        if (newMissedCount >= 2) {
+          await prisma.modelProfile.updateMany({
+            where: { providerId, modelId: known.modelId },
+            data: {
+              modelStatus: "retired",
+              retiredAt: new Date(),
+              retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
+            },
+          });
+          console.log(`[discovery] Retired model ${known.modelId} from ${providerId} (missed ${newMissedCount} discoveries)`);
+        }
+      }
+    }
+
+    return { discovered: result.models.length, newCount };
   }
 
   const providerRow = {
@@ -702,8 +848,9 @@ export async function seedAllRecipes(): Promise<number> {
  * Auto-discover and profile models for a provider after activation.
  * Called from OAuth callback and API key save flows.
  *
- * For discoverable providers: calls discoverModelsInternal + profileModelsInternal.
- * For non-discoverable providers (chatgpt, codex): seeds from KNOWN_PROVIDER_MODELS catalog.
+ * For all providers: tries discoverModelsInternal first (dynamic discovery).
+ * For codex/chatgpt: discoverModelsInternal calls /backend-api/models via OAuth.
+ * If dynamic discovery fails, falls back to KNOWN_PROVIDER_MODELS catalog.
  *
  * Errors are logged but never thrown (activation should succeed even if discovery fails).
  */
@@ -713,22 +860,32 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
   error?: string;
 }> {
   try {
+    // 1. Try dynamic discovery (works for all providers including codex/chatgpt)
+    const discovery = await discoverModelsInternal(providerId);
+
+    if (discovery.discovered > 0) {
+      // Dynamic discovery succeeded — profile the discovered models
+      const profiling = await profileModelsInternal(providerId);
+      return {
+        discovered: discovery.discovered,
+        profiled: profiling.profiled,
+        error: profiling.error,
+      };
+    }
+
+    // 2. Dynamic discovery returned 0 — fall back to known catalog if available
     const knownModels = KNOWN_PROVIDER_MODELS[providerId];
     if (knownModels) {
+      console.log(
+        `[auto-discover] Dynamic discovery returned 0 for ${providerId}` +
+        (discovery.error ? ` (${discovery.error})` : "") +
+        `. Falling back to known catalog (${knownModels.length} models).`,
+      );
       return await seedKnownModels(providerId, knownModels);
     }
 
-    const discovery = await discoverModelsInternal(providerId);
-    if (discovery.error || discovery.discovered === 0) {
-      return { discovered: 0, profiled: 0, error: discovery.error };
-    }
-
-    const profiling = await profileModelsInternal(providerId);
-    return {
-      discovered: discovery.discovered,
-      profiled: profiling.profiled,
-      error: profiling.error,
-    };
+    // 3. No catalog fallback — report the discovery error
+    return { discovered: 0, profiled: 0, error: discovery.error };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[auto-discover] Failed for ${providerId}: ${message}`);

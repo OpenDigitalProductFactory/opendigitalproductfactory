@@ -1,9 +1,14 @@
 /**
- * Known model catalog for providers that cannot be discovered via /v1/models.
+ * Known model catalog — fallback for when dynamic discovery fails.
  *
- * Codex and ChatGPT authenticate via OAuth subscription tokens that lack
- * platform API access, so autoDiscoverAndProfile() uses this catalog
- * instead of hitting the models endpoint.
+ * Codex and ChatGPT now discover models dynamically via /backend-api/models.
+ * This catalog is used only when:
+ *   - OAuth token is not yet available (first activation)
+ *   - The /backend-api/models endpoint is unreachable
+ *   - The response is empty or unparseable
+ *
+ * Keep this catalog reasonably up-to-date as a safety net, but dynamic
+ * discovery is the primary source of truth for model availability.
  */
 import type { ModelCardCapabilities } from "./model-card-types";
 import { EMPTY_CAPABILITIES } from "./model-card-types";
@@ -41,32 +46,36 @@ export interface KnownModel {
 export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
   codex: [
     {
-      modelId: "gpt-5-codex",
-      friendlyName: "GPT-5 Codex",
+      modelId: "gpt-5.3-codex",
+      friendlyName: "GPT-5.3 Codex",
       summary:
-        "OpenAI flagship Codex coding model -- advanced coding, reasoning, and tool use",
+        "OpenAI Codex coding model -- uses built-in Codex tools, not custom function tools",
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        toolUse: true,
+        // toolUse: false — Codex models via ChatGPT backend (/codex/responses)
+        // only support Codex's built-in tools (apply_patch, shell, etc.), not
+        // custom function tools. Setting toolUse=false prevents the routing
+        // pipeline from selecting codex for tasks that need custom tools.
+        toolUse: false,
         streaming: true,
         structuredOutput: true,
       },
-      maxContextTokens: 128_000,
-      maxOutputTokens: 16_384,
-      inputModalities: ["text"],
+      maxContextTokens: 400_000,
+      maxOutputTokens: 128_000,
+      inputModalities: ["text", "image"],
       outputModalities: ["text"],
       modelClass: "code",
       modelFamily: "codex",
       capabilityTier: "advanced",
       costTier: "$$$",
-      bestFor: ["coding", "reasoning", "agentic-tasks"],
-      avoidFor: ["conversation"],
+      bestFor: ["coding", "reasoning"],
+      avoidFor: ["conversation", "custom-tool-use"],
       defaultStatus: "active",
       scores: {
         reasoning: 88,
         codegen: 96,
-        toolFidelity: 90,
+        toolFidelity: 10,
         instructionFollowingScore: 86,
         structuredOutputScore: 84,
         conversational: 50,
@@ -77,11 +86,11 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelId: "codex-mini-latest",
       friendlyName: "Codex Mini",
       summary:
-        "OpenAI Codex agentic coding model -- sandboxed execution with tool use",
+        "OpenAI Codex agentic coding model -- built-in Codex tools only",
       qualityTier: "strong",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        toolUse: true,
+        toolUse: false,
         streaming: true,
         structuredOutput: true,
       },
@@ -93,19 +102,52 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelFamily: "codex",
       capabilityTier: "advanced",
       costTier: "$$",
-      bestFor: ["coding", "agentic-tasks"],
-      avoidFor: ["conversation"],
+      bestFor: ["coding"],
+      avoidFor: ["conversation", "custom-tool-use"],
       defaultStatus: "disabled",
       retiredReason:
         "Codex Mini is not enabled by default for platform routing because it is CLI-oriented and often unavailable via the shared API path.",
       scores: {
         reasoning: 70,
         codegen: 90,
-        toolFidelity: 85,
+        toolFidelity: 10,
         instructionFollowingScore: 80,
         structuredOutputScore: 70,
         conversational: 40,
         contextRetention: 60,
+      },
+    },
+    {
+      modelId: "gpt-5.4",
+      friendlyName: "GPT-5.4 (Codex)",
+      summary:
+        "OpenAI flagship model via Codex -- built-in Codex tools only, not custom function tools",
+      qualityTier: "frontier",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: false,
+        streaming: true,
+        structuredOutput: true,
+      },
+      maxContextTokens: 1_000_000,
+      maxOutputTokens: 128_000,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "code",
+      modelFamily: "gpt-5",
+      capabilityTier: "advanced",
+      costTier: "$$$$",
+      bestFor: ["coding", "reasoning"],
+      avoidFor: ["custom-tool-use"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 95,
+        codegen: 97,
+        toolFidelity: 10,
+        instructionFollowingScore: 93,
+        structuredOutputScore: 92,
+        conversational: 85,
+        contextRetention: 90,
       },
     },
   ],
@@ -115,11 +157,13 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelId: "gpt-5.4",
       friendlyName: "GPT-5.4 (ChatGPT Subscription)",
       summary:
-        "OpenAI GPT-5.4 via ChatGPT subscription -- conversation, coding, reasoning",
+        "OpenAI GPT-5.4 via ChatGPT subscription -- built-in tools only, not custom function tools",
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        toolUse: true,
+        // toolUse: false — ChatGPT backend /codex/responses does not support
+        // custom function tools. Only Codex's built-in tools work.
+        toolUse: false,
         structuredOutput: true,
         streaming: true,
         imageInput: true,
@@ -132,13 +176,13 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelFamily: "gpt-5",
       capabilityTier: "advanced",
       costTier: "subscription",
-      bestFor: ["conversation", "coding", "general-purpose", "reasoning"],
-      avoidFor: ["local-only-required"],
+      bestFor: ["conversation", "coding", "reasoning"],
+      avoidFor: ["custom-tool-use"],
       defaultStatus: "active",
       scores: {
         reasoning: 85,
         codegen: 90,
-        toolFidelity: 85,
+        toolFidelity: 10,
         instructionFollowingScore: 85,
         structuredOutputScore: 80,
         conversational: 80,

@@ -272,9 +272,8 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
       defaultMinimumTier: "strong",
       defaultBudgetClass: "quality_first",
       // No preferredProviderId — let the routing pipeline pick the best available provider.
-      // Previously pinned to "codex" but gpt-5-codex returns empty responses with tools.
-      // The pipeline will rank by cost-per-success and capability, picking anthropic when
-      // available or falling back to gemini/haiku automatically.
+      // Codex now routes through Chat Completions (api_key) or Responses API (OAuth).
+      // The pipeline ranks by cost-per-success and capability.
       defaultEffort: "high" as const,
     },
   },

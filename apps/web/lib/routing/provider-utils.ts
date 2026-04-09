@@ -14,8 +14,10 @@ export function isOpenAI(providerId: string): boolean {
 }
 
 export function usesResponsesApi(providerId: string): boolean {
-  // Both codex and chatgpt use the Responses API via chatgpt.com/backend-api.
-  // This routes through the ChatGPT subscription (flat-rate billing) rather
-  // than the per-token API. The SSE parser now captures function call events.
+  // Both codex and chatgpt require the Responses API.
+  // Codex models (gpt-5.3-codex, gpt-5.4, codex-mini) are Responses-only — Chat Completions
+  // is deprecated for these models per OpenAI docs.
+  // OAuth auth → chatgpt.com/backend-api (SSE streaming).
+  // API key auth → api.openai.com/v1/responses (JSON response).
   return providerId === "codex" || providerId === "chatgpt";
 }

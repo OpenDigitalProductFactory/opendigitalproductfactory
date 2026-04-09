@@ -23,7 +23,7 @@ describe("KNOWN_PROVIDER_MODELS catalog", () => {
     const modelIds = codexModels.map((model) => model.modelId);
 
     expect(modelIds).toContain("codex-mini-latest");
-    expect(modelIds).toContain("gpt-5-codex");
+    expect(modelIds).toContain("gpt-5.3-codex");
 
     for (const model of codexModels) {
       expect(model.modelClass).toBe("code");
@@ -31,7 +31,7 @@ describe("KNOWN_PROVIDER_MODELS catalog", () => {
     }
 
     const codexMini = codexModels.find((model) => model.modelId === "codex-mini-latest");
-    const gpt5Codex = codexModels.find((model) => model.modelId === "gpt-5-codex");
+    const gpt5Codex = codexModels.find((model) => model.modelId === "gpt-5.3-codex");
 
     expect(codexMini).toBeDefined();
     expect(gpt5Codex).toBeDefined();
