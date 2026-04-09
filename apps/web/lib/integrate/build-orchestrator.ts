@@ -524,13 +524,11 @@ export async function runBuildOrchestrator(params: {
   const allResults: SpecialistResult[] = [];
   let priorResultsSummary = priorStoredResults;
 
-  // Layer 1: CLI session continuity — generate a deterministic session ID per build
-  // so all Claude Code tasks share conversation context (files read/written, patterns learned).
-  // Codex CLI does not support sessions — only Claude Code benefits.
-  // Claude Code --session-id requires a valid UUID. Generate a deterministic one
-  // from the buildId so all tasks in the same build share conversation context.
-  const { randomUUID } = await import(/* turbopackIgnore: true */ "crypto");
-  const claudeSessionId = randomUUID();
+  // Layer 1: CLI session continuity — DISABLED for now.
+  // Claude Code --session-id is single-use: one session per invocation.
+  // Parallel tasks in the same phase all try to claim the same session → "already in use" error.
+  // Proper session chaining (sequential between phases) is a future enhancement.
+  // For now, each task gets its own fresh session. Context is passed via priorResults text.
 
   for (const phase of phases) {
     // Timeout check
@@ -573,7 +571,7 @@ export async function runBuildOrchestrator(params: {
           buildContext,
           parentThreadId,
           priorResults: priorResultsSummary || undefined,
-          sessionId: claudeSessionId,
+          // sessionId omitted — see Layer 1 comment above
         })
       ),
     );
