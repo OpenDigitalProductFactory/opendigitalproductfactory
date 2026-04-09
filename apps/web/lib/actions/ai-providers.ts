@@ -286,7 +286,7 @@ async function resolveResponsesProbeBaseUrl(provider: {
 
 function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
   return {
-    model: providerId === "chatgpt" ? "gpt-5.4" : "gpt-5-codex",
+    model: providerId === "chatgpt" ? "gpt-5.4" : "gpt-5.3-codex",
     input: [{ role: "user", content: "ping" }],
     store: false,
   };

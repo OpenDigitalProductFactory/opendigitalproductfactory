@@ -77,13 +77,32 @@ export const openAIAdapter: ProviderAdapter = {
   },
 
   extractModelCard(modelId: string, rawMetadata: unknown): ModelCard {
-    const raw = rawMetadata as OpenAIModel;
+    const raw = rawMetadata as OpenAIModel & {
+      // ChatGPT backend /backend-api/models fields
+      source?: string;
+      slug?: string;
+      title?: string;
+      description?: string;
+      max_tokens?: number;
+      capabilities?: Record<string, unknown>;
+      tags?: string[];
+    };
+
+    const isChatGptDiscovery = raw.source === "chatgpt_backend_discovery";
+
+    // Extract capabilities from ChatGPT backend metadata if available.
+    // toolUse is intentionally false — the ChatGPT backend /codex/responses
+    // endpoint only supports Codex's built-in tools, not custom function tools.
+    const capabilities = { ...EMPTY_CAPABILITIES };
+    if (isChatGptDiscovery) {
+      capabilities.streaming = true;
+    }
 
     return {
       providerId: "openai",
       modelId,
-      displayName: formatDisplayName(modelId),
-      description: "",
+      displayName: raw.title ?? formatDisplayName(modelId),
+      description: raw.description ?? "",
       createdAt: raw.created != null ? new Date(raw.created * 1000) : null,
 
       modelFamily: null,
@@ -92,13 +111,13 @@ export const openAIAdapter: ProviderAdapter = {
         output: ["text"],
       }),
 
-      maxInputTokens: null,
+      maxInputTokens: raw.max_tokens ?? null,
       maxOutputTokens: null,
 
       inputModalities: ["text"],
       outputModalities: ["text"],
 
-      capabilities: { ...EMPTY_CAPABILITIES },
+      capabilities,
       pricing: { ...EMPTY_PRICING },
 
       supportedParameters: [],
@@ -114,8 +133,8 @@ export const openAIAdapter: ProviderAdapter = {
 
       perRequestLimits: null,
 
-      metadataSource: "api",
-      metadataConfidence: "low",
+      metadataSource: isChatGptDiscovery ? "api" : "api",
+      metadataConfidence: isChatGptDiscovery ? "medium" : "low",
       lastMetadataRefresh: new Date(),
       rawMetadataHash: computeMetadataHash(rawMetadata),
 

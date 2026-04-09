@@ -198,10 +198,10 @@ describe("buildPlanFromRecipe", () => {
     expect(plan.executionAdapter).toBe("image_gen");
   });
 
-  it("overrides legacy codex chat recipes to the responses adapter", () => {
+  it("overrides codex recipes to the responses adapter", () => {
     const recipe = makeRecipe({
       providerId: "codex",
-      modelId: "gpt-5-codex",
+      modelId: "gpt-5.3-codex",
       executionAdapter: "chat",
     });
     const plan = buildPlanFromRecipe(recipe, makeContract());
@@ -281,7 +281,7 @@ describe("buildDefaultPlan", () => {
 
   it("selects responses adapter for codex endpoints", () => {
     const plan = buildDefaultPlan(
-      makeEndpoint({ providerId: "codex", modelId: "gpt-5-codex", modelClass: "code" }),
+      makeEndpoint({ providerId: "codex", modelId: "gpt-5.3-codex", modelClass: "code" }),
       makeContract(),
     );
     expect(plan.executionAdapter).toBe("responses");

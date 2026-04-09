@@ -84,7 +84,7 @@ import { responsesAdapter } from "./responses-adapter";
 function makePlan(overrides: Partial<RoutedExecutionPlan> = {}): RoutedExecutionPlan {
   return {
     providerId: "codex",
-    modelId: "gpt-5-codex",
+    modelId: "gpt-5.3-codex",
     recipeId: null,
     contractFamily: "sync.code-gen",
     executionAdapter: "responses",
@@ -99,7 +99,7 @@ function makePlan(overrides: Partial<RoutedExecutionPlan> = {}): RoutedExecution
 function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
   return {
     providerId: "codex",
-    modelId: "gpt-5-codex",
+    modelId: "gpt-5.3-codex",
     plan: makePlan(),
     provider: {
       baseUrl: "https://api.openai.com/v1",
@@ -155,7 +155,7 @@ describe("responsesAdapter", () => {
     expect(url).toBe("https://api.openai.com/v1/responses");
 
     const sentBody = JSON.parse(fetchOpts.body);
-    expect(sentBody.model).toBe("gpt-5-codex");
+    expect(sentBody.model).toBe("gpt-5.3-codex");
     expect(sentBody.store).toBe(false);
     expect(sentBody.instructions).toBe("You are helpful.");
     expect(sentBody.input).toEqual([{ role: "user", content: "Write a helper" }]);

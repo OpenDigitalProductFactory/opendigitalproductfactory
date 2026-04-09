@@ -274,12 +274,23 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     // Always log for chatgpt backend until the tool issue is resolved
     if (isChatGptBackend(providerId, provider.baseUrl)) {
       if (!parsed.text && parsed.toolCalls.length === 0) {
-        console.warn(
-          `[responses-adapter] EMPTY RESPONSE from ${providerId}/${modelId}. ` +
+        const diagnostic =
           `output items: ${data.output?.length ?? "null"}, ` +
           `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
-          `raw: ${JSON.stringify(data).slice(0, 1000)}`,
-        );
+          `raw: ${JSON.stringify(data).slice(0, 1000)}`;
+        console.warn(`[responses-adapter] EMPTY RESPONSE from ${providerId}/${modelId}. ${diagnostic}`);
+
+        // Surface diagnostic in the text so the agentic loop can show it to the user
+        return {
+          text: `[DEBUG] Empty response from ${responsesUrl} (model: ${modelId}). ${diagnostic}`,
+          toolCalls: [],
+          usage: {
+            inputTokens: data.usage?.input_tokens ?? 0,
+            outputTokens: data.usage?.output_tokens ?? 0,
+          },
+          inferenceMs,
+          raw: data as Record<string, unknown>,
+        };
       } else {
         console.log(
           `[responses-adapter] OK from ${providerId}/${modelId}: ` +

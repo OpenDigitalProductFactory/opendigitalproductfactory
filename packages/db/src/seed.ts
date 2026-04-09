@@ -1082,7 +1082,7 @@ async function seedCodexModels(): Promise<void> {
 
     const codeModels = [
       {
-        modelId: "gpt-5-codex",
+        modelId: "gpt-5.3-codex",
         friendlyName: "GPT-5 Codex",
         summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
         modelClass: "code",
@@ -1139,8 +1139,8 @@ async function seedCodexModels(): Promise<void> {
           reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
           instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
           conversational: m.conversational, contextRetention: m.contextRetention,
-          supportsToolUse: true,
-          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: m.modelClass === "chat" } as any,
+          supportsToolUse: false,
+          capabilities: { toolUse: false, streaming: true, structuredOutput: true, imageInput: m.modelClass === "chat" } as any,
           inputModalities: m.modelClass === "chat" ? ["text", "image"] : ["text"],
           outputModalities: ["text"],
         },
@@ -1199,8 +1199,8 @@ async function seedChatGPTModels(): Promise<void> {
           reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
           instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
           conversational: m.conversational, contextRetention: m.contextRetention,
-          supportsToolUse: true,
-          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: true } as any,
+          supportsToolUse: false,
+          capabilities: { toolUse: false, streaming: true, structuredOutput: true, imageInput: true } as any,
           inputModalities: ["text", "image"],
           outputModalities: ["text"],
         },

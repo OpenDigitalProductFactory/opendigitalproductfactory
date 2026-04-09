@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { KNOWN_PROVIDER_MODELS } from "./known-provider-models";
 
 describe("KNOWN_PROVIDER_MODELS", () => {
-  it("keeps gpt-5-codex active by default", () => {
-    const gpt5Codex = KNOWN_PROVIDER_MODELS.codex.find((model) => model.modelId === "gpt-5-codex");
+  it("keeps gpt-5.3-codex active by default", () => {
+    const gpt5Codex = KNOWN_PROVIDER_MODELS.codex.find((model) => model.modelId === "gpt-5.3-codex");
     expect(gpt5Codex?.defaultStatus).toBe("active");
   });
 

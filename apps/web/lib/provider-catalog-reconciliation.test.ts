@@ -15,14 +15,14 @@ describe("provider catalog reconciliation", () => {
 
   it("parses OpenAI model ids from the official models index html", () => {
     const html = `
-      <a href="/api/docs/models/gpt-5-codex">GPT-5 Codex</a>
       <a href="/api/docs/models/gpt-5.3-codex">GPT-5.3 Codex</a>
+      <a href="/api/docs/models/gpt-5.4">GPT-5.4</a>
       <a href="/api/docs/models/codex-mini-latest">Codex Mini</a>
     `;
     const parsed = parseOpenAiModelsIndex(html);
     expect(parsed.map((candidate) => candidate.modelId)).toEqual([
-      "gpt-5-codex",
       "gpt-5.3-codex",
+      "gpt-5.4",
       "codex-mini-latest",
     ]);
   });
@@ -34,8 +34,8 @@ describe("provider catalog reconciliation", () => {
 
   it("reports new official Codex candidates not yet in the known catalog", async () => {
     const html = `
-      <a href="/api/docs/models/gpt-5-codex">GPT-5 Codex</a>
       <a href="/api/docs/models/gpt-5.3-codex">GPT-5.3 Codex</a>
+      <a href="/api/docs/models/gpt-5.4">GPT-5.4</a>
       <a href="/api/docs/models/codex-mini-latest">Codex Mini</a>
     `;
     const fetchImpl = vi.fn().mockResolvedValue({

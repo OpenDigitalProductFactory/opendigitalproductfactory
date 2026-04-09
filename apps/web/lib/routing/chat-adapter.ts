@@ -243,9 +243,16 @@ export const chatAdapter: ExecutionAdapterHandler = {
       if (plan.toolPolicy?.toolChoice && tools && tools.length > 0) {
         (body as Record<string, unknown>).tool_choice = plan.toolPolicy.toolChoice;
       }
-      // Pass tools through (already in OpenAI format)
+      // Pass tools through in OpenAI format, stripping non-standard fields
+      // (e.g. annotations) that some models reject or mishandle.
       if (tools && tools.length > 0) {
-        body.tools = tools;
+        body.tools = tools.map((t: Record<string, unknown>) => {
+          if (t.type === "function" && t.function) {
+            const fn = t.function as Record<string, unknown>;
+            return { type: "function", function: { name: fn.name, description: fn.description, parameters: fn.parameters } };
+          }
+          return t;
+        });
       }
     }
 
