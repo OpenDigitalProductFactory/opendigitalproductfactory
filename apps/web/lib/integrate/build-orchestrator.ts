@@ -527,7 +527,10 @@ export async function runBuildOrchestrator(params: {
   // Layer 1: CLI session continuity — generate a deterministic session ID per build
   // so all Claude Code tasks share conversation context (files read/written, patterns learned).
   // Codex CLI does not support sessions — only Claude Code benefits.
-  const claudeSessionId = `build-${buildId}`;
+  // Claude Code --session-id requires a valid UUID. Generate a deterministic one
+  // from the buildId so all tasks in the same build share conversation context.
+  const { randomUUID } = await import(/* turbopackIgnore: true */ "crypto");
+  const claudeSessionId = randomUUID();
 
   for (const phase of phases) {
     // Timeout check
