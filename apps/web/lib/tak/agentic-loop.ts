@@ -640,6 +640,39 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
+      // Repetition detector: if the model's response is asking a question that's
+      // very similar to a previous assistant message, the user already answered it.
+      // Inject a nudge telling the model to proceed with the answer already given.
+      // This prevents the "ask the same scope question 5 times" loop.
+      if (trimmed.length > 20 && trimmed.includes("?")) {
+        const previousAssistantMessages = messages
+          .filter(m => m.role === "assistant")
+          .map(m => typeof m.content === "string" ? m.content : "");
+        const trimmedLower = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+        const isRepeatQuestion = previousAssistantMessages.some(prev => {
+          const prevLower = prev.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+          if (prevLower.length < 20) return false;
+          // Check word overlap — if >60% of words match, it's a repeated question
+          const trimmedWords = new Set(trimmedLower.split(/\s+/));
+          const prevWords = prevLower.split(/\s+/);
+          const overlap = prevWords.filter(w => trimmedWords.has(w)).length;
+          return overlap / Math.max(prevWords.length, 1) > 0.6;
+        });
+        if (isRepeatQuestion) {
+          console.log(`[agentic-loop] Repeated question detected, injecting proceed nudge: ${trimmed.slice(0, 100)}`);
+          continuationNudges++;
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            {
+              role: "user" as const,
+              content: "You already asked this question and I already answered it in the conversation above. Do NOT ask again. Proceed immediately with the answer I gave. Use your tools now — call saveBuildEvidence or search_project_files to make progress.",
+            },
+          ];
+          continue;
+        }
+      }
+
       if (shouldNudgeNow) {
         // Preserve the best text-only response before nudging, in case the
         // nudge produces an empty response (common with ChatGPT/gpt-5.4).
