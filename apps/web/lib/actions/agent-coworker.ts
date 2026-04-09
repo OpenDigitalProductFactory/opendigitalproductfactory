@@ -754,7 +754,12 @@ export async function sendMessage(input: {
         });
       } catch { /* already advanced or concurrent update — fine */ }
 
-      responseContent = `Build already completed — all ${storedResults!.totalTasks} tasks done. Moving to review phase.\n\nI'll review the changes in the sandbox and prepare a summary. You can check the build results in the task board above.`;
+      const needsReview = (activeBuild!.taskResults as { tasks?: Array<{ outcome: string; title: string }> })?.tasks
+        ?.filter(t => t.outcome !== "DONE") ?? [];
+      const reviewItems = needsReview.length > 0
+        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}\n\nWould you like me to walk through each one, or do you want to check the sandbox preview first?`
+        : "\n\nAll tasks completed cleanly. Would you like me to run a final verification (tests + typecheck), or do you want to check the sandbox preview first?";
+      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}`;
       responseProviderId = "orchestrator";
       responseModelId = "multi-specialist";
       // Fall through to message persistence below
