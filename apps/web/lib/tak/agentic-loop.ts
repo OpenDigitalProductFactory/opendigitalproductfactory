@@ -404,6 +404,7 @@ export async function runAgenticLoop(params: {
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
+  let previousResponseId: string | undefined; // Responses API conversation chaining
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
@@ -527,7 +528,16 @@ export async function runAgenticLoop(params: {
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
-    const result = await routeAndCall(compactAgenticMessages(messages), systemPrompt, sensitivity, enrichedRouteOptions);
+    const result = await routeAndCall(
+      compactAgenticMessages(messages),
+      systemPrompt,
+      sensitivity,
+      { ...enrichedRouteOptions, previousResponseId },
+    );
+    // Track response ID for conversation chaining (Responses API)
+    if (result.responseId) {
+      previousResponseId = result.responseId;
+    }
 
     // First iteration: check if the routed model matches the preferred model.
     // If not, warn — the agent may not be able to orchestrate tools effectively.

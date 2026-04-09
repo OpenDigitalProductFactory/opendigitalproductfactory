@@ -214,14 +214,25 @@ export const responsesAdapter: ExecutionAdapterHandler = {
   type: "responses",
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
-    const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
+    const { providerId, modelId, plan, provider, messages, systemPrompt, tools, previousResponseId } = request;
     const responsesUrl = buildResponsesUrl(providerId, provider.baseUrl);
+
+    // When chaining with previous_response_id, only send new messages (the last
+    // user message + any tool results), not the full history. The server has the
+    // rest. When no previousResponseId, send the full conversation.
+    const inputMessages = previousResponseId
+      ? messages.slice(-1)  // just the latest message
+      : messages;
 
     const body: Record<string, unknown> = {
       model: modelId,
-      input: messages.flatMap((message) => formatMessageForResponses(message)),
-      store: false,
+      input: inputMessages.flatMap((message) => formatMessageForResponses(message)),
+      store: true,  // required for previous_response_id chaining
     };
+
+    if (previousResponseId) {
+      body.previous_response_id = previousResponseId;
+    }
 
     if (isChatGptBackend(providerId, provider.baseUrl)) {
       body.stream = true;
@@ -313,6 +324,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
           },
           inferenceMs,
           raw: data as Record<string, unknown>,
+          responseId: (data as { id?: string }).id ?? undefined,
         };
       } else {
         console.log(
@@ -331,6 +343,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       },
       inferenceMs,
       raw: data as Record<string, unknown>,
+      responseId: (data as { id?: string }).id ?? undefined,
     };
   },
 };
