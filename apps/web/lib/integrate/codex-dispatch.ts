@@ -15,8 +15,10 @@ import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
-// Timeout for a single Codex task (10 minutes — generous for complex tasks)
-const CODEX_TASK_TIMEOUT_MS = 600_000;
+// Timeout per task. Data-architect tasks (schema design) need more time because
+// Codex reads the full schema, plans multi-model changes, validates, and iterates.
+const CODEX_TASK_TIMEOUT_MS = 900_000;       // 15 minutes default
+const CODEX_SCHEMA_TASK_TIMEOUT_MS = 1_200_000; // 20 minutes for schema tasks
 
 export type CodexResult = {
   content: string;       // Codex CLI stdout (summary of what it did)
@@ -225,7 +227,7 @@ export async function dispatchCodexTask(params: {
       `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt 2>/dev/null"`,
       {
         maxBuffer: 10 * 1024 * 1024,
-        timeout: CODEX_TASK_TIMEOUT_MS,
+        timeout: role === "data-architect" ? CODEX_SCHEMA_TASK_TIMEOUT_MS : CODEX_TASK_TIMEOUT_MS,
       },
     );
 
