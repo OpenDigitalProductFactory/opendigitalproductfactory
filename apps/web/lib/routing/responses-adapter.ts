@@ -175,12 +175,22 @@ async function readResponsesPayload(
   }
 
   // If response.completed exists, use it for usage data — but prefer
-  // synthetic output when the completed event has an empty output array.
+  // synthetic output when the completed event has empty/useless output.
   // The ChatGPT backend often sends text/tools via SSE deltas while the
-  // completed event's output[] is empty.
+  // completed event's output[] is empty or contains only empty text.
   if (lastCompleted) {
     const completedOutput = (lastCompleted as { output?: unknown[] }).output ?? [];
-    const useCompleted = completedOutput.length > 0;
+    // Check if completed output has actual content (non-empty text or tool calls)
+    const hasRealContent = completedOutput.some((item: unknown) => {
+      const it = item as Record<string, unknown>;
+      if (it.type === "function_call" && it.name) return true;
+      if (it.type === "message") {
+        const content = (it.content as Array<{ text?: string }>) ?? [];
+        return content.some(c => c.text && c.text.length > 0);
+      }
+      return false;
+    });
+    const useCompleted = hasRealContent;
     return {
       output: useCompleted ? completedOutput : syntheticOutput,
       output_text: useCompleted ? (lastCompleted as { output_text?: string }).output_text : (lastDelta || undefined),
