@@ -160,6 +160,7 @@ export async function dispatchCodexTask(params: {
   priorResults?: string;
   providerId?: string;
   model?: string;
+  onProgress?: (message: string) => void;
 }): Promise<CodexResult> {
   const { task, buildContext, priorResults } = params;
   const providerId = params.providerId ?? "chatgpt";
@@ -200,7 +201,7 @@ export async function dispatchCodexTask(params: {
   const startMs = Date.now();
 
   try {
-    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+    const { exec: execCb, spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
     const { promisify } = await import(/* turbopackIgnore: true */ "util");
     const execAsync = promisify(execCb);
 
@@ -211,29 +212,65 @@ export async function dispatchCodexTask(params: {
       { timeout: 5_000 },
     );
 
-    console.log(`[codex-dispatch] Starting task "${task.title}" with ${model || "ChatGPT default"} in ${SANDBOX_CONTAINER}`);
-
-    // Run Codex CLI with auth from ~/.codex/auth.json (written by injectCodexAuth)
-    // --dangerously-bypass-approvals-and-sandbox (--yolo): the sandbox container IS
-    //   the security boundary; bubblewrap fails without unprivileged user namespaces
-    //   in Docker, so we bypass Codex's internal sandbox entirely.
-    // --skip-git-repo-check: sandbox workspace may not have git init yet
-    // Model: omitted when empty (ChatGPT auth assigns the model server-side)
     const modelFlag = model ? `-m ${model}` : "";
-    // Capture only stdout (the final agent message). Stderr has progress/banner
-    // noise ("Reading prompt from stdin...", "OpenAI Codex v0.118.0", etc.)
-    // that pollutes results. Redirect stderr to /dev/null inside the shell.
-    const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt 2>/dev/null"`,
-      {
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: role === "data-architect" ? CODEX_SCHEMA_TASK_TIMEOUT_MS : CODEX_TASK_TIMEOUT_MS,
-      },
-    );
+    const timeoutMs = role === "data-architect" ? CODEX_SCHEMA_TASK_TIMEOUT_MS : CODEX_TASK_TIMEOUT_MS;
+    console.log(`[codex-dispatch] Starting task "${task.title}" with ${model || "ChatGPT default"} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
-    const durationMs = Date.now() - startMs;
+    // Use spawn instead of exec to stream stderr for progress updates.
+    // stdout = final agent message. stderr = real-time progress (file ops, commands).
+    const { stdout, durationMs } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
+      const proc = spawnCb("docker", [
+        "exec", SANDBOX_CONTAINER, "sh", "-c",
+        `cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
+      ]);
+
+      let stdout = "";
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+      }, timeoutMs);
+
+      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
+
+      proc.stderr.on("data", (data: Buffer) => {
+        const lines = data.toString().split("\n").filter(Boolean);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Parse Codex CLI progress from stderr
+          if (trimmed.startsWith("Reading file:")) {
+            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+          } else if (trimmed.startsWith("Editing file:")) {
+            params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
+          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+            params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+          } else if (trimmed.startsWith("Running command:") || trimmed.startsWith("Running:")) {
+            params.onProgress?.(`Running: ${trimmed.replace(/^Running( command)?: /, "").slice(0, 80)}`);
+          } else if (trimmed.startsWith("Applying patch")) {
+            params.onProgress?.("Applying changes...");
+          }
+        }
+      });
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        const elapsed = Date.now() - startMs;
+        if (timedOut) {
+          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, killed: true }));
+        } else if (code === 0 || stdout.trim()) {
+          resolve({ stdout, durationMs: elapsed });
+        } else {
+          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
+        }
+      });
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+
     const content = stdout.trim();
-
     console.log(`[codex-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)`);
 
     return {

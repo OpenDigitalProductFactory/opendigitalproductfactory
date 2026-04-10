@@ -17,8 +17,9 @@ import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
-// Timeout for a single Claude Code task (10 minutes — generous for complex tasks)
-const CLAUDE_TASK_TIMEOUT_MS = 600_000;
+// Timeout per task. Data-architect tasks need more time for schema design.
+const CLAUDE_TASK_TIMEOUT_MS = 900_000;        // 15 minutes default
+const CLAUDE_SCHEMA_TASK_TIMEOUT_MS = 1_200_000; // 20 minutes for schema tasks
 
 export type ClaudeResult = {
   content: string;       // Claude's response text
@@ -142,6 +143,7 @@ export async function dispatchClaudeTask(params: {
   providerId?: string;
   model?: string;
   sessionId?: string;   // Reuse a Claude Code session for cross-task context continuity
+  onProgress?: (message: string) => void;
 }): Promise<ClaudeResult> {
   const { task, buildContext, priorResults } = params;
   const providerId = params.providerId ?? "anthropic-sub";
@@ -229,23 +231,62 @@ export async function dispatchClaudeTask(params: {
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
     const bareFlag = useBareflag ? "--bare " : "";
     const sessionFlag = sessionId ? `--session-id ${sessionId} ` : "";
-    console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER}`);
+    const timeoutMs = role === "data-architect" ? CLAUDE_SCHEMA_TASK_TIMEOUT_MS : CLAUDE_TASK_TIMEOUT_MS;
+    console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
-    // Run Claude Code CLI as non-root user (node, uid 1000).
-    // -p -: read prompt from stdin (piped from temp file)
-    // --dangerously-skip-permissions: Docker IS the sandbox (refuses root)
-    // --output-format json: structured JSON output with { result, session_id, usage }
-    // --model: explicit model selection (sonnet/opus/haiku)
-    // Stderr redirected to /dev/null to avoid progress noise in output.
-    const { stdout } = await execAsync(
-      `docker exec --user node ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt 2>/dev/null"`,
-      {
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: CLAUDE_TASK_TIMEOUT_MS,
-      },
-    );
+    // Use spawn to stream stderr for progress updates.
+    const { spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
 
-    const durationMs = Date.now() - startMs;
+    const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
+      const proc = spawnCb("docker", [
+        "exec", "--user", "node", SANDBOX_CONTAINER, "sh", "-c",
+        `cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt`,
+      ]);
+
+      let stdout = "";
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+      }, timeoutMs);
+
+      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
+
+      proc.stderr.on("data", (data: Buffer) => {
+        const lines = data.toString().split("\n").filter(Boolean);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("Reading file:")) {
+            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+            params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+          } else if (trimmed.startsWith("Editing file:")) {
+            params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
+          } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
+            params.onProgress?.(`Running: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
+          } else if (trimmed === "Thinking...") {
+            params.onProgress?.("Thinking...");
+          }
+        }
+      });
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        const d = Date.now() - startMs;
+        if (timedOut) {
+          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, killed: true }));
+        } else if (code === 0 || stdout.trim()) {
+          resolve({ stdout, durationMs: d });
+        } else {
+          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
+        }
+      });
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
 
     // Parse JSON output — Claude Code --output-format json returns { result, session_id, ... }
     let content: string;
@@ -255,17 +296,16 @@ export async function dispatchClaudeTask(params: {
       content = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
       returnedSessionId = parsed.session_id ?? undefined;
     } catch {
-      // If JSON parsing fails, use raw stdout (might be plain text on older versions)
       content = stdout.trim();
     }
 
-    console.log(`[claude-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)${returnedSessionId ? ` [session: ${returnedSessionId}]` : ""}`);
+    console.log(`[claude-dispatch] Task "${task.title}" completed in ${(elapsed / 1000).toFixed(1)}s (${content.length} chars)${returnedSessionId ? ` [session: ${returnedSessionId}]` : ""}`);
 
     return {
       content: content || "Task completed with no output.",
       success: true,
       executedTools: [],
-      durationMs,
+      durationMs: elapsed,
       sessionId: returnedSessionId,
     };
   } catch (err) {
