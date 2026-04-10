@@ -317,9 +317,17 @@ async function dispatchSpecialist(params: {
   const config = await getBuildStudioConfig();
 
   if (config.provider === "codex" || config.provider === "claude") {
+    const onProgress = (message: string) => {
+      agentEventBus.emit(parentThreadId, {
+        type: "orchestrator:task_progress",
+        buildId,
+        taskTitle: task.title,
+        message,
+      });
+    };
     const cliResult = config.provider === "claude"
-      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel, sessionId })
-      : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel });
+      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel, sessionId, onProgress })
+      : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel, onProgress });
 
     const outcome = classifyOutcome(cliResult, role);
 
@@ -356,7 +364,7 @@ async function dispatchSpecialist(params: {
   const scopedTools = allTools.filter(t => allowedToolNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(scopedTools);
 
-  const systemPrompt = buildSpecialistPrompt({
+  const systemPrompt = await buildSpecialistPrompt({
     role,
     taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${task.files.map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
     buildContext,

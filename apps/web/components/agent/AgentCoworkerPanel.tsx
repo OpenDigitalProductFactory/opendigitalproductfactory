@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
-import { resolveAgentForRoute, AGENT_NAME_MAP } from "@/lib/agent-routing";
+import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { clearConversation, getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
@@ -110,7 +110,7 @@ export function AgentCoworkerPanel({
   const [devMode, setDevMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const routeAgent: AgentInfo = resolveAgentForRoute(pathname, userContext);
+  const routeAgent: AgentInfo = resolveAgentForRouteSync(pathname, userContext);
   const agent = routeAgent;
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
@@ -153,6 +153,9 @@ export function AgentCoworkerPanel({
             next.set(data.taskTitle, { specialist: data.specialist, status: "working", time: now });
             return next;
           });
+        }
+        if (data.type === "orchestrator:task_progress") {
+          setOrchestratorStatus(`${data.taskTitle}: ${data.message}`);
         }
         if (data.type === "orchestrator:task_complete") {
           const status = data.status === "DONE" ? "done" as const : data.status === "DONE_WITH_CONCERNS" ? "concern" as const : "blocked" as const;
