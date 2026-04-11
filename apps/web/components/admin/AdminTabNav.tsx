@@ -11,7 +11,9 @@ const TABS = [
   { label: "Reference Data", href: "/admin/reference-data" },
   { label: "Settings", href: "/admin/settings" },
   { label: "Platform Development", href: "/admin/platform-development" },
+  { label: "Prompts", href: "/admin/prompts" },
   { label: "Skills", href: "/admin/skills" },
+  { label: "Issue Reports", href: "/admin/issue-reports" },
 ];
 
 export function AdminTabNav() {

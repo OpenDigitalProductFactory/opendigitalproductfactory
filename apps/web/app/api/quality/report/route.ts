@@ -10,6 +10,16 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const reportId = "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
 
+    // Default all platform issue reports to dpf-portal product if not specified
+    let digitalProductId = typeof body.digitalProductId === "string" ? body.digitalProductId : null;
+    if (!digitalProductId) {
+      const dpfPortal = await prisma.digitalProduct.findUnique({
+        where: { productId: "dpf-portal" },
+        select: { id: true },
+      });
+      digitalProductId = dpfPortal?.id ?? null;
+    }
+
     await prisma.platformIssueReport.create({
       data: {
         reportId,
@@ -23,7 +33,7 @@ export async function POST(request: Request) {
         reportedById: typeof body.userId === "string" ? body.userId : null,
         source: String(body.source ?? "manual").slice(0, 30),
         portfolioId: typeof body.portfolioId === "string" ? body.portfolioId : null,
-        digitalProductId: typeof body.digitalProductId === "string" ? body.digitalProductId : null,
+        digitalProductId,
       },
     });
     return Response.json({ ok: true, reportId });
