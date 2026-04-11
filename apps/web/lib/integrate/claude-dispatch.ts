@@ -215,23 +215,22 @@ export async function dispatchClaudeTask(params: {
 
     // Inject auth credentials into the sandbox container.
     // Claude Code CLI must run as non-root (--dangerously-skip-permissions refuses root).
-    // OAuth mode: CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string, NOT JSON.
-    //   --bare is NOT used — it disables OAuth (only allows ANTHROPIC_API_KEY).
-    // API key mode: ANTHROPIC_API_KEY with --bare for clean isolation.
-    let authEnvFragment: string;
+    // Write a runner script to the sandbox to avoid shell quoting issues
+    // with $(cat ...) in Alpine's busybox ash.
+    let authExportLine: string;
     let useBareflag: boolean;
     if (auth.mode === "oauth") {
-      // OAuth (Max Plan): write raw token to task-specific temp file, read at exec time
+      // OAuth (Max Plan): write raw token to task-specific temp file
       const tokenB64 = Buffer.from(auth.tokenJson).toString("base64");
       await execAsync(
         `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
         { timeout: 5_000 },
       );
-      authEnvFragment = `CLAUDE_CODE_OAUTH_TOKEN=\\$(cat ${tokenFile})`;
+      authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
       useBareflag = false;  // --bare disables OAuth
     } else {
-      // API key: inject directly as env var (simple string, no escaping issues)
-      authEnvFragment = `ANTHROPIC_API_KEY=${auth.apiKey}`;
+      // API key mode
+      authExportLine = `export ANTHROPIC_API_KEY=${auth.apiKey}`;
       useBareflag = true;   // --bare is safe with API key
     }
 
@@ -239,6 +238,21 @@ export async function dispatchClaudeTask(params: {
     const bareFlag = useBareflag ? "--bare " : "";
     const sessionFlag = sessionId ? `--session-id ${sessionId} ` : "";
     const timeoutMs = role === "data-architect" ? CLAUDE_SCHEMA_TASK_TIMEOUT_MS : CLAUDE_TASK_TIMEOUT_MS;
+
+    // Write a runner script to avoid all shell quoting issues
+    const runnerScript = `/tmp/claude-run-${taskSlug}.sh`;
+    const script = [
+      "#!/bin/sh",
+      "cd /workspace",
+      authExportLine,
+      `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
+    ].join("\n");
+    const scriptB64 = Buffer.from(script).toString("base64");
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 755 ${runnerScript}"`,
+      { timeout: 5_000 },
+    );
+
     console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
     // Use spawn to stream stderr for progress updates.
@@ -246,8 +260,7 @@ export async function dispatchClaudeTask(params: {
 
     const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
       const proc = spawnCb("docker", [
-        "exec", "--user", "node", SANDBOX_CONTAINER, "sh", "-c",
-        `cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
+        "exec", "--user", "node", SANDBOX_CONTAINER, runnerScript,
       ]);
 
       let stdout = "";
