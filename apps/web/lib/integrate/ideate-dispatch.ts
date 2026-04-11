@@ -65,6 +65,51 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
 }
 
 /**
+ * Inject Claude Code auth into the sandbox container.
+ * Supports both OAuth (anthropic-sub) and API key (anthropic) modes.
+ */
+async function ensureClaudeAuth(providerId: string): Promise<void> {
+  const credential = await getDecryptedCredential(providerId);
+  const isOAuth = providerId === "anthropic-sub";
+
+  if (!isOAuth) {
+    // API key mode — set ANTHROPIC_API_KEY env var
+    const apiKey = credential?.secretRef ?? credential?.cachedToken;
+    if (!apiKey) {
+      throw new Error(`No Anthropic API key for provider "${providerId}".`);
+    }
+    // Write to a file the sandbox can source
+    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+    const { promisify } = await import(/* turbopackIgnore: true */ "util");
+    const execAsync = promisify(execCb);
+    const keyB64 = Buffer.from(apiKey).toString("base64");
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/.anthropic-key && export ANTHROPIC_API_KEY=\\$(cat /tmp/.anthropic-key)"`,
+      { timeout: 5_000 },
+    );
+    return;
+  }
+
+  // OAuth mode — write credentials file
+  if (!credential?.cachedToken) {
+    throw new Error(`No OAuth token for provider "${providerId}".`);
+  }
+
+  const credJson = JSON.stringify({
+    oauth_token: credential.cachedToken,
+  });
+
+  const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+  const { promisify } = await import(/* turbopackIgnore: true */ "util");
+  const execAsync = promisify(execCb);
+  const credB64 = Buffer.from(credJson).toString("base64");
+  await execAsync(
+    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.claude && echo '${credB64}' | base64 -d > /root/.claude/.credentials.json"`,
+    { timeout: 5_000 },
+  );
+}
+
+/**
  * Build the research prompt for Codex CLI.
  * This is a self-contained prompt — Codex will search the codebase,
  * read files, and output a structured JSON design document.
@@ -154,13 +199,29 @@ export async function dispatchIdeateResearch(params: {
   businessContext?: string;
   providerId?: string;
   model?: string;
+  dispatchEngine?: "claude" | "codex" | "agentic";
 }): Promise<IdeateResult> {
-  const providerId = params.providerId ?? "chatgpt";
+  const dispatchEngine = params.dispatchEngine ?? "codex";
+  const providerId = params.providerId || "";
   const model = params.model ?? "";
 
   // Auth
+  if (!providerId) {
+    return {
+      designDoc: null,
+      rawOutput: "",
+      success: false,
+      durationMs: 0,
+      error: `No provider configured for ${dispatchEngine} dispatch. Configure via Admin > AI Workforce > External Services.`,
+    };
+  }
+
   try {
-    await ensureCodexAuth(providerId);
+    if (dispatchEngine === "claude") {
+      await ensureClaudeAuth(providerId);
+    } else {
+      await ensureCodexAuth(providerId);
+    }
   } catch (err) {
     return {
       designDoc: null,
@@ -186,11 +247,21 @@ export async function dispatchIdeateResearch(params: {
       { timeout: 5_000 },
     );
 
-    console.log(`[ideate-dispatch] Starting research for "${params.featureTitle}" with ${model || "ChatGPT default"}`);
+    const engineLabel = dispatchEngine === "claude" ? "Claude Code" : "Codex";
+    console.log(`[ideate-dispatch] Starting research for "${params.featureTitle}" with ${engineLabel} (${model || "default model"})`);
 
-    const modelFlag = model ? `-m ${model}` : "";
+    // Build the CLI command based on the dispatch engine
+    let cliCommand: string;
+    if (dispatchEngine === "claude") {
+      const modelFlag = model ? `--model ${model}` : "";
+      cliCommand = `claude -p "${promptB64}" --output-format text ${modelFlag} 2>/dev/null`;
+    } else {
+      const modelFlag = model ? `-m ${model}` : "";
+      cliCommand = `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`;
+    }
+
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${cliCommand}"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: IDEATE_TIMEOUT_MS,
