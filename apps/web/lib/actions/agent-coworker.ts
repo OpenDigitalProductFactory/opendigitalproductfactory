@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
-import { resolveAgentForRoute, generateCannedResponse } from "@/lib/agent-routing";
+import { generateCannedResponse } from "@/lib/agent-routing";
+import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { serializeMessage } from "@/lib/agent-coworker-data";
 import {
   NoAllowedProvidersForSensitivityError,
@@ -241,10 +242,13 @@ export async function sendMessage(input: {
   const useUnified = await isUnifiedCoworkerEnabled();
 
   // Resolve agent
-  const agent = await resolveAgentForRoute(input.routeContext, {
+  const agent = await resolveAgentForRouteWithPrompts(input.routeContext, {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
+
+  // Track build ID at function scope — used in both prompt assembly and post-inference research dispatch
+  let resolvedBuildId = input.buildId;
 
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
@@ -308,15 +312,54 @@ export async function sendMessage(input: {
       ? routeCtx.domainContext + `\nAvailable domain tools: ${routeCtx.domainTools.join(", ")}`
       : routeCtx.domainContext;
 
+    // User facts: structured memory from prior conversations
+    const { loadUserFacts, formatFactsAsContext, formatFactsCompressed } = await import("@/lib/tak/user-facts");
+    const routeDomain = input.routeContext.replace(/^\//, "").split("/")[0] || undefined;
+    const userFacts = await loadUserFacts(user.id!, routeDomain).catch(() => []);
+    const factsContext = formatFactsAsContext(userFacts);
+    const factsCompressed = formatFactsCompressed(userFacts);
+
+    // Semantic memory: recall relevant context from past conversations, scoped to current route
+    const { recallRelevantContext } = await import("@/lib/semantic-memory");
+    const recalledContext = await recallRelevantContext({
+      query: input.content,
+      userId: user.id!,
+      routeContext: input.routeContext,
+      limit: 8,
+    }).catch(() => null);
+
+    // Build compressed version: top 3 results only
+    let compressedRecall: string | undefined;
+    if (recalledContext) {
+      const lines = recalledContext.split("\n");
+      const headerLines = lines.slice(0, 3); // header text
+      const memoryLines = lines.slice(3, 6); // top 3 memories
+      compressedRecall = [...headerLines, ...memoryLines].join("\n");
+    }
+
     const contextSources = [
       // L1: Route-essential context
       { tier: "L1" as const, priority: 0, content: domainBlock, tokenCount: countTokens(domainBlock), source: "domain", compressible: false },
+      // L1: User facts — structured memory from prior conversations
+      ...(factsContext ? [{
+        tier: "L1" as const, priority: 1, content: factsContext, tokenCount: countTokens(factsContext),
+        source: "user-facts", compressible: true,
+        compressedContent: factsCompressed ?? "",
+        compressedTokenCount: countTokens(factsCompressed ?? ""),
+      }] : []),
       // L2: Situational — page data
       ...(routeData ? [{
         tier: "L2" as const, priority: 1, content: `--- PAGE DATA ---\n${routeData}`, tokenCount: countTokens(routeData),
         source: "page-data", compressible: true,
         compressedContent: `--- PAGE DATA ---\n${routeData.slice(0, 400)}...`,
         compressedTokenCount: countTokens(routeData.slice(0, 400)),
+      }] : []),
+      // L2: Semantic memory — past conversation context
+      ...(recalledContext ? [{
+        tier: "L2" as const, priority: 2, content: recalledContext, tokenCount: countTokens(recalledContext),
+        source: "semantic-memory", compressible: true,
+        compressedContent: compressedRecall!,
+        compressedTokenCount: countTokens(compressedRecall!),
       }] : []),
       // L2: Knowledge pointers
       ...(knowledgePointers ? [{
@@ -344,11 +387,12 @@ export async function sendMessage(input: {
     const selectedPageData = result.selected.find((s) => s.source === "page-data")?.content?.replace("--- PAGE DATA ---\n", "") ?? null;
     const selectedAttachments = result.selected.find((s) => s.source === "attachments")?.content ?? null;
     const selectedKnowledge = result.selected.find((s) => s.source === "knowledge")?.content ?? null;
+    const selectedMemory = result.selected.find((s) => s.source === "semantic-memory")?.content ?? null;
 
-    // Merge knowledge into domain context if it made the budget
-    const finalDomainContext = selectedKnowledge
-      ? selectedDomain + "\n\n" + selectedKnowledge
-      : selectedDomain;
+    // Merge knowledge and semantic memory into domain context if they made the budget
+    let finalDomainContext = selectedDomain;
+    if (selectedKnowledge) finalDomainContext += "\n\n" + selectedKnowledge;
+    if (selectedMemory) finalDomainContext += "\n\n" + selectedMemory;
 
     populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
@@ -377,7 +421,6 @@ export async function sendMessage(input: {
     }
 
     // Inject Build Studio context — use explicit buildId or auto-resolve on /build route
-    let resolvedBuildId = input.buildId;
     if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
       // Auto-resolve: find the user's most recent non-terminal build
       const latestBuild = await prisma.featureBuild.findFirst({
@@ -457,6 +500,7 @@ export async function sendMessage(input: {
     const recalledContext = await recallRelevantContext({
       query: input.content,
       userId: user.id!,
+      routeContext: input.routeContext,
       // Don't exclude current thread — we need older same-thread context too
       limit: 8,
     }).catch(() => null);
@@ -929,13 +973,13 @@ export async function sendMessage(input: {
               "saveBuildEvidence",
               { field: "designDoc", value: ideateResult.designDoc },
               user.id!,
-              input.routeContext,
+              { routeContext: input.routeContext },
             );
 
             if (saveResult.success) {
               // Run the design doc review
               agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-              const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, input.routeContext);
+              const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
               agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
               // Build a user-friendly summary
@@ -1132,6 +1176,18 @@ export async function sendMessage(input: {
       storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" }).catch(() => {});
     }
   }).catch(() => {});
+
+  // Fire-and-forget: extract user facts from substantive user messages
+  if (trimmedContent.length > 30) {
+    import("@/lib/tak/user-facts").then(({ extractAndStoreFacts }) => {
+      extractAndStoreFacts({
+        userId: user.id!,
+        messageContent: trimmedContent,
+        routeContext: input.routeContext,
+        messageId: userMsg.id,
+      }).catch(() => {});
+    }).catch(() => {});
+  }
 
   // Fire-and-forget: process observer
   // EP-INF-009b: endpoint is resolved per-iteration by routeAndCall; use providerId from result

@@ -2316,6 +2316,35 @@ export async function executeTool(
         },
       });
 
+      // Compress older handoffs for this build (fire-and-forget)
+      // Keep most recent handoff in full; summarize older ones to save context budget.
+      prisma.phaseHandoff.findMany({
+        where: { buildId: latestBuild.buildId, compressedSummary: null },
+        orderBy: { createdAt: "asc" },
+      }).then(async (allHandoffs) => {
+        // Only compress if there are 2+ handoffs (skip the newest one)
+        if (allHandoffs.length < 2) return;
+        const toCompress = allHandoffs.slice(0, -1); // all except newest
+        const { utilityInfer } = await import("@/lib/inference/utility-inference");
+        for (const h of toCompress) {
+          const fullText = [
+            `[${h.fromPhase} → ${h.toPhase}] ${h.summary}`,
+            h.decisionsMade.length > 0 ? `Decisions: ${h.decisionsMade.join("; ")}` : "",
+            h.openIssues.length > 0 ? `Open issues: ${h.openIssues.join("; ")}` : "",
+            h.userPreferences.length > 0 ? `User preferences: ${h.userPreferences.join("; ")}` : "",
+          ].filter(Boolean).join("\n");
+          try {
+            const result = await utilityInfer({ task: "summarize", input: fullText });
+            if (result?.output) {
+              await prisma.phaseHandoff.update({
+                where: { id: h.id },
+                data: { compressedSummary: `[${h.fromPhase} → ${h.toPhase}] ${result.output}` },
+              });
+            }
+          } catch { /* non-fatal */ }
+        }
+      }).catch(() => {});
+
       // Actually advance the phase — the agent calls this as its last action
       // before transitioning, so this is the right place to do the DB update.
       // Gate check ensures we don't skip required evidence.

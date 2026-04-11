@@ -13,7 +13,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     include: {
       digitalProduct: { select: { productId: true, version: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 50 },
-      phaseHandoffs: { orderBy: { createdAt: "asc" }, select: { fromPhase: true, toPhase: true, fromAgentId: true, toAgentId: true, summary: true, evidenceDigest: true, createdAt: true } },
+      phaseHandoffs: { orderBy: { createdAt: "asc" }, select: { fromPhase: true, toPhase: true, fromAgentId: true, toAgentId: true, summary: true, decisionsMade: true, openIssues: true, userPreferences: true, compressedSummary: true, evidenceDigest: true, createdAt: true } },
     },
   });
 

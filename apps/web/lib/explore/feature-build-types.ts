@@ -124,6 +124,7 @@ export type FeatureBuildRow = {
     fromAgentId: string;
     toAgentId: string;
     summary: string;
+    compressedSummary?: string | null;
     evidenceDigest: Record<string, string>;
     createdAt: Date;
   }> | null;

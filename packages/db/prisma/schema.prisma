@@ -808,6 +808,7 @@ model TaxonomyNode {
   status                 String                  @default("active")
   governance             Json?
   description            String?
+  enrichment             Json?
   backlogItems           BacklogItem[]
   products               DigitalProduct[]
   eaElements             EaElement[]

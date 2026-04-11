@@ -468,6 +468,7 @@ export type PhaseHandoffSummary = {
   decisionsMade: string[];
   openIssues: string[];
   userPreferences: string[];
+  compressedSummary?: string | null;
 };
 
 export type BuildContext = {
@@ -542,14 +543,24 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
 
   // Cross-phase memory: inject handoff briefings from previous phases.
   // Inspired by Claude Code's MEMORY.md two-tier memory pattern.
+  // Older handoffs use compressed summaries to stay within context budget;
+  // only the most recent handoff is injected in full.
   if (ctx.phaseHandoffs && ctx.phaseHandoffs.length > 0) {
     lines.push("");
     lines.push("--- Briefing from Previous Phases ---");
-    for (const h of ctx.phaseHandoffs) {
-      lines.push(`[${h.fromPhase} → ${h.toPhase}] ${h.summary}`);
-      if (h.decisionsMade.length > 0) lines.push(`  Decisions: ${h.decisionsMade.join("; ")}`);
-      if (h.openIssues.length > 0) lines.push(`  Open issues: ${h.openIssues.join("; ")}`);
-      if (h.userPreferences.length > 0) lines.push(`  User preferences: ${h.userPreferences.join("; ")}`);
+    const lastIdx = ctx.phaseHandoffs.length - 1;
+    for (let i = 0; i < ctx.phaseHandoffs.length; i++) {
+      const h = ctx.phaseHandoffs[i]!;
+      if (i < lastIdx && h.compressedSummary) {
+        // Older handoff: use compressed summary
+        lines.push(h.compressedSummary);
+      } else {
+        // Most recent handoff (or no compressed version): full detail
+        lines.push(`[${h.fromPhase} → ${h.toPhase}] ${h.summary}`);
+        if (h.decisionsMade.length > 0) lines.push(`  Decisions: ${h.decisionsMade.join("; ")}`);
+        if (h.openIssues.length > 0) lines.push(`  Open issues: ${h.openIssues.join("; ")}`);
+        if (h.userPreferences.length > 0) lines.push(`  User preferences: ${h.userPreferences.join("; ")}`);
+      }
     }
     lines.push("Use this briefing to understand WHY decisions were made. Do not re-litigate settled decisions unless the user asks.");
   }
