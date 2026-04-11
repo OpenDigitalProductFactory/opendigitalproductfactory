@@ -193,8 +193,8 @@ STEP 1 — SAVE THE PLAN:
       ...more files — list ALL files that will be created or modified
     ],
     "tasks": [
-      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "edit schema.prisma + add inverse relations to User model at line 62", "verify": "prisma migrate" },
-      { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "write route handlers using auth() pattern from existing routes", "verify": "tsc --noEmit" },
+      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "Edit packages/db/prisma/schema.prisma — add Complaint model + add inverse relations to User model at line 62", "verify": "prisma migrate" },
+      { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "Create apps/web/app/api/complaints/route.ts — write route handlers using auth() pattern from existing routes", "verify": "tsc --noEmit" },
       ...more tasks — one per logical unit of work
     ]
   }
@@ -203,6 +203,7 @@ STEP 1 — SAVE THE PLAN:
   - Do NOT wrap them in "phases", "plan", or any other nesting.
   - The build orchestrator reads these arrays to dispatch specialist agents (data architect, software engineer, etc.).
   - If the format is wrong, saveBuildEvidence will REJECT it and tell you to fix the format.
+  - Each task's "implement" field MUST use full monorepo-relative paths (e.g. "apps/web/lib/..." not "lib/...", "packages/db/prisma/..." not "prisma/..."). The working directory is the monorepo root — shortened paths will create files in the wrong location.
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
 
 STEP 2: Call reviewBuildPlan to review it.
