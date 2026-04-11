@@ -14,7 +14,7 @@
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-const IDEATE_TIMEOUT_MS = 300_000; // 5 minutes — research is usually fast
+const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
 
 export type IdeateResult = {
   designDoc: Record<string, unknown> | null;
@@ -289,12 +289,13 @@ export async function dispatchIdeateResearch(params: {
     let fullCommand: string;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
-      // Write a runner script that handles auth env var expansion inside the sandbox
+      // Write a runner script that handles auth env var expansion inside the sandbox.
+      // Tee output to a file so we can recover it if the process is killed on timeout.
       const script = [
         "#!/bin/sh",
         `cd /workspace`,
         `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
-        `exec claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt`,
+        `claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
       ].join("\n");
       const scriptB64 = Buffer.from(script).toString("base64");
       await execAsync(
@@ -317,16 +318,66 @@ export async function dispatchIdeateResearch(params: {
       fullCommand = `docker exec ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
     }
 
-    const { stdout } = await execAsync(
-      fullCommand,
-      {
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: IDEATE_TIMEOUT_MS,
-      },
-    );
+    // Use spawn (not execAsync) so we can stream stderr progress in real-time,
+    // matching the pattern in claude-dispatch.ts.
+    const { spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
 
-    const durationMs = Date.now() - startMs;
-    let rawOutput = stdout.trim();
+    const cmdParts = fullCommand.split(" ");
+    const { stdout: spawnStdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
+      const proc = spawnCb(cmdParts[0], cmdParts.slice(1));
+      let stdout = "";
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+      }, IDEATE_TIMEOUT_MS);
+
+      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
+      proc.stderr.on("data", (data: Buffer) => {
+        const lines = data.toString().split("\n").filter(Boolean);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Log progress so it appears in container logs
+          if (trimmed && !trimmed.startsWith("Compiling")) {
+            console.log(`[ideate-dispatch] progress: ${trimmed.slice(0, 120)}`);
+          }
+        }
+      });
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        const d = Date.now() - startMs;
+        if (timedOut) {
+          reject(Object.assign(new Error(`Timed out after ${IDEATE_TIMEOUT_MS / 1000}s`), { stdout, killed: true }));
+        } else if (code === 0 || stdout.trim()) {
+          resolve({ stdout, durationMs: d });
+        } else {
+          console.error(`[ideate-dispatch] Exit code ${code}, stdout empty, recovering from file...`);
+          // Try to recover output from tee'd file
+          const { execSync } = require("child_process");
+          try {
+            const recovered = execSync(
+              `docker exec ${SANDBOX_CONTAINER} cat /tmp/ideate-output.json 2>/dev/null`,
+              { timeout: 5_000 },
+            ).toString().trim();
+            if (recovered) {
+              console.log(`[ideate-dispatch] Recovered ${recovered.length} chars from file`);
+              resolve({ stdout: recovered, durationMs: d });
+              return;
+            }
+          } catch { /* no file */ }
+          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
+        }
+      });
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+
+    const durationMs = elapsed;
+    let rawOutput = spawnStdout.trim();
 
     // If using --output-format json, extract the result field
     if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
