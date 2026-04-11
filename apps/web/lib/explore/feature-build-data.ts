@@ -195,6 +195,7 @@ export async function getFeatureBuildForContext(
           decisionsMade: true,
           openIssues: true,
           userPreferences: true,
+          compressedSummary: true,
         },
       },
     },

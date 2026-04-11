@@ -14,6 +14,14 @@ import {
   semanticMemoryLatency,
 } from "@/lib/metrics";
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+/** Extract top-level route domain from a routeContext path (e.g. "/compliance/regs/x" → "compliance"). */
+function extractRouteDomain(routeContext: string): string {
+  const seg = routeContext.replace(/^\//, "").split("/")[0];
+  return seg || "unknown";
+}
+
 // ─── Store Conversation Memory ──────────────────────────────────────────────
 
 export async function storeConversationMemory(params: {
@@ -39,6 +47,7 @@ export async function storeConversationMemory(params: {
           userId: params.userId,
           agentId: params.agentId,
           routeContext: params.routeContext,
+          routeDomain: extractRouteDomain(params.routeContext),
           threadId: params.threadId,
           role: params.role,
           contentPreview: params.content.slice(0, 300),
@@ -62,6 +71,7 @@ export async function recallRelevantContext(params: {
   query: string;
   userId: string;
   currentThreadId?: string;
+  routeContext?: string;
   limit?: number;
 }): Promise<string | null> {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "recall" });
@@ -69,32 +79,53 @@ export async function recallRelevantContext(params: {
     const embedding = await generateEmbedding(params.query);
     if (!embedding) { endTimer(); return null; }
 
-    // Build filter: same user, exclude current thread
-    const must: Array<Record<string, unknown>> = [
+    const limit = params.limit ?? 8;
+    const threshold = 0.55; // lower threshold — more recall to compensate for short message window
+
+    // Base filter: same user, exclude current thread
+    const baseMust: Array<Record<string, unknown>> = [
       { key: "userId", match: { value: params.userId } },
     ];
-    if (params.currentThreadId) {
-      must.push({
-        key: "threadId",
-        match: { value: params.currentThreadId },
-      });
+    const baseMustNot: Array<Record<string, unknown>> = params.currentThreadId
+      ? [{ key: "threadId", match: { value: params.currentThreadId } }]
+      : [];
+
+    // Two-pass retrieval: scoped first, then global fallback
+    let results: Array<{ payload: Record<string, unknown>; score: number; id: string | number }> = [];
+
+    // Pass 1: Route-scoped search (if routeContext provided)
+    if (params.routeContext) {
+      const domain = extractRouteDomain(params.routeContext);
+      const scopedFilter: Record<string, unknown> = {
+        must: [...baseMust, { key: "routeDomain", match: { value: domain } }],
+        ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
+      };
+      results = await searchSimilar(
+        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, scopedFilter, limit, threshold,
+      );
     }
 
-    // For excluding current thread, use must_not
-    const filter: Record<string, unknown> = params.currentThreadId
-      ? {
-          must: [{ key: "userId", match: { value: params.userId } }],
-          must_not: [{ key: "threadId", match: { value: params.currentThreadId } }],
+    // Pass 2: Global fallback if scoped returned fewer than 3 results
+    if (results.length < 3) {
+      const globalFilter: Record<string, unknown> = {
+        must: baseMust,
+        ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
+      };
+      const globalResults = await searchSimilar(
+        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, globalFilter, limit, threshold,
+      );
+      // Merge, deduplicating by id, scoped results take priority
+      const seen = new Set(results.map((r) => String(r.id)));
+      for (const r of globalResults) {
+        if (!seen.has(String(r.id))) {
+          results.push(r);
+          seen.add(String(r.id));
         }
-      : { must };
-
-    const results = await searchSimilar(
-      QDRANT_COLLECTIONS.AGENT_MEMORY,
-      embedding,
-      filter,
-      params.limit ?? 8,
-      0.55, // lower threshold — more recall to compensate for short message window
-    );
+      }
+      // Re-sort by score descending and trim to limit
+      results.sort((a, b) => b.score - a.score);
+      results = results.slice(0, limit);
+    }
 
     semanticMemoryOps.inc({ operation: "recall", status: "success" });
     endTimer();
