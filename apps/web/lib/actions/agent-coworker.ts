@@ -954,14 +954,23 @@ export async function sendMessage(input: {
 
           // Build context for the research
           const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
+          // Use the active provider — Claude or Codex depending on config
+          const ideateProviderId = config.provider === "claude"
+            ? config.claudeProviderId
+            : config.codexProviderId;
+          const ideateModel = config.provider === "claude"
+            ? config.claudeModel
+            : config.codexModel;
+
           const ideateResult = await dispatchIdeateResearch({
             featureTitle: buildForResearch?.title ?? "Untitled Feature",
             featureDescription: buildForResearch?.description ?? "",
             reusabilityScope: String(execState.reusabilityScope ?? "parameterizable"),
             userContext: String(execState.userContext ?? ""),
             businessContext: buildCtx?.businessContext ?? undefined,
-            providerId: config.codexProviderId,
-            model: config.codexModel,
+            providerId: ideateProviderId,
+            model: ideateModel,
+            dispatchEngine: config.provider,
           });
 
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: ideateResult.success });
