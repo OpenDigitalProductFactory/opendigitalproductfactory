@@ -578,22 +578,32 @@ export async function runBuildOrchestrator(params: {
       continue;
     }
 
-    // Dispatch pending tasks in this phase in parallel
-    const phaseResults = await Promise.all(
-      pendingTasks.map(task =>
-        dispatchSpecialist({
-          task,
-          userId,
-          platformRole,
-          isSuperuser,
-          buildId,
-          buildContext,
-          parentThreadId,
-          priorResults: priorResultsSummary || undefined,
-          // sessionId omitted — see Layer 1 comment above
-        })
-      ),
-    );
+    // Dispatch pending tasks with concurrency limit to avoid rate-limiting.
+    // Max 2 concurrent CLI tasks — subscription APIs have per-minute caps.
+    const MAX_CONCURRENT_TASKS = 2;
+    const phaseResults: SpecialistResult[] = [];
+    const taskQueue = [...pendingTasks];
+
+    // Process tasks in batches of MAX_CONCURRENT_TASKS
+    while (taskQueue.length > 0) {
+      const batch = taskQueue.splice(0, MAX_CONCURRENT_TASKS);
+      const batchResults = await Promise.all(
+        batch.map(task =>
+          dispatchSpecialist({
+            task,
+            userId,
+            platformRole,
+            isSuperuser,
+            buildId,
+            buildContext,
+            parentThreadId,
+            priorResults: priorResultsSummary || undefined,
+            // sessionId omitted — see Layer 1 comment above
+          })
+        ),
+      );
+      phaseResults.push(...batchResults);
+    }
 
     // Collect results and build prior context for next phase
     for (const sr of phaseResults) {
