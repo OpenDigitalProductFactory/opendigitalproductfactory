@@ -82,7 +82,7 @@ async function runProbe(
 ): Promise<ProbeRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
-    const systemPrompt = assembleSystemPrompt(promptInput);
+    const systemPrompt = await assembleSystemPrompt(promptInput);
 
     const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
@@ -115,7 +115,7 @@ async function runScenario(
 ): Promise<ScenarioRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
-    const systemPrompt = assembleSystemPrompt(promptInput);
+    const systemPrompt = await assembleSystemPrompt(promptInput);
 
     const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 

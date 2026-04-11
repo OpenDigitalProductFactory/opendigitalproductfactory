@@ -3,6 +3,8 @@ import type { UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
+// prompt-loader is imported server-side only via agent-routing-server.ts.
+// This file stays free of @dpf/db for client component compatibility.
 
 /**
  * Shared platform identity preamble — injected into every agent's system prompt.
@@ -434,6 +436,10 @@ WHAT YOU DO NOT DO:
 
 const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 
+/** Exported for client-safe resolver in agent-routing-client.ts */
+export { PLATFORM_PREAMBLE, FALLBACK_ENTRY };
+export const ROUTE_AGENT_MAP_ENTRIES = Object.entries(ROUTE_AGENT_MAP);
+
 /**
  * Lookup agentId → agentName for rendering historical messages.
  * EP-AI-WORKFORCE-001: This remains synchronous for client component compatibility.
@@ -508,6 +514,57 @@ export function resolveAgentForRoute(
   }
 
   // Gated routes — check user permission
+  const canAssist = can(userContext, bestMatch.capability);
+
+  return {
+    agentId: bestMatch.agentId,
+    agentName: bestMatch.agentName,
+    agentDescription: bestMatch.agentDescription,
+    canAssist,
+    sensitivity: bestMatch.sensitivity ?? getRouteSensitivity(pathname),
+    systemPrompt: bestMatch.systemPrompt,
+    skills: mergedSkills,
+    ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
+  };
+}
+
+/**
+ * Synchronous client-side agent resolver. No DB dependency.
+ * Use in "use client" components where async is not possible.
+ */
+export function resolveAgentForRouteSync(
+  pathname: string,
+  userContext: UserContext,
+): AgentInfo {
+  let bestMatch: RouteAgentEntry = FALLBACK_ENTRY;
+  let bestLen = 0;
+
+  for (const [prefix, entry] of Object.entries(ROUTE_AGENT_MAP)) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) {
+      if (prefix.length > bestLen) {
+        bestLen = prefix.length;
+        bestMatch = entry;
+      }
+    }
+  }
+
+  const reportIssue = bestMatch.skills.find((s) => s.label === "Report an issue");
+  const pageSkills = bestMatch.skills.filter((s) => s.label !== "Report an issue");
+  const mergedSkills = [...(UNIVERSAL_SKILLS as typeof bestMatch.skills), ...pageSkills, ...(reportIssue ? [reportIssue] : [])];
+
+  if (bestMatch.capability === null) {
+    return {
+      agentId: bestMatch.agentId,
+      agentName: bestMatch.agentName,
+      agentDescription: bestMatch.agentDescription,
+      canAssist: true,
+      sensitivity: bestMatch.sensitivity,
+      systemPrompt: PLATFORM_PREAMBLE + bestMatch.systemPrompt,
+      skills: mergedSkills,
+      ...(bestMatch.modelRequirements && { modelRequirements: bestMatch.modelRequirements }),
+    };
+  }
+
   const canAssist = can(userContext, bestMatch.capability);
 
   return {
