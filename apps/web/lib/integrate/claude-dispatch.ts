@@ -259,8 +259,11 @@ export async function dispatchClaudeTask(params: {
 
       proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
 
+      let stderrBuf = "";
       proc.stderr.on("data", (data: Buffer) => {
-        const lines = data.toString().split("\n").filter(Boolean);
+        const chunk = data.toString();
+        stderrBuf += chunk;
+        const lines = chunk.split("\n").filter(Boolean);
         for (const line of lines) {
           const trimmed = line.trim();
           if (trimmed.startsWith("Reading file:")) {
@@ -285,7 +288,8 @@ export async function dispatchClaudeTask(params: {
         } else if (code === 0 || stdout.trim()) {
           resolve({ stdout, durationMs: d });
         } else {
-          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
+          console.error(`[claude-dispatch] Task "${task.title}" stderr: ${stderrBuf.slice(0, 500)}`);
+          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code, stderr: stderrBuf }));
         }
       });
 
