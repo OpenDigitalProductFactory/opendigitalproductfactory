@@ -226,6 +226,7 @@ export async function dispatchIdeateResearch(params: {
   providerId?: string;
   model?: string;
   dispatchEngine?: "claude" | "codex" | "agentic";
+  onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";
   const providerId = params.providerId || "";
@@ -337,8 +338,17 @@ export async function dispatchIdeateResearch(params: {
         const lines = data.toString().split("\n").filter(Boolean);
         for (const line of lines) {
           const trimmed = line.trim();
-          // Log progress so it appears in container logs
-          if (trimmed && !trimmed.startsWith("Compiling")) {
+          if (!trimmed || trimmed.startsWith("Compiling")) continue;
+          // Parse Claude CLI progress and forward to UI
+          if (trimmed.startsWith("Reading file:")) {
+            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+            params.onProgress?.(`Analyzing ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+          } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
+            params.onProgress?.(`Searching: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
+          } else if (trimmed === "Thinking...") {
+            params.onProgress?.("Thinking...");
+          } else {
             console.log(`[ideate-dispatch] progress: ${trimmed.slice(0, 120)}`);
           }
         }

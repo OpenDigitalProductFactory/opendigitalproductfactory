@@ -971,6 +971,14 @@ export async function sendMessage(input: {
             providerId: ideateProviderId,
             model: ideateModel,
             dispatchEngine: config.provider,
+            onProgress: (message: string) => {
+              agentEventBus.emit(input.threadId, {
+                type: "orchestrator:task_progress",
+                buildId: resolvedBuildId!,
+                taskTitle: "Codebase Research",
+                message,
+              });
+            },
           });
 
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: ideateResult.success });
