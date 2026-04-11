@@ -230,6 +230,15 @@ export function SkillsCatalogView({
                 </div>
               )}
 
+              {/* Skill quality indicators */}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {skill.description.length > 50 && (
+                  <span className="text-[8px] px-1 py-0.5 rounded bg-[color-mix(in_srgb,var(--dpf-success)_10%,transparent)] text-[var(--dpf-success)]">
+                    rich description
+                  </span>
+                )}
+              </div>
+
               {/* Footer */}
               <div className="flex items-center justify-between mt-3 pt-2 border-t border-[var(--dpf-border)]">
                 <span className="text-[9px] text-[var(--dpf-muted)]">

@@ -18,6 +18,18 @@ export interface SkillMdFrontmatter {
   agent?: string;
   model?: string;
   effort?: string;
+  // Extended fields (Phase 2 enrichment)
+  triggerPattern?: string;
+  userInvocable?: boolean;
+  agentInvocable?: boolean;
+  allowedTools?: string[];
+  composesFrom?: string[];
+  contextRequirements?: string[];
+  capability?: string | null;
+  taskType?: string;
+  category?: string;
+  assignTo?: string[];
+  riskBand?: string;
 }
 
 export interface SkillIngestionInput {
@@ -63,22 +75,35 @@ function parseSkillMd(raw: string): {
   const yamlBlock = trimmed.slice(3, endIdx).trim();
   const body = trimmed.slice(endIdx + 3).trim();
 
-  const frontmatter: Record<string, string | boolean> = {};
+  const frontmatter: Record<string, string | boolean | string[] | null> = {};
   for (const line of yamlBlock.split("\n")) {
+    if (line.trim().startsWith("#") || line.trim() === "") continue;
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    let value: string | boolean = line.slice(colonIdx + 1).trim();
+    let value: string | boolean | string[] | null = line.slice(colonIdx + 1).trim();
+    // Inline array: ["item1", "item2"] or [item1, item2]
+    if (typeof value === "string" && value.startsWith("[")) {
+      const inner = value.replace(/^\[|\]$/g, "").trim();
+      if (inner === "") {
+        frontmatter[key] = [];
+      } else {
+        frontmatter[key] = inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
+      }
+      continue;
+    }
     // Strip surrounding quotes
     if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
+      typeof value === "string" &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'")))
     ) {
       value = value.slice(1, -1);
     }
-    // Boolean coercion
+    // Boolean / null coercion
     if (value === "true") value = true;
     else if (value === "false") value = false;
+    else if (value === "null") value = null;
     frontmatter[key] = value;
   }
 
@@ -113,6 +138,18 @@ export async function ingestSkill(
     where: { skillId },
   });
 
+  // Extract enriched fields from frontmatter
+  const enrichedFields = {
+    triggerPattern: frontmatter.triggerPattern ?? null,
+    userInvocable: frontmatter.userInvocable ?? (frontmatter["user-invocable"] !== false),
+    agentInvocable: frontmatter.agentInvocable ?? true,
+    allowedTools: frontmatter.allowedTools ?? [],
+    composesFrom: frontmatter.composesFrom ?? [],
+    contextRequirements: frontmatter.contextRequirements ?? [],
+    capability: typeof frontmatter.capability === "string" ? frontmatter.capability : null,
+    taskType: frontmatter.taskType ?? "conversation",
+  };
+
   if (existing) {
     await prisma.skillDefinition.update({
       where: { skillId },
@@ -123,10 +160,11 @@ export async function ingestSkill(
         sourceType: input.sourceType,
         sourceUrl: input.sourceUrl ?? existing.sourceUrl,
         sourceRegistry: input.sourceRegistry ?? existing.sourceRegistry,
-        category: input.category ?? existing.category,
+        category: input.category ?? frontmatter.category ?? existing.category,
         tags: input.tags ?? existing.tags,
         author: input.author ?? existing.author,
         license: input.license ?? existing.license,
+        ...enrichedFields,
       },
     });
     return { skillId, name: frontmatter.name, created: false };
@@ -141,10 +179,11 @@ export async function ingestSkill(
       sourceType: input.sourceType,
       sourceUrl: input.sourceUrl ?? null,
       sourceRegistry: input.sourceRegistry ?? null,
-      category: input.category ?? "ai-agents",
+      category: input.category ?? frontmatter.category ?? "ai-agents",
       tags: input.tags ?? [],
       author: input.author ?? null,
       license: input.license ?? null,
+      ...enrichedFields,
     },
   });
   return { skillId, name: frontmatter.name, created: true };

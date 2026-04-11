@@ -62,6 +62,7 @@ model User {
   workItemAssignments          WorkItem[]                    @relation("WorkItemAssignee")
   workSchedule                 WorkSchedule?
   adminActivities              AdminActivity[]
+  userFacts                    UserFact[]
 }
 
 model UserGroup {
@@ -2007,6 +2008,27 @@ model AgentMessage {
 
   @@index([threadId])
   @@index([createdAt])
+}
+
+model UserFact {
+  id              String    @id @default(cuid())
+  userId          String
+  category        String    // preference | decision | constraint | domain_context
+  key             String
+  value           String
+  confidence      Float     @default(1.0)
+  sourceRoute     String
+  sourceMessageId String?
+  supersededAt    DateTime?
+  supersededById  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy    UserFact? @relation("FactSupersession", fields: [supersededById], references: [id])
+  supersedes      UserFact[] @relation("FactSupersession")
+
+  @@index([userId, category, key])
+  @@index([userId, supersededAt])
 }
 
 model AgentActionProposal {
@@ -4780,12 +4802,23 @@ model SkillDefinition {
   sourceUrl       String?
   sourceRegistry  String?           // "skillsmp" | "skillsllm" | "anthropics" | "internal"
   skillMdContent  String            // Full SKILL.md content
-  category        String            // "ai-agents" | "mcp-servers" | "cli-tools" | etc.
+  category        String            // "ai-agents" | "mcp-servers" | "cli-tools" | "portfolio" | "operations" | "universal" | etc.
   tags            String[]          @default([])
   author          String?
   license         String?
   riskBand        String            @default("low") // "low" | "medium" | "high" | "critical"
   status          String            @default("discovered") // "discovered" | "evaluated" | "approved" | "installed" | "active" | "deprecated"
+
+  // --- SKILL.md pattern fields (Phase 2 enrichment) ---
+  triggerPattern      String?           // regex/keywords for auto-suggestion (Anthropic's description-as-trigger)
+  userInvocable       Boolean           @default(true)   // can humans invoke directly?
+  agentInvocable      Boolean           @default(true)   // can other coworkers invoke?
+  allowedTools        String[]          @default([])      // tools this skill may use
+  composesFrom        String[]          @default([])      // other skillIds this skill builds on
+  contextRequirements String[]          @default([])      // what context/data the skill needs
+  capability          String?           // permission gate (e.g. "view_portfolio") — null = ungated
+  taskType            String            @default("conversation") // "conversation" | "code_generation" | "analysis"
+
   evaluationId    String?
   installedAt     DateTime?
   lastTestedAt    DateTime?
@@ -4833,6 +4866,30 @@ model SkillMetric {
 
   @@unique([skillId, agentId, period])
   @@index([skillId])
+}
+
+// ─── EP-DELEG-001: Delegation Chain (Authority Propagation & Chain of Custody) ─
+
+model DelegationChain {
+  id              String    @id @default(cuid())
+  chainId         String    // UUID grouping all links in one delegation flow
+  depth           Int       // 0 = origin, 1 = first delegate, etc.
+  fromAgentId     String    // delegating coworker
+  toAgentId       String    // receiving coworker
+  skillId         String?   // which skill triggered delegation
+  authorityScope  String[]  // capabilities propagated from origin caller
+  originUserId    String    // human who started the chain
+  originAuthority String[]  // original user's granted capabilities
+  status          String    @default("active") // "active" | "completed" | "failed" | "blocked"
+  reason          String?   // why delegation was made or blocked
+  parentLinkId    String?   // previous link in chain (null for origin)
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([chainId])
+  @@index([fromAgentId])
+  @@index([toAgentId])
+  @@index([status])
 }
 
 // ─── EP-KM-001: Knowledge Management ──────────────────────────────────────────
@@ -5102,5 +5159,49 @@ model WorkSchedule {
   notificationPrefs Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ─── Prompt Templates ─────────────────────────────────────────────────────────
+// Editable AI coworker instructions. Source of truth: prompts/*.prompt.md files.
+// Seeded on deploy, overridable at runtime via Admin > Prompts.
+
+model PromptTemplate {
+  id            String           @id @default(cuid())
+  category      String           // platform-identity | platform-preamble | route-persona | build-phase | specialist | reviewer | context
+  slug          String           // filename stem (e.g. "portfolio-advisor")
+  name          String           // human-readable display name
+  description   String?          // what this prompt does
+  content       String           // the markdown body (below YAML frontmatter)
+  contentFormat String           @default("markdown") // markdown | handlebars
+  composesFrom  String[]         @default([])         // category/slug refs for {{include:...}} resolution
+  variables     Json?            // declared template variables [{name, required}]
+  metadata      Json?            // all other frontmatter (IT4IT, Scott Page, sensitivity)
+  isOverridden  Boolean          @default(false)       // true when admin has edited from seed default
+  enabled       Boolean          @default(true)
+  version       Int              @default(1)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  updatedBy     String?
+
+  revisions     PromptRevision[]
+
+  @@unique([category, slug])
+  @@index([category])
+}
+
+model PromptRevision {
+  id           String         @id @default(cuid())
+  templateId   String
+  version      Int
+  content      String         // snapshot of content at this version
+  metadata     Json?          // snapshot of metadata
+  changeReason String?
+  changedBy    String?
+  createdAt    DateTime       @default(now())
+
+  template     PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId])
 }
 

@@ -23,6 +23,7 @@ type Props = {
   onToggleExternalAccess: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
+  onViewProfile?: () => void;
   providerInfo?: { providerId: string; modelId: string } | null;
   devMode?: boolean;
   canUseDev?: boolean;
@@ -54,6 +55,7 @@ export function AgentPanelHeader({
   onToggleDev,
   coworkerMode,
   onToggleCoworkerMode,
+  onViewProfile,
   sensitivityLevel,
   useUnified,
 }: Props) {
@@ -85,6 +87,29 @@ export function AgentPanelHeader({
             onSend={onSend}
             onCreateSkill={() => {}}
           />
+          {onViewProfile && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProfile();
+              }}
+              title="View coworker profile, skills, and tools"
+              style={{
+                background: "none",
+                border: "1px solid var(--dpf-border)",
+                color: "var(--dpf-muted)",
+                fontSize: 9,
+                cursor: "pointer",
+                padding: "1px 5px",
+                borderRadius: 3,
+                lineHeight: "14px",
+              }}
+            >
+              Profile
+            </button>
+          )}
           {providerInfo && (
             <span style={{ fontSize: 9, color: "var(--dpf-muted)", fontFamily: "monospace" }}>
               {providerInfo.providerId}:{providerInfo.modelId}

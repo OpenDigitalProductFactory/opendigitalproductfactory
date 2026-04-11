@@ -21,6 +21,29 @@ type Props = {
   onCreateSkill: () => void;
 };
 
+const categoryLabels: Record<string, string> = {
+  universal: "Universal",
+  portfolio: "Portfolio",
+  inventory: "Inventory",
+  ea: "Architecture",
+  employee: "Employee",
+  customer: "Customer",
+  ops: "Operations",
+  build: "Build Studio",
+  platform: "Platform",
+  admin: "Administration",
+  compliance: "Compliance",
+  storefront: "Storefront",
+  workspace: "Workspace",
+  docs: "Documentation",
+};
+
+const taskTypeIcons: Record<string, string> = {
+  conversation: "",
+  code_generation: "[code]",
+  analysis: "[analysis]",
+};
+
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "\u2026" : text;
 }
@@ -84,6 +107,10 @@ export function AgentSkillsDropdown({
   const filteredSkills = skills.filter(
     (s) => s.capability === null || can(userContext, s.capability),
   );
+
+  // Group skills by category for enriched display
+  const coworkerSkills = filteredSkills.filter((s) => s.category && s.category !== "universal");
+  const universalSkills = filteredSkills.filter((s) => s.category === "universal" || !s.category);
 
   const orgSkills = userSkills.filter((s) => s.visibility === "org");
   const teamSkills = userSkills.filter((s) => s.visibility === "team");
@@ -193,13 +220,58 @@ export function AgentSkillsDropdown({
             marginTop: 0,
           }}
         >
-          {/* Platform Skills section */}
-          {filteredSkills.length > 0 && (
+          {/* Coworker Skills section (route-specific) */}
+          {coworkerSkills.length > 0 && (
             <>
-              <div style={sectionHeaderStyle}>Platform Skills</div>
-              {filteredSkills.map((skill) => (
+              <div style={sectionHeaderStyle}>Coworker Skills</div>
+              {coworkerSkills.map((skill) => (
                 <button
-                  key={skill.prompt}
+                  key={skill.skillId ?? skill.prompt}
+                  type="button"
+                  onClick={() => {
+                    onSend(skill.prompt);
+                    setIsOpen(false);
+                  }}
+                  style={skillButtonStyle}
+                  onMouseEnter={handleHoverIn}
+                  onMouseLeave={handleHoverOut}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontWeight: 500 }}>{skill.label}</span>
+                    {skill.taskType && skill.taskType !== "conversation" && (
+                      <span style={{
+                        fontSize: 8,
+                        color: "var(--dpf-accent)",
+                        border: "1px solid color-mix(in srgb, var(--dpf-accent) 40%, transparent)",
+                        borderRadius: 3,
+                        padding: "0 3px",
+                        lineHeight: "14px",
+                      }}>
+                        {taskTypeIcons[skill.taskType] || skill.taskType}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--dpf-muted)",
+                      marginTop: 2,
+                    }}
+                  >
+                    {skill.description}
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
+
+          {/* Universal Skills section */}
+          {universalSkills.length > 0 && (
+            <>
+              <div style={sectionHeaderStyle}>Universal</div>
+              {universalSkills.map((skill) => (
+                <button
+                  key={skill.skillId ?? skill.prompt}
                   type="button"
                   onClick={() => {
                     onSend(skill.prompt);
