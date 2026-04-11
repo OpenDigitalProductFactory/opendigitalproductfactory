@@ -2407,12 +2407,12 @@ export async function executeTool(
       // Accept "no existing code found" as valid research for new features.
       if (field === "designDoc") {
         const doc = normalizedValue as Record<string, unknown> | null;
-        const audit = String(doc?.existingFunctionalityAudit ?? "");
+        const audit = String(doc?.existingCodeAudit ?? doc?.existingFunctionalityAudit ?? "");
         if (!audit || audit.length < 20) {
           return {
             success: false,
             error: "Design doc missing codebase research.",
-            message: "REJECTED: existingFunctionalityAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
+            message: "REJECTED: existingCodeAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
           };
         }
       }

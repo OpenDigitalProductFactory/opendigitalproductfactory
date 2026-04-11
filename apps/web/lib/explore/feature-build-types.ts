@@ -42,10 +42,10 @@ export type ReusabilityAnalysis = {
 
 export type BuildDesignDoc = {
   problemStatement: string;
-  existingFunctionalityAudit: string;
-  alternativesConsidered: string;
+  dataModel?: string;
+  existingCodeAudit?: string;
+  existingFunctionalityAudit?: string; // legacy name — accept both
   reusePlan: string;
-  newCodeJustification: string;
   proposedApproach: string;
   acceptanceCriteria: string[];
   reusabilityAnalysis?: ReusabilityAnalysis;
