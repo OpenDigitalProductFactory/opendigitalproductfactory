@@ -284,20 +284,37 @@ export async function dispatchIdeateResearch(params: {
     // Build the CLI command based on the dispatch engine.
     // Both engines read from /tmp/ideate-prompt.txt which was already written above.
     // Claude runs as --user node (refuses root). Codex runs as root.
-    // IMPORTANT: Use single quotes for sh -c '...' so $(cat ...) expands inside
-    // the sandbox shell, not the host shell.
+    // Write a shell script to the sandbox to avoid all quoting issues with
+    // nested $() in docker exec sh -c.
     let fullCommand: string;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
-      // Matches claude-dispatch.ts spawn pattern:
-      // - Env var for auth (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
-      // - --dangerously-skip-permissions for sandbox
-      // - Read prompt from stdin via < /tmp/ideate-prompt.txt
-      // - --output-format json to get structured output we can parse
-      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} sh -c 'cd /workspace && ${claudeAuthEnv} claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt'`;
+      // Write a runner script that handles auth env var expansion inside the sandbox
+      const script = [
+        "#!/bin/sh",
+        `cd /workspace`,
+        `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
+        `exec claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt`,
+      ].join("\n");
+      const scriptB64 = Buffer.from(script).toString("base64");
+      await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
+        { timeout: 5_000 },
+      );
+      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
     } else {
       const modelFlag = model ? `-m ${model}` : "";
-      fullCommand = `docker exec ${SANDBOX_CONTAINER} sh -c 'cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null'`;
+      const script = [
+        "#!/bin/sh",
+        `cd /workspace`,
+        `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
+      ].join("\n");
+      const scriptB64 = Buffer.from(script).toString("base64");
+      await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
+        { timeout: 5_000 },
+      );
+      fullCommand = `docker exec ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
     }
 
     const { stdout } = await execAsync(
