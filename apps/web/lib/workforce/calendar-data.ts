@@ -30,6 +30,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   hr: "#a78bfa",
   operations: "#38bdf8",
   platform: "#fb923c",
+  compliance: "#e879f9",
+  finance: "#facc15",
   personal: "#4ade80",
   external: "#8888a0",
 };
@@ -190,6 +192,358 @@ async function projectLifecycleEvents(rangeStart: Date, rangeEnd: Date): Promise
       sourceType: "projected",
       sourceId: g.id,
     });
+  }
+
+  return events;
+}
+
+// ─── Compliance / GRC projections ───────────────────────────────────────────
+
+async function projectComplianceEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const events: CalendarEventView[] = [];
+
+  const [incidents, actions, findings, audits, obligations, submissions] = await Promise.all([
+    prisma.complianceIncident.findMany({
+      where: {
+        status: { in: ["open", "investigating"] },
+        notificationDeadline: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, incidentId: true, title: true, notificationDeadline: true, severity: true },
+    }),
+    prisma.correctiveAction.findMany({
+      where: {
+        status: { in: ["open", "in-progress"] },
+        dueDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, actionId: true, title: true, dueDate: true },
+    }),
+    prisma.auditFinding.findMany({
+      where: {
+        status: "open",
+        dueDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, findingId: true, title: true, dueDate: true },
+    }),
+    prisma.complianceAudit.findMany({
+      where: {
+        status: "planned",
+        scheduledAt: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, auditId: true, title: true, scheduledAt: true },
+    }),
+    prisma.obligation.findMany({
+      where: {
+        status: "active",
+        reviewDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, obligationId: true, title: true, reviewDate: true },
+    }),
+    prisma.regulatorySubmission.findMany({
+      where: {
+        status: { in: ["draft", "pending"] },
+        dueDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, submissionId: true, title: true, dueDate: true, recipientBody: true },
+    }),
+  ]);
+
+  for (const i of incidents) {
+    events.push({
+      id: `incident-${i.incidentId}`,
+      title: `Incident deadline: ${i.title}`,
+      start: i.notificationDeadline!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "compliance-deadline",
+      color: i.severity === "critical" ? "#ef4444" : CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: i.id,
+    });
+  }
+
+  for (const a of actions) {
+    events.push({
+      id: `capa-${a.actionId}`,
+      title: `CAPA due: ${a.title}`,
+      start: a.dueDate!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "compliance-deadline",
+      color: CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: a.id,
+    });
+  }
+
+  for (const f of findings) {
+    events.push({
+      id: `finding-${f.findingId}`,
+      title: `Finding due: ${f.title}`,
+      start: f.dueDate!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "compliance-deadline",
+      color: CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: f.id,
+    });
+  }
+
+  for (const a of audits) {
+    events.push({
+      id: `audit-${a.auditId}`,
+      title: `Audit: ${a.title}`,
+      start: a.scheduledAt!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "audit",
+      color: CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: a.id,
+    });
+  }
+
+  for (const o of obligations) {
+    events.push({
+      id: `obligation-${o.obligationId}`,
+      title: `Obligation review: ${o.title}`,
+      start: o.reviewDate!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "regulatory",
+      color: CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: o.id,
+    });
+  }
+
+  for (const s of submissions) {
+    events.push({
+      id: `submission-${s.submissionId}`,
+      title: `Submission due: ${s.title} -> ${s.recipientBody}`,
+      start: s.dueDate!.toISOString(),
+      end: null,
+      allDay: true,
+      category: "compliance",
+      eventType: "regulatory",
+      color: CATEGORY_COLORS.compliance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: s.id,
+    });
+  }
+
+  return events;
+}
+
+// ─── Finance projections ────────────────────────────────────────────────────
+
+async function projectFinanceEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const events: CalendarEventView[] = [];
+
+  const [invoices, bills, recurring] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        status: { in: ["sent", "overdue", "partially_paid"] },
+        dueDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, invoiceRef: true, dueDate: true, status: true },
+    }),
+    prisma.bill.findMany({
+      where: {
+        status: { in: ["received", "approved", "partially_paid"] },
+        dueDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, billRef: true, dueDate: true, status: true },
+    }),
+    prisma.recurringSchedule.findMany({
+      where: {
+        status: "active",
+        nextInvoiceDate: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { id: true, scheduleId: true, name: true, nextInvoiceDate: true },
+    }),
+  ]);
+
+  for (const inv of invoices) {
+    events.push({
+      id: `invoice-${inv.invoiceRef}`,
+      title: `Invoice due: ${inv.invoiceRef}`,
+      start: inv.dueDate.toISOString(),
+      end: null,
+      allDay: true,
+      category: "finance",
+      eventType: "invoice",
+      color: inv.status === "overdue" ? "#ef4444" : CATEGORY_COLORS.finance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: inv.id,
+    });
+  }
+
+  for (const b of bills) {
+    events.push({
+      id: `bill-${b.billRef}`,
+      title: `Bill due: ${b.billRef}`,
+      start: b.dueDate.toISOString(),
+      end: null,
+      allDay: true,
+      category: "finance",
+      eventType: "bill",
+      color: CATEGORY_COLORS.finance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: b.id,
+    });
+  }
+
+  for (const r of recurring) {
+    events.push({
+      id: `recurring-inv-${r.scheduleId}`,
+      title: `Recurring: ${r.name}`,
+      start: r.nextInvoiceDate.toISOString(),
+      end: null,
+      allDay: true,
+      category: "finance",
+      eventType: "recurring-invoice",
+      color: CATEGORY_COLORS.finance!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: r.id,
+    });
+  }
+
+  return events;
+}
+
+// ─── Change management projections ──────────────────────────────────────────
+
+async function projectChangeManagementEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const events: CalendarEventView[] = [];
+
+  const [changeRequests, blackouts] = await Promise.all([
+    prisma.changeRequest.findMany({
+      where: {
+        status: { in: ["approved", "scheduled"] },
+        calendarEventId: null,
+        plannedStartAt: { lte: rangeEnd },
+        plannedEndAt: { gte: rangeStart },
+      },
+      select: { id: true, rfcId: true, title: true, plannedStartAt: true, plannedEndAt: true, riskLevel: true },
+    }),
+    prisma.blackoutPeriod.findMany({
+      where: {
+        calendarEventId: null,
+        startAt: { lte: rangeEnd },
+        endAt: { gte: rangeStart },
+      },
+      select: { id: true, name: true, startAt: true, endAt: true },
+    }),
+  ]);
+
+  for (const cr of changeRequests) {
+    events.push({
+      id: `change-${cr.rfcId}`,
+      title: `Change: ${cr.title}`,
+      start: cr.plannedStartAt!.toISOString(),
+      end: cr.plannedEndAt?.toISOString() ?? null,
+      allDay: false,
+      category: "operations",
+      eventType: "change-request",
+      color: cr.riskLevel === "high" ? "#ef4444" : CATEGORY_COLORS.operations!,
+      editable: false,
+      sourceType: "projected",
+      sourceId: cr.id,
+    });
+  }
+
+  for (const bp of blackouts) {
+    events.push({
+      id: `blackout-${bp.id}`,
+      title: `Blackout: ${bp.name}`,
+      start: bp.startAt.toISOString(),
+      end: bp.endAt.toISOString(),
+      allDay: false,
+      category: "operations",
+      eventType: "blackout",
+      color: "#ef4444",
+      editable: false,
+      sourceType: "projected",
+      sourceId: bp.id,
+    });
+  }
+
+  return events;
+}
+
+// ─── Deployment window projections ──────────────────────────────────────────
+
+async function projectDeploymentWindowEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const windows = await prisma.deploymentWindow.findMany({
+    select: { id: true, windowKey: true, name: true, dayOfWeek: true, startTime: true, endTime: true },
+  });
+
+  const events: CalendarEventView[] = [];
+  const density = densityForRange(rangeStart, rangeEnd);
+
+  for (const w of windows) {
+    // Walk each day in range and check if dayOfWeek matches
+    const day = new Date(rangeStart);
+    day.setHours(0, 0, 0, 0);
+
+    while (day < rangeEnd) {
+      const jsDay = day.getDay(); // 0=Sun .. 6=Sat
+      if (w.dayOfWeek.includes(jsDay)) {
+        if (density === "month") {
+          events.push({
+            id: `deploy-${w.windowKey}-${day.getTime()}`,
+            title: `Maintenance: ${w.name}`,
+            start: new Date(day).toISOString(),
+            end: null,
+            allDay: true,
+            category: "operations",
+            eventType: "deployment-window",
+            color: CATEGORY_COLORS.operations!,
+            editable: false,
+            sourceType: "projected",
+            sourceId: w.id,
+          });
+        } else {
+          // Week/day view: timed blocks
+          const [startH, startM] = w.startTime.split(":").map(Number);
+          const [endH, endM] = w.endTime.split(":").map(Number);
+          const start = new Date(day);
+          start.setHours(startH!, startM!, 0, 0);
+          const end = new Date(day);
+          end.setHours(endH!, endM!, 0, 0);
+
+          events.push({
+            id: `deploy-${w.windowKey}-${day.getTime()}`,
+            title: `Maintenance: ${w.name}`,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            allDay: false,
+            category: "operations",
+            eventType: "deployment-window",
+            color: CATEGORY_COLORS.operations!,
+            editable: false,
+            sourceType: "projected",
+            sourceId: w.id,
+          });
+        }
+      }
+      day.setDate(day.getDate() + 1);
+    }
   }
 
   return events;
@@ -397,15 +751,24 @@ export const getCalendarEvents = cache(async (
   }));
 
   // Projected events from platform data
-  const [leaves, reviews, timesheets, onboarding, lifecycle, maintenance] = await Promise.all([
+  const [
+    leaves, reviews, timesheets, onboarding, lifecycle, maintenance,
+    compliance, finance, changeMgmt, deployWindows,
+  ] = await Promise.all([
     projectLeaveEvents(rangeStart, rangeEnd),
     projectReviewEvents(rangeStart, rangeEnd),
     projectTimesheetEvents(rangeStart, rangeEnd),
     projectOnboardingEvents(rangeStart, rangeEnd),
     projectLifecycleEvents(rangeStart, rangeEnd),
     projectScheduledJobEvents(rangeStart, rangeEnd),
+    projectComplianceEvents(rangeStart, rangeEnd),
+    projectFinanceEvents(rangeStart, rangeEnd),
+    projectChangeManagementEvents(rangeStart, rangeEnd),
+    projectDeploymentWindowEvents(rangeStart, rangeEnd),
   ]);
 
-  return [...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle, ...maintenance]
-    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  return [
+    ...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle,
+    ...maintenance, ...compliance, ...finance, ...changeMgmt, ...deployWindows,
+  ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 });

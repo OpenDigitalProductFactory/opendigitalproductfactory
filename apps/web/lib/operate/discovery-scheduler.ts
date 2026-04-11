@@ -6,15 +6,18 @@ import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 import { decryptSecret } from "../govern/credential-crypto";
 
 const PROMETHEUS_POLL_INTERVAL_MS = 60_000;
-const FULL_SWEEP_INTERVAL_MS = 15 * 60_000;
+const FULL_SWEEP_INTERVAL_MS = 60 * 60_000;
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL ?? "http://prometheus:9090";
 
 const JOB_PROMETHEUS_POLL = "discovery-prometheus-poll";
 const JOB_FULL_SWEEP      = "discovery-full-sweep";
+const JOB_ISSUE_TRIAGE    = "issue-report-triage";
+const ISSUE_TRIAGE_INTERVAL_MS = 15 * 60_000;
 
 /** Upsert ScheduledJob rows so calendar-data.ts can project discovery events. */
 export async function registerScheduledJobs(): Promise<void> {
   const now = new Date();
+  const { registerModelDiscoveryJob } = await import("../inference/model-discovery-scheduler");
   await Promise.all([
     prisma.scheduledJob.upsert({
       where:  { jobId: JOB_PROMETHEUS_POLL },
@@ -34,20 +37,40 @@ export async function registerScheduledJobs(): Promise<void> {
       create: {
         jobId: JOB_FULL_SWEEP,
         name:  "Discovery: full infrastructure sweep",
-        schedule: "every-15m",
+        schedule: "hourly",
         nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
       },
       update: {
-        schedule: "every-15m",
+        schedule: "hourly",
         nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
       },
     }),
+    prisma.scheduledJob.upsert({
+      where:  { jobId: JOB_ISSUE_TRIAGE },
+      create: {
+        jobId: JOB_ISSUE_TRIAGE,
+        name:  "Quality: issue report triage",
+        schedule: "every-15m",
+        nextRunAt: new Date(now.getTime() + ISSUE_TRIAGE_INTERVAL_MS),
+      },
+      update: {
+        schedule: "every-15m",
+        nextRunAt: new Date(now.getTime() + ISSUE_TRIAGE_INTERVAL_MS),
+      },
+    }),
+    registerModelDiscoveryJob(),
   ]);
 }
 
+const JOB_INTERVALS: Record<string, number> = {
+  [JOB_PROMETHEUS_POLL]: PROMETHEUS_POLL_INTERVAL_MS,
+  [JOB_FULL_SWEEP]:      FULL_SWEEP_INTERVAL_MS,
+  [JOB_ISSUE_TRIAGE]:    ISSUE_TRIAGE_INTERVAL_MS,
+};
+
 /** Update a ScheduledJob after a run completes. */
 export async function recordJobRun(jobId: string, status: string, error?: string): Promise<void> {
-  const intervalMs = jobId === JOB_PROMETHEUS_POLL ? PROMETHEUS_POLL_INTERVAL_MS : FULL_SWEEP_INTERVAL_MS;
+  const intervalMs = JOB_INTERVALS[jobId] ?? FULL_SWEEP_INTERVAL_MS;
   const now = new Date();
   await prisma.scheduledJob.update({
     where: { jobId },

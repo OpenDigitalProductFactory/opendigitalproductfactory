@@ -15,8 +15,18 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   hr: { label: "HR", color: "var(--dpf-accent)" },
   operations: { label: "Operations", color: "var(--dpf-info)" },
   platform: { label: "Platform", color: "var(--dpf-warning)" },
+  compliance: { label: "Compliance", color: "#e879f9" },
+  finance: { label: "Finance", color: "#facc15" },
   personal: { label: "Personal", color: "var(--dpf-success)" },
   external: { label: "External", color: "var(--dpf-muted)" },
+};
+
+const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourceType: string; eventType: string }) => boolean }> = {
+  native:          { label: "User events",     matchFn: (e) => e.sourceType === "native" },
+  "scheduled-jobs": { label: "Scheduled jobs", matchFn: (e) => e.eventType === "recurring-digest" || e.eventType === "maintenance" },
+  compliance:      { label: "Compliance",      matchFn: (e) => e.eventType === "compliance-deadline" || e.eventType === "audit" || e.eventType === "regulatory" },
+  finance:         { label: "Finance",         matchFn: (e) => e.eventType === "invoice" || e.eventType === "bill" || e.eventType === "recurring-invoice" },
+  "change-mgmt":   { label: "Change mgmt",    matchFn: (e) => e.eventType === "change-request" || e.eventType === "blackout" || e.eventType === "deployment-window" },
 };
 
 type Props = {
@@ -35,6 +45,12 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
     return param ? new Set(param.split(",")) : new Set<string>();
   }, [searchParams]);
 
+  // Restore hidden source filters from URL
+  const hiddenSources = useMemo(() => {
+    const param = searchParams.get("sourceHidden");
+    return param ? new Set(param.split(",")) : new Set<string>();
+  }, [searchParams]);
+
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
   const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
   const [fetching, setFetching] = useState(false);
@@ -48,6 +64,19 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
       params.set("hidden", Array.from(next).join(","));
     } else {
       params.delete("hidden");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function toggleSource(key: string) {
+    const next = new Set(hiddenSources);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next.size > 0) {
+      params.set("sourceHidden", Array.from(next).join(","));
+    } else {
+      params.delete("sourceHidden");
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
@@ -86,6 +115,14 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
   const filteredEvents = useMemo(() =>
     liveEvents
       .filter((e) => !hiddenCategories.has(e.category))
+      .filter((e) => {
+        for (const [key, cfg] of Object.entries(SOURCE_FILTER_CONFIG)) {
+          if (hiddenSources.has(key) && cfg.matchFn({ sourceType: e.sourceType, eventType: e.eventType })) {
+            return false;
+          }
+        }
+        return true;
+      })
       .map((e) => ({
         id: e.id,
         title: e.title,
@@ -105,7 +142,7 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
           digestLastStatus: e.digestLastStatus,
         },
       })),
-    [liveEvents, hiddenCategories],
+    [liveEvents, hiddenCategories, hiddenSources],
   );
 
   return (
@@ -136,6 +173,34 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
           <span className="text-[10px] text-[var(--dpf-muted)] ml-auto">Loading...</span>
         )}
       </div>
+
+      {/* Source filters — collapsible for progressive disclosure */}
+      <details className="mb-3">
+        <summary className="text-[10px] text-[var(--dpf-muted)] cursor-pointer select-none uppercase tracking-widest">
+          Source filters
+        </summary>
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          {Object.entries(SOURCE_FILTER_CONFIG).map(([key, { label }]) => {
+            const hidden = hiddenSources.has(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleSource(key)}
+                className="px-2 py-0.5 text-[10px] rounded-full border transition-colors"
+                style={{
+                  borderColor: hidden ? "var(--dpf-border)" : "var(--dpf-accent)",
+                  background: hidden ? "transparent" : "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
+                  color: hidden ? "var(--dpf-muted)" : "var(--dpf-text)",
+                  opacity: hidden ? 0.5 : 1,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </details>
 
       {/* FullCalendar */}
       <style>{`
