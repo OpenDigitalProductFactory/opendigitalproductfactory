@@ -256,6 +256,42 @@ When the agent receives this prompt (or the feedback-triggered prompt), it respo
 | `apps/web/components/agent/AgentCoworkerShell.tsx` | Listen for `open-agent-feedback` CustomEvent, open panel with feedback prompt |
 | `apps/web/app/(shell)/layout.tsx` | Render `FeedbackButton` and `QueueFlusher` client components |
 
+### Added 2026-04-11: Auto-Triage Bridge + Admin UI
+
+Issue reports were stored but never surfaced or converted to actionable backlog items. The following closes the loop:
+
+| File | Responsibility |
+|------|----------------|
+| `apps/web/app/(shell)/admin/issue-reports/page.tsx` | Admin page — stats dashboard + paginated report list |
+| `apps/web/components/admin/IssueReportPanel.tsx` | Client component — expandable report rows, acknowledge/resolve actions |
+| `apps/web/lib/operate/issue-report-triage.ts` | Triage bridge — converts open PIRs to BacklogItems (BI-PIR-*) with dedup + spike detection |
+| `apps/web/lib/operate/issue-report-triage.test.ts` | Tests for triage bridge (18 tests: deterministic + LLM-enhanced + fallback) |
+| `apps/web/lib/queue/functions/issue-report-triage.ts` | Inngest cron (every 15 min) — runs triage + spike detection |
+
+| File | Change |
+|------|--------|
+| `apps/web/components/admin/AdminTabNav.tsx` | Added "Issue Reports" tab |
+| `apps/web/lib/actions/quality.ts` | Added `getIssueReports()`, `updateIssueReportStatus()`, `getIssueReportStats()` server actions; auto-attribute to `dpf-portal` product |
+| `apps/web/app/api/quality/report/route.ts` | Auto-attribute to `dpf-portal` product when none specified |
+| `apps/web/lib/queue/functions/index.ts` | Registered `issueReportTriage` cron function |
+| `apps/web/lib/queue/inngest-client.ts` | Added `QualityIssueTriageEvent` type |
+
+**Flow:** `PlatformIssueReport` (open) → 15-min cron → LLM-enhanced or deterministic triage → dedup → create `BacklogItem` (BI-PIR-*) + mark PIR acknowledged → spike detection creates P1 item if 3x hourly avg exceeded.
+
+### LLM-Enhanced Triage (added 2026-04-11)
+
+The triage bridge optionally uses `routeAndCall()` with `budgetClass: "minimize_cost"` and `taskType: "triage"` to prefer the cheapest available model (local Docker Model Runner first, then cloud). This enables:
+
+1. **Semantic dedup** — LLM identifies when a new report describes the same issue as an existing backlog item, even with different wording. Falls back to deterministic substring matching when no model is available.
+2. **Severity reassessment** — The crash boundary always sends `severity: critical`, but the LLM assesses actual user impact (data loss vs. cosmetic issue) and may downgrade.
+3. **Taxonomy routing** — Instead of hardcoding all reports to `foundational/platform_services`, the LLM picks the most specific taxonomy node based on the error context and route.
+4. **Root cause hypothesis** — One-line root cause analysis included in the backlog item body.
+5. **Title improvement** — LLM generates a clear, actionable title (e.g., "Ollama provider page crashes when no models are pulled" instead of "An error occurred in the Server Components render").
+
+The LLM call is wrapped in try/catch. On any failure (no model available, timeout, invalid JSON response), triage falls back silently to the deterministic logic. The Inngest cron logs how many items were LLM-enhanced vs. deterministic.
+
+**Key design choice:** No hardcoded model selection. The `routeAndCall` pipeline handles model selection via quality tiers and cost-per-success ranking. As models are added, removed, or repriced, triage automatically uses the best option. The `minimize_cost` budget class ensures local models are strongly preferred over paid APIs for this low-stakes, latency-tolerant task.
+
 ---
 
 ## 10. Testing Strategy

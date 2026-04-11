@@ -49,3 +49,8 @@ export interface OpsMcpCatalogSyncEvent {
   name: "ops/mcp-catalog.sync";
   data: { syncId: string };
 }
+
+export interface QualityIssueTriageEvent {
+  name: "quality/issue-triage.run";
+  data: Record<string, never>;
+}
