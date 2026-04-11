@@ -359,7 +359,7 @@ async function seedTaxonomyNodes(): Promise<void> {
         portfolioId: portfolioCuid,
         status:      "active",
         description: entry.description,
-        enrichment:  entry.enrichment ?? undefined,
+        enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
       },
       update: {
         name:        entry.name,
@@ -367,7 +367,7 @@ async function seedTaxonomyNodes(): Promise<void> {
         portfolioId: portfolioCuid,
         status:      "active",
         description: entry.description,
-        enrichment:  entry.enrichment ?? undefined,
+        enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
       },
       select: { id: true },
     });
