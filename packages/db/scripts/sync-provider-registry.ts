@@ -34,6 +34,7 @@ interface RegistryEntry {
   oauthRedirectUri?: string | null;
   userFacing?: Record<string, string> | null;
   supportsToolUse?: boolean;
+  cliEngine?: string | null;
 }
 
 async function main() {
@@ -77,6 +78,7 @@ async function main() {
           ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: entry.oauthRedirectUri }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse }),
           ...(entry.userFacing !== undefined && { userFacingDescription: entry.userFacing }),
+          ...(entry.cliEngine !== undefined && { cliEngine: entry.cliEngine }),
         },
       });
       console.log(`  UPDATED  ${entry.providerId.padEnd(20)} → "${entry.name}" (was "${existing.name}", status=${existing.status} preserved)`);
@@ -110,6 +112,7 @@ async function main() {
           oauthRedirectUri: entry.oauthRedirectUri ?? null,
           supportsToolUse: entry.supportsToolUse ?? false,
           userFacingDescription: entry.userFacing ?? null,
+          cliEngine: entry.cliEngine ?? null,
         },
       });
       console.log(`  CREATED  ${entry.providerId.padEnd(20)} → "${entry.name}" (status=unconfigured)`);

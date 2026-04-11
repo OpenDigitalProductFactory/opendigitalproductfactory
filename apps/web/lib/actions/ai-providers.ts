@@ -2,7 +2,7 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
@@ -256,7 +256,76 @@ export async function configureProvider(input: {
     },
   });
 
+  // Auto-configure Build Studio dispatch if no explicit config exists yet.
+  // When a user configures a provider, the build system should automatically
+  // pick it up without requiring manual Build Studio configuration.
+  await autoConfigureBuildStudio(input.providerId);
+
   return {};
+}
+
+/**
+ * If no Build Studio config exists, automatically set it based on the
+ * newly configured provider. If config exists but the relevant engine's
+ * providerId is empty, fill it in.
+ */
+async function autoConfigureBuildStudio(providerId: string): Promise<void> {
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { cliEngine: true },
+  });
+  if (!provider?.cliEngine) return; // Not a CLI-dispatchable provider
+
+  const cliEngine = provider.cliEngine as "claude" | "codex";
+  const existing = await prisma.platformConfig.findUnique({
+    where: { key: "build-studio-dispatch" },
+  });
+
+  if (!existing) {
+    // No config at all — create one auto-selecting this engine
+    const config = {
+      provider: cliEngine,
+      claudeProviderId: cliEngine === "claude" ? providerId : "",
+      codexProviderId: cliEngine === "codex" ? providerId : "",
+      claudeModel: "sonnet",
+      codexModel: "",
+    };
+    await prisma.platformConfig.create({
+      data: {
+        key: "build-studio-dispatch",
+        value: config as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return;
+  }
+
+  // Config exists — fill in the provider ID if it's empty for this engine
+  if (existing.value && typeof existing.value === "object") {
+    const config = existing.value as Record<string, unknown>;
+    const claudeKey = "claudeProviderId";
+    const codexKey = "codexProviderId";
+
+    if (cliEngine === "claude" && !config[claudeKey]) {
+      config[claudeKey] = providerId;
+      // If currently set to agentic/codex with no codex provider, switch to claude
+      if (config.provider === "agentic" || (config.provider === "codex" && !config[codexKey])) {
+        config.provider = "claude";
+      }
+      await prisma.platformConfig.update({
+        where: { key: "build-studio-dispatch" },
+        data: { value: config as unknown as Prisma.InputJsonValue },
+      });
+    } else if (cliEngine === "codex" && !config[codexKey]) {
+      config[codexKey] = providerId;
+      if (config.provider === "agentic") {
+        config.provider = "codex";
+      }
+      await prisma.platformConfig.update({
+        where: { key: "build-studio-dispatch" },
+        data: { value: config as unknown as Prisma.InputJsonValue },
+      });
+    }
+  }
 }
 
 // ─── Test provider auth ───────────────────────────────────────────────────────

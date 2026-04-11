@@ -1,3 +1,8 @@
+-- Dynamic Build Studio routing: tag providers with their CLI dispatch engine
+ALTER TABLE "ModelProvider" ADD COLUMN "cliEngine" TEXT;
+UPDATE "ModelProvider" SET "cliEngine" = 'claude' WHERE "providerId" IN ('anthropic', 'anthropic-sub');
+UPDATE "ModelProvider" SET "cliEngine" = 'codex' WHERE "providerId" IN ('codex', 'chatgpt');
+
 -- Phase 2: Enrich SkillDefinition with SKILL.md pattern fields
 ALTER TABLE "SkillDefinition" ADD COLUMN "triggerPattern" TEXT;
 ALTER TABLE "SkillDefinition" ADD COLUMN "userInvocable" BOOLEAN NOT NULL DEFAULT true;

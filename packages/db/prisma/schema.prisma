@@ -1007,6 +1007,7 @@ model ModelProvider {
   updatedAt                DateTime       @updatedAt
   authHeader               String?
   computeWatts             Float?
+  cliEngine                String?        // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
   costModel                String         @default("token")
   electricityRateKwh       Float?
   enabledFamilies          Json           @default("[]")
