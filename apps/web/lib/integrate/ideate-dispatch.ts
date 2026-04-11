@@ -64,49 +64,67 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
   );
 }
 
+type ClaudeAuth =
+  | { mode: "oauth"; token: string }
+  | { mode: "apikey"; apiKey: string };
+
 /**
- * Inject Claude Code auth into the sandbox container.
- * Supports both OAuth (anthropic-sub) and API key (anthropic) modes.
+ * Resolve Claude auth credentials from the DB.
+ * Mirrors the pattern in claude-dispatch.ts.
  */
-async function ensureClaudeAuth(providerId: string): Promise<void> {
+async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
   const credential = await getDecryptedCredential(providerId);
   const isOAuth = providerId === "anthropic-sub";
 
   if (!isOAuth) {
-    // API key mode — set ANTHROPIC_API_KEY env var
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
       throw new Error(`No Anthropic API key for provider "${providerId}".`);
     }
-    // Write to a file the sandbox can source
-    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-    const { promisify } = await import(/* turbopackIgnore: true */ "util");
-    const execAsync = promisify(execCb);
-    const keyB64 = Buffer.from(apiKey).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/.anthropic-key && export ANTHROPIC_API_KEY=\\$(cat /tmp/.anthropic-key)"`,
-      { timeout: 5_000 },
-    );
-    return;
+    return { mode: "apikey", apiKey };
   }
 
-  // OAuth mode — write credentials file
   if (!credential?.cachedToken) {
     throw new Error(`No OAuth token for provider "${providerId}".`);
   }
+  return { mode: "oauth", token: credential.cachedToken };
+}
 
-  const credJson = JSON.stringify({
-    oauth_token: credential.cachedToken,
-  });
+/**
+ * Write Claude auth to temp files in the sandbox so they can be read
+ * as env vars at exec time. Returns the env var fragment for the CLI command.
+ */
+async function ensureClaudeAuth(providerId: string): Promise<{ authEnvFragment: string; bareFlag: string }> {
+  const auth = await resolveClaudeAuth(providerId);
 
   const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
   const { promisify } = await import(/* turbopackIgnore: true */ "util");
   const execAsync = promisify(execCb);
-  const credB64 = Buffer.from(credJson).toString("base64");
-  await execAsync(
-    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.claude && echo '${credB64}' | base64 -d > /root/.claude/.credentials.json"`,
-    { timeout: 5_000 },
-  );
+
+  if (auth.mode === "oauth") {
+    // OAuth: write token to temp file, read at exec time via $(cat ...)
+    // CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string
+    const tokenB64 = Buffer.from(auth.token).toString("base64");
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.txt && chmod 644 /tmp/claude-oauth-token.txt"`,
+      { timeout: 5_000 },
+    );
+    return {
+      authEnvFragment: "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.txt)",
+      bareFlag: "",  // --bare disables OAuth
+    };
+  } else {
+    // API key: write to temp file
+    const keyB64 = Buffer.from(auth.apiKey).toString("base64");
+    await execAsync(
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/claude-api-key.txt && chmod 644 /tmp/claude-api-key.txt"`,
+      { timeout: 5_000 },
+    );
+    return {
+      authEnvFragment: "ANTHROPIC_API_KEY=\\$(cat /tmp/claude-api-key.txt)",
+      bareFlag: "--bare ",
+    };
+  }
 }
 
 /**
@@ -216,9 +234,14 @@ export async function dispatchIdeateResearch(params: {
     };
   }
 
+  // Resolve auth — returns env var fragments for Claude, or injects auth file for Codex
+  let claudeAuthEnv = "";
+  let claudeBareFlag = "";
   try {
     if (dispatchEngine === "claude") {
-      await ensureClaudeAuth(providerId);
+      const authResult = await ensureClaudeAuth(providerId);
+      claudeAuthEnv = authResult.authEnvFragment;
+      claudeBareFlag = authResult.bareFlag;
     } else {
       await ensureCodexAuth(providerId);
     }
@@ -252,20 +275,26 @@ export async function dispatchIdeateResearch(params: {
 
     // Build the CLI command based on the dispatch engine.
     // Both engines read from /tmp/ideate-prompt.txt which was already written above.
+    // Claude runs as --user node (refuses root). Codex runs as root.
+    let dockerExecPrefix: string;
     let cliCommand: string;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
-      // claude -p takes prompt as positional arg or reads piped stdin.
-      // We pipe from the file to avoid shell escaping issues with quotes.
-      // --dangerously-skip-permissions since we're in a sandbox.
-      cliCommand = `cat /tmp/ideate-prompt.txt | claude -p --dangerously-skip-permissions --output-format text ${modelFlag}`;
+      // Matches claude-dispatch.ts pattern exactly:
+      // - Env var for auth (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
+      // - --dangerously-skip-permissions for sandbox
+      // - Read prompt from stdin via < /tmp/ideate-prompt.txt
+      // - --output-format json for structured parsing
+      dockerExecPrefix = `docker exec --user node ${SANDBOX_CONTAINER} sh -c`;
+      cliCommand = `cd /workspace && ${claudeAuthEnv} claude ${claudeBareFlag}-p --dangerously-skip-permissions --output-format text ${modelFlag} < /tmp/ideate-prompt.txt`;
     } else {
       const modelFlag = model ? `-m ${model}` : "";
-      cliCommand = `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`;
+      dockerExecPrefix = `docker exec ${SANDBOX_CONTAINER} sh -c`;
+      cliCommand = `cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`;
     }
 
     const { stdout } = await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "cd /workspace && ${cliCommand}"`,
+      `${dockerExecPrefix} "${cliCommand}"`,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: IDEATE_TIMEOUT_MS,
