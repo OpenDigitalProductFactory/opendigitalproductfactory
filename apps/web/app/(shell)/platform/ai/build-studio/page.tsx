@@ -6,9 +6,6 @@ import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
 import { AiTabNav } from "@/components/platform/AiTabNav";
 import { BuildStudioConfigForm } from "@/components/platform/BuildStudioConfigForm";
 
-const CLAUDE_PROVIDER_IDS = ["anthropic", "anthropic-sub"];
-const CODEX_PROVIDER_IDS = ["codex", "chatgpt"];
-
 export default async function BuildStudioPage() {
   const session = await auth();
   const user = session?.user;
@@ -22,11 +19,12 @@ export default async function BuildStudioPage() {
     getBuildStudioConfig(),
   ]);
 
+  // Dynamic: group providers by cliEngine field instead of hardcoded IDs
   const claudeProviders = allProviders.filter(p =>
-    CLAUDE_PROVIDER_IDS.includes(p.provider.providerId),
+    (p.provider as Record<string, unknown>).cliEngine === "claude",
   );
   const codexProviders = allProviders.filter(p =>
-    CODEX_PROVIDER_IDS.includes(p.provider.providerId),
+    (p.provider as Record<string, unknown>).cliEngine === "codex",
   );
 
   return (

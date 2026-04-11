@@ -45,7 +45,10 @@ const CLAUDE_MODELS = [
   { value: "opus", label: "Opus", desc: "most capable, slower" },
 ];
 
-const SUBSCRIPTION_PROVIDERS = new Set(["anthropic-sub", "chatgpt"]);
+// Subscription providers are identified by $0 input pricing (billing via subscription)
+function isSubscriptionProvider(p: ProviderOption): boolean {
+  return p.billingLabel !== null && p.billingLabel.toLowerCase().includes("subscription");
+}
 
 function isConfigured(status: string): boolean {
   return status === "ok" || status === "configured" || status === "pending";
@@ -331,7 +334,7 @@ function CredentialCard({ title, providers, selectedId, onSelect, active, canWri
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {providers.map(p => {
-            const isSubscription = SUBSCRIPTION_PROVIDERS.has(p.providerId);
+            const isSubscription = isSubscriptionProvider(p);
             const credConfigured = isConfigured(p.status);
             return (
               <label

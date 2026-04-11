@@ -14,9 +14,7 @@ async function requireManageProviders(): Promise<string> {
   return user.id;
 }
 
-const VALID_PROVIDERS = new Set(["claude", "codex", "agentic"]);
-const VALID_CLAUDE_PROVIDERS = new Set(["anthropic", "anthropic-sub"]);
-const VALID_CODEX_PROVIDERS = new Set(["codex", "chatgpt"]);
+const VALID_ENGINES = new Set(["claude", "codex", "agentic"]);
 const VALID_CLAUDE_MODELS = new Set(["haiku", "sonnet", "opus"]);
 
 export async function saveBuildStudioConfig(
@@ -24,16 +22,29 @@ export async function saveBuildStudioConfig(
 ): Promise<{ ok: true }> {
   await requireManageProviders();
 
-  if (!VALID_PROVIDERS.has(config.provider)) {
-    throw new Error(`Invalid provider: ${config.provider}`);
+  if (!VALID_ENGINES.has(config.provider)) {
+    throw new Error(`Invalid provider engine: ${config.provider}`);
   }
-  if (!VALID_CLAUDE_PROVIDERS.has(config.claudeProviderId)) {
-    throw new Error(`Invalid Claude provider ID: ${config.claudeProviderId}`);
+
+  // Validate provider IDs dynamically against what's in the DB
+  if (config.claudeProviderId) {
+    const claudeProvider = await prisma.modelProvider.findFirst({
+      where: { providerId: config.claudeProviderId, cliEngine: "claude" },
+    });
+    if (!claudeProvider) {
+      throw new Error(`Provider ${config.claudeProviderId} is not a Claude-compatible provider`);
+    }
   }
-  if (!VALID_CODEX_PROVIDERS.has(config.codexProviderId)) {
-    throw new Error(`Invalid Codex provider ID: ${config.codexProviderId}`);
+  if (config.codexProviderId) {
+    const codexProvider = await prisma.modelProvider.findFirst({
+      where: { providerId: config.codexProviderId, cliEngine: "codex" },
+    });
+    if (!codexProvider) {
+      throw new Error(`Provider ${config.codexProviderId} is not a Codex-compatible provider`);
+    }
   }
-  if (!VALID_CLAUDE_MODELS.has(config.claudeModel)) {
+
+  if (config.claudeModel && !VALID_CLAUDE_MODELS.has(config.claudeModel)) {
     throw new Error(`Invalid Claude model: ${config.claudeModel}`);
   }
 

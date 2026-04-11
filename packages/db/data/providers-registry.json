@@ -3,6 +3,7 @@
     "providerId": "anthropic",
     "name": "Claude / Anthropic (API Key)",
     "category": "direct",
+    "cliEngine": "claude",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": [
@@ -38,6 +39,7 @@
     "providerId": "anthropic-sub",
     "name": "Claude / Anthropic (OAuth Subscription)",
     "category": "direct",
+    "cliEngine": "claude",
     "baseUrl": "https://api.anthropic.com/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": [
@@ -496,6 +498,7 @@
     "providerId": "codex",
     "name": "OpenAI Codex",
     "category": "agent",
+    "cliEngine": "codex",
     "baseUrl": "https://api.openai.com/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": [
@@ -526,6 +529,7 @@
     "providerId": "chatgpt",
     "name": "ChatGPT (OpenAI Subscription)",
     "category": "direct",
+    "cliEngine": "codex",
     "baseUrl": "https://chatgpt.com/backend-api",
     "authMethod": "oauth2_authorization_code",
     "supportedAuthMethods": [
