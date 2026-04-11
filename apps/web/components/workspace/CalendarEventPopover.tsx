@@ -15,6 +15,8 @@ const CATEGORIES = [
   { value: "hr", label: "HR", color: "var(--dpf-accent)" },
   { value: "operations", label: "Operations", color: "var(--dpf-info)" },
   { value: "platform", label: "Platform", color: "var(--dpf-warning)" },
+  { value: "compliance", label: "Compliance", color: "#e879f9" },
+  { value: "finance", label: "Finance", color: "#facc15" },
   { value: "personal", label: "Personal", color: "var(--dpf-success)" },
 ];
 

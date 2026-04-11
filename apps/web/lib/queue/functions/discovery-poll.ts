@@ -18,7 +18,7 @@ export const fullDiscoverySweep = inngest.createFunction(
     id: "ops/full-discovery-sweep",
     retries: 2,
     concurrency: { limit: 1, scope: "fn" },
-    triggers: [cron("*/15 * * * *")],
+    triggers: [cron("0 * * * *")],
   },
   async ({ step }) => {
     await step.run("run-sweep", async () => {
