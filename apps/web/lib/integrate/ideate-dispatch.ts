@@ -155,22 +155,30 @@ YOUR TASK:
    - Read at least one existing API route (app/api/*/route.ts) to understand patterns
    - Read at least one existing page component to understand UI patterns
 
-2. Based on what you find, draft a design document.
+2. Based on what you find, draft a design specification document.
 
-3. Output ONLY a JSON block (no other text) wrapped in \`\`\`json ... \`\`\` with these fields:
+3. Output ONLY a JSON block (no other text) wrapped in \`\`\`json ... \`\`\` with these fields.
+   CRITICAL: The values must be written in HUMAN-READABLE prose, not code or machine format.
+   Imagine a product manager and a developer both reading this document — it should be
+   clear, specific, and readable without needing to parse JSON structures or code blocks.
+
 {
-  "problemStatement": "What problem this solves and for whom",
-  "existingFunctionalityAudit": "Specific files and patterns you found. Reference actual file paths and model names. If nothing related exists, say 'No existing implementation found. Searched for [terms].'",
-  "externalResearch": "Best practices for this type of feature based on your knowledge",
-  "alternativesConsidered": "Other approaches you considered and why you chose this one",
-  "reusePlan": "What existing code/patterns you will reuse",
-  "newCodeJustification": "What new code is needed and why",
-  "proposedApproach": "Detailed description of how to implement this. Include data model, API routes, UI components, and key interactions.",
-  "acceptanceCriteria": ["criterion 1", "criterion 2", "..."],
+  "problemStatement": "What problem this solves, who it affects, and why it matters. Write 2-3 sentences a non-technical stakeholder can understand.",
+
+  "dataModel": "Describe the data model in PLAIN ENGLISH with a structured layout. For each model: name, purpose (one sentence), then list its fields as: fieldName (Type) — description. Use line breaks between models. Example format:\\n\\nCertificationAuthority — Represents an external certification provider.\\n- slug (String, unique) — short identifier, e.g. 'open-group'\\n- displayName (String) — human-readable name\\n- apiBaseUrl (String) — API endpoint for this provider\\n\\nDo NOT use Prisma syntax or code blocks. Do NOT omit fields. List every field with its type and purpose.",
+
+  "existingCodeAudit": "What existing files, models, and patterns you found in the codebase that this feature will build on. Reference specific file paths (apps/web/...) and model names. If nothing related exists, say so and list what you searched for.",
+
+  "proposedApproach": "A clear, readable description of how this will work. Structure it with labeled sections:\\n- Data Model: summarize the models (detail is in the dataModel field)\\n- API Routes: what endpoints, what each does, auth requirements\\n- UI Pages: what pages, what they show, what actions they support\\n- Integration Flow: step-by-step of what happens when the feature is triggered (automatic and manual paths)\\n- Configuration: how admins set up and manage the feature\\nWrite each section so a developer can implement from it without ambiguity.",
+
+  "reusePlan": "What existing code, patterns, and utilities from the codebase will be reused. Be specific — name files and functions.",
+
+  "acceptanceCriteria": ["criterion 1 — written as a testable statement", "criterion 2", "..."],
+
   "reusabilityAnalysis": {
     "scope": "${params.reusabilityScope}",
     "domainEntities": [{"hardcodedValue": "example", "parameterName": "exampleParam", "otherInstances": ["other1"]}],
-    "abstractionBoundary": "What is structural vs what is configurable",
+    "abstractionBoundary": "What is structural (same for all instances) vs what is configurable (varies per instance)",
     "contributionReadiness": "high | medium | low"
   }
 }
