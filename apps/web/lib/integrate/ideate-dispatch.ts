@@ -250,11 +250,15 @@ export async function dispatchIdeateResearch(params: {
     const engineLabel = dispatchEngine === "claude" ? "Claude Code" : "Codex";
     console.log(`[ideate-dispatch] Starting research for "${params.featureTitle}" with ${engineLabel} (${model || "default model"})`);
 
-    // Build the CLI command based on the dispatch engine
+    // Build the CLI command based on the dispatch engine.
+    // Both engines read from /tmp/ideate-prompt.txt which was already written above.
     let cliCommand: string;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
-      cliCommand = `claude -p "${promptB64}" --output-format text ${modelFlag} 2>/dev/null`;
+      // claude -p takes prompt as positional arg or reads piped stdin.
+      // We pipe from the file to avoid shell escaping issues with quotes.
+      // --dangerously-skip-permissions since we're in a sandbox.
+      cliCommand = `cat /tmp/ideate-prompt.txt | claude -p --dangerously-skip-permissions --output-format text ${modelFlag}`;
     } else {
       const modelFlag = model ? `-m ${model}` : "";
       cliCommand = `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`;
