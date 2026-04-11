@@ -10,6 +10,7 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
+import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 
@@ -108,6 +109,7 @@ export function AgentCoworkerPanel({
   const [pendingAttachment, setPendingAttachment] = useState<{ attachmentId: string; fileName: string; parsedContent: unknown } | null>(null);
   const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
   const [devMode, setDevMode] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(pathname, userContext);
@@ -529,8 +531,16 @@ export function AgentCoworkerPanel({
         onToggleDev={() => setDevMode((prev) => !prev)}
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
+        onViewProfile={() => setShowProfile(true)}
         sensitivityLevel={agent.sensitivity}
       />
+
+      {showProfile && (
+        <CoworkerProfilePanel
+          agent={agent}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
 
       <div
         style={{

@@ -54,6 +54,37 @@
 - **Future — customer branch model:** When customers contribute, each customer gets one persistent branch (`customer/<id>`). Branches are not named by fix or feature — they are named by who owns them. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale when there are thousands of contributors.
 - **Do not create `feat/`, `fix/`, or `refactor/` branches** — these add noise without value for a solo developer.
 
+## AI Coworker Prompts
+
+- Prompt templates live in `prompts/` as `.prompt.md` files with YAML frontmatter.
+- Files are the source of truth — seeded to `PromptTemplate` table on deploy.
+- Admin can override prompts at runtime via Admin > Prompts. Overrides survive redeploy.
+- Hardcoded TypeScript constants remain as last-resort fallback (never delete them).
+- Adding a new prompt: create `prompts/<category>/<slug>.prompt.md` with proper frontmatter, then re-run seed.
+- The `PromptLoader` (`apps/web/lib/tak/prompt-loader.ts`) reads from DB with 60s cache and fallback to hardcoded constants.
+- Composition: use `{{include:category/slug}}` markers and list dependencies in `composesFrom` frontmatter.
+- Categories: `platform-identity`, `platform-preamble`, `platform-mission`, `route-persona`, `build-phase`, `specialist`, `reviewer`, `context`.
+- **Company Mission**: `prompts/platform-mission/company-mission.prompt.md` is injected into every agent's context. Edit via Admin > Prompts.
+
+## AI Coworker Skills
+
+- Skills follow the Anthropic SKILL.md pattern: `.skill.md` files with YAML frontmatter in `skills/` directory.
+- Skills belong to coworkers (not routes). Assigned via `SkillAssignment` in the DB.
+- Files are seeded to `SkillDefinition` + `SkillAssignment` tables on deploy (`packages/db/src/seed-skills.ts`).
+- `assignTo: ["*"]` assigns to all agents. `assignTo: ["agent-id"]` assigns to specific coworkers.
+- Skills vs Tools: skills are procedures/knowledge ("what I know how to do"); tools are external capabilities ("what I can connect to").
+- The `getSkillsForAgent()` function (`apps/web/lib/actions/agent-skills.ts`) loads skills from DB with fallback to inline arrays.
+- Adding a new skill: create `skills/<category>/<name>.skill.md` with frontmatter, then re-run seed.
+- Frontmatter fields: `name`, `description`, `category`, `assignTo`, `capability`, `taskType`, `triggerPattern`, `userInvocable`, `agentInvocable`, `allowedTools`, `composesFrom`, `contextRequirements`, `riskBand`.
+
+## Delegation Chain (Peer Discovery)
+
+- Coworkers can discover and invoke each other's skills via `discoverCoworkerSkills()` and `delegateToCoworker()` in `apps/web/lib/actions/skill-discovery.ts`.
+- Authority propagation: capabilities narrow at each hop (intersection of parent scope and skill requirements).
+- Loop detection: rejects if target agent already appears in the chain.
+- Depth limit: max 4 hops (configurable in `delegation-authority.ts`).
+- `DelegationChain` model tracks chain of custody with `chainId`, `depth`, `authorityScope`, and `status`.
+
 ## Strongly-Typed String Enums — MANDATORY COMPLIANCE
 
 String fields that carry a fixed set of valid values are **canonical enums** even though the DB column is `String`. Using non-canonical values causes silent data corruption, broken filters, and UI display failures downstream.

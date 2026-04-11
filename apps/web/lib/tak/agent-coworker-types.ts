@@ -45,6 +45,16 @@ export type AgentSkill = {
   description: string;
   capability: CapabilityKey | null;
   prompt: string;
+  // Enriched fields (Phase 2 — optional for backward compatibility)
+  skillId?: string;
+  category?: string;
+  tags?: string[];
+  riskBand?: string;
+  taskType?: string;
+  triggerPattern?: string | null;
+  userInvocable?: boolean;
+  agentInvocable?: boolean;
+  allowedTools?: string[];
 };
 
 /** Model capability requirements for an agent. */

@@ -3,6 +3,7 @@
 // with a single template built from 7 ordered blocks.
 
 import type { SensitivityLevel } from "./agent-router-types";
+import { loadPrompts } from "./prompt-loader";
 
 export type PromptInput = {
   hrRole: string;
@@ -59,20 +60,40 @@ const ACT_MODE_BLOCK = `Mode: ACT. You may execute any tool the employee's role 
 
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n\n<!-- DYNAMIC_BOUNDARY -->\n\n";
 
+// ─── Block 0: Company Mission (dynamic — admin-editable) ───────────────────
+
+const COMPANY_MISSION_FALLBACK = `COMPANY MISSION CONTEXT
+This section defines the overarching mission that governs all work — whether performed by humans or AI coworkers. Every action, recommendation, and decision should align with this mission.
+Values: Quality over speed. Transparency. Continuous improvement. Human authority.`;
+
 // ─── Assembler ──────────────────────────────────────────────────────────────
 
-export function assembleSystemPrompt(input: PromptInput): string {
+export async function assembleSystemPrompt(input: PromptInput): Promise<string> {
+  // Load identity, mode, and mission blocks from DB (falls back to hardcoded constants)
+  const modeSlug = input.mode === "advise" ? "advise-mode" : "act-mode";
+  const loaded = await loadPrompts([
+    { category: "platform-identity", slug: "identity-block", fallback: IDENTITY_BLOCK },
+    { category: "platform-identity", slug: modeSlug, fallback: input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK },
+    { category: "platform-mission", slug: "company-mission", fallback: COMPANY_MISSION_FALLBACK },
+  ]);
+
   // --- Static blocks (cacheable across turns for same role+mode) ---
   const staticBlocks: string[] = [];
 
   // Block 1: Identity (static)
-  staticBlocks.push(IDENTITY_BLOCK);
+  staticBlocks.push(loaded.get("platform-identity/identity-block") ?? IDENTITY_BLOCK);
 
   // Block 3: Mode (static per session — advise or act doesn't change mid-conversation)
-  staticBlocks.push(input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK);
+  staticBlocks.push(loaded.get(`platform-identity/${modeSlug}`) ?? (input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK));
 
   // --- Dynamic blocks (change per turn / per route) ---
   const dynamicBlocks: string[] = [];
+
+  // Block 0: Company Mission (dynamic — admin can change it)
+  const missionContent = loaded.get("platform-mission/company-mission") ?? COMPANY_MISSION_FALLBACK;
+  if (missionContent) {
+    dynamicBlocks.push(missionContent);
+  }
 
   // Current date for temporal grounding
   const today = new Date().toISOString().slice(0, 10);

@@ -12,6 +12,8 @@ import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
+import { seedPromptTemplates } from "./seed-prompt-templates.js";
+import { seedSkills } from "./seed-skills.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -1432,6 +1434,8 @@ async function main(): Promise<void> {
   await seedClientIdentity();
   await seedStorefrontArchetypes(prisma);
   await seedWorkQueues();
+  await seedPromptTemplates(prisma);
+  await seedSkills(prisma);
   console.log("Seed complete.");
 }
 
