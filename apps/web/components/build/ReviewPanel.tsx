@@ -187,11 +187,9 @@ function DesignDocSection({
         <div className="space-y-2 text-sm">
           <Field label="Problem Statement" value={doc.problemStatement} />
           <Field label="Proposed Approach" value={doc.proposedApproach} />
-          <Field label="Existing Functionality Audit" value={doc.existingFunctionalityAudit} />
+          {doc.dataModel && <Field label="Data Model" value={doc.dataModel} />}
+          <Field label="Existing Code Audit" value={doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? ""} />
           <Field label="Reuse Plan" value={doc.reusePlan} />
-          {doc.newCodeJustification && (
-            <Field label="New Code Justification" value={doc.newCodeJustification} />
-          )}
           {doc.acceptanceCriteria.length > 0 && (
             <div>
               <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">

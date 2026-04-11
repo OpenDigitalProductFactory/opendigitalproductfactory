@@ -11,10 +11,9 @@ export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: str
 
 DESIGN DOCUMENT:
 Problem: ${doc.problemStatement}
-Existing Functionality Audit: ${doc.existingFunctionalityAudit}
-Alternatives Considered: ${doc.alternativesConsidered}
+${doc.dataModel ? `Data Model: ${doc.dataModel}` : ""}
+Existing Code Audit: ${doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? "Not provided"}
 Reuse Plan: ${doc.reusePlan}
-New Code Justification: ${doc.newCodeJustification}
 Proposed Approach: ${doc.proposedApproach}
 Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : doc.acceptanceCriteria ?? "Not specified"}
 ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalysis.scope}, Entities=${doc.reusabilityAnalysis.domainEntities.map((e) => `${e.hardcodedValue}->${e.parameterName}`).join(", ") || "none"}, Boundary="${doc.reusabilityAnalysis.abstractionBoundary}", Readiness=${doc.reusabilityAnalysis.contributionReadiness}` : ""}
