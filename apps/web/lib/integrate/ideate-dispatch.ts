@@ -284,25 +284,24 @@ export async function dispatchIdeateResearch(params: {
     // Build the CLI command based on the dispatch engine.
     // Both engines read from /tmp/ideate-prompt.txt which was already written above.
     // Claude runs as --user node (refuses root). Codex runs as root.
-    let dockerExecPrefix: string;
-    let cliCommand: string;
+    // IMPORTANT: Use single quotes for sh -c '...' so $(cat ...) expands inside
+    // the sandbox shell, not the host shell.
+    let fullCommand: string;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
-      // Matches claude-dispatch.ts pattern exactly:
+      // Matches claude-dispatch.ts spawn pattern:
       // - Env var for auth (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
       // - --dangerously-skip-permissions for sandbox
       // - Read prompt from stdin via < /tmp/ideate-prompt.txt
-      // - --output-format json for structured parsing
-      dockerExecPrefix = `docker exec --user node ${SANDBOX_CONTAINER} sh -c`;
-      cliCommand = `cd /workspace && ${claudeAuthEnv} claude ${claudeBareFlag}-p --dangerously-skip-permissions --output-format text ${modelFlag} < /tmp/ideate-prompt.txt`;
+      // - --output-format json to get structured output we can parse
+      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} sh -c 'cd /workspace && ${claudeAuthEnv} claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt'`;
     } else {
       const modelFlag = model ? `-m ${model}` : "";
-      dockerExecPrefix = `docker exec ${SANDBOX_CONTAINER} sh -c`;
-      cliCommand = `cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`;
+      fullCommand = `docker exec ${SANDBOX_CONTAINER} sh -c 'cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null'`;
     }
 
     const { stdout } = await execAsync(
-      `${dockerExecPrefix} "${cliCommand}"`,
+      fullCommand,
       {
         maxBuffer: 10 * 1024 * 1024,
         timeout: IDEATE_TIMEOUT_MS,
@@ -310,7 +309,20 @@ export async function dispatchIdeateResearch(params: {
     );
 
     const durationMs = Date.now() - startMs;
-    const rawOutput = stdout.trim();
+    let rawOutput = stdout.trim();
+
+    // If using --output-format json, extract the result field
+    if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(rawOutput);
+        if (parsed.result) {
+          rawOutput = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
+          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars, is_error=${parsed.is_error})`);
+        }
+      } catch {
+        // Not valid JSON — use raw output as-is
+      }
+    }
 
     console.log(`[ideate-dispatch] Research completed in ${(durationMs / 1000).toFixed(1)}s (${rawOutput.length} chars)`);
 
