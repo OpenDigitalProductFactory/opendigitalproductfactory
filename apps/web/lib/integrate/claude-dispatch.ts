@@ -186,6 +186,10 @@ export async function dispatchClaudeTask(params: {
   ].filter(Boolean).join("\n");
 
   const startMs = Date.now();
+  // Use task-specific temp files to avoid collisions during parallel execution.
+  const taskSlug = task.title.replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40).toLowerCase();
+  const promptFile = `/tmp/claude-prompt-${taskSlug}.txt`;
+  const tokenFile = `/tmp/claude-token-${taskSlug}.txt`;
 
   try {
     const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
@@ -200,11 +204,12 @@ export async function dispatchClaudeTask(params: {
       { timeout: 15_000 },
     );
 
-    // Write prompt to temp file in sandbox (avoids all shell escaping issues).
+    // Write prompt to task-specific temp file in sandbox (avoids shell escaping
+    // AND prevents parallel tasks from overwriting each other's prompts).
     // chmod 644 so the non-root node user can read it.
     const promptB64 = Buffer.from(taskPrompt).toString("base64");
     await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/claude-prompt.txt && chmod 644 /tmp/claude-prompt.txt"`,
+      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 644 ${promptFile}"`,
       { timeout: 5_000 },
     );
 
@@ -216,13 +221,13 @@ export async function dispatchClaudeTask(params: {
     let authEnvFragment: string;
     let useBareflag: boolean;
     if (auth.mode === "oauth") {
-      // OAuth (Max Plan): write raw token to temp file, read at exec time
+      // OAuth (Max Plan): write raw token to task-specific temp file, read at exec time
       const tokenB64 = Buffer.from(auth.tokenJson).toString("base64");
       await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.txt && chmod 644 /tmp/claude-oauth-token.txt"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
         { timeout: 5_000 },
       );
-      authEnvFragment = "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.txt)";
+      authEnvFragment = `CLAUDE_CODE_OAUTH_TOKEN=\\$(cat ${tokenFile})`;
       useBareflag = false;  // --bare disables OAuth
     } else {
       // API key: inject directly as env var (simple string, no escaping issues)
@@ -242,7 +247,7 @@ export async function dispatchClaudeTask(params: {
     const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
       const proc = spawnCb("docker", [
         "exec", "--user", "node", SANDBOX_CONTAINER, "sh", "-c",
-        `cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < /tmp/claude-prompt.txt`,
+        `cd /workspace && ${authEnvFragment} claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
       ]);
 
       let stdout = "";
