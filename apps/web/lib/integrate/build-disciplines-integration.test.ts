@@ -37,10 +37,8 @@ describe("Build Disciplines — Full Flow Integration", () => {
       const result = checkPhaseGate("ideate", "plan", {
         designDoc: {
           problemStatement: "Users need a search filter",
-          existingFunctionalityAudit: "Checked OpsClient — no filter exists",
-          alternativesConsidered: "Evaluated existing UI libraries",
+          existingCodeAudit: "Checked OpsClient — no filter exists",
           reusePlan: "Reuse the Hide Done pattern from backlog",
-          newCodeJustification: "Search filter is new functionality",
           proposedApproach: "Add text input with debounced filter",
           acceptanceCriteria: ["Filter narrows results", "Debounced at 300ms"],
         },
@@ -207,15 +205,12 @@ describe("Build Disciplines — Full Flow Integration", () => {
     it("design review prompt checks for existing functionality audit", () => {
       const prompt = buildDesignReviewPrompt({
         problemStatement: "test",
-        existingFunctionalityAudit: "nothing found",
-        alternativesConsidered: "none",
+        existingCodeAudit: "nothing found",
         reusePlan: "none",
-        newCodeJustification: "needed",
         proposedApproach: "build it",
         acceptanceCriteria: ["it works"],
       }, "test project");
-      expect(prompt).toContain("existing functionality");
-      expect(prompt).toContain("alternatives");
+      expect(prompt).toContain("Existing Code Audit");
       expect(prompt).toContain("reuse");
     });
 

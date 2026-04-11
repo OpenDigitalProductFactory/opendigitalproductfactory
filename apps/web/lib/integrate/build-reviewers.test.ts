@@ -5,10 +5,8 @@ describe("buildDesignReviewPrompt", () => {
   it("includes all design doc sections", () => {
     const prompt = buildDesignReviewPrompt({
       problemStatement: "Users need filtering",
-      existingFunctionalityAudit: "No existing filter",
-      alternativesConsidered: "Checked open-source",
+      existingCodeAudit: "No existing filter",
       reusePlan: "Reuse OpsClient pattern",
-      newCodeJustification: "No existing filter component",
       proposedApproach: "Add checkbox filter",
       acceptanceCriteria: ["Filter hides done items", "Count shown"],
     }, "Test project");
