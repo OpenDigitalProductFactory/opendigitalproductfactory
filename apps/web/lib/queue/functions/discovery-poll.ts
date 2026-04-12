@@ -2,7 +2,7 @@ import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 
 export const prometheusPoll = inngest.createFunction(
-  { id: "ops/prometheus-poll", retries: 2, triggers: [cron("* * * * *")] },
+  { id: "ops/prometheus-poll", retries: 2, triggers: [cron("0 * * * *")] },
   async ({ step }) => {
     await step.run("poll-targets", async () => {
       const { runPrometheusTargetCheck } = await import(
