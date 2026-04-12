@@ -141,9 +141,19 @@ function findRuleMatch(
   } else if (itemType.includes("database")) {
     node = matchByNodeId((nodeId) => nodeId.endsWith("/database"));
     ruleId = node ? "foundational_database" : undefined;
-  } else if (itemType.includes("network") || itemType === "subnet" || itemType === "gateway" || itemType === "router") {
-    node = matchByNodeId((nodeId) => nodeId.includes("network_management"));
+  } else if (
+    itemType.includes("network") || itemType === "subnet" || itemType === "gateway" || itemType === "router"
+    || itemType === "vlan" || itemType === "switch" || itemType === "firewall" || itemType === "load_balancer"
+  ) {
+    node = matchByNodeId((nodeId) => nodeId.includes("network_connectivity"))
+        ?? matchByNodeId((nodeId) => nodeId.includes("network_management"));
     ruleId = node ? "foundational_network" : undefined;
+  } else if (
+    itemType === "access_point" || itemType === "wireless_ap" || itemType.includes("wlan") || itemType.includes("wifi")
+  ) {
+    node = matchByNodeId((nodeId) => nodeId.includes("network_connectivity"))
+        ?? matchByNodeId((nodeId) => nodeId.includes("network_management"));
+    ruleId = node ? "foundational_wireless_network" : undefined;
   } else if (itemType === "docker_host") {
     node = matchByNodeId((nodeId) => nodeId.includes("container_platform"))
         ?? matchByNodeId((nodeId) => nodeId.endsWith("/servers"));
