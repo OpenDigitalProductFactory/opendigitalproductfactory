@@ -1,0 +1,832 @@
+# Unified Capability and Integration Lifecycle — Design Spec
+
+| Field | Value |
+|-------|-------|
+| **Epic** | AI Workforce / Platform Integrations |
+| **Status** | Draft |
+| **Created** | 2026-04-12 |
+| **Author** | Codex for Mark Bodman |
+| **Scope** | `apps/web/app/(shell)/platform/ai/**`, `apps/web/app/(shell)/platform/services/**`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/mcp-server-tools.ts`, `apps/web/lib/actions/ai-providers.ts`, `apps/web/lib/actions/mcp-services.ts`, audit/reporting surfaces |
+| **Primary Goal** | Standardize how integrations are connected, governed, exposed, and audited across AI coworkers without flattening away the real differences between internal tools, external MCP services, and provider-native execution paths |
+| **Design Principle** | Unify the product model around capabilities and lifecycle; keep execution adapters and transport details separate underneath |
+
+---
+
+## 1. Problem Statement
+
+The current AI admin surface mixes too many concepts at the same level:
+
+- model providers and endpoint routing
+- external MCP services
+- Build Studio CLI dispatch
+- route logs and async operations
+- proposal history and authority audit
+- skills observability
+
+This creates a UX that reflects implementation boundaries rather than operator tasks. The result is a system that is individually understandable in code, but hard to reason about as a whole.
+
+### 1.1 Current symptoms
+
+Based on the live system state and current code paths on 2026-04-12:
+
+- `Test connection` on the provider detail page performs more than a connection test. It chains auth verification, model discovery, and model profiling.
+- `Sync Models & Profiles` overlaps with that same flow, but skips the auth check.
+- `Run Eval` and `Run Probes` are separate calibration/health concepts, but the UX does not make their differences legible.
+- Build Studio provider/model choices are a separate CLI dispatch configuration, but they visually read like just another model-routing control.
+- AI admin exposes both provider/service registry concepts and MCP service activation concepts in adjacent panels without a clean mental model.
+- Route logs currently have score inconsistencies:
+  - one screen assumes score scale `0-100`
+  - another assumes `0-1`
+  - live data already contains `NaN`
+- `Action History` and `Authority` overlap as audit surfaces, but actually represent different runtime events.
+- `Skills` is implemented as an observability/catalog surface, but is presented like a peer to routing and authority.
+
+### 1.2 Current architecture split
+
+The current platform effectively has **two registries** and **one partial unification layer**:
+
+1. `ModelProvider` / `ModelProfile` / `AgentModelConfig`
+   - inference providers
+   - model discovery and profiling
+   - routing and assignment
+
+2. `McpIntegration` / `McpServer` / `McpServerTool`
+   - integration catalog
+   - activated external MCP servers
+   - external tool discovery
+
+3. `getAvailableTools()`
+   - partially unifies platform-native tools and external MCP tools into one runtime tool surface
+   - governance filters already apply across both
+
+This means the backend is already trending toward a unified capability model, but the product UX still exposes the underlying storage/layout split.
+
+---
+
+## 2. Goals
+
+1. Define a single operator mental model for AI coworker capabilities and integrations
+2. Standardize the lifecycle of integrations across internal and external capability sources
+3. Preserve execution-path differences where they matter operationally
+4. Make MCP legible without making it the primary mental model for most users
+5. Introduce selective audit policy so the system records what matters without drowning in low-value tool chatter
+6. Clarify which screens are for:
+   - connecting
+   - calibrating
+   - assigning
+   - observing
+   - auditing
+
+## 2.1 Non-goals
+
+- Replace all provider adapters with MCP
+- Force every internal platform capability to be implemented as an MCP server
+- Fully redesign the skills system in this epic
+- Implement a new security model; this design reuses existing capability checks, tool grants, and HITL proposal flow
+- Build a complete resources/prompts marketplace in phase 1
+
+---
+
+## 3. Research & Benchmarking
+
+This design is informed by a mix of open standards, open-source systems, and commercial agent/tool platforms.
+
+### 3.1 Open source / open ecosystem systems reviewed
+
+#### A. Model Context Protocol ecosystem
+
+What we learned:
+
+- MCP cleanly separates **clients**, **servers**, and protocol primitives such as **tools**, **resources**, and **prompts**
+- MCP standardizes the interface, not the business lifecycle of credentials, policy, or audit
+- MCP is strongest as a transport and interoperability contract, not as the top-level user mental model
+
+Patterns adopted:
+
+- keep MCP as an execution and interoperability layer
+- keep protocol primitives visible in architecture, but do not force them into the main admin IA for non-technical operators
+
+Patterns rejected:
+
+- treating “MCP” itself as the primary admin information architecture category
+
+Sources:
+
+- Model Context Protocol docs: architecture, client/server concepts, primitives
+
+#### B. n8n
+
+What we learned:
+
+- n8n cleanly separates **credentials**, **nodes**, and generic fallback HTTP actions
+- “credential-only” integrations are treated as real admin objects even when no specialized action surface exists yet
+- credential testing and encryption are explicit parts of the lifecycle, not hidden side effects
+
+Patterns adopted:
+
+- integration lifecycle should be explicit: credentials, test, readiness, allowed actions
+- support integrations that unlock capability without requiring a custom first-class UI for every one
+
+Patterns rejected:
+
+- overloading one button to simultaneously test, sync, profile, and calibrate
+
+Sources:
+
+- n8n docs: integrations, built-in node types, credentials library, credentials testing
+
+### 3.2 Commercial systems reviewed
+
+#### A. Anthropic Claude Code / Claude.ai MCP
+
+What we learned:
+
+- remote/local MCP server configuration is treated as a distinct concern from model/provider selection
+- managed allowlists/denylists, tool search, output limits, OAuth flows, and dynamic tool updates are first-class concerns
+- the docs explicitly warn about trust, prompt injection, and oversized output
+
+Patterns adopted:
+
+- capability exposure should support allow/deny policy and lazy exposure
+- MCP output and trust controls should be treated as integration governance, not buried in provider routing
+
+Patterns rejected:
+
+- assuming all external tools are equally trustworthy or should always be fully exposed
+
+Sources:
+
+- Claude Code MCP docs
+
+#### B. Microsoft Copilot Studio
+
+What we learned:
+
+- connectors, actions, authentication mode, and maker-provided credentials are explicitly modeled
+- user credentials vs maker credentials is a first-class choice
+- authentication policy is environment-scoped and treated as governance, not as an implementation footnote
+
+Patterns adopted:
+
+- integration auth mode should be explicit in admin UI
+- governance policy should apply consistently across connectors, built-in actions, and external services
+
+Patterns rejected:
+
+- leaving credential ownership and auth mode implicit
+
+Sources:
+
+- Copilot Studio docs: connector tools, authentication, maker-provided credentials, SSO policy
+
+### 3.3 Anti-patterns identified
+
+- One control performing multiple hidden lifecycle steps
+- Logging every low-value read/search/probe event forever in the same shape as approvals and writes
+- Treating MCP as the user mental model instead of as one source/transport
+- Mixing routing controls, integration management, and audit/observability on one screen
+- Flattening all capabilities as if internal tools, external services, and provider-native functions had identical risk and lifecycle
+
+### 3.4 Differentiator for DPF
+
+DPF’s differentiator is not “support MCP.” Many systems do that.
+
+The differentiator is:
+
+- **one governance model** across internal and external capabilities
+- **one coworker-facing capability surface**
+- **one operator lifecycle** for connection, readiness, assignment, and audit
+- while preserving specialized execution paths for:
+  - model routing
+  - CLI dispatch
+  - external MCP services
+  - internal platform tools
+
+---
+
+## 4. Design Principles
+
+### 4.1 Unify around capabilities, not transports
+
+The top-level product object should be the **capability**: something a coworker can do.
+
+Examples:
+
+- create a backlog item
+- read a GitHub PR
+- query Postgres
+- run a browser probe
+- update feature brief
+
+How a capability is delivered is secondary.
+
+### 4.2 Keep lifecycle and execution separate
+
+The admin/operator lifecycle should be standardized even when execution differs:
+
+- auth
+- test
+- health
+- discovery
+- readiness
+- permissions
+- audit
+
+But execution can still differ underneath:
+
+- platform-native tool execution
+- external MCP tool execution
+- provider-native tool calling
+- CLI-dispatched tool delivery
+- composite orchestrations
+
+### 4.3 Audit selectively
+
+Not all events deserve the same retention, display priority, or storage cost.
+
+Use audit classes, not one flat stream.
+
+### 4.4 MCP is important, but usually not primary
+
+MCP should be first-class in the architecture and integrations area, but for most operators the primary question is:
+
+> What can this coworker do, what does it need to do it, and what happened when it tried?
+
+Not:
+
+> Which protocol transport is in use?
+
+---
+
+## 5. Proposed Unified Model
+
+### 5.1 New product concepts
+
+#### A. Capability
+
+A coworker-facing action or information access unit.
+
+Canonical fields:
+
+- `capabilityId`
+- `name`
+- `description`
+- `sourceType`
+- `inputSchema`
+- `outputShape`
+- `requiredCapability`
+- `grantScope`
+- `executionMode`
+- `riskClass`
+- `auditClass`
+- `availabilityStatus`
+- `integrationDependencies[]`
+- `routeContexts[]`
+- `buildPhases[]`
+
+#### B. Integration
+
+A configured connection or activation that unlocks one or more capabilities.
+
+Canonical fields:
+
+- `integrationId`
+- `integrationType`
+- `name`
+- `providerId` or `serverId`
+- `authMode`
+- `credentialOwnerMode`
+- `status`
+- `healthStatus`
+- `syncStatus`
+- `trustStatus`
+- `lastTestedAt`
+- `lastSyncedAt`
+- `capabilityCount`
+
+#### C. Adapter
+
+An internal execution-path implementation detail.
+
+Examples:
+
+- `platform_tool`
+- `external_mcp_http`
+- `external_mcp_stdio`
+- `cli_mcp_delivery`
+- `provider_native`
+- `composite`
+
+Adapters should be visible in admin diagnostics, but not be the core IA object.
+
+### 5.2 Capability source taxonomy
+
+Every capability belongs to one `sourceType`:
+
+- `internal`
+  - platform-native tool defined in `mcp-tools.ts`
+- `external_mcp`
+  - tool discovered from an activated MCP server
+- `provider_native`
+  - provider-specific built-in action or model-native function path
+- `composite`
+  - orchestrated capability built from multiple underlying tools
+
+### 5.3 Integration taxonomy
+
+Every integration belongs to one `integrationType`:
+
+- `inference_provider`
+- `cli_provider`
+- `mcp_service`
+- `knowledge_connector`
+- `internal_service`
+
+This allows the lifecycle to be standardized without pretending model providers and MCP servers are identical objects.
+
+---
+
+## 6. Standardized Integration Lifecycle
+
+Every integration should move through the same lifecycle stages, even if some stages are no-ops for a particular integration type.
+
+### 6.1 Lifecycle stages
+
+1. **Registered**
+   - known to the system but not configured
+
+2. **Authenticated**
+   - required credentials or trust material are present
+
+3. **Verified**
+   - connectivity/auth test succeeded
+
+4. **Discovered**
+   - capabilities/models/tools/resources were fetched where applicable
+
+5. **Ready**
+   - the integration has at least one usable capability for coworker execution
+
+6. **Healthy**
+   - ongoing health checks are passing
+
+7. **Governed**
+   - trust and exposure policy is resolved
+
+### 6.2 Lifecycle actions
+
+The UI should standardize these actions across integration types:
+
+- `Configure Authentication`
+- `Verify Connection`
+- `Refresh Catalog`
+- `Review Capabilities`
+- `Set Exposure Policy`
+- `Check Health`
+- `View Audit`
+
+### 6.3 Mapping to current confusing actions
+
+Current `Test connection` on LLM providers should be split or renamed:
+
+- **recommended split**
+  - `Verify Connection`
+  - `Refresh Catalog`
+
+If a split is deferred, rename to:
+
+- `Connect & Prepare`
+
+and explicitly show that it performs:
+
+- auth verification
+- discovery
+- profile sync
+
+Current `Sync Models & Profiles` should become:
+
+- `Refresh Model Catalog`
+
+Current `Run Eval` should become:
+
+- `Update Routing Scores`
+
+Current `Run Probes` / `Run Full Tests` should become:
+
+- `Health Probes`
+- `Behavior Tests`
+
+### 6.4 Auth model must be explicit
+
+Each integration should declare:
+
+- `authMode`
+  - `none`
+  - `api_key`
+  - `oauth_client`
+  - `oauth_user`
+  - `service_account`
+- `credentialOwnerMode`
+  - `platform_owned`
+  - `admin_owned`
+  - `user_owned`
+  - `mixed`
+
+This is especially important for:
+
+- Anthropic subscription OAuth vs Anthropic API key
+- Codex / ChatGPT OAuth vs API key
+- maker-provided vs end-user credentials in future shared integrations
+
+---
+
+## 7. Standardized Capability Exposure
+
+### 7.1 Capability contract
+
+All capabilities exposed to coworkers should present the same governance surface:
+
+- description
+- schema
+- side-effect flag
+- proposal/immediate mode
+- risk class
+- audit class
+- grants/capability gating
+- route/build-phase gating
+- trust source
+
+### 7.2 Capability availability resolution
+
+At runtime, a capability is available only if all are true:
+
+1. source integration is ready and healthy enough
+2. user role is authorized
+3. agent grants allow it
+4. route/build-phase permits it
+5. trust policy permits it
+
+### 7.3 MCP-specific handling
+
+MCP remains important, but should be framed as:
+
+- one source of external capabilities
+- one transport for CLI-delivered tool access
+- a protocol that may later expose tools, resources, and prompts
+
+It should **not** be the top-level concept for general AI workforce administration.
+
+---
+
+## 8. Selective Audit Policy
+
+### 8.1 Problem
+
+Current `ToolExecution` is a flat log shape. That is useful early on, but will not scale well if every low-value read, search, list, and probe is retained and surfaced identically to high-value writes and approvals.
+
+### 8.2 Proposed audit classes
+
+Every capability gets one `auditClass`:
+
+#### A. `ledger`
+
+Always retained in full, operator-visible, compliance-grade.
+
+Use for:
+
+- side-effecting writes
+- destructive actions
+- credential/config changes
+- deployment/release actions
+- approvals/rejections
+- cross-boundary writes to external systems
+
+#### B. `journal`
+
+Retained in detail for a shorter window, grouped in operator UI, roll-up eligible later.
+
+Use for:
+
+- non-destructive external reads
+- significant agent reasoning checkpoints
+- high-value fetches (for example, loading an external schema or artifact)
+- behavior tests and eval runs
+
+#### C. `metrics_only`
+
+Do not retain full payloads by default; aggregate counts/latency/error rate instead.
+
+Use for:
+
+- repetitive read-only tool chatter
+- list/search polling
+- route warmups
+- health pings
+- repeated probes inside one test cycle
+
+### 8.3 Audit event shape
+
+Introduce an internal normalized event shape:
+
+- `eventId`
+- `eventType`
+- `capabilityId`
+- `sourceType`
+- `integrationId`
+- `agentId`
+- `userId`
+- `threadId`
+- `routeContext`
+- `riskClass`
+- `auditClass`
+- `success`
+- `startedAt`
+- `durationMs`
+- `summary`
+- `payloadRef` or `payload`
+
+Full payload storage should be conditional by `auditClass`.
+
+### 8.4 UI impact
+
+Split audit UX into:
+
+- **Action Ledger**
+  - approvals, writes, governance events, destructive actions
+- **Capability Journal**
+  - meaningful execution history and investigation events
+- **Operational Metrics**
+  - counts, failure rates, latency, health
+
+This replaces the current muddy overlap between `Action History`, `Authority`, and low-level tool logs.
+
+---
+
+## 9. Information Architecture Proposal
+
+### 9.1 New top-level structure
+
+#### A. AI Workforce
+
+Purpose: who does what, with which models/capabilities
+
+Subsections:
+
+- Overview
+- Assignments
+- Routing & Calibration
+- Build Studio CLI
+- Skills
+
+#### B. Tools & Integrations
+
+Purpose: what can be connected, activated, governed, and monitored
+
+Subsections:
+
+- Integration Catalog
+- Connected Integrations
+- Capability Inventory
+- Service Health
+- Trust & Exposure Policy
+
+#### C. Audit & Operations
+
+Purpose: what happened, what is running, and what requires attention
+
+Subsections:
+
+- Action Ledger
+- Route Log
+- Long-running Operations
+- Authority & Permissions
+- Capability Journal
+
+### 9.2 Where current pages move
+
+| Current | Proposed home | Notes |
+|---|---|---|
+| Workforce | AI Workforce > Overview | keep |
+| Model Assignment | AI Workforce > Assignments | make primary assignment surface |
+| Build Studio | AI Workforce > Build Studio CLI | explicitly label as CLI dispatch config |
+| Route Log | Audit & Operations > Route Log | keep, fix score normalization |
+| Operations | Audit & Operations > Long-running Operations | rename for clarity |
+| Action History | Audit & Operations > Action Ledger | narrower and clearer |
+| Authority | Audit & Operations > Authority & Permissions | keep, tighten scope |
+| Skills | AI Workforce > Skills | not a top-level peer to routing/audit |
+| AI External Services | split between AI Workforce and Tools & Integrations | provider routing aspects stay under AI; generic integration management moves out |
+| `/platform/services` | Tools & Integrations > Connected Integrations | primary home for external MCP services |
+| `/platform/integrations` | Tools & Integrations > Integration Catalog | primary home |
+
+### 9.3 AI-specific surfaces that remain in AI
+
+These stay in AI because they directly affect inference:
+
+- model tiering
+- provider/model routing
+- model evals
+- endpoint behavioral tests
+- agent assignment
+- Build Studio CLI dispatch
+
+### 9.4 MCP-specific surfaces that move out
+
+These belong in Tools & Integrations:
+
+- browsing integration catalog
+- activating MCP services
+- testing MCP service health
+- tool inventories by external service
+- transport-level server configuration
+
+---
+
+## 10. MCP in the New Design
+
+### 10.1 Product framing
+
+MCP is represented in the specification in three roles:
+
+1. **External capability source**
+   - activated MCP servers expose external capabilities
+
+2. **CLI tool-delivery transport**
+   - platform tools may be delivered to Claude/Codex CLI through MCP
+
+3. **Future context surface**
+   - MCP resources/prompts may later become first-class context objects
+
+### 10.2 Phase 1 scope for MCP
+
+Phase 1 standardizes **tools/capabilities only**.
+
+Phase 1 does **not** attempt to fully normalize:
+
+- MCP resources
+- MCP prompts
+- elicitation UX
+- channel/push patterns
+
+These should be acknowledged in the architecture, but deferred from the first UX consolidation pass.
+
+### 10.3 Why this boundary matters
+
+Trying to unify tools, resources, prompts, model routing, auth policy, and selective audit in one first pass would over-expand the epic and blur the user-facing win.
+
+The first win should be:
+
+> a clear, governed, observable capability and integration model
+
+---
+
+## 11. Data Model Direction
+
+This design does not require an immediate full schema rewrite, but it does require a clear canonical direction.
+
+### 11.1 Canonical concept ownership
+
+- `ModelProvider` remains canonical for inference providers
+- `McpServer` remains canonical for activated external MCP services
+- `McpIntegration` remains canonical for integration catalog entries
+- a new cross-cutting read model should become canonical for **capability inventory**
+
+### 11.2 Recommended read-model additions
+
+Introduce a materialized or computed read model such as `CapabilityInventoryView` or equivalent query layer with:
+
+- `capabilityId`
+- `sourceType`
+- `integrationId`
+- `integrationType`
+- `adapterType`
+- `displayName`
+- `enabled`
+- `availabilityStatus`
+- `riskClass`
+- `auditClass`
+- `gating`
+
+This allows the UI to present a unified capability inventory without immediately rewriting underlying provider and MCP tables into one schema.
+
+### 11.3 Future refactoring opportunities
+
+- normalize route log score storage and display scale
+- unify event/audit storage around typed audit classes
+- reconcile provider readiness vs credential readiness drift
+- revisit whether `ModelProvider` categories should carry MCP-related labels that belong in integration taxonomy instead
+
+---
+
+## 12. Rollout Plan
+
+### Phase 1: IA and terminology cleanup
+
+- rename/reframe confusing actions
+- move MCP service management under Tools & Integrations
+- relabel Build Studio as CLI dispatch
+- move Skills under AI Workforce
+- define audit classes in code, even if storage remains mostly unchanged initially
+
+### Phase 2: Unified capability inventory
+
+- add computed capability inventory
+- show internal + external capabilities in one searchable inventory
+- expose risk/gating/audit class per capability
+
+### Phase 3: Audit refinement
+
+- split ledger/journal/metrics UI
+- reduce full-payload retention for `metrics_only`
+- aggregate probe chatter and repeated read-only cycles
+
+### Phase 4: MCP resources/prompts
+
+- decide whether resources/prompts should become first-class operator-visible context objects
+- only proceed after Phase 1-3 reduce current conceptual overload
+
+---
+
+## 13. Risks and Mitigations
+
+### Risk: over-unifying unlike things
+
+Mitigation:
+
+- unify at capability and lifecycle layer
+- keep adapters and transport diagnostics separate
+
+### Risk: hiding useful technical detail from advanced operators
+
+Mitigation:
+
+- keep transport/auth/trust details in integration detail screens
+- add advanced diagnostics panels rather than promoting them to top-level IA
+
+### Risk: audit signal loss
+
+Mitigation:
+
+- classify by audit class, not by deleting visibility
+- retain metrics for everything
+- retain full detail for ledger-class events
+
+### Risk: MCP becomes invisible despite being important
+
+Mitigation:
+
+- keep MCP explicit in Tools & Integrations and Build Studio diagnostics
+- describe it as a capability source and transport layer
+
+---
+
+## 14. Decision Summary
+
+1. Standardize **both** integration lifecycle and coworker capability exposure
+2. Do **not** standardize around “everything is MCP”
+3. Use **capability** as the primary cross-system object
+4. Use **integration** as the primary admin object for connection/configuration
+5. Keep **adapter/transport** details visible only where operationally needed
+6. Introduce **selective audit classes** to prevent low-value chatter from bloating operator UX and storage
+7. Move generic MCP management to **Tools & Integrations**
+8. Keep model routing, calibration, and CLI dispatch under **AI Workforce**
+
+---
+
+## 15. Acceptance Criteria
+
+This design is successful when:
+
+1. An operator can answer, from the UI:
+   - what this coworker can do
+   - what integrations it depends on
+   - whether those integrations are healthy
+   - which actions are audited and where to find them
+
+2. MCP no longer appears as a confusing peer concept to routing, assignment, and authority for general users
+
+3. Provider/test/sync/eval/probe actions have distinct labels and lifecycle meanings
+
+4. Internal platform tools and external MCP tools appear in one coherent capability inventory
+
+5. Audit views prioritize ledger-grade events while still preserving aggregate operational visibility
+
+6. Build Studio CLI configuration is clearly understood as a special execution path, not just another routing panel
+
+---
+
+## 16. Implementation Notes for Follow-on Plan
+
+The follow-on implementation plan should likely break work into:
+
+1. IA and terminology pass
+2. capability inventory read model
+3. audit-class support in tool execution logging/reporting
+4. route log score normalization
+5. provider lifecycle cleanup
+6. Build Studio / MCP diagnostics clarification
+
+The implementation plan should also explicitly decide whether to:
+
+- merge `Action History` into `Audit & Operations`
+- merge `Authority` and tool-execution log around audit classes
+- create a new integration detail shell shared by provider and MCP service detail pages
