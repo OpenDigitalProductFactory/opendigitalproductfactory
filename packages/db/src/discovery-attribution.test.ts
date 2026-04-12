@@ -20,6 +20,11 @@ const taxonomyNodes: TaxonomyNodeCandidate[] = [
     portfolioSlug: "foundational",
   },
   {
+    nodeId: "foundational/network_management/network_connectivity",
+    name: "Network Connectivity",
+    portfolioSlug: "foundational",
+  },
+  {
     nodeId: "products_and_services_sold/customer_relationship_management",
     name: "Customer Relationship Management",
     portfolioSlug: "products_and_services_sold",
@@ -102,6 +107,42 @@ describe("attributeInventoryEntity", () => {
     expect(result.candidateTaxonomy?.[0]?.nodeId).toBe(
       "products_and_services_sold/customer_relationship_management",
     );
+  });
+
+  it("maps a VLAN to network connectivity by rule", () => {
+    const result = attributeInventoryEntity(
+      {
+        entityKey: "vlan:default",
+        entityType: "vlan",
+        itemType: "vlan",
+        name: "Default",
+        properties: { vlanId: 1 },
+      },
+      taxonomyNodes,
+    );
+
+    expect(result.taxonomyNodeId).toBe("foundational/network_management/network_connectivity");
+    expect(result.attributionMethod).toBe("rule");
+    expect(result.attributionStatus).toBe("attributed");
+    expect(result.confidence).toBeGreaterThan(0.9);
+  });
+
+  it("maps a wireless access point to network connectivity by rule", () => {
+    const result = attributeInventoryEntity(
+      {
+        entityKey: "ap:u6-lr",
+        entityType: "access_point",
+        itemType: "access_point",
+        name: "U6 LR",
+        properties: { model: "U6-LR" },
+      },
+      taxonomyNodes,
+    );
+
+    expect(result.taxonomyNodeId).toBe("foundational/network_management/network_connectivity");
+    expect(result.attributionMethod).toBe("rule");
+    expect(result.attributionStatus).toBe("attributed");
+    expect(result.confidence).toBeGreaterThan(0.9);
   });
 
   it("keeps low-confidence matches in needs-review with candidates", () => {
