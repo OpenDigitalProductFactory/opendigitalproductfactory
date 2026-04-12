@@ -15,6 +15,7 @@ const TABS = [
   { label: "Prompts", href: "/admin/prompts" },
   { label: "Skills", href: "/admin/skills" },
   { label: "Issue Reports", href: "/admin/issue-reports" },
+  { label: "Diagnostics", href: "/admin/diagnostics" },
 ];
 
 export function AdminTabNav() {
