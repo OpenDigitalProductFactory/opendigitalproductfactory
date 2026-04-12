@@ -13,21 +13,16 @@ export async function POST(req: NextRequest) {
 
   const {
     archetypeId, tagline, heroImageUrl, orgName, orgSlug,
-    businessDescription, targetMarket, companySize, geographicScope,
   } = (await req.json()) as {
     archetypeId: string;
     tagline?: string;
     heroImageUrl?: string;
-    orgName: string;
+    orgName?: string;
     orgSlug: string;
-    businessDescription?: string;
-    targetMarket?: string;
-    companySize?: string;
-    geographicScope?: string;
   };
 
-  if (!orgName || !orgSlug) {
-    return NextResponse.json({ error: "orgName and orgSlug are required" }, { status: 400 });
+  if (!orgSlug) {
+    return NextResponse.json({ error: "orgSlug is required" }, { status: 400 });
   }
 
   const org = await prisma.organization.findFirst({ select: { id: true, name: true } });
@@ -115,7 +110,9 @@ export async function POST(req: NextRequest) {
     data: { industry: archetype.category },
   });
 
-  // Create BusinessContext — the single source of truth for business strategy context
+  // Update BusinessContext with archetype-derived fields (ctaType, archetypeId).
+  // BusinessContext should already exist from the "Your Business" setup step.
+  // If it doesn't (backward compat / direct portal setup), create a minimal one.
   const REVENUE_MODEL_MAP: Record<string, string> = {
     booking: "Appointment-based services",
     purchase: "Product/service sales",
@@ -123,14 +120,15 @@ export async function POST(req: NextRequest) {
     donation: "Donor-funded",
   };
 
+  const existingBc = await prisma.businessContext.findUnique({
+    where: { organizationId: org.id },
+    select: { industry: true },
+  });
+
   await prisma.businessContext.upsert({
     where: { organizationId: org.id },
     create: {
       organizationId: org.id,
-      description: businessDescription ?? null,
-      targetMarket: targetMarket ?? null,
-      companySize: companySize ?? null,
-      geographicScope: geographicScope ?? null,
       industry: archetype.category,
       ctaType: archetype.ctaType,
       archetypeId: archetype.archetypeId,
@@ -138,14 +136,11 @@ export async function POST(req: NextRequest) {
       customerSegments: [],
     },
     update: {
-      description: businessDescription ?? undefined,
-      targetMarket: targetMarket ?? undefined,
-      companySize: companySize ?? undefined,
-      geographicScope: geographicScope ?? undefined,
-      industry: archetype.category,
       ctaType: archetype.ctaType,
       archetypeId: archetype.archetypeId,
       revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
+      // Only set industry from archetype if not already set by business-context step
+      ...(existingBc?.industry ? {} : { industry: archetype.category }),
     },
   });
 
@@ -159,7 +154,7 @@ export async function POST(req: NextRequest) {
       data: {
         providerId: `SP-${nanoid(6).toUpperCase()}`,
         storefrontId: config.id,
-        name: orgName,
+        name: orgName ?? org.name,
         isActive: true,
       },
     });

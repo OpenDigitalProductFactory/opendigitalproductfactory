@@ -42,7 +42,7 @@ import { SETUP_STEPS } from "./setup-constants";
 //   0: account-bootstrap
 //   1: ai-providers
 //   2: branding
-//   3: org-settings
+//   3: business-context
 //   4: workspace
 
 describe("setup flow integration", () => {
@@ -64,7 +64,7 @@ describe("setup flow integration", () => {
 
     // Advance step 2 → step 3
     const step3 = await advanceStep(progress.id);
-    expect(step3.currentStep).toBe("org-settings");
+    expect(step3.currentStep).toBe("business-context");
 
     // Advance step 3 → step 4 (last)
     const step4 = await advanceStep(progress.id);

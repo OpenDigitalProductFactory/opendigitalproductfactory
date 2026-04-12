@@ -32,7 +32,7 @@ export default async function AdminSettingsPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Admin</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Platform Settings</p>
+        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Organization &amp; Platform Settings</p>
       </div>
       <AdminTabNav />
       <PlatformKeysPanel keyData={await getKeyData(PLATFORM_KEYS)} />
