@@ -1,35 +1,38 @@
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
+import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import Link from "next/link";
 
-const SETUP_STEPS = [
-  {
-    num: 1,
-    title: "Choose your business type",
-    desc: "Pick an archetype that matches how you sell — services, products, bookings, donations, or general enquiries. This pre-loads relevant sections and items.",
-  },
-  {
-    num: 2,
-    title: "Set your business identity",
-    desc: "Enter your business name. A URL slug is auto-generated — this becomes your storefront address.",
-  },
-  {
-    num: 3,
-    title: "Customise sections and items",
-    desc: "Edit the pre-loaded content to match your offering. Add your own sections, products, or services.",
-  },
-  {
-    num: 4,
-    title: "Configure settings",
-    desc: "Set contact details, branding, and payment or booking options.",
-  },
-  {
-    num: 5,
-    title: "Publish",
-    desc: "When you're ready, publish your storefront so customers can find it.",
-  },
-];
+function getSetupSteps(portalLabel: string, stakeholderLabel: string) {
+  return [
+    {
+      num: 1,
+      title: "Choose your portal template",
+      desc: `Pick an archetype that matches your business. This pre-loads relevant sections and items for your ${portalLabel.toLowerCase()}.`,
+    },
+    {
+      num: 2,
+      title: "Preview and configure",
+      desc: `Review the template sections and set your URL slug, tagline, and hero image.`,
+    },
+    {
+      num: 3,
+      title: "Customise sections and items",
+      desc: "Edit the pre-loaded content to match your offering. Add your own sections, products, or services.",
+    },
+    {
+      num: 4,
+      title: "Configure settings",
+      desc: "Set contact details, branding, and payment or booking options.",
+    },
+    {
+      num: 5,
+      title: "Publish",
+      desc: `When you're ready, publish your ${portalLabel.toLowerCase()} so ${stakeholderLabel.toLowerCase()} can find it.`,
+    },
+  ];
+}
 
 export default async function StorefrontAdminPage() {
   const config = await prisma.storefrontConfig.findFirst({
@@ -69,6 +72,14 @@ export default async function StorefrontAdminPage() {
   }
 
   // Not yet configured — show step-by-step guide
+  // Read BusinessContext to determine vocabulary
+  const bc = await prisma.businessContext.findFirst({
+    select: { industry: true },
+  });
+  const vocab = getVocabulary(bc?.industry);
+
+  const SETUP_STEPS = getSetupSteps(vocab.portalLabel, vocab.stakeholderLabel);
+
   return (
     <div style={{ maxWidth: 640 }}>
       <div style={{
@@ -79,10 +90,10 @@ export default async function StorefrontAdminPage() {
         marginBottom: 24,
       }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
-          Create your storefront
+          Set up your {vocab.portalLabel}
         </div>
         <p style={{ fontSize: 14, color: "var(--dpf-muted, #8888a0)", lineHeight: 1.6, marginBottom: 24 }}>
-          Your storefront lets customers browse your products, services, and offerings online — no login required.
+          Your {vocab.portalLabel.toLowerCase()} lets {vocab.stakeholderLabel.toLowerCase()} browse your offerings, interact with your business, and access services online.
           Follow these steps to get up and running.
         </p>
 

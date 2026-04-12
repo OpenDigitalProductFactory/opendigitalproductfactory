@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { label: "Access", href: "/admin" },
   { label: "Branding", href: "/admin/branding" },
+  { label: "Your Business", href: "/admin/business-context" },
+  { label: "Organization", href: "/admin/settings" },
   { label: "Business Models", href: "/admin/business-models" },
-  { label: "Storefront", href: "/admin/storefront" },
+  { label: "Portal", href: "/admin/storefront" },
   { label: "Reference Data", href: "/admin/reference-data" },
-  { label: "Settings", href: "/admin/settings" },
   { label: "Platform Development", href: "/admin/platform-development" },
   { label: "Prompts", href: "/admin/prompts" },
   { label: "Skills", href: "/admin/skills" },

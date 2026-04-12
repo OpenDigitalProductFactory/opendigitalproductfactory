@@ -26,9 +26,10 @@ const STEP_WELCOME: Record<string, string> = {
     "This is your branding page. Everything here controls how your platform looks — to your team and to your customers.\n\n" +
     "You can set your logo, colors, and tagline. Changes apply across the entire platform, including the storefront if you set one up.\n\n" +
     "Don't worry about getting it perfect now — you can always come back here from Admin > Branding.",
-  "org-settings":
-    "These are your organization settings — the basics about your business.\n\n" +
-    "You can update your organization name, contact details, and location here. This information is used across the platform for things like compliance context and customer-facing materials.",
+  "business-context":
+    "This is where you tell the platform about your business — what you do, who you serve, and how you operate.\n\n" +
+    "This information powers your AI coworker's understanding of your business. It also shapes your portal setup in the next step — the platform will adapt its vocabulary to match your industry. An HOA sees 'Community Portal' and 'Homeowners,' a salon sees 'Booking Portal' and 'Clients,' and so on.\n\n" +
+    "Fill in what you can now — you can always come back to Admin > Your Business to update it later.",
   "storefront":
     "This is your Storefront — a customer-facing portal where your clients can access services, book appointments, view their account, and interact with your business online.\n\n" +
     "If your business serves customers directly, you can configure the storefront here. If not, you can skip this and come back if you need it later.\n\n" +

@@ -108,7 +108,7 @@ describe("setup-progress", () => {
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "org-settings",
+        currentStep: "business-context",
       });
 
       await skipStep("test-id");
