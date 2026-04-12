@@ -390,6 +390,85 @@ export async function GET(): Promise<Response> {
     }
   }));
 
+  // ─── Step 10: Embedding Model ─────────────────────────────────────────────
+  steps.push(await runStep("10. Embedding Model", async () => {
+    const { isEmbeddingAvailable, generateEmbedding } = await import("@/lib/inference/embedding");
+
+    const available = await isEmbeddingAvailable();
+    if (!available) {
+      return {
+        status: "fail",
+        message: "Embedding model not found. Pull ai/nomic-embed-text-v1.5 into Docker Model Runner.",
+        detail: { modelAvailable: false },
+      };
+    }
+
+    // Functional test: generate a real embedding
+    const testVector = await generateEmbedding("diagnostic test embedding");
+    if (!testVector) {
+      return {
+        status: "fail",
+        message: "Embedding model listed but failed to generate vector. Check model-runner logs.",
+        detail: { modelAvailable: true, generationWorking: false },
+      };
+    }
+
+    return {
+      status: "pass",
+      message: `Embedding model operational (${testVector.length}-dim vectors)`,
+      detail: { modelAvailable: true, generationWorking: true, dimensions: testVector.length },
+    };
+  }));
+
+  // ─── Step 11: Vector Memory (Qdrant) ────────────────────────────────────────
+  steps.push(await runStep("11. Vector Memory (Qdrant)", async () => {
+    const { isQdrantHealthy, QDRANT_COLLECTIONS } = await import("@dpf/db");
+
+    const healthy = await isQdrantHealthy();
+    if (!healthy) {
+      return {
+        status: "fail",
+        message: "Qdrant is unreachable. Check that the qdrant container is running.",
+        detail: { reachable: false },
+      };
+    }
+
+    // Check collection existence and point counts
+    const qdrantUrl = process.env.QDRANT_INTERNAL_URL ?? process.env.QDRANT_URL ?? "http://localhost:6333";
+    const collectionStats: Record<string, { exists: boolean; points: number }> = {};
+
+    for (const name of [QDRANT_COLLECTIONS.AGENT_MEMORY, QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE]) {
+      try {
+        const res = await fetch(`${qdrantUrl}/collections/${name}`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json() as { result?: { points_count?: number } };
+          collectionStats[name] = { exists: true, points: data.result?.points_count ?? 0 };
+        } else {
+          collectionStats[name] = { exists: false, points: 0 };
+        }
+      } catch {
+        collectionStats[name] = { exists: false, points: 0 };
+      }
+    }
+
+    const allExist = Object.values(collectionStats).every(c => c.exists);
+    const totalPoints = Object.values(collectionStats).reduce((sum, c) => sum + c.points, 0);
+
+    if (!allExist) {
+      return {
+        status: "warn",
+        message: `Qdrant reachable but collections not yet created (created on first memory write).`,
+        detail: { reachable: true, collections: collectionStats },
+      };
+    }
+
+    return {
+      status: totalPoints > 0 ? "pass" : "warn",
+      message: `Qdrant operational — ${totalPoints} vectors across ${Object.keys(collectionStats).length} collections`,
+      detail: { reachable: true, collections: collectionStats },
+    };
+  }));
+
   // ─── Summary ─────────────────────────────────────────────────────────────
   const passed = steps.filter(s => s.status === "pass").length;
   const failed = steps.filter(s => s.status === "fail").length;
