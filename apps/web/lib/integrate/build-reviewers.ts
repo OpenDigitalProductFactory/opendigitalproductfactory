@@ -21,7 +21,7 @@ ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalys
 PROJECT CONTEXT:
 ${projectContext}
 
-REVIEW CHECKLIST:
+REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Is the problem statement clear and specific?
 2. Was existing functionality properly audited (not building what already exists)?
 3. Were alternatives considered (open-source, existing tools, MCP services)?
@@ -31,6 +31,8 @@ REVIEW CHECKLIST:
 7. Are acceptance criteria testable and specific?
 8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
+
+CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -51,15 +53,19 @@ export function buildPlanReviewPrompt(plan: BuildPlanDoc): string {
 FILE STRUCTURE:
 ${fileList}
 
-TASKS:
+TASKS (${tasks.length} total):
 ${taskList}
 
-REVIEW CHECKLIST:
-1. Are tasks bite-sized (each should be 2-5 minutes of work)?
+REVIEW CHECKLIST — evaluate EVERY item against EVERY task before responding:
+1. Are tasks bite-sized (each should be 2-5 minutes of work)? Check EACH task individually.
 2. Does each task have a test-first step?
 3. Are file paths specific (not vague)?
 4. Is the file structure sensible (one responsibility per file)?
 5. Are there any missing tasks for the described file changes?
+6. Does the plan include data seeding/population tasks if new database entities are introduced?
+7. Are dependencies between tasks clear (does task N depend on task M completing first)?
+
+CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire plan comprehensively — every task, every file, every dependency. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -80,7 +86,7 @@ ${codeChanges}
 TEST OUTPUT:
 ${testOutput}
 
-REVIEW CHECKLIST:
+REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Does a test exist that covers this change?
 2. Is there code duplication with existing functionality?
 3. Does the code follow project patterns (TypeScript, Next.js, Tailwind)?
@@ -88,6 +94,8 @@ REVIEW CHECKLIST:
 5. Is the code clean and maintainable?
 6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
 7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
+
+CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire code change comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {

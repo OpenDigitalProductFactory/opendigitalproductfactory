@@ -32,6 +32,7 @@ function mockResult(overrides: {
     outputTokens: overrides.outputTokens ?? 50,
     toolCalls: overrides.toolCalls ?? [],
     routeDecision: {} as any,
+    responseId: undefined,
   };
 }
 
@@ -449,6 +450,66 @@ describe("runAgenticLoop", () => {
     expect(result.content).toContain("Implementation plan ready — 1 file, 2 tasks.");
     expect(mockExecuteTool).toHaveBeenCalledTimes(4);
     expect(mockExecuteTool.mock.calls[2]?.[1]).toMatchObject({ field: "buildPlan", value: buildPlanV2 });
+  });
+
+  it("allows 3 review cycles when each review follows a plan revision", { timeout: 15_000 }, async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    // Pattern: save → review(fail) → save → review(fail) → save → review(pass) → done
+    // 3 reviews, but each is preceded by a saveBuildEvidence, so it's progress.
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Saving plan v1.",
+        toolCalls: [{ id: "t1", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: { tasks: [{ title: "v1" }] } } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing plan v1.",
+        toolCalls: [{ id: "t2", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Saving plan v2.",
+        toolCalls: [{ id: "t3", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: { tasks: [{ title: "v2" }] } } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing plan v2.",
+        toolCalls: [{ id: "t4", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Saving plan v3.",
+        toolCalls: [{ id: "t5", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: { tasks: [{ title: "v3" }] } } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing plan v3.",
+        toolCalls: [{ id: "t6", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValue(mockResult({
+        content: "Plan passed after 3 revisions. The tasks are now properly scoped and include data seeding, schema changes, and API implementation with proper test coverage.",
+      }));
+
+    mockExecuteTool
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: fail.", data: { review: { decision: "fail" } } })
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: fail.", data: { review: { decision: "fail" } } })
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: pass.", data: { review: { decision: "pass" } } });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "reviewBuildPlan", description: "Review build plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "saveBuildEvidence", description: "Save evidence", parameters: {} } },
+        { type: "function", function: { name: "reviewBuildPlan", description: "Review build plan", parameters: {} } },
+      ],
+    });
+
+    // Should complete successfully, not hit the repetition detector
+    expect(result.content).toContain("Plan passed after 3 revisions");
+    expect(mockExecuteTool).toHaveBeenCalledTimes(6);
   });
 
   it("does not treat scoped search_sandbox calls as repetition when glob changes", async () => {
