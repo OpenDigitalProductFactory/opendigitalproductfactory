@@ -29,11 +29,10 @@ The UX collision:
 - If they then visit Admin > Business Models, they see a completely different "business type" taxonomy: "SaaS / Subscription," "Professional Services / Consulting," "Marketplace / Platform" — these are **product operating models** with governance roles.
 - Both claim to be "your business type" but they are answering different questions.
 - `BusinessContext` is created as a side-effect of storefront setup (line 119-150 of `route.ts`), making it impossible to have business context without a storefront.
-- A business that doesn't need a customer-facing portal (e.g., an internal developer platform) has no path to populate `BusinessContext`.
 
-**Worse still:** Many business types have no "store" at all. An HOA manages a community, not a shop. A consulting firm runs a client portal, not a storefront. A nonprofit has a supporter hub. An internal developer platform has no customer-facing presence whatsoever. Yet today, the only path to telling the platform "what kind of business I am" runs through the Storefront Wizard — a page whose very name says "you sell things."
+**The deeper problem:** This platform targets small businesses, and most of them *do* need an online portal — but for many of them it isn't a "store." An HOA needs a Community Portal where homeowners submit maintenance requests, read bylaws, and pay assessments — homeowners aren't customers and assessments aren't products. A consulting firm needs a Client Portal for project updates and document sharing — clients aren't shoppers. A nonprofit needs a Supporter Hub for donations and volunteer sign-ups — supporters aren't buyers. Every one of these businesses needs a portal, but the Storefront Wizard's vocabulary ("Choose your business type," "Items / Services," "CTA type") frames the entire experience through a retail lens that doesn't fit.
 
-**Net effect:** Users perceive the platform as confused about what their business is. Two separate "business type" concepts with overlapping vocabulary create cognitive overhead and erode trust. Businesses without a traditional "store" feel like second-class citizens.
+**Net effect:** Users perceive the platform as confused about what their business is. Two separate "business type" concepts with overlapping vocabulary create cognitive overhead and erode trust. Non-retail businesses feel like they're being shoehorned into a shopkeeper's setup flow when their relationship with their stakeholders is fundamentally different.
 
 ---
 
@@ -116,7 +115,7 @@ The wizard conflates "tell us about your business" with "configure your customer
 
 1. **Shopify's unified `Shop`**: Combining everything into one entity creates coupling. DPF's multi-model approach is correct for a platform that must support diverse operating models.
 
-2. **Forcing all businesses through storefront setup**: Square doesn't force every merchant to set up an online store. Wix doesn't force every user to pick a shop template. The assumption that every business needs a "store" is retail-centric — an HOA managing assessments and community announcements, a consulting firm nurturing client relationships, and an internal DevOps team running a platform for developers all need business context but have no use for a storefront wizard.
+2. **Store-centric vocabulary for non-store businesses**: Square's onboarding adapts based on business vertical — a restaurant sees "menu items," not "products." Wix's questionnaire understands the business before recommending a template. The assumption that every portal is a "storefront" with "items" and "customers" breaks down for HOAs (homeowners, assessments, bylaws), consultancies (clients, engagements, deliverables), and nonprofits (supporters, campaigns, donations). The portal vocabulary spec (EP-STORE-006) already defines the right labels — the setup flow needs to use them from the start.
 
 ### 3.4 Anti-Patterns Avoided
 
@@ -140,11 +139,11 @@ The wizard conflates "tell us about your business" with "configure your customer
 
 **Pros:**
 - Cleanest separation of concerns
-- Works for every type of business — HOAs, consulting firms, nonprofits, internal platforms, and traditional retail alike
+- Works for every type of small business — HOAs, consulting firms, nonprofits, and traditional retail alike
 - `BusinessContext` becomes genuinely canonical, not a storefront side-effect
+- The portal step inherits the right vocabulary from day one: an HOA sees "Set up your Community Portal" not "Set up your Storefront"
 - Existing data models stay intact — no schema changes needed
-- Portal-free businesses get full AI coworker context without pretending they have a "store"
-- The portal step becomes optional: skip it entirely if your business has no customer-facing web presence
+- AI coworker gets full business context before the portal exists, so it can assist with portal setup itself
 
 **Cons:**
 - Adds one more setup step (mitigated by collapsing operating-hours into it)
@@ -206,15 +205,14 @@ To eliminate the vocabulary collision, establish clear terminology:
 
 **Key rules:**
 
-1. The word "business type" should never appear in the UI without disambiguation.
-2. The word "storefront" should never appear as a generic label — use "portal" or the vocabulary-specific label (Community Portal, Client Portal, Supporter Hub, etc.).
-3. Portal creation is always optional. The platform must never imply that every business needs one.
+1. The phrase "business type" must never appear in the UI without disambiguation.
+2. The word "storefront" must never appear as a generic label — use the vocabulary-specific label from EP-STORE-006 (Community Portal, Client Portal, Supporter Hub, Booking Portal, Storefront, etc.). Only actual retail businesses see the word "Storefront."
+3. The word "customer" must never be used generically for portal users. HOA portals serve **homeowners**, consulting portals serve **clients**, nonprofit portals serve **supporters**. The stakeholder label comes from the archetype vocabulary.
 
 **Prompts by context:**
 
-- "Tell us about your business" → populates `BusinessContext` (universal — every business)
-- "Do your customers need an online portal?" → gates `StorefrontConfig` creation (optional — only if applicable)
-- "Choose your portal template" → selects `StorefrontArchetype` (only if they said yes above)
+- "Tell us about your business" → populates `BusinessContext` (universal — every small business)
+- "Set up your [Community Portal / Client Portal / Storefront / ...]" → creates `StorefrontConfig` using vocabulary from `BusinessContext`
 - "What operating model does this product follow?" → assigns `BusinessModel` (product-level, separate concern)
 
 ### 5.2 Information Architecture
@@ -225,16 +223,16 @@ Onboarding Flow (revised):
   Step 2: AI Providers             → ProviderConfig
   Step 3: Branding                 → BrandingConfig
   Step 4: Your Business (NEW)      → BusinessContext, Organization.industry
-  Step 5: Your Portal (OPTIONAL)   → StorefrontConfig (pre-filled from BusinessContext)
+  Step 5: Your Portal (ADAPTED)    → StorefrontConfig (vocabulary from BusinessContext)
   Step 6: Operating Hours           → BusinessProfile
   Step 7: Platform Development     → ContributionConfig
   Step 8: Build Studio             → (tour)
   Step 9: Workspace                → (tour)
 ```
 
-The old "org-settings" step is absorbed into "Your Business." The old "operating-hours" step stays but the setup step count stays at 9 (we removed one, added one).
+The old "org-settings" step is absorbed into "Your Business." The old "operating-hours" step stays. The setup step count stays at 9 (we removed one, added one).
 
-**The key insight:** Step 4 is the universal step — every business completes it. Step 5 is conditional. A hair salon, restaurant, or retail shop will configure a portal. An HOA *might* set up a Community Portal for homeowner self-service, or might skip it. An internal dev platform or back-office consultancy will skip it entirely. In all cases the AI coworker has full business context from Step 4.
+**The key insight:** Step 4 is the universal step — every small business completes it. Step 5 then adapts: a hair salon sees "Set up your Booking Portal," an HOA sees "Set up your Community Portal," a nonprofit sees "Set up your Supporter Hub." The business already told the platform who its stakeholders are (homeowners, clients, supporters, customers) so the portal wizard speaks their language instead of defaulting to retail.
 
 ### 5.3 Proposed Setup Flow
 
@@ -253,18 +251,19 @@ The old "org-settings" step is absorbed into "Your Business." The old "operating
 
 **API endpoint:** New `POST /api/business-context/setup` that creates/updates `BusinessContext` and `Organization` fields without touching `StorefrontConfig`.
 
-#### Step 5: "Your Portal" (optional — revised storefront wizard)
+#### Step 5: "Your Portal" (revised storefront wizard)
 
-Not every business needs a customer-facing web portal. This step is explicitly **optional** and the onboarding overlay communicates this clearly:
+Because `BusinessContext` already exists from Step 4, the portal wizard can now speak the business's own language from the very first screen. The archetype is pre-selected, and the vocabulary adapts to the stakeholder relationship — not a generic "storefront" frame:
 
-| Business Type | Portal? | What They See |
-| ------------- | ------- | ------------- |
-| Hair salon, restaurant, yoga studio | Yes — booking portal | Choose template, preview, configure |
-| Retail shop, florist, bakery | Yes — storefront | Choose template, preview, configure |
-| HOA, property management | Maybe — community portal | "Set up a Community Portal for homeowners, or skip if you manage communications elsewhere" |
-| Consulting, legal, accounting | Maybe — client portal | "Set up a Client Portal, or skip if you use external CRM/scheduling" |
-| Nonprofit, charity | Maybe — supporter hub | "Set up a Supporter Hub for donations and updates, or skip" |
-| Internal dev platform, API service | No | "Your business doesn't need a customer portal — skip this step" |
+| Business Type | Portal Label | Stakeholders | What They See |
+| ------------- | ------------ | ------------ | ------------- |
+| Hair salon, yoga studio, dentist | Booking Portal | Clients, Patients | "Set up your Booking Portal — let clients book appointments online" |
+| Restaurant, catering | Venue Portal | Guests, Diners | "Set up your Venue Portal — let guests reserve tables and view menus" |
+| Retail shop, florist, bakery | Storefront | Customers | "Set up your Storefront — showcase products and take orders" |
+| HOA, property management | Community Portal | Homeowners | "Set up your Community Portal — homeowners can submit issues, read bylaws, and pay assessments" |
+| Consulting, legal, accounting | Client Portal | Clients | "Set up your Client Portal — clients can view engagements and request services" |
+| Nonprofit, charity, pet rescue | Supporter Hub | Supporters, Donors | "Set up your Supporter Hub — accept donations and share impact updates" |
+| Education, tutoring, music school | Academy Portal | Students | "Set up your Academy Portal — students can enrol and access course materials" |
 
 **Changes from current wizard:**
 - Step 1 ("Choose your business type") becomes "Choose your portal template" with archetype pre-selected from `BusinessContext.industry`
@@ -274,7 +273,7 @@ Not every business needs a customer-facing web portal. This step is explicitly *
 - Only portal-specific fields remain: URL slug, tagline, hero image
 - The portal vocabulary from EP-STORE-006 drives all labels: an HOA sees "Community Portal" not "Storefront," a nonprofit sees "Supporter Hub," etc.
 
-**Skip behavior:** If the user doesn't need a portal, they skip Step 5 entirely. `BusinessContext` still exists and provides full AI coworker context — the coworker knows what the business does, who it serves, and how it operates, regardless of whether a portal exists. This is critical: an HOA board member should be able to ask the AI coworker to "draft a special assessment notice" without ever having configured a "storefront."
+**The difference from today:** An HOA board member no longer sees "Choose your business type" above a grid of retail-flavoured archetype cards. Instead, the platform already knows from Step 4 that this is an HOA. Step 5 opens with "Set up your Community Portal" and shows homeowner-relevant sections (Assessments, Maintenance Requests, Bylaws) — not "Items / Services" and "Hero Image." The vocabulary from EP-STORE-006 is applied from the first screen, not retrofitted after setup.
 
 ### 5.4 What Stays Separate in the Data Model and Why
 
@@ -282,12 +281,12 @@ Not every business needs a customer-facing web portal. This step is explicitly *
 |-------|---------------|--------|
 | `BusinessContext` | Yes | Strategic context for AI coworkers. Must exist without a portal. |
 | `StorefrontArchetype` | Yes | Portal template blueprint. Different taxonomy from business classification. |
-| `StorefrontConfig` | Yes | Portal instance. One org may have **zero** or one portal. Zero is a first-class state — an HOA, internal platform, or consultancy that manages client relationships through other channels simply doesn't create one. |
+| `StorefrontConfig` | Yes | Portal instance. One org has one portal, but the portal's vocabulary, sections, and stakeholder framing vary radically by business type. |
 | `BusinessModel` | Yes | Product governance roles. Entirely different domain (IT4IT, not customer-facing). |
 | `BusinessProfile` | Yes | Operational hours/windows. Used by deployment governance, not customer-facing. |
 | `Organization` | Yes | Root identity entity. Already canonical. |
 
-**No models are merged.** The fix is in the UX flow and API layer, not the data model. The models were correctly designed — the problem is that `BusinessContext` creation is coupled to `StorefrontConfig` creation in the API route. Decoupling them makes "no portal" a natural, supported state rather than a gap in the data.
+**No models are merged.** The fix is in the UX flow and API layer, not the data model. The models were correctly designed — the problem is that `BusinessContext` creation is coupled to `StorefrontConfig` creation in the API route. Decoupling them means the portal wizard can inherit the right vocabulary and stakeholder framing from the business context instead of collecting business identity from scratch through a retail-centric lens.
 
 ### 5.5 Route / Component Changes
 
@@ -421,5 +420,6 @@ This can be a data-only migration or applied in the setup-progress loader as a r
 - **Renaming `StorefrontConfig` to `PortalConfig`** in the database — deferred (requires migration)
 - **Conversational onboarding** (Approach C) — too dependent on AI reliability; could be a future enhancement
 - **Auto-detecting business type from URL** — already exists in setup context; this spec uses it but doesn't extend it
-- **Multi-organization support** — out of scope; the platform remains single-org
+- **Multi-organization support** — out of scope; the platform targets single small businesses
 - **BusinessModel assignment to Organization** — BusinessModels are assigned to DigitalProducts, not orgs; this spec doesn't change that relationship
+- **Stakeholder-type data model** — adding `StakeholderType` to CRM models (homeowner vs client vs supporter) is a future schema change noted in EP-STORE-006
