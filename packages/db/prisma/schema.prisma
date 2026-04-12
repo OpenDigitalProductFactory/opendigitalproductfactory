@@ -63,6 +63,7 @@ model User {
   workSchedule                 WorkSchedule?
   adminActivities              AdminActivity[]
   userFacts                    UserFact[]
+  scheduledAgentTasks          ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
 }
 
 model UserGroup {
@@ -3146,6 +3147,32 @@ model CalendarEvent {
   @@index([category])
   @@index([syncSource, externalId])
   @@index([complianceEntityType, complianceEntityId])
+}
+
+model ScheduledAgentTask {
+  id              String    @id @default(cuid())
+  taskId          String    @unique
+  agentId         String
+  title           String
+  prompt          String
+  routeContext    String
+  schedule        String    // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
+  timezone        String    @default("UTC")
+  isActive        Boolean   @default(true)
+  ownerUserId     String
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  lastStatus      String?   // ok | error
+  lastError       String?
+  lastThreadId    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  owner           User      @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+
+  @@index([agentId])
+  @@index([ownerUserId])
+  @@index([isActive, nextRunAt])
 }
 
 model CalendarSync {

@@ -38,6 +38,9 @@ const EVENT_META: Record<string, { label: string; href?: string; icon: string }>
   "operating-hours":    { label: "Operating Hours",      href: "/admin/operating-hours",    icon: "\uD83D\uDD53" },
   "provider-schedule":  { label: "Provider Schedule",    href: "/storefront",               icon: "\uD83D\uDC64" },
 
+  // Scheduled agent tasks
+  "agent-task":         { label: "AI Coworker Task",    href: "/workspace",                icon: "\uD83E\uDD16" },
+
   // Generic / native
   meeting:             { label: "Meeting",                                                  icon: "\uD83D\uDCAC" },
   reminder:            { label: "Reminder",                                                 icon: "\uD83D\uDD14" },

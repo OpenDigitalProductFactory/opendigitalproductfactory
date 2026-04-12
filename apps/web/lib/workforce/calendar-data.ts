@@ -551,6 +551,35 @@ async function projectDeploymentWindowEvents(rangeStart: Date, rangeEnd: Date): 
   return events;
 }
 
+// ─── Scheduled agent task projections ────────────────────────────────────────
+
+async function projectScheduledAgentTasks(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const tasks = await prisma.scheduledAgentTask.findMany({
+    where: {
+      isActive: true,
+      nextRunAt: { gte: rangeStart, lte: rangeEnd },
+    },
+    select: {
+      id: true, taskId: true, title: true, agentId: true, prompt: true,
+      nextRunAt: true, lastStatus: true, schedule: true,
+    },
+  });
+
+  return tasks.map((t) => ({
+    id: `agent-task-${t.taskId}`,
+    title: `AI: ${t.title}`,
+    start: t.nextRunAt!.toISOString(),
+    end: null,
+    allDay: false,
+    category: "platform",
+    eventType: "agent-task",
+    color: t.lastStatus === "error" ? "#ef4444" : "#14b8a6",
+    editable: false,
+    sourceType: "projected",
+    sourceId: t.id,
+  }));
+}
+
 // ─── Business projections (archetype-universal) ─────────────────────────────
 
 const DAY_NAMES: (keyof WeeklySchedule)[] = [
@@ -984,6 +1013,7 @@ export const getCalendarEvents = cache(async (
     leaves, reviews, timesheets, onboarding, lifecycle, maintenance,
     compliance, finance, changeMgmt, deployWindows,
     bookings, crmActivities, pipeline, operatingHours, providerAvail,
+    agentTasks,
   ] = await Promise.all([
     projectLeaveEvents(rangeStart, rangeEnd),
     projectReviewEvents(rangeStart, rangeEnd),
@@ -1000,11 +1030,13 @@ export const getCalendarEvents = cache(async (
     projectSalesPipelineEvents(rangeStart, rangeEnd),
     projectOperatingHoursEvents(rangeStart, rangeEnd),
     projectProviderAvailabilityEvents(rangeStart, rangeEnd),
+    projectScheduledAgentTasks(rangeStart, rangeEnd),
   ]);
 
   return [
     ...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle,
     ...maintenance, ...compliance, ...finance, ...changeMgmt, ...deployWindows,
     ...bookings, ...crmActivities, ...pipeline, ...operatingHours, ...providerAvail,
+    ...agentTasks,
   ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 });
