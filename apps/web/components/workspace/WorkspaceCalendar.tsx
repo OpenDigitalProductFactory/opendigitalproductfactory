@@ -17,6 +17,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   platform: { label: "Platform", color: "var(--dpf-warning)" },
   compliance: { label: "Compliance", color: "#e879f9" },
   finance: { label: "Finance", color: "#facc15" },
+  business: { label: "Business", color: "#14b8a6" },
   personal: { label: "Personal", color: "var(--dpf-success)" },
   external: { label: "External", color: "var(--dpf-muted)" },
 };
@@ -27,13 +28,27 @@ const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourc
   compliance:      { label: "Compliance",      matchFn: (e) => e.eventType === "compliance-deadline" || e.eventType === "audit" || e.eventType === "regulatory" },
   finance:         { label: "Finance",         matchFn: (e) => e.eventType === "invoice" || e.eventType === "bill" || e.eventType === "recurring-invoice" },
   "change-mgmt":   { label: "Change mgmt",    matchFn: (e) => e.eventType === "change-request" || e.eventType === "blackout" || e.eventType === "deployment-window" },
+  bookings:        { label: "Bookings",       matchFn: (e) => e.eventType === "booking" },
+  crm:             { label: "CRM",            matchFn: (e) => e.eventType === "crm-activity" || e.eventType === "pipeline-deadline" },
+  "op-hours":      { label: "Hours",          matchFn: (e) => e.eventType === "operating-hours" },
+  providers:       { label: "Providers",      matchFn: (e) => e.eventType === "provider-schedule" },
+};
+
+/** Archetype categories where certain source filters are hidden by default. */
+const ARCHETYPE_DEFAULT_HIDDEN: Record<string, string[]> = {
+  "retail-goods":            ["providers"],
+  "hoa-property-management": ["bookings", "providers"],
+  "professional-services":   ["providers"],
+  "nonprofit-community":     ["bookings", "providers"],
+  "trades-maintenance":      ["providers"],
 };
 
 type Props = {
   events: CalendarEventView[];
+  archetypeCategory?: string | null;
 };
 
-export function WorkspaceCalendar({ events: initialEvents }: Props) {
+export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: Props) {
   const calendarRef = useRef<FullCalendar>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -45,11 +60,15 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
     return param ? new Set(param.split(",")) : new Set<string>();
   }, [searchParams]);
 
-  // Restore hidden source filters from URL
+  // Restore hidden source filters from URL — fall back to archetype defaults on first load
   const hiddenSources = useMemo(() => {
     const param = searchParams.get("sourceHidden");
-    return param ? new Set(param.split(",")) : new Set<string>();
-  }, [searchParams]);
+    if (param) return new Set(param.split(","));
+    const defaults = archetypeCategory
+      ? ARCHETYPE_DEFAULT_HIDDEN[archetypeCategory]
+      : undefined;
+    return defaults ? new Set(defaults) : new Set<string>();
+  }, [searchParams, archetypeCategory]);
 
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
   const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
@@ -245,7 +264,8 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
         datesSet={handleDatesSet}
         eventClick={handleEventClick}
         eventDidMount={(info) => {
-          if (info.event.extendedProps.eventType === "recurring-digest") {
+          const evType = info.event.extendedProps.eventType as string;
+          if (evType === "recurring-digest") {
             info.el.setAttribute("data-digest", "true");
             const count = info.event.extendedProps.digestCount;
             const schedule = info.event.extendedProps.digestSchedule;
@@ -253,6 +273,12 @@ export function WorkspaceCalendar({ events: initialEvents }: Props) {
             if (count) {
               info.el.title += `\n${count} occurrences`;
             }
+          }
+          // Operating hours render as translucent background tint
+          if (evType === "operating-hours") {
+            info.el.style.opacity = "0.15";
+            info.el.style.pointerEvents = "none";
+            info.el.style.borderLeft = "3px solid #14b8a6";
           }
         }}
         dateClick={(info) => {

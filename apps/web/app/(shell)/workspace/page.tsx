@@ -103,7 +103,13 @@ export default async function WorkspacePage() {
   const now = new Date();
   const calRangeStart = new Date(now.getFullYear(), now.getMonth(), -7);
   const calRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 7);
-  const calendarEvents = await getCalendarEvents(calRangeStart, calRangeEnd);
+  const [calendarEvents, storefrontConfig] = await Promise.all([
+    getCalendarEvents(calRangeStart, calRangeEnd),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { category: true } } },
+    }).catch(() => null),
+  ]);
+  const archetypeCategory = storefrontConfig?.archetype?.category ?? null;
 
   // Activity feed: determine user's employee profile and role context
   const currentUserProfile = await prisma.employeeProfile.findUnique({
@@ -275,7 +281,7 @@ export default async function WorkspacePage() {
             Calendar
           </p>
           <Suspense fallback={null}>
-            <WorkspaceCalendar events={calendarEvents} />
+            <WorkspaceCalendar events={calendarEvents} archetypeCategory={archetypeCategory} />
           </Suspense>
         </div>
         <div>
