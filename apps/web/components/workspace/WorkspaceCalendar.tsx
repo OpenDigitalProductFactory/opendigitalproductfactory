@@ -10,6 +10,7 @@ import type { DatesSetArg, EventClickArg } from "@fullcalendar/core";
 import type { CalendarEventView } from "@/lib/calendar-data";
 import { CalendarEventPopover } from "./CalendarEventPopover";
 import { CalendarDetailPopover } from "./CalendarDetailPopover";
+import { CalendarAgentScheduler } from "./CalendarAgentScheduler";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
 
 // Must match CATEGORY_COLORS in calendar-data.ts — use concrete hex, not CSS vars
@@ -34,6 +35,7 @@ const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourc
   crm:             { label: "CRM",            matchFn: (e) => e.eventType === "crm-activity" || e.eventType === "pipeline-deadline" },
   "op-hours":      { label: "Hours",          matchFn: (e) => e.eventType === "operating-hours" },
   providers:       { label: "Providers",      matchFn: (e) => e.eventType === "provider-schedule" },
+  "agent-tasks":   { label: "AI tasks",       matchFn: (e) => e.eventType === "agent-task" },
 };
 
 /** Archetype categories where certain source filters are hidden by default. */
@@ -73,6 +75,8 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
   }, [searchParams, archetypeCategory]);
 
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
+  const [agentScheduler, setAgentScheduler] = useState<{ date: string } | null>(null);
+  const [dateChooser, setDateChooser] = useState<{ date: string; endDate?: string; rect: DOMRect | null } | null>(null);
   const [detailPopover, setDetailPopover] = useState<{
     event: {
       id: string; title: string; start: string; end: string | null;
@@ -318,18 +322,87 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
           }
         }}
         dateClick={(info) => {
-          setCreatePopover({ date: info.dateStr });
+          setDateChooser({ date: info.dateStr, rect: info.dayEl.getBoundingClientRect() });
         }}
         select={(info) => {
-          setCreatePopover({ date: info.startStr, endDate: info.endStr });
+          setDateChooser({ date: info.startStr, endDate: info.endStr, rect: null });
         }}
       />
+
+      {/* Date click chooser: create event or schedule agent */}
+      {dateChooser && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 99 }}
+            onClick={() => setDateChooser(null)}
+          />
+          <div
+            style={{
+              position: "fixed",
+              zIndex: 100,
+              top: dateChooser.rect
+                ? Math.min(dateChooser.rect.bottom + 4, window.innerHeight - 100)
+                : "50%",
+              left: dateChooser.rect
+                ? Math.min(dateChooser.rect.left, window.innerWidth - 220)
+                : "50%",
+              ...(!dateChooser.rect ? { transform: "translate(-50%, -50%)" } : {}),
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+              borderRadius: 8,
+              padding: 8,
+              width: 200,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setCreatePopover({ date: dateChooser.date, endDate: dateChooser.endDate });
+                setDateChooser(null);
+              }}
+              style={{
+                display: "block", width: "100%", padding: "8px 12px", fontSize: 12,
+                background: "transparent", border: "none", color: "var(--dpf-text)",
+                textAlign: "left", cursor: "pointer", borderRadius: 4,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--dpf-surface-2)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              Create event
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAgentScheduler({ date: dateChooser.date });
+                setDateChooser(null);
+              }}
+              style={{
+                display: "block", width: "100%", padding: "8px 12px", fontSize: 12,
+                background: "transparent", border: "none", color: "#14b8a6",
+                textAlign: "left", cursor: "pointer", borderRadius: 4, fontWeight: 600,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--dpf-surface-2)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              Schedule AI coworker
+            </button>
+          </div>
+        </>
+      )}
 
       {createPopover && (
         <CalendarEventPopover
           defaultDate={createPopover.date}
           defaultEndDate={createPopover.endDate}
           onClose={() => setCreatePopover(null)}
+        />
+      )}
+
+      {agentScheduler && (
+        <CalendarAgentScheduler
+          defaultDate={agentScheduler.date}
+          onClose={() => setAgentScheduler(null)}
         />
       )}
 
