@@ -480,8 +480,16 @@ export async function runAgenticLoop(params: {
     // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
     // Repetition = same tool with same key arguments called 3+ times.
     // Different arguments (e.g., different search queries, different fields) = progress.
+    //
+    // Review tools (reviewBuildPlan, reviewDesignDoc) are special: they take no arguments
+    // but participate in legitimate revise-resubmit cycles. If saveBuildEvidence was called
+    // between two review calls, the underlying content changed — that's progress, not
+    // repetition. We count only consecutive review calls without an intervening evidence
+    // save as true repetition.
+    const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
     const toolCallCounts = new Map<string, number>();
-    for (const t of executedTools) {
+    for (let ti = 0; ti < executedTools.length; ti++) {
+      const t = executedTools[ti]!;
       const args = t.args as Record<string, unknown> | undefined;
       // Build a signature from the tool name + distinguishing argument values
       const keyParts = [t.name];
@@ -497,6 +505,17 @@ export async function runAgenticLoop(params: {
       if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));
       if (args?.command) keyParts.push(String(args.command).slice(0, 80));
       if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
+
+      // Review tools: append a revision counter so revise-resubmit cycles don't
+      // look like repetition. Each saveBuildEvidence between review calls bumps the counter.
+      if (REVIEW_TOOLS.has(t.name)) {
+        let revisionCount = 0;
+        for (let ri = 0; ri < ti; ri++) {
+          if (executedTools[ri]!.name === "saveBuildEvidence") revisionCount++;
+        }
+        keyParts.push(`rev=${revisionCount}`);
+      }
+
       const sig = keyParts.join(":");
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
     }

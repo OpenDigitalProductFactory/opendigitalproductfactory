@@ -26,6 +26,27 @@ describe("buildPlanReviewPrompt", () => {
     expect(prompt).toContain("lib/filter.ts");
     expect(prompt).toContain("Add filter");
   });
+
+  it("includes comprehensive review instruction to prevent whack-a-mole feedback", () => {
+    const prompt = buildPlanReviewPrompt({
+      fileStructure: [],
+      tasks: [{ title: "Task 1", testFirst: "t", implement: "i", verify: "v" }],
+    });
+    expect(prompt).toContain("MUST report ALL issues in a SINGLE response");
+    expect(prompt).toContain("ZERO surprise issues on a re-review");
+  });
+
+  it("includes task count for reviewer context", () => {
+    const prompt = buildPlanReviewPrompt({
+      fileStructure: [],
+      tasks: [
+        { title: "T1", testFirst: "t", implement: "i", verify: "v" },
+        { title: "T2", testFirst: "t", implement: "i", verify: "v" },
+        { title: "T3", testFirst: "t", implement: "i", verify: "v" },
+      ],
+    });
+    expect(prompt).toContain("TASKS (3 total)");
+  });
 });
 
 describe("buildCodeReviewPrompt", () => {
