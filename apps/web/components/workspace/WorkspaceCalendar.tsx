@@ -12,15 +12,16 @@ import { CalendarEventPopover } from "./CalendarEventPopover";
 import { CalendarDetailPopover } from "./CalendarDetailPopover";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
 
+// Must match CATEGORY_COLORS in calendar-data.ts — use concrete hex, not CSS vars
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
-  hr: { label: "HR", color: "var(--dpf-accent)" },
-  operations: { label: "Operations", color: "var(--dpf-info)" },
-  platform: { label: "Platform", color: "var(--dpf-warning)" },
+  hr: { label: "HR", color: "#a78bfa" },
+  operations: { label: "Operations", color: "#38bdf8" },
+  platform: { label: "Platform", color: "#fb923c" },
   compliance: { label: "Compliance", color: "#e879f9" },
   finance: { label: "Finance", color: "#facc15" },
   business: { label: "Business", color: "#14b8a6" },
-  personal: { label: "Personal", color: "var(--dpf-success)" },
-  external: { label: "External", color: "var(--dpf-muted)" },
+  personal: { label: "Personal", color: "#4ade80" },
+  external: { label: "External", color: "#8888a0" },
 };
 
 const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourceType: string; eventType: string }) => boolean }> = {

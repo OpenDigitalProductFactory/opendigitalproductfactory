@@ -5,7 +5,7 @@
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 import { decryptSecret } from "../govern/credential-crypto";
 
-const PROMETHEUS_POLL_INTERVAL_MS = 60_000;
+const PROMETHEUS_POLL_INTERVAL_MS = 60 * 60_000;
 const FULL_SWEEP_INTERVAL_MS = 60 * 60_000;
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL ?? "http://prometheus:9090";
 
@@ -24,11 +24,11 @@ export async function registerScheduledJobs(): Promise<void> {
       create: {
         jobId: JOB_PROMETHEUS_POLL,
         name:  "Discovery: Prometheus target poll",
-        schedule: "every-1m",
+        schedule: "hourly",
         nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
       },
       update: {
-        schedule: "every-1m",
+        schedule: "hourly",
         nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
       },
     }),
