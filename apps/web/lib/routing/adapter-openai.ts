@@ -90,12 +90,20 @@ export const openAIAdapter: ProviderAdapter = {
 
     const isChatGptDiscovery = raw.source === "chatgpt_backend_discovery";
 
-    // Extract capabilities from ChatGPT backend metadata if available.
-    // toolUse is intentionally false — the ChatGPT backend /codex/responses
-    // endpoint only supports Codex's built-in tools, not custom function tools.
+    // Derive capabilities from the ChatGPT backend API response when available.
+    // The API returns per-model capabilities (e.g. { tools: true, streaming: true }).
+    // For ChatGPT/Codex, "tools" means built-in Codex tools — NOT custom function
+    // tools via the OpenAI-compatible /v1/chat/completions format. The platform
+    // requires custom function tools for agentic tasks, so toolUse stays false.
     const capabilities = { ...EMPTY_CAPABILITIES };
-    if (isChatGptDiscovery) {
-      capabilities.streaming = true;
+    if (isChatGptDiscovery && raw.capabilities) {
+      capabilities.streaming = raw.capabilities.streaming === true ? true : null;
+      capabilities.imageInput = raw.capabilities.image_input === true
+        || raw.capabilities.imageInput === true ? true : null;
+      // ChatGPT backend "tools" = built-in Codex tools, not custom function tools.
+      // Do NOT set toolUse = true here — the Responses API cannot execute custom
+      // function tool calls that the Build Studio and agentic loops require.
+      capabilities.toolUse = false;
     }
 
     return {
