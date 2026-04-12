@@ -9,6 +9,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type { DatesSetArg, EventClickArg } from "@fullcalendar/core";
 import type { CalendarEventView } from "@/lib/calendar-data";
 import { CalendarEventPopover } from "./CalendarEventPopover";
+import { CalendarDetailPopover } from "./CalendarDetailPopover";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
@@ -71,6 +72,14 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
   }, [searchParams, archetypeCategory]);
 
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
+  const [detailPopover, setDetailPopover] = useState<{
+    event: {
+      id: string; title: string; start: string; end: string | null;
+      allDay: boolean; category: string; eventType: string; sourceType: string; color: string;
+      digestCount?: number; digestSchedule?: string; digestLastStatus?: string | null;
+    };
+    anchorRect: { top: number; left: number; width: number; height: number };
+  } | null>(null);
   const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
   const [fetching, setFetching] = useState(false);
 
@@ -120,15 +129,41 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
     }
   }, []);
 
-  // Drill-down: clicking a digest event navigates to day view for that date
+  // Event click: digest → drill-down to day view; all others → detail popover
   const handleEventClick = useCallback((info: EventClickArg) => {
     const eventType = info.event.extendedProps.eventType as string;
+
+    // Digest events drill down to day view
     if (eventType === "recurring-digest") {
       const api = calendarRef.current?.getApi();
       if (api) {
         api.changeView("timeGridDay", info.event.startStr);
       }
+      return;
     }
+
+    // Skip operating-hours (background tint, not interactive)
+    if (eventType === "operating-hours") return;
+
+    // Show detail popover positioned near the clicked element
+    const rect = info.el.getBoundingClientRect();
+    setDetailPopover({
+      event: {
+        id: info.event.id,
+        title: info.event.title,
+        start: info.event.startStr,
+        end: info.event.endStr || null,
+        allDay: info.event.allDay,
+        category: info.event.extendedProps.category as string,
+        eventType,
+        sourceType: info.event.extendedProps.sourceType as string,
+        color: info.event.backgroundColor || "#8888a0",
+        digestCount: info.event.extendedProps.digestCount as number | undefined,
+        digestSchedule: info.event.extendedProps.digestSchedule as string | undefined,
+        digestLastStatus: info.event.extendedProps.digestLastStatus as string | null | undefined,
+      },
+      anchorRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+    });
   }, []);
 
   const filteredEvents = useMemo(() =>
@@ -294,6 +329,14 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
           defaultDate={createPopover.date}
           defaultEndDate={createPopover.endDate}
           onClose={() => setCreatePopover(null)}
+        />
+      )}
+
+      {detailPopover && (
+        <CalendarDetailPopover
+          event={detailPopover.event}
+          anchorRect={detailPopover.anchorRect}
+          onClose={() => setDetailPopover(null)}
         />
       )}
 
