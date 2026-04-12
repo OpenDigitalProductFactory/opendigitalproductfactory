@@ -13,12 +13,12 @@ export type CalendarEventView = {
   start: string;
   end: string | null;
   allDay: boolean;
-  category: string;      // hr | operations | platform | personal | external
-  eventType: string;      // meeting | reminder | deadline | leave | review | timesheet | onboarding | lifecycle | recurring-digest
+  category: string;
+  eventType: string;
   color: string;
-  editable: boolean;      // false for projected events
+  editable: boolean;
   sourceType: "native" | "projected";
-  sourceId?: string;      // original record ID for projected events
+  sourceId?: string;
   /** Present on recurring-digest events — how many occurrences the digest represents. */
   digestCount?: number;
   /** Present on recurring-digest events — job schedule key for client-side expansion. */
