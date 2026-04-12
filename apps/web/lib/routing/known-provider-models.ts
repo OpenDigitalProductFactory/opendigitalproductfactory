@@ -44,6 +44,162 @@ export interface KnownModel {
 }
 
 export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
+  "anthropic-sub": [
+    {
+      modelId: "claude-sonnet-4-6",
+      friendlyName: "Claude Sonnet 4.6",
+      summary:
+        "Anthropic Claude Sonnet 4.6 — best balance of speed and capability for code and tool use",
+      qualityTier: "frontier",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: true,
+        streaming: true,
+        structuredOutput: true,
+        imageInput: true,
+        pdfInput: true,
+        thinking: true,
+        citations: true,
+        promptCaching: true,
+        contextManagement: true,
+      },
+      maxContextTokens: 200_000,
+      maxOutputTokens: 32_000,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "chat",
+      modelFamily: "claude-4",
+      capabilityTier: "advanced",
+      costTier: "$$",
+      bestFor: ["code generation", "tool use", "complex reasoning", "analysis"],
+      avoidFor: [],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 95,
+        codegen: 95,
+        toolFidelity: 95,
+        instructionFollowingScore: 95,
+        structuredOutputScore: 93,
+        conversational: 95,
+        contextRetention: 95,
+      },
+    },
+    {
+      modelId: "claude-opus-4-6",
+      friendlyName: "Claude Opus 4.6",
+      summary:
+        "Anthropic Claude Opus 4.6 — most capable model for deep reasoning and complex tasks",
+      qualityTier: "frontier",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: true,
+        streaming: true,
+        structuredOutput: true,
+        imageInput: true,
+        pdfInput: true,
+        thinking: true,
+        citations: true,
+        promptCaching: true,
+        contextManagement: true,
+      },
+      maxContextTokens: 200_000,
+      maxOutputTokens: 32_000,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "chat",
+      modelFamily: "claude-4",
+      capabilityTier: "advanced",
+      costTier: "$$$",
+      bestFor: ["deep reasoning", "complex code", "architecture", "long context"],
+      avoidFor: [],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 95,
+        codegen: 95,
+        toolFidelity: 95,
+        instructionFollowingScore: 95,
+        structuredOutputScore: 93,
+        conversational: 95,
+        contextRetention: 95,
+      },
+    },
+    {
+      modelId: "claude-haiku-4-5-20251001",
+      friendlyName: "Claude Haiku 4.5",
+      summary:
+        "Anthropic Claude Haiku 4.5 — fast and affordable for general tasks",
+      qualityTier: "strong",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: true,
+        streaming: true,
+        structuredOutput: true,
+        imageInput: true,
+        pdfInput: true,
+        thinking: true,
+        citations: true,
+        promptCaching: true,
+        contextManagement: true,
+      },
+      maxContextTokens: 200_000,
+      maxOutputTokens: 8_192,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "chat",
+      modelFamily: "claude-haiku-4",
+      capabilityTier: "moderate",
+      costTier: "$",
+      bestFor: ["general purpose tasks", "fast responses", "simple tool use"],
+      avoidFor: ["complex code generation", "deep reasoning"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 75,
+        codegen: 75,
+        toolFidelity: 75,
+        instructionFollowingScore: 75,
+        structuredOutputScore: 72,
+        conversational: 75,
+        contextRetention: 72,
+      },
+    },
+    {
+      modelId: "claude-3-haiku-20240307",
+      friendlyName: "Claude Haiku 3",
+      summary:
+        "Anthropic Claude Haiku 3 — legacy model, returns empty via subscription OAuth",
+      qualityTier: "adequate",
+      capabilities: {
+        ...EMPTY_CAPABILITIES,
+        toolUse: true,
+        streaming: true,
+        imageInput: true,
+        promptCaching: true,
+      },
+      maxContextTokens: 200_000,
+      maxOutputTokens: 4_096,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "chat",
+      modelFamily: "claude-3",
+      capabilityTier: "moderate",
+      costTier: "$",
+      bestFor: ["general purpose tasks"],
+      avoidFor: ["complex tasks", "tool use via subscription"],
+      defaultStatus: "retired",
+      retiredReason:
+        "Claude 3 Haiku returns empty responses via subscription OAuth — use Haiku 4.5 instead",
+      scores: {
+        reasoning: 55,
+        codegen: 55,
+        toolFidelity: 55,
+        instructionFollowingScore: 55,
+        structuredOutputScore: 52,
+        conversational: 55,
+        contextRetention: 52,
+      },
+    },
+  ],
+
   codex: [
     {
       modelId: "gpt-5.3-codex",
@@ -53,11 +209,11 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        // toolUse: false — Codex models via ChatGPT backend (/codex/responses)
-        // only support Codex's built-in tools (apply_patch, shell, etc.), not
-        // custom function tools. Setting toolUse=false prevents the routing
-        // pipeline from selecting codex for tasks that need custom tools.
-        toolUse: true,
+        // Codex models via ChatGPT backend (/codex/responses) only support
+        // Codex's built-in tools (apply_patch, shell, etc.), not custom
+        // function tools — mark false so the router never selects codex
+        // for tasks that need custom tools.
+        toolUse: false,
         streaming: true,
         structuredOutput: true,
       },
@@ -161,9 +317,10 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        // toolUse: false — ChatGPT backend /codex/responses does not support
-        // custom function tools. Only Codex's built-in tools work.
-        toolUse: true,
+        // ChatGPT backend /codex/responses does not support custom function
+        // tools. Only Codex's built-in tools work — mark false so the router
+        // never selects this endpoint when tools are required.
+        toolUse: false,
         structuredOutput: true,
         streaming: true,
         imageInput: true,

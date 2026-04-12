@@ -36,15 +36,29 @@ export function extractModelCardWithFallback(
   modelId: string,
   rawMetadata: unknown,
 ): ModelCard {
-  const knownCatalogCard = buildKnownCatalogCard(providerId, modelId, rawMetadata);
-  if (knownCatalogCard) {
-    return knownCatalogCard;
-  }
+  // Prefer live-discovered metadata over the static known catalog.
+  // The known catalog is a fallback for providers that can't be queried dynamically.
+  // If rawMetadata.source indicates live discovery, use the adapter to extract
+  // capabilities from what the provider actually reported.
+  const metadata = (typeof rawMetadata === "object" && rawMetadata !== null && !Array.isArray(rawMetadata))
+    ? rawMetadata as Record<string, unknown>
+    : null;
+  const isLiveDiscovery = metadata?.source != null && metadata.source !== "known_catalog";
 
   const adapter = getAdapter(providerId);
-  const card = adapter
-    ? adapter.extractModelCard(modelId, rawMetadata)
-    : buildFallbackCard(providerId, modelId, rawMetadata);
+  let card: ModelCard;
+
+  if (isLiveDiscovery && adapter) {
+    card = adapter.extractModelCard(modelId, rawMetadata);
+  } else {
+    const knownCatalogCard = buildKnownCatalogCard(providerId, modelId, rawMetadata);
+    if (knownCatalogCard) {
+      return knownCatalogCard;
+    }
+    card = adapter
+      ? adapter.extractModelCard(modelId, rawMetadata)
+      : buildFallbackCard(providerId, modelId, rawMetadata);
+  }
 
   // Fill dimension scores from family baseline if adapter left them at defaults.
   const baseline = getBaselineForModel(modelId);

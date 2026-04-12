@@ -243,12 +243,44 @@ export async function discoverModelsInternal(
   if (!provider) return { discovered: 0, newCount: 0, error: "Provider not found" };
 
   // Codex and ChatGPT subscription providers use the ChatGPT backend
-  // /codex/responses endpoint which does NOT support platform inference
-  // (custom function tools, generic chat). Models are seeded as disabled
-  // via KNOWN_PROVIDER_MODELS. Skip discovery to prevent re-activating them.
+  // /backend-api/models endpoint (not the standard /v1/models). Discover
+  // models from the live API so capabilities come from the provider, not
+  // from hardcoded seed data.
   if (provider.authMethod === "oauth2_authorization_code" &&
       (provider.category === "agent" || providerId === "chatgpt")) {
-    return { discovered: 0, newCount: 0 };
+    const tokenResult = await getProviderBearerToken(providerId);
+    if ("error" in tokenResult) {
+      return { discovered: 0, newCount: 0, error: tokenResult.error };
+    }
+    const headers = { Authorization: `Bearer ${tokenResult.token}` };
+    const result = await discoverChatGptBackendModels(
+      providerId,
+      headers,
+      provider.baseUrl ?? undefined,
+    );
+    if (result.error && result.models.length === 0) {
+      return { discovered: 0, newCount: 0, error: result.error };
+    }
+
+    let newCount = 0;
+    for (const m of result.models) {
+      const existing = await prisma.discoveredModel.findUnique({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      });
+      if (existing) {
+        await prisma.discoveredModel.update({
+          where: { id: existing.id },
+          data: { rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
+        });
+      } else {
+        await prisma.discoveredModel.create({
+          data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
+        });
+        newCount++;
+      }
+    }
+
+    return { discovered: result.models.length, newCount };
   }
 
   const providerRow = {
@@ -531,12 +563,28 @@ export async function profileModelsInternal(
     // EP-INF-003: Drift detection — check if provider metadata changed
     const existingProfile = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { rawMetadataHash: true },
+      select: { rawMetadataHash: true, profileSource: true },
     });
-    if (existingProfile?.rawMetadataHash && existingProfile.rawMetadataHash !== card.rawMetadataHash) {
+    const driftDetected = existingProfile?.rawMetadataHash != null
+      && existingProfile.rawMetadataHash !== card.rawMetadataHash;
+    if (driftDetected) {
       console.log(
-        `[drift] Provider metadata changed for ${providerId}/${m.modelId} — hash ${existingProfile.rawMetadataHash.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
+        `[drift] Provider metadata changed for ${providerId}/${m.modelId} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
       );
+      // For seed-level profiles, allow scores to be re-derived on this sync.
+      // For evaluated/admin profiles, flag for admin review via driftDetectedAt.
+      if (existingProfile.profileSource === "seed") {
+        await prisma.modelProfile.update({
+          where: { providerId_modelId: { providerId, modelId: m.modelId } },
+          data: { driftDetectedAt: new Date() },
+        });
+      } else {
+        await prisma.modelProfile.update({
+          where: { providerId_modelId: { providerId, modelId: m.modelId } },
+          data: { driftDetectedAt: new Date() },
+        });
+        console.log(`[drift] ${providerId}/${m.modelId} has evaluated/admin profile — flagged for review`);
+      }
     }
 
     // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync
@@ -572,6 +620,21 @@ export async function profileModelsInternal(
     const qualityTier = assignTierFromModelId(m.modelId);
     const tierBaseline = TIER_DIMENSION_BASELINES[qualityTier];
 
+    // EP-INF-012b: Use card.dimensionScores (from family-baselines or known catalog)
+    // when available. Fall back to flat tier baselines only when the card has no
+    // family match (dimensionScoreSource === "inferred").
+    const ds = card.dimensionScoreSource !== "inferred"
+      ? card.dimensionScores
+      : {
+          reasoning: tierBaseline.reasoning,
+          codegen: tierBaseline.codegen,
+          toolFidelity: tierBaseline.toolFidelity,
+          instructionFollowing: tierBaseline.instructionFollowing,
+          structuredOutput: tierBaseline.structuredOutput,
+          conversational: tierBaseline.conversational,
+          contextRetention: tierBaseline.contextRetention,
+        };
+
     // Dimension scores — only write on CREATE or when profileSource is still "seed".
     // Never overwrite evaluated or production scores with family baselines.
     const existingFull = existingProfile
@@ -586,13 +649,13 @@ export async function profileModelsInternal(
     const shouldWriteTier = !existingFull?.qualityTierSource || existingFull.qualityTierSource !== "admin";
 
     const scoreFields = shouldWriteScores ? {
-      reasoning: tierBaseline.reasoning,
-      codegen: tierBaseline.codegen,
-      toolFidelity: tierBaseline.toolFidelity,
-      instructionFollowingScore: tierBaseline.instructionFollowing,
-      structuredOutputScore: tierBaseline.structuredOutput,
-      conversational: tierBaseline.conversational,
-      contextRetention: tierBaseline.contextRetention,
+      reasoning: ds.reasoning,
+      codegen: ds.codegen,
+      toolFidelity: ds.toolFidelity,
+      instructionFollowingScore: ds.instructionFollowing,
+      structuredOutputScore: ds.structuredOutput,
+      conversational: ds.conversational,
+      contextRetention: ds.contextRetention,
       profileSource: "seed" as const,
       profileConfidence: card.metadataConfidence,
     } : {
@@ -619,14 +682,14 @@ export async function profileModelsInternal(
         ...metadataFields,
         qualityTier,
         qualityTierSource: "auto",
-        // EP-INF-012: Derive dimension scores from tier baseline
-        reasoning: tierBaseline.reasoning,
-        codegen: tierBaseline.codegen,
-        toolFidelity: tierBaseline.toolFidelity,
-        instructionFollowingScore: tierBaseline.instructionFollowing,
-        structuredOutputScore: tierBaseline.structuredOutput,
-        conversational: tierBaseline.conversational,
-        contextRetention: tierBaseline.contextRetention,
+        // EP-INF-012b: Use card dimension scores (family baseline or known catalog)
+        reasoning: ds.reasoning,
+        codegen: ds.codegen,
+        toolFidelity: ds.toolFidelity,
+        instructionFollowingScore: ds.instructionFollowing,
+        structuredOutputScore: ds.structuredOutput,
+        conversational: ds.conversational,
+        contextRetention: ds.contextRetention,
         profileSource: "seed",
         profileConfidence: card.metadataConfidence,
         generatedBy:          "system:metadata-sync",

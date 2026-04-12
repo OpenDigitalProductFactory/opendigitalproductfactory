@@ -3,19 +3,20 @@
     "providerId": "anthropic-sub",
     "modelId": "claude-3-haiku-20240307",
     "friendlyName": "Claude Haiku 3",
-    "modelStatus": "degraded",
+    "modelStatus": "retired",
+    "retiredReason": "Claude 3 Haiku returns empty responses via subscription OAuth — use Haiku 4.5 instead",
     "capabilityTier": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
     ],
-    "avoidFor": [],
+    "avoidFor": ["complex tasks", "tool use via subscription"],
     "contextWindow": null,
     "speedRating": null,
     "supportsToolUse": true,
     "codingCapability": null,
     "instructionFollowing": null,
-    "modelFamily": null,
+    "modelFamily": "claude-3",
     "modelClass": "chat",
     "maxInputTokens": 200000,
     "inputModalities": [
@@ -57,18 +58,20 @@
     },
     "instructType": null,
     "trainingDataCutoff": null,
-    "codegen": 100,
-    "contextRetention": 50,
-    "conversational": 50,
-    "reasoning": 80,
-    "structuredOutputScore": 67,
-    "toolFidelity": 100,
+    "codegen": 55,
+    "contextRetention": 52,
+    "conversational": 55,
+    "reasoning": 55,
+    "structuredOutputScore": 52,
+    "toolFidelity": 55,
+    "instructionFollowingScore": 55,
     "maxContextTokens": 200000,
-    "maxOutputTokens": null,
+    "maxOutputTokens": 4096,
     "inputPricePerMToken": null,
     "outputPricePerMToken": null,
     "profileConfidence": "medium",
-    "profileSource": "evaluated",
+    "profileSource": "seed",
+    "qualityTier": "adequate",
     "supportedModalities": {
       "input": [
         "text"
@@ -77,7 +80,7 @@
         "text"
       ]
     },
-    "summary": "Claude Haiku 3 by Anthropic - optimized for general purpose tasks"
+    "summary": "Claude Haiku 3 by Anthropic — legacy model, returns empty via subscription OAuth"
   },
   {
     "providerId": "anthropic-sub",
@@ -137,13 +140,13 @@
     "providerId": "anthropic-sub",
     "modelId": "claude-haiku-4-5-20251001",
     "friendlyName": "Claude Haiku 4.5",
-    "modelStatus": "degraded",
+    "modelStatus": "active",
     "capabilityTier": "moderate",
     "costTier": "$",
     "bestFor": [
-      "general purpose tasks"
+      "general purpose tasks", "fast responses", "simple tool use"
     ],
-    "avoidFor": [],
+    "avoidFor": ["complex code generation", "deep reasoning"],
     "contextWindow": null,
     "speedRating": null,
     "supportsToolUse": true,
@@ -153,7 +156,7 @@
     "modelClass": "chat",
     "maxInputTokens": 200000,
     "inputModalities": [
-      "text"
+      "text", "image"
     ],
     "outputModalities": [
       "text"
@@ -191,27 +194,29 @@
     },
     "instructType": null,
     "trainingDataCutoff": null,
-    "codegen": 100,
-    "contextRetention": 50,
-    "conversational": 50,
-    "reasoning": 90,
-    "structuredOutputScore": 100,
-    "toolFidelity": 100,
+    "codegen": 75,
+    "contextRetention": 72,
+    "conversational": 75,
+    "reasoning": 75,
+    "structuredOutputScore": 72,
+    "toolFidelity": 75,
+    "instructionFollowingScore": 75,
     "maxContextTokens": 200000,
-    "maxOutputTokens": null,
+    "maxOutputTokens": 8192,
     "inputPricePerMToken": null,
     "outputPricePerMToken": null,
     "profileConfidence": "medium",
-    "profileSource": "evaluated",
+    "profileSource": "seed",
+    "qualityTier": "strong",
     "supportedModalities": {
       "input": [
-        "text"
+        "text", "image"
       ],
       "output": [
         "text"
       ]
     },
-    "summary": "Claude Haiku 4.5 by Anthropic - optimized for general purpose tasks"
+    "summary": "Claude Haiku 4.5 by Anthropic — fast and affordable for general tasks"
   },
   {
     "providerId": "chatgpt",
@@ -227,11 +232,12 @@
       "reasoning"
     ],
     "avoidFor": [
-      "local-only-required"
+      "local-only-required",
+      "custom-tool-use"
     ],
     "contextWindow": null,
     "speedRating": null,
-    "supportsToolUse": true,
+    "supportsToolUse": false,
     "codingCapability": null,
     "instructionFollowing": null,
     "modelFamily": null,
@@ -245,7 +251,7 @@
       "text"
     ],
     "capabilities": {
-      "toolUse": true,
+      "toolUse": false,
       "streaming": true,
       "imageInput": true,
       "structuredOutput": true
@@ -258,7 +264,7 @@
     "conversational": 80,
     "reasoning": 85,
     "structuredOutputScore": 80,
-    "toolFidelity": 85,
+    "toolFidelity": 10,
     "maxContextTokens": 128000,
     "maxOutputTokens": 16384,
     "inputPricePerMToken": null,
