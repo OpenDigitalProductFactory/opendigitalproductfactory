@@ -160,5 +160,5 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 **Local model not appearing:**
 - Visit the AI Workforce providers page to trigger automatic discovery
-- Verify Docker Model Runner is running: `docker ps | grep model-runner` or check the Ollama endpoint
-- Check that the `ollama` provider status is `active` (not `unconfigured`)
+- Verify Docker Model Runner is running: `docker model list` should return available models
+- Check that the local provider status is `active` (not `unconfigured`) — the provider ID in the database is `ollama` for historical reasons, even when using Docker Model Runner

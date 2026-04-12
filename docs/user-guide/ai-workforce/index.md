@@ -12,7 +12,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 
 ## Key Concepts
 
-- **Provider Registry** — The list of AI providers connected to the platform (e.g., Anthropic, OpenAI, Ollama for local models). Each provider has its own API key, status, and set of available models.
+- **Provider Registry** — The list of AI providers connected to the platform (e.g., Anthropic, OpenAI, Docker Model Runner for local models). Each provider has its own API key, status, and set of available models.
 - **Model Profiles** — Per-model configuration that controls routing behaviour: capability tier, cost sensitivity, latency requirements, and which task types the model is suitable for.
 - **Routing** — The logic that selects which model handles a given request. Routing considers the task type, required capability level, current provider availability, and cost constraints.
 - **Failover Chain** — The ordered sequence of fallback models to use if the primary model is unavailable or returns an error. Failover is automatic and transparent to users.

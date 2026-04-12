@@ -17,14 +17,16 @@ The current platform runtime is a containerized application stack centered on th
 | `postgres` | System of record for transactional platform data |
 | `neo4j` | Graph storage for relationship-rich models such as enterprise architecture and connected capability views |
 | `qdrant` | Vector database for semantic indexing, retrieval, and memory-style AI support |
-| `ollama` | Local AI inference runtime for local-first deployments |
+| `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
+| `redis` | In-memory store backing Inngest's job queue and state |
+| Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. |
 | External AI providers | Optional provider layer used when the tenant enables remote model access |
 
 ### Runtime Characteristics
 
 - `portal` is the only service that needs to be directly exposed to end users in the target customer deployment.
-- `postgres`, `neo4j`, `qdrant`, and `ollama` remain internal services by default.
-- `portal` can route AI work to either local Ollama models or enabled external providers.
+- `postgres`, `neo4j`, and `qdrant` remain internal services by default. Docker Model Runner is built into Docker Desktop and does not run as a separate container.
+- `portal` can route AI work to either local models (via Docker Model Runner) or enabled external providers.
 - Governance, auditability, and human approval sit above the execution layer rather than outside it.
 
 ## Deployment Model 1: Customer Mode
@@ -36,7 +38,7 @@ Customer mode is the target packaged deployment. The platform runs as a containe
 - Everything runs in Docker.
 - Only the web app is published externally, normally on port `3000`.
 - Databases and local AI stay on the internal Docker network.
-- Optional GPU passthrough can be enabled for stronger Ollama performance.
+- Docker Model Runner handles GPU passthrough automatically when a supported GPU is present.
 - Sandbox containers are launched only when needed and are not part of the steady-state runtime.
 
 ### Mermaid Diagram
@@ -52,7 +54,7 @@ flowchart LR
             postgres[(postgres)]
             neo4j[(neo4j)]
             qdrant[(qdrant)]
-            ollama[ollama<br/>optional GPU passthrough]
+            modelrunner[Docker Model Runner<br/>built into Docker Desktop]
             sandbox[sandbox containers<br/>on demand]
         end
     end
@@ -62,7 +64,7 @@ flowchart LR
     portal --> postgres
     portal --> neo4j
     portal --> qdrant
-    portal --> ollama
+    portal --> modelrunner
     portal -. create / inspect / destroy .-> sandbox
 ```
 
@@ -82,7 +84,7 @@ Native developer mode uses the same platform services, but changes the ergonomic
 ### Characteristics
 
 - `portal` runs locally via `pnpm --filter web dev`
-- `postgres`, `neo4j`, `ollama`, and related services remain containerized
+- `postgres`, `neo4j`, and related services remain containerized. Docker Model Runner is built into Docker Desktop.
 - Docker-published ports let the local app connect directly to those services
 - IDE integration and live debugging are first-class in this mode
 - The same sandbox image and sandbox orchestration mechanisms can still be used
@@ -99,7 +101,7 @@ flowchart LR
         subgraph docker["Docker sidecars"]
             postgres[(postgres<br/>:5432)]
             neo4j[(neo4j<br/>:7474 / :7687)]
-            ollama[ollama<br/>:11434]
+            modelrunner[Docker Model Runner<br/>built-in]
             qdrant[(qdrant<br/>internal by default)]
             sandbox[sandbox containers<br/>on demand]
         end
@@ -108,7 +110,7 @@ flowchart LR
     browser --> localapp
     localapp --> postgres
     localapp --> neo4j
-    localapp --> ollama
+    localapp --> modelrunner
     localapp --> qdrant
     localapp -. launch / inspect .-> sandbox
 ```
@@ -326,7 +328,7 @@ The platform supports a broad range of hardware, but the user experience changes
 
 ### Current Local Model Auto-Selection
 
-The current installer and Ollama entrypoint use detected RAM and VRAM to choose a default local model automatically:
+The installer uses detected RAM and VRAM to choose a default local model automatically via Docker Model Runner:
 
 | Hardware signal | Default model |
 |----------------|---------------|
