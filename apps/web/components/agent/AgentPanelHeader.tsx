@@ -32,6 +32,7 @@ type Props = {
   onToggleCoworkerMode?: () => void;
   sensitivityLevel?: string;
   useUnified?: boolean;
+  marketingSkillRules?: Record<string, { visible?: boolean; label?: string; reframe?: string }> | null;
 };
 
 export function AgentPanelHeader({
@@ -58,6 +59,7 @@ export function AgentPanelHeader({
   onViewProfile,
   sensitivityLevel,
   useUnified,
+  marketingSkillRules,
 }: Props) {
   return (
     <div
@@ -84,6 +86,7 @@ export function AgentPanelHeader({
             skills={agent.skills}
             userSkills={[]}
             userContext={userContext}
+            marketingSkillRules={marketingSkillRules}
             onSend={onSend}
             onCreateSkill={() => {}}
           />

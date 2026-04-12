@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { clearConversation, getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
+import { clearConversation, getOrCreateThreadSnapshot, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
@@ -110,12 +110,24 @@ export function AgentCoworkerPanel({
   const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
   const [devMode, setDevMode] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(pathname, userContext);
   const agent = routeAgent;
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
+
+  // Fetch archetype-driven marketing skill rules for the marketing specialist
+  useEffect(() => {
+    if (agent?.agentId !== "marketing-specialist") {
+      setMarketingSkillRules(null);
+      return;
+    }
+    getMarketingSkillRules().then((rules) =>
+      setMarketingSkillRules(rules as Record<string, { visible?: boolean; label?: string; reframe?: string }> | null),
+    );
+  }, [agent?.agentId]);
 
   // Elapsed time counter for thinking indicator
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
@@ -533,6 +545,7 @@ export function AgentCoworkerPanel({
         onToggleCoworkerMode={handleToggleCoworkerMode}
         onViewProfile={() => setShowProfile(true)}
         sensitivityLevel={agent.sensitivity}
+        marketingSkillRules={marketingSkillRules}
       />
 
       {showProfile && (
