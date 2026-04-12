@@ -98,16 +98,39 @@ export async function collectDatabaseMetrics(dbType: "postgres" | "qdrant"): Pro
     return { status, metrics, message: null };
   }
 
-  // Qdrant
+  // Qdrant — check both reachability and collection health
   const upResult = await queryPrometheus('up{job="qdrant"}');
   if (upResult === null) {
     return { status: "unreachable", metrics: {}, message: "Prometheus unreachable" };
   }
   const isUp = parseFloat(upResult?.[0]?.value?.[1] ?? "0") === 1;
+  if (!isUp) {
+    return { status: "critical", metrics: { reachable: false }, message: "Qdrant vector DB is unreachable" };
+  }
+
+  // Check collection existence and point counts
+  const qdrantUrl = process.env.QDRANT_INTERNAL_URL ?? process.env.QDRANT_URL ?? "http://localhost:6333";
+  let agentMemoryPoints = 0;
+  let collectionsExist = false;
+  try {
+    const res = await fetch(`${qdrantUrl}/collections/agent-memory`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      collectionsExist = true;
+      const data = await res.json() as { result?: { points_count?: number } };
+      agentMemoryPoints = data.result?.points_count ?? 0;
+    }
+  } catch { /* non-fatal */ }
+
+  const metrics: Record<string, number | boolean | string> = {
+    reachable: true,
+    collections_exist: collectionsExist,
+    agent_memory_points: agentMemoryPoints,
+  };
+
   return {
-    status: isUp ? "healthy" : "critical",
-    metrics: { reachable: isUp },
-    message: isUp ? null : "Qdrant vector DB is unreachable",
+    status: collectionsExist ? "healthy" : "warning",
+    metrics,
+    message: collectionsExist ? null : "Qdrant reachable but memory collections not initialized — semantic memory is not storing data",
   };
 }
 

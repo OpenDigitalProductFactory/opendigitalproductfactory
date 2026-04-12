@@ -36,7 +36,12 @@ export async function storeConversationMemory(params: {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "store" });
   try {
     const embedding = await generateEmbedding(params.content);
-    if (!embedding) { endTimer(); return; } // silently skip if embedding unavailable
+    if (!embedding) {
+      semanticMemoryOps.inc({ operation: "store", status: "skipped" });
+      console.warn("[semantic-memory] store skipped — embedding unavailable");
+      endTimer();
+      return;
+    }
 
     await upsertVectors(QDRANT_COLLECTIONS.AGENT_MEMORY, [
       {
@@ -73,11 +78,17 @@ export async function recallRelevantContext(params: {
   currentThreadId?: string;
   routeContext?: string;
   limit?: number;
+  excludeMessageIds?: Set<string>;
 }): Promise<string | null> {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "recall" });
   try {
     const embedding = await generateEmbedding(params.query);
-    if (!embedding) { endTimer(); return null; }
+    if (!embedding) {
+      semanticMemoryOps.inc({ operation: "recall", status: "skipped" });
+      console.warn("[semantic-memory] recall skipped — embedding unavailable");
+      endTimer();
+      return null;
+    }
 
     const limit = params.limit ?? 8;
     const threshold = 0.55; // lower threshold — more recall to compensate for short message window
@@ -125,6 +136,14 @@ export async function recallRelevantContext(params: {
       // Re-sort by score descending and trim to limit
       results.sort((a, b) => b.score - a.score);
       results = results.slice(0, limit);
+    }
+
+    // Deduplicate: remove results whose messageId is already in the chat window
+    if (params.excludeMessageIds && params.excludeMessageIds.size > 0) {
+      results = results.filter((r) => {
+        const mid = String(r.payload["messageId"] ?? "");
+        return !params.excludeMessageIds!.has(mid);
+      });
     }
 
     semanticMemoryOps.inc({ operation: "recall", status: "success" });

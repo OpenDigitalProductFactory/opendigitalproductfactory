@@ -257,12 +257,27 @@ export async function sendMessage(input: {
   const isBuildPhase = input.routeContext === "/build";
   const RECENT_WINDOW = isBuildPhase ? 20 : 8;
   const recentMessages = await prisma.agentMessage.findMany({
-    where: { threadId: input.threadId },
+    where: { threadId: input.threadId, role: { in: ["user", "assistant"] } },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
-    select: { role: true, content: true },
+    select: { id: true, role: true, content: true },
   });
-  const chatHistory: ChatMessage[] = recentMessages.reverse().map((m) => ({
+  // Token-aware trimming: keep newest messages up to a token budget.
+  // Prevents 8 long messages from overwhelming context.
+  const CHAT_HISTORY_TOKEN_BUDGET = isBuildPhase ? 4000 : 2000;
+  const reversed = recentMessages.reverse();
+  let historyTokens = 0;
+  const trimmedMessages: typeof reversed = [];
+  // Walk from newest (end) to oldest, accumulating tokens
+  for (let i = reversed.length - 1; i >= 0; i--) {
+    const msgTokens = Math.ceil(reversed[i]!.content.length / 4);
+    if (historyTokens + msgTokens > CHAT_HISTORY_TOKEN_BUDGET && trimmedMessages.length >= 2) break;
+    trimmedMessages.unshift(reversed[i]!);
+    historyTokens += msgTokens;
+  }
+  // Track message IDs for semantic recall dedup
+  const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
+  const chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
@@ -319,13 +334,15 @@ export async function sendMessage(input: {
     const factsContext = formatFactsAsContext(userFacts);
     const factsCompressed = formatFactsCompressed(userFacts);
 
-    // Semantic memory: recall relevant context from past conversations, scoped to current route
+    // Semantic memory: recall relevant context from past conversations, scoped to current route.
+    // Pass excludeMessageIds to avoid duplicating content already in the chat window.
     const { recallRelevantContext } = await import("@/lib/semantic-memory");
     const recalledContext = await recallRelevantContext({
       query: input.content,
       userId: user.id!,
       routeContext: input.routeContext,
       limit: 8,
+      excludeMessageIds: windowMessageIds,
     }).catch(() => null);
 
     // Build compressed version: top 3 results only
@@ -366,21 +383,15 @@ export async function sendMessage(input: {
         tier: "L2" as const, priority: 3, content: knowledgePointers, tokenCount: countTokens(knowledgePointers),
         source: "knowledge", compressible: true, compressedContent: "", compressedTokenCount: 0,
       }] : []),
-      // L2: Attachments (Block 7 — no longer duplicated in user message)
-      ...(attachmentContext ? [{
-        tier: "L2" as const, priority: 4, content: attachmentContext, tokenCount: countTokens(attachmentContext),
-        source: "attachments", compressible: true,
-        compressedContent: attachmentContext.slice(0, 600),
-        compressedTokenCount: countTokens(attachmentContext.slice(0, 600)),
-      }] : []),
+      // L2: Attachments — already injected inline in the last user message (lines 273-283)
+      // for better LLM attention. Do NOT duplicate here in the system prompt.
+      // See EP-CTX-001: attachment dedup.
     ];
 
     const result = arbitrate(contextSources, budget);
 
-    // Debug logging in development
-    if (process.env.NODE_ENV === "development") {
-      console.log(formatArbitrationLog(result, budget));
-    }
+    // Context arbitration logging — always on for operator visibility
+    console.log(formatArbitrationLog(result, budget));
 
     // Reconstruct domain context and route data from selected sources
     const selectedDomain = result.selected.find((s) => s.source === "domain")?.content ?? routeCtx.domainContext;
@@ -1187,12 +1198,14 @@ export async function sendMessage(input: {
     // Skip trivial messages that add noise to semantic search
     const isSubstantive = (text: string) => text.length > 15 && !/^(?:ok|yes|no|thanks|thank you|sure|got it|hello|hi|hey)$/i.test(text.trim());
     if (isSubstantive(trimmedContent)) {
-      storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" }).catch(() => {});
+      storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" })
+        .catch((e) => console.warn("[memory-store] user:", e instanceof Error ? e.message : String(e)));
     }
     if (isSubstantive(responseContent)) {
-      storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" }).catch(() => {});
+      storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" })
+        .catch((e) => console.warn("[memory-store] assistant:", e instanceof Error ? e.message : String(e)));
     }
-  }).catch(() => {});
+  }).catch((e) => console.warn("[memory-store] import failed:", e instanceof Error ? e.message : String(e)));
 
   // Fire-and-forget: extract user facts from substantive user messages
   if (trimmedContent.length > 30) {
@@ -1202,8 +1215,8 @@ export async function sendMessage(input: {
         messageContent: trimmedContent,
         routeContext: input.routeContext,
         messageId: userMsg.id,
-      }).catch(() => {});
-    }).catch(() => {});
+      }).catch((e) => console.warn("[user-facts] extract failed:", e instanceof Error ? e.message : String(e)));
+    }).catch((e) => console.warn("[user-facts] import failed:", e instanceof Error ? e.message : String(e)));
   }
 
   // Fire-and-forget: process observer
