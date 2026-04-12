@@ -2,7 +2,7 @@
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
 
-const EMBEDDING_MODEL = "ai/nomic-embed-text";
+const EMBEDDING_MODEL = "ai/nomic-embed-text-v1.5";
 const MAX_INPUT_LENGTH = 8192;
 
 function getLlmBaseUrl(): string {
@@ -63,7 +63,7 @@ export async function isEmbeddingAvailable(): Promise<boolean> {
     const res = await fetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: Array<{ id: string }> };
-    return data.data?.some((m) => m.id.includes("nomic-embed") || m.id.includes("embed")) ?? false;
+    return data.data?.some((m) => m.id.includes("nomic-embed-text") || m.id.includes("embed")) ?? false;
   } catch {
     return false;
   }
