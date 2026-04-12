@@ -97,7 +97,7 @@ export async function getIssueReports(filters?: {
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { reportedBy: { select: { id: true, name: true, email: true } } },
+      include: { reportedBy: { select: { id: true, email: true } } },
     }),
     prisma.platformIssueReport.count({ where }),
   ]);
