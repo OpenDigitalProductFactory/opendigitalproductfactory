@@ -18,8 +18,8 @@ import { computeMetadataHash } from "./metadata-hash";
 
 /**
  * Extract the model family from a model ID.
- * Docker Model Runner: "ai/llama3.2:1B-Q8_0" → "llama3.2"
- * Ollama legacy:       "llama3.1:latest"      → "llama3.1"
+ * Docker Model Runner: "ai/gemma4" → "gemma4"
+ * Ollama legacy:       "gemma4:27b" → "gemma4"
  */
 function extractModelFamily(modelId: string): string | null {
   // Strip namespace prefix (e.g., "ai/")
@@ -41,7 +41,7 @@ const TOOL_CAPABLE_FAMILIES = new Set([
   "llama3.1", "llama3.2", "llama3.3", "llama4",
   "qwen2.5", "qwen3",
   "mistral", "mixtral", "mistral-small", "mistral-nemo",
-  "gemma2", "gemma3",
+  "gemma2", "gemma3", "gemma4",
   "phi4",
   "command-r",
   "deepseek-v2", "deepseek-v3",

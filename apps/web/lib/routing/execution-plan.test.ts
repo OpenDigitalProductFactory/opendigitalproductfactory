@@ -207,6 +207,16 @@ describe("buildPlanFromRecipe", () => {
     const plan = buildPlanFromRecipe(recipe, makeContract());
     expect(plan.executionAdapter).toBe("responses");
   });
+
+  it("overrides anthropic-sub recipes to the claude-cli adapter", () => {
+    const recipe = makeRecipe({
+      providerId: "anthropic-sub",
+      modelId: "claude-sonnet-4-6",
+      executionAdapter: "chat",
+    });
+    const plan = buildPlanFromRecipe(recipe, makeContract());
+    expect(plan.executionAdapter).toBe("claude-cli");
+  });
 });
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────
@@ -324,5 +334,13 @@ describe("buildDefaultPlan", () => {
   it("defaults to chat adapter when requiredModelClass is absent", () => {
     const plan = buildDefaultPlan(makeEndpoint(), makeContract());
     expect(plan.executionAdapter).toBe("chat");
+  });
+
+  it("selects claude-cli adapter for anthropic-sub endpoints", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({ providerId: "anthropic-sub", modelId: "claude-sonnet-4-6" }),
+      makeContract(),
+    );
+    expect(plan.executionAdapter).toBe("claude-cli");
   });
 });

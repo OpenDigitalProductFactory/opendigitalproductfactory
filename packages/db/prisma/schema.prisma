@@ -1135,6 +1135,7 @@ model ModelProfile {
   metadataConfidence        String        @default("low")
   lastMetadataRefresh       DateTime?
   rawMetadataHash           String?
+  driftDetectedAt           DateTime?
   provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
 
   @@unique([providerId, modelId])
@@ -2268,6 +2269,7 @@ model FeatureBuild {
   buildPlan             Json?
   planReview            Json?
   taskResults           Json?
+  taskResultsVersion    Int               @default(0)
   verificationOut       Json?
   acceptanceMet         Json?
   accountableEmployeeId String?
@@ -2466,18 +2468,29 @@ model TaskNodeEdge {
 }
 
 model FeaturePack {
-  id               String   @id @default(cuid())
-  packId           String   @unique
-  title            String
-  description      String?
-  portfolioContext String?
-  version          String   @default("1.0.0")
-  manifest         Json
-  screenshot       String?
-  buildId          String?
-  status           String   @default("local")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  packId              String    @unique
+  title               String
+  description         String?
+  portfolioContext    String?
+  version             String    @default("1.0.0")
+  manifest            Json
+  screenshot          String?
+  buildId             String?
+  status              String    @default("local")
+
+  // Contribution review results (populated by contribution-review pipeline)
+  mergeReadiness      String?   // "ready" | "needs-work" | "blocked"
+  applicableVerticals String[]  // archetype categories, e.g. ["pet-services", "healthcare-wellness"]
+  sourceVertical      String?   // contributing org's industry
+  reusabilityScope    String?   // "one_off" | "parameterizable" | "already_generic"
+  prUrl               String?   // GitHub PR URL
+  prNumber            Int?      // GitHub PR number
+  reviewReport        Json?     // Full structured ContributionReviewResult
+  reviewedAt          DateTime?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 model PlatformConfig {

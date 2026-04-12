@@ -1,7 +1,7 @@
 // apps/web/lib/actions/ollama-management.ts
 // Local model management server actions.
 // With Docker Model Runner, model pull/delete is done via Docker Desktop CLI:
-//   docker model pull ai/llama3.2:1B-Q8_0
+//   docker model pull ai/gemma4
 //   docker model list
 //   docker model rm <model>
 // This file provides read-only listing via the OpenAI-compatible API.
@@ -67,9 +67,9 @@ export async function getOllamaRunningModels(): Promise<{ models: OllamaRunningM
 
 // Model pull/delete are handled via Docker Desktop CLI, not through the app
 export async function pullOllamaModel(_modelName: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: "Use 'docker model pull <name>' from the command line to add models." };
+  return { success: false, error: "Run: .\\scripts\\manage-local-models.ps1 pull <name> — or: docker model pull <name>. Models are auto-discovered daily at 4 AM." };
 }
 
 export async function deleteOllamaModel(_modelName: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: "Use 'docker model rm <name>' from the command line to remove models." };
+  return { success: false, error: "Run: .\\scripts\\manage-local-models.ps1 rm <name> — or: docker model rm <name>. Removed models are retired at next sync." };
 }

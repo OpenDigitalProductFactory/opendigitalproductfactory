@@ -13,6 +13,13 @@ export function isOpenAI(providerId: string): boolean {
   return providerId === "openai" || providerId.startsWith("openai-");
 }
 
+export function usesCliAdapter(providerId: string): boolean {
+  // anthropic-sub uses Claude Code CLI instead of direct HTTP to /v1/messages.
+  // OAuth tokens are not supported on the direct Messages API — the CLI routes
+  // through Anthropic's subscription infrastructure with generous rate limits.
+  return providerId === "anthropic-sub";
+}
+
 export function usesResponsesApi(providerId: string): boolean {
   // Both codex and chatgpt require the Responses API.
   // Codex models (gpt-5.3-codex, gpt-5.4, codex-mini) are Responses-only — Chat Completions

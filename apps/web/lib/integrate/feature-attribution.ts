@@ -7,6 +7,7 @@
 import { prisma } from "@dpf/db";
 import {
   scoreTaxonomyCandidates,
+  flattenEnrichmentForScoring,
   type TaxonomyNodeCandidate,
   type RankedTaxonomyCandidate,
 } from "@dpf/db/discovery-attribution";
@@ -114,14 +115,16 @@ export async function attributeFeatureBuild(
       status: "active",
       ...(portfolioId ? { portfolioId } : {}),
     },
-    select: { id: true, nodeId: true, name: true, portfolioId: true, description: true },
+    select: { id: true, nodeId: true, name: true, portfolioId: true, description: true, enrichment: true },
   });
 
-  // Convert to TaxonomyNodeCandidate format with description appended to name for richer matching
+  // Convert to TaxonomyNodeCandidate format with description and enrichment for richer matching
   const candidates: TaxonomyNodeCandidate[] = nodes.map((n) => ({
     nodeId: n.nodeId,
     name: n.description ? `${n.name} ${n.description}` : n.name,
     portfolioSlug: null,
+    description: n.description,
+    enrichmentText: flattenEnrichmentForScoring(n.enrichment as Record<string, unknown> | null),
   }));
 
   // 3. Score candidates using the shared heuristic pipeline

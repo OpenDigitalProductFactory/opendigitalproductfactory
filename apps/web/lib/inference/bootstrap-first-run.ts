@@ -41,32 +41,43 @@ export async function seedOnboardingAgent(): Promise<void> {
 }
 
 /**
- * Select the best model to auto-pull based on available VRAM.
- * Leaves 30%+ VRAM headroom per project convention.
+ * Gemma 4 model tiers ordered largest-first.
+ * Each entry specifies the Docker Model Runner tag and the minimum VRAM
+ * required to run it at Q4 quantization with ~30% headroom.
  *
- * Tiers (Q4 quantization, ~0.5-0.7 GB per billion params):
- *   - 8GB+ VRAM  → llama3.1:8b   (needs ~5GB, leaves ~3GB headroom)
- *   - 4-8GB VRAM → phi3:mini     (needs ~2.3GB, leaves headroom)
- *   - <4GB / CPU  → tinyllama    (needs ~0.6GB, runs on anything)
+ * Sizing estimates (Q4_K_M quantization, ~0.55 GB per billion params):
+ *   - ai/gemma4  (31B dense)     → ~18 GB VRAM → needs 24 GB+ GPU
+ *   - ai/gemma3  (12B)           → ~7 GB  VRAM → needs 10 GB+ GPU
+ *   - ai/gemma3  (4B tag)        → ~2.5 GB     → needs 4 GB+ GPU
+ *   - tinyllama  (1.1B fallback) → ~0.6 GB     → runs on anything
+ */
+const MODEL_TIERS: { model: string; minVramGb: number }[] = [
+  { model: "ai/gemma4",   minVramGb: 20 },  // 31B — RTX 4090 / A6000+
+  { model: "ai/gemma3",   minVramGb: 8 },   // 12B default — RTX 3060+
+  { model: "ai/gemma3",   minVramGb: 4 },   // 4B variant — budget GPUs
+  { model: "tinyllama",   minVramGb: 0 },   // CPU-only fallback
+];
+
+/**
+ * Select the largest Gemma model that fits available VRAM.
+ * Walks the tier list top-down and picks the first model whose
+ * minimum VRAM requirement is satisfied by the detected hardware.
  */
 async function selectModelForHardware(baseUrl: string): Promise<string> {
   try {
     const hwInfo = await getOllamaHardwareInfo(baseUrl);
-    const vram = hwInfo?.vramGb;
+    const vram = hwInfo?.vramGb ?? 0;
 
-    if (vram == null || vram < 4) {
-      // CPU-only or very low VRAM — smallest viable model
-      return "tinyllama";
+    for (const tier of MODEL_TIERS) {
+      if (vram >= tier.minVramGb) {
+        return tier.model;
+      }
     }
-    if (vram < 8) {
-      // Mid-range — small but capable
-      return "phi3:mini";
-    }
-    // 8GB+ — standard recommendation
-    return "llama3.1:8b";
+    // Should never reach here (last tier has minVramGb=0), but be safe
+    return "tinyllama";
   } catch {
-    // Can't detect hardware — use safe default
-    return "llama3.1:8b";
+    // Can't detect hardware — use mid-range default
+    return "ai/gemma3";
   }
 }
 

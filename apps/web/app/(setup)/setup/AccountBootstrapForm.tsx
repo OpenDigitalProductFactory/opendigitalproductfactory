@@ -61,7 +61,6 @@ export function AccountBootstrapForm({ setupId }: Props) {
 
         // Redirect to the first real portal route (AI providers)
         router.push("/platform/ai/providers");
-        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }

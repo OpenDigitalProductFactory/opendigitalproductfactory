@@ -47,27 +47,28 @@ if [ "$MODEL_COUNT" = "0" ]; then
 
   # 6. Select model — use installer's choice if provided, else auto-detect.
   #    OLLAMA_DEFAULT_MODEL is set by install-dpf.ps1 via SELECTED_MODEL in .env.
+  #    Picks the largest Gemma 4/3 variant that fits available hardware.
   if [ -n "$OLLAMA_DEFAULT_MODEL" ]; then
     MODEL="$OLLAMA_DEFAULT_MODEL"
     echo "Using installer-selected model: $MODEL"
-  elif [ "$VRAM_MB" -ge 16000 ]; then
-    MODEL="qwen3:32b"
-    echo "Selecting qwen3:32b — fits in ${VRAM_MB}MB VRAM"
+  elif [ "$VRAM_MB" -ge 20000 ]; then
+    MODEL="gemma4:27b"
+    echo "Selecting gemma4:27b — fits in ${VRAM_MB}MB VRAM"
   elif [ "$VRAM_MB" -ge 8000 ]; then
-    MODEL="qwen3:14b"
-    echo "Selecting qwen3:14b — fits in ${VRAM_MB}MB VRAM"
+    MODEL="gemma3:12b"
+    echo "Selecting gemma3:12b — fits in ${VRAM_MB}MB VRAM"
   elif [ "$VRAM_MB" -ge 4000 ]; then
-    MODEL="qwen3:8b"
-    echo "Selecting qwen3:8b — fits in ${VRAM_MB}MB VRAM"
+    MODEL="gemma3:4b"
+    echo "Selecting gemma3:4b — fits in ${VRAM_MB}MB VRAM"
   elif [ "$TOTAL_RAM_MB" -ge 16000 ]; then
-    MODEL="qwen3:8b"
-    echo "Selecting qwen3:8b — no GPU, using ${TOTAL_RAM_MB}MB system RAM"
+    MODEL="gemma3:4b"
+    echo "Selecting gemma3:4b — no GPU, using ${TOTAL_RAM_MB}MB system RAM"
   elif [ "$TOTAL_RAM_MB" -ge 8000 ]; then
-    MODEL="qwen3:1.7b"
-    echo "Selecting qwen3:1.7b — no GPU, using ${TOTAL_RAM_MB}MB system RAM"
+    MODEL="gemma3:1b"
+    echo "Selecting gemma3:1b — no GPU, using ${TOTAL_RAM_MB}MB system RAM"
   else
-    MODEL="qwen3:0.6b"
-    echo "Selecting qwen3:0.6b — constrained hardware (${TOTAL_RAM_MB}MB RAM)"
+    MODEL="gemma3:1b"
+    echo "Selecting gemma3:1b — constrained hardware (${TOTAL_RAM_MB}MB RAM)"
   fi
 
   echo "Pulling $MODEL..."

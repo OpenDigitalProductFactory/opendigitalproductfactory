@@ -236,7 +236,8 @@
       "llama3.2",
       "mistral",
       "phi3",
-      "gemma2"
+      "gemma2",
+      "gemma4"
     ],
     "computeWatts": 150,
     "electricityRateKwh": 0.12,

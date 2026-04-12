@@ -19,6 +19,8 @@ export type TaxonomyNodeCandidate = {
   nodeId: string;
   name: string;
   portfolioSlug?: string | null;
+  description?: string | null;
+  enrichmentText?: string | null;
 };
 
 export type RankedTaxonomyCandidate = TaxonomyNodeCandidate & {
@@ -186,6 +188,21 @@ function findRuleMatch(
   };
 }
 
+export function flattenEnrichmentForScoring(enrichment: Record<string, unknown> | null | undefined): string {
+  if (!enrichment) return "";
+  const parts: string[] = [];
+  for (const [key, val] of Object.entries(enrichment)) {
+    if (key === "industryMarkets" && val && typeof val === "object") {
+      for (const text of Object.values(val as Record<string, string>)) {
+        if (text) parts.push(text);
+      }
+    } else if (typeof val === "string" && val.trim()) {
+      parts.push(val);
+    }
+  }
+  return parts.join(" ");
+}
+
 export function buildDiscoveryDescriptor(input: InventoryAttributionInput): string {
   const propertiesText = toSentence(input.properties ?? {});
   return [input.entityType, input.itemType, input.name, propertiesText]
@@ -203,18 +220,38 @@ export function scoreTaxonomyCandidates(
 
   return taxonomyNodes
     .map((node) => {
-      const labelText = `${node.name} ${node.nodeId.split("/").join(" ")}`;
-      const nodeTokens = tokenize(labelText);
-      const overlap = nodeTokens.filter((token) => descriptorTokenSet.has(token));
-      const nodeCoverage = nodeTokens.length > 0 ? overlap.length / nodeTokens.length : 0;
-      const descriptorCoverage = descriptorTokens.length > 0 ? overlap.length / descriptorTokens.length : 0;
+      // Core label: name + path segments (high weight)
+      const coreText = `${node.name} ${node.nodeId.split("/").join(" ")}`;
+      const coreTokens = tokenize(coreText);
+      const coreOverlap = coreTokens.filter((token) => descriptorTokenSet.has(token));
+
+      // Enrichment text: description + offering/market context (lower weight to prevent dilution)
+      const enrichmentParts = [node.description ?? "", node.enrichmentText ?? ""].filter(Boolean).join(" ");
+      const enrichmentTokens = tokenize(enrichmentParts);
+      const enrichmentTokenSet = new Set(enrichmentTokens);
+      // Only count enrichment tokens that are NOT already in the core
+      const coreTokenSet = new Set(coreTokens);
+      const enrichmentOnlyTokens = enrichmentTokens.filter((t) => !coreTokenSet.has(t));
+      const enrichmentOnlyOverlap = enrichmentOnlyTokens.filter((t) => descriptorTokenSet.has(t));
+
+      // Combined coverage: core tokens at full weight, enrichment-only at 0.5x
+      const allTokens = coreTokens.length + enrichmentOnlyTokens.length * 0.5;
+      const allOverlap = coreOverlap.length + enrichmentOnlyOverlap.length * 0.5;
+      const nodeCoverage = allTokens > 0 ? allOverlap / allTokens : 0;
+
+      // Descriptor coverage: how much of the query is explained by this node
+      const combinedTokenSet = new Set([...coreTokenSet, ...enrichmentTokenSet]);
+      const descriptorOverlap = descriptorTokens.filter((t) => combinedTokenSet.has(t));
+      const descriptorCoverage = descriptorTokens.length > 0 ? descriptorOverlap.length / descriptorTokens.length : 0;
+
       const phraseBonus = descriptorText.includes(normalizeToken(node.name)) ? 0.2 : 0;
       const score = Math.min(0.95, Number((nodeCoverage * 0.7 + descriptorCoverage * 0.3 + phraseBonus).toFixed(3)));
 
+      const evidence = [...coreOverlap, ...enrichmentOnlyOverlap];
       return {
         ...node,
         score,
-        evidence: overlap.length > 0 ? overlap : ["fallback_candidate"],
+        evidence: evidence.length > 0 ? evidence : ["fallback_candidate"],
       };
     })
     .sort((left, right) => right.score - left.score)

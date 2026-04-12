@@ -8,6 +8,7 @@ import { sendMessage } from "@/lib/actions/agent-coworker";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
+// Note: this route uses the sync version since it only needs agentId for message logging
 import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";

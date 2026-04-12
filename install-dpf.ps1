@@ -1051,25 +1051,24 @@ if (-not (Is-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select a Docker Model Runner model that fits comfortably in VRAM.
+    # Select the largest Gemma 4 model that fits available VRAM.
     # Docker Model Runner uses Docker Desktop's built-in GPU passthrough.
-    # Model IDs use the ai/ namespace WITHOUT Ollama-style quantization tags.
-    # Docker Model Runner selects the best quantization internally.
-    if ($gpuVRAM_GB -ge 6) {
-        $selectedModel = "ai/llama3.1"
-        $modelReason = "high-quality chat -- fits in your GPU memory"
-    } elseif ($gpuVRAM_GB -ge 3) {
-        $selectedModel = "ai/llama3.2"
-        $modelReason = "balanced quality, GPU-accelerated"
+    # Model IDs use the ai/ namespace -- Docker Model Runner picks quantization.
+    if ($gpuVRAM_GB -ge 20) {
+        $selectedModel = "ai/gemma4"
+        $modelReason = "Gemma 4 31B -- best quality, fits your $gpuVRAM_GB GB VRAM"
+    } elseif ($gpuVRAM_GB -ge 8) {
+        $selectedModel = "ai/gemma3"
+        $modelReason = "Gemma 3 12B -- strong quality, GPU-accelerated"
+    } elseif ($gpuVRAM_GB -ge 4) {
+        $selectedModel = "ai/gemma3"
+        $modelReason = "Gemma 3 4B -- balanced quality, GPU-accelerated"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "ai/llama3.1"
-        $modelReason = "high-quality chat, fits your RAM (CPU mode)"
-    } elseif ($totalRAM_GB -ge 8) {
-        $selectedModel = "ai/llama3.2"
-        $modelReason = "fast, works well on your hardware"
+        $selectedModel = "ai/gemma3"
+        $modelReason = "Gemma 3 -- fits your RAM (CPU mode)"
     } else {
-        $selectedModel = "ai/llama3.2"
-        $modelReason = "lightweight, optimized for your hardware"
+        $selectedModel = "ai/gemma3"
+        $modelReason = "Gemma 3 -- lightweight, runs on your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Models are managed by Docker Model Runner (built into Docker Desktop)."
@@ -1102,7 +1101,7 @@ if (-not (Is-StepDone "hardware")) {
 } else {
     Write-OK "Already detected"
     $selectedModel = Get-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
-    if (-not $selectedModel) { $selectedModel = "ai/llama3.2" }
+    if (-not $selectedModel) { $selectedModel = "ai/gemma3" }
 }
 
 # --- Generate .env -------------------------------------------------------------

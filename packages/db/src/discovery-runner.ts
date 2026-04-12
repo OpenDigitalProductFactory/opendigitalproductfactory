@@ -15,6 +15,7 @@ import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
 } from "./discovery-inference";
+import { flattenEnrichmentForScoring } from "./discovery-attribution";
 import { runConnectionCollectors, type DecryptFn } from "./discovery-runners/connection-collectors";
 import { prisma } from "./client";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
@@ -93,15 +94,20 @@ export async function executeBootstrapDiscovery(
 
   const taxonomyNodes = options.taxonomyNodes
     ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
-      ? await ((db as unknown) as {
+      ? (await ((db as unknown) as {
           taxonomyNode: {
             findMany(args: {
-              select: { nodeId: true; name: true };
-            }): Promise<Array<{ nodeId: string; name: string }>>;
+              select: { nodeId: true; name: true; description: true; enrichment: true };
+            }): Promise<Array<{ nodeId: string; name: string; description: string | null; enrichment: unknown }>>;
           };
         }).taxonomyNode.findMany({
-          select: { nodeId: true, name: true },
-        })
+          select: { nodeId: true, name: true, description: true, enrichment: true },
+        })).map((n) => ({
+          nodeId: n.nodeId,
+          name: n.name,
+          description: n.description,
+          enrichmentText: flattenEnrichmentForScoring(n.enrichment as Record<string, unknown> | null),
+        }))
       : undefined);
   const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected, {
     ...(taxonomyNodes ? { taxonomyNodes } : {}),

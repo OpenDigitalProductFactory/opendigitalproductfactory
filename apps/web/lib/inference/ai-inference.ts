@@ -25,6 +25,7 @@ import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" ada
 import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
 import "../routing/async-adapter"; // EP-INF-009d: registers "async" adapter
+import "../routing/cli-adapter"; // anthropic-sub: registers "claude-cli" adapter
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -263,9 +264,6 @@ export async function callProvider(
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
-  const baseUrl = await resolveExecutionBaseUrl(providerId, provider);
-  if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
-  const headers = await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
   // 2. Build minimal plan if none provided (backward compat)
   const effectivePlan: RoutedExecutionPlan = plan ?? {
@@ -279,6 +277,13 @@ export async function callProvider(
     toolPolicy: {},
     responsePolicy: {},
   };
+
+  // CLI adapter (anthropic-sub) resolves its own auth via the credential store
+  // and spawns Claude Code CLI — it does not need HTTP base URL or auth headers.
+  const isCliAdapter = effectivePlan.executionAdapter === "claude-cli";
+  const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
+  if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
+  const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
