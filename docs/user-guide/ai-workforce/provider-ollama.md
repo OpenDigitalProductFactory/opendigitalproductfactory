@@ -1,14 +1,16 @@
 ---
-title: "Local AI (Docker Model Runner / Ollama)"
+title: "Local AI — Docker Model Runner"
 area: ai-workforce
 order: 5
-lastUpdated: "2026-03-22"
-updatedBy: "Claude (COO)"
+lastUpdated: "2026-04-11"
+updatedBy: "Claude (Truth-Alignment Lead)"
 ---
 
 ## Overview
 
-Docker Model Runner provides local AI inference using models that run directly on your machine via Docker Desktop. Data never leaves your computer, making it suitable for all sensitivity levels including confidential and restricted data.
+Docker Model Runner is the default local AI runtime. It provides inference using models that run directly on your machine via Docker Desktop 4.40+. Data never leaves your computer, making it suitable for all sensitivity levels including confidential and restricted data.
+
+If you prefer to use Ollama instead, see [Using Ollama Instead (BYOP)](#using-ollama-instead-byop) below.
 
 ## How It Works
 
@@ -23,7 +25,7 @@ The local provider is pre-configured and activates automatically when Docker Mod
 Models must be pulled before they can be used:
 
 ```
-docker model pull ai/llama3.2:1B-Q8_0
+docker model pull ai/gemma4
 ```
 
 To see available models:

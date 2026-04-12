@@ -4,7 +4,7 @@
 
 An open-source, AI-native digital product management platform that gives any organization — from a 5-person startup to a regulated enterprise — the same capabilities that only the largest tech companies have today. Built-in AI agents don't just answer questions: they manage your portfolio, model your architecture, execute your backlog, and eventually write the features you need — all with human approval at every step.
 
-No vendor lock-in. No consultants. No million-dollar license. One click to install. Your AI workforce starts working immediately.
+No vendor lock-in. No consultants. No million-dollar license. One installer to run. Your AI workforce starts working immediately.
 
 ---
 
@@ -58,11 +58,9 @@ gh api repos/markdbodman/opendigitalproductfactory/contents/install-dpf.ps1 -H "
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
-> **Note:** Requires the [GitHub CLI](https://cli.github.com/) (`gh`) with access to this repo. The installer is self-contained — no source code download needed for "Ready to go" mode. If you choose "Customizable", the installer handles the clone for you.
+> **Early access:** The repo and container images are currently private. You need a [GitHub CLI](https://cli.github.com/) (`gh`) installation with access to this repo. "Ready to go" mode also requires a GitHub Personal Access Token with `read:packages` scope for pulling container images from GHCR. The installer walks you through this. If you choose "Customizable", the installer handles the git clone for you.
 
-Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. 5-10 minutes.
-
-That's it. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start configuration.
+Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. Expect 5-10 minutes for the platform itself, plus additional time for the initial AI model download (varies by model size and connection speed).
 
 **Login credentials** are shown at the end of installation and saved to `.admin-credentials` in your install directory. The email is always `admin@dpf.local` — the password is randomly generated and unique to your install. Change it after first login.
 
@@ -251,7 +249,7 @@ This isn't a chatbot bolted onto a dashboard. AI is a core architectural layer.
 | **AI Co-worker Panel** | Floating, semi-transparent assistant on every screen. Context-aware — knows which page you're on and what you can do. |
 | **9 Specialist Agents** | Portfolio Advisor, EA Architect, Ops Coordinator, Platform Engineer, and more — each with domain expertise and role-specific skills |
 | **Skills Dropdown** | Each agent offers context-relevant actions filtered by your role. Higher authority = more capabilities. |
-| **23 Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Ollama, Groq, Together, DeepSeek, xAI, Mistral, and more — cloud, local, or router, your choice |
+| **20+ Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Groq, Together, DeepSeek, xAI, Mistral, and more — cloud, local, or router, your choice |
 | **Automatic Failover** | Priority-ranked providers. If one fails, the next takes over. Local AI is always the safety net. |
 | **Weekly Optimization** | Scheduled job ranks providers by capability tier and cost. The platform optimizes its own AI spending. |
 | **Token Spend Tracking** | Per-provider, per-agent cost monitoring. Know exactly what your AI workforce costs. |
@@ -455,6 +453,8 @@ The installer already detects host CPU, RAM, and GPU/VRAM and picks a local defa
 | `neo4j` | Neo4j 5 Community for graph and relationship-heavy workloads |
 | `qdrant` | Vector store for semantic retrieval, embeddings, and memory-style search |
 | Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed |
+| `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
+| `redis` | In-memory store backing Inngest's job queue and state |
 | `sandbox-image` | Build target for the on-demand sandbox image used by iterative build workflows |
 | `promoter` | One-shot container that builds new portal images from sandbox source, backs up the database, and deploys promoted features. Triggered by Build Studio ship phase or ops UI. Uses the `promote` profile. |
 | `playwright` | Optional tooling image used in the `build-images` profile |
