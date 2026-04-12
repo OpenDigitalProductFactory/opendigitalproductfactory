@@ -415,9 +415,11 @@ function CreateForm({
 function ModelCard({
   model,
   onClone,
+  isRecommended,
 }: {
   model: Model;
   onClone: (modelId: string) => void;
+  isRecommended?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -568,6 +570,19 @@ function ModelCard({
                   built-in
                 </span>
               )}
+              {isRecommended && (
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: "var(--dpf-success)",
+                    background: "color-mix(in srgb, var(--dpf-success) 13%, transparent)",
+                    borderRadius: 3,
+                    padding: "1px 5px",
+                  }}
+                >
+                  recommended for your business
+                </span>
+              )}
               {!model.isBuiltIn && model.status !== "active" && (
                 <span
                   style={{
@@ -670,7 +685,13 @@ function ModelCard({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function BusinessModelBuilder({ models }: { models: Model[] }) {
+export function BusinessModelBuilder({
+  models,
+  recommendedModelIds = [],
+}: {
+  models: Model[];
+  recommendedModelIds?: string[];
+}) {
   const [view, setView] = useState<View>("list");
 
   const builtIn = models.filter((m) => m.isBuiltIn);
@@ -723,6 +744,7 @@ export function BusinessModelBuilder({ models }: { models: Model[] }) {
                 key={m.id}
                 model={m}
                 onClone={(id) => setView({ cloneId: id })}
+                isRecommended={recommendedModelIds.includes(m.modelId)}
               />
             ))}
           </div>

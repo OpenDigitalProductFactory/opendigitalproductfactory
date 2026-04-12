@@ -23,6 +23,15 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
 };
 
 export async function getRouteDataContext(routeContext: string, userId: string): Promise<RouteContextResult> {
+  // Universal business context — injected on every route so the coworker
+  // always knows what the business does, who it serves, and how it operates.
+  let businessContextBlock: string | null = null;
+  try {
+    businessContextBlock = await getBusinessContextBlock();
+  } catch {
+    // Non-fatal — proceed without business context
+  }
+
   // Find the most specific matching route
   let bestMatch: string | null = null;
   let bestLen = 0;
@@ -33,15 +42,20 @@ export async function getRouteDataContext(routeContext: string, userId: string):
     }
   }
 
-  if (!bestMatch) return null;
-  const provider = ROUTE_CONTEXT_PROVIDERS[bestMatch];
-  if (!provider) return null;
-
-  try {
-    return await provider(userId, routeContext);
-  } catch {
-    return null;
+  let routeSpecific: string | null = null;
+  if (bestMatch) {
+    const provider = ROUTE_CONTEXT_PROVIDERS[bestMatch];
+    if (provider) {
+      try {
+        routeSpecific = await provider(userId, routeContext);
+      } catch {
+        // Non-fatal
+      }
+    }
   }
+
+  if (!businessContextBlock && !routeSpecific) return null;
+  return [businessContextBlock, routeSpecific].filter(Boolean).join("\n");
 }
 
 // ─── Route Context Providers ────────────────────────────────────────────────
@@ -447,6 +461,35 @@ async function getStorefrontMarketingContext(): Promise<string> {
     `Engagements: ${engagementSummary || "none"}`,
     `Opportunities: ${opportunitySummary || "none"}`,
   ].join("\n");
+}
+
+// ─── Universal Business Context ───────────────────────────────────────────
+
+async function getBusinessContextBlock(): Promise<string | null> {
+  const bc = await prisma.businessContext.findFirst({
+    select: {
+      description: true,
+      targetMarket: true,
+      industry: true,
+      companySize: true,
+      geographicScope: true,
+      revenueModel: true,
+      ctaType: true,
+    },
+  });
+
+  if (!bc) return null;
+
+  const lines: string[] = ["\nBUSINESS CONTEXT:"];
+  if (bc.industry) lines.push(`Industry: ${bc.industry.replace(/-/g, " ")}`);
+  if (bc.description) lines.push(`What they do: ${bc.description}`);
+  if (bc.targetMarket) lines.push(`Who they serve: ${bc.targetMarket}`);
+  if (bc.revenueModel) lines.push(`Revenue model: ${bc.revenueModel}`);
+  if (bc.ctaType) lines.push(`Primary CTA: ${bc.ctaType}`);
+  if (bc.companySize) lines.push(`Company size: ${bc.companySize}`);
+  if (bc.geographicScope) lines.push(`Geographic scope: ${bc.geographicScope}`);
+
+  return lines.length > 1 ? lines.join("\n") : null;
 }
 
 // ─── Customer Funnel Context ───────────────────────────────────────────
