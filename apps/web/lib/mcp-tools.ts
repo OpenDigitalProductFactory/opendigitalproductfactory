@@ -199,6 +199,17 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "analyze_seo_opportunity",
+    description: "Get structured business context for SEO content recommendations: archetype, services/products, location, existing content sections, and suggested local search intents",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_storefront",
+    sideEffect: false,
+  },
+  {
     name: "generate_custom_archetype",
     description: "Generate a custom business archetype from a description of the business, its offerings, and customer interaction patterns. Creates a new StorefrontArchetype record.",
     inputSchema: {
@@ -5630,6 +5641,76 @@ export async function executeTool(
           season,
           currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
           activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
+        },
+      };
+    }
+
+    case "analyze_seo_opportunity": {
+      const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
+
+      const config = await prisma.storefrontConfig.findFirst({
+        include: {
+          archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } },
+          items: {
+            where: { isActive: true },
+            select: { name: true, description: true, ctaType: true },
+            orderBy: { sortOrder: "asc" },
+            take: 20,
+          },
+          sections: {
+            where: { isVisible: true },
+            select: { type: true, title: true },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      });
+
+      if (!config) {
+        return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+      }
+
+      const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
+
+      // Get organization location if available
+      const org = await prisma.organization.findFirst({
+        select: { address: true, name: true },
+      });
+      const address = org?.address as Record<string, string> | null;
+      const location = address?.city
+        ? `${address.city}${address.region ? `, ${address.region}` : ""}${address.country ? `, ${address.country}` : ""}`
+        : null;
+
+      // Build suggested search intents from services + location
+      const serviceNames = config.items.map((i) => i.name);
+      const locationSuffix = location ? ` ${address?.city}` : " near me";
+      const suggestedSearchIntents = serviceNames.slice(0, 5).map((name) => `${name.toLowerCase()}${locationSuffix}`);
+
+      // Add generic archetype-based intents
+      if (config.archetype.category === "healthcare-wellness") {
+        suggestedSearchIntents.push(`${config.archetype.name.toLowerCase()} accepting patients${locationSuffix}`);
+      } else if (config.archetype.category === "trades-maintenance") {
+        suggestedSearchIntents.push(`emergency ${config.archetype.name.toLowerCase()}${locationSuffix}`);
+      } else if (config.archetype.category === "food-hospitality") {
+        suggestedSearchIntents.push(`best ${config.archetype.name.toLowerCase()}${locationSuffix}`);
+      }
+
+      return {
+        success: true,
+        message: `SEO context for ${config.archetype.name}`,
+        data: {
+          businessType: config.archetype.name,
+          archetype: {
+            category: config.archetype.category,
+            name: config.archetype.name,
+          },
+          location,
+          services: serviceNames,
+          existingContent: config.sections.map((s) => s.title || s.type),
+          playbook: {
+            primaryGoal: playbook.primaryGoal,
+            campaignTypes: playbook.campaignTypes,
+          },
+          suggestedSearchIntents,
         },
       };
     }

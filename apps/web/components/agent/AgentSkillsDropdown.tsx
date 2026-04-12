@@ -13,10 +13,13 @@ type UserSkill = {
   usageCount: number;
 };
 
+type MarketingSkillRule = { visible?: boolean; label?: string; reframe?: string };
+
 type Props = {
   skills: AgentSkill[];
   userSkills: UserSkill[];
   userContext: UserContext;
+  marketingSkillRules?: Record<string, MarketingSkillRule> | null;
   onSend: (prompt: string) => void;
   onCreateSkill: () => void;
 };
@@ -46,6 +49,33 @@ const taskTypeIcons: Record<string, string> = {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "\u2026" : text;
+}
+
+/** Apply archetype-driven skill rules: hide skills or relabel them. Exported for testing. */
+export function applyMarketingSkillRules(
+  skills: AgentSkill[],
+  rules: Record<string, MarketingSkillRule> | null | undefined,
+): AgentSkill[] {
+  if (!rules) return skills;
+  return skills
+    .filter((s) => {
+      if (!s.skillId) return true;
+      const rule = rules[s.skillId];
+      if (rule && rule.visible === false) return false;
+      return true;
+    })
+    .map((s) => {
+      if (!s.skillId) return s;
+      const rule = rules[s.skillId];
+      if (rule && rule.label && rule.reframe) {
+        return {
+          ...s,
+          label: rule.label,
+          prompt: `[ARCHETYPE CONTEXT: ${rule.reframe}]\n\n${s.prompt}`,
+        };
+      }
+      return s;
+    });
 }
 
 const sectionHeaderStyle: React.CSSProperties = {
@@ -82,6 +112,7 @@ export function AgentSkillsDropdown({
   skills,
   userSkills,
   userContext,
+  marketingSkillRules,
   onSend,
   onCreateSkill,
 }: Props) {
@@ -104,8 +135,9 @@ export function AgentSkillsDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const filteredSkills = skills.filter(
-    (s) => s.capability === null || can(userContext, s.capability),
+  const filteredSkills = applyMarketingSkillRules(
+    skills.filter((s) => s.capability === null || can(userContext, s.capability)),
+    marketingSkillRules,
   );
 
   // Group skills by category for enriched display

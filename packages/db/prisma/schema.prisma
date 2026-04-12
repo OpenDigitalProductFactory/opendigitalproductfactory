@@ -3828,10 +3828,11 @@ model StorefrontArchetype {
   tags             String[]
   isActive         Boolean            @default(true)
   isBuiltIn        Boolean            @default(true)
-  customVocabulary Json?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  storefronts      StorefrontConfig[]
+  customVocabulary    Json?
+  marketingSkillRules Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  storefronts         StorefrontConfig[]
 
   @@index([category])
   @@index([isActive])

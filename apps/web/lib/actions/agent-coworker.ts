@@ -1419,3 +1419,21 @@ async function getKnowledgePointersForRoute(routeContext: string): Promise<strin
 
   return "";
 }
+
+// ─── Marketing Skill Rules ─────────────────────────────────────────────
+
+export async function getMarketingSkillRules(): Promise<Record<string, unknown> | null> {
+  const config = await prisma.storefrontConfig.findFirst({
+    select: { archetypeId: true },
+  });
+  if (!config) return null;
+
+  const archetype = await prisma.storefrontArchetype.findUnique({
+    where: { id: config.archetypeId },
+  });
+  // marketingSkillRules is a Json? field added by migration; access via index signature
+  // to avoid type errors before Prisma client is regenerated.
+  const rules = (archetype as Record<string, unknown> | null)?.["marketingSkillRules"];
+  if (!rules || typeof rules !== "object") return null;
+  return rules as Record<string, unknown>;
+}
