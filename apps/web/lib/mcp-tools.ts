@@ -2496,6 +2496,13 @@ export async function executeTool(
         where: { buildId },
         data: updateData,
       });
+      // When taskResults is written via tool call, bump version for optimistic locking
+      if (field === "taskResults") {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: { taskResultsVersion: { increment: 1 } },
+        });
+      }
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field });
       logBuildActivity(buildId, "saveBuildEvidence", `Evidence "${field}" saved.`);
@@ -4092,6 +4099,29 @@ export async function executeTool(
               where: { packId },
               data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
             });
+
+            // Run contribution review pipeline — sanitization, parameterization, vertical tagging
+            if (prResult.prNumber) {
+              try {
+                const { runContributionReview } = await import("@/lib/integrate/contribution-review");
+                // Parse owner/repo from the upstream URL
+                const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+                if (upstreamMatch) {
+                  const reviewResult = await runContributionReview({
+                    buildId,
+                    prUrl: prResult.prUrl!,
+                    prNumber: prResult.prNumber,
+                    repoOwner: upstreamMatch[1],
+                    repoName: upstreamMatch[2],
+                    token: githubToken,
+                    diff,
+                  });
+                  logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
+                }
+              } catch (reviewErr) {
+                console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
+              }
+            }
           }
 
           // Restore original env state

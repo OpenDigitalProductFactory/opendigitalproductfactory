@@ -44,4 +44,53 @@ describe("getBaselineForModel", () => {
     // Should NOT match the o1- pattern
     expect(baseline?.scores.reasoning).not.toBe(95);
   });
+
+  it("matches Gemma 4 models", () => {
+    const baseline = getBaselineForModel("ai/gemma4");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(62);
+    expect(baseline!.scores.toolFidelity).toBe(55);
+  });
+
+  it("matches Gemma 4 with Ollama-style tags", () => {
+    const baseline = getBaselineForModel("gemma4:27b");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(62);
+  });
+
+  it("matches Gemma 3 27B specifically", () => {
+    const baseline = getBaselineForModel("gemma3:27b");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(58);
+  });
+
+  it("matches generic Gemma 3 at lower scores", () => {
+    const baseline = getBaselineForModel("gemma3:4b");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(45);
+  });
+
+  it("matches Qwen 3 30B", () => {
+    const baseline = getBaselineForModel("qwen3:30b");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(72);
+  });
+
+  it("matches generic Qwen 3", () => {
+    const baseline = getBaselineForModel("qwen3:8b");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(55);
+  });
+
+  it("matches phi-4", () => {
+    const baseline = getBaselineForModel("phi4");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(60);
+  });
+
+  it("matches Llama 3.3", () => {
+    const baseline = getBaselineForModel("llama-3.3-70b-instruct");
+    expect(baseline).not.toBeNull();
+    expect(baseline!.scores.reasoning).toBe(65);
+  });
 });

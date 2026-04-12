@@ -79,6 +79,15 @@ export async function callWithFallbackChain(
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
 
+    // Backoff between fallback attempts to avoid cascading rate limits.
+    // First attempt (i=0) runs immediately; subsequent attempts wait with
+    // exponential backoff + jitter: ~500ms, ~1.5s, ~3.5s, ...
+    if (i > 0) {
+      const baseMs = 500 * Math.pow(2, i - 1);
+      const jitterMs = Math.random() * 300;
+      await new Promise(r => setTimeout(r, baseMs + jitterMs));
+    }
+
     // Look up the provider row to get its display name for downgrade messages
     const provider = await prisma.modelProvider.findUnique({
       where: { providerId: entry.providerId },

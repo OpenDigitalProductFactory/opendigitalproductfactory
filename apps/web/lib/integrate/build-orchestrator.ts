@@ -187,16 +187,26 @@ export const MISSING_PREREQUISITE_PATTERNS = [
 export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResult, role: SpecialistRole): SpecialistOutcome {
   const content = result.content.toLowerCase();
 
-  // For CodexResult: success is determined by Codex CLI exit code
+  // CLI dispatch path: CodexResult and ClaudeResult both have durationMs + success
+  // but no providerId. They intentionally share this classification logic.
   if ("durationMs" in result && !("providerId" in result)) {
-    // CodexResult path
     if (!result.success) {
       if (content.includes("timed out")) return "BLOCKED";
       if (content.includes("error") || content.includes("failed")) return "DONE_WITH_CONCERNS";
       return "BLOCKED";
     }
-    // Codex succeeded — check content for concerns
-    if (content.includes("error") || content.includes("failed") || content.includes("warning")) {
+    // CLI succeeded — check content for concern indicators using contextual patterns.
+    // Avoids false positives from phrases like "Fixed the error handling".
+    const CLI_CONCERN_PATTERNS = [
+      /\berrors?[:]\s/i,           // "error: something" or "errors: 3"
+      /\bfailed\b/i,              // "failed" as standalone word (not "fixed the failed")
+      /\bwarnings?[:]\s/i,        // "warning: something"
+      /\d+\s+errors?\b/i,         // "3 errors"
+      /\d+\s+warnings?\b/i,       // "5 warnings"
+      /typecheck.*fail/i,         // "typecheck failed"
+      /build.*fail/i,             // "build failed"
+    ];
+    if (CLI_CONCERN_PATTERNS.some(pat => pat.test(content))) {
       return "DONE_WITH_CONCERNS";
     }
     return "DONE";
@@ -234,7 +244,60 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
   }
   if (calledBuildTools && !hasErrors) return "DONE";
   if (calledBuildTools && hasErrors) return "DONE_WITH_CONCERNS";
+  // No build tools called — normally BLOCKED, but a substantial text response
+  // without blocking language indicates the agent answered via reasoning alone.
+  if (content.length > 50) return "DONE";
   return "BLOCKED";
+}
+
+// ─── QA Verification Parsing ──────────────────────────────────────────────
+
+export type QAVerification = {
+  typecheckPassed: boolean;
+  testsPassed: number;
+  testsFailed: number;
+  /** "high" = regexes matched expected format; "low" = couldn't parse, safe defaults applied */
+  parseConfidence: "high" | "low";
+};
+
+/**
+ * Parse QA specialist output into structured verification data.
+ * Uses broadened regexes to handle common test runner output formats.
+ * Returns safe defaults (typecheckPassed: false, confidence: low) when output
+ * is empty or unparseable — preventing false auto-advance on broken QA runs.
+ */
+export function parseQAVerification(qaContent: string): QAVerification {
+  if (!qaContent || !qaContent.trim()) {
+    return { typecheckPassed: false, testsPassed: 0, testsFailed: 0, parseConfidence: "low" };
+  }
+
+  const lower = qaContent.toLowerCase();
+
+  // Typecheck: explicit fail indicators mean failure; absence alone is not a pass
+  const hasTypecheckFail = /typecheck[\s:]*fail/i.test(qaContent)
+    || /type\s*error/i.test(qaContent)
+    || /tsc.*error/i.test(qaContent);
+  const hasTypecheckPass = /typecheck[\s:]*pass/i.test(qaContent)
+    || /typecheck[\s:]*(?:ok|success)/i.test(qaContent)
+    || lower.includes("no type errors");
+
+  // Broader test count regexes to handle: "12 pass", "12 passing", "12 tests passed"
+  const passMatch = qaContent.match(/(\d+)\s*(?:tests?\s+)?pass(?:ing|ed)?/i);
+  const failMatch = qaContent.match(/(\d+)\s*(?:tests?\s+)?fail(?:ing|ed|ures?)?/i);
+
+  const hasTestResults = !!(passMatch || failMatch);
+  const hasTypecheckSignal = hasTypecheckFail || hasTypecheckPass;
+
+  if (!hasTestResults && !hasTypecheckSignal) {
+    return { typecheckPassed: false, testsPassed: 0, testsFailed: 0, parseConfidence: "low" };
+  }
+
+  return {
+    typecheckPassed: hasTypecheckPass || (!hasTypecheckFail && hasTestResults),
+    testsPassed: passMatch ? parseInt(passMatch[1]!) : 0,
+    testsFailed: failMatch ? parseInt(failMatch[1]!) : 0,
+    parseConfidence: "high",
+  };
 }
 
 // ─── Task Resume Logic ─────────────────────────────────────────────────────
@@ -457,19 +520,23 @@ export async function runBuildOrchestrator(params: {
       where: { buildId },
       data: { sandboxId: sandboxContainer, sandboxPort },
     });
-  } catch { /* non-fatal — preview just won't show */ }
+  } catch (err) {
+    console.warn("[orchestrator] sandbox metadata update skipped:", (err as Error).message);
+  }
 
   // ─── Layer 2: Task checkpointing — resume from prior results ─────────────
   // Read previously completed task results from the FeatureBuild record.
   // Tasks with outcome DONE or DONE_WITH_CONCERNS are skipped on re-run.
   let completedTaskTitles = new Set<string>();
   let priorStoredResults: string = "";
+  let taskResultsVersion = 0;
 
   try {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { taskResults: true },
+      select: { taskResults: true, taskResultsVersion: true },
     });
+    taskResultsVersion = build?.taskResultsVersion ?? 0;
     const stored = build?.taskResults as {
       tasks?: StoredTaskResult[];
     } | null;
@@ -646,17 +713,12 @@ export async function runBuildOrchestrator(params: {
   if (qaResult) {
     try {
       const { executeTool } = await import("@/lib/mcp-tools");
-      // Parse QA output for structured verification data
       const qaContent = qaResult.result.content;
-      const typecheckPassed = !qaContent.toLowerCase().includes("typecheck: fail") && !qaContent.toLowerCase().includes("type error");
-      const testsMatch = qaContent.match(/(\d+)\s*pass/i);
-      const failsMatch = qaContent.match(/(\d+)\s*fail/i);
+      const verification = parseQAVerification(qaContent);
       await executeTool("saveBuildEvidence", {
         field: "verificationOut",
         value: {
-          typecheckPassed,
-          testsPassed: testsMatch ? parseInt(testsMatch[1]!) : 0,
-          testsFailed: failsMatch ? parseInt(failsMatch[1]!) : 0,
+          ...verification,
           fullOutput: qaContent.slice(0, 2000),
           timestamp: new Date().toISOString(),
         },
@@ -666,47 +728,69 @@ export async function runBuildOrchestrator(params: {
     }
   }
 
-  // Persist task results to the FeatureBuild so partial completions are recorded
-  // and the phase gate can evaluate even after a timeout.
-  // IMPORTANT: Merge newly dispatched results with previously completed (skipped) tasks
-  // so a resume run doesn't overwrite prior successes with an empty list.
+  // Persist task results with optimistic locking to prevent concurrent overwrites.
+  // Uses taskResultsVersion to detect if another process modified results since we
+  // read them at the start. On version mismatch, re-reads and retries once.
   try {
-    const { executeTool } = await import("@/lib/mcp-tools");
-
-    // Build combined task list: skipped tasks (from prior run) + newly dispatched tasks
     const newTaskResults = allResults.map(r => ({
       title: r.task.title,
       specialist: r.task.specialist,
       outcome: r.outcome,
       durationMs: "durationMs" in r.result ? r.result.durationMs : 0,
     }));
-    const newTaskTitles = new Set(newTaskResults.map(t => t.title));
 
-    // Re-read stored results to preserve skipped tasks
-    let priorTasks: StoredTaskResult[] = [];
-    try {
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: { taskResults: true },
-      });
-      const stored = build?.taskResults as { tasks?: StoredTaskResult[] } | null;
-      // Keep prior tasks that weren't re-dispatched this run
-      priorTasks = (stored?.tasks ?? []).filter(t => !newTaskTitles.has(t.title));
-    } catch { /* ignore — just save what we have */ }
+    const MAX_MERGE_RETRIES = 1;
+    for (let attempt = 0; attempt <= MAX_MERGE_RETRIES; attempt++) {
+      // Re-read current state for merge (on retry, this picks up the other writer's data)
+      let currentVersion = taskResultsVersion;
+      let priorTasks: StoredTaskResult[] = [];
+      try {
+        const build = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { taskResults: true, taskResultsVersion: true },
+        });
+        currentVersion = build?.taskResultsVersion ?? 0;
+        const stored = build?.taskResults as { tasks?: StoredTaskResult[] } | null;
+        const newTaskTitles = new Set(newTaskResults.map(t => t.title));
+        priorTasks = (stored?.tasks ?? []).filter(t => !newTaskTitles.has(t.title));
+      } catch (err) {
+        console.error("[orchestrator] Failed to re-read stored results for merge:", err);
+      }
 
-    const mergedTasks = [...priorTasks, ...newTaskResults];
-    const completedCount = mergedTasks.filter(t => t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS").length;
-
-    await executeTool("saveBuildEvidence", {
-      field: "taskResults",
-      value: {
+      const mergedTasks = [...priorTasks, ...newTaskResults];
+      const completedCount = mergedTasks.filter(t => t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS").length;
+      const taskResultsValue = {
         completedTasks: completedCount,
         totalTasks,
         timedOut: Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS,
         tasks: mergedTasks,
         timestamp: new Date().toISOString(),
-      },
-    }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+      };
+
+      // Optimistic lock: only update if version hasn't changed since our read
+      const updated = await prisma.featureBuild.updateMany({
+        where: { buildId, taskResultsVersion: currentVersion },
+        data: {
+          taskResults: taskResultsValue as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          taskResultsVersion: currentVersion + 1,
+        },
+      });
+
+      if (updated.count > 0) {
+        // Success — emit evidence event for SSE subscribers
+        if (parentThreadId) {
+          agentEventBus.emit(parentThreadId, { type: "evidence:update", buildId, field: "taskResults" });
+        }
+        break;
+      }
+
+      // Version mismatch — another writer updated since our read
+      if (attempt < MAX_MERGE_RETRIES) {
+        console.warn(`[orchestrator] taskResults version conflict (expected ${currentVersion}), retrying merge`);
+      } else {
+        console.error(`[orchestrator] taskResults merge failed after ${MAX_MERGE_RETRIES + 1} attempts — version conflict persists`);
+      }
+    }
   } catch (err) {
     console.error("[orchestrator] Failed to save task results:", err);
   }
@@ -724,11 +808,16 @@ export async function runBuildOrchestrator(params: {
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
         agentEventBus.emit(parentThreadId, { type: "phase:change", buildId, phase: "review" });
-        prisma.buildActivity.create({ data: { buildId, tool: "phase:advance", summary: "Phase advanced: build → review" } }).catch(() => {});
+        prisma.buildActivity.create({ data: { buildId, tool: "phase:advance", summary: "Phase advanced: build → review" } }).catch((err: unknown) => console.warn("[orchestrator] buildActivity create failed:", (err as Error)?.message));
       }
     }
   } catch (err) {
     console.error("[orchestrator] Failed to auto-advance to review:", err);
+    agentEventBus.emit(parentThreadId, {
+      type: "orchestrator:warning",
+      buildId,
+      message: "Build completed but could not auto-advance to review phase. You can advance manually.",
+    });
   }
 
   // Synthesize final result (include skipped tasks in completed count)

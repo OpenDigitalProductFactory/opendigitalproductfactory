@@ -46,6 +46,7 @@ export const FAMILY_TIERS: Record<string, QualityTier> = {
   "gemini-2.5-pro":   "strong",
   "gemini-2.5-flash": "adequate",
   "gemini-2.0-flash": "adequate",
+  "gemma4":           "adequate",
   "gemma":            "basic",
   // Local / open-source
   "llama":            "basic",

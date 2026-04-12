@@ -132,6 +132,16 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | BUILD-02 | Type feature description and click "New" | New build created, ideate phase starts |
 | BUILD-03 | Agent asks clarifying questions during ideate | Questions about scope, existing code, requirements |
 | BUILD-04 | Provide answers, agent produces feature brief | Brief displayed with acceptance criteria |
+| BUILD-05 | Complete ideate and plan, enter build phase | Orchestrator dispatches specialist tasks, progress events shown in UI |
+| BUILD-06 | Wait for all specialists to complete in build phase | Task results saved to DB, verification evidence persisted on build record |
+| BUILD-07 | QA specialist completes with "8 pass, 0 fail" output | Verification parsed (high confidence), auto-advance to review phase |
+| BUILD-08 | QA specialist output is empty or unparseable | Phase does NOT auto-advance, warning shown to user |
+| BUILD-09 | During build, a specialist returns BLOCKED (e.g. sandbox down) | Build completes with partial results, blocked task visible in UI |
+| BUILD-10 | In review phase, attempt advance without verification evidence | Phase gate blocks with reason message |
+| BUILD-11 | In review phase, approve the build | Phase advances to ship |
+| BUILD-12 | Close coworker panel during active build, reopen | Build state preserved, updates resume via SSE fallback or DB poll |
+| BUILD-13 | Build with all tasks DONE, verify auto-advance | Phase moves from build to review automatically |
+| BUILD-14 | Trigger build when sandbox is not running | Specialist returns BLOCKED, user sees actionable error message |
 
 ## Phase 11: Storefront
 

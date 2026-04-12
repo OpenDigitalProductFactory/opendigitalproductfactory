@@ -26,40 +26,40 @@ describe("bumpVersion", () => {
 });
 
 describe("getBuildPhasePrompt", () => {
-  it("returns ideate prompt for ideate phase", () => {
-    const prompt = getBuildPhasePrompt("ideate");
+  it("returns ideate prompt for ideate phase", async () => {
+    const prompt = await getBuildPhasePrompt("ideate");
     expect(prompt).toContain("search_project_files");
     expect(prompt).toContain("saveBuildEvidence");
     expect(prompt).toContain('field: "designDoc"');
     expect(prompt).toContain("value:");
   });
-  it("returns plan prompt for plan phase", () => {
-    const prompt = getBuildPhasePrompt("plan");
+  it("returns plan prompt for plan phase", async () => {
+    const prompt = await getBuildPhasePrompt("plan");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("testFirst");
     expect(prompt).toContain("If reviewBuildPlan returns fail");
     expect(prompt).toContain("Break oversized tasks into smaller 2-5 minute tasks");
   });
-  it("returns build prompt for build phase", () => {
-    const prompt = getBuildPhasePrompt("build");
+  it("returns build prompt for build phase", async () => {
+    const prompt = await getBuildPhasePrompt("build");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("run_sandbox_tests");
     expect(prompt).toContain("Do NOT ask for go-ahead during build tasks");
     expect(prompt).toContain('Do NOT send status-only updates like "next step" or "ready to proceed."');
   });
-  it("returns review prompt for review phase", () => {
-    const prompt = getBuildPhasePrompt("review");
+  it("returns review prompt for review phase", async () => {
+    const prompt = await getBuildPhasePrompt("review");
     expect(prompt).toContain("acceptanceMet");
     expect(prompt).toContain("Ready to ship");
   });
-  it("returns ship prompt for ship phase", () => {
-    const prompt = getBuildPhasePrompt("ship");
+  it("returns ship prompt for ship phase", async () => {
+    const prompt = await getBuildPhasePrompt("ship");
     expect(prompt).toContain("register_digital_product_from_build");
     expect(prompt).toContain("create_build_epic");
   });
-  it("returns empty string for terminal phases", () => {
-    expect(getBuildPhasePrompt("complete")).toBe("");
-    expect(getBuildPhasePrompt("failed")).toBe("");
+  it("returns empty string for terminal phases", async () => {
+    expect(await getBuildPhasePrompt("complete")).toBe("");
+    expect(await getBuildPhasePrompt("failed")).toBe("");
   });
 });
 
@@ -79,8 +79,8 @@ describe("SPECIALIST_TOOLS", () => {
 });
 
 describe("getBuildContextSection", () => {
-  it("includes buildId and phase", () => {
-    const section = getBuildContextSection({
+  it("includes buildId and phase", async () => {
+    const section = await getBuildContextSection({
       buildId: "FB-12345678",
       phase: "ideate",
       title: "My Feature",
@@ -92,7 +92,7 @@ describe("getBuildContextSection", () => {
     expect(section).toContain("ideate");
     expect(section).toContain("My Feature");
   });
-  it("includes brief summary when present", () => {
+  it("includes brief summary when present", async () => {
     const brief: FeatureBrief = {
       title: "Feedback Form",
       description: "A customer feedback form",
@@ -102,7 +102,7 @@ describe("getBuildContextSection", () => {
       dataNeeds: "feedback table",
       acceptanceCriteria: ["form submits"],
     };
-    const section = getBuildContextSection({
+    const section = await getBuildContextSection({
       buildId: "FB-12345678",
       phase: "plan",
       title: "Feedback Form",
@@ -114,8 +114,8 @@ describe("getBuildContextSection", () => {
     expect(section).toContain("A customer feedback form");
     expect(section).toContain("products_and_services_sold");
   });
-  it("omits brief section when null", () => {
-    const section = getBuildContextSection({
+  it("omits brief section when null", async () => {
+    const section = await getBuildContextSection({
       buildId: "FB-12345678",
       phase: "ideate",
       title: "Test",

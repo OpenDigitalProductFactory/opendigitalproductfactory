@@ -66,6 +66,8 @@ function generatePRBody(input: {
   authorName: string;
   acceptanceCriteria: string[];
   evidenceDigest: Record<string, string>;
+  sourceVertical?: string;
+  reusabilityScope?: string;
 }): string {
   const sections: string[] = [];
 
@@ -75,6 +77,8 @@ function generatePRBody(input: {
   sections.push(`Build: \`${input.buildId}\``);
   if (input.productId) sections.push(`Product: \`${input.productId}\``);
   sections.push(`Author: ${input.authorName} (AI Coworker)`);
+  if (input.sourceVertical) sections.push(`Source vertical: \`${input.sourceVertical}\``);
+  if (input.reusabilityScope) sections.push(`Reusability: \`${input.reusabilityScope}\``);
   sections.push("");
 
   // Impact Analysis
@@ -219,6 +223,17 @@ export async function submitBuildAsPR(
   if (build?.buildPlan) evidenceDigest.buildPlan = String(build.buildPlan).slice(0, 200);
   if (build?.verificationOut) evidenceDigest.verificationOut = String(build.verificationOut).slice(0, 200);
 
+  // Load business vertical context for PR body
+  let sourceVertical: string | undefined;
+  let reusabilityScope: string | undefined;
+  try {
+    const bc = await prisma.businessContext.findFirst({ select: { industry: true } });
+    if (bc?.industry) sourceVertical = bc.industry;
+    const designDoc = build?.designDoc as Record<string, unknown> | null;
+    const reusability = designDoc?.reusabilityAnalysis as { scope?: string } | undefined;
+    if (reusability?.scope) reusabilityScope = reusability.scope;
+  } catch { /* non-fatal */ }
+
   const branchName = generateBranchName(input.buildId, input.title);
   const prTitle = `feat: ${input.title} (Build ${input.buildId})`;
 
@@ -230,6 +245,8 @@ export async function submitBuildAsPR(
     authorName: input.authorName,
     acceptanceCriteria,
     evidenceDigest,
+    sourceVertical,
+    reusabilityScope,
   });
 
   // 3. Determine the best method to create the PR

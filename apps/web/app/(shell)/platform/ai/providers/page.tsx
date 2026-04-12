@@ -38,8 +38,9 @@ export default async function ProvidersPage() {
   }
 
   // Passive health check for bundled Ollama (may change provider status)
-  await checkBundledProviders();
-  await runProviderCatalogReconciliationIfDue();
+  // These are side-effects that must not crash the page render.
+  await checkBundledProviders().catch((e) => console.warn("[providers] checkBundledProviders failed:", e));
+  await runProviderCatalogReconciliationIfDue().catch((e) => console.warn("[providers] catalog reconciliation failed:", e));
 
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };

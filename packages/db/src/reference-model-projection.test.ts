@@ -237,14 +237,16 @@ describe("projectReferenceModel", () => {
     ).rejects.toThrow("Reference model not found");
   });
 
-  it("fails clearly when the reference model has no value streams to project", async () => {
+  it("returns a no-op result when the reference model has no value streams to project", async () => {
     mockPrisma.eaReferenceModelElement.findMany.mockResolvedValue([]);
 
-    await expect(
-      projectReferenceModel({
-        referenceModelSlug: "it4it_v3_0_1",
-        projectionType: "value_stream_view",
-      }),
-    ).rejects.toThrow("Reference model has no value streams to project");
+    const result = await projectReferenceModel({
+      referenceModelSlug: "it4it_v3_0_1",
+      projectionType: "value_stream_view",
+    });
+
+    expect(result.createdView).toBe(false);
+    expect(result.createdElements).toBe(0);
+    expect(result.viewId).toBe("");
   });
 });

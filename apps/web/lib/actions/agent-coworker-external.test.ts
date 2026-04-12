@@ -17,6 +17,10 @@ vi.mock("@/lib/agent-routing", () => ({
   generateCannedResponse: vi.fn(),
 }));
 
+vi.mock("@/lib/tak/agent-routing-server", () => ({
+  resolveAgentForRouteWithPrompts: vi.fn(),
+}));
+
 vi.mock("@/lib/ai-provider-priority", () => ({
   NoAllowedProvidersForSensitivityError: class extends Error {},
   NoProvidersAvailableError: class extends Error {},
@@ -77,7 +81,7 @@ vi.mock("@/lib/route-context-map", () => ({
 }));
 
 vi.mock("@/lib/prompt-assembler", () => ({
-  assembleSystemPrompt: vi.fn().mockReturnValue("assembled prompt"),
+  assembleSystemPrompt: vi.fn().mockResolvedValue("assembled prompt"),
 }));
 
 vi.mock("@/lib/permissions", async () => {
@@ -114,14 +118,14 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { auth } from "@/lib/auth";
-import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { routeAndCall } from "@/lib/routed-inference";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
-const mockResolveAgentForRoute = resolveAgentForRoute as ReturnType<typeof vi.fn>;
+const mockResolveAgentForRoute = resolveAgentForRouteWithPrompts as ReturnType<typeof vi.fn>;
 const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
 const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
@@ -138,7 +142,7 @@ describe("agent coworker external access", () => {
         isSuperuser: false,
       },
     });
-    mockResolveAgentForRoute.mockReturnValue({
+    mockResolveAgentForRoute.mockResolvedValue({
       agentId: "admin-assistant",
       agentName: "Admin Assistant",
       agentDescription: "Admin help",

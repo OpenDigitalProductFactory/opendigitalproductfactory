@@ -43,7 +43,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
     recentFailureRate: 0,
     costPerOutputMToken: 10.0,
     profileSource: "seed",
-    profileConfidence: "medium",
+    profileConfidence: "high",
     retiredAt: null,
     modelClass: "chat",
     modelFamily: null,
@@ -250,6 +250,25 @@ describe("estimateSuccessProbability", () => {
     // getDimensionsForTask returns [] => averageRelevantDimensions returns 50
     // 50 < 75 => below floor => 0.3
     expect(estimateSuccessProbability(ep, contract)).toBe(0.3);
+  });
+
+  it("applies confidence multiplier — low confidence reduces probability", () => {
+    const highConf = makeEndpoint({
+      capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, structuredOutput: true, streaming: true },
+      profileConfidence: "high",
+      recentFailureRate: 0,
+    });
+    const lowConf = makeEndpoint({
+      capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, structuredOutput: true, streaming: true },
+      profileConfidence: "low",
+      recentFailureRate: 0,
+    });
+    const contract = makeContract({ reasoningDepth: "low" });
+    const highProb = estimateSuccessProbability(highConf, contract);
+    const lowProb = estimateSuccessProbability(lowConf, contract);
+    expect(highProb).toBeGreaterThan(lowProb);
+    expect(highProb).toBeCloseTo(1.0);
+    expect(lowProb).toBeCloseTo(0.85);
   });
 });
 

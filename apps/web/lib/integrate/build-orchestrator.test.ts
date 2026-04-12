@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary } from "./build-orchestrator";
+import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, parseQAVerification } from "./build-orchestrator";
 import type { StoredTaskResult } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
 import type { ClaudeResult } from "./claude-dispatch";
+import type { CodexResult } from "./codex-dispatch";
 
 function mockResult(overrides: Partial<AgenticResult> = {}): AgenticResult {
   return {
@@ -113,8 +114,14 @@ describe("classifyOutcome — ClaudeResult (CLI dispatch)", () => {
     expect(classifyOutcome(result, "software-engineer")).toBe("DONE");
   });
 
-  it("returns DONE_WITH_CONCERNS when Claude CLI succeeds but output mentions errors", () => {
+  it("returns DONE when Claude CLI succeeds with incidental mention of warning", () => {
+    // "got a warning about" is narrative, not a compiler/tool warning indicator
     const result = mockClaudeResult({ content: "Applied migration but got a warning about missing index.", success: true });
+    expect(classifyOutcome(result, "data-architect")).toBe("DONE");
+  });
+
+  it("returns DONE_WITH_CONCERNS when Claude CLI succeeds but output has structured warnings", () => {
+    const result = mockClaudeResult({ content: "Applied migration. warning: missing index on userId column.", success: true });
     expect(classifyOutcome(result, "data-architect")).toBe("DONE_WITH_CONCERNS");
   });
 
@@ -245,5 +252,155 @@ describe("buildStoredResultsSummary", () => {
     ];
     const summary = buildStoredResultsSummary(tasks);
     expect(summary).toContain("completed in prior run");
+  });
+});
+
+// ─── QA Verification Parsing ─────────────────────────────────────────────
+
+describe("parseQAVerification", () => {
+  it("parses standard format: 'Typecheck: pass' + '12 tests pass, 0 fail'", () => {
+    const result = parseQAVerification("Typecheck: pass\n12 tests pass, 0 fail");
+    expect(result).toEqual({
+      typecheckPassed: true,
+      testsPassed: 12,
+      testsFailed: 0,
+      parseConfidence: "high",
+    });
+  });
+
+  it("parses alternate format: '12 passing, 3 failing'", () => {
+    const result = parseQAVerification("12 passing, 3 failing");
+    expect(result).toEqual({
+      typecheckPassed: true,
+      testsPassed: 12,
+      testsFailed: 3,
+      parseConfidence: "high",
+    });
+  });
+
+  it("parses 'N tests passed, M failures' format", () => {
+    const result = parseQAVerification("5 tests passed, 1 failure");
+    expect(result).toEqual({
+      typecheckPassed: true,
+      testsPassed: 5,
+      testsFailed: 1,
+      parseConfidence: "high",
+    });
+  });
+
+  it("returns low confidence for empty string", () => {
+    const result = parseQAVerification("");
+    expect(result).toEqual({
+      typecheckPassed: false,
+      testsPassed: 0,
+      testsFailed: 0,
+      parseConfidence: "low",
+    });
+  });
+
+  it("returns low confidence for whitespace-only input", () => {
+    const result = parseQAVerification("   \n\t  ");
+    expect(result.parseConfidence).toBe("low");
+    expect(result.typecheckPassed).toBe(false);
+  });
+
+  it("returns low confidence for garbage/unrecognized output", () => {
+    const result = parseQAVerification("Something happened but I'm not sure what.");
+    expect(result.parseConfidence).toBe("low");
+    expect(result.typecheckPassed).toBe(false);
+  });
+
+  it("handles 'error' in success context without breaking parse", () => {
+    const result = parseQAVerification("Fixed the error handling. Typecheck: pass. 8 pass, 0 fail");
+    expect(result.typecheckPassed).toBe(true);
+    expect(result.testsPassed).toBe(8);
+    expect(result.testsFailed).toBe(0);
+    expect(result.parseConfidence).toBe("high");
+  });
+
+  it("detects typecheck failure", () => {
+    const result = parseQAVerification("Typecheck: fail\n0 pass, 0 fail");
+    expect(result.typecheckPassed).toBe(false);
+    expect(result.parseConfidence).toBe("high");
+  });
+
+  it("detects type error in output", () => {
+    const result = parseQAVerification("Found a type error in User.ts\n3 pass, 1 fail");
+    expect(result.typecheckPassed).toBe(false);
+    expect(result.parseConfidence).toBe("high");
+  });
+
+  it("detects tsc error in output", () => {
+    const result = parseQAVerification("tsc --noEmit error TS2345\n0 pass, 0 fail");
+    expect(result.typecheckPassed).toBe(false);
+  });
+
+  it("typecheck passes when only test results present (no typecheck keywords)", () => {
+    const result = parseQAVerification("8 pass, 0 fail");
+    expect(result.typecheckPassed).toBe(true);
+    expect(result.parseConfidence).toBe("high");
+  });
+});
+
+// ─── Outcome Classification: False Positive Fixes ─────────────────────────
+
+describe("classifyOutcome — false positive fixes", () => {
+  function mockCodexResult(overrides: Partial<CodexResult> = {}): CodexResult {
+    return {
+      content: overrides.content ?? "",
+      success: overrides.success ?? true,
+      executedTools: overrides.executedTools ?? [],
+      durationMs: overrides.durationMs ?? 1000,
+    };
+  }
+
+  it("CodexResult success: 'Fixed the error handling' returns DONE, not DONE_WITH_CONCERNS", () => {
+    const result = mockCodexResult({ content: "Fixed the error handling and updated tests.", success: true });
+    expect(classifyOutcome(result, "software-engineer")).toBe("DONE");
+  });
+
+  it("CodexResult success: 'error: missing module' returns DONE_WITH_CONCERNS", () => {
+    const result = mockCodexResult({ content: "Completed work. error: missing module 'prisma-client'.", success: true });
+    expect(classifyOutcome(result, "software-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("CodexResult success: '3 warnings' returns DONE_WITH_CONCERNS (numeric count)", () => {
+    // "3 warnings" matches the N+warnings pattern — this is a real concern
+    const result = mockCodexResult({ content: "Done. Had 3 warnings about unused imports.", success: true });
+    expect(classifyOutcome(result, "frontend-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("CodexResult success: narrative 'warnings' without count returns DONE", () => {
+    // "some warnings" without a count is narrative, not structured
+    const result = mockCodexResult({ content: "Done. There were some warnings mentioned in the docs.", success: true });
+    expect(classifyOutcome(result, "frontend-engineer")).toBe("DONE");
+  });
+
+  it("CodexResult success: '3 warnings:' returns DONE_WITH_CONCERNS (structured)", () => {
+    const result = mockCodexResult({ content: "Build complete. warnings: unused variable x.", success: true });
+    expect(classifyOutcome(result, "frontend-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("CodexResult success: 'typecheck failed' returns DONE_WITH_CONCERNS", () => {
+    const result = mockCodexResult({ content: "Applied changes but typecheck failed.", success: true });
+    expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  it("AgenticResult with long text, no tools, no blocking language returns DONE", () => {
+    const result = mockResult({
+      content: "I analyzed the schema and here is my recommendation for the data model structure that would best support the complaint tracking feature with proper indexes and relations.",
+      executedTools: [],
+    });
+    expect(classifyOutcome(result, "data-architect")).toBe("DONE");
+  });
+
+  it("AgenticResult with short content, no tools returns BLOCKED", () => {
+    const result = mockResult({ content: "OK", executedTools: [] });
+    expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
+  });
+
+  it("AgenticResult with empty content, no tools returns BLOCKED", () => {
+    const result = mockResult({ content: "", executedTools: [] });
+    expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
   });
 });

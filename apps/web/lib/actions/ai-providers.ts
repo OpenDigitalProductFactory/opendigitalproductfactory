@@ -261,6 +261,13 @@ export async function configureProvider(input: {
   // pick it up without requiring manual Build Studio configuration.
   await autoConfigureBuildStudio(input.providerId);
 
+  // Trigger model discovery + profiling so ModelProfile rows are created
+  // immediately after configuration — not only after testProviderAuth().
+  // Uses fire-and-forget: the UI doesn't need to wait for discovery.
+  autoDiscoverAndProfile(input.providerId).catch((err) => {
+    console.warn(`[configureProvider] Auto-discover failed for ${input.providerId}:`, err);
+  });
+
   return {};
 }
 
@@ -557,16 +564,30 @@ async function runProviderCatalogReconciliationInternal(): Promise<string[]> {
 
 export async function runProviderCatalogReconciliationIfDue(): Promise<void> {
   const now = new Date();
-  const job = await prisma.scheduledJob.upsert({
-    where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
-    create: {
-      jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID,
-      name: PROVIDER_CATALOG_RECONCILIATION_JOB_NAME,
-      schedule: "weekly",
-      nextRunAt: now,
-    },
-    update: {},
-  });
+  let job;
+  try {
+    job = await prisma.scheduledJob.upsert({
+      where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+      create: {
+        jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID,
+        name: PROVIDER_CATALOG_RECONCILIATION_JOB_NAME,
+        schedule: "weekly",
+        nextRunAt: now,
+      },
+      update: {},
+    });
+  } catch (err: unknown) {
+    // Prisma upsert can race under concurrent requests (P2002).
+    // Fall back to a plain read — the other request created the row.
+    if ((err as { code?: string }).code === "P2002") {
+      job = await prisma.scheduledJob.findUnique({
+        where: { jobId: PROVIDER_CATALOG_RECONCILIATION_JOB_ID },
+      });
+      if (!job) return;
+    } else {
+      throw err;
+    }
+  }
   if (job.schedule === "disabled") return;
 
   const neverRun = !job.lastRunAt;

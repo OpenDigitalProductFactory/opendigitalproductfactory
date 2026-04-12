@@ -14,6 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "."),
+      "@dpf/db": resolve(__dirname, "../../packages/db/src/client.ts"),
       "@dpf/finance-templates": resolve(__dirname, "../../packages/finance-templates/src/index.ts"),
     },
   },

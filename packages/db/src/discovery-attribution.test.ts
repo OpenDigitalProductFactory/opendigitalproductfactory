@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   attributeInventoryEntity,
   evaluateInventoryQuality,
+  flattenEnrichmentForScoring,
   scoreTaxonomyCandidates,
   type TaxonomyNodeCandidate,
 } from "./discovery-attribution";
@@ -122,6 +123,86 @@ describe("attributeInventoryEntity", () => {
     expect(result.taxonomyNodeId).toBeNull();
     expect(result.candidateTaxonomy?.length).toBeGreaterThan(0);
     expect(result.confidence).toBeLessThan(0.55);
+  });
+});
+
+describe("flattenEnrichmentForScoring", () => {
+  it("flattens enrichment with industry markets", () => {
+    const result = flattenEnrichmentForScoring({
+      offeringConsiderations: "Standard tier; Premium tier",
+      commercialMarket: "AWS EC2; Azure VM",
+      industryMarkets: {
+        banking: "FIS core banking",
+        healthcare: "Epic EHR",
+      },
+    });
+    expect(result).toContain("Standard tier");
+    expect(result).toContain("AWS EC2");
+    expect(result).toContain("FIS core banking");
+    expect(result).toContain("Epic EHR");
+  });
+
+  it("returns empty string for null input", () => {
+    expect(flattenEnrichmentForScoring(null)).toBe("");
+    expect(flattenEnrichmentForScoring(undefined)).toBe("");
+  });
+
+  it("skips empty values", () => {
+    const result = flattenEnrichmentForScoring({
+      offeringConsiderations: "Some text",
+      commercialMarket: "",
+      digitalPhysical: "Digital",
+    });
+    expect(result).toContain("Some text");
+    expect(result).toContain("Digital");
+    expect(result).not.toContain("commercialMarket");
+  });
+});
+
+describe("scoreTaxonomyCandidates with enrichment", () => {
+  const enrichedNodes: TaxonomyNodeCandidate[] = [
+    {
+      nodeId: "foundational/network_management/network_security",
+      name: "Network Security",
+      portfolioSlug: "foundational",
+      description: "Firewall, intrusion detection, and network access control services",
+      enrichmentText: "Palo Alto Networks; Fortinet FortiGate; Cisco ASA; Check Point; Ubiquiti UniFi Security Gateway; Zscaler; Cloudflare WAF",
+    },
+    {
+      nodeId: "foundational/network_management/wireless_networking",
+      name: "Wireless Networking",
+      portfolioSlug: "foundational",
+      description: "Wi-Fi infrastructure and wireless LAN management",
+      enrichmentText: "Ubiquiti UniFi; Cisco Meraki; Aruba Networks; Ruckus; Cambium; EnGenius; wireless access points; controllers",
+    },
+    {
+      nodeId: "foundational/compute/servers",
+      name: "Servers",
+      portfolioSlug: "foundational",
+    },
+  ];
+
+  it("scores higher when enrichment contains matching vendor names", () => {
+    const ranked = scoreTaxonomyCandidates("Ubiquiti UniFi wireless access point", enrichedNodes);
+    expect(ranked[0]?.nodeId).toContain("wireless_networking");
+    expect(ranked[0]?.score).toBeGreaterThan(0.5);
+  });
+
+  it("enrichment-only matches do not overpower strong core matches", () => {
+    const ranked = scoreTaxonomyCandidates("Server compute physical hardware", enrichedNodes);
+    expect(ranked[0]?.nodeId).toContain("servers");
+  });
+
+  it("vendor name match boosts score compared to unenriched nodes", () => {
+    const unenrichedNodes: TaxonomyNodeCandidate[] = [
+      { nodeId: "foundational/network_management/wireless_networking", name: "Wireless Networking", portfolioSlug: "foundational" },
+    ];
+    const enrichedResult = scoreTaxonomyCandidates("Ubiquiti UniFi", enrichedNodes);
+    const unenrichedResult = scoreTaxonomyCandidates("Ubiquiti UniFi", unenrichedNodes);
+
+    const enrichedScore = enrichedResult.find((r) => r.nodeId.includes("wireless_networking"))?.score ?? 0;
+    const unenrichedScore = unenrichedResult.find((r) => r.nodeId.includes("wireless_networking"))?.score ?? 0;
+    expect(enrichedScore).toBeGreaterThan(unenrichedScore);
   });
 });
 

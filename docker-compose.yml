@@ -49,7 +49,7 @@ services:
   # Docker Model Runner (built into Docker Desktop 4.40+) provides local LLM
   # inference via OpenAI-compatible API at http://model-runner.docker.internal/v1.
   # No separate container needed — models are managed through Docker Desktop.
-  # To pull a model:  docker model pull ai/llama3.2:1B-Q8_0
+  # To pull a model:  docker model pull ai/gemma4
   # To list models:   docker model list
 
   portal-init:

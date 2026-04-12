@@ -44,6 +44,21 @@ const FAMILY_REGISTRY: FamilyEntry[] = [
   { pattern: /gemini.*2\.0.*flash/i, baseline: { scores: { reasoning: 75, codegen: 72, toolFidelity: 70, instructionFollowing: 75, structuredOutput: 70, conversational: 72, contextRetention: 68 }, confidence: "low" } },
   { pattern: /gemini.*1\.5.*pro/i, baseline: { scores: { reasoning: 82, codegen: 78, toolFidelity: 75, instructionFollowing: 80, structuredOutput: 75, conversational: 78, contextRetention: 85 }, confidence: "low" } },
 
+  // ── Google Gemma (local) ──
+  { pattern: /gemma-?4\b/i, baseline: { scores: { reasoning: 62, codegen: 58, toolFidelity: 55, instructionFollowing: 60, structuredOutput: 55, conversational: 60, contextRetention: 52 }, confidence: "low" } },
+  { pattern: /gemma.*3.*27b/i, baseline: { scores: { reasoning: 58, codegen: 55, toolFidelity: 48, instructionFollowing: 55, structuredOutput: 48, conversational: 58, contextRetention: 50 }, confidence: "low" } },
+  { pattern: /gemma.*3/i, baseline: { scores: { reasoning: 45, codegen: 42, toolFidelity: 35, instructionFollowing: 45, structuredOutput: 35, conversational: 48, contextRetention: 40 }, confidence: "low" } },
+
+  // ── Qwen 3 (local) ──
+  { pattern: /qwen.*3.*30b/i, baseline: { scores: { reasoning: 72, codegen: 70, toolFidelity: 52, instructionFollowing: 68, structuredOutput: 52, conversational: 70, contextRetention: 58 }, confidence: "low" } },
+  { pattern: /qwen.*3/i, baseline: { scores: { reasoning: 55, codegen: 52, toolFidelity: 40, instructionFollowing: 52, structuredOutput: 40, conversational: 55, contextRetention: 42 }, confidence: "low" } },
+
+  // ── Microsoft Phi ──
+  { pattern: /phi-?4/i, baseline: { scores: { reasoning: 60, codegen: 58, toolFidelity: 42, instructionFollowing: 58, structuredOutput: 42, conversational: 58, contextRetention: 45 }, confidence: "low" } },
+
+  // ── Meta Llama 3.3 ──
+  { pattern: /llama.*3\.3/i, baseline: { scores: { reasoning: 65, codegen: 62, toolFidelity: 48, instructionFollowing: 62, structuredOutput: 48, conversational: 65, contextRetention: 55 }, confidence: "low" } },
+
   // ── Mistral ──
   { pattern: /mistral.*large/i, baseline: { scores: { reasoning: 78, codegen: 72, toolFidelity: 68, instructionFollowing: 75, structuredOutput: 65, conversational: 72, contextRetention: 65 }, confidence: "low" } },
   { pattern: /mixtral/i, baseline: { scores: { reasoning: 65, codegen: 60, toolFidelity: 50, instructionFollowing: 62, structuredOutput: 48, conversational: 65, contextRetention: 55 }, confidence: "low" } },

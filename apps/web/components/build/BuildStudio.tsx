@@ -1,7 +1,7 @@
 // apps/web/components/build/BuildStudio.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
@@ -33,6 +33,24 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isDevEnvironment = dpfEnvironment === "dev";
 
+  // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
+  const lastFetchRef = useRef<number>(0);
+  const fetchInFlightRef = useRef<boolean>(false);
+  const debouncedRefetch = useCallback(async () => {
+    if (!activeBuild) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 500) return;
+    if (fetchInFlightRef.current) return;
+    lastFetchRef.current = now;
+    fetchInFlightRef.current = true;
+    try {
+      const fresh = await getFeatureBuild(activeBuild.buildId);
+      if (fresh) setActiveBuild(fresh);
+    } finally {
+      fetchInFlightRef.current = false;
+    }
+  }, [activeBuild?.buildId]);
+
   useEffect(() => {
     const detail = activeBuild?.buildId ?? null;
     window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail }));
@@ -48,14 +66,10 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   // and doesn't require a threadId on the build.
   useEffect(() => {
     if (!activeBuild) return;
-    const refetch = async () => {
-      const fresh = await getFeatureBuild(activeBuild.buildId);
-      if (fresh) setActiveBuild(fresh);
-    };
-    const handleProgressUpdate = () => { refetch(); };
+    const handleProgressUpdate = () => { debouncedRefetch(); };
     window.addEventListener("build-progress-update", handleProgressUpdate);
     return () => window.removeEventListener("build-progress-update", handleProgressUpdate);
-  }, [activeBuild?.buildId]);
+  }, [activeBuild?.buildId, debouncedRefetch]);
 
   // ─── Thread linking: panel tells us the threadId ───────────────────────
   // When the coworker sends its first message for a build, it dispatches
@@ -79,32 +93,29 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   useEffect(() => {
     if (!activeBuild?.threadId) return;
     const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
-    const refetch = async () => {
-      const fresh = await getFeatureBuild(activeBuild.buildId);
-      if (fresh) setActiveBuild(fresh);
-    };
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     es.onmessage = async (e) => {
       let isUrgent = false;
       try {
         const data = JSON.parse(e.data);
         isUrgent = data.type === "phase:change" || data.type === "evidence:update"
-          || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready";
+          || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready"
+          || data.type === "orchestrator:warning";
       } catch { /* non-JSON — debounce */ }
 
       if (isUrgent) {
         if (debounceTimer) clearTimeout(debounceTimer);
-        await refetch();
+        await debouncedRefetch();
       } else {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(refetch, 800);
+        debounceTimer = setTimeout(debouncedRefetch, 800);
       }
     };
     return () => {
       es.close();
       if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [activeBuild?.threadId, activeBuild?.buildId]);
+  }, [activeBuild?.threadId, activeBuild?.buildId, debouncedRefetch]);
 
   // ─── Ultimate fallback: DB poll when panel is closed AND no threadId ───
   // Only runs when we have no other update channel. 10-second interval
@@ -113,12 +124,9 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   useEffect(() => {
     if (!activeBuild) return;
     if (activeBuild.threadId) return; // SSE fallback will handle it
-    const interval = setInterval(async () => {
-      const fresh = await getFeatureBuild(activeBuild.buildId);
-      if (fresh) setActiveBuild(fresh);
-    }, 10_000);
+    const interval = setInterval(debouncedRefetch, 10_000);
     return () => clearInterval(interval);
-  }, [activeBuild?.buildId, activeBuild?.threadId]);
+  }, [activeBuild?.buildId, activeBuild?.threadId, debouncedRefetch]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;

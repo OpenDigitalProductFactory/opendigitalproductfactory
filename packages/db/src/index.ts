@@ -63,6 +63,7 @@ export {
   attributeInventoryEntity,
   buildDiscoveryDescriptor,
   evaluateInventoryQuality,
+  flattenEnrichmentForScoring,
   scoreTaxonomyCandidates,
   type InventoryAttributionInput,
   type InventoryAttributionResult,

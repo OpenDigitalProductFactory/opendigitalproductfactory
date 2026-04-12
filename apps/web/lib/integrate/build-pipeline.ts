@@ -263,7 +263,7 @@ async function stepGenerateCode(
   } catch { /* non-fatal */ }
 
   // Build the system prompt with build context (same as the coworker uses)
-  const buildContext = getBuildContextSection({
+  const buildContext = await getBuildContextSection({
     buildId,
     phase: "build",
     title: brief?.title ?? "Feature",

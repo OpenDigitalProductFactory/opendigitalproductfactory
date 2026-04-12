@@ -1301,29 +1301,72 @@ async function seedModelProfiles(): Promise<void> {
    * set by model discovery or provider sync.
    */
 async function ensureBuildStudioModelConfig(): Promise<void> {
-  // Prefer Haiku 4.5 over 3.0 for anthropic-sub (subscription tier)
-  const haiku45 = await prisma.modelProfile.findFirst({
-    where: { modelId: "claude-haiku-4-5-20251001", providerId: "anthropic-sub" },
-  });
-  const haiku30 = await prisma.modelProfile.findFirst({
-    where: { modelId: "claude-3-haiku-20240307", providerId: "anthropic-sub" },
+  // ── Ensure all current Anthropic models have correct status ──────────────
+  // Sonnet 4.6 and Opus 4.6 are the primary models for Build Studio and
+  // complex tasks. They must be active with correct scores so routing
+  // picks them over Haiku.
+
+  const anthropicModels = await prisma.modelProfile.findMany({
+    where: { providerId: "anthropic-sub" },
   });
 
-  if (haiku45) {
-    await prisma.modelProfile.update({
-      where: { id: haiku45.id },
-      data: { modelStatus: "active", retiredAt: null },
-    });
-    console.log("  Haiku 4.5 set to active (tool-capable for Build Studio)");
-  }
+  for (const mp of anthropicModels) {
+    // Sonnet 4.6 and Opus 4.6: ensure active with frontier-tier scores
+    if (mp.modelId === "claude-sonnet-4-6" || mp.modelId === "claude-opus-4-6") {
+      const updates: Record<string, unknown> = {
+        modelStatus: "active",
+        retiredAt: null,
+        retiredReason: null,
+      };
+      // Fix scores if they're at the default 50 (below "strong" tier minimum of 70)
+      if (mp.codegen <= 50 || mp.toolFidelity <= 50 || mp.reasoning <= 50) {
+        Object.assign(updates, {
+          codegen: 95, toolFidelity: 95, reasoning: 95,
+          instructionFollowingScore: 95, structuredOutputScore: 93,
+          conversational: 95, contextRetention: 95,
+          qualityTier: "frontier",
+          profileSource: "seed",
+          profileConfidence: "medium",
+        });
+        console.log(`  ${mp.modelId}: fixed default-50 scores → frontier (95)`);
+      }
+      await prisma.modelProfile.update({ where: { id: mp.id }, data: updates as never });
+      console.log(`  ${mp.modelId} set to active`);
+    }
 
-  if (haiku30 && haiku45) {
-    // Disable 3.0 when 4.5 is available — 3.0 returns empty via OAuth subscription
-    await prisma.modelProfile.update({
-      where: { id: haiku30.id },
-      data: { modelStatus: "disabled" },
-    });
-    console.log("  Haiku 3.0 disabled (returns empty via OAuth subscription)");
+    // Haiku 4.5: ensure active
+    if (mp.modelId === "claude-haiku-4-5-20251001") {
+      const updates: Record<string, unknown> = {
+        modelStatus: "active",
+        retiredAt: null,
+      };
+      // Fix inflated scores (codegen:100 → 75 for "strong" tier)
+      if (mp.codegen > 80 || mp.toolFidelity > 80) {
+        Object.assign(updates, {
+          codegen: 75, toolFidelity: 75, reasoning: 75,
+          instructionFollowingScore: 75, structuredOutputScore: 72,
+          conversational: 75, contextRetention: 72,
+          qualityTier: "strong",
+          profileSource: "seed",
+          profileConfidence: "medium",
+        });
+        console.log(`  ${mp.modelId}: fixed inflated scores → strong (75)`);
+      }
+      await prisma.modelProfile.update({ where: { id: mp.id }, data: updates as never });
+      console.log(`  Haiku 4.5 set to active`);
+    }
+
+    // Haiku 3.0: retire — returns empty via subscription OAuth
+    if (mp.modelId === "claude-3-haiku-20240307") {
+      await prisma.modelProfile.update({
+        where: { id: mp.id },
+        data: {
+          modelStatus: "retired",
+          retiredReason: "Claude 3 Haiku returns empty responses via subscription OAuth — use Haiku 4.5 instead",
+        },
+      });
+      console.log("  Haiku 3.0 retired (returns empty via OAuth subscription)");
+    }
   }
 
   console.log("Ensured Build Studio model configuration");
@@ -1346,7 +1389,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     pinnedProviderId?: string;
     pinnedModelId?: string;
   }> = [
-      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first" },
+      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedModelId: "claude-sonnet-4-6" },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },

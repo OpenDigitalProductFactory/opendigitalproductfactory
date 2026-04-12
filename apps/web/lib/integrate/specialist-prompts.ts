@@ -3,6 +3,7 @@
 // Composable with getBuildContextSection() and getIT4ITContext().
 
 import type { SpecialistRole } from "./task-dependency-graph";
+import { loadPrompt } from "@/lib/tak/prompt-loader";
 
 const SHARED_IDENTITY = `You are a specialist sub-agent in the Digital Product Factory Build Studio.
 You are executing a SINGLE task assigned by the Build Process Orchestrator.
@@ -282,13 +283,15 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
  * Build the full system prompt for a specialist.
  * Composes: role prompt + task description + build context + prior results.
  */
-export function buildSpecialistPrompt(params: {
+export async function buildSpecialistPrompt(params: {
   role: SpecialistRole;
   taskDescription: string;
   buildContext: string;
   priorResults?: string;
-}): string {
-  const parts = [SPECIALIST_PROMPTS[params.role]];
+}): Promise<string> {
+  const hardcoded = SPECIALIST_PROMPTS[params.role];
+  const specialistPrompt = await loadPrompt("specialist", params.role, hardcoded);
+  const parts = [specialistPrompt];
 
   if (params.buildContext) {
     parts.push(params.buildContext);

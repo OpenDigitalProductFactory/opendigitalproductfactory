@@ -102,8 +102,16 @@ export function estimateSuccessProbability(
   const avgScore = averageRelevantDimensions(endpoint, contract.taskType);
   if (avgScore < qualityFloor) return 0.3;
 
-  // Base probability from historical success rate
-  return Math.max(1.0 - endpoint.recentFailureRate, 0.1);
+  // Base probability from historical success rate, discounted by profile confidence.
+  // Low-confidence profiles (inferred from model name) are slightly deprioritized
+  // versus medium/high-confidence profiles (from curated catalogs or evaluations).
+  const confidenceMultiplier: Record<string, number> = {
+    high: 1.0,
+    medium: 0.95,
+    low: 0.85,
+  };
+  const confFactor = confidenceMultiplier[endpoint.profileConfidence] ?? 0.9;
+  return Math.max(1.0 - endpoint.recentFailureRate, 0.1) * confFactor;
 }
 
 // ── Cost-Per-Success Ranking ────────────────────────────────────────────────
