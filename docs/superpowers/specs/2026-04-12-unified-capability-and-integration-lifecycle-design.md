@@ -1,11 +1,12 @@
 # Unified Capability and Integration Lifecycle — Design Spec
 
 | Field | Value |
-|-------|-------|
+| ----- | ----- |
 | **Epic** | AI Workforce / Platform Integrations |
 | **Status** | Draft |
 | **Created** | 2026-04-12 |
 | **Author** | Codex for Mark Bodman |
+| **Reviewed by** | Claude Opus 4.6 — revision 2 |
 | **Scope** | `apps/web/app/(shell)/platform/ai/**`, `apps/web/app/(shell)/platform/services/**`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/mcp-server-tools.ts`, `apps/web/lib/actions/ai-providers.ts`, `apps/web/lib/actions/mcp-services.ts`, audit/reporting surfaces |
 | **Primary Goal** | Standardize how integrations are connected, governed, exposed, and audited across AI coworkers without flattening away the real differences between internal tools, external MCP services, and provider-native execution paths |
 | **Design Principle** | Unify the product model around capabilities and lifecycle; keep execution adapters and transport details separate underneath |
@@ -77,7 +78,24 @@ This means the backend is already trending toward a unified capability model, bu
    - observing
    - auditing
 
-## 2.1 Non-goals
+### 2.1 IT4IT value stream alignment
+
+This spec spans three IT4IT v3.0.1 value streams. Each proposed admin section maps to a primary stream:
+
+| Proposed section | Primary IT4IT value stream | Rationale |
+| --- | --- | --- |
+| AI Workforce | **Integrate** | Agent assignment, routing, skill composition — assembling service components |
+| Tools & Integrations | **Integrate** / **Evaluate** | Capability discovery, integration activation, trust policy — onboarding external service sources; evaluating new integrations for fitness |
+| Audit & Operations | **Operate** | Health monitoring, event ledger, authority audit — runtime governance and observability |
+
+Cross-cutting concerns:
+
+- **Routing & Calibration** touches **Evaluate** (scoring models for fitness) and **Integrate** (assigning them to agents)
+- **Capability Inventory** touches **Integrate** (what is available) and **Operate** (is it healthy)
+
+Agent ownership: When breaking this into implementation tasks, check the agent registry for existing agents in each value stream. Integration lifecycle work should be owned by Integrate-stream agents; audit refinement by Operate-stream agents.
+
+### 2.2 Non-goals
 
 - Replace all provider adapters with MCP
 - Force every internal platform capability to be implemented as an MCP server
@@ -284,6 +302,45 @@ Canonical fields:
 - `routeContexts[]`
 - `buildPhases[]`
 
+##### TAK governance alignment target
+
+TAK is a work in progress, and this section describes the **intended correspondence** between the Capability model and TAK governance concepts rather than a claim about current runtime enforcement.
+
+Current-state note:
+
+- runtime tool exposure today is enforced primarily by the intersection of user role capabilities and `AgentToolGrant` resolution in `getAvailableTools()`
+- delegated authority is further shaped by `DelegationGrant.scopeJson`
+- TAK/governance models such as `AgentCapabilityClass` are part of the evolving governance vocabulary, but should not be treated here as the current single source of runtime truth
+
+Proposed alignment targets:
+
+- `riskClass` should align with TAK-style risk-band semantics, whether that remains on `AgentCapabilityClass` or moves to a more capability-native structure
+- `auditClass` should align with TAK/HITL expectations for autonomy and review, without assuming a one-to-one mapping to the current tier model
+- `grantScope` should align with the authority envelope expressed through `DelegationGrant.scopeJson`
+- `executionMode` should align with the existing `executionMode` field on `PLATFORM_TOOLS` and any future expanded capability execution taxonomy
+
+If implementation reveals that TAK's current risk band or HITL definitions are too coarse for the capability lifecycle, that should feed back into TAK as a refinement rather than forcing this implementation to conform to a premature model boundary.
+
+##### Relationship to existing PlatformCapability model
+
+The `PlatformCapability` model already exists in the schema (`capabilityId`, `name`, `description`, `state`, `manifest`). Rather than creating a parallel model, the Capability concept described here should extend `PlatformCapability`:
+
+- The `manifest` JSON field can carry the new metadata (`riskClass`, `auditClass`, `sourceType`, `inputSchema`, `outputShape`, etc.) without a breaking schema change
+- `state` already provides the availability lifecycle hook
+- Phase 1 can enrich `manifest` content; Phase 2 can promote frequently-queried fields to dedicated columns if query performance requires it
+
+##### Source of truth by phase
+
+To avoid creating a stale second registry, capability ownership should be explicit:
+
+- **Phase 1 runtime truth** remains the existing runtime sources:
+  - `PLATFORM_TOOLS` for internal platform tools
+  - `McpServerTool` for discovered external MCP tools
+- **Phase 2 inventory metadata anchor** becomes `PlatformCapability`, enriched from those runtime sources and used to support inventory, classification, and admin-facing metadata
+- **Later phase decision**: decide whether `PlatformCapability` should remain an enriched registry overlay or become the canonical authored source for capability metadata
+
+Until that later decision is made, `PlatformCapability` should not be treated as replacing `PLATFORM_TOOLS` execution metadata.
+
 #### B. Integration
 
 A configured connection or activation that unlocks one or more capabilities.
@@ -319,6 +376,15 @@ Examples:
 
 Adapters should be visible in admin diagnostics, but not be the core IA object.
 
+##### Two adapter layers
+
+The codebase has two distinct adapter concepts that should not be conflated:
+
+1. **Capability adapters** (described above) — how a capability is delivered to a coworker (platform tool, external MCP, CLI dispatch, etc.)
+2. **Inference adapters** (existing `execution-adapter-registry.ts`) — how model calls are routed at the transport level (chat, responses, image_gen, embedding, transcription, async, cli)
+
+These are orthogonal. A `composite` capability adapter might internally use the `chat` inference adapter. A `provider_native` capability adapter maps directly to an inference adapter. The capability adapter layer is the new concept; the inference adapter layer already works and should not be disturbed.
+
 ### 5.2 Capability source taxonomy
 
 Every capability belongs to one `sourceType`:
@@ -343,6 +409,17 @@ Every integration belongs to one `integrationType`:
 - `internal_service`
 
 This allows the lifecycle to be standardized without pretending model providers and MCP servers are identical objects.
+
+### 5.4 Skill-capability relationship
+
+This spec does not redesign the skills system, but the relationship between skills and capabilities must be defined to prevent future confusion:
+
+- A **skill** is a procedure or knowledge body that a coworker knows how to execute (defined in `.skill.md` files, stored in `SkillDefinition`)
+- A **capability** is a discrete action or information access unit that a coworker can invoke at runtime
+- A skill typically **composes** one or more capabilities — the `allowedTools` field in skill frontmatter is effectively a capability grant list
+- The unified capability inventory should be queryable by skill: "which capabilities does skill X require?" This enables impact analysis when an integration goes unhealthy
+
+The existing `SkillAssignment` model assigns skills to agents. The existing `DelegationGrant` model assigns capability scopes. These remain separate — skills define what an agent knows how to do; grants define what it is permitted to do. A skill without the required capability grants is inert.
 
 ---
 
@@ -437,6 +514,8 @@ This is especially important for:
 - Anthropic subscription OAuth vs Anthropic API key
 - Codex / ChatGPT OAuth vs API key
 - maker-provided vs end-user credentials in future shared integrations
+
+**Phasing note:** Neither `ModelProvider` nor `McpServer` currently stores `authMode` or `credentialOwnerMode` as explicit fields. In Phase 1, these values can be inferred from existing provider config patterns (`providers-registry.json` already distinguishes API key vs OAuth providers). Formalizing them as schema fields is Phase 2 work, after the IA and terminology pass validates the mental model with operators.
 
 ---
 
@@ -605,7 +684,7 @@ Subsections:
 ### 9.2 Where current pages move
 
 | Current | Proposed home | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Workforce | AI Workforce > Overview | keep |
 | Model Assignment | AI Workforce > Assignments | make primary assignment surface |
 | Build Studio | AI Workforce > Build Studio CLI | explicitly label as CLI dispatch config |
@@ -688,11 +767,19 @@ This design does not require an immediate full schema rewrite, but it does requi
 - `ModelProvider` remains canonical for inference providers
 - `McpServer` remains canonical for activated external MCP services
 - `McpIntegration` remains canonical for integration catalog entries
-- a new cross-cutting read model should become canonical for **capability inventory**
+- `PlatformCapability` becomes the canonical **inventory metadata anchor** for capability inventory — it already has `capabilityId`, `name`, `description`, `state`, and a `manifest` JSON field that can carry the extended metadata described in Section 5.1.A
 
 ### 11.2 Recommended read-model additions
 
-Introduce a materialized or computed read model such as `CapabilityInventoryView` or equivalent query layer with:
+The `PlatformCapability.manifest` JSON field should be enriched in Phase 2 with: `sourceType`, `riskClass`, `auditClass`, `inputSchema`, `outputShape`, `integrationDependencies`, `adapterType`.
+
+A computed read model (`CapabilityInventoryView` or equivalent query layer) should join across:
+
+- `PlatformCapability` (internal capabilities with enriched manifest)
+- `McpServerTool` (external MCP capabilities, joined to `McpServer` for integration status)
+- `PLATFORM_TOOLS` constant array (runtime tool definitions from `mcp-tools.ts`)
+
+Projected fields:
 
 - `capabilityId`
 - `sourceType`
@@ -706,43 +793,78 @@ Introduce a materialized or computed read model such as `CapabilityInventoryView
 - `auditClass`
 - `gating`
 
-This allows the UI to present a unified capability inventory without immediately rewriting underlying provider and MCP tables into one schema.
+This allows the UI to present a unified capability inventory without rewriting underlying provider and MCP tables into one schema. If query performance degrades, frequently-filtered fields (`riskClass`, `auditClass`, `sourceType`) can be promoted from JSON to dedicated columns in a later migration.
+
+This read model should treat runtime tool definitions as authoritative for execution and availability, while `PlatformCapability` provides the normalized inventory/admin layer.
 
 ### 11.3 Future refactoring opportunities
 
-- normalize route log score storage and display scale
-- unify event/audit storage around typed audit classes
-- reconcile provider readiness vs credential readiness drift
-- revisit whether `ModelProvider` categories should carry MCP-related labels that belong in integration taxonomy instead
+- Unify event/audit storage around typed audit classes (Phase 3)
+- Reconcile provider readiness vs credential readiness drift
+- Revisit whether `ModelProvider` categories should carry MCP-related labels that belong in integration taxonomy instead
+- Promote high-query manifest fields to dedicated `PlatformCapability` columns if needed
 
 ---
 
 ## 12. Rollout Plan
 
-### Phase 1: IA and terminology cleanup
+### Phase 1: IA, terminology, and data integrity
 
-- rename/reframe confusing actions
-- move MCP service management under Tools & Integrations
-- relabel Build Studio as CLI dispatch
-- move Skills under AI Workforce
-- define audit classes in code, even if storage remains mostly unchanged initially
+- Rename/reframe confusing actions (Test connection, Sync Models, Run Eval, Run Probes)
+- Move MCP service management under Tools & Integrations
+- Relabel Build Studio as CLI dispatch
+- Move Skills under AI Workforce
+- Define audit class enum in code (`ledger`, `journal`, `metrics_only`), even if storage remains mostly unchanged initially
+- **Fix route log score normalization** — canonical stored `fitnessScore` should be `0..1`; UI may render `0..100` or `%` views derived from that. Backfill existing `NaN` values and update all readers/writers to honor the same invariant. This is a data integrity bug, not a future refactor
 
-### Phase 2: Unified capability inventory
+Scope: ~8 route/page files, 0 schema changes, 1 migration for score backfill
 
-- add computed capability inventory
-- show internal + external capabilities in one searchable inventory
-- expose risk/gating/audit class per capability
+### Phase 2: Unified capability inventory and auth formalization
+
+- Enrich `PlatformCapability.manifest` with sourceType, riskClass, auditClass, integrationDependencies
+- Add computed `CapabilityInventoryView` query layer that joins `PlatformCapability`, `McpServerTool`, and `PLATFORM_TOOLS`
+- Show internal + external capabilities in one searchable inventory
+- Expose risk/gating/audit class per capability
+- Formalize `authMode` and `credentialOwnerMode` as schema fields on provider and MCP models
+
+Scope: 1 new Prisma view or query module, manifest schema definition, ~3 server actions, 2-3 UI components
 
 ### Phase 3: Audit refinement
 
-- split ledger/journal/metrics UI
-- reduce full-payload retention for `metrics_only`
-- aggregate probe chatter and repeated read-only cycles
+- Split ledger/journal/metrics UI
+- Add `auditClass` field to `ToolExecution` or introduce a new normalized event model
+- Reduce full-payload retention for `metrics_only`
+- Aggregate probe chatter and repeated read-only cycles
+
+Scope: 1 migration (add auditClass column + index), audit UI refactor across 3 pages
 
 ### Phase 4: MCP resources/prompts
 
-- decide whether resources/prompts should become first-class operator-visible context objects
-- only proceed after Phase 1-3 reduce current conceptual overload
+- Decide whether resources/prompts should become first-class operator-visible context objects
+- Only proceed after Phase 1-3 reduce current conceptual overload
+
+### Dependency map
+
+```text
+Phase 1: IA + terminology + score fix
+    |           |
+    |           +-- (independent) audit class enum definition
+    |           +-- (independent) score normalization migration
+    |           +-- (sequential) IA rename/move depends on nothing
+    |
+Phase 2: capability inventory + auth formalization
+    |       depends on: Phase 1 IA structure (knows where pages live)
+    |       does NOT depend on: Phase 1 score fix
+    |
+Phase 3: audit refinement
+    |       depends on: Phase 1 audit class enum
+    |       does NOT depend on: Phase 2
+    |
+Phase 4: MCP resources/prompts
+            depends on: Phase 1-3 reducing conceptual load
+```
+
+Phases 2 and 3 can run in parallel once Phase 1 completes.
 
 ---
 
@@ -790,6 +912,32 @@ Mitigation:
 7. Move generic MCP management to **Tools & Integrations**
 8. Keep model routing, calibration, and CLI dispatch under **AI Workforce**
 
+### 14.1 Reusability and future tenantization awareness
+
+Per the platform's recursive self-improvement principle, the capability and integration model is itself a sellable feature. Customers running their own DPF instance need the same governance surface.
+
+Current-state constraint:
+
+- `PlatformCapability`, `McpServer`, and `ModelProvider` are not currently organization-scoped in the schema, so tenant scoping is **not** a near-term implementation requirement for this epic
+
+Near-term guidance:
+
+- Avoid introducing new assumptions that would make future tenant scoping harder
+- Avoid hardcoding capability or integration IDs in ways that would not generalize across deployments
+- Design the capability inventory query layer so tenant filtering can be introduced later without a conceptual rewrite
+
+Future direction:
+
+- If and when the platform adopts organization-scoped capability/integration records, the inventory layer defined here should be one of the first read models prepared for that migration
+
+### 14.2 TAK co-evolution
+
+TAK is an evolving spec. This work will likely surface refinements to TAK itself:
+
+- If the audit class taxonomy reveals that TAK's HITL tiers need finer granularity, feed that back as a TAK spec revision
+- If the capability-level risk classification shows that risk bands need to be per-capability rather than per-agent-class, propose that change to TAK
+- Implementation findings should be captured as TAK refinement candidates in the follow-on plan
+
 ---
 
 ## 15. Acceptance Criteria
@@ -816,17 +964,22 @@ This design is successful when:
 
 ## 16. Implementation Notes for Follow-on Plan
 
-The follow-on implementation plan should likely break work into:
+The follow-on implementation plan should break work into:
 
-1. IA and terminology pass
-2. capability inventory read model
-3. audit-class support in tool execution logging/reporting
-4. route log score normalization
-5. provider lifecycle cleanup
-6. Build Studio / MCP diagnostics clarification
+1. IA and terminology pass (rename actions, move pages, relabel Build Studio)
+2. Route log score normalization and NaN backfill (data integrity — do not defer)
+3. Audit class enum definition in code
+4. `PlatformCapability.manifest` enrichment and capability inventory query layer
+5. `authMode` / `credentialOwnerMode` schema formalization
+6. Audit class support in `ToolExecution` logging/reporting
+7. Provider lifecycle cleanup (split Test Connection, rename Sync)
+8. Build Studio / MCP diagnostics clarification
 
 The implementation plan should also explicitly decide whether to:
 
-- merge `Action History` into `Audit & Operations`
-- merge `Authority` and tool-execution log around audit classes
-- create a new integration detail shell shared by provider and MCP service detail pages
+- Merge `Action History` into `Audit & Operations`
+- Merge `Authority` and tool-execution log around audit classes
+- Create a new integration detail shell shared by provider and MCP service detail pages
+- Keep tenantization out of near-term implementation scope, but avoid design choices that block future organization scoping
+
+Each phase should include a TAK compatibility check: does the implementation reveal any TAK spec refinements needed? Capture those as follow-on TAK revision items rather than blocking on them.
