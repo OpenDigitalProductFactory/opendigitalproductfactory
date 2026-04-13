@@ -851,7 +851,8 @@ export async function runAgenticLoop(params: {
       const toolDef = tools.find((t) => t.name === tc.name);
 
       // Proposal tools (side-effecting, need approval) — break the loop and return
-      if (toolDef && toolDef.executionMode !== "immediate") {
+      // Check for explicit "proposal" only — undefined executionMode defaults to immediate
+      if (toolDef && toolDef.executionMode === "proposal") {
         return {
           content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
           providerId: result.providerId,
@@ -867,6 +868,27 @@ export async function runAgenticLoop(params: {
             content: result.content || "",
           },
         };
+      }
+
+      // Tool not in available list — capability-gated or not exposed on this route
+      if (!toolDef) {
+        const platformTool = PLATFORM_TOOLS.find((t) => t.name === tc.name);
+        const reason = platformTool?.requiredCapability
+          ? `requires the \`${platformTool.requiredCapability}\` capability, which is not available on this page`
+          : `is not available in this context`;
+        const hint = platformTool?.requiredCapability
+          ? ` You can access this from the relevant section of the platform (e.g. Storefront, Customer, or Operations pages).`
+          : "";
+        console.warn(`[agentic-tool] NOT_AVAILABLE iter=${iteration} tool=${tc.name} reason=${reason}`);
+        iterationResults.push({
+          tc,
+          toolResult: {
+            success: false,
+            error: `Tool not available`,
+            message: `The tool \`${tc.name}\` ${reason}.${hint}`,
+          },
+        });
+        continue;
       }
 
       // Immediate tools — execute
