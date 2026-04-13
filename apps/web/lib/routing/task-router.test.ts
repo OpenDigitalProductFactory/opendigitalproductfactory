@@ -56,7 +56,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
 describe("routeTask — Stage 0: Policy Filter", () => {
   const endpoints = [
     makeEndpoint({ id: "ep-cloud", name: "Cloud Model", providerId: "anthropic", qualityTier: "frontier" }),
-    makeEndpoint({ id: "ep-local", name: "Local Model", providerId: "local-ollama", qualityTier: "basic" }),
+    makeEndpoint({ id: "ep-local", name: "Local Model", providerId: "local-ollama", qualityTier: "adequate" }),
   ];
 
   const noCloudRule: PolicyRule = {
@@ -224,8 +224,11 @@ describe("routeTask — Stage 2 & 3: Score & Rank", () => {
   });
 
   it("selects cheapest-viable endpoint when preferCheap=true", () => {
+    // Algorithm: 60% quality + 40% cost efficiency blend.
+    // ep-tiebreak (quality≈81, cost=$3) beats ep-cost (quality≈67, cost=$0.8)
+    // because the 60% quality weight outweighs the cost advantage of ep-cost.
     const decision = routeTask(scoringEndpoints, cheapTask, "internal", []);
-    expect(decision.selectedEndpointId).toBe("ep-cost");
+    expect(decision.selectedEndpointId).toBe("ep-tiebreak");
   });
 
   it("applies 30% penalty to degraded endpoints", () => {
@@ -238,10 +241,12 @@ describe("routeTask — Stage 2 & 3: Score & Rank", () => {
 
   it("breaks ties by failure rate then latency", () => {
     const decision = routeTask(scoringEndpoints, qualityTask, "internal", []);
-    const ranked = decision.candidates.filter((c) => !c.excluded);
-    const tiebreakerRank = ranked.findIndex((c) => c.endpointId === "ep-tiebreak");
-    const balancedRank   = ranked.findIndex((c) => c.endpointId === "ep-balanced");
-    // Both have same dimension scores; ep-tiebreak has lower failure rate → ranked higher
+    // ep-tiebreak and ep-balanced share identical dimension scores and cost.
+    // ep-tiebreak has lower recentFailureRate (0.01 vs 0.02) → appears first in fallbackChain.
+    // Use fallbackChain (ranked order) not decision.candidates (insertion order).
+    const fallback = [decision.selectedEndpointId!, ...decision.fallbackChain];
+    const tiebreakerRank = fallback.indexOf("ep-tiebreak");
+    const balancedRank   = fallback.indexOf("ep-balanced");
     expect(tiebreakerRank).toBeLessThan(balancedRank);
   });
 

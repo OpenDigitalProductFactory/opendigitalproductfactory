@@ -25,12 +25,13 @@ describe("Build Disciplines — Full Flow Integration", () => {
       expect(result.reason).toContain("Design review");
     });
 
-    it("ALLOWS with design doc and failing review (review is informational — presence is sufficient)", () => {
+    it("BLOCKS with design doc and failing review (failed review requires revision before advancing)", () => {
       const result = checkPhaseGate("ideate", "plan", {
         designDoc: { problemStatement: "Need a search filter" },
         designReview: { decision: "fail", issues: [{ severity: "critical", description: "Missing alternatives" }], summary: "Rejected" },
       });
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("Design review failed");
     });
 
     it("PASSES with design doc and passing review", () => {
@@ -82,12 +83,11 @@ describe("Build Disciplines — Full Flow Integration", () => {
       expect(result.reason).toContain("verification");
     });
 
-    it("BLOCKS when tests fail", () => {
+    it("ALLOWS when tests fail (test failures are informational — pre-existing suite failures must not block feature builds)", () => {
       const result = checkPhaseGate("build", "review", {
         verificationOut: { testsPassed: 9, testsFailed: 1, typecheckPassed: true, fullOutput: "1 failed", timestamp: "2026-03-17T10:00:00Z" },
       });
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("tests must pass");
+      expect(result.allowed).toBe(true);
     });
 
     it("BLOCKS when typecheck fails", () => {
