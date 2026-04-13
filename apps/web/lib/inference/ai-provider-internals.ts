@@ -216,6 +216,10 @@ export async function discoverChatGptBackendModels(
           ...m as Record<string, unknown>,
           id: m.slug,
           source: "chatgpt_backend_discovery",
+          // Tag the provider so the adapter can distinguish codex (api.openai.com)
+          // from chatgpt (chatgpt.com/backend-api) — they share this discovery path
+          // but have different tool support characteristics.
+          discoveredForProvider: providerId,
         },
       }));
 

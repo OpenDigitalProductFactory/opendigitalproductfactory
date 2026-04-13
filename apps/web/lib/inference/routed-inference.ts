@@ -242,9 +242,9 @@ export async function routeAndCall(
     const name = options?.agentDisplayName ?? "AI Assistant";
     const modelId = decision.selectedModelId ?? "";
     const providerIds = decision.candidates.map((c) => c.providerId);
-    const isCodexBackend =
-      modelId.toLowerCase().includes("codex") ||
-      providerIds.some((p) => p === "codex" || p === "chatgpt");
+    // Only the chatgpt subscription backend (chatgpt.com) lacks custom tool support.
+    // The codex provider (api.openai.com/v1/responses) now supports custom tools.
+    const isCodexBackend = providerIds.some((p) => p === "chatgpt");
 
     // Build the "how to fix" suggestion from actually-configured tool-capable
     // endpoints rather than hardcoded model names.
