@@ -51,6 +51,10 @@ export class NoEligibleEndpointsError extends Error {
     public readonly taskType: string,
     public readonly reason: string,
     public readonly excludedCount: number,
+    /** EP-AGENT-CAP-002: Which capability the agent required but no endpoint satisfied. */
+    public readonly missingCapability?: string,
+    /** EP-AGENT-CAP-002: The agent that triggered the error (for admin UI correlation). */
+    public readonly agentId?: string,
   ) {
     super(
       `No eligible endpoints for task '${taskType}': ${reason}` +
@@ -96,6 +100,25 @@ export interface RouteAndCallOptions {
    * workflows where removing tools changes the task semantics.
    */
   requireTools?: boolean;
+  /**
+   * EP-AGENT-CAP-002: Agent-level minimum capability floor.
+   * When set, endpoints that don't satisfy all declared capabilities are
+   * excluded BEFORE graceful tool-stripping. Use DEFAULT_MINIMUM_CAPABILITIES
+   * ({ toolUse: true }) for standard coworkers.
+   */
+  minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
+  /**
+   * EP-AGENT-CAP-002: Minimum context window tokens required by the agent (for RAG).
+   * Merged with task-level minContextTokens — the stricter value wins.
+   * Null = system default (16000 tokens). Read from AgentModelConfig.minimumContextTokens.
+   */
+  agentMinimumContextTokens?: number;
+  /**
+   * EP-AGENT-CAP-002: Agent identifier for error correlation.
+   * Set from agentId in agentic-loop.ts so NoEligibleEndpointsError can surface
+   * which agent triggered the capability floor violation.
+   */
+  agentId?: string;
   /**
    * EP-INF-013: Reasoning effort hint for the selected model.
    *   low    — no extended thinking; fast and cheap (default when omitted)
@@ -162,6 +185,18 @@ export async function routeAndCall(
     contract.minimumDimensions = options.minimumDimensions;
   }
 
+  // EP-AGENT-CAP-002: Inject agent capability floor into contract
+  if (options?.minimumCapabilities !== undefined) {
+    contract.minimumCapabilities = options.minimumCapabilities;
+  }
+  if (options?.agentMinimumContextTokens !== undefined) {
+    // Use the stricter of task-level and agent-level context minimums
+    const agentMin = options.agentMinimumContextTokens;
+    if (contract.minContextTokens === undefined || agentMin > (contract.minContextTokens ?? 0)) {
+      contract.minContextTokens = agentMin;
+    }
+  }
+
   // 2. Load routing data
   const [manifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(),
@@ -193,6 +228,30 @@ export async function routeAndCall(
         effort: options.effort,
       },
     };
+  }
+
+  // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
+  // Only throw if the routing evidence shows the capability floor was the ACTUAL cause
+  // of failure. If endpoints were excluded for sensitivity, status, rate-limit, or
+  // other reasons, fall through to the existing error/degradation path instead —
+  // surfacing "no tool-capable endpoint" when tools aren't the problem is misleading.
+  if (!decision.selectedEndpoint && options?.minimumCapabilities) {
+    const floorExclusions = decision.candidates.filter(
+      (c) => c.excluded && c.excludedReason?.includes("EP-AGENT-CAP-002"),
+    );
+    if (floorExclusions.length > 0) {
+      // Identify which capability was the blocker from the first exclusion reason
+      const missingCap = floorExclusions[0]?.excludedReason?.match(/capability '(\w+)'/)?.[1];
+      throw new NoEligibleEndpointsError(
+        taskType,
+        `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
+        `Missing: ${missingCap ?? "unknown"}. ` +
+        `Configure a capable provider at Platform > AI > Model Assignment.`,
+        decision.excludedCount,
+        missingCap,
+        options?.agentId,
+      );
+    }
   }
 
   // Graceful degradation: if all endpoints were excluded because they lack tool
