@@ -894,6 +894,7 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       threadId: input.threadId,
       taskType: taskTypeId,
+      agentDisplayName: agent.agentName,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

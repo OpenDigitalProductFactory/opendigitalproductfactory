@@ -3,11 +3,30 @@
 // This is the core behavioral difference between a chatbot and an agent.
 
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
-import { executeTool, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { executeTool, PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { AuditClass } from "@/lib/audit-classes";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+
+// ─── Audit helpers (Phase 3) ────────────────────────────────────────────────
+
+function deriveAuditClassForTool(toolName: string): AuditClass {
+  const tool = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  if (!tool) return "journal"; // unknown — conservative default
+  // Explicit override on the tool definition wins
+  if ("auditClass" in tool && tool.auditClass) return tool.auditClass as AuditClass;
+  if (tool.sideEffect) return "ledger";
+  if (tool.requiresExternalAccess) return "journal";
+  return "metrics_only";
+}
+
+function deriveCapabilityId(toolName: string): string {
+  // Platform tools: platform:toolName
+  // MCP tools (serverSlug__toolName) are dispatched via the MCP adapter, not here.
+  return `platform:${toolName}`;
+}
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -326,6 +345,12 @@ export async function runAgenticLoop(params: {
    * required for correct task execution.
    */
   requireTools?: boolean;
+  /**
+   * Display name of the coworker (e.g. "AI Ops Engineer"). Passed through to
+   * routeAndCall so the degraded-mode system prompt can identify the coworker
+   * by name rather than becoming a generic "AI Assistant".
+   */
+  agentDisplayName?: string;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -341,6 +366,7 @@ export async function runAgenticLoop(params: {
     modelRequirements,
     onProgress,
     requireTools,
+    agentDisplayName,
   } = params;
 
   // EP-INF-012: Load admin-configured model assignment for this agent.
@@ -390,6 +416,7 @@ export async function runAgenticLoop(params: {
     taskType: taskType ?? "conversation",
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
+    ...(agentDisplayName ? { agentDisplayName } : {}),
   };
 
   let messages = [...chatHistory];
@@ -405,6 +432,10 @@ export async function runAgenticLoop(params: {
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
+  // Phase 3: probe chatter aggregation — suppress repetitive metrics_only writes
+  const metricsOnlyBuffer = new Map<string, { count: number; firstAt: number }>();
+  const METRICS_COLLAPSE_THRESHOLD = 3;
+  const METRICS_WINDOW_MS = 60_000;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
@@ -863,21 +894,48 @@ export async function runAgenticLoop(params: {
       const resultPreview = (toolResult.message ?? "").slice(0, 200);
       console.log(`[agentic-tool] RESULT iter=${iteration} tool=${tc.name} success=${toolResult.success} duration=${durationMs}ms msg=${resultPreview}`);
 
-      // Audit: record every tool execution (fire-and-forget)
-      prisma.toolExecution.create({
-        data: {
-          threadId: threadId ?? "",
-          agentId: agentId ?? "unknown",
-          userId,
-          toolName: tc.name,
-          parameters: tc.arguments as any,
-          result: toolResult as any,
-          success: toolResult.success,
-          executionMode: "immediate",
-          routeContext: routeContext ?? null,
-          durationMs: Date.now() - toolStartMs,
-        },
-      }).catch(() => {});
+      // Audit: record every tool execution (fire-and-forget, Phase 3 enriched)
+      const auditClass = deriveAuditClassForTool(tc.name);
+      const capabilityId = deriveCapabilityId(tc.name);
+      const isMetricsOnly = auditClass === "metrics_only";
+
+      // Probe chatter aggregation: suppress repetitive metrics_only rows
+      let suppressWrite = false;
+      if (isMetricsOnly) {
+        const key = `${threadId}:${tc.name}`;
+        const now = Date.now();
+        const existing = metricsOnlyBuffer.get(key);
+        if (existing && (now - existing.firstAt) < METRICS_WINDOW_MS) {
+          existing.count++;
+          if (existing.count >= METRICS_COLLAPSE_THRESHOLD) {
+            suppressWrite = true; // absorbed into buffer
+          }
+        } else {
+          metricsOnlyBuffer.set(key, { count: 1, firstAt: now });
+        }
+      }
+
+      if (!suppressWrite) {
+        prisma.toolExecution.create({
+          data: {
+            threadId: threadId ?? "",
+            agentId: agentId ?? "unknown",
+            userId,
+            toolName: tc.name,
+            parameters: isMetricsOnly ? {} : (tc.arguments as any),
+            result: isMetricsOnly ? {} : (toolResult as any),
+            success: toolResult.success,
+            executionMode: "immediate",
+            routeContext: routeContext ?? null,
+            durationMs,
+            auditClass,
+            capabilityId,
+            summary: isMetricsOnly
+              ? `${tc.name}: ${toolResult.success ? "ok" : "failed"}${durationMs ? ` (${durationMs}ms)` : ""}`
+              : null,
+          },
+        }).catch(() => {});
+      }
 
       // Sandbox circuit breaker: track consecutive unavailable responses
       if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {

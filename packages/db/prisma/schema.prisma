@@ -935,23 +935,25 @@ model PlatformCapability {
 }
 
 model McpServer {
-  id              String    @id @default(cuid())
-  serverId        String    @unique
-  name            String
-  config          Json
-  status          String    @default("unconfigured")
-  transport       String?
-  category        String?
-  tags            String[]  @default([])
-  healthStatus    String    @default("unknown")
-  lastHealthCheck DateTime?
-  lastHealthError String?
-  integrationId   String?
-  activatedBy     String?
-  activatedAt     DateTime?
-  deactivatedAt   DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  serverId            String    @unique
+  name                String
+  config              Json
+  status              String    @default("unconfigured")
+  transport           String?
+  category            String?
+  tags                String[]  @default([])
+  healthStatus        String    @default("unknown")
+  lastHealthCheck     DateTime?
+  lastHealthError     String?
+  integrationId       String?
+  activatedBy         String?
+  activatedAt         DateTime?
+  deactivatedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  authMode            String?
+  credentialOwnerMode String?
 
   integration McpIntegration? @relation(fields: [integrationId], references: [id])
   tools       McpServerTool[]
@@ -1061,6 +1063,8 @@ model ModelProvider {
   supportsToolUse          Boolean        @default(false)
   toolFidelity             Int            @default(50)
   userFacingDescription    Json?
+  authMode                 String?
+  credentialOwnerMode      String?
   modelProfiles            ModelProfile[]
 }
 
@@ -2122,11 +2126,17 @@ model ToolExecution {
   routeContext    String?
   durationMs      Int?
   createdAt       DateTime  @default(now())
+  // Phase 3: audit enrichment — nullable; backfill via backfill-capability-ids.ts
+  auditClass      String?
+  capabilityId    String?
+  summary         String?
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
   @@index([toolName, createdAt])
   @@index([threadId])
+  @@index([auditClass, createdAt(sort: Desc)])
+  @@index([capabilityId, createdAt(sort: Desc)])
 }
 
 model AgentAttachment {
@@ -3814,7 +3824,7 @@ model RouteDecisionLog {
   taskType           String
   sensitivity        String
   reason             String
-  fitnessScore       Float
+  fitnessScore       Float?
   candidateTrace     Json
   excludedTrace      Json
   policyRulesApplied String[] @default([])

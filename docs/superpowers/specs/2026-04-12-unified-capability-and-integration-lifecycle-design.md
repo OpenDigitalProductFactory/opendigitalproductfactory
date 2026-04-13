@@ -6,7 +6,8 @@
 | **Status** | Review |
 | **Created** | 2026-04-12 |
 | **Author** | Codex for Mark Bodman |
-| **Reviewed by** | Codex (30 revisions), Claude Opus 4.6 (revision 2 + final review) |
+| **Reviewed by** | Codex (30 revisions), Claude Opus 4.6 (revision 2 + final review + cross-spec analysis), Claude Sonnet 4.6 (gap analysis + revision 3) |
+| **Owner** | Mark Bodman (Integrate value stream) |
 | **Scope** | `apps/web/app/(shell)/platform/ai/**`, `apps/web/app/(shell)/platform/services/**`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/mcp-server-tools.ts`, `apps/web/lib/actions/ai-providers.ts`, `apps/web/lib/actions/mcp-services.ts`, audit/reporting surfaces |
 | **Primary Goal** | Standardize how integrations are connected, governed, exposed, and audited across AI coworkers without flattening away the real differences between internal tools, external MCP services, and provider-native execution paths |
 | **Design Principle** | Unify the product model around capabilities and lifecycle; keep execution adapters and transport details separate underneath |
@@ -336,10 +337,10 @@ To avoid creating a stale second registry, capability ownership should be explic
 - **Phase 1 runtime truth** remains the existing runtime sources:
   - `PLATFORM_TOOLS` for internal platform tools
   - `McpServerTool` for discovered external MCP tools
-- **Phase 2 inventory metadata anchor** becomes `PlatformCapability`, enriched from those runtime sources and used to support inventory, classification, and admin-facing metadata
+- **Phase 2 inventory metadata anchor** becomes `PlatformCapability`, kept fresh by source-appropriate sync strategies (see Section 11.4)
 - **Later phase decision**: decide whether `PlatformCapability` should remain an enriched registry overlay or become the canonical authored source for capability metadata
 
-Until that later decision is made, `PlatformCapability` should not be treated as replacing `PLATFORM_TOOLS` execution metadata.
+Until that later decision is made, `PlatformCapability` should not be treated as replacing `PLATFORM_TOOLS` execution metadata. The inventory layer must always defer to the runtime source for execution and availability — it adds classification and admin metadata on top.
 
 #### B. Integration
 
@@ -360,6 +361,35 @@ Canonical fields:
 - `lastTestedAt`
 - `lastSyncedAt`
 - `capabilityCount`
+
+### 5.1.B capabilityId namespace convention
+
+Every capability must have a stable, namespaced `capabilityId`. Without a convention, Phase 2 implementation will produce ad-hoc IDs across three sources that cannot be joined reliably.
+
+Canonical format: `<namespace>:<identifier>`
+
+| Source | Namespace prefix | Example |
+| --- | --- | --- |
+| Platform-native tool (`PLATFORM_TOOLS`) | `platform` | `platform:create_backlog_item` |
+| External MCP tool (`McpServerTool`) | `mcp` | `mcp:browser-use__browse_act` |
+| Provider-native function | `provider` | `provider:openai__code_interpreter` |
+| Composite capability | `composite` | `composite:research_and_brief` |
+
+Rules:
+
+- Identifiers within a namespace use snake_case
+- MCP tool identifiers use the existing `serverSlug__toolName` convention (double underscore) as the identifier segment, so the full ID is `mcp:serverSlug__toolName`
+- `capabilityId` values must not change once assigned — they are join keys for audit records and skill grants
+- If an external MCP tool is renamed by its server, assign a new `capabilityId` and add the old one to `legacyIds[]` (see Risk: CLI tool-name contracts, Section 13)
+- `PlatformCapability.capabilityId` column is the persistent anchor; runtime sources (`PLATFORM_TOOLS`, `McpServerTool`) are the execution source of truth
+
+**Existing capabilityId values:** The `PlatformCapability` table currently stores arbitrary string identifiers (not the `namespace:identifier` format above). When Phase 2 populates `PlatformCapability` rows for the first time from `PLATFORM_TOOLS`, use the new `platform:toolName` format for all new rows. If any legacy rows exist, migrate them to the new format in the same Phase 2 migration — do not mix formats in the same table.
+
+**`legacyIds[]` storage:** The `PlatformCapability` manifest JSON is the right place to store an array of superseded `capabilityId` values under the key `legacyIds`. Schema column promotion (e.g. `String[] legacyIds`) can be deferred until query patterns prove it is needed.
+
+> **Why:** The `CapabilityInventoryView` (Section 11.2) joins across three heterogeneous sources. Without a namespace convention specified here, three implementers will produce three different ID schemes that will require a painful normalization pass later.
+
+---
 
 #### C. Adapter
 
@@ -397,6 +427,7 @@ Every capability belongs to one `sourceType`:
   - provider-specific built-in action or model-native function path
 - `composite`
   - orchestrated capability built from multiple underlying tools
+  - **Status: taxonomy placeholder only.** Composite capabilities are listed here to reserve the namespace and prevent implementers from treating `composite` as synonymous with `internal`. Definition of authoring, ownership, and lifecycle for composite capabilities is deferred to a follow-on spec. Do not implement composite capability creation or inventory display in Phases 1-3. If discovered during implementation that a specific composite capability is needed, raise it as a TAK refinement candidate rather than inventing the rules ad-hoc.
 
 **Edge case — internal tools with external dependencies:** Some platform-native tools are defined in `PLATFORM_TOOLS` (`sourceType: internal`) but delegate to an external service at runtime. For example, `evaluate_page` and `run_ux_test` are internal tool definitions that call browser-use via MCP. These remain `sourceType: internal` because their definition, schema, and governance are owned by the platform. However, their `integrationDependencies[]` must list the browser-use integration so the capability inventory can show them as unavailable when that dependency is unhealthy.
 
@@ -411,6 +442,10 @@ Every integration belongs to one `integrationType`:
 - `internal_service`
 
 This allows the lifecycle to be standardized without pretending model providers and MCP servers are identical objects.
+
+**`internal_service` and the lifecycle:** Some lifecycle stages are no-ops or have different semantics for internal services. `Verify Connection` for an `internal_service` means a localhost health-check against the service's own health endpoint (e.g. `GET /health`), not an external connectivity test. `Authenticated` is typically a no-op (internal services use ambient platform trust, not external credentials). Implementers should treat these stage adaptations as expected rather than signs that the lifecycle model is wrong — the lifecycle contract is standardized even when specific stages are trivial.
+
+> **Why:** The gap analysis flagged that lifecycle actions written for external integrations (auth, test, credential ownership) do not map cleanly onto internal services. Specifying the adaptation here prevents implementers from either skipping the lifecycle for internal services or inventing incompatible semantics.
 
 ### 5.4 Skill-capability relationship
 
@@ -458,18 +493,84 @@ Degradation states — an integration can move into these from any stage at or a
   - the integration remains usable but should score lower in routing and surface warnings in admin
 - **Unreachable**
   - connectivity lost entirely; capabilities gated on this integration become unavailable
-  - automatic retry with backoff; operator notification after N consecutive failures
+  - automatic retry with exponential backoff (suggested: 30s, 2m, 10m, 30m, then hourly)
+  - operator notification after 3 consecutive failures (see Section 6.1.2 for notification mechanism)
 - **Suspended**
   - manually disabled by an operator or automatically by policy (e.g., trust revocation, credential expiry)
   - capabilities are hard-gated off until the operator re-enables
 
-### 6.1.1 Governance as a parallel concern
+### 6.1.1 State machine: valid transitions
+
+Not all state transitions are valid. The table below defines permitted moves, their triggers, and any guards.
+
+| From | To | Trigger | Guard |
+| --- | --- | --- | --- |
+| `Registered` | `Authenticated` | operator supplies credentials | credentials present and non-empty |
+| `Registered` | `Suspended` | operator or policy action | none |
+| `Authenticated` | `Verified` | `Verify Connection` succeeds | connectivity test passes |
+| `Authenticated` | `Registered` | credentials removed or invalidated | — |
+| `Authenticated` | `Suspended` | operator or policy action | none |
+| `Verified` | `Discovered` | `Refresh Catalog` succeeds | at least one capability or model returned |
+| `Verified` | `Authenticated` | `Verify Connection` fails | retried and still failing |
+| `Verified` | `Suspended` | operator or policy action | none |
+| `Discovered` | `Ready` | capability review passes; usable capability confirmed | at least one capability passes governance checks |
+| `Discovered` | `Verified` | catalog refresh fails or returns empty | — |
+| `Discovered` | `Suspended` | operator or policy action | none |
+| `Ready` | `Healthy` | health check passes after Ready | health check passes (see Section 6.1.4 for scheduling) |
+| `Ready` | `Degraded` | partial health failure | some capabilities failing, others passing |
+| `Ready` | `Unreachable` | connectivity lost entirely | all health checks failing |
+| `Ready` | `Suspended` | operator or policy action | none |
+| `Healthy` | `Degraded` | partial health failure | — |
+| `Healthy` | `Unreachable` | full connectivity loss | — |
+| `Healthy` | `Suspended` | operator or policy action | none |
+| `Degraded` | `Healthy` | health checks recover | all capabilities passing again |
+| `Degraded` | `Unreachable` | full connectivity loss | — |
+| `Degraded` | `Suspended` | operator or policy action | none |
+| `Unreachable` | `Verified` | retry succeeds (connectivity restored) | connection test passes on retry |
+| `Unreachable` | `Suspended` | operator or policy action | none |
+| `Suspended` | `Authenticated` | operator re-enables (credentials still valid) | credentials present |
+| `Suspended` | `Registered` | operator re-enables (credentials absent or expired) | — |
+
+**Pre-Ready transition failures:** If a lifecycle action fails mid-transition (e.g. `Verify Connection` times out), the integration regresses to the last stable state, not to `Registered`. Failed transitions should annotate the current state with a `lastError` field (timestamp + message) rather than creating a new intermediate state. The operator sees the integration at its last stable state with a visible error banner.
+
+> **Why:** Without explicit transitions, implementers invent different rules for "what happens when Verify fails." Regression to the last stable state (rather than all the way back to Registered) preserves already-validated progress and gives operators a meaningful starting point for diagnosis.
+
+### 6.1.2 Operator notification mechanism
+
+When an integration enters `Unreachable` after 3 consecutive health-check failures, the platform must surface a notification. Delivery targets in priority order for Phase 1:
+
+1. **In-app alert** — a persistent banner in the Tools & Integrations admin surface showing the affected integration, failure count, and last error
+2. **Admin dashboard badge** — a count badge on the Tools & Integrations nav item visible from all admin pages
+
+Out of scope for Phase 1 (deferred):
+
+- Email notification
+- Webhook/outbound push
+- Configurable N threshold per integration
+
+> **Why:** The original spec said "operator notification after N consecutive failures" without defining the mechanism or N. Deferring notification entirely risks operators not discovering unhealthy integrations until a coworker fails visibly. In-app-only is the minimum viable surface that doesn't require email infrastructure.
+
+### 6.1.3 Governance as a parallel concern
 
 Governance (trust and exposure policy) is **not** a lifecycle stage. It is a cross-cutting concern that applies at every stage from Registered onward:
 
 - An operator can set or change exposure policy on a Registered integration before it is even Authenticated
 - A Healthy integration can have its trust policy tightened or revoked at any time
 - Governance resolution is checked at runtime alongside the progressive lifecycle state (Section 7.2)
+
+> **Why:** Governance is a parallel concern, not a lifecycle stage. Making this explicit prevents implementers from treating policy enforcement as something that only applies after an integration reaches Ready.
+
+### 6.1.4 Health check scheduling
+
+**Current state:** Health checks are **on-demand only**. `checkMcpServerHealth` is called at activation time and when the operator triggers `Check Health` manually. There is no scheduled background polling job for integration health.
+
+**Phase 1:** On-demand health checks remain the only trigger. No change needed.
+
+**Phase 2 decision:** Decide whether to add a scheduled health-check job (e.g. via the existing `ScheduledJob` system). The existing `mcp-catalog-sync` job pattern is the model. Suggested default interval: **15 minutes** for active integrations; **1 hour** for integrations in `Registered` or `Authenticated` state (they can't degrade in a meaningful way yet). Degraded or Unreachable integrations should retry more aggressively (30s backoff per Section 6.1).
+
+Until scheduled polling exists, the state machine transitions from `Healthy → Degraded` and `Healthy → Unreachable` can only be triggered by: (a) an on-demand `Check Health` action, or (b) a failed tool execution that surfaces a connectivity error. Implementers should treat (b) as a valid degradation trigger and update `healthStatus` on tool execution failure.
+
+> **Why:** The state machine references "health check interval elapsed" which implies scheduled polling. That infrastructure does not exist today. Without this note, a Phase 2 implementer will either build scheduled polling (scope creep) or leave the `Ready → Healthy` transition unreachable (broken lifecycle).
 
 ### 6.2 Lifecycle actions
 
@@ -535,6 +636,14 @@ This is especially important for:
 - Anthropic subscription OAuth vs Anthropic API key
 - Codex / ChatGPT OAuth vs API key
 - maker-provided vs end-user credentials in future shared integrations
+
+**`user_owned` credential expiry and lifecycle state:** When `credentialOwnerMode` is `user_owned`, token expiry affects individual users, not the integration as a whole. The integration-level lifecycle state (Healthy/Degraded/Unreachable) should not change when one user's token expires — the integration remains healthy for other users. Instead, per-user credential state is a separate concern:
+
+- A coworker invocation that requires a `user_owned` credential should fail gracefully with an actionable error directing the user to re-authenticate, not trigger an integration-level degradation
+- The capability availability check (Section 7.2) must be extended in Phase 2 to evaluate per-user credential validity as a separate gate alongside the integration-level health check
+- Per-user token refresh and re-auth flows are out of scope for this spec but must be accounted for in the Phase 2 authMode formalization work
+
+> **Why:** The gap analysis identified that the lifecycle model only describes platform-level credential states. User-owned OAuth tokens expire independently per user and cannot map onto a shared integration lifecycle state without producing misleading operator signals (e.g., marking a healthy integration as Degraded because one user's token expired).
 
 **Phasing note:** Neither `ModelProvider` nor `McpServer` currently stores `authMode` or `credentialOwnerMode` as explicit fields. In Phase 1, these values can be inferred from existing provider config patterns (`providers-registry.json` already distinguishes API key vs OAuth providers). Formalizing them as schema fields is Phase 2 work, after the IA and terminology pass validates the mental model with operators.
 
@@ -617,9 +726,21 @@ Use for:
 - approvals/rejections
 - cross-boundary writes to external systems
 
+**Retention defaults (all three classes):**
+
+| Class | Full payload | Retention window |
+| --- | --- | --- |
+| `ledger` | Yes | Indefinite |
+| `journal` | Yes | 30 days (rolling) |
+| `metrics_only` | No | Aggregates indefinite; payloads not stored |
+
+These defaults should be operator-configurable in a later phase. For Phase 3 implementation, treat 30 days as the hardcoded default for `journal`.
+
+> **Why:** "Shorter window" is not an implementable spec. Without a concrete default, implementers will choose different values, creating inconsistent operator expectations across deployments. 30 days balances investigation utility (most incidents surface within a week) against storage cost.
+
 #### B. `journal`
 
-Retained in detail for a shorter window, grouped in operator UI, roll-up eligible later.
+Retained in detail for a rolling 30-day window, grouped in operator UI, roll-up eligible after window expires.
 
 Use for:
 
@@ -668,7 +789,7 @@ Full payload storage should be conditional by `auditClass`.
 The current `ToolExecution` model uses `toolName` (string) as its primary identifier. The proposed event shape uses `capabilityId`. The migration should be additive:
 
 1. **Phase 3a:** Add `auditClass` and `capabilityId` columns to `ToolExecution` as nullable fields. Begin writing them on new rows. Existing queries continue to work via `toolName`.
-2. **Phase 3b:** Backfill `capabilityId` from `toolName` using a mapping derived from the capability inventory. Tool names that map 1:1 to capabilities (the common case for `PLATFORM_TOOLS`) can be backfilled mechanically. MCP tools use their namespaced name (`serverSlug__toolName`).
+2. **Phase 3b:** Backfill `capabilityId` from `toolName` using a mapping derived from the capability inventory. Tool names that map 1:1 to capabilities (the common case for `PLATFORM_TOOLS`) backfill as `platform:toolName`. MCP tools backfill as `mcp:serverSlug__toolName`, matching the `capabilityId` namespace convention in Section 5.1.B.
 3. **Phase 3c:** Migrate UI consumers from `toolName` filtering to `capabilityId` filtering. Only then consider deprecating `toolName` on new writes.
 
 Do not remove `toolName` — it remains useful as a human-readable label even after `capabilityId` becomes the join key.
@@ -715,6 +836,10 @@ Subsections:
 - Capability Inventory
 - Service Health
 - Trust & Exposure Policy
+
+**Integration Catalog — sourcing:** The catalog is platform-curated, not dynamically discovered from an external registry. In Phase 1, the catalog is a static list of known integration types supported by the platform (e.g., GitHub, Jira, Anthropic, Codex, browser-use). Operators browse the catalog to activate an integration; activation moves the entry into Connected Integrations with a lifecycle state of `Registered`. Dynamic catalog discovery from external MCP registries or marketplaces is a Phase 4+ consideration and is not in scope here.
+
+> **Why:** The gap analysis noted that the distinction between catalog (what could be connected) and connected integrations (what is connected) was undefined as to sourcing. A dynamically discovered catalog implies infrastructure (registry polling, trust vetting) that is out of scope for this epic. Clarifying it as platform-curated unblocks Phase 1 implementation without foreclosing future extensibility.
 
 #### C. Audit & Operations
 
@@ -845,6 +970,63 @@ This allows the UI to present a unified capability inventory without rewriting u
 
 This read model should treat runtime tool definitions as authoritative for execution and availability, while `PlatformCapability` provides the normalized inventory/admin layer.
 
+### 11.4 Capability inventory maintenance over time
+
+The `PlatformCapability` table is a living registry, not a snapshot. Different capability source types change at different rates and for different reasons. Each needs its own sync strategy.
+
+#### A. Internal tools (`sourceType: internal`, source: `PLATFORM_TOOLS`)
+
+These change only when code deploys. The sync script (`sync-capabilities.ts`) runs as part of `portal-init` on every deploy — the same lifecycle as `seed-skills.ts` and `seed-prompt-templates.ts`. It is idempotent and safe to re-run.
+
+**On new tool added** (developer adds entry to `PLATFORM_TOOLS`):
+
+- Next deploy runs `sync-capabilities.ts`
+- Upsert creates a new `PlatformCapability` row with `state: active`
+- New `capabilityId` is assigned using `platform:toolName` convention
+- No manual action needed
+
+**On tool removed** (developer removes entry from `PLATFORM_TOOLS`):
+
+- Sync script detects the tool is absent from the current `PLATFORM_TOOLS` array
+- Sets `state: deprecated` on the existing row — does **not** delete it
+- Audit records, skill grants, and delegation records that reference this `capabilityId` remain intact
+- The capability inventory surfaces deprecated tools in a separate "Removed" section for operator awareness
+- Hard deletion may be done manually by an operator after confirming no active grants reference it
+
+**On tool schema or metadata changed** (developer updates `inputSchema`, `description`, `riskClass`, etc.):
+
+- Sync script computes a hash of the tool's definition fields and compares to the stored `manifest.definitionHash`
+- If hash differs, update the manifest and set `manifest.schemaChangedAt` timestamp
+- Surface a notice in the capability inventory detail view: "Definition updated on [date]"
+- Skills that reference this tool are **not** automatically updated — operator review is required if the schema change is breaking
+
+#### B. External MCP tools (`sourceType: external_mcp`, source: `McpServerTool`)
+
+These change when the external server changes its tool definitions. Sync is already handled by `discoverMcpServerTools()` triggered at activation and on `Refresh Catalog`. The existing `schemaChangedAt` flag mechanism (Section 13, Risk: external MCP tool schema changes) applies here.
+
+The `CapabilityInventoryView` joins against `McpServerTool` directly, so no additional `PlatformCapability` rows are needed for external MCP tools. If classification metadata (riskClass, auditClass, integrationDependencies) is needed for a specific external tool, it can be added as an operator-authored annotation on the `McpServerTool` row rather than mirroring it into `PlatformCapability`.
+
+#### C. Inference providers and models (`sourceType: provider_native`, source: `ModelProvider` / `ModelProfile`)
+
+These change when a provider adds new models or model variants. Sync is already handled by `syncProviderRegistry()` reading `providers-registry.json` on schedule and on-demand via `Refresh Model Catalog`. No new sync infrastructure is needed.
+
+Provider-native capabilities appear in the `CapabilityInventoryView` as a join against `ModelProvider` and `ModelProfile`. Changes to the provider registry propagate automatically on the next sync.
+
+#### D. Composite capabilities (`sourceType: composite`)
+
+Composite capability definition is deferred from Phases 1-3 (see Section 5.2). When composite capability authoring is introduced, it will require its own authoring and versioning workflow that is distinct from the deploy-time sync patterns above. This is a future spec concern.
+
+#### E. Sync failure handling
+
+If `sync-capabilities.ts` fails during `portal-init`:
+
+- Log the error with full detail to container stdout (captured by the platform log pipeline)
+- Do **not** fail the entire `portal-init` — capability inventory metadata is admin-facing, not runtime-critical
+- The platform continues to operate using existing `PlatformCapability` rows and the runtime sources (`PLATFORM_TOOLS`, `McpServerTool`)
+- Surface a warning badge in the Capability Inventory admin page if the last sync timestamp is stale (older than 2× the expected deploy frequency)
+
+> **Why:** `seed-skills.ts` uses the same "warn but don't fail" approach for the same reason — a metadata sync failure should not take the platform down.
+
 ### 11.3 Future refactoring opportunities
 
 - Unify event/audit storage around typed audit classes (Phase 3)
@@ -871,19 +1053,30 @@ This read model should treat runtime tool definitions as authoritative for execu
   - **UI layer 1:** `RouteDecisionLog.tsx` treats scores as 0..1 (thresholds at 0.8/0.5, renders `(score * 100).toFixed(0)%`)
   - **UI layer 2:** `RouteDecisionLogClient.tsx` treats scores as 0..100 (thresholds at 70/40, renders raw value)
   - **Storage:** `RouteDecisionLog.fitnessScore` is `Float` with no constraint — live data contains values across both scales and `NaN`
-  - **Fix target:** Canonical stored `fitnessScore` should be `0..1`. All score-writer paths (legacy and V2) must normalize before persistence. Both UI components must agree on 0..1 input. Backfill existing rows with scale detection heuristic (values > 1.0 are 0-100 scale; divide by 100)
+  - **Fix target:** Canonical stored `fitnessScore` should be `0..1`. All score-writer paths (legacy and V2) must normalize before persistence. Both UI components must agree on 0..1 input. Backfill existing rows using the following rules applied in order:
+    1. `NaN` → `NULL` (unknown score; do not guess)
+    2. `value > 1.0` → `value / 100` (0-100 scale; divide to normalize)
+    3. `value >= 0.0 AND value <= 1.0` → no transform (already normalized; the ambiguity is accepted — a score of e.g. `0.5` is indistinguishable between scales, so we treat the [0,1] range as already correct)
+    4. `value < 0.0` → `NULL` (corrupt; do not propagate)
+  - UI components must handle `NULL` fitnessScore gracefully (render as "—" or "unscored", not as 0%)
 
-Scope: ~8 route/page files, 1 data-only migration for score backfill (no additive schema changes), nav component updates (`AiTabNav.tsx`, breadcrumbs, sidebar links) to reflect IA reorganization, audit class enum definition in a shared constants file
+> **Why:** The original backfill heuristic ("values > 1.0 divide by 100") left two cases unspecified: `NaN` rows (present in live data) and ambiguous values in the [0,1] range that could be either scale. Without explicit rules, the migration author will make ad-hoc choices that differ from what the UI expects.
+
+- **URL redirect policy for IA moves:** Pages relocated by the IA reorganization must implement HTTP 301 redirects from old URLs to new URLs. Old routes must not return 404. Rationale: operators bookmark admin pages; broken bookmarks erode trust in the admin surface. Redirects can be removed after one major release cycle.
+
+Scope: ~8 route/page files, 1 data-only migration for score backfill (no additive schema changes), nav component updates (`AiTabNav.tsx`, breadcrumbs, sidebar links) to reflect IA reorganization, audit class enum definition in a shared constants file, redirect rules for relocated pages
 
 ### Phase 2: Unified capability inventory and auth formalization
 
-- Enrich `PlatformCapability.manifest` with sourceType, riskClass, auditClass, integrationDependencies
+- **Implement `sync-capabilities.ts`** — the `PlatformCapability` table is currently empty. Phase 2 must introduce a sync script (same pattern as `seed-skills.ts`) that keeps `PlatformCapability` rows current as `PLATFORM_TOOLS` evolves. See Section 11.4 for the full sync strategy by source type. This is not a one-time seed — it is a recurring deploy-time sync for internal tools, plus hooks into existing provider and MCP refresh flows for other source types.
+- Enrich `PlatformCapability.manifest` with `sourceType`, `riskClass`, `auditClass`, `integrationDependencies`, and a `definitionHash` for drift detection
 - Add computed `CapabilityInventoryView` query layer that joins `PlatformCapability`, `McpServerTool`, and `PLATFORM_TOOLS`
 - Show internal + external capabilities in one searchable inventory
 - Expose risk/gating/audit class per capability
-- Formalize `authMode` and `credentialOwnerMode` as schema fields on provider and MCP models
+- Formalize `authMode` and `credentialOwnerMode` as schema fields on `ModelProvider` and `McpServer`
+- Implement skill→capability queryability: given a `SkillDefinition.allowedTools` list, resolve the corresponding `capabilityId` values so the inventory can show "skills that require this capability"
 
-Scope: 1 new Prisma view or query module, manifest schema definition, ~3 server actions, 2-3 UI components
+Scope: 1 sync script (`sync-capabilities.ts`, ~50 initial rows from PLATFORM_TOOLS), manifest schema definition (`zod` or JSON Schema), 1 migration (authMode/credentialOwnerMode columns + `definitionHash` on PlatformCapability), ~3 server actions, 2-3 UI components
 
 ### Phase 3: Audit refinement
 
@@ -956,7 +1149,22 @@ Mitigation:
 
 - Do not rename existing tool `name` values as part of the IA reorganization
 - The `capabilityId` introduced in the inventory layer is an internal join key, not a replacement for the tool name exposed to clients
-- If tool names must change in a future phase, introduce a `legacyNames[]` alias mechanism so existing CLI sessions do not break mid-conversation
+- If tool names must change in a future phase, introduce a `legacyIds[]` field (see Section 5.1.B) so audit records and grants remain joinable; the CLI-facing tool name contract is separate from the internal `capabilityId` key
+
+### Risk: external MCP tool schema changes break existing skill and grant references
+
+When `Refresh Catalog` runs and an external MCP server has changed its tool schema (added, removed, or renamed tools), existing `SkillAssignment` entries and `DelegationGrant` records that reference the old tool names may silently become stale.
+
+Mitigation:
+
+- On `Refresh Catalog`, diff the incoming tool list against `McpServerTool` rows for that server
+- Tools that have disappeared: mark their `McpServerTool` row as `status: removed` rather than deleting it; keep it visible in the capability inventory with an unavailable state so admins can see what broke
+- Tools that are new: add rows normally with `status: active`
+- Tools that have changed schema (`inputSchema` or `outputShape`): update the row and flag it with a `schemaChangedAt` timestamp; surface a warning in the capability inventory detail view
+- Do not automatically update `SkillAssignment.allowedTools` — require operator review when a referenced tool's schema changes
+- The `legacyIds[]` mechanism defined in Section 5.1.B applies here: if a tool is renamed, the old `capabilityId` must be preserved as a legacy reference so audit records and grants remain joinable
+
+> **Why:** The spec correctly protects platform-side tool names from being renamed (Risk: CLI tool-name contracts). The inverse — external tools changing their own contracts — is an equal risk that was not addressed in the original draft. Silent schema drift causes coworker failures that are hard to diagnose without this flag.
 
 ### Risk: MCP becomes invisible despite being important
 
@@ -1026,9 +1234,87 @@ This design is successful when:
 
 6. Build Studio CLI configuration is clearly understood as a special execution path, not just another routing panel
 
+7. A coworker interacting with a Degraded or Unreachable integration receives a meaningful, actionable error message — not a silent failure, an opaque timeout, or a raw exception. The error must tell the user what broke and what they (or an operator) can do about it.
+
+8. An operator who bookmarks an admin page before the IA reorganization can still reach that page after Phase 1 ships (via redirect, not 404).
+
+> **Why criteria 7 and 8 were added:** The original acceptance criteria were entirely operator-centric. Criterion 7 closes the coworker-facing half of the capability availability chain — a system that governs capabilities well but fails opaquely at the coworker layer has not met its goal. Criterion 8 is a concrete test for the URL redirect policy added to Phase 1; without an acceptance criterion it would be treated as optional.
+
 ---
 
-## 16. Implementation Notes for Follow-on Plan
+## 16. Cross-Spec Dependencies
+
+This spec does not exist in isolation. It conflicts with three existing specs that require explicit reconciliation before Phase 1 work begins, and augments or is augmented by twelve others. The Build Studio and hive mind correlation is addressed separately.
+
+### 17.1 Conflicting specs — requires resolution before implementation
+
+#### A. `2026-04-11-platform-mcp-tool-server-design.md`
+
+That spec proposes a DPF-hosted MCP server endpoint (`/api/mcp`) that exposes all platform tools to CLI clients (Claude CLI, Codex). Its framing positions MCP as the canonical delivery pillar for tools to CLI-agentic providers.
+
+**Conflict:** The unified capability spec classifies platform tools as `sourceType: internal` and explicitly positions MCP as *one adapter layer among several* — not the primary delivery channel. The platform MCP tool server is the `cli_mcp_delivery` adapter in Section 4.2, not a replacement for the `internal` sourceType classification.
+
+**Conflict point 2:** The platform MCP server exposes tools using their original `name` from `PLATFORM_TOOLS`. The unified capability spec assigns each tool a `capabilityId` (`platform:toolName`) as an internal inventory key. These are different identifiers for the same tool. The CLI-facing contract is the `name`; the `capabilityId` is the internal join key. Section 13 (Risk: CLI tool-name contracts) covers this, but the two specs must be reconciled to make the boundary explicit.
+
+**Resolution:** Treat the platform MCP server as the execution-layer implementation of the `cli_mcp_delivery` adapter. The `capabilityId` is the inventory anchor; the `PLATFORM_TOOLS` name is the stable CLI contract. The MCP server spec does not change `sourceType` classification — platform tools remain `internal` regardless of how they are delivered to a client.
+
+#### B. `2026-03-16-unified-mcp-coworker-design.md`
+
+That spec establishes "Workforce = MCP Registry" as a design principle: all AI resources — local models, cloud models, external services — treated as MCP endpoints in one unified registry.
+
+**Conflict:** This spec explicitly rejects that model. Non-goal 1 (Section 2.2) says "Replace all provider adapters with MCP." Non-goal 2 says "Force every internal platform capability to be implemented as an MCP server." The unified capability model keeps separate registries (`ModelProvider`, `McpServer`, `PlatformCapability`) and unifies them only at the product/capability layer via the `CapabilityInventoryView`.
+
+**Status note:** Portions of the 2026-03-16 spec have already been superseded. The `2026-03-20-mcp-activation-and-services-surface-design.md` spec explicitly decoupled `ModelProvider` (LLM-only) from `McpServer` (MCP services only). The unified capability spec aligns with that decoupling. The "Workforce = MCP Registry" mental model should be treated as superseded by the differentiated registry approach.
+
+#### C. `2026-03-20-mcp-activation-and-services-surface-design.md` (live implementation)
+
+That spec designed and implemented the External Services admin surface — the current live UI at `/platform/services`. It established the `McpServer` schema, the two-track design (Catalog Activation Bridge + External Services Admin Surface), and the integration/health status UI. Its predecessor (`2026-03-16-external-services-mcp-surface-design.md`) is explicitly superseded by it.
+
+**Conflict:** The unified capability spec proposes moving the external services surface out of the current AI nav into a new `Tools & Integrations` section. The data model from this spec (`McpServer`, `McpServerTool`) is correctly aligned and does not need to change — only the navigation home and URL change.
+
+**Resolution:** The Phase 1 IA work must reconcile the live URL structure from this spec with the proposed IA reorganization. The URL redirect policy in Section 12 (Phase 1) covers the operator-facing impact. Implementers should treat this spec as the authoritative reference for `McpServer` schema semantics, activation lifecycle, and health states — those do not change.
+
+### 17.2 Augmenting specs
+
+These specs extend this design or are extended by it. No conflict exists, but implementation teams should read them together with this spec.
+
+| Spec | Relationship |
+| --- | --- |
+| `2026-04-02-ai-workforce-consolidation-design.md` | Defines `AgentCapabilityClass` and single canonical agent ID (`AGT-xxx`). The `riskClass` and `grantScope` alignment targets in Section 5.1.A depend on this consolidation. The "two authorization models" problem it identifies (flat `tool_grants` vs `AgentCapabilityClass` riskBand) must be resolved for the capability governance layer to work cleanly. |
+| `2026-04-08-build-studio-config-design.md` | Defines Build Studio CLI dispatch config tab (already implemented at `/platform/ai/build-studio`). The Phase 1 IA reorganization must update this tab's navigation position. Treat this spec as the source of truth for CLI dispatch config content; this spec governs where it lives in the IA. |
+| `2026-04-05-provider-reconciliation-automation-design.md` | Defines automated provider reconciliation loop (connect → discover → profile → sync → routing repair). This IS the sync strategy for `sourceType: provider_native` described in Section 11.4.C. Phase 2 should treat this reconciliation loop as the authoritative sync mechanism for provider-native capabilities in the `CapabilityInventoryView`. |
+| `2026-03-16-agent-action-history-design.md` | Establishes Action History at `/platform/ai/history`. The unified capability spec renames this to "Action Ledger" under `Audit & Operations`. HTTP 301 redirect from old URL required in Phase 1 per the URL redirect policy. |
+| `2026-03-20-execution-adapter-framework-design.md` | Defines the inference adapter registry (`execution-adapter-registry.ts`). Section 5.1.A names this as the "inference adapters" layer orthogonal to "capability adapters." This spec is the authoritative description of the inference adapter layer — do not conflate the two. |
+| `2026-04-01-platform-operational-health-monitoring-design.md` | Defines the Prometheus/Grafana operational health layer and `ScheduledJob` patterns. The Phase 2 decision point for scheduled health polling (Section 6.1.4) should use this spec as the reference implementation when introducing background health polling for integrations. |
+| `2026-03-20-capability-detection-and-routing-design.md` | Defines provider-level capability detection (`codeExecution`, `webSearch`, `computerUse`). These detected provider-native capabilities are exactly the `sourceType: provider_native` entries in the `CapabilityInventoryView`. Phase 2 inventory population should use this spec's capability detection output for provider-native rows. |
+| `2026-04-02-ai-provider-agent-operational-monitoring-design.md` | Defines AI provider health monitoring and health state reporting. The `Degraded` / `Unreachable` states in Section 6.1 of this spec should align with health state transitions defined there. |
+| `2026-03-19-mcp-integrations-catalog-design.md` | Defines the MCP integration catalog (already implemented). Section 9.1.B notes the catalog is platform-curated, not dynamically discovered. This spec is the authoritative description of how the catalog is maintained; do not introduce a conflicting catalog sourcing model. |
+| `2026-03-13-unified-identity-access-agent-governance-design.md` | Identity and access governance. The TAK alignment targets (Section 5.1.A) and capability availability resolution (Section 7.2) depend on `can()`, `AgentToolGrant`, and `DelegationGrant`. This spec is the authoritative reference for those mechanisms. |
+| `2026-03-18-ai-routing-and-profiling-design.md` | Routing profiles and fitness scoring. The fitnessScore normalization bug in Section 12 (Phase 1) traces to the scoring computation in this spec's routing pipeline. The Phase 1 fix must reconcile scoring conventions between this spec and both UI components. |
+| `2026-04-06-ideate-conversational-gate-design.md` | Build Studio ideate phase conversational gate. See Section 17.3. |
+
+### 17.3 Build Studio and hive mind correlation
+
+**Current Build Studio tool selection** uses `getAvailableTools()` at `build-orchestrator.ts:426`, filtered by the `buildPhases` property per tool. This is already a form of capability-phase gating, but it operates directly on `PLATFORM_TOOLS` — it has no visibility into `PlatformCapability`, integration health, or external MCP tool availability. New tools are invisible to Build Studio until the next deployment.
+
+`sync-capabilities.ts` (Phase 2) will close the deploy-time gap for internal tools. It does not help with runtime integration health.
+
+**The ideate conversational gate** (`2026-04-06-ideate-conversational-gate-design.md`) is not capability-aware. It performs a lightweight intent check before launching the research pipeline, but it does not query whether the integrations or capabilities that the research pipeline requires are actually healthy. If a required integration is unhealthy, the research pipeline launches, runs for up to 300 seconds, and fails mid-way.
+
+**Phase 2+ enhancement opportunity (not in scope for Phases 1-3):** Once the `CapabilityInventoryView` exists, the ideate gate could query it before starting the research pipeline to surface "integration X is not configured" or "capability Y is unavailable" as a pre-build constraint check. This would let the gate offer a specific, actionable message ("this feature requires the GitHub integration — configure it first") instead of launching a failing pipeline. This enhancement should be captured as a follow-on spec when Phase 2 capability inventory work completes.
+
+**Hive mind flywheel** (`2026-04-05-continuous-improvement-flywheel-design.md`) flows through `ImprovementSignal → ImprovementProposal → backlog items`. It does not involve tool or capability discovery — improvement signals come from conversational friction, build quality outcomes, and operator feedback. Knowledge is indexed separately in Qdrant. There is no direct correlation between the hive mind flywheel and the capability inventory introduced by this spec. They are complementary but orthogonal: the flywheel surfaces what to improve; the capability inventory surfaces what is available to do the work.
+
+---
+
+## 17. Implementation Notes for Follow-on Plan
+
+**Implementation briefs:**
+
+- Phase 1: `docs/superpowers/specs/2026-04-12-unified-capability-phase1-implementation.md` — IA, terminology, score fix, audit enum
+- Phase 2: `docs/superpowers/specs/2026-04-12-unified-capability-phase2-implementation.md` — capability inventory, auth formalization
+- Phase 3: TBD (audit refinement — implement after Phase 2 ships)
+- Phase 4: TBD (MCP resources/prompts — deferred)
 
 The follow-on implementation plan should break work into:
 

@@ -18,6 +18,7 @@ import {
   classifyHttpError,
   extractAnthropicToolCalls,
   extractOpenAIToolCalls,
+  extractTextualToolCalls,
   formatMessageForAnthropic,
   formatMessageForOpenAI,
   formatMessageForResponses,
@@ -388,7 +389,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
       text = msg?.content || msg?.reasoning || "";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
+        // Structured tool calls (standard OpenAI format)
         toolCalls = extractOpenAIToolCalls(msg.tool_calls);
+      } else if (text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
+        // Fallback: model runner didn't translate native tool-call markers to structured format.
+        // Handles Gemma/Llama template variants that leak <tool_call> or <|tool_call> as text.
+        const extracted = extractTextualToolCalls(text);
+        toolCalls = extracted.toolCalls;
+        text = extracted.cleanText;
       }
 
       const usage = typeof data.usage === "object" && data.usage !== null

@@ -455,7 +455,7 @@ export async function profileModelsInternal(
         maxContextTokens: card.maxInputTokens,
         inputPricePerMToken: card.pricing.inputPerMToken,
         outputPricePerMToken: card.pricing.outputPerMToken,
-        supportsToolUse: card.capabilities.toolUse ?? false,
+        supportsToolUse: card.capabilities.toolUse ?? provider!.supportsToolUse ?? false,
       };
       await prisma.modelProfile.upsert({
         where: { providerId_modelId: { providerId, modelId: m.modelId } },
@@ -563,7 +563,7 @@ export async function profileModelsInternal(
     // EP-INF-003: Drift detection — check if provider metadata changed
     const existingProfile = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { rawMetadataHash: true, profileSource: true },
+      select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true },
     });
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
@@ -587,7 +587,20 @@ export async function profileModelsInternal(
       }
     }
 
-    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync
+    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
+    // supportsToolUse uses a fallback chain:
+    //   1. extracted value (non-null) — authoritative from provider metadata
+    //   2. existing DB value when profileSource is evaluated/admin — preserves manual overrides
+    //   3. provider-level supportsToolUse flag — provider knows its models better than per-model metadata
+    //   4. false — last resort
+    const extractedToolUse = card.capabilities.toolUse;
+    const isManuallySet = existingProfile?.profileSource === "evaluated" || existingProfile?.profileSource === "admin";
+    const resolvedToolUse = extractedToolUse !== null && extractedToolUse !== undefined
+      ? extractedToolUse
+      : isManuallySet
+        ? (existingProfile.supportsToolUse ?? provider!.supportsToolUse ?? false)
+        : (provider!.supportsToolUse ?? false);
+
     const metadataFields = {
       modelFamily: card.modelFamily,
       modelClass: card.modelClass,
@@ -613,7 +626,7 @@ export async function profileModelsInternal(
       maxContextTokens: card.maxInputTokens,
       inputPricePerMToken: card.pricing.inputPerMToken,
       outputPricePerMToken: card.pricing.outputPerMToken,
-      supportsToolUse: card.capabilities.toolUse ?? false,
+      supportsToolUse: resolvedToolUse,
     };
 
     // EP-INF-012: Assign quality tier from model family
@@ -912,10 +925,11 @@ async function seedKnownModels(
 
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { qualityTierSource: true, profileSource: true },
+      select: { qualityTierSource: true, profileSource: true, supportsToolUse: true },
     });
 
     const shouldWriteScores = !existing?.profileSource || existing.profileSource === "seed";
+    const isManuallySetCatalog = existing?.profileSource === "evaluated" || existing?.profileSource === "admin";
     const shouldWriteTier = !existing?.qualityTierSource || existing.qualityTierSource !== "admin";
 
     // Use per-model scores if provided, otherwise fall back to tier baselines
@@ -986,7 +1000,9 @@ async function seedKnownModels(
         inputModalities: m.inputModalities,
         outputModalities: m.outputModalities,
         capabilities: m.capabilities as any,
-        supportsToolUse: m.capabilities.toolUse ?? false,
+        supportsToolUse: isManuallySetCatalog
+          ? (existing.supportsToolUse ?? m.capabilities.toolUse ?? false)
+          : (m.capabilities.toolUse ?? false),
         ...scoreFields,
         ...tierFields,
         generatedBy: "system:auto-discover",

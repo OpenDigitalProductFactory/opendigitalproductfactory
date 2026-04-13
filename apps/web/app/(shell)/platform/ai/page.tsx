@@ -3,7 +3,6 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
 import { AgentProviderSelect } from "@/components/platform/AgentProviderSelect";
-import { AiTabNav } from "@/components/platform/AiTabNav";
 import { getAgentGrantSummaries } from "@/lib/agent-grants";
 
 const TIER_LABELS: Record<number, string> = {
@@ -95,8 +94,6 @@ export default async function PlatformAiPage() {
           {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
         </p>
       </div>
-
-      <AiTabNav />
 
       {agentsWithBrokenProviders.length > 0 && (
         <div style={{

@@ -14,6 +14,7 @@ import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
+import { syncCapabilities } from "./sync-capabilities.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -1514,6 +1515,7 @@ async function main(): Promise<void> {
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
+  await syncCapabilities(prisma);
   console.log("Seed complete.");
 }
 

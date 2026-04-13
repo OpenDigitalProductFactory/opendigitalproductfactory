@@ -35,10 +35,12 @@ export async function resolveAgentForRouteWithPrompts(
 
   // Load DB-powered prompt (falls back to the hardcoded one)
   const dbPrompt = await loadPrompt("route-persona", agent.agentId, agent.systemPrompt);
+  const dbIdentity = await loadPrompt("platform-identity", "identity-block");
   const dbPreamble = await loadPrompt("platform-preamble", "platform-preamble");
   const dbMission = await loadPrompt("platform-mission", "company-mission");
 
-  const preamble = [dbMission, dbPreamble].filter(Boolean).join("\n\n");
+  // Order: identity (who you are + page context rules) → mission → behavioral preamble → role persona
+  const preamble = [dbIdentity, dbMission, dbPreamble].filter(Boolean).join("\n\n");
 
   return {
     ...agent,

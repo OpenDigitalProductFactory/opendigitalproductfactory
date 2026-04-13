@@ -12,12 +12,15 @@ type AgentRow = {
   pinnedModelId: string | null;
   lastModel: string | null;
   isDbConfig: boolean;
+  hasToolGrants: boolean;
 };
+
+type ProviderModel = { modelId: string; friendlyName: string; supportsToolUse: boolean };
 
 type Provider = {
   providerId: string;
   name: string;
-  models: Array<{ modelId: string; friendlyName: string }>;
+  models: Array<ProviderModel>;
 };
 
 const TIERS = [
@@ -32,6 +35,16 @@ const BUDGET_CLASSES = [
   { value: "balanced", label: "Balanced" },
   { value: "minimize_cost", label: "Cost" },
 ];
+
+function findPinnedModel(
+  providers: Provider[],
+  pinnedProviderId: string | null,
+  pinnedModelId: string | null,
+): ProviderModel | null {
+  if (!pinnedProviderId || !pinnedModelId) return null;
+  const provider = providers.find((p) => p.providerId === pinnedProviderId);
+  return provider?.models.find((m) => m.modelId === pinnedModelId) ?? null;
+}
 
 export function AgentModelAssignmentTable({
   agents,
@@ -106,21 +119,39 @@ export function AgentModelAssignmentTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const pinnedModel = findPinnedModel(providers, row.pinnedProviderId, row.pinnedModelId);
+            const showToolWarning = row.hasToolGrants && pinnedModel !== null && pinnedModel.supportsToolUse === false;
+            return (
             <>
               <tr key={row.agentId}>
                 <td style={cellStyle}>
-                  <div>
-                    <span style={{ fontWeight: 500 }}>{row.agentName}</span>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 11,
-                        color: "var(--dpf-muted)",
-                      }}
-                    >
-                      {row.agentId}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div>
+                      <span style={{ fontWeight: 500 }}>{row.agentName}</span>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 11,
+                          color: "var(--dpf-muted)",
+                        }}
+                      >
+                        {row.agentId}
+                      </span>
+                    </div>
+                    {showToolWarning && (
+                      <span
+                        title="Pinned model does not support function calling — tools disabled"
+                        style={{
+                          display: "inline-block",
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: "#f59e0b",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
                   </div>
                 </td>
                 <td style={cellStyle}>
@@ -275,11 +306,28 @@ export function AgentModelAssignmentTable({
                         </span>
                       )}
                     </div>
+                    {showToolWarning && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          border: "1px solid #fcd34d",
+                          background: "#fef3c7",
+                          color: "#b45309",
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        ⚠ This model does not support function calling. Pinning it will disable all tools for this coworker — it will respond as a generic assistant with no capabilities or identity.
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}
             </>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 12 }}>
