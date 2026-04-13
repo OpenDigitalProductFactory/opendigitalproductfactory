@@ -127,11 +127,39 @@ export function catalogEntryToProfileFields(entry: KnownModel): ProfileUpdateSha
   };
 }
 
+async function logChanges(
+  providerId: string,
+  modelId: string,
+  changedFields: Record<string, unknown>,
+  currentProfile: Record<string, unknown>,
+  source: string,
+): Promise<void> {
+  const entries = Object.entries(changedFields).map(([field, newValue]) => ({
+    id: `${Date.now()}-${field}-${Math.random().toString(36).slice(2, 7)}`,
+    providerId,
+    modelId,
+    field,
+    oldValue: currentProfile[field] ?? null,
+    newValue: newValue ?? null,
+    source,
+  }));
+  if (entries.length > 0) {
+    await prisma.modelCapabilityChangeLog.createMany({ data: entries });
+  }
+}
+
 async function reconcile(): Promise<void> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
   let noChange = 0;
+
+  // Prune change log entries older than 90 days
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const { count: pruned } = await prisma.modelCapabilityChangeLog.deleteMany({
+    where: { changedAt: { lt: cutoff } },
+  });
+  if (pruned > 0) console.log(`  Pruned ${pruned} change log entries older than 90 days`);
 
   for (const [providerId, models] of Object.entries(KNOWN_PROVIDER_MODELS)) {
     for (const entry of models) {
@@ -177,6 +205,8 @@ async function reconcile(): Promise<void> {
           } as Parameters<typeof prisma.modelProfile.create>[0]["data"],
         });
         console.log(`  CREATED  ${providerId}/${modelId}`);
+        const newFieldsForLog = fields as unknown as Record<string, unknown>;
+        await logChanges(providerId, modelId, newFieldsForLog, {}, "catalog");
         created++;
         continue;
       }
@@ -225,6 +255,13 @@ async function reconcile(): Promise<void> {
 
       const changedKeys = Object.keys(changedFields).join(", ");
       console.log(`  UPDATED  ${providerId}/${modelId} [${changedKeys}]`);
+      await logChanges(
+        providerId,
+        modelId,
+        changedFields,
+        profile as Record<string, unknown>,
+        "catalog",
+      );
       updated++;
     }
   }
