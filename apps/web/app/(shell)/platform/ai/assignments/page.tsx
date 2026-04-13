@@ -122,10 +122,10 @@ export default async function AssignmentsPage() {
   const providerList = providers.map((p) => ({
     providerId: p.providerId,
     name: p.name,
-    models: p.modelProfiles.map((m: { modelId: string; friendlyName: string; supportsToolUse: boolean }) => ({
+    models: p.modelProfiles.map((m: { modelId: string; friendlyName: string; supportsToolUse: boolean | null }) => ({
       modelId: m.modelId,
       friendlyName: m.friendlyName,
-      supportsToolUse: m.supportsToolUse,
+      supportsToolUse: m.supportsToolUse ?? false,
     })),
   }));
 
