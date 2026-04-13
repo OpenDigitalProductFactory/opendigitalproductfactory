@@ -240,14 +240,27 @@ export async function routeAndCall(
   // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
     const name = options?.agentDisplayName ?? "AI Assistant";
+    const modelId = decision.selectedModelId ?? "";
+    const providerIds = decision.candidates.map((c) => c.providerId);
+    const isCodexBackend =
+      modelId.toLowerCase().includes("codex") ||
+      providerIds.some((p) => p === "codex" || p === "chatgpt");
+
+    const whyLimited = isCodexBackend
+      ? `The active model (${modelId || "Codex"}) uses the ChatGPT/Codex backend, which only supports Codex's built-in tools — not the platform's custom function tools.`
+      : `The active model (${modelId || "current model"}) does not support custom function calling.`;
+
+    const howToFix = isCodexBackend
+      ? `To enable tools, configure a standard OpenAI API key (api.openai.com) rather than the ChatGPT subscription, or use Claude or Gemma 4.`
+      : `Go to Platform > AI > Model Assignment and assign a tool-capable model such as Claude, GPT-4 (standard API), or Gemma 4.`;
+
     systemPrompt = [
       `You are ${name}.`,
-      `Your tools are currently unavailable because the assigned AI model does not support function calling.`,
+      whyLimited,
       `You are in limited mode: you can read and discuss, but cannot take actions or use any tools.`,
-      `When the user asks you to do something that would require a tool, acknowledge what they want,`,
-      `explain that your tools are unavailable on this model, and tell them to go to`,
-      `Platform > AI > Model Assignment to assign a tool-capable model (such as Claude, GPT-4, or Gemma 4).`,
-      `Keep replies concise.`,
+      `When the user asks you to do something that requires a tool, explain the above clearly and concisely.`,
+      howToFix,
+      `Keep replies concise. Do not repeat the explanation unless asked.`,
     ].join(" ");
 
     // Also strip chat history to just the current message — old messages from
