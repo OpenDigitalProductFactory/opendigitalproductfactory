@@ -9,7 +9,7 @@ import { AgentModelAssignmentTable } from "@/components/platform/AgentModelAssig
 // Agent defaults — used when no DB config row exists.
 // Must match the defaultMinimumTier/defaultBudgetClass in agent-routing.ts ROUTE_AGENT_MAP.
 const AGENT_DEFAULTS: Record<string, { minimumTier: string; budgetClass: string }> = {
-  "build-specialist":     { minimumTier: "frontier", budgetClass: "quality_first" },
+  "build-specialist":     { minimumTier: "strong",   budgetClass: "quality_first" },
   "coo":                  { minimumTier: "strong",   budgetClass: "balanced" },
   "admin-assistant":      { minimumTier: "strong",   budgetClass: "balanced" },
   "platform-engineer":    { minimumTier: "strong",   budgetClass: "balanced" },
@@ -21,7 +21,9 @@ const AGENT_DEFAULTS: Record<string, { minimumTier: string; budgetClass: string 
   "inventory-specialist": { minimumTier: "adequate", budgetClass: "balanced" },
   "ea-architect":         { minimumTier: "adequate", budgetClass: "balanced" },
   "ops-coordinator":      { minimumTier: "adequate", budgetClass: "balanced" },
-  "onboarding-coo":       { minimumTier: "basic",   budgetClass: "minimize_cost" },
+  "onboarding-coo":       { minimumTier: "basic",    budgetClass: "minimize_cost" },
+  "doc-specialist":       { minimumTier: "adequate", budgetClass: "balanced" },
+  "data-architect":       { minimumTier: "adequate", budgetClass: "balanced" },
 };
 
 // Agent display names
@@ -30,6 +32,8 @@ const AGENT_NAMES: Record<string, string> = {
   "coo":                  "COO",
   "admin-assistant":      "System Admin",
   "platform-engineer":    "AI Ops Engineer",
+  "compliance-officer":   "Compliance Officer",
+  "finance-controller":   "Finance Controller",
   "hr-specialist":        "HR Director",
   "customer-advisor":     "Customer Success Manager",
   "portfolio-advisor":    "Portfolio Analyst",
@@ -37,6 +41,8 @@ const AGENT_NAMES: Record<string, string> = {
   "ea-architect":         "Enterprise Architect",
   "ops-coordinator":      "Scrum Master",
   "onboarding-coo":       "Onboarding COO",
+  "doc-specialist":       "Documentation Specialist",
+  "data-architect":       "Data Architect",
 };
 
 export default async function AssignmentsPage() {
