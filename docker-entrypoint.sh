@@ -33,6 +33,11 @@ cd /app
 pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  WARN Seed had warnings (non-fatal)"
 echo "  OK Seed complete"
 
+echo "[3b/5] Reconciling model capability catalog..."
+cd /app
+pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts || echo "  WARN Catalog reconciliation had warnings (non-fatal)"
+echo "  OK Catalog reconciliation complete"
+
 echo "[4/5] Detecting hardware..."
 if [ -n "$DPF_HOST_PROFILE" ]; then
   cd /app
