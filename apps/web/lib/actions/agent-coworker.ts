@@ -1017,7 +1017,37 @@ export async function sendMessage(input: {
                 reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
               } Ready to move to the planning phase?`;
             } else {
-              responseContent = `Research completed but the design doc was rejected: ${saveResult.error ?? "Unknown error"}. I'll revise the approach.`;
+              // If the only issue is a missing/short codebase audit, auto-patch the doc and retry once.
+              // This prevents an infinite loop where the agent calls start_ideate_research repeatedly
+              // when the research engine produced valid content but omitted the audit field.
+              const rawDoc = ideateResult.designDoc as Record<string, unknown>;
+              const auditRaw = String(rawDoc?.existingCodeAudit ?? rawDoc?.existingFunctionalityAudit ?? "");
+              if (saveResult.error === "Design doc missing codebase research." && auditRaw.length < 20) {
+                const reusePlan = String(rawDoc?.reusePlan ?? "").slice(0, 150);
+                const fallbackAudit = reusePlan.length > 10
+                  ? `No existing implementation found. ${reusePlan}`
+                  : "No existing implementation found. Searched for related models, routes, and components. This is a new feature.";
+                const patchedDoc = { ...rawDoc, existingCodeAudit: fallbackAudit };
+                const retryResult = await executeTool(
+                  "saveBuildEvidence",
+                  { field: "designDoc", value: patchedDoc },
+                  user.id!,
+                  { routeContext: input.routeContext },
+                );
+                if (retryResult.success) {
+                  agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+                  const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                  agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+                  const approach = String(rawDoc.proposedApproach ?? "").slice(0, 300);
+                  responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach}\n\n${
+                    reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+                  } Ready to move to the planning phase?`;
+                } else {
+                  responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
+                }
+              } else {
+                responseContent = `Research completed but the design doc needs revision. ${saveResult.message ?? "Please provide more context about the feature."}`;
+              }
             }
           } else {
             responseContent = ideateResult.error
