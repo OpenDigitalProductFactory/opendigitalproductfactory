@@ -15,6 +15,53 @@ import type { ModelCardCapabilities, ModelCardPricing } from "./model-card-types
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 
 /**
+ * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
+ *
+ * Precedence (highest to lowest):
+ *   1. capabilityOverrides.toolUse — explicit admin field-level override
+ *   2. capabilities.toolUse (discovery-owned profiles only)
+ *   3. capabilities.toolUse (catalog-owned profiles only)
+ *   4. profile.supportsToolUse — set by provider-sync null-backfill or admin
+ *   5. provider.supportsToolUse — floor
+ */
+export function resolveToolUse(
+  profile: {
+    profileSource: string | null;
+    capabilityOverrides: unknown;
+    capabilities: unknown;
+    supportsToolUse: boolean | null;
+    provider: { supportsToolUse: boolean | null };
+  },
+): boolean | null {
+  // 1. Admin field-level override
+  const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
+  if (overrides !== null && overrides !== undefined && "toolUse" in overrides) {
+    return overrides.toolUse as boolean;
+  }
+
+  const caps = profile.capabilities as Record<string, unknown> | null;
+  const src = profile.profileSource ?? "seed";
+
+  // 2. Discovery-owned: use adapter-extracted value
+  if (src === "auto-discover" || src === "evaluated") {
+    if (caps?.toolUse !== undefined && caps.toolUse !== null) return caps.toolUse as boolean;
+  }
+
+  // 3. Catalog-owned: use reconciled value
+  if (src === "catalog" || src === "seed") {
+    if (caps?.toolUse !== undefined && caps.toolUse !== null) return caps.toolUse as boolean;
+  }
+
+  // 4. Profile-level boolean (set by provider-sync null-backfill)
+  if (profile.supportsToolUse !== null && profile.supportsToolUse !== undefined) {
+    return profile.supportsToolUse;
+  }
+
+  // 5. Provider floor
+  return profile.provider.supportsToolUse ?? null;
+}
+
+/**
  * Load all active/degraded endpoints as EndpointManifest objects.
  * Queries ModelProfile joined with ModelProvider — each manifest entry represents
  * a specific model, not just a provider.
@@ -45,7 +92,7 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
       ? "degraded"
       : mp.provider.status) as EndpointManifest["status"],
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
-    supportsToolUse: (mp.capabilities as any)?.toolUse ?? mp.supportsToolUse ?? mp.provider.supportsToolUse,
+    supportsToolUse: resolveToolUse(mp) ?? false,
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
     supportsStreaming: mp.provider.supportsStreaming,
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
