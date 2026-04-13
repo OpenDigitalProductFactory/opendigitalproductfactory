@@ -122,6 +122,22 @@ async function main() {
 
   console.log(`\nDone: ${created} created, ${updated} updated`);
 
+  // EP-MODEL-CAP-001-C: Backfill null supportsToolUse on ModelProfile rows
+  // that have never had a model-level value set.
+  // Only fills NULLs — never overwrites an explicit model-level value.
+  for (const entry of entries) {
+    if (entry.supportsToolUse === undefined) continue;
+    await prisma.modelProfile.updateMany({
+      where: {
+        providerId: entry.providerId,
+        supportsToolUse: null,
+        profileSource: { not: "admin" },
+      },
+      data: { supportsToolUse: entry.supportsToolUse },
+    });
+  }
+  console.log("  Provider-level supportsToolUse backfilled for null model profiles");
+
   // Show final state
   const all = await prisma.modelProvider.findMany({
     select: { providerId: true, name: true, status: true },
