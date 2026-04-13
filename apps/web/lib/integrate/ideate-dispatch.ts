@@ -11,7 +11,7 @@
 // 3. Codex searches /workspace, reads files, outputs a JSON design doc
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
-import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
@@ -70,13 +70,16 @@ type ClaudeAuth =
 
 /**
  * Resolve Claude auth credentials from the DB.
- * Mirrors the pattern in claude-dispatch.ts.
+ * For OAuth providers, uses getProviderBearerToken so expired tokens are
+ * automatically refreshed (access tokens expire every few hours; refresh
+ * tokens are valid for days). Falls back to getDecryptedCredential for
+ * API key providers where no refresh is needed.
  */
 async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
-  const credential = await getDecryptedCredential(providerId);
   const isOAuth = providerId === "anthropic-sub";
 
   if (!isOAuth) {
+    const credential = await getDecryptedCredential(providerId);
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
       throw new Error(`No Anthropic API key for provider "${providerId}".`);
@@ -84,10 +87,14 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
     return { mode: "apikey", apiKey };
   }
 
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}".`);
+  // OAuth: use getProviderBearerToken which checks expiry and refreshes automatically.
+  // Direct getDecryptedCredential would return an expired access token on the next
+  // request after tokenExpiresAt, causing a 401 from the CLI.
+  const result = await getProviderBearerToken(providerId);
+  if ("error" in result) {
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
   }
-  return { mode: "oauth", token: credential.cachedToken };
+  return { mode: "oauth", token: result.token };
 }
 
 /**
