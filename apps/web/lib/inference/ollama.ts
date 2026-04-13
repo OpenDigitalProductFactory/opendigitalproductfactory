@@ -95,9 +95,9 @@ export async function checkBundledProviders(): Promise<void> {
   } else if (reachable && provider.status === "active") {
     const profileCount = await prisma.modelProfile.count({ where: { providerId: "local" } });
     if (profileCount === 0) {
-      const result = await discoverModelsInternal("ollama");
+      const result = await discoverModelsInternal("local");
       if (result.discovered < 20) {
-        await profileModelsInternal("ollama");
+        await profileModelsInternal("local");
       }
     }
     await enrichLocalInfraCI(baseUrl, "operational");
