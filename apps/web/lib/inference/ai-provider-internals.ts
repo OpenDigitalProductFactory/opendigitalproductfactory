@@ -596,14 +596,14 @@ export async function profileModelsInternal(
     //   1. extracted value (non-null) — authoritative from provider metadata
     //   2. existing DB value when profileSource is evaluated/admin — preserves manual overrides
     //   3. provider-level supportsToolUse flag — provider knows its models better than per-model metadata
-    //   4. false — last resort
+    //   4. null — unknown (not false); prevents permanent tool disabling on undiscovered models
     const extractedToolUse = card.capabilities.toolUse;
     const isManuallySet = existingProfile?.profileSource === "evaluated" || existingProfile?.profileSource === "admin";
     const resolvedToolUse = extractedToolUse !== null && extractedToolUse !== undefined
       ? extractedToolUse
       : isManuallySet
-        ? (existingProfile.supportsToolUse ?? provider!.supportsToolUse ?? false)
-        : (provider!.supportsToolUse ?? false);
+        ? (existingProfile.supportsToolUse ?? provider!.supportsToolUse ?? null)
+        : (provider!.supportsToolUse ?? null);
 
     const metadataFields = {
       modelFamily: card.modelFamily,
@@ -626,6 +626,7 @@ export async function profileModelsInternal(
       metadataConfidence: card.metadataConfidence,
       lastMetadataRefresh: new Date(),
       rawMetadataHash: card.rawMetadataHash,
+      discoveryHash: card.rawMetadataHash,   // EP-MODEL-CAP-001: explicit discovery hash column
       // Backward compat
       maxContextTokens: card.maxInputTokens,
       inputPricePerMToken: card.pricing.inputPerMToken,
