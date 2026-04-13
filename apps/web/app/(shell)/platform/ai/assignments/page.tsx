@@ -5,6 +5,9 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { AgentModelAssignmentTable } from "@/components/platform/AgentModelAssignmentTable";
+import { satisfiesMinimumCapabilities, DEFAULT_MINIMUM_CAPABILITIES } from "@/lib/routing/agent-capability-types";
+import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
+import { EMPTY_CAPABILITIES } from "@/lib/routing/model-card-types";
 
 // Agent defaults — used when no DB config row exists.
 // Must match the defaultMinimumTier/defaultBudgetClass in agent-routing.ts ROUTE_AGENT_MAP.
@@ -122,7 +125,27 @@ export default async function AssignmentsPage() {
       lastModel: lastModelMap[agentId] ?? null,
       isDbConfig: !!dbCfg,
       hasToolGrants: (toolGrantCounts[agentId] ?? 0) > 0,
+      minimumCapabilities: (dbCfg?.minimumCapabilities ?? null) as AgentMinimumCapabilities | null,
     };
+  });
+
+  // EP-AGENT-CAP-002: Identify agents with no eligible endpoints for their capability floor.
+  // Build a flat list of all active model profiles across active/degraded providers.
+  // ModelProfile only carries supportsToolUse; other capability flags default to EMPTY_CAPABILITIES.
+  const activeModelProfiles = providers.flatMap((p) =>
+    p.modelProfiles.map((m) => ({
+      supportsToolUse: m.supportsToolUse ?? false,
+      capabilities: EMPTY_CAPABILITIES,
+    })),
+  );
+
+  const capabilityGapAgents = agents.filter((agent) => {
+    const floor: AgentMinimumCapabilities =
+      (agent.minimumCapabilities as AgentMinimumCapabilities | null) ?? DEFAULT_MINIMUM_CAPABILITIES;
+    if (Object.keys(floor).length === 0) return false; // passive agent — no gap possible
+    return !activeModelProfiles.some(
+      (m) => satisfiesMinimumCapabilities(m, floor).satisfied,
+    );
   });
 
   const providerList = providers.map((p) => ({
@@ -158,6 +181,7 @@ export default async function AssignmentsPage() {
           agents={agents}
           providers={providerList}
           canWrite={canWrite}
+          capabilityGapCount={capabilityGapAgents.length}
         />
       </div>
     </div>

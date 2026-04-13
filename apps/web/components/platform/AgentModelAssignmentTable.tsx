@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { saveAgentModelConfig } from "@/lib/actions/agent-model-config";
+import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 
 type AgentRow = {
   agentId: string;
@@ -13,6 +14,7 @@ type AgentRow = {
   lastModel: string | null;
   isDbConfig: boolean;
   hasToolGrants: boolean;
+  minimumCapabilities: AgentMinimumCapabilities | null;
 };
 
 type ProviderModel = { modelId: string; friendlyName: string; supportsToolUse: boolean };
@@ -50,10 +52,12 @@ export function AgentModelAssignmentTable({
   agents,
   providers,
   canWrite,
+  capabilityGapCount,
 }: {
   agents: AgentRow[];
   providers: Provider[];
   canWrite: boolean;
+  capabilityGapCount: number;
 }) {
   const [rows, setRows] = useState(agents);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
@@ -108,6 +112,33 @@ export function AgentModelAssignmentTable({
 
   return (
     <div style={{ overflowX: "auto" }}>
+      {capabilityGapCount > 0 && (
+        <div
+          className="mb-4 rounded-md border px-4 py-3 text-sm"
+          style={{
+            borderColor: "var(--dpf-warning)",
+            backgroundColor: "color-mix(in srgb, var(--dpf-warning) 10%, var(--dpf-surface-1))",
+            color: "var(--dpf-text)",
+            marginBottom: 16,
+            borderRadius: 6,
+            border: "1px solid var(--dpf-warning)",
+            padding: "12px 16px",
+            fontSize: 13,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>
+            {capabilityGapCount} agent{capabilityGapCount > 1 ? "s" : ""}
+          </span>
+          {" "}have no eligible endpoints for their required capabilities.
+          Check active providers at{" "}
+          <a
+            href="/platform/ai/providers"
+            style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}
+          >
+            Platform &gt; AI &gt; Providers
+          </a>.
+        </div>
+      )}
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "2px solid var(--dpf-border)" }}>
@@ -138,6 +169,62 @@ export function AgentModelAssignmentTable({
                       >
                         {row.agentId}
                       </span>
+                      {row.minimumCapabilities && Object.keys(row.minimumCapabilities).length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                          {(row.minimumCapabilities as AgentMinimumCapabilities).toolUse && (
+                            <span
+                              style={{
+                                borderRadius: 4,
+                                padding: "1px 6px",
+                                fontSize: 11,
+                                background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
+                                color: "var(--dpf-accent)",
+                              }}
+                            >
+                              Tools
+                            </span>
+                          )}
+                          {(row.minimumCapabilities as AgentMinimumCapabilities).imageInput && (
+                            <span
+                              style={{
+                                borderRadius: 4,
+                                padding: "1px 6px",
+                                fontSize: 11,
+                                background: "color-mix(in srgb, var(--dpf-info) 15%, transparent)",
+                                color: "var(--dpf-info)",
+                              }}
+                            >
+                              Image
+                            </span>
+                          )}
+                          {(row.minimumCapabilities as AgentMinimumCapabilities).pdfInput && (
+                            <span
+                              style={{
+                                borderRadius: 4,
+                                padding: "1px 6px",
+                                fontSize: 11,
+                                background: "color-mix(in srgb, var(--dpf-warning) 15%, transparent)",
+                                color: "var(--dpf-warning)",
+                              }}
+                            >
+                              PDF
+                            </span>
+                          )}
+                          {(row.minimumCapabilities as AgentMinimumCapabilities).codeExecution && (
+                            <span
+                              style={{
+                                borderRadius: 4,
+                                padding: "1px 6px",
+                                fontSize: 11,
+                                background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)",
+                                color: "var(--dpf-success)",
+                              }}
+                            >
+                              Code
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {showToolWarning && (
                       <span
