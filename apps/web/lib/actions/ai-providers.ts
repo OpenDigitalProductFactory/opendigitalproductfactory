@@ -509,7 +509,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
 export async function toggleProviderStatus(
   providerId: string,
-): Promise<{ status: string }> {
+): Promise<{ status: string; warning: string | null }> {
   await requireManageProviders();
 
   const provider = await prisma.modelProvider.findUnique({
@@ -524,7 +524,33 @@ export async function toggleProviderStatus(
     data: { status: newStatus },
   });
 
-  return { status: newStatus };
+  // EP-AGENT-CAP-002: Warn if activated provider has no models with active capabilities
+  let warning: string | null = null;
+  if (newStatus === "active") {
+    const activeModels = await prisma.modelProfile.findMany({
+      where: { providerId, modelStatus: { in: ["active", "degraded"] } },
+      select: { capabilities: true },
+    });
+
+    const hasActiveCapability = activeModels.some((m) => {
+      const caps = m.capabilities as Record<string, unknown> | null;
+      return (
+        caps?.toolUse === true ||
+        caps?.imageInput === true ||
+        caps?.pdfInput === true ||
+        caps?.codeExecution === true
+      );
+    });
+
+    if (!hasActiveCapability) {
+      warning =
+        "This provider's models have no active capabilities (toolUse, imageInput, pdfInput, codeExecution). " +
+        "It will not be eligible for routing to any registered coworker. " +
+        "It may still be used for passive chat workflows.";
+    }
+  }
+
+  return { status: newStatus, warning };
 }
 
 // ─── Model discovery ─────────────────────────────────────────────────────────
