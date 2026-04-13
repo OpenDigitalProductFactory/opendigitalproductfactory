@@ -182,6 +182,7 @@ describe("getExclusionReasonV2", () => {
   it("excludes models lacking tool use when requiresTools=true", () => {
     const noTools = makeEndpoint({
       capabilities: { ...EMPTY_CAPABILITIES, streaming: true },
+      supportsToolUse: false,
     });
     const contract = makeContract({ requiresTools: true });
     expect(getExclusionReasonV2(noTools, contract)).toContain("toolUse");
