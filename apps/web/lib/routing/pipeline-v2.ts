@@ -18,6 +18,7 @@ import type {
 import type { RequestContract } from "./request-contract";
 import { filterByPolicy } from "./pipeline";
 import { checkModelCapacity } from "./rate-tracker";
+import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
   estimateSuccessProbability,
   rankByCostPerSuccess,
@@ -39,6 +40,16 @@ export function getExclusionReasonV2(
   ep: EndpointManifest,
   contract: RequestContract,
 ): string | null {
+  // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
+  // Must run BEFORE status/graceful-degradation checks so a tool-incapable
+  // endpoint is never selected even in degraded mode.
+  if (contract.minimumCapabilities && Object.keys(contract.minimumCapabilities).length > 0) {
+    const check = satisfiesMinimumCapabilities(ep, contract.minimumCapabilities);
+    if (!check.satisfied) {
+      return `Agent requires capability '${check.missingCapability}' (EP-AGENT-CAP-002)`;
+    }
+  }
+
   // Status check — only active and degraded pass
   if (ep.status !== "active" && ep.status !== "degraded") {
     return `Status is '${ep.status}'`;
