@@ -246,13 +246,23 @@ export async function routeAndCall(
       modelId.toLowerCase().includes("codex") ||
       providerIds.some((p) => p === "codex" || p === "chatgpt");
 
+    // Build the "how to fix" suggestion from actually-configured tool-capable
+    // endpoints rather than hardcoded model names.
+    const toolCapableEndpoints = manifests
+      .filter((m) => m.supportsToolUse && m.status === "active")
+      .map((m) => m.name)
+      .slice(0, 3); // cap at 3 to keep the message concise
+    const toolCapableSuggestion = toolCapableEndpoints.length > 0
+      ? `Switch to one of your configured tool-capable models: ${toolCapableEndpoints.join(", ")}.`
+      : `Configure a tool-capable provider (standard OpenAI API, Anthropic, or a local model with tool support) and assign it via Platform > AI > Model Assignment.`;
+
     const whyLimited = isCodexBackend
       ? `The active model (${modelId || "Codex"}) uses the ChatGPT/Codex backend, which only supports Codex's built-in tools — not the platform's custom function tools.`
       : `The active model (${modelId || "current model"}) does not support custom function calling.`;
 
     const howToFix = isCodexBackend
-      ? `To enable tools, configure a standard OpenAI API key (api.openai.com) rather than the ChatGPT subscription, or use Claude or Gemma 4.`
-      : `Go to Platform > AI > Model Assignment and assign a tool-capable model such as Claude, GPT-4 (standard API), or Gemma 4.`;
+      ? `To enable tools, use a standard API-key-based provider instead of the ChatGPT subscription. ${toolCapableSuggestion}`
+      : `Go to Platform > AI > Model Assignment and assign a tool-capable model. ${toolCapableSuggestion}`;
 
     systemPrompt = [
       `You are ${name}.`,
