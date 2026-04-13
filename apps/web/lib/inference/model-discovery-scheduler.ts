@@ -11,7 +11,7 @@ const JOB_ID = "model-discovery-refresh";
 export async function registerModelDiscoveryJob(): Promise<void> {
   const now = new Date();
   const nextRun = new Date(now);
-  nextRun.setHours(4, 0, 0, 0); // 4 AM
+  nextRun.setHours(3, 0, 0, 0); // 3 AM (EP-MODEL-CAP-001-D)
   if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1);
 
   await prisma.scheduledJob.upsert({
@@ -19,11 +19,11 @@ export async function registerModelDiscoveryJob(): Promise<void> {
     create: {
       jobId: JOB_ID,
       name: "Model discovery: daily refresh",
-      schedule: "0 4 * * *",
+      schedule: "0 3 * * *",
       nextRunAt: nextRun,
     },
     update: {
-      schedule: "0 4 * * *",
+      schedule: "0 3 * * *",
       nextRunAt: nextRun,
     },
   });
@@ -76,7 +76,7 @@ export async function runModelDiscoveryRefresh(): Promise<void> {
   const now = new Date();
   const nextRun = new Date(now);
   nextRun.setDate(nextRun.getDate() + 1);
-  nextRun.setHours(4, 0, 0, 0);
+  nextRun.setHours(3, 0, 0, 0); // 3 AM (EP-MODEL-CAP-001-D)
 
   await prisma.scheduledJob.update({
     where: { jobId: JOB_ID },
