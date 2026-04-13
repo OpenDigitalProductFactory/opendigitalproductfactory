@@ -234,7 +234,7 @@ export function AgentModelAssignmentTable({
                           width: 8,
                           height: 8,
                           borderRadius: "50%",
-                          background: "#f59e0b",
+                          background: "var(--dpf-warning)",
                           flexShrink: 0,
                         }}
                       />
@@ -399,9 +399,9 @@ export function AgentModelAssignmentTable({
                           marginTop: 12,
                           padding: "8px 12px",
                           borderRadius: 6,
-                          border: "1px solid #fcd34d",
-                          background: "#fef3c7",
-                          color: "#b45309",
+                          border: "1px solid var(--dpf-warning)",
+                          background: "color-mix(in srgb, var(--dpf-warning) 10%, var(--dpf-surface-1))",
+                          color: "var(--dpf-text)",
                           fontSize: 12,
                           lineHeight: 1.5,
                         }}
