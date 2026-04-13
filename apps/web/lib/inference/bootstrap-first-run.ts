@@ -32,10 +32,10 @@ export async function seedOnboardingAgent(): Promise<void> {
       agentId: "onboarding-coo",
       minimumTier: "basic",
       budgetClass: "minimize_cost",
-      pinnedProviderId: "ollama",
+      pinnedProviderId: "local",
     },
     update: {
-      pinnedProviderId: "ollama",
+      pinnedProviderId: "local",
     },
   });
 }
@@ -141,7 +141,7 @@ export async function executeFirstRunBootstrap(
 
         // Set sensitivity clearance for local provider
         await prisma.modelProvider.update({
-          where: { providerId: "ollama" },
+          where: { providerId: "local" },
           data: {
             sensitivityClearance: ["public", "internal", "confidential", "restricted"],
           },

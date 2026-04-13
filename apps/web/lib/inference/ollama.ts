@@ -64,7 +64,7 @@ async function enrichLocalInfraCI(baseUrl: string, status: string): Promise<void
  */
 export async function checkBundledProviders(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({
-    where: { providerId: "ollama" },
+    where: { providerId: "local" },
     select: { providerId: true, status: true, baseUrl: true, endpoint: true },
   });
 
@@ -83,17 +83,17 @@ export async function checkBundledProviders(): Promise<void> {
 
   if (reachable && provider.status === "unconfigured") {
     await prisma.modelProvider.update({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: { status: "active" },
     });
 
-    const result = await discoverModelsInternal("ollama");
+    const result = await discoverModelsInternal("local");
     if (result.discovered < 20) {
-      await profileModelsInternal("ollama");
+      await profileModelsInternal("local");
     }
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
-    const profileCount = await prisma.modelProfile.count({ where: { providerId: "ollama" } });
+    const profileCount = await prisma.modelProfile.count({ where: { providerId: "local" } });
     if (profileCount === 0) {
       const result = await discoverModelsInternal("ollama");
       if (result.discovered < 20) {
@@ -103,7 +103,7 @@ export async function checkBundledProviders(): Promise<void> {
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {
     await prisma.modelProvider.update({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: { status: "inactive" },
     });
     await enrichLocalInfraCI(baseUrl, "offline");

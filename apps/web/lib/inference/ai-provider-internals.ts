@@ -352,7 +352,7 @@ export async function discoverModelsInternal(
   }
 
   // ── EP-INF-002: Discovery reconciliation — detect gone models ──
-  const isLocalProvider = providerId === "ollama";
+  const isLocalProvider = providerId === "local" || providerId === "ollama";
   if (!isLocalProvider) {
     const allKnown = await prisma.discoveredModel.findMany({
       where: { providerId },
@@ -441,7 +441,7 @@ export async function profileModelsInternal(
         // For Ollama: force streaming=true (all models support it) since the
         // model card probe can't detect this and returns null for everything.
         // Null capabilities cause routing exclusion (streaming required for sync).
-        capabilities: providerId === "ollama"
+        capabilities: (providerId === "local" || providerId === "ollama")
           ? { ...card.capabilities, streaming: true } as any
           : card.capabilities as any,
         pricing: card.pricing as any,
@@ -611,7 +611,7 @@ export async function profileModelsInternal(
       maxInputTokens: card.maxInputTokens,
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
-      capabilities: providerId === "ollama"
+      capabilities: (providerId === "local" || providerId === "ollama")
         ? { ...card.capabilities, streaming: true } as any
         : card.capabilities as any,
       pricing: card.pricing as any,
@@ -748,7 +748,7 @@ export async function backfillModelCards(): Promise<number> {
         maxInputTokens: card.maxInputTokens,
         inputModalities: card.inputModalities as any,
         outputModalities: card.outputModalities as any,
-        capabilities: dm.providerId === "ollama"
+        capabilities: (dm.providerId === "local" || dm.providerId === "ollama")
           ? { ...card.capabilities, streaming: true } as any
           : card.capabilities as any,
         pricing: card.pricing as any,

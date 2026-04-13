@@ -133,8 +133,8 @@ export function getExclusionReasonV2(
   }
 
   // Residency policy
-  if (contract.residencyPolicy === "local_only" && ep.providerId !== "ollama") {
-    return "Residency policy 'local_only' requires ollama provider";
+  if (contract.residencyPolicy === "local_only" && ep.providerId !== "local" && ep.providerId !== "ollama") {
+    return "Residency policy 'local_only' requires a local provider (Docker Model Runner or Ollama)";
   }
 
   // Rate limit pre-flight check

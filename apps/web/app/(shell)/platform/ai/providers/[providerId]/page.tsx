@@ -39,7 +39,7 @@ export default async function ProviderDetailPage({ params }: Props) {
 
   // Fetch hardware info for Ollama
   let hardwareInfo: { gpu: string; vramGb: number | null; modelCount: number } | null = null;
-  if (providerId === "ollama") {
+  if (providerId === "local" || providerId === "ollama") {
     const infraCIs = await getInfraCIs("ai-inference");
     const ollamaCI = infraCIs.find((ci) => ci.id === "CI-ollama-01");
     if (ollamaCI?.properties.gpu) {
@@ -91,7 +91,7 @@ export default async function ProviderDetailPage({ params }: Props) {
         />
       )}
 
-      {providerId === "ollama" && (
+      {(providerId === "local" || providerId === "ollama") && (
         <OllamaManagement canWrite={canWrite} />
       )}
 
