@@ -23,36 +23,10 @@ async function requireManageFinance(): Promise<string> {
 }
 
 // ─── calculateNextDate ────────────────────────────────────────────────────────
-
-export async function calculateNextDate(currentDate: Date, frequency: string): Promise<Date> {
-  // Work in UTC to avoid timezone-driven date drift
-  const y = currentDate.getUTCFullYear();
-  const m = currentDate.getUTCMonth();
-  const d = currentDate.getUTCDate();
-
-  switch (frequency) {
-    case "weekly":
-      return new Date(Date.UTC(y, m, d + 7));
-    case "fortnightly":
-      return new Date(Date.UTC(y, m, d + 14));
-    case "monthly":
-      return addMonthsUTC(y, m, d, 1);
-    case "quarterly":
-      return addMonthsUTC(y, m, d, 3);
-    case "annually":
-      return addMonthsUTC(y, m + 12, d, 0);
-    default:
-      throw new Error(`Unknown frequency: ${frequency}`);
-  }
-}
-
-function addMonthsUTC(year: number, month: number, day: number, addMonths: number): Date {
-  // Target month (JavaScript handles year rollover automatically)
-  const targetMonth = month + addMonths;
-  // Find last day of target month using Date.UTC with day=0 of next month
-  const lastDayOfMonth = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, targetMonth, Math.min(day, lastDayOfMonth)));
-}
+// Pure utility — lives in recurring-utils (no "use server" constraint).
+// Re-exported here so existing callers don't need to change their import path.
+import { calculateNextDate } from "@/lib/recurring-utils";
+export { calculateNextDate };
 
 // ─── createRecurringSchedule ──────────────────────────────────────────────────
 
@@ -242,7 +216,7 @@ export async function generateDueInvoices(): Promise<{ generated: number; sent: 
     }
 
     // Advance nextInvoiceDate
-    const nextDate = await calculateNextDate(schedule.nextInvoiceDate, schedule.frequency);
+    const nextDate = calculateNextDate(schedule.nextInvoiceDate, schedule.frequency);
 
     // Check if schedule is completed
     const isCompleted = schedule.endDate != null && nextDate > schedule.endDate;
