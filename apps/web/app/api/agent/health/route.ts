@@ -25,11 +25,12 @@ export async function GET(): Promise<Response> {
   });
 
   const usableProviderIds = [...new Set(profiles.map((profile) => profile.providerId))];
-  const cloudProviderIds = usableProviderIds.filter((providerId) => providerId !== "ollama");
+  const cloudProviderIds = usableProviderIds.filter((providerId) => providerId !== "local" && providerId !== "ollama");
+  const localProviderCount = usableProviderIds.filter((providerId) => providerId === "local" || providerId === "ollama").length;
 
   return NextResponse.json({
     usableProviderCount: usableProviderIds.length,
     cloudProviderCount: cloudProviderIds.length,
-    localProviderCount: usableProviderIds.includes("ollama") ? 1 : 0,
+    localProviderCount,
   });
 }

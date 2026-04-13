@@ -489,7 +489,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
       // Cloud LLM providers get public/internal/confidential clearance by default
-      const clearance = provider.providerId === "ollama"
+      const clearance = provider.providerId === "local" || provider.providerId === "ollama"
         ? ["public", "internal", "confidential", "restricted"]
         : ["public", "internal", "confidential"];
       await prisma.modelProvider.update({

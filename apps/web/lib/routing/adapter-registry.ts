@@ -20,6 +20,7 @@ const ADAPTERS: Record<string, ProviderAdapter> = {
   chatgpt: openAIAdapter,
   codex: openAIAdapter,
   gemini: geminiAdapter,
+  local: ollamaAdapter,
   ollama: ollamaAdapter,
 };
 

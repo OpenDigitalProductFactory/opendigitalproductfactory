@@ -71,7 +71,7 @@ describe("bootstrap-first-run", () => {
         expect.objectContaining({
           where: { agentId: "onboarding-coo" },
           create: expect.objectContaining({
-            pinnedProviderId: "ollama",
+            pinnedProviderId: "local",
           }),
         }),
       );

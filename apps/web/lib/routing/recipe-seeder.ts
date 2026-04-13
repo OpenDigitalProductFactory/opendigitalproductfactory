@@ -133,7 +133,7 @@ function buildProviderSettings(
     applyOpenAIReasoningSettings(settings, contract.reasoningDepth);
   } else if (isOpenAI(providerId) && modelCard.modelClass !== "reasoning") {
     applyOpenAIChatSettings(settings, contract.budgetClass);
-  } else if (providerId === "ollama") {
+  } else if (providerId === "local" || providerId === "ollama") {
     settings.keep_alive = -1;
   }
   // Generic fallback: just max_tokens (already set)

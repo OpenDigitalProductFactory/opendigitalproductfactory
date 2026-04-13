@@ -1041,7 +1041,7 @@ async function seedClientIdentity(): Promise<void> {
  */
 async function seedLocalModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({
-    where: { providerId: "ollama" },
+    where: { providerId: "local" },
   });
   if (!provider) return;
 
@@ -1064,7 +1064,7 @@ async function seedLocalModels(): Promise<void> {
   // Activate provider and grant full sensitivity clearance (local = data never leaves machine)
   if (provider.status === "unconfigured" || (provider.sensitivityClearance as string[]).length === 0) {
     await prisma.modelProvider.update({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: {
         status: "active",
         sensitivityClearance: ["public", "internal", "confidential", "restricted"],
@@ -1076,19 +1076,19 @@ async function seedLocalModels(): Promise<void> {
   for (const m of models) {
     // Upsert DiscoveredModel
     await prisma.discoveredModel.upsert({
-      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
-      create: { providerId: "ollama", modelId: m.id, rawMetadata: m as any },
+      where: { providerId_modelId: { providerId: "local", modelId: m.id } },
+      create: { providerId: "local", modelId: m.id, rawMetadata: m as any },
       update: { rawMetadata: m as any },
     });
 
     // Upsert a basic ModelProfile so routing has an endpoint
     const existing = await prisma.modelProfile.findUnique({
-      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
+      where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
     if (!existing) {
       await prisma.modelProfile.create({
         data: {
-          providerId: "ollama",
+          providerId: "local",
           modelId: m.id,
           friendlyName: m.id.replace("docker.io/ai/", ""),
           summary: "Local model via Docker Model Runner",

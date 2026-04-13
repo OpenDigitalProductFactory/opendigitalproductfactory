@@ -24,7 +24,7 @@ const ROUTE_SENSITIVITY: Array<{ prefix: string; sensitivity: RouteSensitivity }
 ];
 
 function isLocalProvider(provider: ProviderPolicyInfo): boolean {
-  return provider.providerId === "ollama" || provider.costModel === "compute";
+  return provider.providerId === "local" || provider.providerId === "ollama" || provider.costModel === "compute";
 }
 
 const AGENT_SENSITIVITY: Record<string, RouteSensitivity> = {
