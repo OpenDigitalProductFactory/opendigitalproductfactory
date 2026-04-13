@@ -9,6 +9,11 @@ import type { AuditClass } from "@/lib/audit-classes";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import {
+  DEFAULT_MINIMUM_CAPABILITIES,
+  DEFAULT_MINIMUM_CONTEXT_TOKENS,
+} from "@/lib/routing/agent-capability-types";
+import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 
 // ─── Audit helpers (Phase 3) ────────────────────────────────────────────────
 
@@ -373,6 +378,15 @@ export async function runAgenticLoop(params: {
   // DB config takes precedence over code defaults in modelRequirements.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
 
+  // EP-AGENT-CAP-002: Read capability floor from agent config.
+  // Null DB value = use system default { toolUse: true }.
+  // {} DB value = passive agent, no floor.
+  const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
+  const minimumCapabilities: AgentMinimumCapabilities =
+    rawMinCaps !== null && rawMinCaps !== undefined ? rawMinCaps : DEFAULT_MINIMUM_CAPABILITIES;
+  const agentMinimumContextTokens: number =
+    agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
+
   // Resolve effective config: DB row > code defaults > nothing
   const effectiveConfig = agentModelConfig
     ? {
@@ -417,6 +431,10 @@ export async function runAgenticLoop(params: {
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
+    // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
+    minimumCapabilities,
+    agentMinimumContextTokens,
+    agentId,
   };
 
   let messages = [...chatHistory];
