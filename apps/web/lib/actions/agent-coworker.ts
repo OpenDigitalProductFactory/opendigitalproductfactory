@@ -1006,16 +1006,21 @@ export async function sendMessage(input: {
             );
 
             if (saveResult.success) {
-              // Run the design doc review
-              agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-              const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
-              agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").trim();
+              if (approach.length < 30) {
+                // Design doc saved but approach is blank — research engine produced an empty doc.
+                responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+              } else {
+                // Run the design doc review
+                agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+                const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
-              // Build a user-friendly summary
-              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").slice(0, 300);
-              responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach}\n\n${
-                reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
-              } Ready to move to the planning phase?`;
+                // Build a user-friendly summary
+                responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
+                  reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+                } Ready to move to the planning phase?`;
+              }
             } else {
               // If the only issue is a missing/short codebase audit, auto-patch the doc and retry once.
               // This prevents an infinite loop where the agent calls start_ideate_research repeatedly
@@ -1035,13 +1040,19 @@ export async function sendMessage(input: {
                   { routeContext: input.routeContext },
                 );
                 if (retryResult.success) {
-                  agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-                  const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
-                  agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
-                  const approach = String(rawDoc.proposedApproach ?? "").slice(0, 300);
-                  responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach}\n\n${
-                    reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
-                  } Ready to move to the planning phase?`;
+                  // Only treat as success if proposedApproach has real content.
+                  // An empty approach means the research engine ran but produced a blank doc.
+                  const approach = String(rawDoc.proposedApproach ?? "").trim();
+                  if (approach.length < 30) {
+                    responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                  } else {
+                    agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+                    const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                    agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+                    responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
+                      reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+                    } Ready to move to the planning phase?`;
+                  }
                 } else {
                   responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
                 }
