@@ -4857,6 +4857,13 @@ model AgentModelConfig {
   pinnedProviderId String?
   pinnedModelId    String?
   budgetClass      String    @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
+  // Null = system default { "toolUse": true }.
+  // {} = passive agent (no capability floor — rare, must be explicit).
+  minimumCapabilities  Json?
+  // EP-AGENT-CAP-002: Minimum context window tokens for RAG/knowledge retrieval.
+  // Null = system default 16000.
+  minimumContextTokens Int?
   configuredAt     DateTime  @default(now())
   configuredById   String?
   configuredBy     User?     @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
