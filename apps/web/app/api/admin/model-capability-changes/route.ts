@@ -19,7 +19,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const providerId = searchParams.get("providerId");
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 200);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const limit = Math.min(Number.isNaN(rawLimit) ? 50 : rawLimit, 200);
 
   const changes = await prisma.modelCapabilityChangeLog.findMany({
     where: providerId ? { providerId } : undefined,
