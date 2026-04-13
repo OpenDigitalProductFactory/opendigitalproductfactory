@@ -3,10 +3,10 @@
 | Field | Value |
 | ----- | ----- |
 | **Epic** | AI Workforce / Platform Integrations |
-| **Status** | Draft |
+| **Status** | Review |
 | **Created** | 2026-04-12 |
 | **Author** | Codex for Mark Bodman |
-| **Reviewed by** | Claude Opus 4.6 — revision 2 |
+| **Reviewed by** | Codex (30 revisions), Claude Opus 4.6 (revision 2 + final review) |
 | **Scope** | `apps/web/app/(shell)/platform/ai/**`, `apps/web/app/(shell)/platform/services/**`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/mcp-server-tools.ts`, `apps/web/lib/actions/ai-providers.ts`, `apps/web/lib/actions/mcp-services.ts`, audit/reporting surfaces |
 | **Primary Goal** | Standardize how integrations are connected, governed, exposed, and audited across AI coworkers without flattening away the real differences between internal tools, external MCP services, and provider-native execution paths |
 | **Design Principle** | Unify the product model around capabilities and lifecycle; keep execution adapters and transport details separate underneath |
@@ -398,6 +398,8 @@ Every capability belongs to one `sourceType`:
 - `composite`
   - orchestrated capability built from multiple underlying tools
 
+**Edge case — internal tools with external dependencies:** Some platform-native tools are defined in `PLATFORM_TOOLS` (`sourceType: internal`) but delegate to an external service at runtime. For example, `evaluate_page` and `run_ux_test` are internal tool definitions that call browser-use via MCP. These remain `sourceType: internal` because their definition, schema, and governance are owned by the platform. However, their `integrationDependencies[]` must list the browser-use integration so the capability inventory can show them as unavailable when that dependency is unhealthy.
+
 ### 5.3 Integration taxonomy
 
 Every integration belongs to one `integrationType`:
@@ -429,6 +431,8 @@ Every integration should move through the same lifecycle stages, even if some st
 
 ### 6.1 Lifecycle stages
 
+Progressive stages — an integration advances through these in order:
+
 1. **Registered**
    - known to the system but not configured
 
@@ -447,8 +451,25 @@ Every integration should move through the same lifecycle stages, even if some st
 6. **Healthy**
    - ongoing health checks are passing
 
-7. **Governed**
-   - trust and exposure policy is resolved
+Degradation states — an integration can move into these from any stage at or above Verified:
+
+- **Degraded**
+  - health checks show partial failure (some capabilities work, others do not), or latency/error rates exceed thresholds
+  - the integration remains usable but should score lower in routing and surface warnings in admin
+- **Unreachable**
+  - connectivity lost entirely; capabilities gated on this integration become unavailable
+  - automatic retry with backoff; operator notification after N consecutive failures
+- **Suspended**
+  - manually disabled by an operator or automatically by policy (e.g., trust revocation, credential expiry)
+  - capabilities are hard-gated off until the operator re-enables
+
+### 6.1.1 Governance as a parallel concern
+
+Governance (trust and exposure policy) is **not** a lifecycle stage. It is a cross-cutting concern that applies at every stage from Registered onward:
+
+- An operator can set or change exposure policy on a Registered integration before it is even Authenticated
+- A Healthy integration can have its trust policy tightened or revoked at any time
+- Governance resolution is checked at runtime alongside the progressive lifecycle state (Section 7.2)
 
 ### 6.2 Lifecycle actions
 
@@ -544,6 +565,22 @@ At runtime, a capability is available only if all are true:
 3. agent grants allow it
 4. route/build-phase permits it
 5. trust policy permits it
+6. governance policy permits it (Section 6.1.1)
+
+**Current implementation state:** `getAvailableTools()` in `mcp-tools.ts` already enforces checks 2-4, and partially enforces check 1 for external MCP tools:
+
+- User role: `can(userContext, tool.requiredCapability)`
+- Agent grants: `isToolAllowedByGrants(tool.name, agentGrants)` via `AgentToolGrant`
+- Mode gating: `options.mode !== "advise" || !tool.sideEffect`
+- External access: `options.externalAccessEnabled` gates MCP tool inclusion
+- External MCP health gating: `getMcpServerTools()` only includes tools from servers with `status: active` and `healthStatus: healthy`
+
+What is **not yet enforced** at the `getAvailableTools()` level:
+
+- Integration health/readiness (check 1) for internal capabilities with external dependencies and richer degradation states — for example, internal tools that call external services at runtime still need explicit dependency health/readiness evaluation at capability resolution time
+- Trust policy (check 5) and governance policy (check 6) — no per-integration trust or exposure policy is evaluated at tool resolution time
+
+These gaps define the Phase 2 work for capability availability.
 
 ### 7.3 MCP-specific handling
 
@@ -626,6 +663,16 @@ Introduce an internal normalized event shape:
 
 Full payload storage should be conditional by `auditClass`.
 
+#### Migration path from ToolExecution
+
+The current `ToolExecution` model uses `toolName` (string) as its primary identifier. The proposed event shape uses `capabilityId`. The migration should be additive:
+
+1. **Phase 3a:** Add `auditClass` and `capabilityId` columns to `ToolExecution` as nullable fields. Begin writing them on new rows. Existing queries continue to work via `toolName`.
+2. **Phase 3b:** Backfill `capabilityId` from `toolName` using a mapping derived from the capability inventory. Tool names that map 1:1 to capabilities (the common case for `PLATFORM_TOOLS`) can be backfilled mechanically. MCP tools use their namespaced name (`serverSlug__toolName`).
+3. **Phase 3c:** Migrate UI consumers from `toolName` filtering to `capabilityId` filtering. Only then consider deprecating `toolName` on new writes.
+
+Do not remove `toolName` — it remains useful as a human-readable label even after `capabilityId` becomes the join key.
+
 ### 8.4 UI impact
 
 Split audit UX into:
@@ -693,7 +740,8 @@ Subsections:
 | Action History | Audit & Operations > Action Ledger | narrower and clearer |
 | Authority | Audit & Operations > Authority & Permissions | keep, tighten scope |
 | Skills | AI Workforce > Skills | not a top-level peer to routing/audit |
-| AI External Services | split between AI Workforce and Tools & Integrations | provider routing aspects stay under AI; generic integration management moves out |
+| AI External Services — provider registry (Section 1) | AI Workforce > Routing & Calibration | provider cards, sync, model discovery — these are inference routing concerns |
+| AI External Services — activated MCP servers (Section 1b) | Tools & Integrations > Connected Integrations | MCP server activation, health, tool listing — these are integration concerns |
 | `/platform/services` | Tools & Integrations > Connected Integrations | primary home for external MCP services |
 | `/platform/integrations` | Tools & Integrations > Integration Catalog | primary home |
 
@@ -815,9 +863,17 @@ This read model should treat runtime tool definitions as authoritative for execu
 - Relabel Build Studio as CLI dispatch
 - Move Skills under AI Workforce
 - Define audit class enum in code (`ledger`, `journal`, `metrics_only`), even if storage remains mostly unchanged initially
-- **Fix route log score normalization** — canonical stored `fitnessScore` should be `0..1`; UI may render `0..100` or `%` views derived from that. Backfill existing `NaN` values and update all readers/writers to honor the same invariant. This is a data integrity bug, not a future refactor
+- **Fix route log score normalization** — this is a data integrity bug, not a future refactor. The inconsistency exists at three layers:
+  - **Writer layer (mixed scoring paths):**
+    - Legacy scorer path (`task-router.ts`) computes `fitnessScore` from 0-100 dimension math
+    - Contract/V2 path (`pipeline-v2.ts` + `cost-ranking.ts`) writes `rankScore` that is not constrained to a shared 0..1 invariant
+    - Persistence paths (`loader.ts`, `task-dispatcher.ts`) write `fitnessScore` without scale metadata
+  - **UI layer 1:** `RouteDecisionLog.tsx` treats scores as 0..1 (thresholds at 0.8/0.5, renders `(score * 100).toFixed(0)%`)
+  - **UI layer 2:** `RouteDecisionLogClient.tsx` treats scores as 0..100 (thresholds at 70/40, renders raw value)
+  - **Storage:** `RouteDecisionLog.fitnessScore` is `Float` with no constraint — live data contains values across both scales and `NaN`
+  - **Fix target:** Canonical stored `fitnessScore` should be `0..1`. All score-writer paths (legacy and V2) must normalize before persistence. Both UI components must agree on 0..1 input. Backfill existing rows with scale detection heuristic (values > 1.0 are 0-100 scale; divide by 100)
 
-Scope: ~8 route/page files, 0 schema changes, 1 migration for score backfill
+Scope: ~8 route/page files, 1 data-only migration for score backfill (no additive schema changes), nav component updates (`AiTabNav.tsx`, breadcrumbs, sidebar links) to reflect IA reorganization, audit class enum definition in a shared constants file
 
 ### Phase 2: Unified capability inventory and auth formalization
 
@@ -891,6 +947,16 @@ Mitigation:
 - classify by audit class, not by deleting visibility
 - retain metrics for everything
 - retain full detail for ledger-class events
+
+### Risk: breaking CLI tool-name contracts
+
+MCP tools are exposed to Claude/Codex CLI clients via `mcp-server-tools.ts` using a `serverSlug__toolName` namespacing convention. Platform-native tools are exposed by their `name` field from `PLATFORM_TOOLS`. These names are effectively API contracts — CLI clients cache tool schemas and build tool-call references against them.
+
+Mitigation:
+
+- Do not rename existing tool `name` values as part of the IA reorganization
+- The `capabilityId` introduced in the inventory layer is an internal join key, not a replacement for the tool name exposed to clients
+- If tool names must change in a future phase, introduce a `legacyNames[]` alias mechanism so existing CLI sessions do not break mid-conversation
 
 ### Risk: MCP becomes invisible despite being important
 
