@@ -13,7 +13,7 @@
 
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
-import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -42,14 +42,13 @@ type ClaudeAuth =
   | { mode: "apikey"; apiKey: string };
 
 async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
-  const credential = await getDecryptedCredential(providerId);
-
   // Auth mode is implicit in the provider ID:
   //   "anthropic-sub" → OAuth (Max Plan subscription, flat-rate)
   //   "anthropic"     → API key (per-token billing)
   const isOAuth = providerId === "anthropic-sub";
 
   if (!isOAuth) {
+    const credential = await getDecryptedCredential(providerId);
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
       throw new Error(`No Anthropic API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
@@ -57,13 +56,15 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
     return { mode: "apikey", apiKey };
   }
 
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+  // OAuth: use getProviderBearerToken which checks tokenExpiresAt and refreshes
+  // automatically when the access token has expired. Access tokens expire every
+  // few hours; using getDecryptedCredential directly would send an expired token
+  // causing 401. CLAUDE_CODE_OAUTH_TOKEN takes the raw sk-ant-oat01-... string.
+  const result = await getProviderBearerToken(providerId);
+  if ("error" in result) {
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
   }
-
-  // CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string (sk-ant-oat01-...),
-  // NOT a JSON object. The JSON format is for ~/.claude/.credentials.json only.
-  return { mode: "oauth", tokenJson: credential.cachedToken };
+  return { mode: "oauth", tokenJson: result.token };
 }
 
 /**
