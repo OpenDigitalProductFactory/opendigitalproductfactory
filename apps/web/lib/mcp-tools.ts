@@ -538,8 +538,26 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["plan"],
   },
   {
+    name: "check_sandbox",
+    description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. Call this before start_build to diagnose sandbox issues.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
+    name: "start_sandbox",
+    description: "Start the sandbox container if it is stopped. If status is 'stopped', this will start it and wait up to 20 seconds for it to become ready. If status is 'not_found', the container has never been created — the user must run 'docker compose up -d sandbox' once to create it. Call check_sandbox first to confirm the status before calling this.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
     name: "start_build",
-    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', STOP and tell the user to run: docker compose up -d sandbox",
+    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', call start_sandbox first, then retry start_build.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -2632,6 +2650,84 @@ export async function executeTool(
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
     }
 
+    case "check_sandbox": {
+      const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+      try {
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const execAsync = promisify(execCb);
+        const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
+        const status = stdout.trim(); // "running", "exited", "paused", etc.
+        const isRunning = status === "running";
+        return {
+          success: true,
+          message: isRunning
+            ? `Sandbox (${sandboxId}) is running and ready.`
+            : `Sandbox (${sandboxId}) exists but is ${status}. Call start_sandbox to start it.`,
+          data: { status: isRunning ? "running" : "stopped", containerId: sandboxId },
+        };
+      } catch {
+        return {
+          success: true,
+          message: `Sandbox container (${sandboxId}) does not exist. The user must run 'docker compose up -d sandbox' once from the DPF directory to create it.`,
+          data: { status: "not_found", containerId: sandboxId },
+        };
+      }
+    }
+
+    case "start_sandbox": {
+      const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+      try {
+        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
+        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const execAsync = promisify(execCb);
+
+        // First check current status
+        let currentStatus = "unknown";
+        try {
+          const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
+          currentStatus = stdout.trim();
+        } catch {
+          return {
+            success: false,
+            error: "Sandbox container not found.",
+            message: `The sandbox container (${sandboxId}) has never been created. The user needs to run 'docker compose up -d sandbox' from the DPF directory once to create it. After that, this tool can start and stop it.`,
+          };
+        }
+
+        if (currentStatus === "running") {
+          return { success: true, message: `Sandbox (${sandboxId}) is already running.`, data: { status: "running" } };
+        }
+
+        // Start the container
+        await execAsync(`docker start ${sandboxId}`, { timeout: 15_000 });
+
+        // Wait up to 20s for it to become running
+        const deadline = Date.now() + 20_000;
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 1_500));
+          try {
+            const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 3_000 });
+            if (stdout.trim() === "running") {
+              return { success: true, message: `Sandbox (${sandboxId}) started successfully and is ready.`, data: { status: "running" } };
+            }
+          } catch { /* keep waiting */ }
+        }
+
+        return {
+          success: false,
+          error: "Sandbox start timed out.",
+          message: `The sandbox container (${sandboxId}) was started but did not become ready within 20 seconds. It may still be initialising — try check_sandbox again in a moment.`,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: "Failed to start sandbox.",
+          message: `Could not start sandbox (${sandboxId}): ${(err as Error).message?.slice(0, 200)}`,
+        };
+      }
+    }
+
     case "start_build": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -2643,7 +2739,7 @@ export async function executeTool(
         return {
           success: false,
           error: "Sandbox container is not running.",
-          message: "The sandbox container (dpf-sandbox-1) is not running. STOP — do not retry. Tell the user to run: docker compose up -d sandbox",
+          message: "The sandbox is not running. Call check_sandbox to see the status, then start_sandbox if it is stopped.",
         };
       }
 
