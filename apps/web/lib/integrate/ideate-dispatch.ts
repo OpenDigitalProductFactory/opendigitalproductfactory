@@ -394,9 +394,25 @@ export async function dispatchIdeateResearch(params: {
     if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
       try {
         const parsed = JSON.parse(rawOutput);
+        // Fail fast on CLI-level errors (auth failures, rate limits, etc.)
+        // before parseDesignDoc accidentally misidentifies the error JSON as a design doc.
+        if (parsed.is_error) {
+          const errText = typeof parsed.result === "string" ? parsed.result : "Claude CLI returned an error";
+          const isAuth = errText.includes("401") || errText.toLowerCase().includes("authentication") || errText.toLowerCase().includes("invalid.*credentials");
+          console.error(`[ideate-dispatch] Claude CLI error (is_error=true): ${errText.slice(0, 200)}`);
+          return {
+            designDoc: null,
+            rawOutput,
+            success: false,
+            durationMs,
+            error: isAuth
+              ? "Claude authentication failed (401). The Anthropic OAuth token has expired — go to Admin > AI Providers > Anthropic Subscription and reconnect."
+              : `Claude CLI error: ${errText.slice(0, 150)}`,
+          };
+        }
         if (parsed.result) {
           rawOutput = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
-          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars, is_error=${parsed.is_error})`);
+          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars)`);
         }
       } catch {
         // Not valid JSON — use raw output as-is
@@ -413,7 +429,7 @@ export async function dispatchIdeateResearch(params: {
         rawOutput,
         success: false,
         durationMs,
-        error: "Could not parse design document from Codex output.",
+        error: "Could not parse design document from research output. The research engine may have returned an unexpected format.",
       };
     }
 
