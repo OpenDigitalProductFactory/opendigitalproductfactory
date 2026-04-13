@@ -16,8 +16,9 @@ function fmtTime(d: Date): string {
   });
 }
 
-function fmtScore(n: number): string {
-  return n.toFixed(1);
+function fmtScore(n: number | null | undefined): string {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return (n * 100).toFixed(0) + "%";
 }
 
 function sensitivityColor(s: string): string {
@@ -29,9 +30,10 @@ function sensitivityColor(s: string): string {
   }
 }
 
-function fitnessColor(score: number): string {
-  if (score >= 70) return "var(--dpf-success)";
-  if (score >= 40) return "#facc15";
+function fitnessColor(score: number | null | undefined): string {
+  if (score === null || score === undefined || isNaN(score)) return "var(--dpf-muted)";
+  if (score >= 0.7) return "var(--dpf-success)";
+  if (score >= 0.4) return "#facc15";
   return "var(--dpf-error)";
 }
 

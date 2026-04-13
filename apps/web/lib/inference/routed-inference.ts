@@ -108,6 +108,13 @@ export interface RouteAndCallOptions {
   effort?: "low" | "medium" | "high" | "max";
   /** Responses API: chain to a previous response for conversation state. */
   previousResponseId?: string;
+  /**
+   * Display name of the coworker invoking this call (e.g. "AI Ops Engineer").
+   * When tools are stripped due to model capability limits, this name is
+   * preserved in the degraded system prompt so the model can identify itself
+   * and explain its limited state — rather than becoming a generic assistant.
+   */
+  agentDisplayName?: string;
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -232,7 +239,16 @@ export async function routeAndCall(
   // listed below" — they latch onto the tool names and hallucinate calls.
   // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
-    systemPrompt = `You are a helpful assistant. Respond naturally to the user. Keep replies short.`;
+    const name = options?.agentDisplayName ?? "AI Assistant";
+    systemPrompt = [
+      `You are ${name}.`,
+      `Your tools are currently unavailable because the assigned AI model does not support function calling.`,
+      `You are in limited mode: you can read and discuss, but cannot take actions or use any tools.`,
+      `When the user asks you to do something that would require a tool, acknowledge what they want,`,
+      `explain that your tools are unavailable on this model, and tell them to go to`,
+      `Platform > AI > Model Assignment to assign a tool-capable model (such as Claude, GPT-4, or Gemma 4).`,
+      `Keep replies concise.`,
+    ].join(" ");
 
     // Also strip chat history to just the current message — old messages from
     // capable-model conversations contain tool calls and context that confuse
@@ -243,7 +259,7 @@ export async function routeAndCall(
       messages = [lastUserMsg];
     }
 
-    // Tools stripped — prompt replaced, history trimmed, no nudging
+    console.log(`[routing] Tools stripped for ${name} — using degraded identity prompt`);
   }
 
   // 3b. If a preferred provider was requested, force it as the selected endpoint.

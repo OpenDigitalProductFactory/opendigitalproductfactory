@@ -39,6 +39,8 @@ COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
+# Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
+RUN node packages/db/scripts/generate-tools-snapshot.js
 
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner

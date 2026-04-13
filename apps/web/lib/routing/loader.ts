@@ -180,7 +180,8 @@ export async function persistRouteDecision(
       taskType: decision.taskType,
       sensitivity: decision.sensitivity,
       reason: decision.reason,
-      fitnessScore: decision.fitnessScore,
+      // Normalize to DB invariant 0..1 (pipeline scores are 0..100 or unbounded).
+      fitnessScore: Math.min(Math.max(decision.fitnessScore / 100, 0), 1),
       candidateTrace: decision.candidates as any,
       excludedTrace: decision.candidates.filter((c) => c.excluded) as any,
       policyRulesApplied: decision.policyRulesApplied,

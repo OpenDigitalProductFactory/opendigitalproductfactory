@@ -72,8 +72,13 @@ export function getExclusionReasonV2(
     return `Context window too small: ${ep.maxContextTokens} < ${contract.minContextTokens}`;
   }
 
-  // Required capabilities — tools
-  if (contract.requiresTools && ep.capabilities.toolUse !== true) {
+  // Required capabilities — tools.
+  // Use ep.supportsToolUse (the resolved fallback chain from loader.ts) rather than
+  // ep.capabilities.toolUse directly, because the capabilities JSON blob may not
+  // have toolUse set even when the model is known to support tools (e.g. gemma4
+  // via TOOL_CAPABLE_FAMILIES in adapter-ollama.ts writes supportsToolUse: true
+  // to the ModelProfile but doesn't populate capabilities.toolUse in the JSON blob).
+  if (contract.requiresTools && !ep.supportsToolUse) {
     return "Missing required capability: toolUse";
   }
 

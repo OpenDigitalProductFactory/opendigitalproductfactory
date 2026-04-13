@@ -1,9 +1,12 @@
 # Build Studio Configuration Tab
 
 **Date:** 2026-04-08
-**Status:** Implemented
+**Status:** Implemented (navigation position changing — see note below)
 **Author:** Mark Bodman + Claude
 **Depends on:** Claude Code CLI Dispatch (2026-04-08-claude-code-cli-dispatch-design.md)
+**Updated by:** `2026-04-12-unified-capability-and-integration-lifecycle-design.md` (IA reorganization)
+
+> **Navigation note (added 2026-04-12):** The Build Studio config tab's content and function are unchanged. The unified capability spec Phase 1 IA reorganization moves its navigation context: Build Studio CLI configuration lives under **AI Workforce > Build Studio CLI** (not after "External Services"). The tab currently at `/platform/ai/build-studio` should move or be reachable from the new AI Workforce section. HTTP 301 redirect required. The framing changes from "External Services consumer" to "CLI dispatch configuration" — this is a label clarification, not a functional change.
 
 ## Problem
 

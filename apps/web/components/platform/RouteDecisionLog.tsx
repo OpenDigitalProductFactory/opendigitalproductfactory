@@ -8,7 +8,7 @@ type RouteDecision = {
   selectedEndpointId: string;
   sensitivity: string;
   reason: string;
-  fitnessScore: number;
+  fitnessScore: number | null;
   policyRulesApplied: string[];
   shadowMode: boolean;
   createdAt: string;
@@ -43,7 +43,8 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)} day${Math.floor(hrs / 24) !== 1 ? "s" : ""} ago`;
 }
 
-function fitnessColor(score: number): string {
+function fitnessColor(score: number | null | undefined): string {
+  if (score === null || score === undefined || isNaN(score)) return "var(--dpf-muted)";
   if (score >= 0.8) return "var(--dpf-success)";
   if (score >= 0.5) return "var(--dpf-warning)";
   return "var(--dpf-error)";
@@ -106,7 +107,7 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
           fontWeight: 600,
           color: fitnessColor(score),
         }}>
-          {(score * 100).toFixed(0)}%
+          {score === null || score === undefined ? "unscored" : `${(score * 100).toFixed(0)}%`}
         </span>
 
         {/* Shadow mode badge */}
