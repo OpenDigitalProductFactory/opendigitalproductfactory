@@ -1094,7 +1094,7 @@ model ModelProfile {
   speedRating               String?
   generatedBy               String
   generatedAt               DateTime      @default(now())
-  supportsToolUse           Boolean       @default(false)
+  supportsToolUse           Boolean?
   codingCapability          String?
   instructionFollowing      String?
   codegen                   Int           @default(50)
@@ -1141,9 +1141,27 @@ model ModelProfile {
   lastMetadataRefresh       DateTime?
   rawMetadataHash           String?
   driftDetectedAt           DateTime?
+  catalogHash               String?
+  discoveryHash             String?
+  capabilityOverrides       Json?
   provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
 
   @@unique([providerId, modelId])
+}
+
+model ModelCapabilityChangeLog {
+  id         String   @id @default(cuid())
+  providerId String
+  modelId    String
+  field      String
+  oldValue   Json?
+  newValue   Json?
+  source     String
+  changedAt  DateTime @default(now())
+  changedBy  String?
+
+  @@index([providerId, changedAt])
+  @@index([modelId, changedAt])
 }
 
 model TokenUsage {
