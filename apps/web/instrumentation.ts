@@ -26,6 +26,8 @@ export async function register() {
           "[model-revalidation] Startup revalidation failed (non-fatal):",
           err,
         );
+      } finally {
+        await pgPool.end().catch(() => {});
       }
     }, STARTUP_DELAY_MS);
   }
