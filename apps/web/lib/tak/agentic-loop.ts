@@ -2,6 +2,7 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 
+import { createHash } from "crypto";
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import { executeTool, PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import type { ChatMessage } from "@/lib/ai-inference";
@@ -276,24 +277,6 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
-function buildSaveEvidenceSignature(args: Record<string, unknown>): string | null {
-  const field = typeof args.field === "string" ? args.field : null;
-  if (!field) return null;
-
-  if (field === "buildPlan") {
-    const rawValue = (args.value ?? args.data) as Record<string, unknown> | undefined;
-    if (!rawValue || typeof rawValue !== "object") return "buildPlan:empty";
-    const fileStructure = Array.isArray(rawValue.fileStructure) ? rawValue.fileStructure : [];
-    const tasks = Array.isArray(rawValue.tasks) ? rawValue.tasks : [];
-    const taskTitles = tasks
-      .slice(0, 3)
-      .map((task) => (task && typeof task === "object" && "title" in task ? String((task as Record<string, unknown>).title ?? "") : ""))
-      .join("|");
-    return `buildPlan:${fileStructure.length}:${tasks.length}:${taskTitles}`;
-  }
-
-  return field;
-}
 
 function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
   const scopedMessages = messages.length <= MAX_AGENTIC_HISTORY_MESSAGES
@@ -524,68 +507,44 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Repetition detector — if the same tool+key has been called 3+ times, the model is stuck.
-    // For tools like saveBuildEvidence, different field arguments are distinct operations
-    // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
-    // Repetition = same tool with same key arguments called 3+ times.
-    // Different arguments (e.g., different search queries, different fields) = progress.
+    // Repetition detector — hash the full args so any argument difference = different
+    // operation. The model is stuck only when the exact same call (same tool + identical
+    // args) repeats. No hand-picked field lists, no tool-specific special cases.
     //
-    // Review tools (reviewBuildPlan, reviewDesignDoc) are special: they take no arguments
-    // but participate in legitimate revise-resubmit cycles. If saveBuildEvidence was called
-    // between two review calls, the underlying content changed — that's progress, not
-    // repetition. We count only consecutive review calls without an intervening evidence
-    // save as true repetition.
+    // Review tools (reviewBuildPlan, reviewDesignDoc) take no meaningful args, so their
+    // hash is always the same. We append a revision counter (bumped by each saveBuildEvidence)
+    // so a legitimate revise-resubmit cycle isn't treated as repetition.
+    //
+    // Thresholds:
+    //   last call failed  → break at 3 (stuck on a failing call)
+    //   last call succeeded → break at 5 (error-recovery retries or slow convergence)
     const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
     const toolCallCounts = new Map<string, number>();
-    // Track whether the last call for each signature succeeded (to distinguish
-    // error-recovery retries from genuine infinite loops).
     const toolLastSucceeded = new Map<string, boolean>();
+
     for (let ti = 0; ti < executedTools.length; ti++) {
       const t = executedTools[ti]!;
-      const args = t.args as Record<string, unknown> | undefined;
-      // Build a signature from the tool name + distinguishing argument values
-      const keyParts = [t.name];
-      if (t.name === "saveBuildEvidence" && args) {
-        const evidenceSignature = buildSaveEvidenceSignature(args);
-        if (evidenceSignature) keyParts.push(evidenceSignature);
-      } else if (t.name === "save_build_notes" && args) {
-        // save_build_notes accumulates spec items across multiple calls — each call with
-        // different content is progress, not repetition. Distinguish by first process entry.
-        const firstProcess = Array.isArray(args.processes) ? String(args.processes[0] ?? "").slice(0, 60) : "";
-        if (firstProcess) keyParts.push(firstProcess);
-      } else if (args?.field) keyParts.push(String(args.field));
-      if (args?.model_name) keyParts.push(String(args.model_name));
-      if (args?.query) keyParts.push(String(args.query).slice(0, 50));
-      if (args?.glob) keyParts.push(String(args.glob).slice(0, 80));
-      if (args?.path) keyParts.push(String(args.path));
-      if (args?.offset != null) keyParts.push(`offset=${args.offset}`);
-      if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));
-      if (args?.command) keyParts.push(String(args.command).slice(0, 80));
-      if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
-      // Include nodeId for taxonomy placement tools so that retrying with a different
-      // nodeId counts as a distinct operation, not repetition.
-      if (args?.nodeId) keyParts.push(String(args.nodeId).slice(0, 80));
 
-      // Review tools: append a revision counter so revise-resubmit cycles don't
-      // look like repetition. Each saveBuildEvidence between review calls bumps the counter.
+      // Hash the full args object — keys sorted for stability
+      const argsJson = JSON.stringify(t.args ?? {}, Object.keys((t.args as Record<string, unknown>) ?? {}).sort());
+      const argsHash = createHash("sha1").update(argsJson).digest("hex").slice(0, 12);
+
+      // For review tools, append a revision counter so successive revise-resubmit
+      // cycles (each preceded by a saveBuildEvidence) aren't flagged as repetition.
+      let revisionSuffix = "";
       if (REVIEW_TOOLS.has(t.name)) {
         let revisionCount = 0;
         for (let ri = 0; ri < ti; ri++) {
           if (executedTools[ri]!.name === "saveBuildEvidence") revisionCount++;
         }
-        keyParts.push(`rev=${revisionCount}`);
+        revisionSuffix = `:rev${revisionCount}`;
       }
 
-      const sig = keyParts.join(":");
+      const sig = `${t.name}:${argsHash}${revisionSuffix}`;
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
-      // Track the most recent success/failure for this signature.
-      // result.success may be undefined for older entries — treat as succeeded.
       toolLastSucceeded.set(sig, (t.result as { success?: boolean } | undefined)?.success !== false);
     }
-    // Stuck = same tool+args called 3+ times where the last attempt also FAILED,
-    // OR 5+ times regardless (handles loops where the tool keeps succeeding but
-    // the model never advances). Error-recovery retries (e.g. two validation
-    // failures then a success) are not stuck — the last attempt succeeded.
+
     const repeatedTool = [...toolCallCounts.entries()].find(([sig, count]) => {
       const lastSucceeded = toolLastSucceeded.get(sig) ?? true;
       return lastSucceeded ? count >= 5 : count >= 3;
