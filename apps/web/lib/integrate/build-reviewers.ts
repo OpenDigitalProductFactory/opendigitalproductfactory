@@ -7,6 +7,12 @@ import type { ReviewResult, BuildDesignDoc, BuildPlanDoc } from "@/lib/feature-b
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
 export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: string): string {
+  // Detect whether this feature has a UI component. Backend-only features
+  // (cron jobs, API routes, data models) shouldn't be flagged for accessibility.
+  const approachLower = (doc.proposedApproach ?? "").toLowerCase();
+  const hasUI = /\bui\b|page\.tsx|component|dashboard|panel|form|modal|button|card|tab/i.test(approachLower)
+    || /\b(shell)\b.*page/i.test(approachLower);
+
   return `You are reviewing a design document for a platform feature.
 
 DESIGN DOCUMENT:
@@ -29,7 +35,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 5. Is new code justified where reuse wasn't possible?
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
-8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)
+${hasUI ? `8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
 
 CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
