@@ -2,6 +2,7 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
+import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -1825,6 +1826,31 @@ async function resolveActiveBuildId(userId: string): Promise<string | null> {
   return build?.buildId ?? null;
 }
 
+async function updateBuildHappyPathState(
+  userId: string,
+  patch: Parameters<typeof mergeHappyPathStateIntoPlan>[1],
+  buildId?: string | null,
+): Promise<void> {
+  const resolvedBuildId = buildId ?? await resolveActiveBuildId(userId);
+  if (!resolvedBuildId) return;
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId: resolvedBuildId },
+    select: { plan: true },
+  });
+  if (!build) return;
+
+  const mergedPlan = mergeHappyPathStateIntoPlan(
+    (build.plan as Record<string, unknown> | null) ?? null,
+    patch,
+  );
+
+  await prisma.featureBuild.update({
+    where: { buildId: resolvedBuildId },
+    data: { plan: mergedPlan as import("@dpf/db").Prisma.InputJsonValue },
+  });
+}
+
 export async function executeTool(
   toolName: string,
   rawParams: Record<string, unknown>,
@@ -1862,6 +1888,14 @@ export async function executeTool(
           content: String(params["body"] ?? ""),
         })
       ).catch(() => {});
+      if (context?.routeContext === "/build") {
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            backlogItemId: item.itemId,
+            epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+          },
+        });
+      }
       return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
@@ -2064,6 +2098,11 @@ export async function executeTool(
       };
       try {
         await updateFeatureBrief(buildId, brief);
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            constrainedGoal: brief.title || null,
+          },
+        }, buildId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Update failed";
         return { success: false, error: msg, message: `Could not update brief: ${msg}. The brief can only be updated during the Ideate phase. You are past that phase — proceed with your current phase instead.` };
@@ -2147,6 +2186,13 @@ export async function executeTool(
           // When parentNodeId/name are empty, silently ignore proposeNew — fall through to nodeId path
         }
         const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
+        if (result.success && nodeId) {
+          await updateBuildHappyPathState(userId, {
+            intake: {
+              taxonomyNodeId: nodeId,
+            },
+          }, buildId);
+        }
         return { success: result.success, entityId: buildId, message: result.message };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
@@ -2234,6 +2280,11 @@ export async function executeTool(
       if (resolvedProductId) epicInput.digitalProductId = resolvedProductId;
       try {
         const result = await createBuildEpic(epicInput);
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            epicId: result.epicId,
+          },
+        }, epicBuildId);
         return { success: true, entityId: result.epicId, message: result.message };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Epic creation failed";

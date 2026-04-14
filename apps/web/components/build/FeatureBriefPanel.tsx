@@ -160,6 +160,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   if (!brief) {
     return (
       <div className="p-4 flex flex-col gap-3">
+        {build && <HappyPathStatusCard build={build} />}
         {progressMsg && (
           <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
             <span className="w-2 h-2 rounded-full bg-[var(--dpf-accent)] shrink-0" />
@@ -175,6 +176,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
 
   return (
     <div className="p-4 flex flex-col gap-3">
+      {build && <HappyPathStatusCard build={build} />}
       {progressMsg && (
         <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
           <span className="w-2 h-2 rounded-full bg-[var(--dpf-accent)] shrink-0" />
@@ -211,6 +213,43 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function HappyPathStatusCard({ build }: { build: FeatureBuildRow }) {
+  const intake = build.happyPathState.intake;
+  const execution = build.happyPathState.execution;
+  const items = [
+    { label: "Taxonomy", value: intake.taxonomyNodeId ?? "Missing", ok: Boolean(intake.taxonomyNodeId) },
+    { label: "Backlog", value: intake.backlogItemId ?? "Missing", ok: Boolean(intake.backlogItemId) },
+    { label: "Epic", value: intake.epicId ?? "Missing", ok: Boolean(intake.epicId) },
+    { label: "Goal", value: intake.constrainedGoal ?? "Missing", ok: Boolean(intake.constrainedGoal) },
+  ];
+
+  return (
+    <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-[var(--dpf-text)]">Happy Path Status</span>
+        <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
+          Engine: {execution.engine ?? "Not selected"}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1.5">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-start justify-between gap-3 text-xs">
+            <span className="text-[var(--dpf-muted)] uppercase tracking-wider">{item.label}</span>
+            <span className={item.ok ? "text-[var(--dpf-text)]" : "text-[var(--dpf-warning)]"}>
+              {item.value}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="text-[11px] text-[var(--dpf-muted)] leading-snug">
+        Stage: {execution.status}
+        {execution.failureStage ? ` · failed at ${execution.failureStage}` : ""}
+        {intake.failureReason ? ` · ${intake.failureReason}` : ""}
+      </div>
     </div>
   );
 }

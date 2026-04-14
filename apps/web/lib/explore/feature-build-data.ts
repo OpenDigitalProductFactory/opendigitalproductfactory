@@ -2,6 +2,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion } from "./feature-build-types";
+import { normalizeHappyPathState } from "./feature-build-types";
 import type { BuildContext } from "@/lib/build-agent-prompts";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 
@@ -65,6 +66,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
@@ -133,6 +135,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,

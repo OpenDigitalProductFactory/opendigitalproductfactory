@@ -7,6 +7,26 @@ import { parseReviewResponse, buildDesignReviewPrompt, buildPlanReviewPrompt } f
  * Tests the complete gate enforcement chain without needing a running server.
  */
 describe("Build Disciplines — Full Flow Integration", () => {
+  const happyPathState = {
+    intake: {
+      status: "ready" as const,
+      taxonomyNodeId: "tax-1",
+      backlogItemId: "BI-1",
+      epicId: "epic-1",
+      constrainedGoal: "Capture one version value from Prometheus",
+      failureReason: null,
+    },
+    execution: {
+      engine: null,
+      source: null,
+      status: "pending" as const,
+      failureStage: null,
+    },
+    verification: {
+      status: "pending" as const,
+      checks: [],
+    },
+  };
 
   // ─── Gate 1: Ideate → Plan ───────────────────────────────────────────────
 
@@ -44,6 +64,7 @@ describe("Build Disciplines — Full Flow Integration", () => {
           acceptanceCriteria: ["Filter narrows results", "Debounced at 300ms"],
         },
         designReview: { decision: "pass", issues: [], summary: "Design is sound" },
+        happyPathState,
       });
       expect(result.allowed).toBe(true);
     });
@@ -69,6 +90,7 @@ describe("Build Disciplines — Full Flow Integration", () => {
           ],
         },
         planReview: { decision: "pass", issues: [], summary: "Plan is executable" },
+        happyPathState,
       });
       expect(result.allowed).toBe(true);
     });

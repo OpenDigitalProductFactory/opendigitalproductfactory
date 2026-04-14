@@ -162,6 +162,26 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         taskResults: null,
         verificationOut: null,
         acceptanceMet: null,
+        happyPathState: {
+          intake: {
+            status: "pending",
+            taxonomyNodeId: null,
+            backlogItemId: null,
+            epicId: null,
+            constrainedGoal: null,
+            failureReason: null,
+          },
+          execution: {
+            engine: null,
+            source: null,
+            status: "pending",
+            failureStage: null,
+          },
+          verification: {
+            status: "pending",
+            checks: [],
+          },
+        },
         accountableEmployeeId: null,
         claimedByAgentId: null,
         claimedAt: null,

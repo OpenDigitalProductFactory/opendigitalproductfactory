@@ -9,6 +9,7 @@ import {
   checkPhaseGate,
   generateBuildId,
   bumpVersion,
+  normalizeHappyPathState,
   type FeatureBrief,
   type BuildPhase,
   type VersionBump,
@@ -101,6 +102,7 @@ export async function advanceBuildPhase(
       createdById: true,
       designDoc: true,
       designReview: true,
+      plan: true,
       buildPlan: true,
       planReview: true,
       taskResults: true,
@@ -119,6 +121,7 @@ export async function advanceBuildPhase(
   const gate = checkPhaseGate(currentPhase, targetPhase, {
     designDoc: build.designDoc,
     designReview: build.designReview,
+    happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     buildPlan: build.buildPlan,
     planReview: build.planReview,
     taskResults: build.taskResults,

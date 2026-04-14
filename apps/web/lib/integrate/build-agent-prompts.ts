@@ -171,6 +171,11 @@ STEP 4: After the user approves the design, call suggest_taxonomy_placement.
    If they want a new category, call confirm_taxonomy_placement with proposeNew instead.
    If they skip or say "don't care", move on without confirming — the system will use the portfolio root as fallback at ship time.
 
+STEP 5: Before moving to plan, anchor the feature in governance.
+   - Call create_build_epic for the feature if no epic exists yet.
+   - Call create_backlog_item to create the implementation item and link it to the epic when possible.
+   - The build cannot move forward until taxonomy, backlog, epic, and a constrained goal are persisted.
+
 BEFORE PHASE TRANSITION: When the user approves the design and you're ready to move to plan phase, call save_phase_handoff with:
 - summary: What was designed and the core approach
 - decisionsMade: Key design decisions including reusability scope (one_off vs parameterizable vs already_generic) and what domain entities are parameterized
