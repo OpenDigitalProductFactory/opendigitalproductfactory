@@ -1010,15 +1010,21 @@ export async function sendMessage(input: {
               { routeContext: input.routeContext },
             );
 
+            console.log(`[coworker] saveBuildEvidence result: success=${saveResult.success}, msg=${saveResult.message?.slice(0, 100)}`);
+
             if (saveResult.success) {
               const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").trim();
+              console.log(`[coworker] Approach length: ${approach.length}`);
               if (approach.length < 30) {
                 // Design doc saved but approach is blank — research engine produced an empty doc.
+                console.log(`[coworker] Approach too short (${approach.length} chars) — treating as empty doc`);
                 responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
               } else {
                 // Run the design doc review
+                console.log(`[coworker] Running reviewDesignDoc...`);
                 agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                 const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${reviewResult.message?.slice(0, 100)}`);
                 agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
                 // Build a user-friendly summary
