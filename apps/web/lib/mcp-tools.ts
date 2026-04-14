@@ -2059,18 +2059,21 @@ export async function executeTool(
         }
         const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
         const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
-        // Validate proposeNew structure before passing to Prisma
+        // Validate proposeNew structure before passing to Prisma.
+        // Models often send proposeNew with empty strings alongside a valid nodeId
+        // (filling in the schema shape). Ignore proposeNew when fields are empty —
+        // only treat it as a real proposal when parentNodeId and name are non-empty.
         let proposeNew: { parentNodeId: string; name: string; description: string; rationale: string } | undefined;
         if (params["proposeNew"] && typeof params["proposeNew"] === "object") {
           const raw = params["proposeNew"] as Record<string, unknown>;
-          const parentNodeId = typeof raw["parentNodeId"] === "string" ? raw["parentNodeId"] : "";
-          const name = typeof raw["name"] === "string" ? raw["name"] : "";
+          const parentNodeId = typeof raw["parentNodeId"] === "string" ? raw["parentNodeId"].trim() : "";
+          const name = typeof raw["name"] === "string" ? raw["name"].trim() : "";
           const description = typeof raw["description"] === "string" ? raw["description"] : "";
           const rationale = typeof raw["rationale"] === "string" ? raw["rationale"] : "";
-          if (!parentNodeId || !name) {
-            return { success: false, error: "Invalid proposeNew", message: "proposeNew requires at least parentNodeId and name" };
+          if (parentNodeId && name) {
+            proposeNew = { parentNodeId, name, description, rationale };
           }
-          proposeNew = { parentNodeId, name, description, rationale };
+          // When parentNodeId/name are empty, silently ignore proposeNew — fall through to nodeId path
         }
         const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
         return { success: result.success, entityId: buildId, message: result.message };
