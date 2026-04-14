@@ -20,11 +20,12 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
-import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing
+import type { BuildPhaseTag } from "@/lib/mcp-tools";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
-import { deleteAttachmentsForThread } from "@/lib/file-upload";
+// file-upload is imported dynamically at call site to avoid NFT whole-project tracing
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
@@ -523,6 +524,7 @@ export async function sendMessage(input: {
   }
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
+  const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
   const allPlatformTools = await getAvailableTools({
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
@@ -571,7 +573,7 @@ export async function sendMessage(input: {
     // (53+ tools) which causes smaller models to miss critical tools.
     if (activeBuildPhase) {
       if (!t.buildPhases) return false; // Exclude general-purpose tools during builds
-      return t.buildPhases.includes(activeBuildPhase as import("@/lib/mcp-tools").BuildPhaseTag);
+      return t.buildPhases.includes(activeBuildPhase as BuildPhaseTag);
     }
     return true;
   });
@@ -995,8 +997,11 @@ export async function sendMessage(input: {
 
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: ideateResult.success });
 
+          console.log(`[coworker] Ideate result: success=${ideateResult.success}, hasDesignDoc=${!!ideateResult.designDoc}, docKeys=${ideateResult.designDoc ? Object.keys(ideateResult.designDoc as Record<string, unknown>).join(",") : "none"}`);
+
           if (ideateResult.success && ideateResult.designDoc) {
             // Save design doc via the same tool handler
+            console.log(`[coworker] Saving design doc + triggering review...`);
             const { executeTool } = await import("@/lib/mcp-tools");
             const saveResult = await executeTool(
               "saveBuildEvidence",
@@ -1376,6 +1381,7 @@ export async function clearConversation(input: {
   }
 
   // Delete attachments (files on disk + DB rows), then proposals (FK on messageId), then messages
+  const { deleteAttachmentsForThread } = await import("@/lib/file-upload");
   await deleteAttachmentsForThread(input.threadId);
   await prisma.agentActionProposal.deleteMany({
     where: { threadId: input.threadId },
