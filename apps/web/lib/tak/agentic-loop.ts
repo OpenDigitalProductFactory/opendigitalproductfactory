@@ -512,12 +512,12 @@ export async function runAgenticLoop(params: {
     // Only recent behavior counts — early calls that were followed by progress are outside
     // the window and don't trigger the guard.
     //
-    // Review tools (reviewBuildPlan, reviewDesignDoc) take no meaningful args so their
-    // hash is always the same. A revision counter (bumped by each saveBuildEvidence) keeps
-    // legitimate revise-resubmit cycles distinct.
+    // No special-casing for review tools. reviewDesignDoc/reviewBuildPlan take no args,
+    // so every call hashes identically — 3 calls trips the guard. This caps the agent at
+    // 2 revision attempts per review, which is enough. If the design/plan still fails after
+    // 2 revisions the user needs to intervene.
     const WINDOW = 40;
     const REPEAT_THRESHOLD = 3;
-    const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
     const toolCallCounts = new Map<string, number>();
     // Track the most recent result for each hash to include in the stuck message.
     const toolLastResult = new Map<string, { success: boolean; error?: string }>();
@@ -530,18 +530,7 @@ export async function runAgenticLoop(params: {
       const argsJson = JSON.stringify(t.args ?? {}, Object.keys((t.args as Record<string, unknown>) ?? {}).sort());
       const argsHash = createHash("sha1").update(argsJson).digest("hex").slice(0, 12);
 
-      // For review tools, append a revision counter so successive revise-resubmit
-      // cycles (each preceded by a saveBuildEvidence) aren't flagged as repetition.
-      let revisionSuffix = "";
-      if (REVIEW_TOOLS.has(t.name)) {
-        let revisionCount = 0;
-        for (let ri = 0; ri < ti; ri++) {
-          if (windowSlice[ri]!.name === "saveBuildEvidence") revisionCount++;
-        }
-        revisionSuffix = `:rev${revisionCount}`;
-      }
-
-      const sig = `${t.name}:${argsHash}${revisionSuffix}`;
+      const sig = `${t.name}:${argsHash}`;
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
       toolLastResult.set(sig, t.result as { success: boolean; error?: string });
     }
