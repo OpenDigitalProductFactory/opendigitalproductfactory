@@ -54,6 +54,75 @@ export function resolveAnnotations(tool: ToolDefinition): ToolAnnotations {
   return { ...defaults, ...tool.annotations };
 }
 
+// ─── Parameter Sanitization ─────────────────────────────────────────────────
+// Models (especially Codex/GPT) often fill optional object parameters with empty
+// strings as schema artifacts. This causes validation failures in handlers that
+// check for the object's presence before inspecting its fields.
+//
+// sanitizeToolParams strips optional object params whose string fields are all
+// empty/whitespace. Applied once at the executeTool entry point so every handler
+// is protected without per-tool defensive code.
+
+const _toolSchemaCache = new Map<string, { required: Set<string>; objectParams: string[] }>();
+
+function _getToolParamMeta(toolName: string): { required: Set<string>; objectParams: string[] } {
+  const cached = _toolSchemaCache.get(toolName);
+  if (cached) return cached;
+
+  const tool = PLATFORM_TOOLS.find(t => t.name === toolName);
+  if (!tool) {
+    const empty = { required: new Set<string>(), objectParams: [] };
+    _toolSchemaCache.set(toolName, empty);
+    return empty;
+  }
+
+  const schema = tool.inputSchema as {
+    properties?: Record<string, { type?: string }>;
+    required?: string[];
+  };
+  const required = new Set<string>(schema.required ?? []);
+  const objectParams: string[] = [];
+  if (schema.properties) {
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      if (prop?.type === "object" && !required.has(key)) {
+        objectParams.push(key);
+      }
+    }
+  }
+  const result = { required, objectParams };
+  _toolSchemaCache.set(toolName, result);
+  return result;
+}
+
+/**
+ * Strip optional object parameters that are empty schema artifacts.
+ * An object param is considered empty when all its string-typed values
+ * are empty or whitespace-only. Returns a shallow copy with empty
+ * objects removed; does not mutate the original.
+ */
+export function sanitizeToolParams(
+  toolName: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const { objectParams } = _getToolParamMeta(toolName);
+  if (objectParams.length === 0) return params;
+
+  let cleaned: Record<string, unknown> | null = null;
+  for (const key of objectParams) {
+    const val = params[key];
+    if (val == null || typeof val !== "object") continue;
+    const obj = val as Record<string, unknown>;
+    const stringValues = Object.values(obj).filter((v): v is string => typeof v === "string");
+    // Object with at least one string field, all of which are empty → schema artifact
+    if (stringValues.length > 0 && stringValues.every(s => s.trim() === "")) {
+      if (!cleaned) cleaned = { ...params };
+      delete cleaned[key];
+      console.log(`[sanitize] ${toolName}: stripped empty optional object param "${key}"`);
+    }
+  }
+  return cleaned ?? params;
+}
+
 /** Tools that perform destructive or irreversible actions beyond what
  *  sideEffect/executionMode already captures. */
 const DESTRUCTIVE_TOOLS = new Set([
@@ -1758,10 +1827,12 @@ async function resolveActiveBuildId(userId: string): Promise<string | null> {
 
 export async function executeTool(
   toolName: string,
-  params: Record<string, unknown>,
+  rawParams: Record<string, unknown>,
   userId: string,
   context?: { routeContext?: string; agentId?: string; threadId?: string },
 ): Promise<ToolResult> {
+  // Strip empty optional object params that models send as schema artifacts
+  const params = sanitizeToolParams(toolName, rawParams);
   try {
   switch (toolName) {
     case "create_backlog_item": {
