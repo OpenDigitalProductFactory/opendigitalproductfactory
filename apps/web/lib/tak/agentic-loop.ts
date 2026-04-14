@@ -548,6 +548,11 @@ export async function runAgenticLoop(params: {
       if (t.name === "saveBuildEvidence" && args) {
         const evidenceSignature = buildSaveEvidenceSignature(args);
         if (evidenceSignature) keyParts.push(evidenceSignature);
+      } else if (t.name === "save_build_notes" && args) {
+        // save_build_notes accumulates spec items across multiple calls — each call with
+        // different content is progress, not repetition. Distinguish by first process entry.
+        const firstProcess = Array.isArray(args.processes) ? String(args.processes[0] ?? "").slice(0, 60) : "";
+        if (firstProcess) keyParts.push(firstProcess);
       } else if (args?.field) keyParts.push(String(args.field));
       if (args?.model_name) keyParts.push(String(args.model_name));
       if (args?.query) keyParts.push(String(args.query).slice(0, 50));
