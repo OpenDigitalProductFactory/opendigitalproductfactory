@@ -30,13 +30,15 @@ ${projectContext}
 REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Is the problem statement clear and specific?
 2. Was existing functionality properly audited (not building what already exists)?
-3. Were alternatives considered (open-source, existing tools, MCP services)?
+3. Were alternatives considered? (For simple, standard patterns like health endpoints, CRUD routes, or utility functions, noting "standard pattern, no alternatives needed" is sufficient — do NOT fail a review for missing alternatives on trivial features.)
 4. Is the reuse plan concrete (not vague)?
 5. Is new code justified where reuse wasn't possible?
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
 ${hasUI ? `8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
+
+SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss, security vulnerabilities, or broken functionality. Use "important" for design gaps that should be addressed but don't block implementation. Use "minor" for style, naming, or nice-to-have improvements. A health endpoint or simple utility does NOT need the same rigor as a payment system — calibrate accordingly.
 
 CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
 
