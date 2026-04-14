@@ -78,9 +78,12 @@ test.describe("Build Studio Lifecycle", () => {
     await expect(panel).toBeVisible({ timeout: 15_000 });
     console.log("[lifecycle] Panel opened");
 
-    // Erase old conversation to avoid context pollution from prior test runs
+    // Erase old conversation to avoid context pollution from prior test runs.
+    // With thread-per-build, new builds get a fresh thread so Erase may be disabled.
     const eraseBtn = panel.locator('button:has-text("Erase")').first();
-    if (await eraseBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    const eraseVisible = await eraseBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+    const eraseEnabled = eraseVisible && await eraseBtn.isEnabled().catch(() => false);
+    if (eraseEnabled) {
       await eraseBtn.click();
       // Confirm erase if there's a dialog
       const confirmBtn = page.locator('button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Erase")').last();
@@ -118,19 +121,42 @@ test.describe("Build Studio Lifecycle", () => {
     expect(lower).not.toContain("got stuck");
 
     // ── Step 4: Wait for background research to complete ──────────
-    // The agent dispatches ideate research in the background (takes 2-4 min).
+    // The agent dispatches ideate research in the background (takes 2-5 min).
     // The agentic loop returns early ("researching...") while research runs.
-    // Wait for "Design Research" header to appear — that means the design doc was saved.
-    console.log("[lifecycle] Waiting for background research to complete (up to 5 min)...");
-    const designHeader = page.locator("text=Design Research").first();
-    const briefHeader = page.locator("text=Feature Brief").first();
+    // Poll by switching to the docs view and checking for "Design Research" header.
+    console.log("[lifecycle] Waiting for background research to complete (up to 6 min)...");
+
+    // The default view is "Graph" — FeatureBriefPanel is only visible in non-graph view.
+    // Click the Graph tab area to switch away, or look for a non-graph tab.
     let hasDesign = false;
-    const researchDeadline = Date.now() + 300_000;
+    const researchDeadline = Date.now() + 360_000; // 6 min (research takes 3-5 min)
     while (Date.now() < researchDeadline) {
+      // Reload to pick up any DB changes from background research
+      await page.reload({ waitUntil: "networkidle", timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(2_000);
+
+      // Switch to Details tab to see FeatureBriefPanel (design doc)
+      const detailsTab = page.locator('button[role="tab"]:has-text("Details")').first();
+      if (await detailsTab.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await detailsTab.click();
+        await page.waitForTimeout(500);
+      }
+
+      const designHeader = page.locator("text=Design Research").first();
       hasDesign = await designHeader.isVisible({ timeout: 2_000 }).catch(() => false);
       if (hasDesign) break;
-      await page.waitForTimeout(5_000); // poll every 5s
+
+      // Also check brief (may show before design doc)
+      const briefHeader = page.locator("text=Feature Brief").first();
+      const hasBrief = await briefHeader.isVisible({ timeout: 1_000 }).catch(() => false);
+      if (hasBrief) {
+        console.log("[lifecycle] Feature Brief visible (design doc not yet saved)");
+      }
+
+      console.log(`[lifecycle] Polling... design=${hasDesign} (${Math.round((researchDeadline - Date.now()) / 1000)}s remaining)`);
+      await page.waitForTimeout(10_000); // poll every ~15s total with reload
     }
+    const briefHeader = page.locator("text=Feature Brief").first();
     const hasBrief = await briefHeader.isVisible({ timeout: 2_000 }).catch(() => false);
     console.log(`[lifecycle] Design doc visible: ${hasDesign}, Brief visible: ${hasBrief}`);
     await screenshot(page, "design-check");

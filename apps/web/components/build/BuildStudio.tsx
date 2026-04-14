@@ -349,26 +349,36 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                   >
                     Graph
                   </button>
+                  {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
+                  <button
+                    role="tab"
+                    aria-selected={buildView === "docs"}
+                    aria-controls="panel-docs"
+                    onClick={() => setBuildView("docs")}
+                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                    style={{
+                      background: buildView === "docs" ? "var(--dpf-surface-2)" : "transparent",
+                      color: buildView === "docs" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                      borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                    }}
+                  >
+                    {(activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Details"}
+                  </button>
                   {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
-                    <>
-                      {(["preview", "docs"] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          role="tab"
-                          aria-selected={buildView === tab}
-                          aria-controls={`panel-${tab}`}
-                          onClick={() => setBuildView(tab)}
-                          className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                          style={{
-                            background: buildView === tab ? "var(--dpf-surface-2)" : "transparent",
-                            color: buildView === tab ? "var(--dpf-text)" : "var(--dpf-muted)",
-                            borderBottom: buildView === tab ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                          }}
-                        >
-                          {tab === "preview" ? "Live Preview" : (activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Build Details"}
-                        </button>
-                      ))}
-                    </>
+                    <button
+                      role="tab"
+                      aria-selected={buildView === "preview"}
+                      aria-controls="panel-preview"
+                      onClick={() => setBuildView("preview")}
+                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                      style={{
+                        background: buildView === "preview" ? "var(--dpf-surface-2)" : "transparent",
+                        color: buildView === "preview" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                        borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                      }}
+                    >
+                      Live Preview
+                    </button>
                   )}
                 </div>
                 {buildView === "graph" && (
