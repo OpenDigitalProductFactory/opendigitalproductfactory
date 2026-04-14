@@ -1,0 +1,58 @@
+/* apps/web/components/build/process-graph.css
+ * CSS-only animations for the process visualization graph.
+ * React sets class names; CSS handles the visuals.
+ */
+
+/* ─── Pulsing border ring — applied to running nodes ────────────────────── */
+@keyframes pg-pulse-ring {
+  0%   { box-shadow: 0 0 0 0px var(--pg-color-25); }
+  50%  { box-shadow: 0 0 0 5px var(--pg-color-25); }
+  100% { box-shadow: 0 0 0 0px var(--pg-color-25); }
+}
+
+.pg-node-running {
+  animation: pg-pulse-ring 1.4s ease-in-out infinite;
+}
+
+/* ─── Done flash ────────────────────────────────────────────────────────── */
+@keyframes pg-done-flash {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.pg-node-done-flash {
+  animation: pg-done-flash 0.4s ease-out forwards;
+}
+
+/* ─── Error shake ───────────────────────────────────────────────────────── */
+@keyframes pg-error-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-3px); }
+  40%      { transform: translateX(3px); }
+  60%      { transform: translateX(-2px); }
+  80%      { transform: translateX(2px); }
+}
+
+.pg-node-error-enter {
+  animation: pg-error-shake 0.4s ease-out forwards;
+}
+
+/* ─── Traveling edge dash ───────────────────────────────────────────────── */
+@keyframes pg-dash-travel {
+  to { stroke-dashoffset: -36; }
+}
+
+.pg-edge-active path {
+  animation: pg-dash-travel 0.9s linear infinite;
+}
+
+/* ─── Respect prefers-reduced-motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .pg-node-running,
+  .pg-node-done-flash,
+  .pg-node-error-enter,
+  .pg-edge-active path {
+    animation: none !important;
+  }
+}
