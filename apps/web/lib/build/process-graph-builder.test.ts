@@ -12,7 +12,10 @@ import {
   type ProcessActorKind,
   type NodeStatus,
 } from "./process-graph-builder";
-import type { FeatureBuildRow } from "@/lib/explore/feature-build-types";
+import {
+  normalizeHappyPathState,
+  type FeatureBuildRow,
+} from "@/lib/explore/feature-build-types";
 
 // Minimal FeatureBuildRow stub
 function makeRow(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
@@ -50,6 +53,7 @@ function makeRow(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
     claimStatus: null,
     buildExecState: null,
     phaseHandoffs: null,
+    happyPathState: normalizeHappyPathState(null),
     ...overrides,
   };
 }

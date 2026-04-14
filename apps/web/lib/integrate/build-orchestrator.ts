@@ -20,6 +20,7 @@ import {
 } from "./specialist-prompts";
 import type { SpecialistRole } from "./task-dependency-graph";
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
+import { mergeHappyPathStateIntoPlan } from "@/lib/explore/feature-build-types";
 import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
 import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
 import { getBuildStudioConfig } from "./build-studio-config";
@@ -556,6 +557,34 @@ export async function runBuildOrchestrator(params: {
   // the same auth error. One clear message is better than 14 cryptic ones.
   const preflightConfig = await getBuildStudioConfig();
 
+  try {
+    const buildRecord = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { plan: true },
+    });
+    if (buildRecord) {
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: {
+          codingProvider: preflightConfig.provider,
+          plan: mergeHappyPathStateIntoPlan(
+            (buildRecord.plan as Record<string, unknown> | null) ?? null,
+            {
+              execution: {
+                engine: preflightConfig.provider,
+                source: null,
+                status: "running",
+                failureStage: null,
+              },
+            },
+          ) as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[orchestrator] Could not persist execution engine metadata:", err);
+  }
+
   if (preflightConfig.provider === "codex" || preflightConfig.provider === "claude") {
     try {
       const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
@@ -568,6 +597,28 @@ export async function runBuildOrchestrator(params: {
         : !!cred?.cachedToken;
       if (!hasAuth) {
         const label = preflightConfig.provider === "claude" ? "Claude / Anthropic" : "OpenAI / Codex";
+        const buildRecord = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { plan: true },
+        });
+        if (buildRecord) {
+          await prisma.featureBuild.update({
+            where: { buildId },
+            data: {
+              plan: mergeHappyPathStateIntoPlan(
+                (buildRecord.plan as Record<string, unknown> | null) ?? null,
+                {
+                  execution: {
+                    engine: preflightConfig.provider,
+                    source: null,
+                    status: "failed",
+                    failureStage: "connect",
+                  },
+                },
+              ) as import("@dpf/db").Prisma.InputJsonValue,
+            },
+          }).catch(() => {});
+        }
         return {
           content: `Build cannot start — the ${label} provider "${providerId}" is not connected.\n\nGo to Admin > AI Workforce > External Services and configure credentials, or switch providers in Build Studio.`,
           totalTasks: 0, completedTasks: 0, failedTasks: 0,
@@ -575,6 +626,28 @@ export async function runBuildOrchestrator(params: {
         };
       }
     } catch {
+      const buildRecord = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { plan: true },
+      });
+      if (buildRecord) {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: {
+            plan: mergeHappyPathStateIntoPlan(
+              (buildRecord.plan as Record<string, unknown> | null) ?? null,
+              {
+                execution: {
+                  engine: preflightConfig.provider,
+                  source: null,
+                  status: "failed",
+                  failureStage: "connect",
+                },
+              },
+            ) as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        }).catch(() => {});
+      }
       return {
         content: "Build cannot start — could not verify AI provider credentials.\n\nGo to Admin > AI Workforce and ensure at least one code generation provider is connected.",
         totalTasks: 0, completedTasks: 0, failedTasks: 0,
