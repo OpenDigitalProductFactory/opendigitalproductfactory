@@ -1,0 +1,553 @@
+// apps/web/lib/build/process-graph-builder.ts
+// Pure function module: FeatureBuildRow -> ReactFlow { nodes, edges }
+// No DB, no React, no side effects.
+
+import type {
+  BuildPhase,
+  FeatureBuildRow,
+} from "@/lib/explore/feature-build-types";
+import {
+  PHASE_LABELS,
+  VISIBLE_PHASES,
+} from "@/lib/explore/feature-build-types";
+import {
+  buildDependencyGraph,
+  type AssignedTask,
+  type ExecutionPhase,
+  type SpecialistRole,
+} from "@/lib/integrate/task-dependency-graph";
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+/** Icons (emoji shortcodes) for each visible build phase */
+export const PHASE_ICONS: Record<string, string> = {
+  ideate: "lightbulb",
+  plan: "clipboard",
+  build: "hammer",
+  review: "magnifying_glass",
+  ship: "rocket",
+};
+
+/** CSS variable colours for specialist roles (used in task nodes) */
+export const ROLE_COLOURS: Record<SpecialistRole, string> = {
+  "data-architect": "var(--pg-role-data-architect)",
+  "software-engineer": "var(--pg-role-software-engineer)",
+  "frontend-engineer": "var(--pg-role-frontend-engineer)",
+  "qa-engineer": "var(--pg-role-qa-engineer)",
+};
+
+/** Icons for specialist roles */
+export const ROLE_ICONS: Record<SpecialistRole, string> = {
+  "data-architect": "database",
+  "software-engineer": "code",
+  "frontend-engineer": "layout",
+  "qa-engineer": "check_circle",
+};
+
+/** Map each BuildPhase to its ordinal index for comparison */
+const PHASE_ORDER: BuildPhase[] = [
+  "ideate", "plan", "build", "review", "ship", "complete", "failed",
+];
+
+const PHASE_ORDER_INDEX: Record<string, number> = {};
+for (let i = 0; i < PHASE_ORDER.length; i++) {
+  const p = PHASE_ORDER[i];
+  if (p != null) {
+    PHASE_ORDER_INDEX[p] = i;
+  }
+}
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export type NodeStatus = "pending" | "running" | "done" | "error";
+
+export type ProcessActorKind = "ai_coworker" | "human" | "system";
+
+export type PhaseNodeData = {
+  label: string;
+  status: NodeStatus;
+  color: string;
+  icon: string;
+  phase: BuildPhase;
+};
+
+export type TaskNodeData = {
+  label: string;
+  status: NodeStatus;
+  specialist: SpecialistRole;
+  roleColor: string;
+  roleIcon: string;
+  actorKind: ProcessActorKind;
+  actorLabel: string;
+  taskIndex: number;
+};
+
+export type PhaseProcessNode = {
+  id: string;
+  type: "processPhase";
+  position: { x: number; y: number };
+  data: PhaseNodeData;
+};
+
+export type TaskProcessNode = {
+  id: string;
+  type: "processTask";
+  position: { x: number; y: number };
+  data: TaskNodeData;
+};
+
+export type ForkJoinProcessNode = {
+  id: string;
+  type: "processFork" | "processJoin";
+  position: { x: number; y: number };
+  data: PhaseNodeData;
+};
+
+export type ProcessNode = PhaseProcessNode | TaskProcessNode | ForkJoinProcessNode;
+
+export type ProcessEdge = {
+  id: string;
+  source: string;
+  target: string;
+  animated?: boolean;
+};
+
+export type GraphOutput = {
+  nodes: ProcessNode[];
+  edges: ProcessEdge[];
+};
+
+/** A single task result after normalization from the runtime shape */
+export type NormalizedStoredTaskResult = {
+  title: string;
+  specialist: string;
+  outcome: string;
+  durationMs: number;
+};
+
+/** Snapshot of build process state, normalized for graph building */
+export type NormalizedBuildProcessSnapshot = {
+  /** Map of task title -> normalized result */
+  taskResultMap: Map<string, NormalizedStoredTaskResult>;
+  /** Set of currently active task titles */
+  activeTaskTitles: Set<string>;
+  /** Map of task title -> actor info */
+  actorMap: Map<string, { kind: ProcessActorKind; label: string }>;
+};
+
+// ─── Phase Status ───────────────────────────────────────────────────────────
+
+/**
+ * Determine the display status of a visible phase given the build state.
+ *
+ * Logic:
+ * - If the build is "complete", all visible phases are "done".
+ * - If the build is "failed", phases before the failure point are "done",
+ *   the failing phase is "error", and later phases are "pending".
+ * - Otherwise, phases before the current phase are "done", the current
+ *   phase is "running", and later phases are "pending".
+ */
+export function getPhaseNodeStatus(
+  phase: BuildPhase,
+  build: FeatureBuildRow,
+): NodeStatus {
+  const currentPhase = build.phase;
+
+  // "complete" means everything is done
+  if (currentPhase === "complete") {
+    return "done";
+  }
+
+  // "failed" means we need to figure out which phase failed
+  if (currentPhase === "failed") {
+    return getFailedPhaseStatus(phase, build);
+  }
+
+  const phaseIdx = PHASE_ORDER_INDEX[phase] ?? 0;
+  const currentIdx = PHASE_ORDER_INDEX[currentPhase] ?? 0;
+
+  if (phaseIdx < currentIdx) return "done";
+  if (phaseIdx === currentIdx) return "running";
+  return "pending";
+}
+
+/**
+ * When a build has failed, determine which phase was the last completed
+ * handoff and mark the next phase as error.
+ */
+function getFailedPhaseStatus(
+  phase: BuildPhase,
+  build: FeatureBuildRow,
+): NodeStatus {
+  const handoffs = build.phaseHandoffs;
+  if (handoffs == null || handoffs.length === 0) {
+    // No handoffs — failure happened in the first phase
+    if (phase === "ideate") return "error";
+    return "pending";
+  }
+
+  // Find the last phase that was successfully handed off TO
+  let lastHandedToIdx = -1;
+  for (const h of handoffs) {
+    const toIdx = PHASE_ORDER_INDEX[h.toPhase] ?? -1;
+    if (toIdx > lastHandedToIdx) {
+      lastHandedToIdx = toIdx;
+    }
+  }
+
+  const phaseIdx = PHASE_ORDER_INDEX[phase] ?? 0;
+
+  // Phases before the last handoff target are done
+  if (phaseIdx < lastHandedToIdx) return "done";
+  // The last handoff target phase is where the failure happened
+  if (phaseIdx === lastHandedToIdx) return "error";
+  return "pending";
+}
+
+// ─── Phase Graph ────────────────────────────────────────────────────────────
+
+const PHASE_X_SPACING = 280;
+const PHASE_Y = 0;
+
+/**
+ * Build a ReactFlow graph of the 5 visible build phases.
+ * Nodes are positioned left-to-right with PHASE_X_SPACING between them.
+ */
+export function buildPhaseGraph(build: FeatureBuildRow): GraphOutput {
+  const nodes: ProcessNode[] = [];
+  const edges: ProcessEdge[] = [];
+
+  for (let i = 0; i < VISIBLE_PHASES.length; i++) {
+    const phase = VISIBLE_PHASES[i]!;
+    const status = getPhaseNodeStatus(phase, build);
+    const label = PHASE_LABELS[phase] ?? phase;
+    const icon = PHASE_ICONS[phase] ?? "circle";
+
+    // Use a neutral hex color per-status for graph display
+    const color = statusToColor(status);
+
+    nodes.push({
+      id: `phase-${phase}`,
+      type: "processPhase",
+      position: { x: i * PHASE_X_SPACING, y: PHASE_Y },
+      data: {
+        label,
+        status,
+        color,
+        icon,
+        phase,
+      },
+    });
+
+    // Edge from previous phase to this one
+    if (i > 0) {
+      const prevPhase = VISIBLE_PHASES[i - 1]!;
+      edges.push({
+        id: `edge-phase-${prevPhase}-${phase}`,
+        source: `phase-${prevPhase}`,
+        target: `phase-${phase}`,
+        animated: status === "running",
+      });
+    }
+  }
+
+  return { nodes, edges };
+}
+
+function statusToColor(status: NodeStatus): string {
+  switch (status) {
+    case "done": return "#4ade80";
+    case "running": return "#38bdf8";
+    case "error": return "#f87171";
+    case "pending":
+    default: return "#6b7280";
+  }
+}
+
+// ─── Normalization ──────────────────────────────────────────────────────────
+
+/**
+ * Parse the runtime taskResults shape (which differs from the TypeScript type)
+ * and build a normalized snapshot for graph building.
+ *
+ * Runtime shape:
+ * { completedTasks, totalTasks, timedOut, tasks: Array<{title, specialist, outcome, durationMs}>, timestamp }
+ *
+ * TypeScript type says TaskResult[] | null but the orchestrator stores the above.
+ */
+export function normalizeBuildSnapshot(
+  build: FeatureBuildRow,
+  activeTaskTitles: Set<string> = new Set(),
+): NormalizedBuildProcessSnapshot {
+  const taskResultMap = new Map<string, NormalizedStoredTaskResult>();
+  const actorMap = new Map<string, { kind: ProcessActorKind; label: string }>();
+
+  if (build.taskResults != null) {
+    // The runtime stores taskResults as the object shape described above.
+    // Cast to unknown first, then to the runtime shape.
+    const raw = build.taskResults as unknown;
+
+    if (raw != null && typeof raw === "object" && "tasks" in raw) {
+      // Runtime shape: { tasks: Array<{title, specialist, outcome, durationMs}> }
+      const runtimeResult = raw as {
+        tasks?: Array<{
+          title: string;
+          specialist: string;
+          outcome: string;
+          durationMs: number;
+        }>;
+      };
+
+      if (Array.isArray(runtimeResult.tasks)) {
+        for (const t of runtimeResult.tasks) {
+          taskResultMap.set(t.title, {
+            title: t.title,
+            specialist: t.specialist,
+            outcome: t.outcome,
+            durationMs: t.durationMs,
+          });
+
+          // Actor provenance — AI coworker with specialist role as label
+          actorMap.set(t.title, {
+            kind: "ai_coworker",
+            label: formatSpecialistLabel(t.specialist),
+          });
+        }
+      }
+    } else if (Array.isArray(raw)) {
+      // TypeScript type shape: TaskResult[]
+      for (const t of raw as Array<{ title?: string; taskIndex?: number }>) {
+        const title = t.title ?? `Task ${t.taskIndex ?? 0}`;
+        taskResultMap.set(title, {
+          title,
+          specialist: "software-engineer",
+          outcome: "DONE",
+          durationMs: 0,
+        });
+        actorMap.set(title, { kind: "ai_coworker", label: "Software Engineer" });
+      }
+    }
+  }
+
+  return {
+    taskResultMap,
+    activeTaskTitles,
+    actorMap,
+  };
+}
+
+function formatSpecialistLabel(specialist: string): string {
+  return specialist
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// ─── Task Status ────────────────────────────────────────────────────────────
+
+/**
+ * Determine the display status of a single task.
+ *
+ * Priority:
+ * 1. If the task is in the activeTaskTitles set -> "running"
+ * 2. If the task has a result with outcome starting with "DONE" -> "done"
+ * 3. If the task has a result with a non-DONE outcome -> "error"
+ * 4. Otherwise -> "pending"
+ */
+export function getTaskNodeStatus(
+  taskTitle: string,
+  _build: FeatureBuildRow,
+  snapshot: NormalizedBuildProcessSnapshot,
+): NodeStatus {
+  // Active tasks are running
+  if (snapshot.activeTaskTitles.has(taskTitle)) {
+    return "running";
+  }
+
+  // Check task results
+  const result = snapshot.taskResultMap.get(taskTitle);
+  if (result != null) {
+    if (result.outcome.startsWith("DONE")) {
+      return "done";
+    }
+    return "error";
+  }
+
+  return "pending";
+}
+
+// ─── Task Graph ─────────────────────────────────────────────────────────────
+
+const TASK_X_START = 40;
+const TASK_X_SPACING = 260;
+const TASK_Y_START = 40;
+const TASK_Y_SPACING = 100;
+const FORK_JOIN_Y_OFFSET = 40;
+
+/**
+ * Build a ReactFlow graph of the build plan tasks.
+ * Uses buildDependencyGraph() to determine execution phases and parallelism.
+ *
+ * Layout:
+ * - Each execution phase is a column (x axis)
+ * - Parallel tasks within a phase are stacked vertically (y axis)
+ * - Fork/join nodes are added for parallel phases
+ */
+export function buildTaskGraph(
+  build: FeatureBuildRow,
+  snapshot: NormalizedBuildProcessSnapshot,
+): GraphOutput {
+  if (build.buildPlan == null) {
+    return { nodes: [], edges: [] };
+  }
+
+  const { fileStructure, tasks } = build.buildPlan;
+  if (!tasks || tasks.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const execPhases = buildDependencyGraph(fileStructure, tasks);
+  const nodes: ProcessNode[] = [];
+  const edges: ProcessEdge[] = [];
+
+  let prevNodeIds: string[] = [];
+
+  for (let phaseIdx = 0; phaseIdx < execPhases.length; phaseIdx++) {
+    const execPhase = execPhases[phaseIdx]!;
+    const x = TASK_X_START + phaseIdx * TASK_X_SPACING;
+
+    if (execPhase.parallel && execPhase.tasks.length > 1) {
+      // Fork/join for parallel tasks
+      const forkId = `fork-${phaseIdx}`;
+      const joinId = `join-${phaseIdx}`;
+
+      nodes.push({
+        id: forkId,
+        type: "processFork",
+        position: { x: x - 40, y: TASK_Y_START },
+        data: { label: "fork", status: "pending", color: "#6b7280", icon: "split", phase: "build" as BuildPhase },
+      });
+
+      // Edges from previous nodes to fork
+      for (const prevId of prevNodeIds) {
+        edges.push({
+          id: `edge-${prevId}-${forkId}`,
+          source: prevId,
+          target: forkId,
+        });
+      }
+
+      const taskNodeIds: string[] = [];
+
+      for (let taskIdx = 0; taskIdx < execPhase.tasks.length; taskIdx++) {
+        const assignedTask = execPhase.tasks[taskIdx]!;
+        const nodeId = `task-${execPhase.phaseIndex}-${taskIdx}`;
+        const status = getTaskNodeStatus(assignedTask.title, build, snapshot);
+        const actor = snapshot.actorMap.get(assignedTask.title) ?? {
+          kind: "ai_coworker" as ProcessActorKind,
+          label: formatSpecialistLabel(assignedTask.specialist),
+        };
+
+        nodes.push({
+          id: nodeId,
+          type: "processTask",
+          position: {
+            x,
+            y: TASK_Y_START + taskIdx * TASK_Y_SPACING,
+          },
+          data: {
+            label: assignedTask.title,
+            status,
+            specialist: assignedTask.specialist,
+            roleColor: ROLE_COLOURS[assignedTask.specialist],
+            roleIcon: ROLE_ICONS[assignedTask.specialist],
+            actorKind: actor.kind,
+            actorLabel: actor.label,
+            taskIndex: assignedTask.taskIndex,
+          },
+        });
+
+        // Edge from fork to task
+        edges.push({
+          id: `edge-${forkId}-${nodeId}`,
+          source: forkId,
+          target: nodeId,
+          animated: status === "running",
+        });
+
+        taskNodeIds.push(nodeId);
+      }
+
+      // Join node
+      const joinY =
+        TASK_Y_START +
+        ((execPhase.tasks.length - 1) * TASK_Y_SPACING) / 2;
+
+      nodes.push({
+        id: joinId,
+        type: "processJoin",
+        position: { x: x + TASK_X_SPACING - 40, y: joinY },
+        data: { label: "join", status: "pending", color: "#6b7280", icon: "merge", phase: "build" as BuildPhase },
+      });
+
+      // Edges from tasks to join
+      for (const taskNodeId of taskNodeIds) {
+        edges.push({
+          id: `edge-${taskNodeId}-${joinId}`,
+          source: taskNodeId,
+          target: joinId,
+        });
+      }
+
+      prevNodeIds = [joinId];
+    } else {
+      // Sequential: single task in this phase
+      const taskNodeIds: string[] = [];
+
+      for (let taskIdx = 0; taskIdx < execPhase.tasks.length; taskIdx++) {
+        const assignedTask = execPhase.tasks[taskIdx]!;
+        const nodeId = `task-${execPhase.phaseIndex}-${taskIdx}`;
+        const status = getTaskNodeStatus(assignedTask.title, build, snapshot);
+        const actor = snapshot.actorMap.get(assignedTask.title) ?? {
+          kind: "ai_coworker" as ProcessActorKind,
+          label: formatSpecialistLabel(assignedTask.specialist),
+        };
+
+        nodes.push({
+          id: nodeId,
+          type: "processTask",
+          position: {
+            x,
+            y: TASK_Y_START + taskIdx * TASK_Y_SPACING,
+          },
+          data: {
+            label: assignedTask.title,
+            status,
+            specialist: assignedTask.specialist,
+            roleColor: ROLE_COLOURS[assignedTask.specialist],
+            roleIcon: ROLE_ICONS[assignedTask.specialist],
+            actorKind: actor.kind,
+            actorLabel: actor.label,
+            taskIndex: assignedTask.taskIndex,
+          },
+        });
+
+        // Edges from previous nodes to this task
+        for (const prevId of prevNodeIds) {
+          edges.push({
+            id: `edge-${prevId}-${nodeId}`,
+            source: prevId,
+            target: nodeId,
+            animated: status === "running",
+          });
+        }
+
+        taskNodeIds.push(nodeId);
+      }
+
+      prevNodeIds = taskNodeIds;
+    }
+  }
+
+  return { nodes, edges };
+}
