@@ -105,6 +105,39 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }`;
 }
 
+// ─── Review Merging ──────────────────────────────────────────────────────────
+
+/**
+ * Merge two ReviewResults from independent reviewers into one authoritative result.
+ * Decision: fail if either reviewer fails (conservative — surface everything).
+ * Issues: union of both sets, deduped by first 80 chars of lowercased description.
+ * Summary: joined from both reviewers.
+ */
+export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
+  const decision = r1.decision === "fail" || r2.decision === "fail" ? "fail" : "pass";
+
+  // Deduplicate by normalized description prefix
+  const seen = new Set<string>();
+  const merged: ReviewResult["issues"] = [];
+  for (const issue of [...r1.issues, ...r2.issues]) {
+    const key = issue.description.toLowerCase().slice(0, 80);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(issue);
+    }
+  }
+
+  // Sort: critical → important → minor
+  const SEVERITY_ORDER: Record<string, number> = { critical: 0, important: 1, minor: 2 };
+  merged.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 2) - (SEVERITY_ORDER[b.severity] ?? 2));
+
+  const summary = r1.summary && r2.summary
+    ? `Reviewer 1: ${r1.summary} | Reviewer 2: ${r2.summary}`
+    : r1.summary || r2.summary || "Review complete";
+
+  return { decision, issues: merged, summary };
+}
+
 // ─── Response Parsing ────────────────────────────────────────────────────────
 
 export function parseReviewResponse(raw: string): ReviewResult {

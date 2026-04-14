@@ -109,25 +109,25 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
           </div>
         )}
 
-        {designReview?.summary && (
-          <DocSection label="Review Summary" value={designReview.summary} />
+        {designReview?.summary != null && (
+          <DocSection label="Review Summary" value={String(designReview.summary)} />
         )}
 
-        {designDoc.problemStatement && (
+        {designDoc.problemStatement != null && (
           <DocSection label="Problem Statement" value={String(designDoc.problemStatement)} />
         )}
 
-        {designDoc.proposedApproach && (
+        {designDoc.proposedApproach != null && (
           <DocSection label="Proposed Approach" value={String(designDoc.proposedApproach)} />
         )}
 
-        {designDoc.existingFunctionalityAudit && (
-          <DocSection label="Existing Code Audit" value={String(designDoc.existingFunctionalityAudit)} />
-        )}
+        {designDoc.existingFunctionalityAudit != null
+          ? <DocSection label="Existing Code Audit" value={String(designDoc.existingFunctionalityAudit)} />
+          : null}
 
-        {designDoc.dataModel && (
-          <DocSection label="Data Model" value={String(designDoc.dataModel)} />
-        )}
+        {designDoc.dataModel != null
+          ? <DocSection label="Data Model" value={String(designDoc.dataModel)} />
+          : null}
 
         {Array.isArray(designDoc.acceptanceCriteria) && designDoc.acceptanceCriteria.length > 0 && (
           <div>
