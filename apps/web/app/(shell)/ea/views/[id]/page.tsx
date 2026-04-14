@@ -38,6 +38,7 @@ export default async function EaViewPage({ params }: { params: Promise<{ id: str
         viewId={view.id}
         viewName={view.name}
         viewStatus={view.status}
+        notationSlug={view.notationSlug}
         viewpoint={view.viewpoint ?? null}
         allElementTypes={allElementTypes}
         initialElements={view.elements}
