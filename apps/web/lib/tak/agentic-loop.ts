@@ -537,6 +537,9 @@ export async function runAgenticLoop(params: {
     // save as true repetition.
     const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
     const toolCallCounts = new Map<string, number>();
+    // Track whether the last call for each signature succeeded (to distinguish
+    // error-recovery retries from genuine infinite loops).
+    const toolLastSucceeded = new Map<string, boolean>();
     for (let ti = 0; ti < executedTools.length; ti++) {
       const t = executedTools[ti]!;
       const args = t.args as Record<string, unknown> | undefined;
@@ -554,6 +557,9 @@ export async function runAgenticLoop(params: {
       if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));
       if (args?.command) keyParts.push(String(args.command).slice(0, 80));
       if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
+      // Include nodeId for taxonomy placement tools so that retrying with a different
+      // nodeId counts as a distinct operation, not repetition.
+      if (args?.nodeId) keyParts.push(String(args.nodeId).slice(0, 80));
 
       // Review tools: append a revision counter so revise-resubmit cycles don't
       // look like repetition. Each saveBuildEvidence between review calls bumps the counter.
@@ -567,8 +573,18 @@ export async function runAgenticLoop(params: {
 
       const sig = keyParts.join(":");
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
+      // Track the most recent success/failure for this signature.
+      // result.success may be undefined for older entries — treat as succeeded.
+      toolLastSucceeded.set(sig, (t.result as { success?: boolean } | undefined)?.success !== false);
     }
-    const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
+    // Stuck = same tool+args called 3+ times where the last attempt also FAILED,
+    // OR 5+ times regardless (handles loops where the tool keeps succeeding but
+    // the model never advances). Error-recovery retries (e.g. two validation
+    // failures then a success) are not stuck — the last attempt succeeded.
+    const repeatedTool = [...toolCallCounts.entries()].find(([sig, count]) => {
+      const lastSucceeded = toolLastSucceeded.get(sig) ?? true;
+      return lastSucceeded ? count >= 5 : count >= 3;
+    });
     if (repeatedTool && iteration > 5) {
       console.warn(`[agentic-loop] tool repetition: ${repeatedTool[0]} called ${repeatedTool[1]} times. Breaking loop.`);
       // Return immediately with a canned message — do NOT make another inference call here.
