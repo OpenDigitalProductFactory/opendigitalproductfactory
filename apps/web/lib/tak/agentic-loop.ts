@@ -561,10 +561,10 @@ export async function runAgenticLoop(params: {
       // was unavailable. The executedTools list already contains the full work history.
       return {
         content: `I called ${toolName} ${count} times with the same arguments and got stuck.${reasonHint} Check the build evidence for what was completed.`,
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
+        providerId: "",
+        modelId: "",
+        downgraded: false,
+        downgradeMessage: null,
         totalInputTokens,
         totalOutputTokens,
         executedTools,

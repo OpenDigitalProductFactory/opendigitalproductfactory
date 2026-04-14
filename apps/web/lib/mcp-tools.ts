@@ -2549,13 +2549,27 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
       const { routeAndCall } = await import("@/lib/routed-inference");
-      const llmResult = await routeAndCall(
-        [{ role: "user", content: prompt }], "You are a design reviewer.", "internal",
-      );
-      const review = parseReviewResponse(llmResult.content);
+      const messages = [{ role: "user" as const, content: prompt }];
+      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
+      const [r1settled, r2settled] = await Promise.allSettled([
+        routeAndCall(messages, "You are a design reviewer.", "internal"),
+        routeAndCall(
+          messages,
+          "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
+      ]);
+      const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
+      const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+        decision: "fail" as const,
+        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
+        summary: "Review could not be completed — retry.",
+      };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
@@ -2602,13 +2616,27 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
-      const { buildPlanReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const prompt = buildPlanReviewPrompt(build.buildPlan as Parameters<typeof buildPlanReviewPrompt>[0]);
       const { routeAndCall } = await import("@/lib/routed-inference");
-      const llmResult = await routeAndCall(
-        [{ role: "user", content: prompt }], "You are a plan reviewer.", "internal",
-      );
-      const review = parseReviewResponse(llmResult.content);
+      const messages = [{ role: "user" as const, content: prompt }];
+      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
+      const [r1settled, r2settled] = await Promise.allSettled([
+        routeAndCall(messages, "You are a plan reviewer.", "internal"),
+        routeAndCall(
+          messages,
+          "You are an independent plan reviewer. Focus especially on missing tasks, dependency ordering, absent test-first steps, and data seeding gaps.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
+      ]);
+      const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
+      const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+        decision: "fail" as const,
+        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
+        summary: "Review could not be completed — retry.",
+      };
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
