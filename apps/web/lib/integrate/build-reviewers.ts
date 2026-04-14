@@ -120,12 +120,22 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
  * Summary: joined from both reviewers.
  */
 export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
-  const decision = r1.decision === "fail" || r2.decision === "fail" ? "fail" : "pass";
+  // A parse failure ("could not parse agent response") is not a real review.
+  // If one reviewer parsed successfully and the other didn't, trust the parsed one.
+  const r1ParseFail = r1.issues.some(i => i.description.includes("unparseable response"));
+  const r2ParseFail = r2.issues.some(i => i.description.includes("unparseable response"));
+  const decision =
+    r1ParseFail && !r2ParseFail ? r2.decision :
+    r2ParseFail && !r1ParseFail ? r1.decision :
+    r1.decision === "fail" || r2.decision === "fail" ? "fail" : "pass";
 
-  // Deduplicate by normalized description prefix
+  // Deduplicate by normalized description prefix.
+  // Skip parse-failure issues if the other reviewer gave a real result.
+  const skipParseFailures = (r1ParseFail && !r2ParseFail) || (r2ParseFail && !r1ParseFail);
   const seen = new Set<string>();
   const merged: ReviewResult["issues"] = [];
   for (const issue of [...r1.issues, ...r2.issues]) {
+    if (skipParseFailures && issue.description.includes("unparseable response")) continue;
     const key = issue.description.toLowerCase().slice(0, 80);
     if (!seen.has(key)) {
       seen.add(key);
