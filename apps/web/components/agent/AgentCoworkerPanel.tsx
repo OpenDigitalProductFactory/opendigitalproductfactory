@@ -241,6 +241,11 @@ export function AgentCoworkerPanel({
         if (RELAY_TYPES.includes(data.type)) {
           window.dispatchEvent(new CustomEvent("build-progress-update", { detail: data }));
         }
+        // Relay research progress messages separately so FeatureBriefPanel can
+        // show them without triggering unnecessary DB refetches in BuildStudio.
+        if (data.type === "orchestrator:task_progress" && data.message) {
+          window.dispatchEvent(new CustomEvent("build-research-progress", { detail: data }));
+        }
       } catch { /* ignore */ }
     };
     // SSE connection lost — don't mark as "Not sent", show reconnection attempt
