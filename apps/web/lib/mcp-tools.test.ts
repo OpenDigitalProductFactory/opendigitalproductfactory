@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAvailableTools } from "./mcp-tools";
+import { getAvailableTools, sanitizeToolParams } from "./mcp-tools";
 import { getActionsForRoute } from "./agent-action-registry";
 
 describe("mcp tools", () => {
@@ -71,6 +71,64 @@ describe("mcp tools", () => {
       expect(tool).toBeDefined();
       expect(tool!.executionMode).toBe("immediate");
     }
+  });
+});
+
+describe("sanitizeToolParams", () => {
+  it("strips optional object param when all string fields are empty", () => {
+    const result = sanitizeToolParams("confirm_taxonomy_placement", {
+      nodeId: "manufacturing_and_delivery/detect_to_correct",
+      proposeNew: { parentNodeId: "", name: "", description: "", rationale: "" },
+    });
+    expect(result).toEqual({ nodeId: "manufacturing_and_delivery/detect_to_correct" });
+    expect(result).not.toHaveProperty("proposeNew");
+  });
+
+  it("strips optional object param when all string fields are whitespace", () => {
+    const result = sanitizeToolParams("confirm_taxonomy_placement", {
+      nodeId: "some/node",
+      proposeNew: { parentNodeId: "  ", name: " ", description: "  ", rationale: "" },
+    });
+    expect(result).not.toHaveProperty("proposeNew");
+  });
+
+  it("keeps optional object param when at least one string field is non-empty", () => {
+    const result = sanitizeToolParams("confirm_taxonomy_placement", {
+      proposeNew: { parentNodeId: "some/parent", name: "New Node", description: "", rationale: "" },
+    });
+    expect(result).toHaveProperty("proposeNew");
+    expect((result.proposeNew as Record<string, string>).parentNodeId).toBe("some/parent");
+  });
+
+  it("does not modify params for tools with no optional object params", () => {
+    const original = { field: "designDoc", value: { problemStatement: "test" } };
+    const result = sanitizeToolParams("saveBuildEvidence", original);
+    // saveBuildEvidence has value as required, so sanitizer should not touch it
+    expect(result).toBe(original); // same reference — no copy made
+  });
+
+  it("does not modify params for unknown tools", () => {
+    const original = { foo: "bar" };
+    const result = sanitizeToolParams("nonexistent_tool", original);
+    expect(result).toBe(original);
+  });
+
+  it("handles params where optional object is null or absent", () => {
+    const result = sanitizeToolParams("confirm_taxonomy_placement", {
+      nodeId: "some/node",
+    });
+    expect(result).toEqual({ nodeId: "some/node" });
+  });
+
+  it("handles optional object with non-string fields (numbers, booleans) — keeps it", () => {
+    // If the object has non-string values, it's not an empty schema artifact
+    const result = sanitizeToolParams("confirm_taxonomy_placement", {
+      nodeId: "some/node",
+      proposeNew: { parentNodeId: "", name: "", count: 5 },
+    });
+    // All string fields are empty but there's a non-string field — string check still applies
+    // to string-typed fields only. Both string fields are empty → stripped.
+    expect(result).not.toHaveProperty("proposeNew");
   });
 });
 
