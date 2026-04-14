@@ -507,25 +507,26 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Repetition detector — hash the full args so any argument difference = different
-    // operation. The model is stuck only when the exact same call (same tool + identical
-    // args) repeats. No hand-picked field lists, no tool-specific special cases.
+    // Repetition detector — sliding window of last 40 tool calls.
+    // Hash tool name + full args: identical hash appearing 3+ times in the window = stuck.
+    // Only recent behavior counts — early calls that were followed by progress are outside
+    // the window and don't trigger the guard.
     //
-    // Review tools (reviewBuildPlan, reviewDesignDoc) take no meaningful args, so their
-    // hash is always the same. We append a revision counter (bumped by each saveBuildEvidence)
-    // so a legitimate revise-resubmit cycle isn't treated as repetition.
-    //
-    // Thresholds:
-    //   last call failed  → break at 3 (stuck on a failing call)
-    //   last call succeeded → break at 5 (error-recovery retries or slow convergence)
+    // Review tools (reviewBuildPlan, reviewDesignDoc) take no meaningful args so their
+    // hash is always the same. A revision counter (bumped by each saveBuildEvidence) keeps
+    // legitimate revise-resubmit cycles distinct.
+    const WINDOW = 40;
+    const REPEAT_THRESHOLD = 3;
     const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
     const toolCallCounts = new Map<string, number>();
-    const toolLastSucceeded = new Map<string, boolean>();
+    // Track the most recent result for each hash to include in the stuck message.
+    const toolLastResult = new Map<string, { success: boolean; error?: string }>();
 
-    for (let ti = 0; ti < executedTools.length; ti++) {
-      const t = executedTools[ti]!;
+    const windowSlice = executedTools.slice(-WINDOW);
+    for (let ti = 0; ti < windowSlice.length; ti++) {
+      const t = windowSlice[ti]!;
 
-      // Hash the full args object — keys sorted for stability
+      // Hash the full args object — keys sorted for a stable canonical form
       const argsJson = JSON.stringify(t.args ?? {}, Object.keys((t.args as Record<string, unknown>) ?? {}).sort());
       const argsHash = createHash("sha1").update(argsJson).digest("hex").slice(0, 12);
 
@@ -535,27 +536,31 @@ export async function runAgenticLoop(params: {
       if (REVIEW_TOOLS.has(t.name)) {
         let revisionCount = 0;
         for (let ri = 0; ri < ti; ri++) {
-          if (executedTools[ri]!.name === "saveBuildEvidence") revisionCount++;
+          if (windowSlice[ri]!.name === "saveBuildEvidence") revisionCount++;
         }
         revisionSuffix = `:rev${revisionCount}`;
       }
 
       const sig = `${t.name}:${argsHash}${revisionSuffix}`;
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
-      toolLastSucceeded.set(sig, (t.result as { success?: boolean } | undefined)?.success !== false);
+      toolLastResult.set(sig, t.result as { success: boolean; error?: string });
     }
 
-    const repeatedTool = [...toolCallCounts.entries()].find(([sig, count]) => {
-      const lastSucceeded = toolLastSucceeded.get(sig) ?? true;
-      return lastSucceeded ? count >= 5 : count >= 3;
-    });
-    if (repeatedTool && iteration > 5) {
-      console.warn(`[agentic-loop] tool repetition: ${repeatedTool[0]} called ${repeatedTool[1]} times. Breaking loop.`);
-      // Return immediately with a canned message — do NOT make another inference call here.
+    const repeatedEntry = [...toolCallCounts.entries()].find(([, count]) => count >= REPEAT_THRESHOLD);
+    if (repeatedEntry && iteration > 5) {
+      const [sig, count] = repeatedEntry;
+      const toolName = sig.split(":")[0] ?? sig;
+      const lastResult = toolLastResult.get(sig);
+      // Surface the reason if the last call failed — helps identify timeouts, auth errors, limits
+      const reasonHint = lastResult && !lastResult.success && lastResult.error
+        ? ` Last error: ${lastResult.error.slice(0, 120)}.`
+        : "";
+      console.warn(`[agentic-loop] stuck: ${toolName} called ${count}x with same args in last ${WINDOW} calls.${reasonHint}`);
+      // Return immediately — do NOT make another inference call here.
       // The summary inference call was the source of 300s hangs when the preferred provider
       // was unavailable. The executedTools list already contains the full work history.
       return {
-        content: `I called ${repeatedTool[0]} ${repeatedTool[1]} times and got stuck. Check the build evidence for what was completed.`,
+        content: `I called ${toolName} ${count} times with the same arguments and got stuck.${reasonHint} Check the build evidence for what was completed.`,
         providerId: lastResult?.providerId ?? "",
         modelId: lastResult?.modelId ?? "",
         downgraded: lastResult?.downgraded ?? false,
