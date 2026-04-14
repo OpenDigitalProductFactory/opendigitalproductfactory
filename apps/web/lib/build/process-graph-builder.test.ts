@@ -9,6 +9,8 @@ import {
   type NormalizedBuildProcessSnapshot,
   type PhaseNodeData,
   type TaskNodeData,
+  type ProcessActorKind,
+  type NodeStatus,
 } from "./process-graph-builder";
 import type { FeatureBuildRow } from "@/lib/explore/feature-build-types";
 
@@ -221,6 +223,26 @@ describe("buildTaskGraph", () => {
     const { nodes } = buildTaskGraph(row, snap);
     const taskNodes = nodes.filter((n) => n.type === "processTask");
     expect(taskNodes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("generates fork/join nodes for parallel phases", () => {
+    const row = makeRow({
+      phase: "build",
+      buildPlan: {
+        fileStructure: [
+          { path: "apps/web/app/api/foo/route.ts", action: "create", purpose: "api A" },
+          { path: "apps/web/app/api/bar/route.ts", action: "create", purpose: "api B" },
+        ],
+        tasks: [
+          { title: "Add foo API", testFirst: "", implement: "", verify: "" },
+          { title: "Add bar API", testFirst: "", implement: "", verify: "" },
+        ],
+      },
+    });
+    const snap = makeSnapshot(row);
+    const { nodes } = buildTaskGraph(row, snap);
+    const forkJoinNodes = nodes.filter((n) => n.type === "processForkJoin");
+    expect(forkJoinNodes.length).toBeGreaterThanOrEqual(2); // at least one fork + one join
   });
 
   it("task nodes include actor provenance from the snapshot", () => {
