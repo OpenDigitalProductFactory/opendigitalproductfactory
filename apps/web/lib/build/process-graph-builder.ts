@@ -19,13 +19,15 @@ import {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-/** Icons (emoji shortcodes) for each visible build phase */
-export const PHASE_ICONS: Record<string, string> = {
-  ideate: "lightbulb",
-  plan: "clipboard",
-  build: "hammer",
-  review: "magnifying_glass",
-  ship: "rocket",
+/** Unicode icons for each build phase */
+export const PHASE_ICONS: Record<BuildPhase, string> = {
+  ideate:   "◈",
+  plan:     "▤",
+  build:    "⚙",
+  review:   "◎",
+  ship:     "▶",
+  complete: "✓",
+  failed:   "✗",
 };
 
 /** CSS variable colours for specialist roles (used in task nodes) */
@@ -36,12 +38,12 @@ export const ROLE_COLOURS: Record<SpecialistRole, string> = {
   "qa-engineer": "var(--pg-role-qa-engineer)",
 };
 
-/** Icons for specialist roles */
+/** Unicode icons for specialist roles */
 export const ROLE_ICONS: Record<SpecialistRole, string> = {
-  "data-architect": "database",
-  "software-engineer": "code",
-  "frontend-engineer": "layout",
-  "qa-engineer": "check_circle",
+  "data-architect":    "◈",
+  "software-engineer": "⌨",
+  "frontend-engineer": "◻",
+  "qa-engineer":       "✓",
 };
 
 /** Map each BuildPhase to its ordinal index for comparison */
@@ -61,7 +63,7 @@ for (let i = 0; i < PHASE_ORDER.length; i++) {
 
 export type NodeStatus = "pending" | "running" | "done" | "error";
 
-export type ProcessActorKind = "ai_coworker" | "human" | "system";
+export type ProcessActorKind = "ai_coworker" | "system" | "human_hitl" | "review_gate";
 
 export type PhaseNodeData = {
   label: string;
@@ -98,7 +100,7 @@ export type TaskProcessNode = {
 
 export type ForkJoinProcessNode = {
   id: string;
-  type: "processFork" | "processJoin";
+  type: "processForkJoin";
   position: { x: number; y: number };
   data: PhaseNodeData;
 };
@@ -128,11 +130,13 @@ export type NormalizedStoredTaskResult = {
 /** Snapshot of build process state, normalized for graph building */
 export type NormalizedBuildProcessSnapshot = {
   /** Map of task title -> normalized result */
-  taskResultMap: Map<string, NormalizedStoredTaskResult>;
-  /** Set of currently active task titles */
+  storedTaskResults: Map<string, NormalizedStoredTaskResult>;
+  /** Set of currently active task titles (supports parallel tasks) */
   activeTaskTitles: Set<string>;
   /** Map of task title -> actor info */
-  actorMap: Map<string, { kind: ProcessActorKind; label: string }>;
+  taskActors: Map<string, { kind: ProcessActorKind; label: string }>;
+  /** Map of phase -> actor info */
+  phaseActors: Map<BuildPhase, { kind: ProcessActorKind; label: string }>;
 };
 
 // ─── Phase Status ───────────────────────────────────────────────────────────
@@ -279,12 +283,10 @@ export function normalizeBuildSnapshot(
   build: FeatureBuildRow,
   activeTaskTitles: Set<string> = new Set(),
 ): NormalizedBuildProcessSnapshot {
-  const taskResultMap = new Map<string, NormalizedStoredTaskResult>();
-  const actorMap = new Map<string, { kind: ProcessActorKind; label: string }>();
+  const storedTaskResults = new Map<string, NormalizedStoredTaskResult>();
+  const taskActors = new Map<string, { kind: ProcessActorKind; label: string }>();
 
   if (build.taskResults != null) {
-    // The runtime stores taskResults as the object shape described above.
-    // Cast to unknown first, then to the runtime shape.
     const raw = build.taskResults as unknown;
 
     if (raw != null && typeof raw === "object" && "tasks" in raw) {
@@ -300,40 +302,55 @@ export function normalizeBuildSnapshot(
 
       if (Array.isArray(runtimeResult.tasks)) {
         for (const t of runtimeResult.tasks) {
-          taskResultMap.set(t.title, {
+          storedTaskResults.set(t.title, {
             title: t.title,
             specialist: t.specialist,
             outcome: t.outcome,
             durationMs: t.durationMs,
           });
-
-          // Actor provenance — AI coworker with specialist role as label
-          actorMap.set(t.title, {
+          taskActors.set(t.title, {
             kind: "ai_coworker",
             label: formatSpecialistLabel(t.specialist),
           });
         }
       }
     } else if (Array.isArray(raw)) {
-      // TypeScript type shape: TaskResult[]
+      // TypeScript type shape fallback: TaskResult[]
       for (const t of raw as Array<{ title?: string; taskIndex?: number }>) {
         const title = t.title ?? `Task ${t.taskIndex ?? 0}`;
-        taskResultMap.set(title, {
+        storedTaskResults.set(title, {
           title,
           specialist: "software-engineer",
           outcome: "DONE",
           durationMs: 0,
         });
-        actorMap.set(title, { kind: "ai_coworker", label: "Software Engineer" });
+        taskActors.set(title, { kind: "ai_coworker", label: "Software Engineer" });
       }
     }
   }
 
-  return {
-    taskResultMap,
-    activeTaskTitles,
-    actorMap,
-  };
+  // Build phase actor map from handoffs
+  const phaseActors = new Map<BuildPhase, { kind: ProcessActorKind; label: string }>();
+  const handoffs = build.phaseHandoffs ?? [];
+  for (const h of handoffs) {
+    const phase = h.fromPhase as BuildPhase;
+    phaseActors.set(phase, {
+      kind: "ai_coworker",
+      label: h.fromAgentId ?? "AI Coworker",
+    });
+  }
+  // Active phase with no handoff yet
+  if (build.phase !== "complete" && build.phase !== "failed") {
+    if (!phaseActors.has(build.phase)) {
+      const inbound = handoffs.find((h) => h.toPhase === build.phase);
+      phaseActors.set(build.phase, {
+        kind: "ai_coworker",
+        label: inbound?.toAgentId ?? "AI Coworker",
+      });
+    }
+  }
+
+  return { storedTaskResults, activeTaskTitles, taskActors, phaseActors };
 }
 
 function formatSpecialistLabel(specialist: string): string {
@@ -345,33 +362,35 @@ function formatSpecialistLabel(specialist: string): string {
 
 // ─── Task Status ────────────────────────────────────────────────────────────
 
+const DONE_OUTCOMES = new Set(["DONE", "DONE_WITH_CONCERNS"]);
+
 /**
- * Determine the display status of a single task.
+ * Determine the display status of a single task from the normalized snapshot.
+ * Matches by title (NOT by index — the orchestrator stores by title).
  *
  * Priority:
- * 1. If the task is in the activeTaskTitles set -> "running"
- * 2. If the task has a result with outcome starting with "DONE" -> "done"
- * 3. If the task has a result with a non-DONE outcome -> "error"
- * 4. Otherwise -> "pending"
+ * 1. If task has a stored result with DONE/DONE_WITH_CONCERNS outcome -> "done"
+ * 2. If task has a stored result with other outcome -> "error"
+ * 3. If build.phase !== "build" -> "pending" (tasks only run during build)
+ * 4. If task is in activeTaskTitles Set -> "running"
+ * 5. Otherwise -> "pending"
  */
 export function getTaskNodeStatus(
   taskTitle: string,
-  _build: FeatureBuildRow,
+  build: FeatureBuildRow,
   snapshot: NormalizedBuildProcessSnapshot,
 ): NodeStatus {
-  // Active tasks are running
-  if (snapshot.activeTaskTitles.has(taskTitle)) {
-    return "running";
+  // Check stored results first — a completed task is never "running"
+  const result = snapshot.storedTaskResults.get(taskTitle);
+  if (result != null) {
+    return DONE_OUTCOMES.has(result.outcome) ? "done" : "error";
   }
 
-  // Check task results
-  const result = snapshot.taskResultMap.get(taskTitle);
-  if (result != null) {
-    if (result.outcome.startsWith("DONE")) {
-      return "done";
-    }
-    return "error";
-  }
+  // Tasks only run during the build phase
+  if (build.phase !== "build") return "pending";
+
+  // Live signal: SSE relay told us this task is dispatched right now
+  if (snapshot.activeTaskTitles.has(taskTitle)) return "running";
 
   return "pending";
 }
@@ -423,7 +442,7 @@ export function buildTaskGraph(
 
       nodes.push({
         id: forkId,
-        type: "processFork",
+        type: "processForkJoin",
         position: { x: x - 40, y: TASK_Y_START },
         data: { label: "fork", status: "pending", color: "#6b7280", icon: "split", phase: "build" as BuildPhase },
       });
@@ -443,7 +462,7 @@ export function buildTaskGraph(
         const assignedTask = execPhase.tasks[taskIdx]!;
         const nodeId = `task-${execPhase.phaseIndex}-${taskIdx}`;
         const status = getTaskNodeStatus(assignedTask.title, build, snapshot);
-        const actor = snapshot.actorMap.get(assignedTask.title) ?? {
+        const actor = snapshot.taskActors.get(assignedTask.title) ?? {
           kind: "ai_coworker" as ProcessActorKind,
           label: formatSpecialistLabel(assignedTask.specialist),
         };
@@ -485,7 +504,7 @@ export function buildTaskGraph(
 
       nodes.push({
         id: joinId,
-        type: "processJoin",
+        type: "processForkJoin",
         position: { x: x + TASK_X_SPACING - 40, y: joinY },
         data: { label: "join", status: "pending", color: "#6b7280", icon: "merge", phase: "build" as BuildPhase },
       });
@@ -508,7 +527,7 @@ export function buildTaskGraph(
         const assignedTask = execPhase.tasks[taskIdx]!;
         const nodeId = `task-${execPhase.phaseIndex}-${taskIdx}`;
         const status = getTaskNodeStatus(assignedTask.title, build, snapshot);
-        const actor = snapshot.actorMap.get(assignedTask.title) ?? {
+        const actor = snapshot.taskActors.get(assignedTask.title) ?? {
           kind: "ai_coworker" as ProcessActorKind,
           label: formatSpecialistLabel(assignedTask.specialist),
         };
