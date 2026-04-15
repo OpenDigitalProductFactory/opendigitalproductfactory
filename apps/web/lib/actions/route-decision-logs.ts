@@ -13,7 +13,7 @@ export interface RouteDecisionLogRow {
   taskType: string;
   sensitivity: string;
   reason: string;
-  fitnessScore: number;
+  fitnessScore: number | null;
   candidateTrace: CandidateTrace[];
   excludedTrace: CandidateTrace[];
   policyRulesApplied: string[];
@@ -63,9 +63,10 @@ export async function getRouteDecisionStats(): Promise<RouteDecisionStats> {
 
   const uniqueTaskTypes = new Set(rows.map((r) => r.taskType)).size;
   const uniqueModels = new Set(rows.map((r) => r.selectedModelId).filter(Boolean)).size;
+  const scoredRows = rows.filter((r) => r.fitnessScore !== null);
   const avgFitnessScore =
-    rows.length > 0
-      ? rows.reduce((sum, r) => sum + r.fitnessScore, 0) / rows.length
+    scoredRows.length > 0
+      ? scoredRows.reduce((sum, r) => sum + (r.fitnessScore as number), 0) / scoredRows.length
       : 0;
 
   return { total, uniqueTaskTypes, uniqueModels, avgFitnessScore };

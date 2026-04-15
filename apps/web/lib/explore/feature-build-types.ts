@@ -83,6 +83,45 @@ export type AcceptanceCriterion = {
   evidence: string;
 };
 
+export type HappyPathFailureStage = "connect" | "fetch" | "parse" | "persist";
+
+export type HappyPathIntakeState = {
+  status: "pending" | "ready" | "failed";
+  taxonomyNodeId: string | null;
+  backlogItemId: string | null;
+  epicId: string | null;
+  constrainedGoal: string | null;
+  failureReason: string | null;
+};
+
+export type HappyPathExecutionState = {
+  engine: "claude" | "codex" | "agentic" | null;
+  source: "grafana" | "prometheus" | null;
+  status: "pending" | "running" | "failed" | "done";
+  failureStage: HappyPathFailureStage | null;
+};
+
+export type HappyPathVerificationState = {
+  status: "pending" | "running" | "failed" | "passed";
+  checks: Array<{
+    stage: HappyPathFailureStage;
+    passed: boolean;
+    detail: string;
+  }>;
+};
+
+export type HappyPathState = {
+  intake: HappyPathIntakeState;
+  execution: HappyPathExecutionState;
+  verification: HappyPathVerificationState;
+};
+
+export type HappyPathStatePatch = {
+  intake?: Partial<HappyPathIntakeState>;
+  execution?: Partial<HappyPathExecutionState>;
+  verification?: Partial<HappyPathVerificationState>;
+};
+
 export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed";
 
 export type FeatureBuildRow = {
@@ -128,6 +167,7 @@ export type FeatureBuildRow = {
     evidenceDigest: Record<string, string>;
     createdAt: Date;
   }> | null;
+  happyPathState: HappyPathState;
 };
 
 export type FeaturePackRow = {
@@ -201,6 +241,139 @@ export function canTransitionPhase(from: BuildPhase, to: BuildPhase): boolean {
 
 export type PhaseGateResult = { allowed: boolean; reason?: string };
 
+const DEFAULT_HAPPY_PATH_STATE: HappyPathState = {
+  intake: {
+    status: "pending",
+    taxonomyNodeId: null,
+    backlogItemId: null,
+    epicId: null,
+    constrainedGoal: null,
+    failureReason: null,
+  },
+  execution: {
+    engine: null,
+    source: null,
+    status: "pending",
+    failureStage: null,
+  },
+  verification: {
+    status: "pending",
+    checks: [],
+  },
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function asFailureStage(value: unknown): HappyPathFailureStage | null {
+  return value === "connect" || value === "fetch" || value === "parse" || value === "persist"
+    ? value
+    : null;
+}
+
+function asStringArrayChecks(value: unknown): HappyPathVerificationState["checks"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      const record = asRecord(entry);
+      if (!record) return null;
+      const stage = asFailureStage(record.stage);
+      if (!stage) return null;
+      return {
+        stage,
+        passed: Boolean(record.passed),
+        detail: typeof record.detail === "string" ? record.detail : "",
+      };
+    })
+    .filter((entry): entry is HappyPathVerificationState["checks"][number] => Boolean(entry));
+}
+
+export function normalizeHappyPathState(raw: unknown): HappyPathState {
+  const root = asRecord(raw);
+  const intake = asRecord(root?.intake);
+  const execution = asRecord(root?.execution);
+  const verification = asRecord(root?.verification);
+
+  return {
+    intake: {
+      status: intake?.status === "ready" || intake?.status === "failed" ? intake.status : "pending",
+      taxonomyNodeId: asNullableString(intake?.taxonomyNodeId),
+      backlogItemId: asNullableString(intake?.backlogItemId),
+      epicId: asNullableString(intake?.epicId),
+      constrainedGoal: asNullableString(intake?.constrainedGoal),
+      failureReason: asNullableString(intake?.failureReason),
+    },
+    execution: {
+      engine: execution?.engine === "claude" || execution?.engine === "codex" || execution?.engine === "agentic"
+        ? execution.engine
+        : null,
+      source: execution?.source === "grafana" || execution?.source === "prometheus"
+        ? execution.source
+        : null,
+      status: execution?.status === "running" || execution?.status === "failed" || execution?.status === "done"
+        ? execution.status
+        : "pending",
+      failureStage: asFailureStage(execution?.failureStage),
+    },
+    verification: {
+      status: verification?.status === "running" || verification?.status === "failed" || verification?.status === "passed"
+        ? verification.status
+        : "pending",
+      checks: asStringArrayChecks(verification?.checks),
+    },
+  };
+}
+
+export function isHappyPathIntakeReady(state: HappyPathState | null | undefined): boolean {
+  if (!state) return false;
+  const { taxonomyNodeId, backlogItemId, epicId, constrainedGoal } = state.intake;
+  return Boolean(taxonomyNodeId && backlogItemId && epicId && constrainedGoal);
+}
+
+export function mergeHappyPathStateIntoPlan(
+  plan: Record<string, unknown> | null | undefined,
+  patch: HappyPathStatePatch,
+): Record<string, unknown> {
+  const existingPlan = plan ?? {};
+  const mergedState = normalizeHappyPathState({
+    ...normalizeHappyPathState(existingPlan["happyPathState"]),
+    ...patch,
+    intake: {
+      ...normalizeHappyPathState(existingPlan["happyPathState"]).intake,
+      ...(patch.intake ?? {}),
+    },
+    execution: {
+      ...normalizeHappyPathState(existingPlan["happyPathState"]).execution,
+      ...(patch.execution ?? {}),
+    },
+    verification: {
+      ...normalizeHappyPathState(existingPlan["happyPathState"]).verification,
+      ...(patch.verification ?? {}),
+      checks: patch.verification?.checks
+        ?? normalizeHappyPathState(existingPlan["happyPathState"]).verification.checks,
+    },
+  });
+  return {
+    ...existingPlan,
+    happyPathState: mergedState as unknown as Record<string, unknown>,
+  };
+}
+
+function missingHappyPathAnchors(state: HappyPathState): string[] {
+  const missing: string[] = [];
+  if (!state.intake.taxonomyNodeId) missing.push("taxonomy");
+  if (!state.intake.backlogItemId) missing.push("backlog item");
+  if (!state.intake.epicId) missing.push("epic");
+  if (!state.intake.constrainedGoal) missing.push("constrained goal");
+  return missing;
+}
+
 export function checkPhaseGate(
   from: BuildPhase,
   to: BuildPhase,
@@ -217,6 +390,11 @@ export function checkPhaseGate(
     if (designReview.decision === "fail") {
       return { allowed: false, reason: "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing." };
     }
+    const happyPathState = normalizeHappyPathState(evidence.happyPathState);
+    if (!isHappyPathIntakeReady(happyPathState)) {
+      const missing = missingHappyPathAnchors(happyPathState).join(", ");
+      return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before planning. Missing: ${missing}.` };
+    }
     return { allowed: true };
   }
 
@@ -227,6 +405,11 @@ export function checkPhaseGate(
     const planReview = evidence.planReview as { decision?: string };
     if (planReview.decision === "fail") {
       return { allowed: false, reason: "Plan review failed. Revise the implementation plan and re-run reviewBuildPlan before advancing." };
+    }
+    const happyPathState = normalizeHappyPathState(evidence.happyPathState);
+    if (!isHappyPathIntakeReady(happyPathState)) {
+      const missing = missingHappyPathAnchors(happyPathState).join(", ");
+      return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before building. Missing: ${missing}.` };
     }
     return { allowed: true };
   }

@@ -201,9 +201,13 @@ export function routeTask(
       if (preferCheap && maxCost > 0) {
         const costFactor = 1 - ((endpoint.costPerOutputMToken ?? 0) / maxCost);
         // Blend: 60% quality, 40% cost efficiency.
+        // getDimensionScore returns 0..100; costFactor is 0..1 so scale it to match.
         finalFitness = 0.6 * finalFitness + 0.4 * costFactor * 100;
       }
 
+      // getDimensionScore returns 0..100. Normalization to 0..1 happens at the
+      // DB write layer (loader.ts persistRouteDecision / task-dispatcher.ts) so
+      // both write paths apply the same transformation.
       candidate.fitnessScore = finalFitness;
     }
   }

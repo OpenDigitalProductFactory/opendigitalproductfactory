@@ -86,24 +86,26 @@ export const openAIAdapter: ProviderAdapter = {
       max_tokens?: number;
       capabilities?: Record<string, unknown>;
       tags?: string[];
+      // Which provider ran the discovery (codex vs chatgpt share the same path)
+      discoveredForProvider?: string;
     };
 
     const isChatGptDiscovery = raw.source === "chatgpt_backend_discovery";
+    // codex provider routes to api.openai.com/v1/responses and supports custom
+    // function tools. chatgpt provider routes to chatgpt.com/backend-api and
+    // only supports built-in Codex tools (apply_patch, shell, etc.).
+    const isChatGptSubscription = isChatGptDiscovery && raw.discoveredForProvider === "chatgpt";
 
-    // Derive capabilities from the ChatGPT backend API response when available.
-    // The API returns per-model capabilities (e.g. { tools: true, streaming: true }).
-    // For ChatGPT/Codex, "tools" means built-in Codex tools — NOT custom function
-    // tools via the OpenAI-compatible /v1/chat/completions format. The platform
-    // requires custom function tools for agentic tasks, so toolUse stays false.
     const capabilities = { ...EMPTY_CAPABILITIES };
     if (isChatGptDiscovery && raw.capabilities) {
       capabilities.streaming = raw.capabilities.streaming === true ? true : null;
       capabilities.imageInput = raw.capabilities.image_input === true
         || raw.capabilities.imageInput === true ? true : null;
-      // ChatGPT backend "tools" = built-in Codex tools, not custom function tools.
-      // Do NOT set toolUse = true here — the Responses API cannot execute custom
-      // function tool calls that the Build Studio and agentic loops require.
-      capabilities.toolUse = false;
+      // Only disable custom tool use for the chatgpt subscription backend.
+      // The codex provider (api.openai.com/v1/responses) supports custom function tools.
+      if (isChatGptSubscription) {
+        capabilities.toolUse = false;
+      }
     }
 
     return {

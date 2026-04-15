@@ -1,11 +1,19 @@
 # EP-MCP-ACT-001: MCP Catalog Activation & External Services Surface
 
-**Status:** Draft
+**Status:** Implemented (data model canonical; IA home changing — see note below)
 **Date:** 2026-03-20
 **Epic:** MCP Ecosystem Integration
 **Depends on:** EP-INT-001 (MCP Integrations Catalog — complete)
 **Parallel with:** EP-INF-001–004 (LLM Routing — separate concern)
 **Supersedes:** EP-MCP-SURFACE-001 (2026-03-16 External Services & MCP Surface Visibility — the earlier design routed MCP services through `ModelProvider` with `endpointType: "service"`. This spec replaces that approach: `McpServer` is now the authoritative model for MCP services, fully decoupled from `ModelProvider` which remains LLM-only.)
+**Updated by:** `2026-04-12-unified-capability-and-integration-lifecycle-design.md` (IA reorganization)
+
+> **IA migration note (added 2026-04-12):** The data model defined in this spec — `McpServer`, `McpServerTool`, lifecycle states, health status — is canonical and does not change. The **navigation home** for external MCP service management is changing as part of the unified capability spec Phase 1 IA reorganization:
+>
+> - Current home: `/platform/ai/providers` (Section 1b of that page) and `/platform/services`
+> - New home: **Tools & Integrations > Connected Integrations**
+>
+> HTTP 301 redirects are required from old URLs to new URLs per the URL redirect policy in the unified capability spec. The `McpServer` lifecycle stages (`unconfigured`, `active`, `degraded`, `unreachable`, `deactivated`) map to the standardized lifecycle in Section 6.1 of the unified capability spec. No schema changes are needed for Phase 1.
 
 ---
 

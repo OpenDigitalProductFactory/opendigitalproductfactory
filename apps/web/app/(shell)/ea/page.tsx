@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { ReferenceModelSummary } from "@/components/ea/ReferenceModelSummary";
+import { CreateViewButton } from "@/components/ea/CreateViewButton";
 import { getReferenceModelsSummary } from "@/lib/ea-data";
 
 const LAYOUT_LABELS: Record<string, string> = {
@@ -68,13 +69,7 @@ export default async function EaPage() {
       {views.length > 0 ? (
         <>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <button
-              disabled
-              style={{ padding: "6px 14px", background: "var(--dpf-accent)", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "not-allowed", opacity: 0.5 }}
-              title="New view creation coming soon"
-            >
-              + New view
-            </button>
+            <CreateViewButton />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {views.map((v) => (
@@ -101,9 +96,12 @@ export default async function EaPage() {
           </div>
         </>
       ) : (
-        <p className="text-sm text-[var(--dpf-muted)]">
-          No views yet. Views will appear here once the modeling canvas is available.
-        </p>
+        <div className="text-center py-8">
+          <p className="text-sm text-[var(--dpf-muted)] mb-4">
+            No views yet. Create your first view to start modeling.
+          </p>
+          <CreateViewButton />
+        </div>
       )}
     </div>
   );

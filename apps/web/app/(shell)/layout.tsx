@@ -95,7 +95,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // Check for active setup progress (onboarding tour in progress)
   const activeSetup = await prisma.platformSetupProgress.findFirst({
     where: { completedAt: null, userId: user.id },
-    select: { id: true, currentStep: true, steps: true },
+    select: { id: true, currentStep: true, steps: true, context: true },
   });
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
@@ -109,6 +109,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             progressId={activeSetup.id}
             currentStep={activeSetup.currentStep}
             steps={activeSetup.steps as Record<string, "pending" | "completed" | "skipped">}
+            setupContext={(activeSetup.context ?? {}) as Record<string, string>}
           />
         )}
         <StatusBanner />

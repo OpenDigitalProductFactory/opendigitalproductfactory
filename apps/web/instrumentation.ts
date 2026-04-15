@@ -9,5 +9,26 @@ export async function register() {
     registerScheduledJobs().catch((err) =>
       console.error("[instrumentation] Failed to register discovery jobs:", err),
     );
+
+    // EP-MODEL-CAP-001-D: Startup revalidation — runs 90–120s after startup.
+    // Jitter avoids thundering-herd when multiple replicas start simultaneously.
+    const STARTUP_DELAY_MS = 90_000 + Math.floor(Math.random() * 30_000);
+    const { Pool } = await import("pg");
+    const pgPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    setTimeout(async () => {
+      try {
+        const { runModelRevalidation } = await import(
+          "@/lib/inference/model-revalidation"
+        );
+        await runModelRevalidation({ source: "startup" }, pgPool);
+      } catch (err) {
+        console.warn(
+          "[model-revalidation] Startup revalidation failed (non-fatal):",
+          err,
+        );
+      } finally {
+        await pgPool.end().catch(() => {});
+      }
+    }, STARTUP_DELAY_MS);
   }
 }

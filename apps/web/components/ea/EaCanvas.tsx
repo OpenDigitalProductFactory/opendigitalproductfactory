@@ -47,6 +47,7 @@ type Props = {
   viewId: string;
   viewName: string;
   viewStatus: string;
+  notationSlug: string;
   viewpoint: ViewpointInfo | null;
   allElementTypes: ElementTypeOption[];
   initialElements: SerializedViewElement[];
@@ -265,7 +266,7 @@ const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
 };
 
 export function EaCanvas({
-  viewId, viewName, viewStatus, viewpoint, allElementTypes,
+  viewId, viewName, viewStatus, notationSlug, viewpoint, allElementTypes,
   initialElements, initialEdges, initialCanvasState, isReadOnly,
 }: Props) {
   const paletteTypes = viewpoint
@@ -620,6 +621,7 @@ export function EaCanvas({
 
       <ElementInspector
         selected={selectedViewElement}
+        notationSlug={notationSlug}
         onUpdated={() => window.location.reload()}
       />
 

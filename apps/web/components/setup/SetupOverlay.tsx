@@ -11,51 +11,37 @@ import {
 } from "@/lib/actions/setup-constants";
 import { advanceStep, skipStep, pauseSetup, completeSetup } from "@/lib/actions/setup-progress";
 
-/**
- * Pre-written COO welcome messages for each setup step.
- * These appear directly in the coworker panel as assistant messages —
- * NO LLM call needed. The local model can't reliably generate useful
- * onboarding guidance, so we write it ourselves.
+/** Build a context-aware trigger prompt for the current setup step.
+ * Sent as an autoMessage — triggers a real LLM call so the COO responds
+ * with personalised guidance rather than pre-written text.
  */
-const STEP_WELCOME: Record<string, string> = {
-  "ai-providers":
-    "Welcome to External Services. This is where you manage your AI providers — the engines that power the platform's intelligence.\n\n" +
-    "Right now, Ollama is running locally on your machine. It handles basic conversation (like this), but for complex tasks like document analysis, code generation, or taking actions, you'll want to add a cloud provider.\n\n" +
-    "To add one: click a provider like Anthropic or OpenAI, paste your API key, and click Test Connection. The platform will automatically use the best provider for each task.",
-  "branding":
-    "This is your branding page. Everything here controls how your platform looks — to your team and to your customers.\n\n" +
-    "You can set your logo, colors, and tagline. Changes apply across the entire platform, including the storefront if you set one up.\n\n" +
-    "Don't worry about getting it perfect now — you can always come back here from Admin > Branding.",
-  "business-context":
-    "This is where you tell the platform about your business — what you do, who you serve, and how you operate.\n\n" +
-    "This information powers your AI coworker's understanding of your business. It also shapes your portal setup in the next step — the platform will adapt its vocabulary to match your industry. An HOA sees 'Community Portal' and 'Homeowners,' a salon sees 'Booking Portal' and 'Clients,' and so on.\n\n" +
-    "Fill in what you can now — you can always come back to Admin > Your Business to update it later.",
-  "storefront":
-    "This is your Storefront — a customer-facing portal where your clients can access services, book appointments, view their account, and interact with your business online.\n\n" +
-    "If your business serves customers directly, you can configure the storefront here. If not, you can skip this and come back if you need it later.\n\n" +
-    "When enabled, the welcome page will show a Customer Portal login option alongside the Employee & Admin login.",
-  "platform-development":
-    "This is the Platform Development configuration. Here you decide how features from your shared development workspace are governed when they move toward production or community contribution.\n\n" +
-    "Build Studio always uses this policy, and in customizable installs VS Code works from the same codebase too. The choice here controls whether shipped changes stay private, are shared selectively, or are contributed by default.\n\n" +
-    "Pick whichever feels right — you can change this at any time from Admin > Platform Development.",
-  "build-studio":
-    "This is the Build Studio — one of the most powerful features of the platform.\n\n" +
-    "If you need something the platform doesn't have out of the box, you can describe what you need and the AI workforce will help build it: new workflows, reports, integrations, custom pages — whatever your business requires.\n\n" +
-    "Build Studio works from the same shared codebase used by this install. In customizable mode, that means Build Studio and VS Code stay aligned instead of creating separate copies of the platform.\n\n" +
-    "Anything you build can be kept private or donated back to the community so other businesses benefit too.",
-  "workspace":
-    "This is your workspace — where you and your team do day-to-day work.\n\n" +
-    "Before we wrap up, two important settings in the AI Coworker panel you should know about:\n\n" +
-    "Hands Off / Hands On — By default, the AI is in \"Hands Off\" mode. It can read and analyze but won't make changes. Switch to \"Hands On\" when you want it to take action — create tasks, modify settings, propose code changes. You control when it acts.\n\n" +
-    "External Access — By default, the AI can't reach the internet. Turn on External Access when you need it to search the web, fetch documentation, or pull in outside information. It stays off until you say so.\n\n" +
-    "These are your guardrails. The AI Coworker is powerful, but it only does what you allow.\n\n" +
-    "Try it now — switch to Hands On mode, then click the Skills menu and select \"Analyze this page.\" Watch what your AI coworker can do. Welcome aboard!",
-};
+function buildStepTrigger(step: string, ctx: Record<string, string>): string {
+  const org = ctx.orgName ? `Organisation: ${ctx.orgName}` : "Organisation: not yet entered";
+  const archetype = ctx.suggestedArchetypeName ? `Business type: ${ctx.suggestedArchetypeName}` : "";
+  const industry = ctx.industry ? `Industry: ${ctx.industry}` : "";
+
+  const contextLine = [org, archetype, industry].filter(Boolean).join(" | ");
+
+  const stepLabels: Record<string, string> = {
+    "ai-providers": "AI Providers — configure inference engines",
+    "branding": "Branding — logo, colours, tagline",
+    "business-context": "Your Business — describe what you do and who you serve",
+    "operating-hours": "Operating Hours — when your business is open",
+    "storefront": "Storefront — customer-facing portal",
+    "platform-development": "Platform Development — contribution and governance mode",
+    "build-studio": "Build Studio — custom feature development",
+    "workspace": "Workspace — day-to-day operations and guardrails",
+  };
+
+  const label = stepLabels[step] ?? step;
+  return `[Setup step: ${label}]\n${contextLine}\n\nGuide me through this step.`;
+}
 
 type Props = {
   progressId: string;
   currentStep: string;
   steps: Record<string, StepStatus>;
+  setupContext: Record<string, string>;
 };
 
 /**
@@ -65,26 +51,26 @@ type Props = {
  *
  * Auto-opens the coworker panel so the COO can provide guidance.
  */
-export function SetupOverlay({ progressId, currentStep, steps }: Props) {
+export function SetupOverlay({ progressId, currentStep, steps, setupContext }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
 
-  // Auto-open the coworker panel with a pre-written welcome for this step.
-  // Fires on step change AND pathname change — so the welcome re-appears
-  // when the user navigates within a step (e.g., provider detail → back).
+  // Auto-open the coworker panel and trigger a live COO response for this step.
+  // Uses autoMessage so the LLM generates personalised guidance from the setup
+  // context rather than displaying a pre-written string.
   useEffect(() => {
-    const welcome = STEP_WELCOME[currentStep];
-    if (!welcome) return;
+    const trigger = buildStepTrigger(currentStep, setupContext);
+    if (!trigger) return;
     const timer = setTimeout(() => {
       document.dispatchEvent(
         new CustomEvent("open-agent-panel", {
-          detail: { welcomeMessage: welcome },
+          detail: { autoMessage: trigger },
         }),
       );
     }, 300);
     return () => clearTimeout(timer);
-  }, [currentStep, pathname]);
+  }, [currentStep, pathname, setupContext]);
 
   const navigateToStep = (step: string, completed?: boolean) => {
     if (completed) {

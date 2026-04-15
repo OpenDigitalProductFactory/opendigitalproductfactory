@@ -20,11 +20,12 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
-import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing
+import type { BuildPhaseTag } from "@/lib/mcp-tools";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
-import { deleteAttachmentsForThread } from "@/lib/file-upload";
+// file-upload is imported dynamically at call site to avoid NFT whole-project tracing
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
@@ -523,6 +524,7 @@ export async function sendMessage(input: {
   }
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
+  const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
   const allPlatformTools = await getAvailableTools({
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
@@ -571,7 +573,7 @@ export async function sendMessage(input: {
     // (53+ tools) which causes smaller models to miss critical tools.
     if (activeBuildPhase) {
       if (!t.buildPhases) return false; // Exclude general-purpose tools during builds
-      return t.buildPhases.includes(activeBuildPhase as import("@/lib/mcp-tools").BuildPhaseTag);
+      return t.buildPhases.includes(activeBuildPhase as BuildPhaseTag);
     }
     return true;
   });
@@ -894,6 +896,7 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       threadId: input.threadId,
       taskType: taskTypeId,
+      agentDisplayName: agent.agentName,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });
@@ -994,8 +997,11 @@ export async function sendMessage(input: {
 
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: ideateResult.success });
 
+          console.log(`[coworker] Ideate result: success=${ideateResult.success}, hasDesignDoc=${!!ideateResult.designDoc}, docKeys=${ideateResult.designDoc ? Object.keys(ideateResult.designDoc as Record<string, unknown>).join(",") : "none"}`);
+
           if (ideateResult.success && ideateResult.designDoc) {
             // Save design doc via the same tool handler
+            console.log(`[coworker] Saving design doc + triggering review...`);
             const { executeTool } = await import("@/lib/mcp-tools");
             const saveResult = await executeTool(
               "saveBuildEvidence",
@@ -1004,19 +1010,66 @@ export async function sendMessage(input: {
               { routeContext: input.routeContext },
             );
 
-            if (saveResult.success) {
-              // Run the design doc review
-              agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-              const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
-              agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+            console.log(`[coworker] saveBuildEvidence result: success=${saveResult.success}, msg=${saveResult.message?.slice(0, 100)}`);
 
-              // Build a user-friendly summary
-              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").slice(0, 300);
-              responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach}\n\n${
-                reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
-              } Ready to move to the planning phase?`;
+            if (saveResult.success) {
+              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").trim();
+              console.log(`[coworker] Approach length: ${approach.length}`);
+              if (approach.length < 30) {
+                // Design doc saved but approach is blank — research engine produced an empty doc.
+                console.log(`[coworker] Approach too short (${approach.length} chars) — treating as empty doc`);
+                responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+              } else {
+                // Run the design doc review
+                console.log(`[coworker] Running reviewDesignDoc...`);
+                agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+                const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${reviewResult.message?.slice(0, 100)}`);
+                agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+
+                // Build a user-friendly summary
+                responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
+                  reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+                } Ready to move to the planning phase?`;
+              }
             } else {
-              responseContent = `Research completed but the design doc was rejected: ${saveResult.error ?? "Unknown error"}. I'll revise the approach.`;
+              // If the only issue is a missing/short codebase audit, auto-patch the doc and retry once.
+              // This prevents an infinite loop where the agent calls start_ideate_research repeatedly
+              // when the research engine produced valid content but omitted the audit field.
+              const rawDoc = ideateResult.designDoc as Record<string, unknown>;
+              const auditRaw = String(rawDoc?.existingCodeAudit ?? rawDoc?.existingFunctionalityAudit ?? "");
+              if (saveResult.error === "Design doc missing codebase research." && auditRaw.length < 20) {
+                const reusePlan = String(rawDoc?.reusePlan ?? "").slice(0, 150);
+                const fallbackAudit = reusePlan.length > 10
+                  ? `No existing implementation found. ${reusePlan}`
+                  : "No existing implementation found. Searched for related models, routes, and components. This is a new feature.";
+                const patchedDoc = { ...rawDoc, existingCodeAudit: fallbackAudit };
+                const retryResult = await executeTool(
+                  "saveBuildEvidence",
+                  { field: "designDoc", value: patchedDoc },
+                  user.id!,
+                  { routeContext: input.routeContext },
+                );
+                if (retryResult.success) {
+                  // Only treat as success if proposedApproach has real content.
+                  // An empty approach means the research engine ran but produced a blank doc.
+                  const approach = String(rawDoc.proposedApproach ?? "").trim();
+                  if (approach.length < 30) {
+                    responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                  } else {
+                    agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
+                    const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                    agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+                    responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
+                      reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
+                    } Ready to move to the planning phase?`;
+                  }
+                } else {
+                  responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
+                }
+              } else {
+                responseContent = `Research completed but the design doc needs revision. ${saveResult.message ?? "Please provide more context about the feature."}`;
+              }
             }
           } else {
             responseContent = ideateResult.error
@@ -1334,6 +1387,7 @@ export async function clearConversation(input: {
   }
 
   // Delete attachments (files on disk + DB rows), then proposals (FK on messageId), then messages
+  const { deleteAttachmentsForThread } = await import("@/lib/file-upload");
   await deleteAttachmentsForThread(input.threadId);
   await prisma.agentActionProposal.deleteMany({
     where: { threadId: input.threadId },

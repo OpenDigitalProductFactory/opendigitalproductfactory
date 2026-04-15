@@ -11,7 +11,7 @@
 // 3. Codex searches /workspace, reads files, outputs a JSON design doc
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
-import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
@@ -70,13 +70,16 @@ type ClaudeAuth =
 
 /**
  * Resolve Claude auth credentials from the DB.
- * Mirrors the pattern in claude-dispatch.ts.
+ * For OAuth providers, uses getProviderBearerToken so expired tokens are
+ * automatically refreshed (access tokens expire every few hours; refresh
+ * tokens are valid for days). Falls back to getDecryptedCredential for
+ * API key providers where no refresh is needed.
  */
 async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
-  const credential = await getDecryptedCredential(providerId);
   const isOAuth = providerId === "anthropic-sub";
 
   if (!isOAuth) {
+    const credential = await getDecryptedCredential(providerId);
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
       throw new Error(`No Anthropic API key for provider "${providerId}".`);
@@ -84,10 +87,14 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
     return { mode: "apikey", apiKey };
   }
 
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}".`);
+  // OAuth: use getProviderBearerToken which checks expiry and refreshes automatically.
+  // Direct getDecryptedCredential would return an expired access token on the next
+  // request after tokenExpiresAt, causing a 401 from the CLI.
+  const result = await getProviderBearerToken(providerId);
+  if ("error" in result) {
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
   }
-  return { mode: "oauth", token: credential.cachedToken };
+  return { mode: "oauth", token: result.token };
 }
 
 /**
@@ -167,7 +174,7 @@ YOUR TASK:
 
   "dataModel": "Describe the data model in PLAIN ENGLISH with a structured layout. For each model: name, purpose (one sentence), then list its fields as: fieldName (Type) — description. Use line breaks between models. Example format:\\n\\nCertificationAuthority — Represents an external certification provider.\\n- slug (String, unique) — short identifier, e.g. 'open-group'\\n- displayName (String) — human-readable name\\n- apiBaseUrl (String) — API endpoint for this provider\\n\\nDo NOT use Prisma syntax or code blocks. Do NOT omit fields. List every field with its type and purpose.",
 
-  "existingFunctionalityAudit": "What existing files, models, and patterns you found in the codebase that this feature will build on. Reference specific file paths (apps/web/...) and model names. If nothing related exists, say so and list what you searched for.",
+  "existingFunctionalityAudit": "REQUIRED — never leave empty. What existing files, models, and patterns you found in the codebase that this feature will build on. Reference specific file paths (apps/web/...) and model names. If nothing related exists, write: 'No existing implementation found. Searched for [list the exact terms you searched for]. This is a new feature.' That format is accepted — but an empty string is not.",
 
   "proposedApproach": "A clear, readable description of how this will work. Structure it with labeled sections:\\n- Data Model: summarize the models (detail is in the dataModel field)\\n- API Routes: what endpoints, what each does, auth requirements\\n- UI Pages: what pages, what they show, what actions they support\\n- Integration Flow: step-by-step of what happens when the feature is triggered (automatic and manual paths)\\n- Configuration: how admins set up and manage the feature\\nWrite each section so a developer can implement from it without ambiguity.",
 
@@ -185,30 +192,96 @@ YOUR TASK:
 
 RULES:
 - Search thoroughly before writing. Your audit must reference real files.
+- existingFunctionalityAudit MUST never be empty or null. If you find nothing relevant, write what you searched for.
 - If reusability scope is "parameterizable", the proposedApproach MUST describe how domain-specific values are stored as configuration, not hardcoded.
-- Output ONLY the JSON block. No commentary, no explanations.`;
+- Output ONLY the JSON block. No commentary, no explanations.
+- VALID JSON ONLY: The output must parse with JSON.parse(). Do NOT put double-quote characters inside string values — they break parsing. Version numbers (1.0.0), product names, and file paths must NOT be wrapped in quotes inside a JSON string. WRONG: "assigns version \\"1.0.0\\" to each" — RIGHT: "assigns version 1.0.0 to each". If you need to emphasize something, use parentheses or dashes instead of quotes.`;
 }
 
 /**
- * Parse the design doc JSON from Codex CLI output.
- * Handles markdown code blocks and bare JSON.
+ * Attempt lightweight JSON repair on AI-generated output before giving up.
+ * Handles the two most common Claude JSON errors:
+ * 1. Trailing commas before ] or } (always invalid JSON)
+ * 2. Unescaped double quotes inside string values (e.g. "version "1.0.0" of")
+ *
+ * The unescaped-quote repair uses a character-level state machine to distinguish
+ * quotes that are part of the JSON structure from quotes that appear inside a
+ * string value and need to be escaped.
+ */
+function repairJson(text: string): string {
+  // Pass 1: remove trailing commas
+  let s = text.replace(/,(\s*[\]}])/g, "$1");
+
+  // Pass 2: escape unescaped double quotes inside string values.
+  // Walk character by character tracking: inString, escaped.
+  // When we see a " that is NOT the opening/closing quote of a key or value,
+  // replace it with \".
+  const chars = Array.from(s);
+  let inString = false;
+  let escaped = false;
+  const out: string[] = [];
+
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i]!;
+    if (escaped) {
+      out.push(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out.push(ch);
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      if (!inString) {
+        inString = true;
+        out.push(ch);
+      } else {
+        // Peek ahead: if next non-whitespace is : , } ] or end-of-string, this closes a value/key
+        let j = i + 1;
+        while (j < chars.length && chars[j] === " ") j++;
+        const next = chars[j] ?? "";
+        if (next === ":" || next === "," || next === "}" || next === "]" || next === "\n" || next === "\r" || j >= chars.length) {
+          inString = false;
+          out.push(ch);
+        } else {
+          // Mid-string unescaped quote — escape it
+          out.push('\\"');
+        }
+      }
+      continue;
+    }
+    out.push(ch);
+  }
+
+  return out.join("");
+}
+
+/**
+ * Parse the design doc JSON from Codex/Claude CLI output.
+ * Tries: markdown code block → bare JSON → repaired code block → repaired bare JSON.
  */
 function parseDesignDoc(output: string): Record<string, unknown> | null {
-  // Try markdown code block first
+  function tryParse(text: string): Record<string, unknown> | null {
+    const t = text.trim();
+    try { return JSON.parse(t); } catch { /* try repair */ }
+    try { return JSON.parse(repairJson(t)); } catch { return null; }
+  }
+
+  // Try markdown code block first (non-greedy — first ```)
   const codeBlockMatch = output.match(/```json\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
-    try {
-      return JSON.parse(codeBlockMatch[1]!.trim());
-    } catch { /* fall through */ }
+    const result = tryParse(codeBlockMatch[1]!);
+    if (result) return result;
   }
 
   // Try bare JSON (find first { to last })
   const firstBrace = output.indexOf("{");
   const lastBrace = output.lastIndexOf("}");
   if (firstBrace >= 0 && lastBrace > firstBrace) {
-    try {
-      return JSON.parse(output.slice(firstBrace, lastBrace + 1));
-    } catch { /* fall through */ }
+    const result = tryParse(output.slice(firstBrace, lastBrace + 1));
+    if (result) return result;
   }
 
   return null;
@@ -393,9 +466,25 @@ export async function dispatchIdeateResearch(params: {
     if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
       try {
         const parsed = JSON.parse(rawOutput);
+        // Fail fast on CLI-level errors (auth failures, rate limits, etc.)
+        // before parseDesignDoc accidentally misidentifies the error JSON as a design doc.
+        if (parsed.is_error) {
+          const errText = typeof parsed.result === "string" ? parsed.result : "Claude CLI returned an error";
+          const isAuth = errText.includes("401") || errText.toLowerCase().includes("authentication") || errText.toLowerCase().includes("invalid.*credentials");
+          console.error(`[ideate-dispatch] Claude CLI error (is_error=true): ${errText.slice(0, 200)}`);
+          return {
+            designDoc: null,
+            rawOutput,
+            success: false,
+            durationMs,
+            error: isAuth
+              ? "Claude authentication failed (401). The Anthropic OAuth token has expired — go to Admin > AI Providers > Anthropic Subscription and reconnect."
+              : `Claude CLI error: ${errText.slice(0, 150)}`,
+          };
+        }
         if (parsed.result) {
           rawOutput = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
-          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars, is_error=${parsed.is_error})`);
+          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars)`);
         }
       } catch {
         // Not valid JSON — use raw output as-is
@@ -412,7 +501,7 @@ export async function dispatchIdeateResearch(params: {
         rawOutput,
         success: false,
         durationMs,
-        error: "Could not parse design document from Codex output.",
+        error: "Could not parse design document from research output. The research engine may have returned an unexpected format.",
       };
     }
 

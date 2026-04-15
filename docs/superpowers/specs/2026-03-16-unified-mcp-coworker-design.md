@@ -1,8 +1,16 @@
 # Unified MCP Coworker Architecture
 
 **Date:** 2026-03-16
-**Status:** Draft
+**Status:** Superseded in part — see note below
 **Author:** Mark Bodman (CEO) + Claude (design partner)
+
+> **Supersession note (added 2026-04-12):** The **"Workforce = MCP Registry"** design principle in this spec has been superseded by `2026-04-12-unified-capability-and-integration-lifecycle-design.md`. That spec explicitly rejects treating all AI resources as MCP endpoints in one registry — instead it maintains separate canonical tables (`ModelProvider` for LLM providers, `McpServer` for external MCP services, `PlatformCapability` for platform capabilities) and unifies them only at the product/capability layer via `CapabilityInventoryView`.
+>
+> The decoupling of `ModelProvider` from `McpServer` was already implemented by `2026-03-20-mcp-activation-and-services-surface-design.md`. The unified capability spec aligns with and extends that decoupling.
+>
+> **What remains valid in this spec:** The core identity model (one coworker, context-injected behavior, HR role as primary authority gate, Advise/Act toggle), the route context injection pattern, and the HR role capability matrix. These are unaffected.
+>
+> **What is superseded:** The "Workforce = MCP Registry" mental model and the proposal to route all AI resources through a unified MCP endpoint registry.
 
 ## Problem Statement
 

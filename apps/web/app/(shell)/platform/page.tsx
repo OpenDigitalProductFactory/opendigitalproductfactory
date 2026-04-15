@@ -127,13 +127,13 @@ export default async function PlatformPage() {
               textDecoration: "none",
             }}
           >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>AI Providers</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>AI Workforce</p>
             <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              Provider registry, credentials, token spend
+              Coworkers, routing, build studio, skills
             </p>
           </Link>
           <Link
-            href="/platform/integrations"
+            href="/platform/tools/catalog"
             style={{
               display: "block",
               padding: 16,
@@ -145,14 +145,14 @@ export default async function PlatformPage() {
             }}
           >
             <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-              Integrations
+              Tools &amp; Integrations
             </p>
             <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              MCP catalog, sync, archetype recommendations
+              MCP catalog, activated services, tool grants
             </p>
           </Link>
           <Link
-            href="/platform/services"
+            href="/platform/tools/services"
             style={{
               display: "block",
               padding: 16,
@@ -168,6 +168,25 @@ export default async function PlatformPage() {
             </p>
             <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
               Registered MCP services, health, tools
+            </p>
+          </Link>
+          <Link
+            href="/platform/audit/ledger"
+            style={{
+              display: "block",
+              padding: 16,
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+              borderLeft: "4px solid #f59e0b",
+              borderRadius: 8,
+              textDecoration: "none",
+            }}
+          >
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
+              Audit &amp; Operations
+            </p>
+            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
+              Action ledger, routes, operations, authority
             </p>
           </Link>
         </div>

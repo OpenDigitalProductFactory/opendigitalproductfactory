@@ -221,7 +221,7 @@
     }
   },
   {
-    "providerId": "ollama",
+    "providerId": "local",
     "name": "Docker Model Runner (local)",
     "category": "direct",
     "baseUrl": "http://model-runner.docker.internal/v1",
@@ -256,6 +256,36 @@
       "dataResidency": "Your machine. Nothing leaves.",
       "setupDifficulty": "automatic",
       "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
+    },
+    "supportsToolUse": true
+  },
+  {
+    "providerId": "ollama",
+    "name": "Ollama",
+    "category": "direct",
+    "baseUrl": "http://localhost:11434",
+    "authMethod": "none",
+    "supportedAuthMethods": ["none"],
+    "authHeader": null,
+    "costModel": "compute",
+    "families": ["llama3", "llama3.2", "mistral", "phi3", "gemma2", "gemma4", "qwen2", "qwen3", "deepseek"],
+    "computeWatts": 150,
+    "electricityRateKwh": 0.12,
+    "docsUrl": "https://ollama.com/docs",
+    "consoleUrl": null,
+    "billingLabel": "Local compute · electricity cost only",
+    "costPerformanceNotes": null,
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "AI running on your own hardware via Ollama. No data leaves your system. Install Ollama separately at ollama.com.",
+      "authExplained": "None needed — Ollama runs locally.",
+      "costTier": "free",
+      "costExplained": "Costs only the electricity to run your computer. No per-use charges.",
+      "capabilitySummary": "Handles conversation, summaries, and basic analysis. Model quality depends on what you pull.",
+      "limitations": "Requires separate Ollama installation and sufficient RAM/VRAM for chosen models.",
+      "dataResidency": "Your machine. Nothing leaves.",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "All data stays on your hardware."
     },
     "supportsToolUse": true
   },

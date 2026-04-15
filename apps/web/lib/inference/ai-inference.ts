@@ -180,6 +180,75 @@ export function extractOpenAIToolCalls(
     }));
 }
 
+/**
+ * Extract tool calls embedded as text when the model runner doesn't translate
+ * them to structured `tool_calls`. Handles two formats:
+ *
+ * 1. Standard Gemma/Llama JSON:  <tool_call>{"name":"fn","arguments":{...}}</tool_call>
+ * 2. Gemma template variant:     <|tool_call>call: fn{key: "value"}<tool_call|>
+ *
+ * Returns { toolCalls, cleanText } where cleanText has the markers stripped.
+ */
+export function extractTextualToolCalls(
+  text: string,
+): { toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; cleanText: string } {
+  const toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
+  let cleanText = text;
+
+  // Format 1: <tool_call>{"name":"fn","arguments":{...}}</tool_call>
+  const jsonPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+  cleanText = cleanText.replace(jsonPattern, (_, inner) => {
+    try {
+      const parsed = JSON.parse(inner.trim()) as { name?: string; arguments?: Record<string, unknown> };
+      if (parsed.name) {
+        toolCalls.push({
+          id: `text_${Math.random().toString(36).slice(2, 9)}`,
+          name: parsed.name,
+          arguments: parsed.arguments ?? {},
+        });
+      }
+    } catch {
+      // malformed — skip
+    }
+    return "";
+  });
+
+  // Format 2: <|tool_call>call: fn{key: "value", ...}<tool_call|>
+  // Also covers <|tool_call>fn({"key":"value"})<tool_call|> variants.
+  const templatePattern = /<\|tool_call\>(?:call:\s*)?(\w+)\s*[\({]([\s\S]*?)[\)}]?\s*<tool_call\|>/g;
+  cleanText = cleanText.replace(templatePattern, (_, name: string, argsRaw: string) => {
+    try {
+      // argsRaw may be JS-like object literal — attempt JSON parse after key-quoting
+      const jsonified = argsRaw
+        .trim()
+        // Add quotes around unquoted keys: word: → "word":
+        .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":')
+        // Ensure leading brace
+        .replace(/^([^{])/, '{$1')
+        .replace(/([^}])$/, '$1}');
+      const args = JSON.parse(jsonified) as Record<string, unknown>;
+      toolCalls.push({
+        id: `text_${Math.random().toString(36).slice(2, 9)}`,
+        name,
+        arguments: args,
+      });
+    } catch {
+      // fallback: treat entire argsRaw as a single "query" param
+      toolCalls.push({
+        id: `text_${Math.random().toString(36).slice(2, 9)}`,
+        name,
+        arguments: { query: argsRaw.trim() },
+      });
+    }
+    return "";
+  });
+
+  // Strip any leftover <eos> tokens from local models
+  cleanText = cleanText.replace(/<eos>/g, "").trim();
+
+  return { toolCalls, cleanText };
+}
+
 // ─── Message Formatting Helpers ──────────────────────────────────────────────
 
 /** Format a ChatMessage for the Anthropic Messages API */

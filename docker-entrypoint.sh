@@ -33,6 +33,11 @@ cd /app
 pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  WARN Seed had warnings (non-fatal)"
 echo "  OK Seed complete"
 
+echo "[3b/5] Reconciling model capability catalog..."
+cd /app
+pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts || echo "  WARN Catalog reconciliation had warnings (non-fatal)"
+echo "  OK Catalog reconciliation complete"
+
 echo "[4/5] Detecting hardware..."
 if [ -n "$DPF_HOST_PROFILE" ]; then
   cd /app
@@ -105,5 +110,17 @@ elif [ -f "$WORKSPACE/.dpf-version" ]; then
 else
   echo "  -- /workspace not mounted, skipping"
 fi
+
+# Ensure codex provider is active and build-specialist is pinned to it.
+# The CLI adapter (anthropic-sub) cannot execute MCP tools — codex via the
+# responses adapter is required for tool-based agentic coworker conversations.
+echo "[post-init] Ensuring codex provider active + build-specialist pinned..."
+psql "$DATABASE_URL" -c "
+  UPDATE \"ModelProvider\" SET status = 'active', \"supportsToolUse\" = true WHERE \"providerId\" = 'codex';
+  UPDATE \"ModelProvider\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
+  UPDATE \"ModelProfile\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
+  UPDATE \"AgentModelConfig\" SET \"pinnedProviderId\" = 'codex', \"pinnedModelId\" = 'gpt-5.4' WHERE \"agentId\" = 'build-specialist';
+" 2>/dev/null || echo "  WARN post-init SQL had warnings (non-fatal)"
+echo "  OK Provider config locked"
 
 echo "=== Init complete ==="

@@ -51,6 +51,10 @@ export class NoEligibleEndpointsError extends Error {
     public readonly taskType: string,
     public readonly reason: string,
     public readonly excludedCount: number,
+    /** EP-AGENT-CAP-002: Which capability the agent required but no endpoint satisfied. */
+    public readonly missingCapability?: string,
+    /** EP-AGENT-CAP-002: The agent that triggered the error (for admin UI correlation). */
+    public readonly agentId?: string,
   ) {
     super(
       `No eligible endpoints for task '${taskType}': ${reason}` +
@@ -97,6 +101,25 @@ export interface RouteAndCallOptions {
    */
   requireTools?: boolean;
   /**
+   * EP-AGENT-CAP-002: Agent-level minimum capability floor.
+   * When set, endpoints that don't satisfy all declared capabilities are
+   * excluded BEFORE graceful tool-stripping. Use DEFAULT_MINIMUM_CAPABILITIES
+   * ({ toolUse: true }) for standard coworkers.
+   */
+  minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
+  /**
+   * EP-AGENT-CAP-002: Minimum context window tokens required by the agent (for RAG).
+   * Merged with task-level minContextTokens — the stricter value wins.
+   * Null = system default (16000 tokens). Read from AgentModelConfig.minimumContextTokens.
+   */
+  agentMinimumContextTokens?: number;
+  /**
+   * EP-AGENT-CAP-002: Agent identifier for error correlation.
+   * Set from agentId in agentic-loop.ts so NoEligibleEndpointsError can surface
+   * which agent triggered the capability floor violation.
+   */
+  agentId?: string;
+  /**
    * EP-INF-013: Reasoning effort hint for the selected model.
    *   low    — no extended thinking; fast and cheap (default when omitted)
    *   medium — moderate thinking budget (~8k tokens for Anthropic)
@@ -108,6 +131,13 @@ export interface RouteAndCallOptions {
   effort?: "low" | "medium" | "high" | "max";
   /** Responses API: chain to a previous response for conversation state. */
   previousResponseId?: string;
+  /**
+   * Display name of the coworker invoking this call (e.g. "AI Ops Engineer").
+   * When tools are stripped due to model capability limits, this name is
+   * preserved in the degraded system prompt so the model can identify itself
+   * and explain its limited state — rather than becoming a generic assistant.
+   */
+  agentDisplayName?: string;
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -155,6 +185,18 @@ export async function routeAndCall(
     contract.minimumDimensions = options.minimumDimensions;
   }
 
+  // EP-AGENT-CAP-002: Inject agent capability floor into contract
+  if (options?.minimumCapabilities !== undefined) {
+    contract.minimumCapabilities = options.minimumCapabilities;
+  }
+  if (options?.agentMinimumContextTokens !== undefined) {
+    // Use the stricter of task-level and agent-level context minimums
+    const agentMin = options.agentMinimumContextTokens;
+    if (contract.minContextTokens === undefined || agentMin > (contract.minContextTokens ?? 0)) {
+      contract.minContextTokens = agentMin;
+    }
+  }
+
   // 2. Load routing data
   const [manifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(),
@@ -186,6 +228,30 @@ export async function routeAndCall(
         effort: options.effort,
       },
     };
+  }
+
+  // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
+  // Only throw if the routing evidence shows the capability floor was the ACTUAL cause
+  // of failure. If endpoints were excluded for sensitivity, status, rate-limit, or
+  // other reasons, fall through to the existing error/degradation path instead —
+  // surfacing "no tool-capable endpoint" when tools aren't the problem is misleading.
+  if (!decision.selectedEndpoint && options?.minimumCapabilities) {
+    const floorExclusions = decision.candidates.filter(
+      (c) => c.excluded && c.excludedReason?.includes("EP-AGENT-CAP-002"),
+    );
+    if (floorExclusions.length > 0) {
+      // Identify which capability was the blocker from the first exclusion reason
+      const missingCap = floorExclusions[0]?.excludedReason?.match(/capability '(\w+)'/)?.[1];
+      throw new NoEligibleEndpointsError(
+        taskType,
+        `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
+        `Missing: ${missingCap ?? "unknown"}. ` +
+        `Configure a capable provider at Platform > AI > Model Assignment.`,
+        decision.excludedCount,
+        missingCap,
+        options?.agentId,
+      );
+    }
   }
 
   // Graceful degradation: if all endpoints were excluded because they lack tool
@@ -232,7 +298,39 @@ export async function routeAndCall(
   // listed below" — they latch onto the tool names and hallucinate calls.
   // A clean, simple prompt is the only reliable approach.
   if (toolsStripped) {
-    systemPrompt = `You are a helpful assistant. Respond naturally to the user. Keep replies short.`;
+    const name = options?.agentDisplayName ?? "AI Assistant";
+    const modelId = decision.selectedModelId ?? "";
+    const providerIds = decision.candidates.map((c) => c.providerId);
+    // Only the chatgpt subscription backend (chatgpt.com) lacks custom tool support.
+    // The codex provider (api.openai.com/v1/responses) now supports custom tools.
+    const isCodexBackend = providerIds.some((p) => p === "chatgpt");
+
+    // Build the "how to fix" suggestion from actually-configured tool-capable
+    // endpoints rather than hardcoded model names.
+    const toolCapableEndpoints = manifests
+      .filter((m) => m.supportsToolUse && m.status === "active")
+      .map((m) => m.name)
+      .slice(0, 3); // cap at 3 to keep the message concise
+    const toolCapableSuggestion = toolCapableEndpoints.length > 0
+      ? `Switch to one of your configured tool-capable models: ${toolCapableEndpoints.join(", ")}.`
+      : `Configure a tool-capable provider (standard OpenAI API, Anthropic, or a local model with tool support) and assign it via Platform > AI > Model Assignment.`;
+
+    const whyLimited = isCodexBackend
+      ? `The active model (${modelId || "Codex"}) uses the ChatGPT/Codex backend, which only supports Codex's built-in tools — not the platform's custom function tools.`
+      : `The active model (${modelId || "current model"}) does not support custom function calling.`;
+
+    const howToFix = isCodexBackend
+      ? `To enable tools, use a standard API-key-based provider instead of the ChatGPT subscription. ${toolCapableSuggestion}`
+      : `Go to Platform > AI > Model Assignment and assign a tool-capable model. ${toolCapableSuggestion}`;
+
+    systemPrompt = [
+      `You are ${name}.`,
+      whyLimited,
+      `You are in limited mode: you can read and discuss, but cannot take actions or use any tools.`,
+      `When the user asks you to do something that requires a tool, explain the above clearly and concisely.`,
+      howToFix,
+      `Keep replies concise. Do not repeat the explanation unless asked.`,
+    ].join(" ");
 
     // Also strip chat history to just the current message — old messages from
     // capable-model conversations contain tool calls and context that confuse
@@ -243,7 +341,7 @@ export async function routeAndCall(
       messages = [lastUserMsg];
     }
 
-    // Tools stripped — prompt replaced, history trimmed, no nudging
+    console.log(`[routing] Tools stripped for ${name} — using degraded identity prompt`);
   }
 
   // 3b. If a preferred provider was requested, force it as the selected endpoint.

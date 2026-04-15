@@ -1,0 +1,814 @@
+[
+  {
+    "name": "create_backlog_item",
+    "description": "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "update_backlog_item",
+    "description": "Update an existing backlog item",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "create_digital_product",
+    "description": "Register a new digital product in the inventory",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "update_lifecycle",
+    "description": "Update a digital product's lifecycle stage and status",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "query_backlog",
+    "description": "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "report_quality_issue",
+    "description": "Report a bug, suggestion, or question about the platform. Available to ALL employees regardless of role — anyone can report a problem.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "get_marketing_summary",
+    "description": "Get archetype-aware marketing metrics: storefront inbox counts, CRM pipeline summary, and the marketing playbook for this business type",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "suggest_campaign_ideas",
+    "description": "Get structured context for generating archetype-specific marketing campaign ideas, including business type, season, playbook, and top storefront items",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "analyze_seo_opportunity",
+    "description": "Get structured business context for SEO content recommendations: archetype, services/products, location, existing content sections, and suggested local search intents",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "generate_custom_archetype",
+    "description": "Generate a custom business archetype from a description of the business, its offerings, and customer interaction patterns. Creates a new StorefrontArchetype record.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "assess_archetype_refinement",
+    "description": "Compare the current storefront configuration against the original archetype template and return a structured refinement diff showing what items, sections, and categories have changed",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_public_web",
+    "description": "Search the public web for relevant pages or facts",
+    "sideEffect": false,
+    "requiresExternalAccess": true,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "fetch_public_website",
+    "description": "Fetch a public website and summarize visible branding and metadata",
+    "sideEffect": false,
+    "requiresExternalAccess": true,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "analyze_public_website_branding",
+    "description": "Analyze a public website and propose branding values such as company name, logo, and accent color",
+    "sideEffect": false,
+    "requiresExternalAccess": true,
+    "buildPhases": null
+  },
+  {
+    "name": "update_feature_brief",
+    "description": "Save the Feature Brief for the current build. Build ID is auto-resolved.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "suggest_taxonomy_placement",
+    "description": "Analyze the current feature brief and suggest where it belongs in the portfolio taxonomy. Returns ranked candidates with match scores. Call after saving the feature brief.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "confirm_taxonomy_placement",
+    "description": "Confirm or override the taxonomy placement for the current feature build. Either confirm an existing node or propose a new one.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "ship"
+    ]
+  },
+  {
+    "name": "register_digital_product_from_build",
+    "description": "Register or update a DigitalProduct from the current build. Build ID is auto-resolved. Requires approval.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "create_build_epic",
+    "description": "Create an Epic and backlog items for a shipped build. All IDs are auto-resolved.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "search_portfolio_context",
+    "description": "Search taxonomy, products, builds, and backlog for items related to a feature description.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "assess_complexity",
+    "description": "Score a feature on 7 dimensions, get path recommendation (simple/moderate/complex).",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "analyze_reusability",
+    "description": "Analyze a feature for reusability potential. Identifies hardcoded domain concepts that could be parameterized and rates contribution readiness. Call after codebase research, before saving the design doc.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "propose_decomposition",
+    "description": "Generate an epic + feature set breakdown for a complex idea.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "register_tech_debt",
+    "description": "Log a technical shortcut as a refactoring backlog item.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "save_build_notes",
+    "description": "Persist key points from the conversation to the running spec. Call silently after each significant exchange.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan"
+    ]
+  },
+  {
+    "name": "save_phase_handoff",
+    "description": "Save a structured handoff briefing for the next phase. Call this as your LAST action before a phase transition.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "saveBuildEvidence",
+    "description": "Save evidence to a FeatureBuild record. Fields: designDoc, buildPlan, taskResults, verificationOut, acceptanceMet.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "build",
+      "review",
+      "ship"
+    ]
+  },
+  {
+    "name": "reviewDesignDoc",
+    "description": "Submit the design document for AI review. Returns pass/fail with issues.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "reviewBuildPlan",
+    "description": "Submit the implementation plan for AI review. Returns pass/fail with issues.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "plan"
+    ]
+  },
+  {
+    "name": "start_build",
+    "description": "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', STOP and tell the user to run: docker compose up -d sandbox",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build"
+    ]
+  },
+  {
+    "name": "run_sandbox_tests",
+    "description": "Run unit tests and typecheck inside the sandbox container. Set auto_fix to true to automatically diagnose and fix failures (up to 3 attempts).",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "read_sandbox_file",
+    "description": "Read a file from the project workspace. Returns contents with line numbers. Use offset and limit for large files. Always read a file before editing it.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "plan",
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "write_sandbox_file",
+    "description": "Create or overwrite a file in the sandbox workspace. Use this to create new files. For modifying existing files, prefer edit_sandbox_file for surgical edits.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "edit_sandbox_file",
+    "description": "Edit an existing file in the sandbox. Two modes: (1) String mode: old_text + new_text for exact find-and-replace. (2) Line mode: start_line + end_line + new_content to replace a line range by number. Use line mode when string matching fails — line numbers from read_sandbox_file are reliable.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "search_sandbox",
+    "description": "Search for a text pattern across the sandbox workspace. Returns matching file paths, line numbers, and context lines.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "plan",
+      "build"
+    ]
+  },
+  {
+    "name": "list_sandbox_files",
+    "description": "List files in the sandbox workspace matching a glob pattern. Returns file paths.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "plan",
+      "build"
+    ]
+  },
+  {
+    "name": "run_sandbox_command",
+    "description": "Run a shell command inside the sandbox container. Use for build, test, lint, git diff, or any other verification. Returns stdout and stderr.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "describe_model",
+    "description": "Look up a Prisma model's fields, types, relations, and indexes from the sandbox schema. Use this instead of asking the user about schema structure. Example: describe_model({ model_name: 'User' }) returns all fields with types.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "validate_schema",
+    "description": "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build"
+    ]
+  },
+  {
+    "name": "deploy_feature",
+    "description": "Extract the git diff from sandbox and deploy to the platform. Requires approval.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "admin_view_logs",
+    "description": "View recent logs from a Docker Compose service. Returns the last N lines (default 100).",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_query_db",
+    "description": "Run a read-only SQL query against the portal database. Only SELECT statements are permitted. Max 1000 rows.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_read_file",
+    "description": "Read a file within the project directory. Path must be relative to PROJECT_ROOT. Sensitive files (.env, *.key, *.pem) are excluded.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_restart_service",
+    "description": "Restart a Docker Compose service. Equivalent to 'docker compose restart <service>'.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_run_migration",
+    "description": "Run 'prisma migrate deploy' inside the portal container to apply pending database migrations.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_run_seed",
+    "description": "Run the database seed script inside the portal container to populate reference data.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "admin_run_command",
+    "description": "Run a shell command in the project directory. Only docker compose, git, and pnpm commands are permitted. Destructive commands require user confirmation.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "check_deployment_windows",
+    "description": "Check available deployment windows for promoting changes to production. Returns current window status, blackout periods, and next available window time.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "review",
+      "ship"
+    ]
+  },
+  {
+    "name": "schedule_promotion",
+    "description": "Schedule an approved promotion for deployment during a specific window. Creates a calendar event for visibility.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "execute_promotion",
+    "description": "Execute an approved promotion. Starts the autonomous promoter: backup DB, build new portal image from sandbox, swap containers, health check. Rolls back automatically on failure.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "create_release_bundle",
+    "description": "Group multiple completed builds into a release bundle for coordinated deployment (IT4IT §5.3.5 Release Package).",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "run_release_gate",
+    "description": "Run gate checks on a release bundle: combine diffs from all builds, run destructive operation scan, validate all builds passed tests (IT4IT §5.3.5 Accept & Publish Release).",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "schedule_release_bundle",
+    "description": "Schedule an approved release bundle for deployment during a deployment window. Creates an RFC, ChangePromotion, and CalendarEvent for operations calendar visibility.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "get_release_status",
+    "description": "Get the current status of a release bundle or promotion, including deployment window availability and gate check results.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "assess_contribution",
+    "description": "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "contribute_to_hive",
+    "description": "Package a shipped feature as a FeaturePack for community contribution. Only call after the user has seen the assessment and explicitly approved. Includes DCO (Developer Certificate of Origin) attestation.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ship"
+    ]
+  },
+  {
+    "name": "apply_platform_update",
+    "description": "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "evaluate_page",
+    "description": "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "review"
+    ]
+  },
+  {
+    "name": "run_ux_test",
+    "description": "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "review"
+    ]
+  },
+  {
+    "name": "list_project_directory",
+    "description": "List files and directories in a project directory. Use '.' or empty string for project root. Helps discover the project structure.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan"
+    ]
+  },
+  {
+    "name": "start_ideate_research",
+    "description": "Signal that you have enough context from the user to begin codebase research and draft the design document. Call this AFTER the user answers your questions (intent gate, reusability scope). The system will search the codebase, analyze patterns, and draft the design doc automatically. You do NOT need to call search_project_files or read_project_file yourself — this tool handles all research.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate"
+    ]
+  },
+  {
+    "name": "read_project_file",
+    "description": "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan"
+    ]
+  },
+  {
+    "name": "search_project_files",
+    "description": "Search the project codebase for a text pattern. The query parameter is the text to search for (e.g. 'voucher', 'student'). The glob parameter is an OPTIONAL file type filter (e.g. '*.ts'). Do NOT combine them — use query='voucher' and glob='*.prisma' as separate parameters, NOT query='voucher:*.prisma'.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan"
+    ]
+  },
+  {
+    "name": "query_version_history",
+    "description": "List product versions with their git tags, ship dates, change counts, and promotion status. Optionally filter by digital product ID.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_design_intelligence",
+    "description": "Search the design intelligence database for UI/UX recommendations. Returns style guides, color palettes, typography pairings, UX best practices, landing page patterns, chart types, or product-type recommendations based on keyword matching.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "generate_design_system",
+    "description": "Generate a complete design system recommendation for a product. Searches across product types, styles, colors, typography, and landing page patterns, then applies industry-specific reasoning rules. Returns: recommended pattern, style, color palette, font pairing, effects, anti-patterns to avoid, and a pre-delivery checklist. This is a pure data lookup — no LLM call, works at any model tier.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "ideate",
+      "plan",
+      "build",
+      "review"
+    ]
+  },
+  {
+    "name": "generate_codebase_manifest",
+    "description": "Generate or refresh the codebase manifest (SBOM). Reads package.json, schema.prisma, directory structure, and the base manifest template to produce a current snapshot. Dev-only.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "read_codebase_manifest",
+    "description": "Read the codebase manifest (SBOM) for a specific version. Returns the structured JSON with modules, capabilities, dependencies, and statistics. Works in both dev and production.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "read_source_at_version",
+    "description": "Read a file from the codebase at a specific version tag. Uses git history — works in production without source code. Default version: DEPLOYED_VERSION or HEAD.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_source_at_version",
+    "description": "Search the codebase at a specific version for a text pattern. Uses git grep — works in production without source code.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "list_source_directory",
+    "description": "List directory contents at a specific version. Uses git ls-tree — works in production without source code.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "compare_versions",
+    "description": "Show what changed between two versions — files modified, commit log. Uses git diff.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "propose_file_change",
+    "description": "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": [
+      "build"
+    ]
+  },
+  {
+    "name": "propose_improvement",
+    "description": "",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "add_provider",
+    "description": "Add a new AI provider to the platform. Creates an unconfigured entry that can then be set up.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "update_provider_category",
+    "description": "Change the category of an existing AI provider (e.g. from 'direct' to 'local').",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "analyze_brand_document",
+    "description": "Analyze an uploaded brand guidelines document (PDF or image) and extract brand assets: logo, colors, and fonts",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "query_employees",
+    "description": "Search and list employee profiles. Use this to find employees by name, email, department, or status. Returns a summary list with employee IDs, names, and departments. Use before create_employee to check if someone already exists.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "list_departments",
+    "description": "List all active departments with their IDs and names. Call this before create_employee to find valid department IDs or to present the user with choices.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "list_positions",
+    "description": "List all active positions with their IDs and titles. Call this before create_employee to find valid position IDs or to present the user with choices.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "create_employee",
+    "description": "Create a new employee record. Department and position can be supplied as an ID or a name/title — the system resolves names automatically. Call list_departments and list_positions first if you need to show the user their options.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "transition_employee_status",
+    "description": "Move an employee through lifecycle stages (e.g. offer → onboarding, onboarding → active, active → offboarding).",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "propose_leave_policy",
+    "description": "Suggest leave policies for an employee based on their location/country. Creates default leave policy records.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "submit_feedback",
+    "description": "Log a feedback note for an employee (praise, constructive, or observation).",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_knowledge",
+    "description": "Search the platform knowledge base for relevant backlog items, epics, improvement proposals, and specs. Uses semantic similarity, not keyword matching.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_knowledge_base",
+    "description": "Search organizational knowledge articles (policies, processes, decisions, runbooks, reference material). Returns articles ranked by semantic relevance. Use this when the user asks about how things work, what the policy is, or needs procedural guidance.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "create_knowledge_article",
+    "description": "Draft a new knowledge article. The article is created in 'draft' status and must be published separately. Use when the user asks to document a process, record a decision, or create a runbook.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "flag_stale_knowledge",
+    "description": "Check for knowledge articles that haven't been reviewed within their review interval. Returns articles needing attention.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "run_endpoint_tests",
+    "description": "Run the agent test harness against one or all endpoints. Tests capability probes (instruction compliance, tool calling, output format) and task scenarios. Results feed into endpoint performance scores and update ModelProfile with evidence.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "search_integrations",
+    "description": "Search the MCP integrations catalog for services relevant to a feature or business need. Use when the user asks what they can connect, or when researching integrations for a new feature.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "prefill_onboarding_wizard",
+    "description": "Pre-fill the regulation onboarding wizard with AI-drafted data. Stores a draft and returns the wizard URL for human review.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "evaluate_tool",
+    "description": "Initiate a tool evaluation pipeline for an external tool, MCP server, or dependency. Creates a ToolEvaluation record for multi-agent security, architecture, compliance, and integration review.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "create_ea_element",
+    "description": "Create a new element in the ontology graph. Use when a user describes a new architectural entity (product, component, actor, service, etc). Defaults to refinementLevel=conceptual.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "create_ea_relationship",
+    "description": "Connect two ontology graph elements with a typed relationship. Validates against EaRelationshipRule before creating.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "classify_ea_element",
+    "description": "Advance an element's IT4IT value stream stage and/or refinement level. Call after the user confirms what stage their architecture work is in.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "query_ontology_graph",
+    "description": "Query ontology graph elements with filters. Use before creating elements to avoid duplicates. Returns element IDs, names, types, and refinement levels.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "run_traversal_pattern",
+    "description": "Run a named bounded analysis pattern (e.g. blast_radius, governance_audit, ma_separation) from one or more starting elements. Returns traversal paths and summary.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "import_archimate",
+    "description": "Import a .archimate XML file from the Archi tool into the ontology graph. All elements are created as draft/conceptual. Max file size: 1 MB base64.",
+    "sideEffect": true,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  },
+  {
+    "name": "export_archimate",
+    "description": "Export elements scoped to a portfolio, digital product, or view as a .archimate XML file. Extension types are mapped to standard ArchiMate types with dpf: properties for round-trip fidelity.",
+    "sideEffect": false,
+    "requiresExternalAccess": false,
+    "buildPhases": null
+  }
+]

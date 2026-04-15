@@ -243,7 +243,7 @@ describe("GET /api/v1/agent/proposals", () => {
         actionType: "create_backlog_item",
         parameters: { title: "New item" },
         status: "proposed",
-        createdAt: new Date("2026-03-19T10:00:00Z"),
+        proposedAt: new Date("2026-03-19T10:00:00Z"),
         message: {
           id: "msg-1",
           role: "assistant",

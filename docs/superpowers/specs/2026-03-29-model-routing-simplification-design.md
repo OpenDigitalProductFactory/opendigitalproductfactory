@@ -335,6 +335,66 @@ These items are technical debt to address in a follow-up:
 
 ---
 
+## Section 6: Routing Pipeline Stages
+
+The routing pipeline (`pipeline-v2.ts`) selects an endpoint for each request by running the candidate list through a sequence of staged filters and a final ranker. This section documents the full stage sequence as implemented, including the capability floor added by EP-AGENT-CAP-002.
+
+```
+Routing pipeline — endpoint selection for a given RequestContract
+  ↓
+Stage 0: Candidate enumeration
+  All EndpointManifest records with status "active" or "degraded"
+  ↓
+Stage 1: Hard filters — getExclusionReasonV2() per endpoint
+  Any endpoint that fails a hard filter is excluded from further consideration.
+
+  1a. Agent capability floor (EP-AGENT-CAP-002, runs FIRST)
+      Source: AgentModelConfig.minimumCapabilities (runtime default: { toolUse: true })
+      Check: satisfiesMinimumCapabilities(endpoint, contract.minimumCapabilities)
+      Exclude if: any declared capability is not satisfied by the endpoint
+      Error path: NoEligibleEndpointsError with missingCapability + agentId fields
+      Note: This is an AGENT-level predicate — it characterizes what the model must support
+            to serve this particular agent, regardless of what the current task requires.
+
+  1b. Status filter — only active/degraded endpoints pass (existing)
+  1c. Model class filter (existing)
+  1d. Sensitivity clearance (existing)
+  1e. Context window minimum (existing, now also enforced via agentMinimumContextTokens)
+  1f. Task capability requirements — requiresTools, requiresCodeExecution, etc. (existing)
+  ↓
+Stage 2: Preference scoring — rank surviving candidates
+  Cost estimate × quality tier × budget class preference
+  ↓
+Stage 3: Selection + fallback
+  Pick highest-ranked candidate.
+  If zero candidates survive Stage 1: raise NoEligibleEndpointsError
+  If all candidates are degraded: raise DegradedServiceError
+```
+
+### Agent-level vs task-level capability predicates
+
+The capability floor (1a) is an *agent-level* predicate — it characterizes what the model must
+be able to do to serve this particular agent, regardless of what the current task requires.
+The task capability requirements (1f) are *task-level* predicates — they reflect what the
+current message requires. Both are hard filters; the agent floor runs first because it
+eliminates the most endpoints most of the time (all standard coworkers require toolUse).
+
+The capability floor is the primary reason a model is or is not eligible as a coworker —
+this is the fundamental routing decision for agentic workflows.
+
+### Local provider types (EP-AGENT-CAP-002-CLEANUP)
+
+The platform supports two local provider configurations, both using the OpenAI-compatible API:
+
+| Provider key | Runtime | API base URL | Notes |
+| --- | --- | --- | --- |
+| `local` | Docker Model Runner (built into Docker Desktop 4.40+) | `http://model-runner.docker.internal/v1` | Bundled — no separate install |
+| `ollama` | Standalone Ollama installation | `http://localhost:11434` | Legacy — used before Docker Model Runner was available |
+
+Both share the same routing adapter (Ollama-compatible wire format). The `"ollama"` provider key is a legacy misnaming from when Ollama was the only local runtime; EP-AGENT-CAP-002-CLEANUP renames it to `"local"` across the DB, adapter, seed, and UI.
+
+---
+
 ## What Already Exists (No Changes Required)
 
 | Component | Status |

@@ -3,7 +3,7 @@ import { prisma } from "../src/client";
 async function seed() {
   const providers = await prisma.modelProvider.findMany();
   for (const p of providers) {
-    const isLocal = p.category === "local" || p.providerId === "ollama";
+    const isLocal = p.category === "local" || p.providerId === "local" || p.providerId === "ollama";
     await prisma.modelProvider.update({
       where: { providerId: p.providerId },
       data: {
@@ -11,7 +11,7 @@ async function seed() {
         sensitivityClearance: isLocal
           ? ["public", "internal", "confidential", "restricted"]
           : ["public", "internal", "confidential"],
-        capabilityTier: p.providerId === "ollama" ? "analytical" : "deep-thinker",
+        capabilityTier: (p.providerId === "local" || p.providerId === "ollama") ? "analytical" : "deep-thinker",
         costBand: isLocal ? "free" : "medium",
         taskTags: ["reasoning", "summarization", "code-gen"],
       },

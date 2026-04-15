@@ -10,6 +10,16 @@
 | **Replaces** | Text-based tool descriptions in CLI adapter system prompt |
 | **Primary Goal** | Expose all platform tools as a first-class MCP server so any MCP-capable client (Claude CLI, Codex, future agents) can discover and call them natively |
 | **Design Principle** | Architecture over shortcuts — single protocol, single source of truth, no translation layers |
+| **Unified Capability Alignment** | See `2026-04-12-unified-capability-and-integration-lifecycle-design.md` — this spec implements the `cli_mcp_delivery` adapter described in that spec's capability adapter taxonomy. Read the note below before implementing. |
+
+---
+
+> **Reconciliation note (added 2026-04-12):** This spec and the Unified Capability and Integration Lifecycle Design are complementary, not competing. Key boundary:
+>
+> - The DPF MCP server endpoint (`/api/mcp`) defined here is the **`cli_mcp_delivery` capability adapter** — it is how platform tools are *delivered* to CLI clients (Claude CLI, Codex). It does not change the `sourceType` classification of those tools.
+> - Platform tools remain `sourceType: internal` in the capability taxonomy. They are defined and governed by the platform regardless of which delivery mechanism is used.
+> - The `capabilityId` (`platform:toolName` namespace format) is the internal inventory join key used by `PlatformCapability`. The tool `name` from `PLATFORM_TOOLS` is the stable CLI-facing contract. **Do not rename existing tool `name` values** as part of implementing the MCP server — these names are the API contract for CLI clients that cache tool schemas.
+> - The two concepts are orthogonal: the MCP server can be implemented without waiting for Phase 2 capability inventory work, and Phase 2 inventory work does not depend on the MCP server being live.
 
 ---
 
