@@ -783,6 +783,15 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ship"],
   },
+  {
+    name: "create_portal_pr",
+    description: "Create a pull request on the portal's own repository from the current build's diff. Runs pre-PR security gates (security scan, destructive ops, architecture compliance, dependency audit). If all gates pass and the build is fully verified, auto-merges via squash. If any gate fails, creates the PR with findings and requests human review.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "manage_capabilities",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ship"],
+  },
   // ─── Admin Coworker Tools (TAK-ADMIN-001) ──────────────────────────────
   // These tools are available on the /admin route for platform administration.
   // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -3626,6 +3635,231 @@ export async function executeTool(
           destructiveWarnings,
           windowStatus,
           impactReport,
+        },
+      };
+    }
+
+    // ─── Portal PR Creation & Merge ────────────────────────────────────────
+
+    case "create_portal_pr": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: {
+          id: true, title: true, diffPatch: true, buildBranch: true,
+          verificationOut: true, acceptanceMet: true, phase: true,
+          designDoc: true, buildPlan: true,
+          productVersions: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              changePromotions: { take: 1, orderBy: { createdAt: "desc" }, select: { promotionId: true, status: true } },
+            },
+          },
+        },
+      });
+      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
+
+      const diff = (build.diffPatch ?? "") as string;
+      if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
+
+      // Resolve the portal's own repo from git remote
+      let repoOwner: string | null = null;
+      let repoName: string | null = null;
+      try {
+        const { getRemoteUrl } = await import("@/lib/git-utils");
+        const remoteUrl = await getRemoteUrl();
+        if (remoteUrl) {
+          const match = remoteUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+          if (match) { repoOwner = match[1]; repoName = match[2]; }
+        }
+      } catch { /* git may not be available */ }
+
+      // Fallback to upstream URL if no local git
+      if (!repoOwner) {
+        const devConfig = await prisma.platformDevConfig.findUnique({
+          where: { id: "singleton" },
+          select: { upstreamRemoteUrl: true },
+        });
+        const url = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
+        const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+        if (match) { repoOwner = match[1]; repoName = match[2]; }
+      }
+
+      if (!repoOwner || !repoName) {
+        return { success: false, error: "Cannot determine repository.", message: "No git remote or upstream URL configured." };
+      }
+
+      // Resolve token
+      const { resolveHiveToken, getPlatformIdentity, generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
+      const token = await resolveHiveToken();
+      if (!token) {
+        return { success: false, error: "No GitHub token available.", message: "Configure HIVE_CONTRIBUTION_TOKEN or a git credential to create PRs." };
+      }
+
+      // Run pre-PR gates
+      const { runPrePRGates, formatGateReport } = await import("@/lib/integrate/pre-pr-gates");
+      const gateResult = runPrePRGates(diff);
+
+      // If gates block, return the report without creating a PR
+      if (!gateResult.canProceed) {
+        logBuildActivity(buildId, "create_portal_pr", `BLOCKED: ${gateResult.summary}`);
+        return {
+          success: false,
+          error: "Pre-PR gates failed.",
+          message: `The pre-PR security gates found blocking issues. Fix these before creating a PR.\n\n${formatGateReport(gateResult)}`,
+          data: { gates: gateResult },
+        };
+      }
+
+      // Build the PR
+      const platformId = await getPlatformIdentity();
+      const branchName = generatePrivateBranchName(platformId.clientId, build.title);
+
+      const devConfigForDco = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: { dcoAcceptedAt: true },
+      });
+
+      const commitMessage = generateAnonymousCommitMessage({
+        title: build.title,
+        buildId,
+        productId: null,
+        platformIdentity: platformId,
+        dcoAcceptedAt: devConfigForDco?.dcoAcceptedAt ?? undefined,
+      });
+
+      // Build PR body with gate report and build evidence
+      const verification = build.verificationOut as Record<string, unknown> | null;
+      const typecheckPassed = verification?.typecheckPassed === true;
+      const testsPassed = typeof verification?.testsPassed === "number" ? verification.testsPassed : 0;
+      const testsFailed = typeof verification?.testsFailed === "number" ? verification.testsFailed : 0;
+
+      const acceptance = build.acceptanceMet as Array<{ criterion: string; met: boolean }> | null;
+      const acMet = acceptance?.filter((a) => a.met).length ?? 0;
+      const acTotal = acceptance?.length ?? 0;
+
+      const prBody = [
+        `## ${build.title}`,
+        "",
+        `Build: \`${buildId}\` | Phase: \`${build.phase}\``,
+        "",
+        "### Verification",
+        `- TypeCheck: ${typecheckPassed ? "PASSED" : "FAILED"}`,
+        `- Tests: ${testsPassed} passed, ${testsFailed} failed`,
+        `- Acceptance: ${acMet}/${acTotal} criteria met`,
+        "",
+        formatGateReport(gateResult),
+        "",
+        "---",
+        `License: Apache-2.0 | ${platformId.dcoSignoff}`,
+      ].join("\n");
+
+      const prTitle = `feat(${buildId}): ${build.title}`;
+      const labels = ["build-studio", "automated"];
+      if (gateResult.requiresHumanReview) labels.push("needs-review");
+      if (!typecheckPassed || testsFailed > 0) labels.push("verification-issues");
+
+      const { createBranchAndPR, mergePR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
+
+      const prResult = await createBranchAndPR({
+        owner: repoOwner,
+        repo: repoName,
+        branchName,
+        commitMessage,
+        diff,
+        prTitle,
+        prBody,
+        labels,
+        token,
+      });
+
+      if (!prResult.prUrl || !prResult.prNumber) {
+        logBuildActivity(buildId, "create_portal_pr", `Branch created (${branchName}) but PR creation failed.`);
+        return {
+          success: false,
+          error: "PR creation failed.",
+          message: `Branch \`${branchName}\` was created with the commit, but the pull request could not be opened. Check GitHub permissions.`,
+          data: { branchName, commitSha: prResult.commitSha },
+        };
+      }
+
+      // Auto-merge decision: all gates pass + build fully verified
+      const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
+      let merged = false;
+
+      if (!gateResult.requiresHumanReview && fullyVerified) {
+        // Auto-merge via squash
+        const mergeResult = await mergePR({
+          owner: repoOwner,
+          repo: repoName,
+          prNumber: prResult.prNumber,
+          commitTitle: `${prTitle} (#${prResult.prNumber})`,
+          mergeMethod: "squash",
+          token,
+        });
+        merged = mergeResult.merged;
+
+        if (merged) {
+          // Update lifecycle: FeatureBuild → complete, ChangePromotion → deployed
+          await prisma.featureBuild.update({
+            where: { buildId },
+            data: { phase: "complete" },
+          });
+
+          const promotion = build.productVersions[0]?.changePromotions[0];
+          if (promotion) {
+            await prisma.changePromotion.update({
+              where: { promotionId: promotion.promotionId },
+              data: { status: "deployed", deployedAt: new Date(), deploymentLog: `Auto-merged PR #${prResult.prNumber}` },
+            });
+          }
+
+          logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} auto-merged. Build complete.`);
+        } else {
+          // Merge failed — post comment explaining why
+          await commentOnPR({
+            owner: repoOwner, repo: repoName, prNumber: prResult.prNumber,
+            body: `Auto-merge failed. This PR requires manual review and merge.\n\n${formatGateReport(gateResult)}`,
+            token,
+          }).catch(() => {});
+
+          logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} created but auto-merge failed.`);
+        }
+      } else {
+        // Needs human review — post gate report as comment
+        const reasons: string[] = [];
+        if (gateResult.requiresHumanReview) reasons.push("security gate warnings");
+        if (!typecheckPassed) reasons.push("TypeCheck failed");
+        if (testsFailed > 0) reasons.push(`${testsFailed} test(s) failed`);
+        if (acMet < acTotal) reasons.push(`${acTotal - acMet} acceptance criteria not met`);
+
+        await commentOnPR({
+          owner: repoOwner, repo: repoName, prNumber: prResult.prNumber,
+          body: `This PR requires human review: ${reasons.join(", ")}.\n\n${formatGateReport(gateResult)}`,
+          token,
+        }).catch(() => {});
+
+        logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} created — needs review: ${reasons.join(", ")}`);
+      }
+
+      const statusMsg = merged
+        ? `PR #${prResult.prNumber} created and auto-merged. Build is complete.`
+        : `PR #${prResult.prNumber} created and awaiting review. ${gateResult.summary}`;
+
+      return {
+        success: true,
+        message: `${statusMsg}\n\n${prResult.prUrl}`,
+        data: {
+          prUrl: prResult.prUrl,
+          prNumber: prResult.prNumber,
+          branchName,
+          commitSha: prResult.commitSha,
+          merged,
+          gates: gateResult,
         },
       };
     }
