@@ -1,7 +1,9 @@
 // apps/web/components/build/ReviewPanel.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { formatText } from "@/lib/actions/local-format";
 import type {
   FeatureBuildRow,
   FeatureBrief,
@@ -173,6 +175,9 @@ function DesignDocSection({
   doc: BuildDesignDoc | null;
   review: FeatureBuildRow["designReview"];
 }) {
+  const [formatted, setFormatted] = useState<Record<string, string>>({});
+  const [isFormatting, startFormatting] = useTransition();
+
   const reviewBadge = review
     ? review.decision === "pass" ? "Approved" : "Failed"
     : doc ? "Not reviewed" : "Missing";
@@ -182,15 +187,44 @@ function DesignDocSection({
     ? "var(--dpf-error)"
     : "var(--dpf-muted)";
 
+  function handleFormat() {
+    if (!doc) return;
+    startFormatting(async () => {
+      const fields = [
+        { key: "proposedApproach", value: doc.proposedApproach },
+        { key: "dataModel", value: doc.dataModel },
+        { key: "existingCodeAudit", value: doc.existingCodeAudit ?? doc.existingFunctionalityAudit },
+        { key: "reusePlan", value: doc.reusePlan },
+      ];
+      const results: Record<string, string> = {};
+      for (const f of fields) {
+        if (f.value && f.value.length > 100) {
+          results[f.key] = await formatText(f.value, doc.problemStatement);
+        }
+      }
+      setFormatted(results);
+    });
+  }
+
   return (
     <Section title="Design Document" badge={reviewBadge} badgeColor={reviewColor} hidden={!doc}>
       {doc && (
         <div className="space-y-2 text-sm">
+          {Object.keys(formatted).length === 0 && (
+            <button
+              type="button"
+              onClick={handleFormat}
+              disabled={isFormatting}
+              className="text-[10px] text-[var(--dpf-accent)] hover:underline cursor-pointer disabled:opacity-50"
+            >
+              {isFormatting ? "Formatting with local AI..." : "Format for readability"}
+            </button>
+          )}
           <Field label="Problem Statement" value={doc.problemStatement} />
-          <Field label="Proposed Approach" value={doc.proposedApproach} />
-          {doc.dataModel && <Field label="Data Model" value={doc.dataModel} />}
-          <Field label="Existing Code Audit" value={doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? ""} />
-          <Field label="Reuse Plan" value={doc.reusePlan} />
+          <Field label="Proposed Approach" value={formatted.proposedApproach ?? doc.proposedApproach} />
+          {doc.dataModel && <Field label="Data Model" value={formatted.dataModel ?? doc.dataModel} />}
+          <Field label="Existing Code Audit" value={formatted.existingCodeAudit ?? doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? ""} />
+          <Field label="Reuse Plan" value={formatted.reusePlan ?? doc.reusePlan} />
           {doc.acceptanceCriteria.length > 0 && (
             <div>
               <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
