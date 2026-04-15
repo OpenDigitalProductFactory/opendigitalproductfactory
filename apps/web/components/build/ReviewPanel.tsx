@@ -33,6 +33,7 @@ export function ReviewPanel({ build }: Props) {
       <VerificationSection verification={build.verificationOut} />
       <AcceptanceSection criteria={build.acceptanceMet} />
       <CodeChangesSection diffSummary={build.diffSummary} diffPatch={build.diffPatch} />
+      <ManualTestSteps criteria={build.acceptanceMet} title={build.title} />
       <UxTestsSection results={build.uxTestResults} />
     </div>
   );
@@ -404,38 +405,85 @@ function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
 
 /* ── Verification ────────────────────────────────────────────────────────── */
 
+function parseVerificationErrors(output: string | undefined | null): string[] {
+  if (!output) return [];
+  const errors: string[] = [];
+  // TypeScript errors: src/file.ts(line,col): error TS1234: message
+  for (const match of output.matchAll(/([^\s]+\.tsx?)\((\d+),\d+\):\s*error\s+TS\d+:\s*(.+)/g)) {
+    errors.push(`${match[1]}:${match[2]} — ${match[3]}`);
+  }
+  // Next.js / generic errors: Error: message at file
+  if (errors.length === 0) {
+    for (const match of output.matchAll(/(?:Error|error):\s*(.{10,80})/g)) {
+      errors.push(match[1].trim());
+      if (errors.length >= 5) break;
+    }
+  }
+  return errors;
+}
+
 function VerificationSection({ verification }: { verification: VerificationOutput | null }) {
+  const [showRaw, setShowRaw] = useState(false);
   if (!verification) return null;
 
-  const badge = verification.typecheckPassed ? "Passed" : "Failed";
-  const badgeColor = verification.typecheckPassed ? "var(--dpf-success)" : "var(--dpf-error)";
+  const allPassed = verification.typecheckPassed && verification.testsFailed === 0;
+  const badge = allPassed ? "Passed" : "Failed";
+  const badgeColor = allPassed ? "var(--dpf-success)" : "var(--dpf-error)";
+
+  const errors = parseVerificationErrors(verification.fullOutput);
+  const totalTests = verification.testsPassed + verification.testsFailed;
 
   return (
-    <Section title="Verification" badge={badge} badgeColor={badgeColor}>
+    <Section title="Verification" badge={badge} badgeColor={badgeColor} defaultOpen={!allPassed}>
       <div className="space-y-2">
-        <div className="flex gap-4 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ background: verification.typecheckPassed ? "var(--dpf-success)" : "var(--dpf-error)" }}
-            />
-            <span className="text-[var(--dpf-text)]">
-              Typecheck: {verification.typecheckPassed ? "pass" : "fail"}
-            </span>
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`rounded border p-2 ${verification.typecheckPassed ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+            <div className="text-[10px] text-[var(--dpf-muted)]">TypeCheck</div>
+            <div className="text-xs font-medium text-[var(--dpf-text)]">
+              {verification.typecheckPassed ? "No errors" : `${errors.length} error${errors.length === 1 ? "" : "s"}`}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[var(--dpf-text)]">
-              Tests: {verification.testsPassed} passed
-              {verification.testsFailed > 0 && (
-                <span className="text-[var(--dpf-warning)]"> / {verification.testsFailed} failed</span>
-              )}
-            </span>
+          <div className={`rounded border p-2 ${verification.testsFailed === 0 ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+            <div className="text-[10px] text-[var(--dpf-muted)]">Tests</div>
+            <div className="text-xs font-medium text-[var(--dpf-text)]">
+              {totalTests > 0
+                ? `${verification.testsPassed} passed${verification.testsFailed > 0 ? `, ${verification.testsFailed} failed` : ""}`
+                : "No tests run"}
+            </div>
           </div>
         </div>
+
+        {/* Parsed error list */}
+        {errors.length > 0 && (
+          <div className="space-y-1">
+            {errors.slice(0, 8).map((err, i) => (
+              <div key={i} className="text-[10px] text-[var(--dpf-error)] bg-red-500/5 rounded px-2 py-1 border border-red-500/20 font-mono">
+                {err}
+              </div>
+            ))}
+            {errors.length > 8 && (
+              <div className="text-[10px] text-[var(--dpf-muted)]">... and {errors.length - 8} more errors</div>
+            )}
+          </div>
+        )}
+
+        {/* Raw output toggle */}
         {verification.fullOutput && (
-          <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
-            {verification.fullOutput}
-          </pre>
+          <>
+            <button
+              type="button"
+              onClick={() => setShowRaw(!showRaw)}
+              className="text-[10px] text-[var(--dpf-accent)] hover:underline cursor-pointer"
+            >
+              {showRaw ? "Hide raw output" : "Show raw output"}
+            </button>
+            {showRaw && (
+              <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
+                {verification.fullOutput}
+              </pre>
+            )}
+          </>
         )}
         {verification.timestamp && (
           <div className="text-[10px] text-[var(--dpf-muted)]">
@@ -486,6 +534,29 @@ function AcceptanceSection({ criteria }: { criteria: AcceptanceCriterion[] | nul
 
 /* ── Code Changes ────────────────────────────────────────────────────────── */
 
+type ParsedFileChange = { path: string; operation: "new" | "modified" | "deleted"; shortPath: string };
+
+function parseFileChanges(diff: string): ParsedFileChange[] {
+  const files: ParsedFileChange[] = [];
+  const segments: Array<{ path: string; start: number }> = [];
+  const headerRe = /^diff --git a\/(.+) b\/(.+)$/gm;
+  let m;
+  while ((m = headerRe.exec(diff)) !== null) {
+    segments.push({ path: m[2], start: m.index });
+  }
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const end = i + 1 < segments.length ? segments[i + 1].start : diff.length;
+    const block = diff.slice(seg.start, end);
+    const operation = block.includes("--- /dev/null") ? "new"
+      : block.includes("+++ /dev/null") ? "deleted"
+      : "modified";
+    const shortPath = seg.path.replace(/^apps\/web\//, "").replace(/^packages\/db\//, "db/");
+    files.push({ path: seg.path, operation, shortPath });
+  }
+  return files;
+}
+
 function CodeChangesSection({
   diffSummary,
   diffPatch,
@@ -496,14 +567,53 @@ function CodeChangesSection({
   const [showPatch, setShowPatch] = useState(false);
   if (!diffSummary && !diffPatch) return null;
 
+  const files = diffPatch ? parseFileChanges(diffPatch) : [];
+  const newCount = files.filter((f) => f.operation === "new").length;
+  const modCount = files.filter((f) => f.operation === "modified").length;
+  const delCount = files.filter((f) => f.operation === "deleted").length;
+  const badge = files.length > 0 ? `${files.length} file${files.length === 1 ? "" : "s"}` : "Available";
+
+  const opColors: Record<string, string> = {
+    new: "var(--dpf-success)",
+    modified: "var(--dpf-accent)",
+    deleted: "var(--dpf-error)",
+  };
+  const opLabels: Record<string, string> = {
+    new: "new",
+    modified: "mod",
+    deleted: "del",
+  };
+
   return (
-    <Section title="Code Changes" badge={diffSummary ? "Available" : undefined} badgeColor="var(--dpf-accent)">
+    <Section title="Code Changes" badge={badge} badgeColor="var(--dpf-accent)">
       <div className="space-y-2">
-        {diffSummary && (
-          <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed">
-            {diffSummary}
-          </pre>
+        {/* Summary counts */}
+        {files.length > 0 && (
+          <div className="flex gap-3 text-[10px] text-[var(--dpf-muted)]">
+            {newCount > 0 && <span style={{ color: opColors.new }}>{newCount} new</span>}
+            {modCount > 0 && <span style={{ color: opColors.modified }}>{modCount} modified</span>}
+            {delCount > 0 && <span style={{ color: opColors.deleted }}>{delCount} deleted</span>}
+          </div>
         )}
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div className="space-y-0.5">
+            {files.map((file, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+                <span
+                  className="text-[9px] font-medium px-1 rounded"
+                  style={{ color: opColors[file.operation], background: `${opColors[file.operation]}15` }}
+                >
+                  {opLabels[file.operation]}
+                </span>
+                <span className="text-[10px] font-mono text-[var(--dpf-text)] truncate">{file.shortPath}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Full diff toggle */}
         {diffPatch && (
           <>
             <button
@@ -511,7 +621,7 @@ function CodeChangesSection({
               onClick={() => setShowPatch(!showPatch)}
               className="text-[10px] text-[var(--dpf-accent)] hover:underline cursor-pointer"
             >
-              {showPatch ? "Hide full diff" : "Show full diff"}
+              {showPatch ? "Hide full diff" : "View full diff"}
             </button>
             {showPatch && (
               <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-96 overflow-auto font-mono">
@@ -520,6 +630,48 @@ function CodeChangesSection({
             )}
           </>
         )}
+      </div>
+    </Section>
+  );
+}
+
+/* ── Manual Test Steps ──────────────────────────────────────────────────── */
+
+function ManualTestSteps({
+  criteria,
+  title,
+}: {
+  criteria: AcceptanceCriterion[] | null;
+  title: string;
+}) {
+  if (!criteria || !Array.isArray(criteria) || criteria.length === 0) return null;
+
+  return (
+    <Section title="Test It Yourself" badge={`${criteria.length} step${criteria.length === 1 ? "" : "s"}`} badgeColor="var(--dpf-accent)">
+      <div className="space-y-0">
+        <p className="text-[10px] text-[var(--dpf-muted)] mb-2">
+          Manual walkthrough for <strong>{title}</strong>:
+        </p>
+        <ol className="space-y-1.5">
+          {criteria.map((c, i) => (
+            <li key={i} className="flex items-start gap-2 px-2 py-1.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+              <span className="text-[10px] font-bold text-[var(--dpf-accent)] mt-0.5 shrink-0 w-4 text-right">
+                {i + 1}.
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-[var(--dpf-text)]">{safeRenderValue(c.criterion)}</div>
+                {c.evidence && (
+                  <div className="text-[10px] text-[var(--dpf-muted)] mt-0.5 italic">
+                    Expected: {safeRenderValue(c.evidence)}
+                  </div>
+                )}
+              </div>
+              <span className="text-[10px] mt-0.5" style={{ color: c.met ? "var(--dpf-success)" : "var(--dpf-muted)" }}>
+                {c.met ? "verified" : "untested"}
+              </span>
+            </li>
+          ))}
+        </ol>
       </div>
     </Section>
   );
