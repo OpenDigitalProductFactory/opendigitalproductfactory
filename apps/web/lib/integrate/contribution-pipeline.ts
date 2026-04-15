@@ -11,6 +11,7 @@
 
 import { prisma } from "@dpf/db";
 import { scanDiffForSecurityIssues, formatScanForDisplay } from "@/lib/security-scan";
+import { redactHostnames } from "@/lib/integrate/identity-privacy";
 import type { ChangeImpactReport } from "@/lib/change-impact";
 import type { SecurityScanResult } from "@/lib/security-scan";
 
@@ -76,7 +77,7 @@ function generatePRBody(input: {
   sections.push("");
   sections.push(`Build: \`${input.buildId}\``);
   if (input.productId) sections.push(`Product: \`${input.productId}\``);
-  sections.push(`Author: ${input.authorName} (AI Coworker)`);
+  sections.push(`Author: ${redactHostnames(input.authorName)} (AI Coworker)`);
   if (input.sourceVertical) sections.push(`Source vertical: \`${input.sourceVertical}\``);
   if (input.reusabilityScope) sections.push(`Reusability: \`${input.reusabilityScope}\``);
   sections.push("");
@@ -140,15 +141,18 @@ function generateCommitMessage(input: {
   authorName: string;
   dcoSignoff?: string;
 }): string {
+  // authorName should be "dpf-agent" (platform identity), not a personal name.
+  // Defensive redaction catches any hostname leaks that slip through.
+  const safeName = redactHostnames(input.authorName);
   const lines = [
     `feat: ${input.title}`,
     "",
     `Build: ${input.buildId}`,
   ];
   if (input.productId) lines.push(`Product: ${input.productId}`);
-  lines.push(`Author: ${input.authorName} (AI Coworker)`);
+  lines.push(`Author: ${safeName} (AI Coworker)`);
   lines.push("Change-Type: ai-proposed");
-  if (input.dcoSignoff) lines.push("", input.dcoSignoff);
+  if (input.dcoSignoff) lines.push("", redactHostnames(input.dcoSignoff));
   return lines.join("\n");
 }
 

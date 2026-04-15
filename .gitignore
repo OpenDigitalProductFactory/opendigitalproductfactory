@@ -12,3 +12,6 @@ packages/db/generated/
 .pnpm-store/
 docker-compose.override.yml
 backups/
+.host-profile.json
+.dpf-instance-id
+.admin-credentials

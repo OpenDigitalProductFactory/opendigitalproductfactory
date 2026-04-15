@@ -395,7 +395,20 @@ if (-not (Is-StepDone "download")) {
             foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
 
             # Create one durable branch for this install's local customization work.
-            $branchName = "install/$env:COMPUTERNAME"
+            # Generate a stable anonymous instance ID (8-char hex from GUID hash).
+            # This replaces $env:COMPUTERNAME which would leak the machine name
+            # to any public git repo this branch is pushed to.
+            $instanceIdFile = "$DPF_DIR\.dpf-instance-id"
+            if (Test-Path $instanceIdFile) {
+                $instanceId = (Get-Content $instanceIdFile).Trim()
+            } else {
+                $guid = [System.Guid]::NewGuid().ToString()
+                $sha = [System.Security.Cryptography.SHA256]::Create()
+                $hashBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($guid))
+                $instanceId = ($hashBytes[0..3] | ForEach-Object { $_.ToString("x2") }) -join ""
+                $instanceId | Set-Content $instanceIdFile
+            }
+            $branchName = "dpf/$instanceId"
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
             git -C "$DPF_DIR" checkout -b $branchName 2>&1 | Out-Null

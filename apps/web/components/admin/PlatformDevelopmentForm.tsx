@@ -38,8 +38,8 @@ type WizardStep = "mode" | "explain" | "github-account" | "create-token" | "past
 
 const DCO_PLAIN = [
   "The features I share are my original work, or based on work I have the right to share.",
-  "I give permission for others to use these features under the project's open-source license.",
-  "I understand that shared features (and my name as contributor) become part of the public project record.",
+  "I give permission for others to use these features under the Apache License 2.0, the same license as the platform itself.",
+  "I understand that shared features become part of the public project. My contributions are anonymous — the platform uses a pseudonymous identity, not my personal information.",
 ];
 
 // ─── Props ──────────────────────────────────────────────────────────────────
