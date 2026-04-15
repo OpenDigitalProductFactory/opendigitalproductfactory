@@ -3506,7 +3506,7 @@ export async function executeTool(
       }
 
       // Extract diff from sandbox
-      const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/sandbox-promotion");
+      const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/integrate/sandbox/sandbox-promotion");
       const extracted = await extractAndCategorizeDiff(build.sandboxId);
       await prisma.featureBuild.update({
         where: { buildId },
