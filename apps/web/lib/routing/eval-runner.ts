@@ -258,6 +258,20 @@ export async function runDimensionEval(
     throw new Error(`Model ${providerId}/${modelId} is ${modelProfile.modelStatus} — cannot run evaluation`);
   }
 
+  // Don't eval providers that use user-delegated OAuth — those tokens are tied to a live
+  // browser session and are not available in background eval workers. Attempting to call
+  // them returns an HTML redirect page (401/403) rather than inference output.
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { authMethod: true, name: true },
+  });
+  if (provider?.authMethod === "oauth2_authorization_code") {
+    throw new Error(
+      `${provider.name ?? providerId} uses user-delegated OAuth — evals require an API key or service credentials. ` +
+      `Connect via a direct API key provider instead.`,
+    );
+  }
+
   const currentEvalCount = modelProfile.evalCount;
   const runId = `DE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
@@ -300,11 +314,17 @@ export async function runDimensionEval(
   const hasDrift = dimensions.some((d) => d.drift.severity !== "none");
   const hasSevereDrift = dimensions.some((d) => d.drift.severity === "severe");
 
+  // Only promote profileSource to "evaluated" when real scores were written.
+  // An all-inconclusive eval preserves the previous scores unchanged — promoting
+  // profileSource would lock the seed out from correcting stale catalog values.
+  const allInconclusive = dimensions.every((d) => d.inconclusive);
+  const hasRealScores = Object.keys(scoreUpdates).length > 0;
+
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
-      profileSource: "evaluated",
+      ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
       profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
       evalCount: { increment: 1 },
       lastEvalAt: new Date(),
@@ -341,7 +361,6 @@ export async function runDimensionEval(
   // If ALL dimensions are inconclusive, the model is unusable — retire it.
   // This covers: model removed (404), deprecated, wrong API type (400),
   // auth restrictions, and any other consistent failure pattern.
-  const allInconclusive = dimensions.every((d) => d.inconclusive);
   if (allInconclusive && firstError) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },

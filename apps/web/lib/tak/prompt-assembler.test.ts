@@ -145,7 +145,7 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("NEVER claim you did something");
     expect(prompt).toContain("approval card IS");
     expect(prompt).toContain("propose_improvement");
-    expect(prompt).toContain("CRITICAL RULES");
+    expect(prompt).toContain("OPERATING PRINCIPLES");
   });
 
   // Test 8: Route data block omitted when null
@@ -202,9 +202,15 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("NEVER describe code you haven't written through a tool");
   });
 
-  // EP-SELF-DEV-002: Tool-first rule (rule 16)
-  it("includes tool-first rule (rule 16)", async () => {
+  // EP-SELF-DEV-002: Evidence-first action rule
+  it("includes evidence-first action rule", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
-    expect(prompt).toContain("your FIRST action must be a tool call");
+    expect(prompt).toContain("start with the most relevant evidence-gathering or action tool");
+  });
+
+  it("includes calm under pressure and anti-reward-hacking guidance", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+    expect(prompt).toContain("Stay calm under pressure");
+    expect(prompt).toContain("Do NOT game tests, acceptance criteria, approval flows, or tooling");
   });
 });

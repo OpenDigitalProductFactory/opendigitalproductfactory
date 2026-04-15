@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@dpf/db";
+import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
 /**
  * Commit a promotion diff to the configured backup repository.
@@ -43,11 +44,9 @@ export async function backupPromotionToGit(input: {
   }
 
   try {
-    const { exec: execCb } = await import("child_process");
-    const { promisify } = await import("util");
-    const { writeFile, unlink } = await import("fs/promises");
-    const { resolve } = await import("path");
-    const exec = promisify(execCb);
+    const exec = lazyUtil().promisify(lazyChildProcess().exec);
+    const { writeFile, unlink } = lazyFsPromises();
+    const { resolve } = lazyPath();
 
     const gitRoot = process.env.PROJECT_ROOT
       ? resolve(process.env.PROJECT_ROOT)

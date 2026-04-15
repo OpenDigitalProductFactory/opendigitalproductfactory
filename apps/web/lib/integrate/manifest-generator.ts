@@ -2,11 +2,12 @@
 // Generates the codebase manifest (SBOM) by merging a human-maintained base
 // template with auto-generated dependency, model, and statistics data.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "fs";
-import { resolve, join } from "path";
+import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 import { isDevInstance } from "@/lib/codebase-tools";
 
-const PROJECT_ROOT = resolve(process.cwd(), "..", "..");
+function getProjectRoot(): string {
+  return lazyPath().resolve(process.cwd(), "..", "..");
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,23 +80,26 @@ export function mergeManifest(
 // ─── File Counting ───────────────────────────────────────────────────────────
 
 function countFilesAndLines(dirPath: string): { files: number; lines: number } {
+  const fs = lazyFs();
+  const path = lazyPath();
   let files = 0;
   let lines = 0;
-  const fullPath = resolve(PROJECT_ROOT, dirPath);
-  if (!existsSync(fullPath)) return { files, lines };
+  const projectRoot = getProjectRoot();
+  const fullPath = path.resolve(projectRoot, dirPath);
+  if (!fs.existsSync(fullPath)) return { files, lines };
 
   function walk(dir: string): void {
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === ".next") continue;
-        const entryPath = join(dir, entry.name);
+        const entryPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           walk(entryPath);
         } else if (entry.isFile()) {
           files++;
           try {
-            const content = readFileSync(entryPath, "utf-8");
+            const content = fs.readFileSync(entryPath, "utf-8");
             lines += content.split("\n").length;
           } catch { /* skip unreadable files */ }
         }
@@ -114,11 +118,15 @@ export async function generateManifest(opts?: {
   gitRef?: string;
   writeFile?: boolean;
 }): Promise<CodebaseManifestData> {
+  const fs = lazyFs();
+  const path = lazyPath();
+  const projectRoot = getProjectRoot();
+
   // Read base manifest
-  const basePath = resolve(PROJECT_ROOT, "codebase-manifest.base.json");
+  const basePath = path.resolve(projectRoot, "codebase-manifest.base.json");
   let base: Record<string, unknown> = {};
-  if (existsSync(basePath)) {
-    try { base = JSON.parse(readFileSync(basePath, "utf-8")); } catch { /* use empty base */ }
+  if (fs.existsSync(basePath)) {
+    try { base = JSON.parse(fs.readFileSync(basePath, "utf-8")); } catch { /* use empty base */ }
   }
 
   // Auto-generate: external dependencies
@@ -126,9 +134,9 @@ export async function generateManifest(opts?: {
   const pkgPaths = ["package.json", "apps/web/package.json"];
   const seen = new Set<string>();
   for (const rel of pkgPaths) {
-    const full = resolve(PROJECT_ROOT, rel);
-    if (existsSync(full)) {
-      const deps = parseDependencies(readFileSync(full, "utf-8"));
+    const full = path.resolve(projectRoot, rel);
+    if (fs.existsSync(full)) {
+      const deps = parseDependencies(fs.readFileSync(full, "utf-8"));
       for (const dep of deps) {
         if (!seen.has(dep.name)) {
           seen.add(dep.name);
@@ -139,10 +147,10 @@ export async function generateManifest(opts?: {
   }
 
   // Auto-generate: model count
-  const schemaPath = resolve(PROJECT_ROOT, "packages/db/prisma/schema.prisma");
+  const schemaPath = path.resolve(projectRoot, "packages/db/prisma/schema.prisma");
   let modelCount = 0;
-  if (existsSync(schemaPath)) {
-    modelCount = countPrismaModels(readFileSync(schemaPath, "utf-8"));
+  if (fs.existsSync(schemaPath)) {
+    modelCount = countPrismaModels(fs.readFileSync(schemaPath, "utf-8"));
   }
 
   // Auto-generate: file/line statistics per module
@@ -173,8 +181,8 @@ export async function generateManifest(opts?: {
 
   // Write file if requested
   if (opts?.writeFile !== false && isDevInstance()) {
-    const outPath = resolve(PROJECT_ROOT, "codebase-manifest.json");
-    writeFileSync(outPath, JSON.stringify(manifest, null, 2), "utf-8");
+    const outPath = path.resolve(projectRoot, "codebase-manifest.json");
+    fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2), "utf-8");
   }
 
   return manifest;

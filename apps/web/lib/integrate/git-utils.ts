@@ -1,16 +1,15 @@
 // apps/web/lib/git-utils.ts
 // Async git operations for the development lifecycle pipeline.
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
-import { resolve } from "path";
+import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
-const exec = promisify(execCb);
+const exec = lazyExec();
 const GIT_TIMEOUT_MS = 10_000;
 
 /** Resolve git root at call time — respects PROJECT_ROOT env var set by Docker. */
 function getGitRoot(): string {
+  const { resolve } = lazyPath();
   return process.env.PROJECT_ROOT
     ? resolve(process.env.PROJECT_ROOT)
     : resolve(process.cwd(), "..", "..");
@@ -389,7 +388,7 @@ export async function pushBranch(
  */
 export async function applyPatch(patch: string): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: "Git apply is only available on dev instances." };
-  const { writeFile, unlink } = await import("fs/promises");
+  const { writeFile, unlink } = lazyFsPromises();
   const tmpFile = `/tmp/dpf-pr-${Date.now()}.patch`;
   try {
     await writeFile(tmpFile, patch, "utf-8");

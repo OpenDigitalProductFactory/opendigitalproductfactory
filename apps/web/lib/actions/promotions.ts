@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 async function requireOpsAccess(): Promise<string> {
   const session = await auth();
@@ -109,10 +110,10 @@ export async function executePromotionAction(
 
   // Try Docker promoter first (production path)
   try {
-    const { execFile: execFileCb } = await import("child_process");
-    const { promisify } = await import("util");
-    const execFileAsync = promisify(execFileCb);
-    const execAsync = promisify((await import("child_process")).exec);
+    const cp = lazyChildProcess();
+    const { promisify } = lazyUtil();
+    const execFileAsync = promisify(cp.execFile);
+    const execAsync = promisify(cp.exec);
 
     await execAsync("docker info", { timeout: 5_000 });
     await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");

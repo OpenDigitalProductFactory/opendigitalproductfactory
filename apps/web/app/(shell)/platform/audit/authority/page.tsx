@@ -3,7 +3,7 @@ import { getAgentGrantSummaries } from "@/lib/agent-grants";
 import { AuthorityMatrixPanel, type BmrRoleRow } from "@/components/platform/AuthorityMatrixPanel";
 import { DelegationChainPanel, type BmrNode } from "@/components/platform/DelegationChainPanel";
 import { EffectivePermissionsPanel, type ProductBmr } from "@/components/platform/EffectivePermissionsPanel";
-import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
+// mcp-tools is imported dynamically inside the component to avoid NFT whole-project tracing
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -94,6 +94,7 @@ export default async function AuditAuthorityPage() {
   const productBmrList: ProductBmr[] = Array.from(bmrByProduct.values());
 
   // Build tools list for effective permissions (serializable subset)
+  const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
   const toolsList = PLATFORM_TOOLS.map((t) => ({
     toolName: t.name,
     description: t.description,

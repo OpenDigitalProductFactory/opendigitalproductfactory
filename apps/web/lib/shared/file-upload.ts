@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { parseFileContent, capParsedContentSize } from "./file-parsers";
+import { lazyFsPromises, lazyPath, lazyCrypto } from "./lazy-node";
 
 const ALLOWED_EXTENSIONS = new Set(["csv", "xls", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf"]);
 const DEFAULT_MAX_SIZE_MB = 10;
@@ -50,13 +51,13 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
   const totalStorage = await prisma.agentAttachment.aggregate({ where: { threadId: { in: userThreads.map((t) => t.id) } }, _sum: { sizeBytes: true } });
   if ((totalStorage._sum.sizeBytes ?? 0) + file.size > MAX_USER_STORAGE_BYTES) return { error: "Storage quota exceeded (200MB per user)", status: 507 };
 
-  const { writeFile, mkdir } = await import(/* turbopackIgnore: true */ "fs/promises");
-  const { join } = await import(/* turbopackIgnore: true */ "path");
+  const fs = lazyFsPromises();
+  const path = lazyPath();
   const storagePath = await getUploadStoragePath();
-  const { randomUUID } = await import(/* turbopackIgnore: true */ "crypto");
+  const { randomUUID } = lazyCrypto();
   const storageKey = `${threadId}/${randomUUID()}.${ext}`;
-  await mkdir(join(storagePath, threadId), { recursive: true });
-  await writeFile(join(storagePath, storageKey), buffer);
+  await fs.mkdir(path.join(storagePath, threadId), { recursive: true });
+  await fs.writeFile(path.join(storagePath, storageKey), buffer);
 
   let parsedContent = await parseFileContent(buffer, file.type, file.name);
   if (parsedContent) parsedContent = capParsedContentSize(parsedContent);
@@ -76,8 +77,8 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
 export async function deleteAttachmentsForThread(threadId: string): Promise<void> {
   const attachments = await prisma.agentAttachment.findMany({ where: { threadId }, select: { storageKey: true } });
   const storagePath = await getUploadStoragePath();
-  const { unlink } = await import(/* turbopackIgnore: true */ "fs/promises");
-  const { join } = await import(/* turbopackIgnore: true */ "path");
-  for (const att of attachments) { await unlink(join(storagePath, att.storageKey)).catch(() => {}); }
+  const fs = lazyFsPromises();
+  const path = lazyPath();
+  for (const att of attachments) { await fs.unlink(path.join(storagePath, att.storageKey)).catch(() => {}); }
   await prisma.agentAttachment.deleteMany({ where: { threadId } });
 }

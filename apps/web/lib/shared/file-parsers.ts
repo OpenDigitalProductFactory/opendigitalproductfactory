@@ -36,7 +36,7 @@ export function parseCsv(buffer: Buffer): ParsedFileContent {
 }
 
 export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
-  const XLSX = await import("xlsx");
+  const XLSX = await import(/* turbopackIgnore: true */ "xlsx");
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
@@ -56,7 +56,7 @@ export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
 }
 
 export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
-  const { PDFParse } = await import("pdf-parse");
+  const { PDFParse } = await import(/* turbopackIgnore: true */ "pdf-parse");
   const pdf = new PDFParse({ data: new Uint8Array(buffer) });
   const textResult = await pdf.getText();
   const info = await pdf.getInfo();
@@ -67,7 +67,7 @@ export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
 }
 
 export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
-  const mammoth = await import("mammoth");
+  const mammoth = await import(/* turbopackIgnore: true */ "mammoth");
   const result = await mammoth.extractRawText({ buffer });
   const htmlResult = await mammoth.convertToHtml({ buffer });
   const headingRe = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;

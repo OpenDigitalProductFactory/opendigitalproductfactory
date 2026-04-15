@@ -1,7 +1,6 @@
 "use server";
 
-import { readFileSync } from "fs";
-import { join } from "path";
+import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -47,7 +46,7 @@ async function requireSession(): Promise<void> {
 
 // ─── Registry sync ────────────────────────────────────────────────────────────
 
-const REGISTRY_PATH = join(process.cwd(), "..", "..", "packages", "db", "data", "providers-registry.json");
+function getRegistryPath() { return lazyPath().join(process.cwd(), "..", "..", "packages", "db", "data", "providers-registry.json"); }
 
 /**
  * Sync provider registry from local JSON file. No auth guard — called from
@@ -60,7 +59,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
   let entries: RegistryProviderEntry[];
 
   try {
-    const raw = readFileSync(REGISTRY_PATH, "utf-8");
+    const raw = lazyFs().readFileSync(getRegistryPath(), "utf-8");
     entries = JSON.parse(raw) as RegistryProviderEntry[];
   } catch (err) {
     const error = err instanceof Error ? err.message : "Unknown error";
@@ -830,11 +829,9 @@ export async function detectMcpServers(): Promise<DetectedMcpService[]> {
 
   // Source 2: Claude plugins (best-effort, file may not exist)
   try {
-    const fs = await import("fs/promises");
-    const path = await import("path");
     const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
-    const pluginsPath = path.join(home, ".claude", "plugins", "installed_plugins.json");
-    const raw = await fs.readFile(pluginsPath, "utf-8");
+    const pluginsPath = lazyPath().join(home, ".claude", "plugins", "installed_plugins.json");
+    const raw = await lazyFsPromises().readFile(pluginsPath, "utf-8");
     const plugins = JSON.parse(raw) as Array<{ package_name?: string; name?: string }>;
 
     for (const plugin of plugins) {

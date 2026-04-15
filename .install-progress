@@ -1,0 +1,14 @@
+{
+    "completedSteps":  [
+                           "windows_check",
+                           "wsl2",
+                           "docker",
+                           "windows_exporter",
+                           "download",
+                           "dev_setup",
+                           "hardware",
+                           "started",
+                           "model",
+                           "autostart"
+                       ]
+}
