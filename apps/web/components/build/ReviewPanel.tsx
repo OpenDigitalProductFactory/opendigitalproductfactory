@@ -29,7 +29,7 @@ export function ReviewPanel({ build }: Props) {
       <BriefSection brief={build.brief} />
       <DesignDocSection doc={build.designDoc} review={build.designReview} />
       <BuildPlanSection plan={build.buildPlan} review={build.planReview} />
-      <TaskResultsSection results={build.taskResults} />
+      <TaskResultsSection results={Array.isArray(build.taskResults) ? build.taskResults : Array.isArray((build.taskResults as any)?.tasks) ? (build.taskResults as any).tasks : null} />
       <VerificationSection verification={build.verificationOut} />
       <AcceptanceSection criteria={build.acceptanceMet} />
       <CodeChangesSection diffSummary={build.diffSummary} diffPatch={build.diffPatch} />
@@ -96,7 +96,7 @@ function EvidenceBar({ build }: { build: FeatureBuildRow }) {
   const items = [
     { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" },
     { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" },
-    { label: "Build", ok: (build.taskResults?.length ?? 0) > 0 },
+    { label: "Build", ok: Array.isArray(build.taskResults) ? build.taskResults.length > 0 : Array.isArray((build.taskResults as any)?.tasks) && (build.taskResults as any).tasks.length > 0 },
     { label: "Verify", ok: build.verificationOut?.typecheckPassed === true },
     {
       label: "AC",
