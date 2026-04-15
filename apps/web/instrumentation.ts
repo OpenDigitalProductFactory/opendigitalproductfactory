@@ -10,8 +10,43 @@ export async function register() {
       console.error("[instrumentation] Failed to register discovery jobs:", err),
     );
 
+    // ── First-boot auto-provisioning ───────────────────────────────────────
+    // Runs 15s after startup. Detects active providers with zero model
+    // profiles (the exact state after a fresh install where the seed +
+    // post-init SQL activated providers but no discovery has run yet).
+    // This eliminates the need to manually click "Update Providers" or
+    // "Run Eval" — the platform is ready to route immediately.
+    setTimeout(async () => {
+      try {
+        const { prisma } = await import("@dpf/db");
+        const activeProviders = await prisma.modelProvider.findMany({
+          where: { status: { in: ["active", "degraded"] } },
+          select: { providerId: true },
+        });
+
+        for (const { providerId } of activeProviders) {
+          const profileCount = await prisma.modelProfile.count({
+            where: { providerId },
+          });
+          if (profileCount === 0) {
+            console.log(`[first-boot] Provider "${providerId}" is active but has 0 model profiles — running auto-discovery...`);
+            const { autoDiscoverAndProfile } = await import(
+              "@/lib/inference/ai-provider-internals"
+            );
+            const result = await autoDiscoverAndProfile(providerId);
+            console.log(`[first-boot] ${providerId}: discovered=${result.discovered}, profiled=${result.profiled}${result.error ? ` (${result.error})` : ""}`);
+          }
+        }
+      } catch (err) {
+        console.warn("[first-boot] Auto-provisioning failed (non-fatal):", err);
+      }
+    }, 15_000);
+
+    // ── Periodic revalidation ──────────────────────────────────────────────
     // EP-MODEL-CAP-001-D: Startup revalidation — runs 90–120s after startup.
     // Jitter avoids thundering-herd when multiple replicas start simultaneously.
+    // This handles ongoing model status changes (new models, deprecated models)
+    // for providers that already have profiles.
     const STARTUP_DELAY_MS = 90_000 + Math.floor(Math.random() * 30_000);
     const { Pool } = await import("pg");
     const pgPool = new Pool({ connectionString: process.env.DATABASE_URL });

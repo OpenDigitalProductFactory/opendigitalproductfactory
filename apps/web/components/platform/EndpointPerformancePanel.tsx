@@ -139,6 +139,9 @@ export default function EndpointPerformancePanel({
             {isPending ? "Running..." : "Run Full Tests"}
           </button>
         </div>
+        <div className="text-[10px] text-[var(--dpf-muted)] mt-1">
+          Optional diagnostics. The platform automatically tests providers on startup and when they are configured.
+        </div>
       </div>
 
       {/* Tabs */}
