@@ -254,12 +254,17 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
     setEvalMessage(null);
     startTransition(async () => {
       try {
-        const result = await triggerDimensionEval(endpointId, model.modelId) as {
-          dimensions: Array<{ inconclusive: boolean; newScore: number }>;
-          hasDrift: boolean;
-          hasSevereDrift: boolean;
-          firstError?: string | null;
-        };
+        const result = await triggerDimensionEval(endpointId, model.modelId) as
+          | { queued: boolean; message: string }
+          | { dimensions: Array<{ inconclusive: boolean; newScore: number }>; hasDrift: boolean; hasSevereDrift: boolean; firstError?: string | null };
+
+        if ("queued" in result) {
+          // Background job queued — show message and refresh later
+          setEvalMessage(result.message);
+          setTimeout(() => router.refresh(), 5000);
+          return;
+        }
+
         const updated = result.dimensions.filter((d) => !d.inconclusive).length;
         const total = result.dimensions.length;
         if (updated === 0) {
