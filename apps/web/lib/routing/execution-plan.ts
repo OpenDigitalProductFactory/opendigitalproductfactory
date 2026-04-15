@@ -64,13 +64,12 @@ export function buildPlanFromRecipe(
       ? (recipe.responsePolicy as RoutedExecutionPlan["responsePolicy"])
       : {};
 
-  // CLI adapter cannot execute MCP tools — only use it for tool-free requests.
-  // When tools are present (agentic loop), fall through to the chat adapter
-  // which invokes the Anthropic Messages API with tool definitions.
-  const hasTools = toolPolicy.toolChoice != null;
+  // anthropic-sub uses OAuth tokens which only work with Claude CLI, not the
+  // direct Messages API. Always route through CLI adapter for this provider.
+  // MCP tool execution happens via the agentic loop, not the adapter itself.
   const executionAdapter = usesResponsesApi(recipe.providerId)
     ? "responses"
-    : (usesCliAdapter(recipe.providerId) && !hasTools)
+    : usesCliAdapter(recipe.providerId)
       ? "claude-cli"
       : (recipe.executionAdapter ?? "chat");
 
@@ -120,11 +119,10 @@ export function buildDefaultPlan(
     stream: contract.requiresStreaming,
   };
 
-  // EP-INF-009c: Select adapter based on required model class.
-  // CLI adapter cannot execute MCP tools — skip it when tools are required.
+  // EP-INF-009c: Select adapter based on required model class
   const adapterType = usesResponsesApi(endpoint.providerId)
     ? "responses"
-    : (usesCliAdapter(endpoint.providerId) && !contract.requiresTools)
+    : usesCliAdapter(endpoint.providerId)
       ? "claude-cli"
       : contract.requiredModelClass
         ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
