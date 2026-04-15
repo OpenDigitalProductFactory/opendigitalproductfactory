@@ -1035,6 +1035,34 @@ async function seedClientIdentity(): Promise<void> {
 }
 
 /**
+ * Seed the hive-contribution credential entry.
+ *
+ * If HIVE_CONTRIBUTION_TOKEN env var is set, stores it as the credential.
+ * Otherwise creates an "unconfigured" placeholder so the admin UI knows
+ * the provider exists. The token enables anonymous direct-branch-push
+ * contributions to the upstream repo (Option B in the contribution model).
+ */
+async function seedHiveContributionCredential(): Promise<void> {
+  const token = process.env.HIVE_CONTRIBUTION_TOKEN;
+
+  await prisma.credentialEntry.upsert({
+    where: { providerId: "hive-contribution" },
+    create: {
+      providerId: "hive-contribution",
+      secretRef: token ?? null,
+      status: token ? "active" : "unconfigured",
+    },
+    // Never overwrite an active credential on re-seed — admin may have
+    // changed it via the portal. Only upgrade unconfigured → active.
+    update: token
+      ? { secretRef: token, status: "active" }
+      : {},
+  });
+
+  console.log(`[seed] Hive contribution credential: ${token ? "active (from env)" : "unconfigured"}`);
+}
+
+/**
  * Discover and profile local LLM models from Docker Model Runner.
  * Runs at seed time so the routing system has endpoints immediately
  * without waiting for a page visit to trigger checkBundledProviders().
@@ -1622,6 +1650,7 @@ async function main(): Promise<void> {
   await seedAgentModelDefaults();
   await seedPlatformConfig();
   await seedClientIdentity();
+  await seedHiveContributionCredential();
   await seedStorefrontArchetypes(prisma);
   await seedWorkQueues();
   await seedPromptTemplates(prisma);

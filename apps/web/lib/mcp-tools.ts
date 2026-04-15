@@ -4321,76 +4321,92 @@ export async function executeTool(
         },
       });
 
-      // Create upstream PR if configured (EP-BUILD-HANDOFF-002 contribution mode)
+      // Create upstream PR via direct branch push (Option B).
+      // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
+      // No customer fork needed — the hive token provides write access.
       let prUrl: string | null = null;
       try {
         const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
         const hasDco = !!devConfig?.dcoAcceptedAt;
 
-        // Resolve GitHub token: env var takes priority, then stored credential from portal setup
-        let githubToken = process.env.GITHUB_TOKEN ?? "";
-        if (!githubToken) {
-          const { getStoredGitHubToken } = await import("@/lib/actions/platform-dev-config");
-          githubToken = (await getStoredGitHubToken()) ?? "";
-        }
+        // Resolve token: hive-contribution > HIVE_CONTRIBUTION_TOKEN > GITHUB_TOKEN > git-backup
+        const { resolveHiveToken, generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
+        const hiveToken = await resolveHiveToken();
 
-        if (hasDco && githubToken) {
-          // Temporarily set GITHUB_TOKEN so downstream code can access it
-          const prevToken = process.env.GITHUB_TOKEN;
-          process.env.GITHUB_TOKEN = githubToken;
+        if (hasDco && hiveToken) {
+          const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+          if (upstreamMatch) {
+            const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
 
-          const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-          // Use platform identity for all public-facing git metadata.
-          // Personal identity (real name, email) never leaves the local DB.
-          const dcoSignoff = `${platformId.dcoSignoff}\nDCO-Accepted: ${devConfig!.dcoAcceptedAt!.toISOString()}`;
-
-          const prResult = await submitBuildAsPR({
-            buildId,
-            title: build.title,
-            diffPatch: diff,
-            productId: null,
-            impactReport: null,
-            authorUserId: userId,
-            authorName: platformId.authorName,
-            forkRemoteUrl: devConfig?.gitRemoteUrl ?? undefined,
-            upstreamRemoteUrl: upstreamUrl,
-            dcoSignoff,
-          });
-
-          if (prResult.prUrl) {
-            prUrl = prResult.prUrl;
-            await prisma.featurePack.update({
-              where: { packId },
-              data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+            const branchName = generatePrivateBranchName(platformId.clientId, build.title);
+            const commitMessage = generateAnonymousCommitMessage({
+              title: build.title,
+              buildId,
+              productId: null,
+              platformIdentity: platformId,
+              dcoAcceptedAt: devConfig!.dcoAcceptedAt!,
             });
 
-            // Run contribution review pipeline — sanitization, parameterization, vertical tagging
-            if (prResult.prNumber) {
-              try {
-                const { runContributionReview } = await import("@/lib/integrate/contribution-review");
-                // Parse owner/repo from the upstream URL
-                const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-                if (upstreamMatch) {
+            const prTitle = `feat: ${build.title}`;
+            const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
+            const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(diff);
+            const prBody = [
+              "## Summary",
+              "",
+              `Build: \`${buildId}\``,
+              `Author: ${platformId.authorName} (AI Coworker)`,
+              "",
+              `**Security Scan:** ${securityScan.passed ? "PASSED" : "FAILED"} (${securityScan.criticalCount} critical, ${securityScan.warningCount} warnings)`,
+              "",
+              `Files: ${manifest.totalFiles} | Migrations: ${manifest.migrations.length} | Schema changes: ${manifest.schemaChanges.length}`,
+              "",
+              "---",
+              `License: Apache-2.0 (inbound=outbound)`,
+              platformId.dcoSignoff,
+            ].join("\n");
+
+            const labels = ["ai-contributed", "build-studio"];
+            if (!securityScan.passed) labels.push("security-review-needed");
+
+            const prResult = await createBranchAndPR({
+              owner: upstreamMatch[1],
+              repo: upstreamMatch[2],
+              branchName,
+              commitMessage,
+              diff,
+              prTitle,
+              prBody,
+              labels,
+              token: hiveToken,
+            });
+
+            if (prResult.prUrl) {
+              prUrl = prResult.prUrl;
+              await prisma.featurePack.update({
+                where: { packId },
+                data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+              });
+
+              // Run contribution review pipeline — sanitization, parameterization, vertical tagging
+              if (prResult.prNumber) {
+                try {
+                  const { runContributionReview } = await import("@/lib/integrate/contribution-review");
                   const reviewResult = await runContributionReview({
                     buildId,
                     prUrl: prResult.prUrl!,
                     prNumber: prResult.prNumber,
                     repoOwner: upstreamMatch[1],
                     repoName: upstreamMatch[2],
-                    token: githubToken,
+                    token: hiveToken,
                     diff,
                   });
                   logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
+                } catch (reviewErr) {
+                  console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
                 }
-              } catch (reviewErr) {
-                console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
               }
             }
           }
-
-          // Restore original env state
-          if (prevToken) process.env.GITHUB_TOKEN = prevToken;
-          else delete process.env.GITHUB_TOKEN;
         }
       } catch (err) {
         console.warn("[contribute_to_hive] upstream PR creation failed:", err);
