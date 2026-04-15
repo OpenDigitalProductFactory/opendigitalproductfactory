@@ -2,10 +2,9 @@
 // Sandbox lifecycle management — creates, manages, and destroys Docker containers
 // for isolated code generation.
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
+import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
 
-const exec = promisify(execCb);
+const exec = lazyExec();
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -97,7 +96,7 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   // so discover our actual container ID from /etc/hostname (Docker sets this).
   let portalContainer = "dpf-portal-1";
   try {
-    const { readFileSync } = await import("fs");
+    const { readFileSync } = lazyFs();
     const hostname = readFileSync("/etc/hostname", "utf-8").trim();
     if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
   } catch { /* fallback to dpf-portal-1 */ }
@@ -144,8 +143,9 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   await exec(
     `docker exec ${containerId} sh -c "cd /workspace && pnpm --filter @dpf/db exec prisma generate 2>&1"`,
     { timeout: 30_000 },
-  ).catch((err) => {
-    console.log(`[sandbox-init] prisma generate failed (non-fatal): ${err.message?.slice(0, 200)}`);
+  ).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`[sandbox-init] prisma generate failed (non-fatal): ${message.slice(0, 200)}`);
   });
 
   // Initialize git repo for diff tracking

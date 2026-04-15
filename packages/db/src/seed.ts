@@ -1117,6 +1117,8 @@ async function seedLocalModels(): Promise<void> {
  * via /v1/models, so we seed them from the registry.
  */
 async function seedCodexModels(): Promise<void> {
+  const codexFamilies = ["gpt-5.4", "gpt-5.3-codex", "codex-mini"];
+
   // Ensure codex provider exists and is active. The CLI adapter (anthropic-sub)
   // cannot execute MCP tools — codex via the responses adapter is the only
   // provider that supports both tool use and OAuth auth for the coworker agentic loop.
@@ -1125,6 +1127,8 @@ async function seedCodexModels(): Promise<void> {
     create: {
       providerId: "codex",
       name: "Codex (OpenAI)",
+      families: codexFamilies,
+      enabledFamilies: codexFamilies,
       status: "active",
       endpointType: "responses",
       supportsToolUse: true,

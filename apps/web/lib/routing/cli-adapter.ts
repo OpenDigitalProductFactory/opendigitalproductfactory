@@ -20,6 +20,7 @@ import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEn
 import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes — matches chat adapter's AbortSignal.timeout
@@ -236,9 +237,9 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const tokenFile = `/tmp/cli-token-${slug}.txt`;
     const runnerScript = `/tmp/cli-run-${slug}.sh`;
 
-    const { exec: execCb, spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
-    const { promisify } = await import(/* turbopackIgnore: true */ "util");
-    const execAsync = promisify(execCb);
+    const cp = lazyChildProcess();
+    const execAsync = lazyUtil().promisify(cp.exec);
+    const spawnCb = cp.spawn;
 
     try {
       // Write prompt and system prompt to sandbox
@@ -309,7 +310,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
         proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
         proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
 
-        proc.on("close", (code) => {
+        proc.on("close", (code: number | null) => {
           clearTimeout(timer);
           if (timedOut) {
             reject(new InferenceError(
@@ -343,7 +344,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
           }
         });
 
-        proc.on("error", (err) => {
+        proc.on("error", (err: Error) => {
           clearTimeout(timer);
           reject(new InferenceError(
             `Claude CLI spawn error: ${err.message}`,

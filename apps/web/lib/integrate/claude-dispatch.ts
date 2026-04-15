@@ -14,6 +14,7 @@
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -193,9 +194,7 @@ export async function dispatchClaudeTask(params: {
   const tokenFile = `/tmp/claude-token-${taskSlug}.txt`;
 
   try {
-    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-    const { promisify } = await import(/* turbopackIgnore: true */ "util");
-    const execAsync = promisify(execCb);
+    const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
 
     // Ensure /workspace is writable by the node user (uid 1000).
     // Files may be root-owned from bootstrap or prior Codex runs.
@@ -257,7 +256,7 @@ export async function dispatchClaudeTask(params: {
     console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
     // Use spawn to stream stderr for progress updates.
-    const { spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
+    const { spawn: spawnCb } = lazyChildProcess();
 
     const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
       const proc = spawnCb("docker", [
@@ -294,7 +293,7 @@ export async function dispatchClaudeTask(params: {
         }
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         clearTimeout(timer);
         const d = Date.now() - startMs;
         if (timedOut) {
@@ -307,7 +306,7 @@ export async function dispatchClaudeTask(params: {
         }
       });
 
-      proc.on("error", (err) => {
+      proc.on("error", (err: Error) => {
         clearTimeout(timer);
         reject(err);
       });
