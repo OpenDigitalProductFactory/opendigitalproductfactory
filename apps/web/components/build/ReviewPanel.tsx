@@ -294,7 +294,11 @@ function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
   if (!results || results.length === 0) return null;
 
-  const passCount = results.filter((r) => r.testResult.passed && r.codeReview.decision === "pass").length;
+  // Handle both old shape (testResult/codeReview) and orchestrator shape (outcome/specialist)
+  const passCount = results.filter((r) => {
+    if (r.testResult && r.codeReview) return r.testResult.passed && r.codeReview.decision === "pass";
+    return (r as any).outcome === "DONE" || (r as any).outcome === "DONE_WITH_CONCERNS";
+  }).length;
   const badge = `${passCount}/${results.length} passed`;
   const allPass = passCount === results.length;
 
@@ -306,89 +310,82 @@ function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
       defaultOpen={true}
     >
       <div className="space-y-1">
-        {results.map((r) => {
-          const taskPass = r.testResult.passed && r.codeReview.decision === "pass";
-          const isExpanded = expandedTask === r.taskIndex;
+        {results.map((r, idx) => {
+          // Support both orchestrator shape (outcome/specialist) and legacy shape (testResult/codeReview)
+          const raw = r as any;
+          const taskPass = raw.testResult && raw.codeReview
+            ? raw.testResult.passed && raw.codeReview.decision === "pass"
+            : raw.outcome === "DONE" || raw.outcome === "DONE_WITH_CONCERNS";
+          const taskIndex = r.taskIndex ?? idx;
+          const isExpanded = expandedTask === taskIndex;
+          const outcomeLabel = raw.outcome ?? (taskPass ? "DONE" : "BLOCKED");
+          const specialistLabel = raw.specialist ?? "unknown";
+          const durationLabel = raw.durationMs ? `${(raw.durationMs / 1000).toFixed(0)}s` : "";
 
           return (
-            <div key={r.taskIndex}>
+            <div key={taskIndex}>
               <button
                 type="button"
-                onClick={() => setExpandedTask(isExpanded ? null : r.taskIndex)}
+                onClick={() => setExpandedTask(isExpanded ? null : taskIndex)}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-[var(--dpf-surface-2)] transition-colors"
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ background: taskPass ? "var(--dpf-success)" : "var(--dpf-error)" }}
                 />
-                <span className="text-xs text-[var(--dpf-muted)] w-5 shrink-0">#{r.taskIndex + 1}</span>
+                <span className="text-xs text-[var(--dpf-muted)] w-5 shrink-0">#{taskIndex + 1}</span>
                 <span className="text-xs text-[var(--dpf-text)] flex-1">{r.title}</span>
                 <span className="text-[10px] text-[var(--dpf-muted)]">
-                  {isExpanded ? "\u25BC" : "\u25B6"}
+                  {durationLabel} {isExpanded ? "\u25BC" : "\u25B6"}
                 </span>
               </button>
 
               {isExpanded && (
                 <div className="ml-9 mt-1 mb-2 space-y-2 animate-fade-in">
-                  {/* Test result */}
-                  <div className="text-xs">
-                    <span className="text-[var(--dpf-muted)]">Test: </span>
-                    <span style={{ color: r.testResult.passed ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                      {r.testResult.passed ? "Passed" : "Failed"}
+                  {/* Orchestrator shape: outcome + specialist */}
+                  <div className="text-xs flex gap-3">
+                    <span>
+                      <span className="text-[var(--dpf-muted)]">Outcome: </span>
+                      <span style={{ color: taskPass ? "var(--dpf-success)" : "var(--dpf-error)" }}>
+                        {outcomeLabel}
+                      </span>
                     </span>
-                    {r.testResult.output && (
-                      <pre className="mt-1 p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-32 overflow-auto">
-                        {r.testResult.output}
-                      </pre>
-                    )}
+                    <span>
+                      <span className="text-[var(--dpf-muted)]">Specialist: </span>
+                      <span className="text-[var(--dpf-text)]">{specialistLabel}</span>
+                    </span>
                   </div>
 
-                  {/* Code review */}
-                  <div className="text-xs">
-                    <span className="text-[var(--dpf-muted)]">Code Review: </span>
-                    <span style={{ color: r.codeReview.decision === "pass" ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                      {r.codeReview.decision === "pass" ? "Approved" : "Issues found"}
-                    </span>
-                    {r.codeReview.summary && (
-                      <p className="mt-0.5 text-[var(--dpf-muted)] text-[10px] leading-relaxed">
-                        {safeRenderValue(r.codeReview.summary)}
-                      </p>
-                    )}
-                    {r.codeReview.issues.length > 0 && (
-                      <div className="mt-1 space-y-0.5">
-                        {r.codeReview.issues.map((issue, j) => (
-                          <div
-                            key={j}
-                            className="flex items-start gap-1.5 text-[10px] px-2 py-1 rounded"
-                            style={{
-                              background: issue.severity === "critical"
-                                ? "color-mix(in srgb, var(--dpf-error) 8%, transparent)"
-                                : "var(--dpf-surface-2)",
-                            }}
-                          >
-                            <span
-                              className="shrink-0 uppercase font-semibold"
-                              style={{
-                                color: issue.severity === "critical"
-                                  ? "var(--dpf-error)"
-                                  : issue.severity === "important"
-                                  ? "var(--dpf-warning)"
-                                  : "var(--dpf-muted)",
-                              }}
-                            >
-                              {issue.severity}
-                            </span>
-                            <span className="text-[var(--dpf-text-secondary)]">
-                              {issue.description}
-                              {issue.location && (
-                                <span className="text-[var(--dpf-muted)] ml-1">({issue.location})</span>
-                              )}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* Legacy shape: test result + code review (if present) */}
+                  {raw.testResult && (
+                    <div className="text-xs">
+                      <span className="text-[var(--dpf-muted)]">Test: </span>
+                      <span style={{ color: raw.testResult.passed ? "var(--dpf-success)" : "var(--dpf-error)" }}>
+                        {raw.testResult.passed ? "Passed" : "Failed"}
+                      </span>
+                      {raw.testResult.output && (
+                        <pre className="mt-1 p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-32 overflow-auto">
+                          {raw.testResult.output}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
+                  {raw.codeReview && (
+                    <div className="text-xs">
+                      <span className="text-[var(--dpf-muted)]">Code Review: </span>
+                      <span style={{ color: raw.codeReview.decision === "pass" ? "var(--dpf-success)" : "var(--dpf-error)" }}>
+                        {raw.codeReview.decision === "pass" ? "Approved" : "Issues found"}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Content/summary from orchestrator */}
+                  {raw.content && (
+                    <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-32 overflow-auto">
+                      {typeof raw.content === "string" ? raw.content.slice(0, 500) : JSON.stringify(raw.content).slice(0, 500)}
+                    </pre>
+                  )}
 
                   {r.commitSha && (
                     <div className="text-[10px] text-[var(--dpf-muted)] font-mono">
