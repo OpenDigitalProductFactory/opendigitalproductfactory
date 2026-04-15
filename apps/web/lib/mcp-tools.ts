@@ -776,10 +776,10 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "deploy_feature",
-    description: "Extract the git diff from sandbox and deploy to the platform. Requires approval.",
+    description: "Extract the git diff from sandbox and deploy to the platform.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "manage_capabilities",
-    executionMode: "proposal",
+    executionMode: "immediate",
     sideEffect: true,
     buildPhases: ["ship"],
   },
