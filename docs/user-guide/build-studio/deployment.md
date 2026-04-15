@@ -55,14 +55,14 @@ If your organisation has configured deployment windows (Admin > Business Profile
 
 ## The Ship Phase Step by Step
 
-When your feature is ready to ship, the AI Coworker runs through these tools in order:
+When your feature is ready to ship, the AI Coworker runs through these steps in order:
 
 1. **Extract and scan** — Pulls the code changes from the sandbox and scans for any risky database operations (like deleting tables). You are warned if any are found.
 2. **Register product** — Creates a digital product record in the inventory and sets up change tracking
 3. **Create backlog epic** — Adds the feature to the operations backlog for visibility
-4. **Schedule promotion** — Creates a promotion record and checks deployment window availability
-5. **Deploy** — Triggers the autonomous deployment pipeline described above
-6. **Contribution assessment** — Evaluates whether the feature could benefit the wider community
+4. **Contribution assessment** — If sharing is enabled, evaluates whether the feature could benefit the wider community. You choose whether to share.
+5. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. If all checks pass and the build is fully verified, the PR auto-merges. If any check fails, the PR is flagged for human review with details of what needs attention.
+6. **Deploy** — Checks the deployment window and triggers the autonomous deployment pipeline described above
 
 ## Database Backups
 
@@ -70,6 +70,40 @@ Every deployment creates a backup before making changes. Backups are stored in t
 
 Backup files are named with the build ID and timestamp for easy identification:
 `pre-promote-FB-XXXXXXXX-YYYYMMDDHHMMSS.dump`
+
+## Pull Requests and Security Gates
+
+Before deploying, the platform creates a pull request on the codebase and runs automated security checks. This provides a code review record and catches issues before they reach production.
+
+### Pre-PR Security Gates
+
+Every PR goes through four automated checks:
+
+1. **Security scan** — Detects SQL injection, XSS, command injection, hardcoded secrets, API token leaks, eval() usage, obfuscated code, unexpected network calls, and data exfiltration patterns
+2. **Destructive operations** — Scans database migrations for DROP TABLE, TRUNCATE, and other destructive operations that require explicit acknowledgment
+3. **Architecture compliance** — Verifies files are in the correct directories and imports follow platform conventions
+4. **Dependency audit** — Flags any new packages added to the project for license and security review
+
+### Auto-Merge
+
+If all four gates pass AND the build has passed TypeCheck, all tests, and all acceptance criteria, the PR is automatically merged using squash merge. The build status updates to "complete."
+
+If any gate finds issues, the PR is created but not merged. The findings are posted as a comment on the PR for human review.
+
+### Configuration
+
+Pull request creation requires a GitHub token. This is configured differently depending on your contribution mode:
+
+- **Anonymous contributions** (selective/contribute_all mode) — The platform uses a pre-provisioned token (`HIVE_CONTRIBUTION_TOKEN` environment variable). No GitHub account is needed from the customer.
+- **Private mode** (fork_only) — If you want PR-based code tracking for your own repository, configure a personal access token in Admin > Platform Development.
+
+To set up the hive contribution token, add it to your `.env` file:
+
+```shell
+HIVE_CONTRIBUTION_TOKEN=ghp_your_fine_grained_pat_here
+```
+
+Then restart the platform: `docker compose restart portal-init portal`
 
 ## Safety Guarantees
 
@@ -80,3 +114,4 @@ Backup files are named with the build ID and timestamp for easy identification:
 - All deployments are time-limited (10 minutes maximum)
 - All deployments are logged with full audit trail
 - Failed deployments roll back automatically — no manual intervention needed
+- All code changes pass automated security gates before merging

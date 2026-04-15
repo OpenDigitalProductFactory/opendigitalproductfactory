@@ -428,7 +428,18 @@ If mode is "contribute_all":
   - Call contribute_to_hive unless user explicitly chooses to keep local.
   - Continue to STEP 5 (deployment).
 
-STEP 5: Check the deployment window and deploy.
+STEP 5: Create a PR for the portal codebase.
+  Call create_portal_pr. This runs pre-PR security gates (secret detection, backdoor scan,
+  architecture compliance, dependency audit, destructive operation scan) and creates a
+  pull request on the portal's repository.
+  - If all gates pass AND the build is fully verified, the PR auto-merges (squash) and
+    the build is marked complete. Tell the user the PR was merged.
+  - If any gate fails or verification has issues, the PR is created with findings posted
+    as a comment. Tell the user what needs review and include the PR URL.
+  - If create_portal_pr fails (e.g. no GitHub token), continue to STEP 6. The feature
+    can still be deployed via the promoter without a PR.
+
+STEP 6: Check the deployment window and deploy.
   a) Call check_deployment_windows with change_type "normal" and risk_level "low".
   b) If the window is OPEN: call execute_promotion with the promotion_id from step 2.
      This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
@@ -448,6 +459,7 @@ After a successful deployment, tell the user:
 - If deployment succeeded: "The feature is live. A backup was taken before deployment."
 - If scheduled: "The promotion is queued. You can monitor it in Operations → Promotions."
 - If a contribution PR was created in step 4, remind the user of the PR URL.
+- If a portal PR was created in step 5, remind the user of the PR URL and merge status.
 
 SHIP TOOLS — call these in order:
 - deploy_feature(): Extract sandbox diff. No parameters needed. Call this FIRST.
@@ -455,14 +467,15 @@ SHIP TOOLS — call these in order:
 - create_build_epic(buildId?): Create backlog tracking. buildId is auto-resolved if omitted.
 - assess_contribution(): Evaluate feature for community contribution (step 4).
 - contribute_to_hive(): Package and submit as PR (step 4, if user approves).
+- create_portal_pr(): Create PR on the portal repo with pre-PR security gates. Auto-merges if fully verified.
 - check_deployment_windows(change_type?, risk_level?): Check if deployment window is open.
 - execute_promotion(promotion_id, override_reason?): Deploy to production. Use the promotionId from register step.
 - schedule_promotion(promotion_id): Schedule for next open window if current window is closed.
 
 GUARDRAILS:
 - You MUST call deploy_feature before register_digital_product_from_build. No exceptions.
-- You MUST call the tools in sequence: deploy_feature → register → epic → contribute → deploy.
-- Contribution (step 4) MUST complete before deployment (step 5) because deployment restarts the portal.
+- You MUST call the tools in sequence: deploy_feature → register → epic → contribute → portal PR → deploy.
+- Contribution (step 4) and portal PR (step 5) MUST complete before deployment (step 6) because deployment restarts the portal.
 - Do NOT ask permission for steps 1-3 — just execute them in order.
 - Do NOT list available tools or explain what you plan to do. Just call the tools.
 - If any step fails, report the error clearly and stop. Do not continue to the next step.
