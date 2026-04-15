@@ -404,7 +404,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                   )}
                 </div>
 
-                {/* Run Eval button */}
+                {/* Run Eval button — optional diagnostic, not required for routing */}
                 {endpointId && !isRetired && (
                   <div style={{ marginTop: 8 }}>
                     <button
@@ -422,6 +422,9 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
                     >
                       {isPending ? "Running..." : "Run Eval"}
                     </button>
+                    <div style={{ fontSize: 9, color: "var(--dpf-muted)", marginTop: 2 }}>
+                      Optional. Re-evaluates this model's quality scores. Routing works without running this.
+                    </div>
                   </div>
                 )}
 

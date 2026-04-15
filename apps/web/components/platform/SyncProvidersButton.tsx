@@ -70,7 +70,7 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
       )}
       {!result && isStale && !isPending && (
         <span style={{ fontSize: 10, color: "var(--dpf-warning)" }}>
-          {lastSyncAt ? "Last updated over a month ago" : "Never synced"}
+          {lastSyncAt ? "Last updated over a month ago" : "Providers are loaded automatically on install. Click to refresh if you've updated the platform."}
         </span>
       )}
     </span>
