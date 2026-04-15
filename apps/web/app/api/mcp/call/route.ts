@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
+// Lazy-load mcp-tools to avoid bundling child_process at module init.
+// Uses a normal dynamic import (NOT turbopackIgnore) so Turbopack resolves @/lib correctly.
+const getMcpTools = () => import("@/lib/mcp-tools");
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -13,6 +15,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing tool name" }, { status: 400 });
   }
 
+  const { PLATFORM_TOOLS, executeTool } = await getMcpTools();
 
   const tool = PLATFORM_TOOLS.find((t) => t.name === body.name);
   if (!tool) {

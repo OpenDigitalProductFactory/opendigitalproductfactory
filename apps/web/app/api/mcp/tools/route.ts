@@ -1,5 +1,4 @@
 import { auth } from "@/lib/auth";
-import { getAvailableTools } from "@/lib/mcp-tools";
 
 export async function POST() {
   const session = await auth();
@@ -7,6 +6,7 @@ export async function POST() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { getAvailableTools } = await import("@/lib/mcp-tools");
   const tools = await getAvailableTools({
     platformRole: session.user.platformRole,
     isSuperuser: session.user.isSuperuser,
