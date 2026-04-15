@@ -64,9 +64,13 @@ export function buildPlanFromRecipe(
       ? (recipe.responsePolicy as RoutedExecutionPlan["responsePolicy"])
       : {};
 
+  // CLI adapter cannot execute MCP tools — only use it for tool-free requests.
+  // When tools are present (agentic loop), fall through to the chat adapter
+  // which invokes the Anthropic Messages API with tool definitions.
+  const hasTools = toolPolicy.toolChoice != null;
   const executionAdapter = usesResponsesApi(recipe.providerId)
     ? "responses"
-    : usesCliAdapter(recipe.providerId)
+    : (usesCliAdapter(recipe.providerId) && !hasTools)
       ? "claude-cli"
       : (recipe.executionAdapter ?? "chat");
 
@@ -116,10 +120,11 @@ export function buildDefaultPlan(
     stream: contract.requiresStreaming,
   };
 
-  // EP-INF-009c: Select adapter based on required model class
+  // EP-INF-009c: Select adapter based on required model class.
+  // CLI adapter cannot execute MCP tools — skip it when tools are required.
   const adapterType = usesResponsesApi(endpoint.providerId)
     ? "responses"
-    : usesCliAdapter(endpoint.providerId)
+    : (usesCliAdapter(endpoint.providerId) && !contract.requiresTools)
       ? "claude-cli"
       : contract.requiredModelClass
         ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
