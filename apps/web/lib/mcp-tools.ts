@@ -4299,10 +4299,12 @@ export async function executeTool(
         portfolioContext: build.portfolioId,
       };
 
-      // DCO attestation
-      const userEmail = build.createdBy?.email ?? "unknown@dpf.local";
-      const userName = userEmail.split("@")[0] ?? "Contributor";
-      const dcoAttestation = `Signed-off-by: ${userName} <${userEmail}>`;
+      // DCO attestation — uses anonymous platform identity, not personal info.
+      // Real user identity stays in the local DB only; public git metadata
+      // shows "dpf-agent <agent-xxx@hive.dpf>" so installs are indistinguishable.
+      const { getPlatformIdentity } = await import("@/lib/integrate/identity-privacy");
+      const platformId = await getPlatformIdentity();
+      const dcoAttestation = platformId.dcoSignoff;
 
       // Create FeaturePack
       const packId = `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -4338,13 +4340,9 @@ export async function executeTool(
           process.env.GITHUB_TOKEN = githubToken;
 
           const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-          const userInfo = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { employeeProfile: { select: { displayName: true, workEmail: true } } },
-          });
-          const displayName = userInfo?.employeeProfile?.displayName ?? userName;
-          const email = userInfo?.employeeProfile?.workEmail ?? userEmail;
-          const dcoSignoff = `Signed-off-by: ${displayName} <${email}>\nDCO-Accepted: ${devConfig!.dcoAcceptedAt!.toISOString()}`;
+          // Use platform identity for all public-facing git metadata.
+          // Personal identity (real name, email) never leaves the local DB.
+          const dcoSignoff = `${platformId.dcoSignoff}\nDCO-Accepted: ${devConfig!.dcoAcceptedAt!.toISOString()}`;
 
           const prResult = await submitBuildAsPR({
             buildId,
@@ -4353,7 +4351,7 @@ export async function executeTool(
             productId: null,
             impactReport: null,
             authorUserId: userId,
-            authorName: displayName,
+            authorName: platformId.authorName,
             forkRemoteUrl: devConfig?.gitRemoteUrl ?? undefined,
             upstreamRemoteUrl: upstreamUrl,
             dcoSignoff,
