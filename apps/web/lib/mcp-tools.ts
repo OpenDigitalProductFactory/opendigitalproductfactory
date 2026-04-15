@@ -2578,7 +2578,12 @@ export async function executeTool(
       // silently falls back to a single agent doing everything — no data architect,
       // no frontend engineer, no QA. Reject malformed plans early.
       if (field === "buildPlan") {
-        const plan = normalizedValue as Record<string, unknown> | null;
+        // Unwrap if agent nested: { buildPlan: { fileStructure, tasks } }
+        let plan = normalizedValue as Record<string, unknown> | null;
+        if (plan && !plan.fileStructure && !plan.tasks && plan.buildPlan && typeof plan.buildPlan === "object") {
+          plan = plan.buildPlan as Record<string, unknown>;
+          normalizedValue = plan;
+        }
         const fileStructure = plan?.fileStructure;
         const tasks = plan?.tasks;
 
