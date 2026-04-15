@@ -2,6 +2,7 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
+import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
   analyzePublicWebsiteBranding,
@@ -2806,8 +2807,8 @@ export async function executeTool(
     case "check_sandbox": {
       const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
         const status = stdout.trim(); // "running", "exited", "paused", etc.
@@ -2831,8 +2832,8 @@ export async function executeTool(
     case "start_sandbox": {
       const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
 
         // First check current status
@@ -3153,8 +3154,8 @@ export async function executeTool(
       // ── Dispatch to specific tool ──
       // ── Direct filesystem tools (via shared Docker volume at /sandbox-workspace) ──
       // These use Node.js fs operations — no docker exec, no shell escaping.
-      const { readFile, writeFile, mkdir, stat } = await import(/* turbopackIgnore: true */ "fs/promises");
-      const { join, dirname } = await import(/* turbopackIgnore: true */ "path");
+      const { readFile, writeFile, mkdir, stat } = lazyFsPromises();
+      const { join, dirname } = lazyPath();
       const SANDBOX_MOUNT = "/sandbox-workspace";
 
       const resolveSandboxPath = (p: string) => {
@@ -3251,8 +3252,8 @@ export async function executeTool(
         const max = Number(params.maxResults) || 20;
         try {
           // Use grep on the mounted volume — runs in portal, not sandbox container
-          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-          const { promisify } = await import(/* turbopackIgnore: true */ "util");
+          const { exec: execCb } = lazyChildProcess();
+          const { promisify } = lazyUtil();
           const execAsync = promisify(execCb);
           const { stdout } = await execAsync(
             `grep -rn --include='${globFilter}' '${pattern.replace(/'/g, "'\\''")}' ${SANDBOX_MOUNT}/apps/ ${SANDBOX_MOUNT}/packages/ 2>/dev/null | head -${max}`,
@@ -3280,8 +3281,8 @@ export async function executeTool(
       if (toolName === "list_sandbox_files") {
         const pattern = String(params.pattern ?? "**/*");
         try {
-          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-          const { promisify } = await import(/* turbopackIgnore: true */ "util");
+          const { exec: execCb } = lazyChildProcess();
+          const { promisify } = lazyUtil();
           const execAsync = promisify(execCb);
           const findPattern = pattern.startsWith("/") ? pattern : `${SANDBOX_MOUNT}/${pattern}`;
           const { stdout } = await execAsync(
@@ -3397,8 +3398,8 @@ export async function executeTool(
 
       const tryDirectRead = async (): Promise<string | null> => {
         try {
-          const { resolve } = await import(/* turbopackIgnore: true */ "path");
-          const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
+          const { resolve } = lazyPath();
+          const { readFile } = lazyFsPromises();
           const root = process.env.PROJECT_ROOT
             ? resolve(process.env.PROJECT_ROOT)
             : resolve(process.cwd(), "..", "..");
@@ -3765,10 +3766,10 @@ export async function executeTool(
       const promoBuildId = promoDetail?.productVersion?.featureBuild?.buildId;
       if (!sandboxId) return { success: false, error: "No sandbox", message: "No sandbox linked to this promotion." };
 
-      const { execFile: execFileCb } = await import(/* turbopackIgnore: true */ "child_process");
-      const { promisify } = await import(/* turbopackIgnore: true */ "util");
+      const { execFile: execFileCb } = lazyChildProcess();
+      const { promisify } = lazyUtil();
       const execFileAsync = promisify(execFileCb);
-      const execAsync = promisify((await import(/* turbopackIgnore: true */ "child_process")).exec);
+      const execAsync = promisify((lazyChildProcess()).exec);
 
       // Start promoter container (array form — no shell injection)
       try {
@@ -4578,7 +4579,7 @@ export async function executeTool(
     }
 
     case "list_project_directory": {
-      const { listProjectDirectory } = await import("@/lib/codebase-tools");
+      const { listProjectDirectory } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const result = await listProjectDirectory(String(params.path ?? "."));
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
@@ -4586,7 +4587,7 @@ export async function executeTool(
     }
 
     case "read_project_file": {
-      const { readProjectFile } = await import("@/lib/codebase-tools");
+      const { readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const opts: { startLine?: number; endLine?: number } = {};
       if (typeof params.startLine === "number") opts.startLine = params.startLine;
       if (typeof params.endLine === "number") opts.endLine = params.endLine;
@@ -4624,13 +4625,13 @@ export async function executeTool(
 
       return {
         success: true,
-        message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now.",
+        message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now. IMPORTANT: Do NOT call saveBuildEvidence with field 'designDoc' — the research system saves the design document and runs the review automatically when research completes. Just wait and tell the user.",
         data: { reusabilityScope: scope, userContext: context },
       };
     }
 
     case "search_project_files": {
-      const { searchProjectFiles } = await import("@/lib/codebase-tools");
+      const { searchProjectFiles } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       let query = String(params.query ?? "");
       const opts: { glob?: string; maxResults?: number } = {};
 
@@ -4719,7 +4720,7 @@ export async function executeTool(
     }
 
     case "generate_codebase_manifest": {
-      const { isDevInstance } = await import("@/lib/codebase-tools");
+      const { isDevInstance } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
 
       const { generateManifest } = await import("@/lib/manifest-generator");
@@ -4768,7 +4769,7 @@ export async function executeTool(
       }
 
       // Fall back to reading the file (dev instances only)
-      const { isDevInstance, readProjectFile } = await import("@/lib/codebase-tools");
+      const { isDevInstance, readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       if (isDevInstance()) {
         const result = await readProjectFile("codebase-manifest.json");
         if ("content" in result) {
@@ -4827,7 +4828,7 @@ export async function executeTool(
     }
 
     case "propose_file_change": {
-      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("@/lib/codebase-tools");
+      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const path = String(params.path ?? "");
       const newContent = String(params.newContent ?? "");
       const description = String(params.description ?? "");
@@ -5697,8 +5698,8 @@ export async function executeTool(
     }
 
     case "apply_platform_update": {
-      const { exec: execCbUpdate } = await import(/* turbopackIgnore: true */ "child_process");
-      const { promisify: promisifyUpdate } = await import(/* turbopackIgnore: true */ "util");
+      const { exec: execCbUpdate } = lazyChildProcess();
+      const { promisify: promisifyUpdate } = lazyUtil();
       const execUpdate = promisifyUpdate(execCbUpdate);
 
       const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
@@ -5716,14 +5717,14 @@ export async function executeTool(
 
       try {
         // Check for in-progress merge from a previous interrupted run
-        const { existsSync } = await import("fs");
-        const { resolve: resolvePath } = await import(/* turbopackIgnore: true */ "path");
+        const { existsSync } = lazyFs();
+        const { resolve: resolvePath } = lazyPath();
         if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
           // Return existing conflict list
           const { stdout: conflicted } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
           const conflicts = [];
           for (const file of conflicted.trim().split("\n").filter(Boolean)) {
-            const { readFileSync } = await import("fs");
+            const { readFileSync } = lazyFs();
             const content = readFileSync(resolvePath(workspace, file), "utf-8");
             const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
             const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
@@ -5765,8 +5766,8 @@ export async function executeTool(
         const { stdout: conflictedFiles } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts).catch(() => ({ stdout: "" }));
         if (conflictedFiles.trim()) {
           const conflicts = [];
-          const { readFileSync } = await import("fs");
-          const { resolve: rp } = await import(/* turbopackIgnore: true */ "path");
+          const { readFileSync } = lazyFs();
+          const { resolve: rp } = lazyPath();
           for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
             const content = readFileSync(rp(workspace, file), "utf-8");
             const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
@@ -5790,8 +5791,8 @@ export async function executeTool(
         await execUpdate(`git commit -m "chore: merge dpf v${pendingVersion}"`, gitOpts);
 
         // Update version sentinel
-        const { writeFileSync } = await import("fs");
-        const { resolve: rp2 } = await import(/* turbopackIgnore: true */ "path");
+        const { writeFileSync } = lazyFs();
+        const { resolve: rp2 } = lazyPath();
         writeFileSync(rp2(workspace, ".dpf-version"), pendingVersion, "utf-8");
 
         // Clear update pending flag
@@ -6135,8 +6136,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
           cwd: process.env.PROJECT_ROOT || "/app",
@@ -6179,8 +6180,8 @@ export async function executeTool(
     case "admin_read_file": {
       const filePath = String(params.path ?? "");
       if (!filePath) return { success: false, error: "path is required.", message: "Provide a file path." };
-      const { resolve, join } = await import(/* turbopackIgnore: true */ "path");
-      const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
+      const { resolve, join } = lazyPath();
+      const { readFile } = lazyFsPromises();
       const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(process.cwd(), "..", "..");
       const resolved = resolve(join(root, filePath));
       if (!resolved.startsWith(root)) {
@@ -6215,8 +6216,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_restart_service", { service }, "success", 2, `Restarting ${service}`);
         const { stdout } = await execAsync(`docker compose restart ${service} 2>&1`, {
@@ -6232,8 +6233,8 @@ export async function executeTool(
 
     case "admin_run_migration": {
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
         const { stdout, stderr } = await execAsync(
@@ -6250,8 +6251,8 @@ export async function executeTool(
 
     case "admin_run_seed": {
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
         const { stdout, stderr } = await execAsync(
@@ -6303,8 +6304,8 @@ export async function executeTool(
       }
 
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
         const { stdout, stderr } = await execAsync(command + " 2>&1", {
