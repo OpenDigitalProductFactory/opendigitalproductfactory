@@ -1117,6 +1117,34 @@ async function seedLocalModels(): Promise<void> {
  * via /v1/models, so we seed them from the registry.
  */
 async function seedCodexModels(): Promise<void> {
+  // Ensure codex provider exists and is active. The CLI adapter (anthropic-sub)
+  // cannot execute MCP tools — codex via the responses adapter is the only
+  // provider that supports both tool use and OAuth auth for the coworker agentic loop.
+  await prisma.modelProvider.upsert({
+    where: { providerId: "codex" },
+    create: {
+      providerId: "codex",
+      name: "Codex (OpenAI)",
+      status: "active",
+      endpointType: "responses",
+      supportsToolUse: true,
+      supportsStreaming: true,
+      supportsStructuredOutput: true,
+    },
+    update: {
+      status: "active",
+      supportsToolUse: true,
+    },
+  });
+
+  // Pin build-specialist to codex/gpt-5.4 so it gets MCP tools.
+  // anthropic-sub uses the CLI adapter which has no tool execution.
+  await prisma.agentModelConfig.upsert({
+    where: { agentId: "build-specialist" },
+    create: { agentId: "build-specialist", pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
+    update: { pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
+  });
+
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
 
@@ -1203,10 +1231,16 @@ async function seedCodexModels(): Promise<void> {
       });
       created++;
     } else if (existing.profileSource === "seed") {
-      // Refresh scores from catalog when profile hasn't been overridden by eval or admin
+      // Refresh scores AND capability flags from catalog when profile hasn't been overridden by eval or admin.
+      // EP-AGENT-CAP-002 fix: capability flags must be refreshed alongside scores,
+      // otherwise a stale supportsToolUse=false survives even after profileSource is reset to 'seed'.
       await prisma.modelProfile.update({
         where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
-        data: scoreFields,
+        data: {
+          ...scoreFields,
+          supportsToolUse: m.modelId !== "codex-mini-latest",
+          capabilities: { toolUse: m.modelId !== "codex-mini-latest", streaming: true, structuredOutput: true } as any,
+        },
       });
       updated++;
     }
@@ -1299,7 +1333,22 @@ async function seedAnthropicSubScope(): Promise<void> {
     },
     update: {},  // preserve existing credentials on re-seed
   });
-  console.log("Seeded anthropic-sub credential scope");
+
+  // anthropic-sub uses the Claude CLI adapter which runs Claude Code in a
+  // sandbox subprocess. The CLI has NO access to MCP tools — tool-based
+  // agentic work (coworker conversations) must route to codex instead.
+  // Mark supportsToolUse=false so the routing pipeline skips this provider
+  // for tool-based requests.
+  await prisma.modelProvider.updateMany({
+    where: { providerId: "anthropic-sub" },
+    data: { supportsToolUse: false },
+  });
+  await prisma.modelProfile.updateMany({
+    where: { providerId: "anthropic-sub" },
+    data: { supportsToolUse: false },
+  });
+
+  console.log("Seeded anthropic-sub credential scope (toolUse=false)");
 }
 
 /**
