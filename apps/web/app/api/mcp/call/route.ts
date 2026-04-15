@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-// mcp-tools is imported dynamically to avoid NFT whole-project tracing (fs/child_process operations)
+import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -13,7 +13,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing tool name" }, { status: 400 });
   }
 
-  const { PLATFORM_TOOLS, executeTool } = await import(/* turbopackIgnore: true */ "../../../../lib/mcp-tools");
 
   const tool = PLATFORM_TOOLS.find((t) => t.name === body.name);
   if (!tool) {
