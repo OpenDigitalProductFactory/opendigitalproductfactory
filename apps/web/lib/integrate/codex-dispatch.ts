@@ -12,6 +12,7 @@
 import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -77,9 +78,7 @@ async function injectCodexAuth(providerId: string): Promise<void> {
     last_refresh: new Date().toISOString(),
   });
 
-  const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-  const { promisify } = await import(/* turbopackIgnore: true */ "util");
-  const execAsync = promisify(execCb);
+  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
 
   // Write auth.json to ~/.codex/ in the sandbox container
   const authB64 = Buffer.from(authJson).toString("base64");
@@ -203,9 +202,9 @@ export async function dispatchCodexTask(params: {
   const startMs = Date.now();
 
   try {
-    const { exec: execCb, spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
-    const { promisify } = await import(/* turbopackIgnore: true */ "util");
-    const execAsync = promisify(execCb);
+    const cp = lazyChildProcess();
+    const execAsync = lazyUtil().promisify(cp.exec);
+    const spawnCb = cp.spawn;
 
     // Write prompt to temp file in sandbox (avoids all shell escaping issues)
     const promptB64 = Buffer.from(taskPrompt).toString("base64");
@@ -254,7 +253,7 @@ export async function dispatchCodexTask(params: {
         }
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         clearTimeout(timer);
         const elapsed = Date.now() - startMs;
         if (timedOut) {
@@ -266,7 +265,7 @@ export async function dispatchCodexTask(params: {
         }
       });
 
-      proc.on("error", (err) => {
+      proc.on("error", (err: Error) => {
         clearTimeout(timer);
         reject(err);
       });

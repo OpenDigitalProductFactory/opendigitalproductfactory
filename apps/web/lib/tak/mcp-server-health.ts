@@ -2,6 +2,7 @@
 // MCP initialize handshake for all transports.
 
 import type { McpConnectionConfig, HealthCheckResult } from "./mcp-server-types";
+import { lazyChildProcess } from "@/lib/shared/lazy-node";
 
 const HTTP_TIMEOUT_MS = 5_000;
 const STDIO_TIMEOUT_MS = 10_000;
@@ -60,7 +61,7 @@ async function checkStdio(command: string, args?: string[], env?: Record<string,
 
   const start = Date.now();
   try {
-    const { spawn } = await import("child_process");
+    const { spawn } = lazyChildProcess();
     return new Promise<HealthCheckResult>((resolve) => {
       const proc = spawn(command, args ?? [], {
         env: { ...process.env, ...env },
@@ -91,12 +92,12 @@ async function checkStdio(command: string, args?: string[], env?: Record<string,
         }
       });
 
-      proc.on("error", (err) => {
+      proc.on("error", (err: Error) => {
         clearTimeout(timeout);
         resolve({ healthy: false, latencyMs: Date.now() - start, error: err.message });
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         clearTimeout(timeout);
         if (code !== 0 && code !== null) {
           resolve({ healthy: false, latencyMs: Date.now() - start, error: `Process exited with code ${code}` });

@@ -12,6 +12,7 @@
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
@@ -53,8 +54,8 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
     last_refresh: new Date().toISOString(),
   });
 
-  const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-  const { promisify } = await import(/* turbopackIgnore: true */ "util");
+  const { exec: execCb } = lazyChildProcess();
+  const { promisify } = lazyUtil();
   const execAsync = promisify(execCb);
 
   const authB64 = Buffer.from(authJson).toString("base64");
@@ -104,8 +105,8 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
 async function ensureClaudeAuth(providerId: string): Promise<{ authEnvFragment: string; bareFlag: string }> {
   const auth = await resolveClaudeAuth(providerId);
 
-  const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-  const { promisify } = await import(/* turbopackIgnore: true */ "util");
+  const { exec: execCb } = lazyChildProcess();
+  const { promisify } = lazyUtil();
   const execAsync = promisify(execCb);
 
   if (auth.mode === "oauth") {
@@ -341,9 +342,7 @@ export async function dispatchIdeateResearch(params: {
   const startMs = Date.now();
 
   try {
-    const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-    const { promisify } = await import(/* turbopackIgnore: true */ "util");
-    const execAsync = promisify(execCb);
+    const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
 
     // Write prompt to temp file
     const promptB64 = Buffer.from(prompt).toString("base64");
@@ -394,7 +393,7 @@ export async function dispatchIdeateResearch(params: {
 
     // Use spawn (not execAsync) so we can stream stderr progress in real-time,
     // matching the pattern in claude-dispatch.ts.
-    const { spawn: spawnCb } = await import(/* turbopackIgnore: true */ "child_process");
+    const { spawn: spawnCb } = lazyChildProcess();
 
     const cmdParts = fullCommand.split(" ");
     const { stdout: spawnStdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
@@ -427,7 +426,7 @@ export async function dispatchIdeateResearch(params: {
         }
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         clearTimeout(timer);
         const d = Date.now() - startMs;
         if (timedOut) {
@@ -453,7 +452,7 @@ export async function dispatchIdeateResearch(params: {
         }
       });
 
-      proc.on("error", (err) => {
+      proc.on("error", (err: Error) => {
         clearTimeout(timer);
         reject(err);
       });
