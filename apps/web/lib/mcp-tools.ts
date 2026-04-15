@@ -3176,7 +3176,9 @@ export async function executeTool(
           const startLine = (offset ?? 1) - 1;
           const endLine = limit ? startLine + limit : allLines.length;
           const slice = allLines.slice(startLine, endLine);
-          const numbered = slice.map((line, i) => `${String(startLine + i + 1).padStart(6)}\t${line}`).join("\n");
+          const numbered = slice
+            .map((line: string, i: number) => `${String(startLine + i + 1).padStart(6)}\t${line}`)
+            .join("\n");
           const rangeMsg = offset || limit ? ` (lines ${startLine + 1}–${startLine + slice.length})` : "";
           return { success: true, message: `File: ${relative}${rangeMsg}`, data: { path: relative, content: numbered } };
         } catch {
@@ -6201,7 +6203,9 @@ export async function executeTool(
         const limit = params.limit ? Number(params.limit) : allLines.length;
         const startLine = offset - 1;
         const slice = allLines.slice(startLine, startLine + limit);
-        const numbered = slice.map((line, i) => `${String(startLine + i + 1).padStart(6)}\t${line}`).join("\n");
+        const numbered = slice
+          .map((line: string, i: number) => `${String(startLine + i + 1).padStart(6)}\t${line}`)
+          .join("\n");
         await logAdminActivity(userId, "admin_read_file", { path: filePath, offset, limit }, "success", 1, `${slice.length} lines`);
         return { success: true, message: `File: ${filePath} (${slice.length} lines)`, data: { path: filePath, content: numbered } };
       } catch {
