@@ -28,24 +28,23 @@ describe("bumpVersion", () => {
 describe("getBuildPhasePrompt", () => {
   it("returns ideate prompt for ideate phase", async () => {
     const prompt = await getBuildPhasePrompt("ideate");
-    expect(prompt).toContain("search_project_files");
-    expect(prompt).toContain("saveBuildEvidence");
-    expect(prompt).toContain('field: "designDoc"');
-    expect(prompt).toContain("value:");
+    expect(prompt).toContain("start_ideate_research");
+    expect(prompt).toContain("suggest_taxonomy_placement");
+    expect(prompt).toContain("create_backlog_item");
   });
   it("returns plan prompt for plan phase", async () => {
     const prompt = await getBuildPhasePrompt("plan");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("testFirst");
-    expect(prompt).toContain("If reviewBuildPlan returns fail");
-    expect(prompt).toContain("Break oversized tasks into smaller 2-5 minute tasks");
+    expect(prompt).toContain("reviewBuildPlan");
+    expect(prompt).toContain("The plan is approved when it passes review");
   });
   it("returns build prompt for build phase", async () => {
     const prompt = await getBuildPhasePrompt("build");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("run_sandbox_tests");
-    expect(prompt).toContain("Do NOT ask for go-ahead during build tasks");
-    expect(prompt).toContain('Do NOT send status-only updates like "next step" or "ready to proceed."');
+    expect(prompt).toContain("Do not pause for routine go-ahead requests during planned build work");
+    expect(prompt).toContain("Never reward-hack");
   });
   it("returns review prompt for review phase", async () => {
     const prompt = await getBuildPhasePrompt("review");
