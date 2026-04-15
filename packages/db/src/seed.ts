@@ -1063,6 +1063,109 @@ async function seedHiveContributionCredential(): Promise<void> {
 }
 
 /**
+ * Seed provider registry from the JSON file.
+ *
+ * This MUST run before seedCodexModels/seedLocalModels/seedChatGPTModels
+ * because those functions look up providers by providerId. On a fresh
+ * install, if providers don't exist yet, those functions silently skip
+ * and the platform starts with no working AI routing.
+ *
+ * Previously this only ran when an admin visited /platform/ai/providers
+ * and clicked "Update Providers" — a manual step that was easy to miss.
+ */
+async function seedProviderRegistry(): Promise<void> {
+  const registryPath = join(__dirname, "..", "data", "providers-registry.json");
+  if (!existsSync(registryPath)) {
+    console.warn("[seed] providers-registry.json not found — skipping provider seed");
+    return;
+  }
+
+  let entries: Array<Record<string, unknown>>;
+  try {
+    entries = JSON.parse(readFileSync(registryPath, "utf-8"));
+  } catch (err) {
+    console.warn("[seed] Failed to parse providers-registry.json:", err);
+    return;
+  }
+
+  let added = 0;
+  let updated = 0;
+
+  for (const entry of entries) {
+    const providerId = entry.providerId as string;
+    if (!providerId) continue;
+
+    const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
+    if (existing) {
+      // Update metadata but preserve admin config (status, endpoint, enabledFamilies)
+      await prisma.modelProvider.update({
+        where: { providerId },
+        data: {
+          name: entry.name as string,
+          families: (entry.families as string[]) ?? [],
+          category: entry.category as string ?? "direct",
+          baseUrl: (entry.baseUrl as string) ?? null,
+          authMethod: existing.authMethod ?? (entry.authMethod as string) ?? "none",
+          supportedAuthMethods: (entry.supportedAuthMethods as string[]) ?? [],
+          authHeader: (entry.authHeader as string) ?? null,
+          costModel: entry.costModel as string ?? "token",
+          ...(entry.inputPricePerMToken !== undefined && { inputPricePerMToken: entry.inputPricePerMToken as number }),
+          ...(entry.outputPricePerMToken !== undefined && { outputPricePerMToken: entry.outputPricePerMToken as number }),
+          ...(entry.computeWatts !== undefined && { computeWatts: entry.computeWatts as number }),
+          ...(entry.electricityRateKwh !== undefined && { electricityRateKwh: entry.electricityRateKwh as number }),
+          docsUrl: (entry.docsUrl as string) ?? null,
+          consoleUrl: (entry.consoleUrl as string) ?? null,
+          ...(entry.billingLabel !== undefined && { billingLabel: entry.billingLabel as string }),
+          ...(entry.costPerformanceNotes !== undefined && { costPerformanceNotes: entry.costPerformanceNotes as string }),
+          ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility as string }),
+          ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
+          ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
+          ...(entry.authorizeUrl !== undefined && { authorizeUrl: (entry.authorizeUrl as string) ?? null }),
+          ...(entry.tokenUrl !== undefined && { tokenUrl: (entry.tokenUrl as string) ?? null }),
+          ...(entry.oauthClientId !== undefined && { oauthClientId: (entry.oauthClientId as string) ?? null }),
+          ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: (entry.oauthRedirectUri as string) ?? null }),
+        },
+      });
+      updated++;
+    } else {
+      await prisma.modelProvider.create({
+        data: {
+          providerId,
+          name: entry.name as string ?? providerId,
+          families: (entry.families as string[]) ?? [],
+          enabledFamilies: [],
+          status: "unconfigured",
+          category: entry.category as string ?? "direct",
+          baseUrl: (entry.baseUrl as string) ?? null,
+          authMethod: entry.authMethod as string ?? "none",
+          supportedAuthMethods: (entry.supportedAuthMethods as string[]) ?? [],
+          authHeader: (entry.authHeader as string) ?? null,
+          costModel: entry.costModel as string ?? "token",
+          inputPricePerMToken: (entry.inputPricePerMToken as number) ?? null,
+          outputPricePerMToken: (entry.outputPricePerMToken as number) ?? null,
+          computeWatts: (entry.computeWatts as number) ?? null,
+          electricityRateKwh: (entry.electricityRateKwh as number) ?? null,
+          docsUrl: (entry.docsUrl as string) ?? null,
+          consoleUrl: (entry.consoleUrl as string) ?? null,
+          billingLabel: (entry.billingLabel as string) ?? null,
+          costPerformanceNotes: (entry.costPerformanceNotes as string) ?? null,
+          catalogVisibility: (entry.catalogVisibility as string) ?? "visible",
+          ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
+          ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
+          authorizeUrl: (entry.authorizeUrl as string) ?? null,
+          tokenUrl: (entry.tokenUrl as string) ?? null,
+          oauthClientId: (entry.oauthClientId as string) ?? null,
+          oauthRedirectUri: (entry.oauthRedirectUri as string) ?? null,
+        },
+      });
+      added++;
+    }
+  }
+
+  console.log(`[seed] Provider registry: ${added} added, ${updated} updated (${entries.length} total)`);
+}
+
+/**
  * Discover and profile local LLM models from Docker Model Runner.
  * Runs at seed time so the routing system has endpoints immediately
  * without waiting for a page visit to trigger checkBundledProviders().
@@ -1642,6 +1745,7 @@ async function main(): Promise<void> {
   await seedMcpServers();
   await seedSandboxPool();
   await seedAnthropicSubScope();
+  await seedProviderRegistry();
   await seedCodexModels();
   await seedChatGPTModels();
   await seedLocalModels();
