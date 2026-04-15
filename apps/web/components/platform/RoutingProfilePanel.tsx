@@ -104,12 +104,16 @@ function ModelCard({ profile, endpointId }: { profile: ModelProfile; endpointId:
     setMessage(null);
     startTransition(async () => {
       try {
-        const result = await triggerDimensionEval(endpointId, profile.modelId) as {
-          dimensions: Array<{ inconclusive: boolean; newScore: number }>;
-          hasDrift: boolean;
-          hasSevereDrift: boolean;
-          firstError?: string | null;
-        };
+        const result = await triggerDimensionEval(endpointId, profile.modelId) as
+          | { queued: boolean; message: string }
+          | { dimensions: Array<{ inconclusive: boolean; newScore: number }>; hasDrift: boolean; hasSevereDrift: boolean; firstError?: string | null };
+
+        if ("queued" in result) {
+          setMessage(result.message);
+          setTimeout(() => router.refresh(), 5000);
+          return;
+        }
+
         const updated = result.dimensions.filter((d) => !d.inconclusive).length;
         const total = result.dimensions.length;
         if (updated === 0) {

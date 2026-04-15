@@ -34,6 +34,7 @@ export const evalBackground = inngest.createFunction(
         where: { jobId: `eval-${modelId}` },
         create: {
           jobId: `eval-${modelId}`,
+          name: `Eval: ${modelId}`,
           schedule: "manual",
           lastRunAt: new Date(),
           lastStatus: "completed",
@@ -81,6 +82,7 @@ export const probeBackground = inngest.createFunction(
         where: { jobId },
         create: {
           jobId,
+          name: probesOnly ? "Endpoint Probes" : "Full Endpoint Tests",
           schedule: "manual",
           lastRunAt: new Date(),
           lastStatus: "completed",
