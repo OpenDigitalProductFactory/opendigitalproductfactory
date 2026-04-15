@@ -867,6 +867,8 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
   profiled: number;
   error?: string;
 }> {
+  let result: { discovered: number; profiled: number; error?: string };
+
   try {
     // 1. Try dynamic discovery (works for all providers including codex/chatgpt)
     const discovery = await discoverModelsInternal(providerId);
@@ -874,31 +876,56 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
     if (discovery.discovered > 0) {
       // Dynamic discovery succeeded — profile the discovered models
       const profiling = await profileModelsInternal(providerId);
-      return {
+      result = {
         discovered: discovery.discovered,
         profiled: profiling.profiled,
         error: profiling.error,
       };
+    } else {
+      // 2. Dynamic discovery returned 0 — fall back to known catalog if available
+      const knownModels = KNOWN_PROVIDER_MODELS[providerId];
+      if (knownModels) {
+        console.log(
+          `[auto-discover] Dynamic discovery returned 0 for ${providerId}` +
+          (discovery.error ? ` (${discovery.error})` : "") +
+          `. Falling back to known catalog (${knownModels.length} models).`,
+        );
+        result = await seedKnownModels(providerId, knownModels);
+      } else {
+        // 3. No catalog fallback — report the discovery error
+        result = { discovered: 0, profiled: 0, error: discovery.error };
+      }
     }
-
-    // 2. Dynamic discovery returned 0 — fall back to known catalog if available
-    const knownModels = KNOWN_PROVIDER_MODELS[providerId];
-    if (knownModels) {
-      console.log(
-        `[auto-discover] Dynamic discovery returned 0 for ${providerId}` +
-        (discovery.error ? ` (${discovery.error})` : "") +
-        `. Falling back to known catalog (${knownModels.length} models).`,
-      );
-      return await seedKnownModels(providerId, knownModels);
-    }
-
-    // 3. No catalog fallback — report the discovery error
-    return { discovered: 0, profiled: 0, error: discovery.error };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[auto-discover] Failed for ${providerId}: ${message}`);
-    return { discovered: 0, profiled: 0, error: message };
+    result = { discovered: 0, profiled: 0, error: message };
   }
+
+  // 4. Queue background evals for newly discovered/profiled models.
+  // This ensures every provider activation path (OAuth, API key, first-boot,
+  // startup revalidation) triggers live quality scoring without manual clicks.
+  if (result.profiled > 0) {
+    try {
+      const { inngest } = await import("@/lib/queue/inngest-client");
+      const models = await prisma.modelProfile.findMany({
+        where: { providerId, modelStatus: "active" },
+        select: { modelId: true, id: true },
+      });
+      for (const m of models) {
+        await inngest.send({
+          name: "ai/eval.run" as const,
+          data: { endpointId: m.id, modelId: m.modelId, userId: "system" },
+        });
+      }
+      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${providerId}`);
+    } catch (err) {
+      // Non-fatal — catalog scores are usable even without live eval
+      console.warn(`[auto-discover] Failed to queue background evals for ${providerId}:`, err);
+    }
+  }
+
+  return result;
 }
 
 /**
