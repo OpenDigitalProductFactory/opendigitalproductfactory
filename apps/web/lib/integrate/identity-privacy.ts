@@ -107,6 +107,62 @@ export function generatePrivateBranchName(
   return `dpf/${shortId}/${slug}`;
 }
 
+// ─── Hive Token Resolution ──────────────────────────────────────────────────
+
+/**
+ * Resolve the token for pushing branches to the upstream hive repo.
+ *
+ * Priority:
+ *   1. HIVE_CONTRIBUTION_TOKEN env var (explicit hive token)
+ *   2. hive-contribution CredentialEntry (seeded or admin-configured)
+ *   3. GITHUB_TOKEN env var (legacy fallback)
+ *   4. git-backup CredentialEntry (customer's own PAT — fork_only backup)
+ *
+ * Returns null if no token is available.
+ */
+export async function resolveHiveToken(): Promise<string | null> {
+  // 1. Explicit env var
+  if (process.env.HIVE_CONTRIBUTION_TOKEN) {
+    return process.env.HIVE_CONTRIBUTION_TOKEN;
+  }
+
+  // 2. Hive credential from DB
+  const hiveCred = await prisma.credentialEntry.findUnique({
+    where: { providerId: "hive-contribution" },
+    select: { secretRef: true, status: true },
+  });
+  if (hiveCred?.status === "active" && hiveCred.secretRef) {
+    // May be encrypted — try decryption, fall back to raw
+    try {
+      const { decryptSecret } = await import("@/lib/credential-crypto");
+      return decryptSecret(hiveCred.secretRef);
+    } catch {
+      return hiveCred.secretRef;
+    }
+  }
+
+  // 3. GITHUB_TOKEN env var (legacy)
+  if (process.env.GITHUB_TOKEN) {
+    return process.env.GITHUB_TOKEN;
+  }
+
+  // 4. git-backup credential (customer's own token)
+  const backupCred = await prisma.credentialEntry.findUnique({
+    where: { providerId: "git-backup" },
+    select: { secretRef: true, status: true },
+  });
+  if (backupCred?.status === "active" && backupCred.secretRef) {
+    try {
+      const { decryptSecret } = await import("@/lib/credential-crypto");
+      return decryptSecret(backupCred.secretRef);
+    } catch {
+      return backupCred.secretRef;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Generates a commit message using platform identity (no personal info).
  */

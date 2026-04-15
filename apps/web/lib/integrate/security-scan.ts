@@ -144,6 +144,90 @@ const SCAN_PATTERNS: ScanPattern[] = [
     message: "new Function() — dynamic code execution",
     fileFilter: /\.tsx?$/,
   },
+
+  // ─── Backdoor Detection (Phase 2) ────────────────────────────────────────
+
+  // Obfuscated code patterns
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /\\x[0-9a-fA-F]{2}(?:\\x[0-9a-fA-F]{2}){3,}/,
+    message: "Hex-escaped string sequence — possible obfuscated code",
+    fileFilter: /\.tsx?$/,
+  },
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /atob\s*\(\s*['"][A-Za-z0-9+/=]{20,}/,
+    message: "Base64 decode of long string — possible obfuscated payload",
+    fileFilter: /\.tsx?$/,
+  },
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /Buffer\.from\s*\(\s*['"][A-Za-z0-9+/=]{40,}['"],\s*['"]base64['"]\)/,
+    message: "Buffer.from base64 with long payload — possible obfuscated code",
+    fileFilter: /\.tsx?$/,
+  },
+
+  // Unexpected network calls
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /fetch\s*\(\s*['"]https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|api\.github\.com)/,
+    message: "Outbound fetch to non-platform URL — verify this is intended",
+    fileFilter: /\.tsx?$/,
+  },
+  {
+    category: "backdoor",
+    severity: "warning",
+    pattern: /(?:net|dgram|http|https)\.(?:createServer|createConnection|connect|request)\s*\(/,
+    message: "Direct network server/connection — should use platform abstractions",
+    fileFilter: /\.tsx?$/,
+  },
+
+  // Crypto mining / data exfiltration
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /(?:crypto(?:night|miner)|stratum\+tcp|coinhive|minergate)/i,
+    message: "Crypto mining pattern detected",
+    fileFilter: /\.tsx?$/,
+  },
+  {
+    category: "backdoor",
+    severity: "critical",
+    pattern: /(?:document\.cookie|localStorage|sessionStorage).*(?:fetch|XMLHttpRequest|sendBeacon)/,
+    message: "Possible data exfiltration — reading storage and sending data",
+    fileFilter: /\.tsx?$/,
+  },
+
+  // ─── Architecture Compliance (Phase 2) ────────────────────────────────────
+
+  // Raw SQL in app code (should use Prisma)
+  {
+    category: "architecture",
+    severity: "warning",
+    pattern: /\$queryRaw|\.query\s*\(\s*['"`](?:SELECT|INSERT|UPDATE|DELETE)\b/i,
+    message: "Raw SQL in app code — use Prisma client for database access",
+    fileFilter: /\.tsx?$/,
+  },
+
+  // Direct API calls bypassing routing (should go through ai-inference.ts)
+  {
+    category: "architecture",
+    severity: "warning",
+    pattern: /fetch\s*\(\s*['"]https?:\/\/api\.openai\.com/,
+    message: "Direct OpenAI API call — use the platform inference pipeline instead",
+    fileFilter: /\.tsx?$/,
+  },
+  {
+    category: "architecture",
+    severity: "warning",
+    pattern: /fetch\s*\(\s*['"]https?:\/\/api\.anthropic\.com/,
+    message: "Direct Anthropic API call — use the platform inference pipeline instead",
+    fileFilter: /\.tsx?$/,
+  },
 ];
 
 // ─── Diff Parsing ───────────────────────────────────────────────────────────

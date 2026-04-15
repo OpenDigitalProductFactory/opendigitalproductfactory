@@ -65,7 +65,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
 
   // Wizard state
   const isContributionMode = selected === "selective" || selected === "contribute_all";
-  const isAlreadySetUp = isContributionMode && props.hasGitCredential && !!props.dcoAcceptedAt;
+  const isAlreadySetUp = isContributionMode && !!props.dcoAcceptedAt;
   const [wizardStep, setWizardStep] = useState<WizardStep>(isAlreadySetUp ? "done" : "mode");
   const [token, setToken] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -124,14 +124,19 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   const handleCompleteDco = () => {
     setDcoError(null);
     startTransition(async () => {
-      // Save everything: token + mode + DCO
-      const setupResult = await saveContributionSetup({
-        token: token.trim(),
-        mode: selected,
-      });
-      if (!setupResult.success) {
-        setDcoError(setupResult.error ?? "Setup failed.");
-        return;
+      if (token.trim()) {
+        // Attributed mode: customer provided their own GitHub token
+        const setupResult = await saveContributionSetup({
+          token: token.trim(),
+          mode: selected,
+        });
+        if (!setupResult.success) {
+          setDcoError(setupResult.error ?? "Setup failed.");
+          return;
+        }
+      } else {
+        // Anonymous mode: no customer token needed — save mode only
+        await savePlatformDevConfig(selected);
       }
 
       const dcoResult = await acceptDco();
@@ -294,7 +299,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {isContributionMode && wizardStep === "explain" && (
         <WizardCard
           step={1}
-          total={4}
+          total={2}
           title="How sharing works"
         >
           <div className="space-y-2 text-xs text-[var(--dpf-text)] leading-relaxed">
@@ -305,8 +310,13 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             </p>
             <p>
               Shared features are submitted as a <strong>proposed change</strong> to
-              the community repository on GitHub. A maintainer reviews the proposal
+              the community repository. A maintainer reviews the proposal
               before it becomes available to others.
+            </p>
+            <p>
+              Your contributions are <strong>anonymous</strong> — the platform uses a
+              pseudonymous identity so no one can tell which install a contribution
+              came from. No GitHub account is needed.
             </p>
             <p>
               {selected === "selective"
@@ -316,7 +326,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
           </div>
           <div className="flex justify-end mt-4">
             <button
-              onClick={() => setWizardStep("github-account")}
+              onClick={() => setWizardStep("dco")}
               className="rounded px-4 py-1.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-colors"
             >
               Next
@@ -480,11 +490,11 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
         </WizardCard>
       )}
 
-      {/* Step 4: DCO acceptance */}
+      {/* Step 2: DCO acceptance */}
       {isContributionMode && wizardStep === "dco" && (
         <WizardCard
-          step={4}
-          total={4}
+          step={2}
+          total={2}
           title="Contributor agreement"
         >
           <div className="space-y-3">
@@ -514,7 +524,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
           </div>
           <div className="flex justify-between mt-4">
             <button
-              onClick={() => setWizardStep("paste-token")}
+              onClick={() => setWizardStep("explain")}
               className="rounded px-3 py-1.5 text-sm font-medium border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-border)] transition-colors"
             >
               Back

@@ -400,3 +400,116 @@ export async function createCrossForkPR(input: {
 
   return { branchName, commitSha: result.commitSha, prUrl, prNumber };
 }
+
+// ─── PR Status & Merge ─────────────────────────────────────────────────────
+
+export interface PRStatus {
+  number: number;
+  state: "open" | "closed";
+  merged: boolean;
+  mergeable: boolean | null;
+  title: string;
+  checksPass: boolean | null;
+}
+
+/**
+ * Get the status of a PR including merge readiness.
+ */
+export async function getPRStatus(input: {
+  owner: string;
+  repo: string;
+  prNumber: number;
+  token: string;
+}): Promise<PRStatus> {
+  const { owner, repo, prNumber, token } = input;
+  const apiBase = `https://api.github.com/repos/${owner}/${repo}`;
+
+  const pr = await githubGet<{
+    number: number;
+    state: string;
+    merged: boolean;
+    mergeable: boolean | null;
+    title: string;
+  }>(`${apiBase}/pulls/${prNumber}`, token);
+
+  // Check combined status for the head SHA
+  let checksPass: boolean | null = null;
+  try {
+    const checks = await githubGet<{ state: string }>(
+      `${apiBase}/commits/${pr.number}/status`,
+      token,
+    );
+    checksPass = checks.state === "success";
+  } catch {
+    // Status checks may not be configured
+  }
+
+  return {
+    number: pr.number,
+    state: pr.state as "open" | "closed",
+    merged: pr.merged,
+    mergeable: pr.mergeable,
+    title: pr.title,
+    checksPass,
+  };
+}
+
+export interface MergeResult {
+  merged: boolean;
+  sha: string | null;
+  message: string;
+}
+
+/**
+ * Merge a PR via the GitHub API. Uses squash merge by default.
+ */
+export async function mergePR(input: {
+  owner: string;
+  repo: string;
+  prNumber: number;
+  commitTitle?: string;
+  mergeMethod?: "merge" | "squash" | "rebase";
+  token: string;
+}): Promise<MergeResult> {
+  const { owner, repo, prNumber, token } = input;
+  const mergeMethod = input.mergeMethod ?? "squash";
+  const apiBase = `https://api.github.com/repos/${owner}/${repo}`;
+
+  try {
+    const result = await githubPost<{ merged: boolean; sha: string; message: string }>(
+      `${apiBase}/pulls/${prNumber}/merge`,
+      {
+        merge_method: mergeMethod,
+        ...(input.commitTitle ? { commit_title: input.commitTitle } : {}),
+      },
+      token,
+    );
+    return { merged: result.merged, sha: result.sha, message: result.message };
+  } catch (err) {
+    return {
+      merged: false,
+      sha: null,
+      message: err instanceof Error ? err.message : "Merge failed",
+    };
+  }
+}
+
+/**
+ * Post a comment on a PR.
+ */
+export async function commentOnPR(input: {
+  owner: string;
+  repo: string;
+  prNumber: number;
+  body: string;
+  token: string;
+}): Promise<void> {
+  const { owner, repo, prNumber, body, token } = input;
+  const apiBase = `https://api.github.com/repos/${owner}/${repo}`;
+
+  await githubPost(
+    `${apiBase}/issues/${prNumber}/comments`,
+    { body },
+    token,
+  );
+}
