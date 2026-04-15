@@ -2543,7 +2543,7 @@ export async function executeTool(
       const topLevelValue = Object.fromEntries(
         Object.entries(params).filter(([key]) => key !== "field" && key !== "value"),
       );
-      const normalizedValue =
+      let normalizedValue =
         params.value !== undefined
           ? params.value
           : Object.keys(topLevelValue).length > 0
