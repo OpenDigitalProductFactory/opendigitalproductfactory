@@ -3,7 +3,7 @@
 // Only serves files under docs/ with allowed extensions.
 
 import { NextRequest } from "next/server";
-import { readProjectFile, isPathAllowedSync as isPathAllowed } from "@/lib/codebase-tools";
+// codebase-tools is imported dynamically inside the handler to avoid NFT whole-project tracing
 
 const ALLOWED_PREFIXES = ["docs/"];
 const ALLOWED_EXTENSIONS = [".md", ".txt"];
@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
   if (!ALLOWED_EXTENSIONS.some((ext) => path.endsWith(ext))) {
     return new Response("Access denied: unsupported file type", { status: 403 });
   }
+
+  const { readProjectFile, isPathAllowedSync: isPathAllowed } = await import(/* turbopackIgnore: true */ "../../../lib/integrate/codebase-tools");
   if (!isPathAllowed(path)) {
     return new Response("Access denied", { status: 403 });
   }
