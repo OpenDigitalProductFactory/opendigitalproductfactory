@@ -45,8 +45,15 @@ export async function syncSocialAuthCredentials(): Promise<void> {
   }
 }
 
-// Sync credentials from DB on module load
-syncSocialAuthCredentials();
+// Lazy sync: credentials are loaded on first auth request, not at module load.
+// Module-level calls fire during `next build` where the DB is unreachable,
+// and Prisma logs noisy auth-failure errors to stderr even though we catch them.
+let _socialAuthSynced = false;
+async function ensureSocialAuthCredentials(): Promise<void> {
+  if (_socialAuthSynced) return;
+  _socialAuthSynced = true;
+  await syncSocialAuthCredentials();
+}
 
 export type UserType = "admin" | "customer";
 
@@ -79,6 +86,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        await ensureSocialAuthCredentials();
         try {
           if (!credentials?.email || !credentials?.password) return null;
           const user = await prisma.user.findUnique({
@@ -117,6 +125,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        await ensureSocialAuthCredentials();
         if (!credentials?.email || !credentials?.password) return null;
         const contact = await prisma.customerContact.findUnique({
           where: { email: credentials.email as string },
@@ -156,6 +165,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
+      await ensureSocialAuthCredentials();
       // Credential providers: pass through (existing behavior)
       if (!account || account.type !== "oauth") return true;
 

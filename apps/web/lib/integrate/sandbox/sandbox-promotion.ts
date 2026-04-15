@@ -2,15 +2,12 @@
 // Sandbox → production promotion: backup production DB, scan for destructive ops,
 // extract and categorize diffs, apply promotion patches.
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
-import * as fs from "fs";
+import { lazyExec, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import * as os from "os";
-import * as path from "path";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
 
-const exec = promisify(execCb);
+const exec = lazyExec();
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -403,12 +400,12 @@ export async function backupProductionDb(
   productionDbContainerName: string = DEFAULT_PRODUCTION_DB_CONTAINER,
 ): Promise<{ id: string; filePath: string; sizeBytes: number }> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupsDir = path.join(process.cwd(), "backups");
+  const backupsDir = lazyPath().join(process.cwd(), "backups");
   const fileName = `backup-${buildId}-${timestamp}.sql`;
-  const filePath = path.join(backupsDir, fileName);
+  const filePath = lazyPath().join(backupsDir, fileName);
 
   // Ensure backups directory exists
-  await fs.promises.mkdir(backupsDir, { recursive: true });
+  await lazyFsPromises().mkdir(backupsDir, { recursive: true });
 
   // Run pg_dump inside the production DB container, write to host via redirect
   await exec(
@@ -416,7 +413,7 @@ export async function backupProductionDb(
   );
 
   // Get file size
-  const stat = await fs.promises.stat(filePath);
+  const stat = await lazyFsPromises().stat(filePath);
   const sizeBytes = stat.size;
 
   // Create Prisma record
@@ -462,11 +459,11 @@ export async function applyPromotionPatch(
   diffPatch: string,
   productionDbContainerName: string = DEFAULT_PRODUCTION_DB_CONTAINER,
 ): Promise<{ success: boolean; error?: string }> {
-  const tmpFile = path.join(os.tmpdir(), `dpf-promotion-${Date.now()}.patch`);
+  const tmpFile = lazyPath().join(os.tmpdir(), `dpf-promotion-${Date.now()}.patch`);
 
   try {
     // Write patch to temp file
-    await fs.promises.writeFile(tmpFile, diffPatch, "utf8");
+    await lazyFsPromises().writeFile(tmpFile, diffPatch, "utf8");
 
     // Apply the patch with git apply
     await exec(`git apply "${tmpFile}"`);
@@ -485,6 +482,6 @@ export async function applyPromotionPatch(
     return { success: false, error };
   } finally {
     // Clean up temp file
-    await fs.promises.unlink(tmpFile).catch(() => {});
+    await lazyFsPromises().unlink(tmpFile).catch(() => {});
   }
 }

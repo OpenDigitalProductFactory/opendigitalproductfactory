@@ -3,8 +3,7 @@
 // Reads CSV files from apps/web/data/design-intelligence/ and performs
 // BM25-like keyword matching across multiple design domains.
 
-import { readFileSync } from "fs";
-import { join } from "path";
+import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +37,7 @@ export type DesignSystemResult = {
 
 // ─── CSV Parsing ────────────────────────────────────────────────────────────
 
-const DATA_DIR = join(process.cwd(), "apps/web/data/design-intelligence");
+function getDataDir() { return lazyPath().join(process.cwd(), "apps/web/data/design-intelligence"); }
 
 /** Simple CSV parser that handles quoted fields with commas. */
 function parseCsv(content: string): CsvRow[] {
@@ -104,7 +103,7 @@ function loadDomain(domain: DesignDomain): CsvRow[] {
   if (cache.has(filename)) return cache.get(filename)!;
 
   try {
-    const content = readFileSync(join(DATA_DIR, filename), "utf-8");
+    const content = lazyFs().readFileSync(lazyPath().join(getDataDir(), filename), "utf-8");
     const rows = parseCsv(content);
     cache.set(filename, rows);
     return rows;

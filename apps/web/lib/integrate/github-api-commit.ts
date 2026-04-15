@@ -16,6 +16,8 @@
  *   7. Create a PR (handled by the calling code)
  */
 
+import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface FileOperation {
@@ -124,8 +126,8 @@ export function extractNewFileContent(diff: string, filePath: string): string | 
  * The sandbox workspace is mounted at /sandbox-workspace in the portal container.
  */
 export async function readSandboxFile(filePath: string): Promise<string | null> {
-  const { readFile } = await import("fs/promises");
-  const { resolve } = await import("path");
+  const { readFile } = lazyFsPromises();
+  const { resolve } = lazyPath();
 
   // The sandbox workspace is mounted at /sandbox-workspace
   const sandboxRoot = process.env.SANDBOX_WORKSPACE_PATH ?? "/sandbox-workspace";

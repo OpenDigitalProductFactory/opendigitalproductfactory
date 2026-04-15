@@ -2,8 +2,9 @@
 // Codebase file access with path security for agent tools.
 // Only available on dev instances (INSTANCE_TYPE=dev). Production has no source code.
 //
-// All fs/path/child_process usage is behind dynamic import() to prevent
-// Next.js NFT from tracing the entire project tree during production builds.
+// All fs/path/child_process usage goes through lazy-node helpers which hide
+// require() from Turbopack/NFT static analysis via new Function().
+// This prevents whole-project tracing during production builds.
 
 // ─── Instance Type ──────────────────────────────────────────────────────────
 
@@ -17,10 +18,12 @@ export function isDevInstance(): boolean {
 
 const DEV_ONLY_ERROR = "Codebase access is only available on dev instances. Production does not have source code.";
 
-async function getProjectRoot(): Promise<string> {
-  const { resolve } = await import(/* turbopackIgnore: true */ "path");
-  if (process.env.PROJECT_ROOT) return resolve(process.env.PROJECT_ROOT);
-  return resolve(process.cwd(), "..", "..");
+import { lazyFs as getFs, lazyPath as getPath, lazyChildProcess } from "@/lib/shared/lazy-node";
+
+function getProjectRoot(): string {
+  const path = getPath();
+  if (process.env.PROJECT_ROOT) return path.resolve(process.env.PROJECT_ROOT);
+  return path.resolve(process.cwd(), "..", "..");
 }
 
 // ─── Path Security ──────────────────────────────────────────────────────────
@@ -41,9 +44,9 @@ const BLOCKED_PATTERNS = [
   /^node_modules[\\/]/,
 ];
 
-export async function isPathAllowed(filePath: string): Promise<boolean> {
-  const { isAbsolute } = await import(/* turbopackIgnore: true */ "path");
-  if (isAbsolute(filePath)) return false;
+export function isPathAllowed(filePath: string): boolean {
+  const path = getPath();
+  if (path.isAbsolute(filePath)) return false;
   if (/^[A-Za-z]:/.test(filePath)) return false;
   if (filePath.includes("..")) return false;
 
@@ -71,17 +74,17 @@ type SafePathResult =
   | { ok: true; path: string }
   | { ok: false; error: string };
 
-export async function resolveSafePath(filePath: string): Promise<SafePathResult> {
+export function resolveSafePath(filePath: string): SafePathResult {
   if (!isPathAllowedSync(filePath)) {
     return { ok: false, error: `Access denied: ${filePath}` };
   }
 
-  const { resolve, relative, isAbsolute } = await import(/* turbopackIgnore: true */ "path");
-  const projectRoot = await getProjectRoot();
-  const fullPath = resolve(projectRoot, filePath);
-  const rel = relative(projectRoot, fullPath);
+  const path = getPath();
+  const projectRoot = getProjectRoot();
+  const fullPath = path.resolve(projectRoot, filePath);
+  const rel = path.relative(projectRoot, fullPath);
 
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
     return { ok: false, error: "Path escapes project root" };
   }
 
@@ -95,16 +98,16 @@ export async function readProjectFile(
   options?: { startLine?: number; endLine?: number },
 ): Promise<{ content: string } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
-  const resolved = await resolveSafePath(filePath);
+  const resolved = resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
-  const { readFileSync, existsSync } = await import(/* turbopackIgnore: true */ "fs");
-  if (!existsSync(resolved.path)) {
+  const fs = getFs();
+  if (!fs.existsSync(resolved.path)) {
     return { error: `File not found: ${filePath}` };
   }
 
   try {
-    const content = readFileSync(resolved.path, "utf-8");
+    const content = fs.readFileSync(resolved.path, "utf-8");
     if (options?.startLine || options?.endLine) {
       const lines = content.split("\n");
       const start = (options.startLine ?? 1) - 1;
@@ -125,8 +128,8 @@ export async function searchProjectFiles(
   const max = options?.maxResults ?? 20;
 
   try {
-    const { execSync } = await import(/* turbopackIgnore: true */ "child_process");
-    const projectRoot = await getProjectRoot();
+    const { execSync } = lazyChildProcess();
+    const projectRoot = getProjectRoot();
     const globArg = options?.glob ? `-- "${options.glob}"` : "";
     const output = execSync(
       `git grep -n --max-count=${max} ${JSON.stringify(query)} HEAD ${globArg}`.trim(),
@@ -165,16 +168,16 @@ export async function listProjectDirectory(
     return { error: `Access denied: ${safePath}` };
   }
 
-  const { resolve } = await import(/* turbopackIgnore: true */ "path");
-  const projectRoot = await getProjectRoot();
-  const fullPath = safePath === "." ? projectRoot : resolve(projectRoot, safePath);
-  const { readdirSync, existsSync } = await import(/* turbopackIgnore: true */ "fs");
-  if (!existsSync(fullPath)) {
+  const path = getPath();
+  const projectRoot = getProjectRoot();
+  const fullPath = safePath === "." ? projectRoot : path.resolve(projectRoot, safePath);
+  const fs = getFs();
+  if (!fs.existsSync(fullPath)) {
     return { error: `Directory not found: ${safePath}` };
   }
 
   try {
-    const items = readdirSync(fullPath, { withFileTypes: true });
+    const items = fs.readdirSync(fullPath, { withFileTypes: true });
     const entries: Array<{ name: string; type: "file" | "dir"; path: string }> = [];
 
     for (const item of items) {
@@ -204,24 +207,24 @@ export async function writeProjectFile(
   content: string,
 ): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
-  const resolved = await resolveSafePath(filePath);
+  const resolved = resolveSafePath(filePath);
   if (!resolved.ok) return { error: resolved.error };
 
   try {
-    const { writeFileSync, existsSync, mkdirSync } = await import(/* turbopackIgnore: true */ "fs");
-    const { dirname, join } = await import(/* turbopackIgnore: true */ "path");
+    const fs = getFs();
+    const path = getPath();
 
     // Verify the project root has source code — prevents silently writing to ephemeral container storage
-    const projectRoot = await getProjectRoot();
-    if (!existsSync(join(projectRoot, "package.json"))) {
+    const projectRoot = getProjectRoot();
+    if (!fs.existsSync(path.join(projectRoot, "package.json"))) {
       return { error: "Source code is not accessible from this environment. Mount the project source into the container (PROJECT_ROOT env var) or run the portal outside Docker." };
     }
 
-    const dir = dirname(resolved.path);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+    const dir = path.dirname(resolved.path);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(resolved.path, content, "utf-8");
+    fs.writeFileSync(resolved.path, content, "utf-8");
     return { ok: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Write error" };

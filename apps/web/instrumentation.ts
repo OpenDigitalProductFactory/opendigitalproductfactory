@@ -2,7 +2,7 @@
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
+  if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     // Register ScheduledJob rows so the calendar shows discovery events.
     // Actual execution handled by Inngest cron functions (lib/queue/functions/).
     const { registerScheduledJobs } = await import("@/lib/operate/discovery-scheduler");

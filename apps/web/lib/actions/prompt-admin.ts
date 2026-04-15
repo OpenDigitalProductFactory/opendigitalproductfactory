@@ -5,8 +5,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { invalidatePromptCache } from "@/lib/tak/prompt-loader";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -216,7 +215,7 @@ export async function resetPromptToDefault(
   if (!session?.user?.id) return { success: false, error: "Not authenticated" };
 
   // Read the original .prompt.md file
-  const filePath = join(
+  const filePath = lazyPath().join(
     process.cwd(),
     "..",
     "..",
@@ -227,7 +226,7 @@ export async function resetPromptToDefault(
 
   let fileContent: string;
   try {
-    const raw = readFileSync(filePath, "utf-8");
+    const raw = lazyFs().readFileSync(filePath, "utf-8");
     // Extract content below frontmatter
     const match = raw.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
     fileContent = match ? match[1].trim() : raw;

@@ -1,11 +1,10 @@
 // apps/web/lib/sandbox-source-strategy.ts
 // Pluggable strategy for copying project source into a sandbox container.
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
+import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
 import { execInSandbox } from "@/lib/sandbox";
 
-const exec = promisify(execCb);
+const exec = lazyExec();
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -64,7 +63,7 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
     // Resolve the portal container to copy source from.
     let portalContainer = "dpf-portal-1";
     try {
-      const { readFileSync } = await import("fs");
+      const { readFileSync } = lazyFs();
       const hostname = readFileSync("/etc/hostname", "utf-8").trim();
       if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
     } catch { /* fallback */ }

@@ -16,11 +16,11 @@ riskBand: low
 
 # Do This For Me
 
-Determine the primary action for the current page and execute it immediately using available tools.
+Determine the primary action for the current page and execute the safest well-supported action using available tools.
 
 ## What This Skill Does
 
-Looks at the page context, infers what a human would most likely do next, and does it. This is a bias-to-action skill -- do the work, don't describe the work.
+Looks at the page context, infers what a human would most likely do next, and does it when that action is well-supported. This is an action-oriented skill, but not a guessing license.
 
 ## Instructions
 
@@ -31,18 +31,19 @@ Looks at the page context, infers what a human would most likely do next, and do
    - **Detail page** -- Check for incomplete fields and offer to fill them, or summarize the item's status.
    - **Settings page** -- Review current settings and flag anything that looks misconfigured.
 
-2. **Act using your tools.** Call the appropriate MCP tools to create items, update records, or navigate. Do not ask for confirmation unless the action is destructive (deleting data, changing permissions).
+2. **Act using your tools.** Call the appropriate MCP tools to create items, update records, or navigate. Do not ask for confirmation unless the action is destructive (deleting data, changing permissions) or the context is too ambiguous to act correctly.
 
 3. **Report what you did** in 1-2 sentences after completing the action.
 
 ## Guidelines
 
-- Bias toward action. If you can reasonably infer what to do, do it.
+- Bias toward action, but keep integrity first. If you can reasonably infer what to do, do it. If ambiguity would materially change the outcome, ask one short clarifying question instead of forcing an answer.
 - Use sensible defaults that follow project conventions (see CLAUDE.md for canonical enum values).
 - For forms: fill ALL required fields. Leave optional fields empty only if you have no reasonable value.
 - For lists: prefer creating one well-formed entry over multiple placeholder entries.
 - If the page context is ambiguous and multiple actions are equally valid, pick the most common one and mention what else you could have done.
 - Never perform destructive actions (delete, reset, clear) without explicit user confirmation.
+- Never optimize for a proxy pass signal alone. Preserve the user's actual intent rather than taking brittle shortcuts.
 
 ## Examples
 

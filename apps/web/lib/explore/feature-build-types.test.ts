@@ -7,7 +7,30 @@ import {
   CODING_CAPABILITY_COLOURS,
   generateBuildId,
   generatePackId,
+  normalizeHappyPathState,
+  isHappyPathIntakeReady,
 } from "./feature-build-types";
+
+const readyHappyPath = {
+  intake: {
+    status: "ready" as const,
+    taxonomyNodeId: "tax-1",
+    backlogItemId: "BI-1",
+    epicId: "epic-1",
+    constrainedGoal: "Capture one version value from Prometheus",
+    failureReason: null,
+  },
+  execution: {
+    engine: null,
+    source: null,
+    status: "pending" as const,
+    failureStage: null,
+  },
+  verification: {
+    status: "pending" as const,
+    checks: [],
+  },
+};
 
 describe("validateFeatureBrief", () => {
   it("accepts a valid brief", () => {
@@ -174,8 +197,18 @@ describe("checkPhaseGate", () => {
     const result = checkPhaseGate("ideate", "plan", {
       designDoc: { problemStatement: "test" },
       designReview: { decision: "pass", issues: [], summary: "ok" },
+      happyPathState: readyHappyPath,
     });
     expect(result.allowed).toBe(true);
+  });
+
+  it("blocks ideate to plan without happy-path intake readiness", () => {
+    const result = checkPhaseGate("ideate", "plan", {
+      designDoc: { problemStatement: "test" },
+      designReview: { decision: "pass", issues: [], summary: "ok" },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("taxonomy");
   });
 
   it("blocks plan to build without buildPlan", () => {
@@ -205,8 +238,19 @@ describe("checkPhaseGate", () => {
     const result = checkPhaseGate("plan", "build", {
       buildPlan: { fileStructure: [], tasks: [] },
       planReview: { decision: "pass", issues: [], summary: "ok" },
+      happyPathState: readyHappyPath,
     });
     expect(result.allowed).toBe(true);
+  });
+
+  it("blocks plan to build when happy-path intake is incomplete", () => {
+    const result = checkPhaseGate("plan", "build", {
+      buildPlan: { fileStructure: [], tasks: [] },
+      planReview: { decision: "pass", issues: [], summary: "ok" },
+      happyPathState: normalizeHappyPathState(null),
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("backlog");
   });
 
   it("blocks build to review without passing verification", () => {
@@ -250,5 +294,49 @@ describe("checkPhaseGate", () => {
   it("allows review to build (backward, no gate)", () => {
     const result = checkPhaseGate("review", "build", {});
     expect(result.allowed).toBe(true);
+  });
+});
+
+describe("normalizeHappyPathState", () => {
+  it("returns safe defaults for null input", () => {
+    expect(normalizeHappyPathState(null)).toEqual({
+      intake: {
+        status: "pending",
+        taxonomyNodeId: null,
+        backlogItemId: null,
+        epicId: null,
+        constrainedGoal: null,
+        failureReason: null,
+      },
+      execution: {
+        engine: null,
+        source: null,
+        status: "pending",
+        failureStage: null,
+      },
+      verification: {
+        status: "pending",
+        checks: [],
+      },
+    });
+  });
+});
+
+describe("isHappyPathIntakeReady", () => {
+  it("returns false when any anchor is missing", () => {
+    const state = normalizeHappyPathState({
+      intake: {
+        status: "ready",
+        taxonomyNodeId: "tax-1",
+        backlogItemId: null,
+        epicId: "epic-1",
+        constrainedGoal: "Capture one version value",
+      },
+    });
+    expect(isHappyPathIntakeReady(state)).toBe(false);
+  });
+
+  it("returns true when taxonomy, backlog, epic, and constrained goal are present", () => {
+    expect(isHappyPathIntakeReady(readyHappyPath)).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 
 const PASSWORD = process.env.DPF_ADMIN_PASSWORD || 'changeme123';
 const BASE = 'http://localhost:3000';
-const FEATURE = 'Add a /api/v1/health endpoint that returns JSON with service status, uptime, and version';
+const FEATURE = 'Customer Complaint Tracker';
 
 async function shot(page, name) {
   await page.screenshot({ path: `e2e-report/drive/${name}.png`, fullPage: true });
@@ -106,11 +106,21 @@ try {
   }
   console.log(`[drive] Panel open: ${panelOpen}`);
 
-  // Wait for initial response
-  await waitIdle(page, 120000);
-  const initial = await lastResponse(page);
-  console.log(`[drive] Initial: ${initial.slice(0, 200)}`);
+  // Wait for initial response (auto-message from create)
+  await waitIdle(page, 60000);
   await shot(page, '02-initial');
+
+  // Send explicit design instructions (GPT-5.4 needs clear direction)
+  console.log('\n=== IDEATE: DESIGN ===');
+  await sendMsg(page,
+    "Design this feature now. Here are the exact requirements — do not ask for clarification:\n" +
+    "1) A simple complaints list page at /complaints showing all complaints with status badges (open, investigating, resolved, closed)\n" +
+    "2) A form to submit a new complaint with fields: customer name (text), description (textarea), severity (select: low/medium/high/critical), category (text)\n" +
+    "3) In-memory data store (no database changes needed — use a simple array or Map for this demo)\n" +
+    "4) Use existing platform UI patterns (Tailwind CSS)\n\n" +
+    "Save the design document with saveBuildEvidence and then submit it for review with reviewDesignDoc.",
+    300000,
+  );
 
   // WAIT FOR RESEARCH
   console.log('\n=== WAIT FOR RESEARCH ===');

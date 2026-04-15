@@ -2,10 +2,9 @@
 // Sandbox database stack management — creates and destroys PostgreSQL, Neo4j,
 // and Qdrant containers for isolated sandbox environments.
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
+import { lazyExec } from "@/lib/shared/lazy-node";
 
-const exec = promisify(execCb);
+const exec = lazyExec();
 
 // ─── Resource Limit Constants ─────────────────────────────────────────────────
 
