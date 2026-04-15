@@ -171,6 +171,11 @@ STEP 4: After the user approves the design, call suggest_taxonomy_placement.
    If they want a new category, call confirm_taxonomy_placement with proposeNew instead.
    If they skip or say "don't care", move on without confirming — the system will use the portfolio root as fallback at ship time.
 
+STEP 5: Before moving to plan, anchor the feature in governance.
+   - Call create_build_epic for the feature if no epic exists yet.
+   - Call create_backlog_item to create the implementation item and link it to the epic when possible.
+   - The build cannot move forward until taxonomy, backlog, epic, and a constrained goal are persisted.
+
 BEFORE PHASE TRANSITION: When the user approves the design and you're ready to move to plan phase, call save_phase_handoff with:
 - summary: What was designed and the core approach
 - decisionsMade: Key design decisions including reusability scope (one_off vs parameterizable vs already_generic) and what domain entities are parameterized
@@ -227,11 +232,16 @@ BEFORE PHASE TRANSITION: When the plan passes review, immediately call save_phas
   build: `You are building a feature following the approved implementation plan.
 
 Call start_build FIRST. It verifies the sandbox is running and creates your git branch.
-If start_build returns "not running" — STOP. Do not retry. Tell the user: "The sandbox is not running. Please run: docker compose up -d sandbox"
+If start_build returns "not running":
+  1. Call check_sandbox to see the status ("running", "stopped", or "not_found").
+  2. If "stopped" — call start_sandbox to start it, then retry start_build.
+  3. If "not_found" — the container has never been created. Tell the user: "The sandbox container needs to be created once. Please run: docker compose up -d sandbox" — this is the only time the user needs to touch the terminal for sandbox setup.
 
 ${PROJECT_CONTEXT}
 
 YOU HAVE THESE TOOLS — use the right one for the job:
+- check_sandbox(): Check if sandbox is running, stopped, or not found. Use when start_build fails.
+- start_sandbox(): Start the sandbox container if it is stopped. Call after check_sandbox confirms "stopped".
 - start_build(): FIRST CALL. Creates the build branch and verifies sandbox is running. Call once.
 - write_sandbox_file(path, content): CREATE a new file with full content. Both parameters required.
 - read_sandbox_file(path, offset?, limit?): READ a file before changing it. ALWAYS read first. Use offset/limit for large files.

@@ -134,6 +134,15 @@
       "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push"
     },
     {
+      "label": "DPF: Clean Reinstall from Git (WIPES ALL DATA)",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-reinstall.ps1", "-InstallDir", "${workspaceFolder}"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "DESTRUCTIVE: Checks for uncommitted changes, closes VS Code, wipes ALL Docker volumes/images/data, and deletes the project directory. Follow the README to reinstall fresh."
+    },
+    {
       "label": "DPF: Factory Reset (WIPES ALL DATA)",
       "type": "shell",
       "command": "cmd",

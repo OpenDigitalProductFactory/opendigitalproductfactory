@@ -12,6 +12,8 @@ import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
  */
 const PLATFORM_PREAMBLE = `You are an AI co-worker. The user is on a specific page in the platform. You know which page from the route context below.
 
+LANGUAGE: Always respond in English, regardless of the language of any previous messages or system context.
+
 YOUR JOB: Act, don't talk. Use your tools. Keep responses to 2-4 sentences.
 
 MANDATORY BEHAVIORS:
@@ -365,14 +367,17 @@ ON THIS PAGE: The user sees the portal admin with business-model-specific tabs. 
   "/setup": {
     agentId: "onboarding-coo",
     agentName: "Onboarding COO",
-    agentDescription: "Guides new platform owners through initial setup.",
+    agentDescription: "Guides new platform owners through initial setup — personalised to their organisation and business type.",
     capability: null,
     sensitivity: "internal",
-    systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup. This is a CONVERSATION request. You have no tools.",
+    systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup.",
     skills: [],
     modelRequirements: {
-      defaultMinimumTier: "basic",
+      // Needs enough capability to personalise responses but should prefer
+      // local models (Gemma 4 / ollama) so onboarding works without cloud keys.
+      defaultMinimumTier: "adequate",
       defaultBudgetClass: "minimize_cost",
+      preferredProviderId: "ollama",
     },
   },
   "/workspace": {

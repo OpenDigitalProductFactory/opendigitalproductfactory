@@ -1,6 +1,5 @@
 // apps/web/app/(shell)/platform/ai/skills/page.tsx
 // TAK Skills Observatory — admin visibility into specialist capabilities.
-import { AiTabNav } from "@/components/platform/AiTabNav";
 import { SkillsObservatoryPanel } from "@/components/platform/SkillsObservatoryPanel";
 import {
   getSkillsCatalog,
@@ -25,8 +24,6 @@ export default async function SkillsObservatoryPage() {
           TAK Skills Observatory — {stats.totalSkills} skills across {stats.routes} routes
         </p>
       </div>
-
-      <AiTabNav />
 
       <SkillsObservatoryPanel
         skills={skills}

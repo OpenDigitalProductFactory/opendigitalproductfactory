@@ -7,6 +7,12 @@ import type { ReviewResult, BuildDesignDoc, BuildPlanDoc } from "@/lib/feature-b
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
 export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: string): string {
+  // Detect whether this feature has a UI component. Backend-only features
+  // (cron jobs, API routes, data models) shouldn't be flagged for accessibility.
+  const approachLower = (doc.proposedApproach ?? "").toLowerCase();
+  const hasUI = /\bui\b|page\.tsx|component|dashboard|panel|form|modal|button|card|tab/i.test(approachLower)
+    || /\b(shell)\b.*page/i.test(approachLower);
+
   return `You are reviewing a design document for a platform feature.
 
 DESIGN DOCUMENT:
@@ -24,13 +30,15 @@ ${projectContext}
 REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Is the problem statement clear and specific?
 2. Was existing functionality properly audited (not building what already exists)?
-3. Were alternatives considered (open-source, existing tools, MCP services)?
+3. Were alternatives considered? (For simple, standard patterns like health endpoints, CRUD routes, or utility functions, noting "standard pattern, no alternatives needed" is sufficient — do NOT fail a review for missing alternatives on trivial features.)
 4. Is the reuse plan concrete (not vague)?
 5. Is new code justified where reuse wasn't possible?
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
-8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)
+${hasUI ? `8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
+
+SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss, security vulnerabilities, or broken functionality. Use "important" for design gaps that should be addressed but don't block implementation. Use "minor" for style, naming, or nice-to-have improvements. A health endpoint or simple utility does NOT need the same rigor as a payment system — calibrate accordingly.
 
 CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
 
@@ -103,6 +111,49 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
   "issues": [{"severity": "critical|important|minor", "description": "..."}],
   "summary": "one sentence summary"
 }`;
+}
+
+// ─── Review Merging ──────────────────────────────────────────────────────────
+
+/**
+ * Merge two ReviewResults from independent reviewers into one authoritative result.
+ * Decision: fail if either reviewer fails (conservative — surface everything).
+ * Issues: union of both sets, deduped by first 80 chars of lowercased description.
+ * Summary: joined from both reviewers.
+ */
+export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
+  // A parse failure ("could not parse agent response") is not a real review.
+  // If one reviewer parsed successfully and the other didn't, trust the parsed one.
+  const r1ParseFail = r1.issues.some(i => i.description.includes("unparseable response"));
+  const r2ParseFail = r2.issues.some(i => i.description.includes("unparseable response"));
+  const decision =
+    r1ParseFail && !r2ParseFail ? r2.decision :
+    r2ParseFail && !r1ParseFail ? r1.decision :
+    r1.decision === "fail" || r2.decision === "fail" ? "fail" : "pass";
+
+  // Deduplicate by normalized description prefix.
+  // Skip parse-failure issues if the other reviewer gave a real result.
+  const skipParseFailures = (r1ParseFail && !r2ParseFail) || (r2ParseFail && !r1ParseFail);
+  const seen = new Set<string>();
+  const merged: ReviewResult["issues"] = [];
+  for (const issue of [...r1.issues, ...r2.issues]) {
+    if (skipParseFailures && issue.description.includes("unparseable response")) continue;
+    const key = issue.description.toLowerCase().slice(0, 80);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(issue);
+    }
+  }
+
+  // Sort: critical → important → minor
+  const SEVERITY_ORDER: Record<string, number> = { critical: 0, important: 1, minor: 2 };
+  merged.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 2) - (SEVERITY_ORDER[b.severity] ?? 2));
+
+  const summary = r1.summary && r2.summary
+    ? `Reviewer 1: ${r1.summary} | Reviewer 2: ${r2.summary}`
+    : r1.summary || r2.summary || "Review complete";
+
+  return { decision, issues: merged, summary };
 }
 
 // ─── Response Parsing ────────────────────────────────────────────────────────

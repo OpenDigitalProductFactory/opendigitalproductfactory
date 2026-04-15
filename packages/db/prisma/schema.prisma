@@ -935,23 +935,25 @@ model PlatformCapability {
 }
 
 model McpServer {
-  id              String    @id @default(cuid())
-  serverId        String    @unique
-  name            String
-  config          Json
-  status          String    @default("unconfigured")
-  transport       String?
-  category        String?
-  tags            String[]  @default([])
-  healthStatus    String    @default("unknown")
-  lastHealthCheck DateTime?
-  lastHealthError String?
-  integrationId   String?
-  activatedBy     String?
-  activatedAt     DateTime?
-  deactivatedAt   DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  serverId            String    @unique
+  name                String
+  config              Json
+  status              String    @default("unconfigured")
+  transport           String?
+  category            String?
+  tags                String[]  @default([])
+  healthStatus        String    @default("unknown")
+  lastHealthCheck     DateTime?
+  lastHealthError     String?
+  integrationId       String?
+  activatedBy         String?
+  activatedAt         DateTime?
+  deactivatedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  authMode            String?
+  credentialOwnerMode String?
 
   integration McpIntegration? @relation(fields: [integrationId], references: [id])
   tools       McpServerTool[]
@@ -1061,6 +1063,8 @@ model ModelProvider {
   supportsToolUse          Boolean        @default(false)
   toolFidelity             Int            @default(50)
   userFacingDescription    Json?
+  authMode                 String?
+  credentialOwnerMode      String?
   modelProfiles            ModelProfile[]
 }
 
@@ -1090,7 +1094,7 @@ model ModelProfile {
   speedRating               String?
   generatedBy               String
   generatedAt               DateTime      @default(now())
-  supportsToolUse           Boolean       @default(false)
+  supportsToolUse           Boolean?
   codingCapability          String?
   instructionFollowing      String?
   codegen                   Int           @default(50)
@@ -1137,9 +1141,27 @@ model ModelProfile {
   lastMetadataRefresh       DateTime?
   rawMetadataHash           String?
   driftDetectedAt           DateTime?
+  catalogHash               String?
+  discoveryHash             String?
+  capabilityOverrides       Json?
   provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
 
   @@unique([providerId, modelId])
+}
+
+model ModelCapabilityChangeLog {
+  id         String   @id @default(cuid())
+  providerId String
+  modelId    String
+  field      String
+  oldValue   Json?
+  newValue   Json?
+  source     String
+  changedAt  DateTime @default(now())
+  changedBy  String?
+
+  @@index([providerId, changedAt])
+  @@index([modelId, changedAt])
 }
 
 model TokenUsage {
@@ -2122,11 +2144,17 @@ model ToolExecution {
   routeContext    String?
   durationMs      Int?
   createdAt       DateTime  @default(now())
+  // Phase 3: audit enrichment — nullable; backfill via backfill-capability-ids.ts
+  auditClass      String?
+  capabilityId    String?
+  summary         String?
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
   @@index([toolName, createdAt])
   @@index([threadId])
+  @@index([auditClass, createdAt(sort: Desc)])
+  @@index([capabilityId, createdAt(sort: Desc)])
 }
 
 model AgentAttachment {
@@ -3814,7 +3842,7 @@ model RouteDecisionLog {
   taskType           String
   sensitivity        String
   reason             String
-  fitnessScore       Float
+  fitnessScore       Float?
   candidateTrace     Json
   excludedTrace      Json
   policyRulesApplied String[] @default([])
@@ -4829,6 +4857,13 @@ model AgentModelConfig {
   pinnedProviderId String?
   pinnedModelId    String?
   budgetClass      String    @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
+  // Null = system default { "toolUse": true }.
+  // {} = passive agent (no capability floor — rare, must be explicit).
+  minimumCapabilities  Json?
+  // EP-AGENT-CAP-002: Minimum context window tokens for RAG/knowledge retrieval.
+  // Null = system default 16000.
+  minimumContextTokens Int?
   configuredAt     DateTime  @default(now())
   configuredById   String?
   configuredBy     User?     @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])

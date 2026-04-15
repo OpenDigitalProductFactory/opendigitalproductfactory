@@ -2,6 +2,8 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
+import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -52,6 +54,75 @@ export function resolveAnnotations(tool: ToolDefinition): ToolAnnotations {
     openWorldHint: tool.requiresExternalAccess === true,
   };
   return { ...defaults, ...tool.annotations };
+}
+
+// ─── Parameter Sanitization ─────────────────────────────────────────────────
+// Models (especially Codex/GPT) often fill optional object parameters with empty
+// strings as schema artifacts. This causes validation failures in handlers that
+// check for the object's presence before inspecting its fields.
+//
+// sanitizeToolParams strips optional object params whose string fields are all
+// empty/whitespace. Applied once at the executeTool entry point so every handler
+// is protected without per-tool defensive code.
+
+const _toolSchemaCache = new Map<string, { required: Set<string>; objectParams: string[] }>();
+
+function _getToolParamMeta(toolName: string): { required: Set<string>; objectParams: string[] } {
+  const cached = _toolSchemaCache.get(toolName);
+  if (cached) return cached;
+
+  const tool = PLATFORM_TOOLS.find(t => t.name === toolName);
+  if (!tool) {
+    const empty = { required: new Set<string>(), objectParams: [] };
+    _toolSchemaCache.set(toolName, empty);
+    return empty;
+  }
+
+  const schema = tool.inputSchema as {
+    properties?: Record<string, { type?: string }>;
+    required?: string[];
+  };
+  const required = new Set<string>(schema.required ?? []);
+  const objectParams: string[] = [];
+  if (schema.properties) {
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      if (prop?.type === "object" && !required.has(key)) {
+        objectParams.push(key);
+      }
+    }
+  }
+  const result = { required, objectParams };
+  _toolSchemaCache.set(toolName, result);
+  return result;
+}
+
+/**
+ * Strip optional object parameters that are empty schema artifacts.
+ * An object param is considered empty when all its string-typed values
+ * are empty or whitespace-only. Returns a shallow copy with empty
+ * objects removed; does not mutate the original.
+ */
+export function sanitizeToolParams(
+  toolName: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const { objectParams } = _getToolParamMeta(toolName);
+  if (objectParams.length === 0) return params;
+
+  let cleaned: Record<string, unknown> | null = null;
+  for (const key of objectParams) {
+    const val = params[key];
+    if (val == null || typeof val !== "object") continue;
+    const obj = val as Record<string, unknown>;
+    const stringValues = Object.values(obj).filter((v): v is string => typeof v === "string");
+    // Object with at least one string field, all of which are empty → schema artifact
+    if (stringValues.length > 0 && stringValues.every(s => s.trim() === "")) {
+      if (!cleaned) cleaned = { ...params };
+      delete cleaned[key];
+      console.log(`[sanitize] ${toolName}: stripped empty optional object param "${key}"`);
+    }
+  }
+  return cleaned ?? params;
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
@@ -538,8 +609,26 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["plan"],
   },
   {
+    name: "check_sandbox",
+    description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. Call this before start_build to diagnose sandbox issues.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
+    name: "start_sandbox",
+    description: "Start the sandbox container if it is stopped. If status is 'stopped', this will start it and wait up to 20 seconds for it to become ready. If status is 'not_found', the container has never been created — the user must run 'docker compose up -d sandbox' once to create it. Call check_sandbox first to confirm the status before calling this.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
     name: "start_build",
-    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', STOP and tell the user to run: docker compose up -d sandbox",
+    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', call start_sandbox first, then retry start_build.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -1738,12 +1827,39 @@ async function resolveActiveBuildId(userId: string): Promise<string | null> {
   return build?.buildId ?? null;
 }
 
+async function updateBuildHappyPathState(
+  userId: string,
+  patch: Parameters<typeof mergeHappyPathStateIntoPlan>[1],
+  buildId?: string | null,
+): Promise<void> {
+  const resolvedBuildId = buildId ?? await resolveActiveBuildId(userId);
+  if (!resolvedBuildId) return;
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId: resolvedBuildId },
+    select: { plan: true },
+  });
+  if (!build) return;
+
+  const mergedPlan = mergeHappyPathStateIntoPlan(
+    (build.plan as Record<string, unknown> | null) ?? null,
+    patch,
+  );
+
+  await prisma.featureBuild.update({
+    where: { buildId: resolvedBuildId },
+    data: { plan: mergedPlan as import("@dpf/db").Prisma.InputJsonValue },
+  });
+}
+
 export async function executeTool(
   toolName: string,
-  params: Record<string, unknown>,
+  rawParams: Record<string, unknown>,
   userId: string,
   context?: { routeContext?: string; agentId?: string; threadId?: string },
 ): Promise<ToolResult> {
+  // Strip empty optional object params that models send as schema artifacts
+  const params = sanitizeToolParams(toolName, rawParams);
   try {
   switch (toolName) {
     case "create_backlog_item": {
@@ -1773,6 +1889,14 @@ export async function executeTool(
           content: String(params["body"] ?? ""),
         })
       ).catch(() => {});
+      if (context?.routeContext === "/build") {
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            backlogItemId: item.itemId,
+            epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+          },
+        });
+      }
       return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
@@ -1975,6 +2099,11 @@ export async function executeTool(
       };
       try {
         await updateFeatureBrief(buildId, brief);
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            constrainedGoal: brief.title || null,
+          },
+        }, buildId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Update failed";
         return { success: false, error: msg, message: `Could not update brief: ${msg}. The brief can only be updated during the Ideate phase. You are past that phase — proceed with your current phase instead.` };
@@ -2041,20 +2170,30 @@ export async function executeTool(
         }
         const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
         const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
-        // Validate proposeNew structure before passing to Prisma
+        // Validate proposeNew structure before passing to Prisma.
+        // Models often send proposeNew with empty strings alongside a valid nodeId
+        // (filling in the schema shape). Ignore proposeNew when fields are empty —
+        // only treat it as a real proposal when parentNodeId and name are non-empty.
         let proposeNew: { parentNodeId: string; name: string; description: string; rationale: string } | undefined;
         if (params["proposeNew"] && typeof params["proposeNew"] === "object") {
           const raw = params["proposeNew"] as Record<string, unknown>;
-          const parentNodeId = typeof raw["parentNodeId"] === "string" ? raw["parentNodeId"] : "";
-          const name = typeof raw["name"] === "string" ? raw["name"] : "";
+          const parentNodeId = typeof raw["parentNodeId"] === "string" ? raw["parentNodeId"].trim() : "";
+          const name = typeof raw["name"] === "string" ? raw["name"].trim() : "";
           const description = typeof raw["description"] === "string" ? raw["description"] : "";
           const rationale = typeof raw["rationale"] === "string" ? raw["rationale"] : "";
-          if (!parentNodeId || !name) {
-            return { success: false, error: "Invalid proposeNew", message: "proposeNew requires at least parentNodeId and name" };
+          if (parentNodeId && name) {
+            proposeNew = { parentNodeId, name, description, rationale };
           }
-          proposeNew = { parentNodeId, name, description, rationale };
+          // When parentNodeId/name are empty, silently ignore proposeNew — fall through to nodeId path
         }
         const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
+        if (result.success && nodeId) {
+          await updateBuildHappyPathState(userId, {
+            intake: {
+              taxonomyNodeId: nodeId,
+            },
+          }, buildId);
+        }
         return { success: result.success, entityId: buildId, message: result.message };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
@@ -2142,6 +2281,11 @@ export async function executeTool(
       if (resolvedProductId) epicInput.digitalProductId = resolvedProductId;
       try {
         const result = await createBuildEpic(epicInput);
+        await updateBuildHappyPathState(userId, {
+          intake: {
+            epicId: result.epicId,
+          },
+        }, epicBuildId);
         return { success: true, entityId: result.epicId, message: result.message };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Epic creation failed";
@@ -2531,13 +2675,27 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
       const { routeAndCall } = await import("@/lib/routed-inference");
-      const llmResult = await routeAndCall(
-        [{ role: "user", content: prompt }], "You are a design reviewer.", "internal",
-      );
-      const review = parseReviewResponse(llmResult.content);
+      const messages = [{ role: "user" as const, content: prompt }];
+      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
+      const [r1settled, r2settled] = await Promise.allSettled([
+        routeAndCall(messages, "You are a design reviewer.", "internal"),
+        routeAndCall(
+          messages,
+          "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
+      ]);
+      const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
+      const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+        decision: "fail" as const,
+        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
+        summary: "Review could not be completed — retry.",
+      };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
@@ -2584,13 +2742,27 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
-      const { buildPlanReviewPrompt, parseReviewResponse } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const prompt = buildPlanReviewPrompt(build.buildPlan as Parameters<typeof buildPlanReviewPrompt>[0]);
       const { routeAndCall } = await import("@/lib/routed-inference");
-      const llmResult = await routeAndCall(
-        [{ role: "user", content: prompt }], "You are a plan reviewer.", "internal",
-      );
-      const review = parseReviewResponse(llmResult.content);
+      const messages = [{ role: "user" as const, content: prompt }];
+      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
+      const [r1settled, r2settled] = await Promise.allSettled([
+        routeAndCall(messages, "You are a plan reviewer.", "internal"),
+        routeAndCall(
+          messages,
+          "You are an independent plan reviewer. Focus especially on missing tasks, dependency ordering, absent test-first steps, and data seeding gaps.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
+      ]);
+      const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
+      const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+        decision: "fail" as const,
+        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
+        summary: "Review could not be completed — retry.",
+      };
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
@@ -2632,6 +2804,84 @@ export async function executeTool(
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
     }
 
+    case "check_sandbox": {
+      const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+      try {
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
+        const execAsync = promisify(execCb);
+        const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
+        const status = stdout.trim(); // "running", "exited", "paused", etc.
+        const isRunning = status === "running";
+        return {
+          success: true,
+          message: isRunning
+            ? `Sandbox (${sandboxId}) is running and ready.`
+            : `Sandbox (${sandboxId}) exists but is ${status}. Call start_sandbox to start it.`,
+          data: { status: isRunning ? "running" : "stopped", containerId: sandboxId },
+        };
+      } catch {
+        return {
+          success: true,
+          message: `Sandbox container (${sandboxId}) does not exist. The user must run 'docker compose up -d sandbox' once from the DPF directory to create it.`,
+          data: { status: "not_found", containerId: sandboxId },
+        };
+      }
+    }
+
+    case "start_sandbox": {
+      const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+      try {
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
+        const execAsync = promisify(execCb);
+
+        // First check current status
+        let currentStatus = "unknown";
+        try {
+          const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
+          currentStatus = stdout.trim();
+        } catch {
+          return {
+            success: false,
+            error: "Sandbox container not found.",
+            message: `The sandbox container (${sandboxId}) has never been created. The user needs to run 'docker compose up -d sandbox' from the DPF directory once to create it. After that, this tool can start and stop it.`,
+          };
+        }
+
+        if (currentStatus === "running") {
+          return { success: true, message: `Sandbox (${sandboxId}) is already running.`, data: { status: "running" } };
+        }
+
+        // Start the container
+        await execAsync(`docker start ${sandboxId}`, { timeout: 15_000 });
+
+        // Wait up to 20s for it to become running
+        const deadline = Date.now() + 20_000;
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 1_500));
+          try {
+            const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 3_000 });
+            if (stdout.trim() === "running") {
+              return { success: true, message: `Sandbox (${sandboxId}) started successfully and is ready.`, data: { status: "running" } };
+            }
+          } catch { /* keep waiting */ }
+        }
+
+        return {
+          success: false,
+          error: "Sandbox start timed out.",
+          message: `The sandbox container (${sandboxId}) was started but did not become ready within 20 seconds. It may still be initialising — try check_sandbox again in a moment.`,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: "Failed to start sandbox.",
+          message: `Could not start sandbox (${sandboxId}): ${(err as Error).message?.slice(0, 200)}`,
+        };
+      }
+    }
+
     case "start_build": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -2643,7 +2893,7 @@ export async function executeTool(
         return {
           success: false,
           error: "Sandbox container is not running.",
-          message: "The sandbox container (dpf-sandbox-1) is not running. STOP — do not retry. Tell the user to run: docker compose up -d sandbox",
+          message: "The sandbox is not running. Call check_sandbox to see the status, then start_sandbox if it is stopped.",
         };
       }
 
@@ -2904,8 +3154,8 @@ export async function executeTool(
       // ── Dispatch to specific tool ──
       // ── Direct filesystem tools (via shared Docker volume at /sandbox-workspace) ──
       // These use Node.js fs operations — no docker exec, no shell escaping.
-      const { readFile, writeFile, mkdir, stat } = await import(/* turbopackIgnore: true */ "fs/promises");
-      const { join, dirname } = await import(/* turbopackIgnore: true */ "path");
+      const { readFile, writeFile, mkdir, stat } = lazyFsPromises();
+      const { join, dirname } = lazyPath();
       const SANDBOX_MOUNT = "/sandbox-workspace";
 
       const resolveSandboxPath = (p: string) => {
@@ -3002,8 +3252,8 @@ export async function executeTool(
         const max = Number(params.maxResults) || 20;
         try {
           // Use grep on the mounted volume — runs in portal, not sandbox container
-          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-          const { promisify } = await import(/* turbopackIgnore: true */ "util");
+          const { exec: execCb } = lazyChildProcess();
+          const { promisify } = lazyUtil();
           const execAsync = promisify(execCb);
           const { stdout } = await execAsync(
             `grep -rn --include='${globFilter}' '${pattern.replace(/'/g, "'\\''")}' ${SANDBOX_MOUNT}/apps/ ${SANDBOX_MOUNT}/packages/ 2>/dev/null | head -${max}`,
@@ -3031,8 +3281,8 @@ export async function executeTool(
       if (toolName === "list_sandbox_files") {
         const pattern = String(params.pattern ?? "**/*");
         try {
-          const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-          const { promisify } = await import(/* turbopackIgnore: true */ "util");
+          const { exec: execCb } = lazyChildProcess();
+          const { promisify } = lazyUtil();
           const execAsync = promisify(execCb);
           const findPattern = pattern.startsWith("/") ? pattern : `${SANDBOX_MOUNT}/${pattern}`;
           const { stdout } = await execAsync(
@@ -3148,8 +3398,8 @@ export async function executeTool(
 
       const tryDirectRead = async (): Promise<string | null> => {
         try {
-          const { resolve } = await import(/* turbopackIgnore: true */ "path");
-          const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
+          const { resolve } = lazyPath();
+          const { readFile } = lazyFsPromises();
           const root = process.env.PROJECT_ROOT
             ? resolve(process.env.PROJECT_ROOT)
             : resolve(process.cwd(), "..", "..");
@@ -3516,10 +3766,10 @@ export async function executeTool(
       const promoBuildId = promoDetail?.productVersion?.featureBuild?.buildId;
       if (!sandboxId) return { success: false, error: "No sandbox", message: "No sandbox linked to this promotion." };
 
-      const { execFile: execFileCb } = await import(/* turbopackIgnore: true */ "child_process");
-      const { promisify } = await import(/* turbopackIgnore: true */ "util");
+      const { execFile: execFileCb } = lazyChildProcess();
+      const { promisify } = lazyUtil();
       const execFileAsync = promisify(execFileCb);
-      const execAsync = promisify((await import(/* turbopackIgnore: true */ "child_process")).exec);
+      const execAsync = promisify((lazyChildProcess()).exec);
 
       // Start promoter container (array form — no shell injection)
       try {
@@ -4329,7 +4579,7 @@ export async function executeTool(
     }
 
     case "list_project_directory": {
-      const { listProjectDirectory } = await import("@/lib/codebase-tools");
+      const { listProjectDirectory } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const result = await listProjectDirectory(String(params.path ?? "."));
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
@@ -4337,7 +4587,7 @@ export async function executeTool(
     }
 
     case "read_project_file": {
-      const { readProjectFile } = await import("@/lib/codebase-tools");
+      const { readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const opts: { startLine?: number; endLine?: number } = {};
       if (typeof params.startLine === "number") opts.startLine = params.startLine;
       if (typeof params.endLine === "number") opts.endLine = params.endLine;
@@ -4375,13 +4625,13 @@ export async function executeTool(
 
       return {
         success: true,
-        message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now.",
+        message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now. IMPORTANT: Do NOT call saveBuildEvidence with field 'designDoc' — the research system saves the design document and runs the review automatically when research completes. Just wait and tell the user.",
         data: { reusabilityScope: scope, userContext: context },
       };
     }
 
     case "search_project_files": {
-      const { searchProjectFiles } = await import("@/lib/codebase-tools");
+      const { searchProjectFiles } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       let query = String(params.query ?? "");
       const opts: { glob?: string; maxResults?: number } = {};
 
@@ -4470,7 +4720,7 @@ export async function executeTool(
     }
 
     case "generate_codebase_manifest": {
-      const { isDevInstance } = await import("@/lib/codebase-tools");
+      const { isDevInstance } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
 
       const { generateManifest } = await import("@/lib/manifest-generator");
@@ -4519,7 +4769,7 @@ export async function executeTool(
       }
 
       // Fall back to reading the file (dev instances only)
-      const { isDevInstance, readProjectFile } = await import("@/lib/codebase-tools");
+      const { isDevInstance, readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       if (isDevInstance()) {
         const result = await readProjectFile("codebase-manifest.json");
         if ("content" in result) {
@@ -4578,7 +4828,7 @@ export async function executeTool(
     }
 
     case "propose_file_change": {
-      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("@/lib/codebase-tools");
+      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
       const path = String(params.path ?? "");
       const newContent = String(params.newContent ?? "");
       const description = String(params.description ?? "");
@@ -5448,8 +5698,8 @@ export async function executeTool(
     }
 
     case "apply_platform_update": {
-      const { exec: execCbUpdate } = await import(/* turbopackIgnore: true */ "child_process");
-      const { promisify: promisifyUpdate } = await import(/* turbopackIgnore: true */ "util");
+      const { exec: execCbUpdate } = lazyChildProcess();
+      const { promisify: promisifyUpdate } = lazyUtil();
       const execUpdate = promisifyUpdate(execCbUpdate);
 
       const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
@@ -5467,14 +5717,14 @@ export async function executeTool(
 
       try {
         // Check for in-progress merge from a previous interrupted run
-        const { existsSync } = await import("fs");
-        const { resolve: resolvePath } = await import(/* turbopackIgnore: true */ "path");
+        const { existsSync } = lazyFs();
+        const { resolve: resolvePath } = lazyPath();
         if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
           // Return existing conflict list
           const { stdout: conflicted } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
           const conflicts = [];
           for (const file of conflicted.trim().split("\n").filter(Boolean)) {
-            const { readFileSync } = await import("fs");
+            const { readFileSync } = lazyFs();
             const content = readFileSync(resolvePath(workspace, file), "utf-8");
             const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
             const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
@@ -5516,8 +5766,8 @@ export async function executeTool(
         const { stdout: conflictedFiles } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts).catch(() => ({ stdout: "" }));
         if (conflictedFiles.trim()) {
           const conflicts = [];
-          const { readFileSync } = await import("fs");
-          const { resolve: rp } = await import(/* turbopackIgnore: true */ "path");
+          const { readFileSync } = lazyFs();
+          const { resolve: rp } = lazyPath();
           for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
             const content = readFileSync(rp(workspace, file), "utf-8");
             const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
@@ -5541,8 +5791,8 @@ export async function executeTool(
         await execUpdate(`git commit -m "chore: merge dpf v${pendingVersion}"`, gitOpts);
 
         // Update version sentinel
-        const { writeFileSync } = await import("fs");
-        const { resolve: rp2 } = await import(/* turbopackIgnore: true */ "path");
+        const { writeFileSync } = lazyFs();
+        const { resolve: rp2 } = lazyPath();
         writeFileSync(rp2(workspace, ".dpf-version"), pendingVersion, "utf-8");
 
         // Clear update pending flag
@@ -5886,8 +6136,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
           cwd: process.env.PROJECT_ROOT || "/app",
@@ -5930,8 +6180,8 @@ export async function executeTool(
     case "admin_read_file": {
       const filePath = String(params.path ?? "");
       if (!filePath) return { success: false, error: "path is required.", message: "Provide a file path." };
-      const { resolve, join } = await import(/* turbopackIgnore: true */ "path");
-      const { readFile } = await import(/* turbopackIgnore: true */ "fs/promises");
+      const { resolve, join } = lazyPath();
+      const { readFile } = lazyFsPromises();
       const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(process.cwd(), "..", "..");
       const resolved = resolve(join(root, filePath));
       if (!resolved.startsWith(root)) {
@@ -5966,8 +6216,8 @@ export async function executeTool(
         return { success: false, error: `Invalid service. Allowed: ${ALLOWED.join(", ")}`, message: `Unknown service "${service}".` };
       }
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_restart_service", { service }, "success", 2, `Restarting ${service}`);
         const { stdout } = await execAsync(`docker compose restart ${service} 2>&1`, {
@@ -5983,8 +6233,8 @@ export async function executeTool(
 
     case "admin_run_migration": {
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
         const { stdout, stderr } = await execAsync(
@@ -6001,8 +6251,8 @@ export async function executeTool(
 
     case "admin_run_seed": {
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
         const { stdout, stderr } = await execAsync(
@@ -6054,8 +6304,8 @@ export async function executeTool(
       }
 
       try {
-        const { exec: execCb } = await import(/* turbopackIgnore: true */ "child_process");
-        const { promisify } = await import(/* turbopackIgnore: true */ "util");
+        const { exec: execCb } = lazyChildProcess();
+        const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
         const { stdout, stderr } = await execAsync(command + " 2>&1", {

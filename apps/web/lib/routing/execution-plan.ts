@@ -64,6 +64,9 @@ export function buildPlanFromRecipe(
       ? (recipe.responsePolicy as RoutedExecutionPlan["responsePolicy"])
       : {};
 
+  // anthropic-sub uses OAuth tokens which only work with Claude CLI, not the
+  // direct Messages API. Always route through CLI adapter for this provider.
+  // MCP tool execution happens via the agentic loop, not the adapter itself.
   const executionAdapter = usesResponsesApi(recipe.providerId)
     ? "responses"
     : usesCliAdapter(recipe.providerId)

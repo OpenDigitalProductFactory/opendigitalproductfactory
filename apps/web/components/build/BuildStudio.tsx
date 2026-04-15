@@ -8,6 +8,7 @@ import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { SandboxPreview } from "./SandboxPreview";
 import { ClaimBadge } from "./ClaimBadge";
+import { ProcessGraph } from "./ProcessGraph";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
@@ -29,7 +30,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [buildView, setBuildView] = useState<"preview" | "docs">("preview");
+  const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isDevEnvironment = dpfEnvironment === "dev";
 
@@ -161,6 +162,26 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         taskResults: null,
         verificationOut: null,
         acceptanceMet: null,
+        happyPathState: {
+          intake: {
+            status: "pending",
+            taxonomyNodeId: null,
+            backlogItemId: null,
+            epicId: null,
+            constrainedGoal: null,
+            failureReason: null,
+          },
+          execution: {
+            engine: null,
+            source: null,
+            status: "pending",
+            failureStage: null,
+          },
+          verification: {
+            status: "pending",
+            checks: [],
+          },
+        },
         accountableEmployeeId: null,
         claimedByAgentId: null,
         claimedAt: null,
@@ -312,54 +333,83 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
               )}
 
               <div className="flex-1 flex flex-col">
-                {/* Tab selector — only show when sandbox is available */}
-                {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
-                  <div role="tablist" aria-label="Build view tabs" className="flex gap-1 px-4 pt-3 pb-0">
-                    {(["preview", "docs"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        role="tab"
-                        aria-selected={buildView === tab}
-                        aria-controls={`panel-${tab}`}
-                        onClick={() => setBuildView(tab)}
-                        onKeyDown={(e) => {
-                          if (e.key === "ArrowRight") { setBuildView(tab === "preview" ? "docs" : "preview"); }
-                          if (e.key === "ArrowLeft") { setBuildView(tab === "docs" ? "preview" : "docs"); }
-                        }}
-                        className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                        style={{
-                          background: buildView === tab ? "var(--dpf-surface-2)" : "transparent",
-                          color: buildView === tab ? "var(--dpf-text)" : "var(--dpf-muted)",
-                          borderBottom: buildView === tab ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                        }}
-                      >
-                        {tab === "preview" ? "Live Preview" : (activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Build Details"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="flex-1 flex p-4 gap-4">
-                  {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
-                    <SandboxPreview
-                      buildId={activeBuild.buildId}
-                      phase={activeBuild.phase}
-                      sandboxPort={activeBuild.sandboxPort}
-                    />
-                  ) : (
-                    <div className="flex-1 overflow-auto">
-                      {activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete" ? (
-                        <ReviewPanel build={activeBuild} />
-                      ) : (
-                        <FeatureBriefPanel
-                          brief={activeBuild.brief}
-                          phase={activeBuild.phase}
-                          diffSummary={activeBuild.diffSummary}
-                          build={activeBuild}
-                        />
-                      )}
-                    </div>
+                {/* Tab selector */}
+                <div role="tablist" aria-label="Build view tabs" className="flex gap-1 px-4 pt-3 pb-0">
+                  <button
+                    role="tab"
+                    aria-selected={buildView === "graph"}
+                    aria-controls="panel-graph"
+                    onClick={() => setBuildView("graph")}
+                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                    style={{
+                      background: buildView === "graph" ? "var(--dpf-surface-2)" : "transparent",
+                      color: buildView === "graph" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                      borderBottom: buildView === "graph" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                    }}
+                  >
+                    Graph
+                  </button>
+                  {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
+                  <button
+                    role="tab"
+                    aria-selected={buildView === "docs"}
+                    aria-controls="panel-docs"
+                    onClick={() => setBuildView("docs")}
+                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                    style={{
+                      background: buildView === "docs" ? "var(--dpf-surface-2)" : "transparent",
+                      color: buildView === "docs" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                      borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                    }}
+                  >
+                    {(activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Details"}
+                  </button>
+                  {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
+                    <button
+                      role="tab"
+                      aria-selected={buildView === "preview"}
+                      aria-controls="panel-preview"
+                      onClick={() => setBuildView("preview")}
+                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                      style={{
+                        background: buildView === "preview" ? "var(--dpf-surface-2)" : "transparent",
+                        color: buildView === "preview" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                        borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                      }}
+                    >
+                      Live Preview
+                    </button>
                   )}
                 </div>
+                {buildView === "graph" && (
+                  <div style={{ height: "calc(100vh - 200px)", minHeight: 400 }}>
+                    <ProcessGraph build={activeBuild} />
+                  </div>
+                )}
+                {buildView !== "graph" && (
+                  <div className="flex-1 flex p-4 gap-4">
+                    {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
+                      <SandboxPreview
+                        buildId={activeBuild.buildId}
+                        phase={activeBuild.phase}
+                        sandboxPort={activeBuild.sandboxPort}
+                      />
+                    ) : (
+                      <div className="flex-1 overflow-auto">
+                        {activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete" ? (
+                          <ReviewPanel build={activeBuild} />
+                        ) : (
+                          <FeatureBriefPanel
+                            brief={activeBuild.brief}
+                            phase={activeBuild.phase}
+                            diffSummary={activeBuild.diffSummary}
+                            build={activeBuild}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -391,7 +441,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         </div>
       </div>
 
-      {activeBuild && <PhaseIndicator currentPhase={activeBuild.phase} />}
+      {activeBuild && buildView !== "graph" && <PhaseIndicator currentPhase={activeBuild.phase} />}
     </div>
   );
 }

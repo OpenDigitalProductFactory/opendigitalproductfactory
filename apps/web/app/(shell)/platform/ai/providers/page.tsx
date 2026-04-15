@@ -11,7 +11,6 @@ import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
-import { AiTabNav } from "@/components/platform/AiTabNav";
 import { McpServiceRow } from "@/components/platform/McpServiceRow";
 import { ToolInventoryPanel } from "@/components/platform/ToolInventoryPanel";
 import Link from "next/link";
@@ -62,14 +61,12 @@ export default async function ProvidersPage() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>External Services</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Routing &amp; Calibration</h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           {providers.length} service{providers.length !== 1 ? "s" : ""} registered
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
       </div>
-
-      <AiTabNav />
 
       <DetectedServicesBanner detected={detected} />
 
@@ -100,6 +97,7 @@ export default async function ProvidersPage() {
         )}
       </div>
 
+      {/* TODO Phase 2: move MCP server cards to /platform/tools */}
       {/* Section 1b: Activated MCP Services */}
       {mcpServers.length > 0 && (
         <div style={{ marginBottom: 32 }}>
@@ -111,7 +109,7 @@ export default async function ProvidersPage() {
               </span>
             </div>
             <Link
-              href="/platform/integrations"
+              href="/platform/tools/catalog"
               style={{ color: "var(--dpf-accent)", fontSize: 10 }}
             >
               Browse Catalog →
@@ -146,7 +144,7 @@ export default async function ProvidersPage() {
           }}>
             <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: 0 }}>
               No MCP services activated.{" "}
-              <Link href="/platform/integrations" style={{ color: "var(--dpf-accent)" }}>
+              <Link href="/platform/tools/catalog" style={{ color: "var(--dpf-accent)" }}>
                 Browse the integration catalog
               </Link>{" "}
               to activate services.

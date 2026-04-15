@@ -159,7 +159,8 @@ async function persistDecision(
       taskType: decision.taskType,
       sensitivity: decision.sensitivity,
       reason: decision.reason,
-      fitnessScore: selectedCandidate?.fitnessScore ?? 0,
+      // Normalize to DB invariant 0..1 (pipeline scores are 0..100).
+      fitnessScore: Math.min(Math.max((selectedCandidate?.fitnessScore ?? 0) / 100, 0), 1),
       candidateTrace: JSON.stringify(decision.candidates.filter((c) => !c.excluded)),
       excludedTrace: JSON.stringify(decision.candidates.filter((c) => c.excluded)),
       policyRulesApplied: decision.policyRulesApplied,

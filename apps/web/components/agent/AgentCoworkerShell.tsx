@@ -85,13 +85,29 @@ export function AgentCoworkerShell({ userContext }: Props) {
     return () => window.removeEventListener("resize", handleResize);
   }, [userKey]);
 
+  // Track active build ID from Build Studio — each build gets its own thread
+  const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
+  useEffect(() => {
+    function handleBuildChange(e: Event) {
+      setActiveBuildId((e as CustomEvent<string | null>).detail);
+    }
+    window.addEventListener("build-studio-active-build", handleBuildChange);
+    return () => window.removeEventListener("build-studio-active-build", handleBuildChange);
+  }, []);
+
+  // Thread-per-build: when on /build with an active build, scope the thread to that build.
+  // This prevents 30+ messages from prior builds polluting the context (saves ~15K tokens/call).
+  const threadContext = activeBuildId && pathname === "/build"
+    ? `${pathname}#${activeBuildId}`
+    : pathname;
+
   useEffect(() => {
     let active = true;
     setThreadId(null);
     setInitialMessages([]);
 
     (async () => {
-      const snapshot = await getOrCreateThreadSnapshot({ routeContext: pathname });
+      const snapshot = await getOrCreateThreadSnapshot({ routeContext: threadContext });
       if (!active) return;
       setThreadId(snapshot?.threadId ?? null);
       setInitialMessages(snapshot?.messages ?? []);
@@ -105,7 +121,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
     return () => {
       active = false;
     };
-  }, [pathname]);
+  }, [threadContext]);
 
   function handleOpen() {
     setIsOpen(true);

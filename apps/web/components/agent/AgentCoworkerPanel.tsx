@@ -237,9 +237,14 @@ export function AgentCoworkerPanel({
         // Relay build-relevant events to BuildStudio via DOM event.
         // The panel is always SSE-connected when busy; BuildStudio may not
         // have a threadId yet, so this relay is the primary update channel.
-        const RELAY_TYPES = ["phase:change", "evidence:update", "sandbox:ready", "orchestrator:task_complete", "done"];
+        const RELAY_TYPES = ["phase:change", "evidence:update", "sandbox:ready", "orchestrator:task_dispatched", "orchestrator:task_complete", "done"];
         if (RELAY_TYPES.includes(data.type)) {
           window.dispatchEvent(new CustomEvent("build-progress-update", { detail: data }));
+        }
+        // Relay research progress messages separately so FeatureBriefPanel can
+        // show them without triggering unnecessary DB refetches in BuildStudio.
+        if (data.type === "orchestrator:task_progress" && data.message) {
+          window.dispatchEvent(new CustomEvent("build-research-progress", { detail: data }));
         }
       } catch { /* ignore */ }
     };

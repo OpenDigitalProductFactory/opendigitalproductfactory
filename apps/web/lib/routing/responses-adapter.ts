@@ -274,15 +274,15 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       body.tools = responseTools;
     }
 
-    // Debug: log the request for ChatGPT backend to diagnose empty tool responses
-    if (isChatGptBackend(providerId, provider.baseUrl)) {
+    // Log all Responses API requests to help diagnose tool call issues
+    {
       const toolCount = (body.tools as unknown[] | undefined)?.length ?? 0;
       const toolNames = (body.tools as Array<Record<string, unknown>> | undefined)?.map(t => t.name).slice(0, 5).join(", ") ?? "none";
-      const inputPreview = JSON.stringify(body.input).slice(0, 300);
+      const inputPreview = JSON.stringify(body.input).slice(0, 200);
       console.log(
         `[responses-adapter] REQUEST to ${responsesUrl} | model=${body.model} | ` +
-        `tools=${toolCount} [${toolNames}] | stream=${body.stream} | ` +
-        `input=${inputPreview}`,
+        `tools=${toolCount} [${toolNames}] | stream=${body.stream ?? false} | ` +
+        `reasoning=${JSON.stringify(body.reasoning)} | input=${inputPreview}`,
       );
     }
 
@@ -312,16 +312,16 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
 
-    // Always log for chatgpt backend until the tool issue is resolved
-    if (isChatGptBackend(providerId, provider.baseUrl)) {
-      if (!parsed.text && parsed.toolCalls.length === 0) {
-        const diagnostic =
-          `output items: ${data.output?.length ?? "null"}, ` +
-          `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
-          `raw: ${JSON.stringify(data).slice(0, 1000)}`;
-        console.warn(`[responses-adapter] EMPTY RESPONSE from ${providerId}/${modelId}. ${diagnostic}`);
+    // Log all responses to diagnose tool call issues
+    if (!parsed.text && parsed.toolCalls.length === 0) {
+      const diagnostic =
+        `output items: ${data.output?.length ?? "null"}, ` +
+        `output types: [${(data.output ?? []).map(i => i.type).join(", ")}], ` +
+        `raw: ${JSON.stringify(data).slice(0, 1000)}`;
+      console.warn(`[responses-adapter] EMPTY RESPONSE from ${providerId}/${modelId}. ${diagnostic}`);
 
-        // Surface diagnostic in the text so the agentic loop can show it to the user
+      if (isChatGptBackend(providerId, provider.baseUrl)) {
+        // Surface diagnostic in text for chatgpt backend (harder to debug)
         return {
           text: `[DEBUG] Empty response from ${responsesUrl} (model: ${modelId}). ${diagnostic}`,
           toolCalls: [],
@@ -333,12 +333,12 @@ export const responsesAdapter: ExecutionAdapterHandler = {
           raw: data as Record<string, unknown>,
           responseId: (data as { id?: string }).id ?? undefined,
         };
-      } else {
-        console.log(
-          `[responses-adapter] OK from ${providerId}/${modelId}: ` +
-          `text=${parsed.text.length} chars, tools=${parsed.toolCalls.length} [${parsed.toolCalls.map(t => t.name).join(", ")}]`,
-        );
       }
+    } else {
+      console.log(
+        `[responses-adapter] OK from ${providerId}/${modelId}: ` +
+        `text=${parsed.text.length} chars, tools=${parsed.toolCalls.length} [${parsed.toolCalls.map(t => t.name).join(", ")}]`,
+      );
     }
 
     return {

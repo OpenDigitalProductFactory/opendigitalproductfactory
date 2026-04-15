@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getProviders } from "@/lib/inference/ai-provider-data";
 import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
-import { AiTabNav } from "@/components/platform/AiTabNav";
 import { BuildStudioConfigForm } from "@/components/platform/BuildStudioConfigForm";
 
 export default async function BuildStudioPage() {
@@ -31,14 +30,12 @@ export default async function BuildStudioPage() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
-          Build Studio
+          Build Studio CLI
         </h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           Configure which CLI agent and credentials run build tasks in the sandbox.
         </p>
       </div>
-
-      <AiTabNav />
 
       <BuildStudioConfigForm
         config={config}

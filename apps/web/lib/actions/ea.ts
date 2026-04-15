@@ -340,7 +340,8 @@ export async function advanceEaLifecycle(
 // ─── View actions ─────────────────────────────────────────────────────────────
 
 type CreateEaViewInput = {
-  notationId: string;
+  notationId?: string;
+  notationSlug?: string;
   name: string;
   description?: string;
   layoutType: string;
@@ -349,11 +350,27 @@ type CreateEaViewInput = {
   viewpointId?: string;
 };
 
-export async function createEaView(input: CreateEaViewInput): Promise<void> {
+export async function createEaView(
+  input: CreateEaViewInput,
+): Promise<{ id: string } | { error: string }> {
   const { userId } = await requireManageEaModel();
-  await prisma.eaView.create({
+
+  let resolvedNotationId = input.notationId;
+
+  if (!resolvedNotationId && input.notationSlug) {
+    const notation = await prisma.eaNotation.findUnique({
+      where: { slug: input.notationSlug },
+      select: { id: true },
+    });
+    if (!notation) return { error: "NotationNotFound" };
+    resolvedNotationId = notation.id;
+  }
+
+  if (!resolvedNotationId) return { error: "NotationRequired" };
+
+  const view = await prisma.eaView.create({
     data: {
-      notationId:  input.notationId,
+      notationId:  resolvedNotationId,
       name:        input.name,
       description: input.description ?? null,
       layoutType:  input.layoutType,
@@ -362,7 +379,10 @@ export async function createEaView(input: CreateEaViewInput): Promise<void> {
       viewpointId: input.viewpointId ?? null,
       createdById: userId,
     },
+    select: { id: true },
   });
+
+  return { id: view.id };
 }
 
 export async function updateEaView(id: string, input: Partial<CreateEaViewInput>): Promise<void> {

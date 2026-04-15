@@ -216,6 +216,10 @@ export async function discoverChatGptBackendModels(
           ...m as Record<string, unknown>,
           id: m.slug,
           source: "chatgpt_backend_discovery",
+          // Tag the provider so the adapter can distinguish codex (api.openai.com)
+          // from chatgpt (chatgpt.com/backend-api) — they share this discovery path
+          // but have different tool support characteristics.
+          discoveredForProvider: providerId,
         },
       }));
 
@@ -348,7 +352,7 @@ export async function discoverModelsInternal(
   }
 
   // ── EP-INF-002: Discovery reconciliation — detect gone models ──
-  const isLocalProvider = providerId === "ollama";
+  const isLocalProvider = providerId === "local" || providerId === "ollama";
   if (!isLocalProvider) {
     const allKnown = await prisma.discoveredModel.findMany({
       where: { providerId },
@@ -437,7 +441,7 @@ export async function profileModelsInternal(
         // For Ollama: force streaming=true (all models support it) since the
         // model card probe can't detect this and returns null for everything.
         // Null capabilities cause routing exclusion (streaming required for sync).
-        capabilities: providerId === "ollama"
+        capabilities: (providerId === "local" || providerId === "ollama")
           ? { ...card.capabilities, streaming: true } as any
           : card.capabilities as any,
         pricing: card.pricing as any,
@@ -455,7 +459,7 @@ export async function profileModelsInternal(
         maxContextTokens: card.maxInputTokens,
         inputPricePerMToken: card.pricing.inputPerMToken,
         outputPricePerMToken: card.pricing.outputPerMToken,
-        supportsToolUse: card.capabilities.toolUse ?? false,
+        supportsToolUse: card.capabilities.toolUse ?? provider!.supportsToolUse ?? false,
       };
       await prisma.modelProfile.upsert({
         where: { providerId_modelId: { providerId, modelId: m.modelId } },
@@ -563,7 +567,7 @@ export async function profileModelsInternal(
     // EP-INF-003: Drift detection — check if provider metadata changed
     const existingProfile = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { rawMetadataHash: true, profileSource: true },
+      select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true },
     });
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
@@ -587,14 +591,27 @@ export async function profileModelsInternal(
       }
     }
 
-    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync
+    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
+    // supportsToolUse uses a fallback chain:
+    //   1. extracted value (non-null) — authoritative from provider metadata
+    //   2. existing DB value when profileSource is evaluated/admin — preserves manual overrides
+    //   3. provider-level supportsToolUse flag — provider knows its models better than per-model metadata
+    //   4. null — unknown (not false); prevents permanent tool disabling on undiscovered models
+    const extractedToolUse = card.capabilities.toolUse;
+    const isManuallySet = existingProfile?.profileSource === "evaluated" || existingProfile?.profileSource === "admin";
+    const resolvedToolUse = extractedToolUse !== null && extractedToolUse !== undefined
+      ? extractedToolUse
+      : isManuallySet
+        ? (existingProfile.supportsToolUse ?? provider!.supportsToolUse ?? null)
+        : (provider!.supportsToolUse ?? null);
+
     const metadataFields = {
       modelFamily: card.modelFamily,
       modelClass: card.modelClass,
       maxInputTokens: card.maxInputTokens,
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
-      capabilities: providerId === "ollama"
+      capabilities: (providerId === "local" || providerId === "ollama")
         ? { ...card.capabilities, streaming: true } as any
         : card.capabilities as any,
       pricing: card.pricing as any,
@@ -609,11 +626,12 @@ export async function profileModelsInternal(
       metadataConfidence: card.metadataConfidence,
       lastMetadataRefresh: new Date(),
       rawMetadataHash: card.rawMetadataHash,
+      discoveryHash: card.rawMetadataHash,   // EP-MODEL-CAP-001: explicit discovery hash column
       // Backward compat
       maxContextTokens: card.maxInputTokens,
       inputPricePerMToken: card.pricing.inputPerMToken,
       outputPricePerMToken: card.pricing.outputPerMToken,
-      supportsToolUse: card.capabilities.toolUse ?? false,
+      supportsToolUse: resolvedToolUse,
     };
 
     // EP-INF-012: Assign quality tier from model family
@@ -730,7 +748,7 @@ export async function backfillModelCards(): Promise<number> {
         maxInputTokens: card.maxInputTokens,
         inputModalities: card.inputModalities as any,
         outputModalities: card.outputModalities as any,
-        capabilities: dm.providerId === "ollama"
+        capabilities: (dm.providerId === "local" || dm.providerId === "ollama")
           ? { ...card.capabilities, streaming: true } as any
           : card.capabilities as any,
         pricing: card.pricing as any,
@@ -912,10 +930,11 @@ async function seedKnownModels(
 
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { qualityTierSource: true, profileSource: true },
+      select: { qualityTierSource: true, profileSource: true, supportsToolUse: true },
     });
 
     const shouldWriteScores = !existing?.profileSource || existing.profileSource === "seed";
+    const isManuallySetCatalog = existing?.profileSource === "evaluated" || existing?.profileSource === "admin";
     const shouldWriteTier = !existing?.qualityTierSource || existing.qualityTierSource !== "admin";
 
     // Use per-model scores if provided, otherwise fall back to tier baselines
@@ -986,7 +1005,9 @@ async function seedKnownModels(
         inputModalities: m.inputModalities,
         outputModalities: m.outputModalities,
         capabilities: m.capabilities as any,
-        supportsToolUse: m.capabilities.toolUse ?? false,
+        supportsToolUse: isManuallySetCatalog
+          ? (existing.supportsToolUse ?? m.capabilities.toolUse ?? false)
+          : (m.capabilities.toolUse ?? false),
         ...scoreFields,
         ...tierFields,
         generatedBy: "system:auto-discover",

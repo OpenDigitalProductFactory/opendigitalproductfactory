@@ -46,7 +46,7 @@ describe("checkBundledProviders", () => {
 
   it("activates Ollama and triggers discovery when reachable and unconfigured", async () => {
     mockFindFirst.mockResolvedValue({
-      providerId: "ollama",
+      providerId: "local",
       status: "unconfigured",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
@@ -70,16 +70,16 @@ describe("checkBundledProviders", () => {
     await checkBundledProviders();
 
     expect(mockUpdate).toHaveBeenCalledWith({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: { status: "active" },
     });
-    expect(mockDiscover).toHaveBeenCalledWith("ollama");
-    expect(mockProfile).toHaveBeenCalledWith("ollama");
+    expect(mockDiscover).toHaveBeenCalledWith("local");
+    expect(mockProfile).toHaveBeenCalledWith("local");
   });
 
   it("deactivates Ollama when unreachable and currently active", async () => {
     mockFindFirst.mockResolvedValue({
-      providerId: "ollama",
+      providerId: "local",
       status: "active",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
@@ -89,7 +89,7 @@ describe("checkBundledProviders", () => {
     await checkBundledProviders();
 
     expect(mockUpdate).toHaveBeenCalledWith({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: { status: "inactive" },
     });
     expect(mockDiscover).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("checkBundledProviders", () => {
 
   it("leaves unconfigured status when unreachable and unconfigured", async () => {
     mockFindFirst.mockResolvedValue({
-      providerId: "ollama",
+      providerId: "local",
       status: "unconfigured",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
@@ -116,7 +116,7 @@ describe("checkBundledProviders", () => {
 
   it("skips auto-profiling when model count >= 20", async () => {
     mockFindFirst.mockResolvedValue({
-      providerId: "ollama",
+      providerId: "local",
       status: "unconfigured",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
@@ -144,7 +144,7 @@ describe("checkBundledProviders", () => {
 
   it("refreshes hardware info when already active and reachable (steady state)", async () => {
     mockFindFirst.mockResolvedValue({
-      providerId: "ollama",
+      providerId: "local",
       status: "active",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,

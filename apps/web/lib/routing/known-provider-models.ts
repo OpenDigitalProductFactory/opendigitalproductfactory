@@ -205,15 +205,11 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelId: "gpt-5.3-codex",
       friendlyName: "GPT-5.3 Codex",
       summary:
-        "OpenAI Codex coding model -- uses built-in Codex tools, not custom function tools",
+        "OpenAI Codex coding model — routes to api.openai.com/v1/responses, supports custom function tools",
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        // Codex models via ChatGPT backend (/codex/responses) only support
-        // Codex's built-in tools (apply_patch, shell, etc.), not custom
-        // function tools — mark false so the router never selects codex
-        // for tasks that need custom tools.
-        toolUse: false,
+        toolUse: true,
         streaming: true,
         structuredOutput: true,
       },
@@ -225,13 +221,13 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelFamily: "codex",
       capabilityTier: "advanced",
       costTier: "$$$",
-      bestFor: ["coding", "reasoning"],
-      avoidFor: ["conversation", "custom-tool-use"],
+      bestFor: ["coding", "reasoning", "tool-use"],
+      avoidFor: ["conversation"],
       defaultStatus: "active",
       scores: {
         reasoning: 88,
         codegen: 96,
-        toolFidelity: 10,
+        toolFidelity: 80,
         instructionFollowingScore: 86,
         structuredOutputScore: 84,
         conversational: 50,
@@ -277,7 +273,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelId: "gpt-5.4",
       friendlyName: "GPT-5.4 (Codex)",
       summary:
-        "OpenAI flagship model via Codex -- built-in Codex tools only, not custom function tools",
+        "OpenAI GPT-5.4 via Codex — routes to api.openai.com/v1/responses, supports custom function tools",
       qualityTier: "frontier",
       capabilities: {
         ...EMPTY_CAPABILITIES,
@@ -293,13 +289,13 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       modelFamily: "gpt-5",
       capabilityTier: "advanced",
       costTier: "$$$$",
-      bestFor: ["coding", "reasoning"],
-      avoidFor: ["custom-tool-use"],
+      bestFor: ["coding", "reasoning", "tool-use"],
+      avoidFor: [],
       defaultStatus: "active",
       scores: {
         reasoning: 95,
         codegen: 97,
-        toolFidelity: 10,
+        toolFidelity: 80,
         instructionFollowingScore: 93,
         structuredOutputScore: 92,
         conversational: 85,

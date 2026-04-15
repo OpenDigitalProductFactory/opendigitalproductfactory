@@ -2,12 +2,37 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 
+import { createHash } from "crypto";
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
-import { executeTool, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { executeTool, PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { AuditClass } from "@/lib/audit-classes";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import {
+  DEFAULT_MINIMUM_CAPABILITIES,
+  DEFAULT_MINIMUM_CONTEXT_TOKENS,
+} from "@/lib/routing/agent-capability-types";
+import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
+
+// ─── Audit helpers (Phase 3) ────────────────────────────────────────────────
+
+function deriveAuditClassForTool(toolName: string): AuditClass {
+  const tool = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  if (!tool) return "journal"; // unknown — conservative default
+  // Explicit override on the tool definition wins
+  if ("auditClass" in tool && tool.auditClass) return tool.auditClass as AuditClass;
+  if (tool.sideEffect) return "ledger";
+  if (tool.requiresExternalAccess) return "journal";
+  return "metrics_only";
+}
+
+function deriveCapabilityId(toolName: string): string {
+  // Platform tools: platform:toolName
+  // MCP tools (serverSlug__toolName) are dispatched via the MCP adapter, not here.
+  return `platform:${toolName}`;
+}
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -252,24 +277,6 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
-function buildSaveEvidenceSignature(args: Record<string, unknown>): string | null {
-  const field = typeof args.field === "string" ? args.field : null;
-  if (!field) return null;
-
-  if (field === "buildPlan") {
-    const rawValue = (args.value ?? args.data) as Record<string, unknown> | undefined;
-    if (!rawValue || typeof rawValue !== "object") return "buildPlan:empty";
-    const fileStructure = Array.isArray(rawValue.fileStructure) ? rawValue.fileStructure : [];
-    const tasks = Array.isArray(rawValue.tasks) ? rawValue.tasks : [];
-    const taskTitles = tasks
-      .slice(0, 3)
-      .map((task) => (task && typeof task === "object" && "title" in task ? String((task as Record<string, unknown>).title ?? "") : ""))
-      .join("|");
-    return `buildPlan:${fileStructure.length}:${tasks.length}:${taskTitles}`;
-  }
-
-  return field;
-}
 
 function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
   const scopedMessages = messages.length <= MAX_AGENTIC_HISTORY_MESSAGES
@@ -326,6 +333,12 @@ export async function runAgenticLoop(params: {
    * required for correct task execution.
    */
   requireTools?: boolean;
+  /**
+   * Display name of the coworker (e.g. "AI Ops Engineer"). Passed through to
+   * routeAndCall so the degraded-mode system prompt can identify the coworker
+   * by name rather than becoming a generic "AI Assistant".
+   */
+  agentDisplayName?: string;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -341,11 +354,21 @@ export async function runAgenticLoop(params: {
     modelRequirements,
     onProgress,
     requireTools,
+    agentDisplayName,
   } = params;
 
   // EP-INF-012: Load admin-configured model assignment for this agent.
   // DB config takes precedence over code defaults in modelRequirements.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
+
+  // EP-AGENT-CAP-002: Read capability floor from agent config.
+  // Null DB value = use system default { toolUse: true }.
+  // {} DB value = passive agent, no floor.
+  const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
+  const minimumCapabilities: AgentMinimumCapabilities =
+    rawMinCaps !== null && rawMinCaps !== undefined ? rawMinCaps : DEFAULT_MINIMUM_CAPABILITIES;
+  const agentMinimumContextTokens: number =
+    agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
 
   // Resolve effective config: DB row > code defaults > nothing
   const effectiveConfig = agentModelConfig
@@ -390,6 +413,11 @@ export async function runAgenticLoop(params: {
     taskType: taskType ?? "conversation",
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
+    ...(agentDisplayName ? { agentDisplayName } : {}),
+    // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
+    minimumCapabilities,
+    agentMinimumContextTokens,
+    agentId,
   };
 
   let messages = [...chatHistory];
@@ -405,6 +433,10 @@ export async function runAgenticLoop(params: {
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
+  // Phase 3: probe chatter aggregation — suppress repetitive metrics_only writes
+  const metricsOnlyBuffer = new Map<string, { count: number; firstAt: number }>();
+  const METRICS_COLLAPSE_THRESHOLD = 3;
+  const METRICS_WINDOW_MS = 60_000;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
@@ -475,62 +507,53 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Repetition detector — if the same tool+key has been called 3+ times, the model is stuck.
-    // For tools like saveBuildEvidence, different field arguments are distinct operations
-    // (e.g., saving "designDoc" vs "buildPlan" is progress, not repetition).
-    // Repetition = same tool with same key arguments called 3+ times.
-    // Different arguments (e.g., different search queries, different fields) = progress.
+    // Repetition detector — sliding window of last 40 tool calls.
+    // Hash tool name + full args: identical hash appearing 3+ times in the window = stuck.
+    // Only recent behavior counts — early calls that were followed by progress are outside
+    // the window and don't trigger the guard.
     //
-    // Review tools (reviewBuildPlan, reviewDesignDoc) are special: they take no arguments
-    // but participate in legitimate revise-resubmit cycles. If saveBuildEvidence was called
-    // between two review calls, the underlying content changed — that's progress, not
-    // repetition. We count only consecutive review calls without an intervening evidence
-    // save as true repetition.
-    const REVIEW_TOOLS = new Set(["reviewBuildPlan", "reviewDesignDoc"]);
+    // No special-casing for review tools. reviewDesignDoc/reviewBuildPlan take no args,
+    // so every call hashes identically — 3 calls trips the guard. This caps the agent at
+    // 2 revision attempts per review, which is enough. If the design/plan still fails after
+    // 2 revisions the user needs to intervene.
+    const WINDOW = 40;
+    const REPEAT_THRESHOLD = 3;
     const toolCallCounts = new Map<string, number>();
-    for (let ti = 0; ti < executedTools.length; ti++) {
-      const t = executedTools[ti]!;
-      const args = t.args as Record<string, unknown> | undefined;
-      // Build a signature from the tool name + distinguishing argument values
-      const keyParts = [t.name];
-      if (t.name === "saveBuildEvidence" && args) {
-        const evidenceSignature = buildSaveEvidenceSignature(args);
-        if (evidenceSignature) keyParts.push(evidenceSignature);
-      } else if (args?.field) keyParts.push(String(args.field));
-      if (args?.model_name) keyParts.push(String(args.model_name));
-      if (args?.query) keyParts.push(String(args.query).slice(0, 50));
-      if (args?.glob) keyParts.push(String(args.glob).slice(0, 80));
-      if (args?.path) keyParts.push(String(args.path));
-      if (args?.offset != null) keyParts.push(`offset=${args.offset}`);
-      if (args?.pattern) keyParts.push(String(args.pattern).slice(0, 50));
-      if (args?.command) keyParts.push(String(args.command).slice(0, 80));
-      if (args?.instruction) keyParts.push(String(args.instruction).slice(0, 50));
+    // Track the most recent result for each hash to include in the stuck message.
+    const toolLastResult = new Map<string, { success: boolean; error?: string }>();
 
-      // Review tools: append a revision counter so revise-resubmit cycles don't
-      // look like repetition. Each saveBuildEvidence between review calls bumps the counter.
-      if (REVIEW_TOOLS.has(t.name)) {
-        let revisionCount = 0;
-        for (let ri = 0; ri < ti; ri++) {
-          if (executedTools[ri]!.name === "saveBuildEvidence") revisionCount++;
-        }
-        keyParts.push(`rev=${revisionCount}`);
-      }
+    const windowSlice = executedTools.slice(-WINDOW);
+    for (let ti = 0; ti < windowSlice.length; ti++) {
+      const t = windowSlice[ti]!;
 
-      const sig = keyParts.join(":");
+      // Hash the full args object — keys sorted for a stable canonical form
+      const argsJson = JSON.stringify(t.args ?? {}, Object.keys((t.args as Record<string, unknown>) ?? {}).sort());
+      const argsHash = createHash("sha1").update(argsJson).digest("hex").slice(0, 12);
+
+      const sig = `${t.name}:${argsHash}`;
       toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
+      toolLastResult.set(sig, t.result as { success: boolean; error?: string });
     }
-    const repeatedTool = [...toolCallCounts.entries()].find(([, count]) => count >= 3);
-    if (repeatedTool && iteration > 5) {
-      console.warn(`[agentic-loop] tool repetition: ${repeatedTool[0]} called ${repeatedTool[1]} times. Breaking loop.`);
-      // Return immediately with a canned message — do NOT make another inference call here.
+
+    const repeatedEntry = [...toolCallCounts.entries()].find(([, count]) => count >= REPEAT_THRESHOLD);
+    if (repeatedEntry && iteration > 5) {
+      const [sig, count] = repeatedEntry;
+      const toolName = sig.split(":")[0] ?? sig;
+      const lastResult = toolLastResult.get(sig);
+      // Surface the reason if the last call failed — helps identify timeouts, auth errors, limits
+      const reasonHint = lastResult && !lastResult.success && lastResult.error
+        ? ` Last error: ${lastResult.error.slice(0, 120)}.`
+        : "";
+      console.warn(`[agentic-loop] stuck: ${toolName} called ${count}x with same args in last ${WINDOW} calls.${reasonHint}`);
+      // Return immediately — do NOT make another inference call here.
       // The summary inference call was the source of 300s hangs when the preferred provider
       // was unavailable. The executedTools list already contains the full work history.
       return {
-        content: `I called ${repeatedTool[0]} ${repeatedTool[1]} times and got stuck. Check the build evidence for what was completed.`,
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
+        content: `I called ${toolName} ${count} times with the same arguments and got stuck.${reasonHint} Check the build evidence for what was completed.`,
+        providerId: "",
+        modelId: "",
+        downgraded: false,
+        downgradeMessage: null,
         totalInputTokens,
         totalOutputTokens,
         executedTools,
@@ -820,7 +843,8 @@ export async function runAgenticLoop(params: {
       const toolDef = tools.find((t) => t.name === tc.name);
 
       // Proposal tools (side-effecting, need approval) — break the loop and return
-      if (toolDef && toolDef.executionMode !== "immediate") {
+      // Check for explicit "proposal" only — undefined executionMode defaults to immediate
+      if (toolDef && toolDef.executionMode === "proposal") {
         return {
           content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
           providerId: result.providerId,
@@ -836,6 +860,27 @@ export async function runAgenticLoop(params: {
             content: result.content || "",
           },
         };
+      }
+
+      // Tool not in available list — capability-gated or not exposed on this route
+      if (!toolDef) {
+        const platformTool = PLATFORM_TOOLS.find((t) => t.name === tc.name);
+        const reason = platformTool?.requiredCapability
+          ? `requires the \`${platformTool.requiredCapability}\` capability, which is not available on this page`
+          : `is not available in this context`;
+        const hint = platformTool?.requiredCapability
+          ? ` You can access this from the relevant section of the platform (e.g. Storefront, Customer, or Operations pages).`
+          : "";
+        console.warn(`[agentic-tool] NOT_AVAILABLE iter=${iteration} tool=${tc.name} reason=${reason}`);
+        iterationResults.push({
+          tc,
+          toolResult: {
+            success: false,
+            error: `Tool not available`,
+            message: `The tool \`${tc.name}\` ${reason}.${hint}`,
+          },
+        });
+        continue;
       }
 
       // Immediate tools — execute
@@ -863,21 +908,48 @@ export async function runAgenticLoop(params: {
       const resultPreview = (toolResult.message ?? "").slice(0, 200);
       console.log(`[agentic-tool] RESULT iter=${iteration} tool=${tc.name} success=${toolResult.success} duration=${durationMs}ms msg=${resultPreview}`);
 
-      // Audit: record every tool execution (fire-and-forget)
-      prisma.toolExecution.create({
-        data: {
-          threadId: threadId ?? "",
-          agentId: agentId ?? "unknown",
-          userId,
-          toolName: tc.name,
-          parameters: tc.arguments as any,
-          result: toolResult as any,
-          success: toolResult.success,
-          executionMode: "immediate",
-          routeContext: routeContext ?? null,
-          durationMs: Date.now() - toolStartMs,
-        },
-      }).catch(() => {});
+      // Audit: record every tool execution (fire-and-forget, Phase 3 enriched)
+      const auditClass = deriveAuditClassForTool(tc.name);
+      const capabilityId = deriveCapabilityId(tc.name);
+      const isMetricsOnly = auditClass === "metrics_only";
+
+      // Probe chatter aggregation: suppress repetitive metrics_only rows
+      let suppressWrite = false;
+      if (isMetricsOnly) {
+        const key = `${threadId}:${tc.name}`;
+        const now = Date.now();
+        const existing = metricsOnlyBuffer.get(key);
+        if (existing && (now - existing.firstAt) < METRICS_WINDOW_MS) {
+          existing.count++;
+          if (existing.count >= METRICS_COLLAPSE_THRESHOLD) {
+            suppressWrite = true; // absorbed into buffer
+          }
+        } else {
+          metricsOnlyBuffer.set(key, { count: 1, firstAt: now });
+        }
+      }
+
+      if (!suppressWrite) {
+        prisma.toolExecution.create({
+          data: {
+            threadId: threadId ?? "",
+            agentId: agentId ?? "unknown",
+            userId,
+            toolName: tc.name,
+            parameters: isMetricsOnly ? {} : (tc.arguments as any),
+            result: isMetricsOnly ? {} : (toolResult as any),
+            success: toolResult.success,
+            executionMode: "immediate",
+            routeContext: routeContext ?? null,
+            durationMs,
+            auditClass,
+            capabilityId,
+            summary: isMetricsOnly
+              ? `${tc.name}: ${toolResult.success ? "ok" : "failed"}${durationMs ? ` (${durationMs}ms)` : ""}`
+              : null,
+          },
+        }).catch(() => {});
+      }
 
       // Sandbox circuit breaker: track consecutive unavailable responses
       if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {

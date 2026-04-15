@@ -62,6 +62,12 @@ export interface RequestContract {
   /** Minimum dimension scores (0-100) the model must meet.
    *  Models below any threshold get successProbability = 0. */
   minimumDimensions?: Record<string, number>;
+  // EP-AGENT-CAP-002: Agent-level capability floor — hard filter in Stage 1 routing.
+  // Set from AgentModelConfig.minimumCapabilities. Null = no agent-level floor.
+  minimumCapabilities?: import("./agent-capability-types").AgentMinimumCapabilities;
+  // EP-AGENT-CAP-002: Minimum context window for RAG injection.
+  // Set from AgentModelConfig.minimumContextTokens. Merged with minContextTokens (stricter wins).
+  agentMinimumContextTokens?: number;
 }
 
 // ── Reasoning depth defaults per task type ──────────────────────────────────

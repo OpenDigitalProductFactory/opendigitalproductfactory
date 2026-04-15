@@ -15,6 +15,7 @@ export const getEaView = cache(async (id: string) => {
     select: {
       id: true,
       notationId: true,
+      notation: { select: { slug: true } },
       name: true,
       description: true,
       layoutType: true,
@@ -157,6 +158,7 @@ export const getEaView = cache(async (id: string) => {
   return {
     id: view.id,
     notationId: view.notationId,
+    notationSlug: view.notation.slug,
     name: view.name,
     description: view.description,
     layoutType: view.layoutType,

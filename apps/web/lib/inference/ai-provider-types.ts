@@ -283,7 +283,7 @@ export function getTestUrl(provider: Pick<ProviderRow, "providerId" | "baseUrl" 
   const base = provider.baseUrl ?? provider.endpoint;
   if (!base) return null;
   // Docker Model Runner uses OpenAI-compatible /v1/models; legacy Ollama uses /api/tags
-  if (provider.providerId === "ollama") {
+  if (provider.providerId === "local" || provider.providerId === "ollama") {
     return base.includes("/v1") ? `${base}/models` : `${base}/api/tags`;
   }
   return `${base}/models`;

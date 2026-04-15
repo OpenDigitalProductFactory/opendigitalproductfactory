@@ -14,6 +14,7 @@ import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
+import { syncCapabilities } from "./sync-capabilities.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -842,6 +843,8 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "restricted" },
     { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
+    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "restricted" },
+    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "restricted" },
   ];
 
   for (const cw of coworkers) {
@@ -1038,7 +1041,7 @@ async function seedClientIdentity(): Promise<void> {
  */
 async function seedLocalModels(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({
-    where: { providerId: "ollama" },
+    where: { providerId: "local" },
   });
   if (!provider) return;
 
@@ -1061,7 +1064,7 @@ async function seedLocalModels(): Promise<void> {
   // Activate provider and grant full sensitivity clearance (local = data never leaves machine)
   if (provider.status === "unconfigured" || (provider.sensitivityClearance as string[]).length === 0) {
     await prisma.modelProvider.update({
-      where: { providerId: "ollama" },
+      where: { providerId: "local" },
       data: {
         status: "active",
         sensitivityClearance: ["public", "internal", "confidential", "restricted"],
@@ -1073,19 +1076,19 @@ async function seedLocalModels(): Promise<void> {
   for (const m of models) {
     // Upsert DiscoveredModel
     await prisma.discoveredModel.upsert({
-      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
-      create: { providerId: "ollama", modelId: m.id, rawMetadata: m as any },
+      where: { providerId_modelId: { providerId: "local", modelId: m.id } },
+      create: { providerId: "local", modelId: m.id, rawMetadata: m as any },
       update: { rawMetadata: m as any },
     });
 
     // Upsert a basic ModelProfile so routing has an endpoint
     const existing = await prisma.modelProfile.findUnique({
-      where: { providerId_modelId: { providerId: "ollama", modelId: m.id } },
+      where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
     if (!existing) {
       await prisma.modelProfile.create({
         data: {
-          providerId: "ollama",
+          providerId: "local",
           modelId: m.id,
           friendlyName: m.id.replace("docker.io/ai/", ""),
           summary: "Local model via Docker Model Runner",
@@ -1114,39 +1117,79 @@ async function seedLocalModels(): Promise<void> {
  * via /v1/models, so we seed them from the registry.
  */
 async function seedCodexModels(): Promise<void> {
+  // Ensure codex provider exists and is active. The CLI adapter (anthropic-sub)
+  // cannot execute MCP tools — codex via the responses adapter is the only
+  // provider that supports both tool use and OAuth auth for the coworker agentic loop.
+  await prisma.modelProvider.upsert({
+    where: { providerId: "codex" },
+    create: {
+      providerId: "codex",
+      name: "Codex (OpenAI)",
+      status: "active",
+      endpointType: "responses",
+      supportsToolUse: true,
+      supportsStreaming: true,
+      supportsStructuredOutput: true,
+    },
+    update: {
+      status: "active",
+      supportsToolUse: true,
+    },
+  });
+
+  // Pin build-specialist to codex/gpt-5.4 so it gets MCP tools.
+  // anthropic-sub uses the CLI adapter which has no tool execution.
+  await prisma.agentModelConfig.upsert({
+    where: { agentId: "build-specialist" },
+    create: { agentId: "build-specialist", pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
+    update: { pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
+  });
+
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
 
-    const codeModels = [
-      {
-        modelId: "gpt-5.3-codex",
-        friendlyName: "GPT-5 Codex",
-        summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
-        modelClass: "code",
-        costTier: "$$$",
-        bestFor: ["coding", "reasoning", "agentic-tasks"] as string[],
-        avoidFor: ["conversation"] as string[],
-        reasoning: 88, codegen: 96, toolFidelity: 90,
-        instructionFollowingScore: 86, structuredOutputScore: 84,
-        conversational: 50, contextRetention: 78,
-      },
-      {
-        modelId: "codex-mini-latest",
-        friendlyName: "Codex Mini",
-        summary: "OpenAI Codex mini model — retained for catalog visibility, but disabled by default for platform routing",
-        modelClass: "code",
-        costTier: "$$",
-        bestFor: ["coding", "agentic-tasks"] as string[],
-        avoidFor: ["conversation"] as string[],
-        reasoning: 70, codegen: 90, toolFidelity: 85,
-        instructionFollowingScore: 80, structuredOutputScore: 70,
+  const codeModels = [
+    {
+      modelId: "gpt-5.3-codex",
+      friendlyName: "GPT-5 Codex",
+      summary: "OpenAI flagship Codex coding model — advanced coding, reasoning, and tool use",
+      modelClass: "code",
+      costTier: "$$$",
+      bestFor: ["coding", "reasoning", "agentic-tasks"] as string[],
+      avoidFor: ["conversation"] as string[],
+      reasoning: 88, codegen: 96, toolFidelity: 80,
+      instructionFollowingScore: 86, structuredOutputScore: 84,
+      conversational: 50, contextRetention: 78,
+    },
+    {
+      modelId: "gpt-5.4",
+      friendlyName: "GPT-5.4 (Codex)",
+      summary: "OpenAI GPT-5.4 via Codex — supports custom function tools via the Responses API",
+      modelClass: "code",
+      costTier: "$$$$",
+      bestFor: ["coding", "reasoning", "tool-use"] as string[],
+      avoidFor: [] as string[],
+      reasoning: 95, codegen: 97, toolFidelity: 80,
+      instructionFollowingScore: 93, structuredOutputScore: 92,
+      conversational: 85, contextRetention: 90,
+    },
+    {
+      modelId: "codex-mini-latest",
+      friendlyName: "Codex Mini",
+      summary: "OpenAI Codex mini model — retained for catalog visibility, but disabled by default for platform routing",
+      modelClass: "code",
+      costTier: "$$",
+      bestFor: ["coding", "agentic-tasks"] as string[],
+      avoidFor: ["conversation", "custom-tool-use"] as string[],
+      reasoning: 70, codegen: 90, toolFidelity: 10,
+      instructionFollowingScore: 80, structuredOutputScore: 70,
       conversational: 40, contextRetention: 60,
     },
   ];
 
-    const allModels = [...codeModels];
   let created = 0;
-  for (const m of allModels) {
+  let updated = 0;
+  for (const m of codeModels) {
     await prisma.discoveredModel.upsert({
       where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
       create: { providerId: "codex", modelId: m.modelId, rawMetadata: { id: m.modelId } as any, lastSeenAt: new Date() },
@@ -1154,7 +1197,13 @@ async function seedCodexModels(): Promise<void> {
     });
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
+      select: { profileSource: true },
     });
+    const scoreFields = {
+      reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
+      instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
+      conversational: m.conversational, contextRetention: m.contextRetention,
+    };
     if (!existing) {
       await prisma.modelProfile.create({
         data: {
@@ -1171,21 +1220,32 @@ async function seedCodexModels(): Promise<void> {
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "medium",
-          maxContextTokens: 128000,
-          maxOutputTokens: 16384,
-          reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
-          instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
-          conversational: m.conversational, contextRetention: m.contextRetention,
-          supportsToolUse: true,
-          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: m.modelClass === "chat" } as any,
-          inputModalities: m.modelClass === "chat" ? ["text", "image"] : ["text"],
+          maxContextTokens: m.modelId === "gpt-5.4" ? 1000000 : 128000,
+          maxOutputTokens: m.modelId === "gpt-5.4" ? 128000 : 16384,
+          supportsToolUse: m.modelId !== "codex-mini-latest",
+          capabilities: { toolUse: m.modelId !== "codex-mini-latest", streaming: true, structuredOutput: true } as any,
+          inputModalities: ["text", "image"],
           outputModalities: ["text"],
+          ...scoreFields,
         },
       });
       created++;
+    } else if (existing.profileSource === "seed") {
+      // Refresh scores AND capability flags from catalog when profile hasn't been overridden by eval or admin.
+      // EP-AGENT-CAP-002 fix: capability flags must be refreshed alongside scores,
+      // otherwise a stale supportsToolUse=false survives even after profileSource is reset to 'seed'.
+      await prisma.modelProfile.update({
+        where: { providerId_modelId: { providerId: "codex", modelId: m.modelId } },
+        data: {
+          ...scoreFields,
+          supportsToolUse: m.modelId !== "codex-mini-latest",
+          capabilities: { toolUse: m.modelId !== "codex-mini-latest", streaming: true, structuredOutput: true } as any,
+        },
+      });
+      updated++;
     }
   }
-  if (created > 0) console.log(`  Seeded ${created} Codex model profile(s)`);
+  if (created > 0 || updated > 0) console.log(`  Seeded ${created} / updated ${updated} Codex model profile(s)`);
 }
 
   /**
@@ -1201,20 +1261,30 @@ async function seedChatGPTModels(): Promise<void> {
     {
       modelId: "gpt-5.4",
       friendlyName: "GPT-5.4 (ChatGPT Subscription)",
-      summary: "OpenAI GPT-5.4 via ChatGPT subscription — conversation, coding, reasoning",
+      // ChatGPT backend (/codex/responses) does not support custom function tools —
+      // only built-in Codex tools work. toolFidelity=10 so the router skips this
+      // endpoint for any task that requires tool use.
+      summary: "OpenAI GPT-5.4 via ChatGPT subscription — conversation and coding only (no custom tool use)",
       bestFor: ["conversation", "coding", "general-purpose", "reasoning"] as string[],
-      avoidFor: ["local-only-required"] as string[],
-      reasoning: 85, codegen: 90, toolFidelity: 85,
+      avoidFor: ["custom-tool-use"] as string[],
+      reasoning: 85, codegen: 90, toolFidelity: 10,
       instructionFollowingScore: 85, structuredOutputScore: 80,
       conversational: 80, contextRetention: 75,
     },
   ];
 
   let created = 0;
+  let updated = 0;
   for (const m of models) {
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId: "chatgpt", modelId: m.modelId } },
+      select: { profileSource: true },
     });
+    const scoreFields = {
+      reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
+      instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
+      conversational: m.conversational, contextRetention: m.contextRetention,
+    };
     if (!existing) {
       await prisma.modelProfile.create({
         data: {
@@ -1233,19 +1303,24 @@ async function seedChatGPTModels(): Promise<void> {
           profileConfidence: "medium",
           maxContextTokens: 128000,
           maxOutputTokens: 16384,
-          reasoning: m.reasoning, codegen: m.codegen, toolFidelity: m.toolFidelity,
-          instructionFollowingScore: m.instructionFollowingScore, structuredOutputScore: m.structuredOutputScore,
-          conversational: m.conversational, contextRetention: m.contextRetention,
-          supportsToolUse: true,
-          capabilities: { toolUse: true, streaming: true, structuredOutput: true, imageInput: true } as any,
+          // ChatGPT backend does not support custom function tools
+          supportsToolUse: false,
+          capabilities: { toolUse: false, streaming: true, structuredOutput: true, imageInput: true } as any,
           inputModalities: ["text", "image"],
           outputModalities: ["text"],
+          ...scoreFields,
         },
       });
       created++;
+    } else if (existing.profileSource === "seed") {
+      await prisma.modelProfile.update({
+        where: { providerId_modelId: { providerId: "chatgpt", modelId: m.modelId } },
+        data: scoreFields,
+      });
+      updated++;
     }
   }
-  if (created > 0) console.log(`  Seeded ${created} ChatGPT model profile(s)`);
+  if (created > 0 || updated > 0) console.log(`  Seeded ${created} / updated ${updated} ChatGPT model profile(s)`);
 }
 
 async function seedAnthropicSubScope(): Promise<void> {
@@ -1258,7 +1333,22 @@ async function seedAnthropicSubScope(): Promise<void> {
     },
     update: {},  // preserve existing credentials on re-seed
   });
-  console.log("Seeded anthropic-sub credential scope");
+
+  // anthropic-sub uses the Claude CLI adapter which runs Claude Code in a
+  // sandbox subprocess. The CLI has NO access to MCP tools — tool-based
+  // agentic work (coworker conversations) must route to codex instead.
+  // Mark supportsToolUse=false so the routing pipeline skips this provider
+  // for tool-based requests.
+  await prisma.modelProvider.updateMany({
+    where: { providerId: "anthropic-sub" },
+    data: { supportsToolUse: false },
+  });
+  await prisma.modelProfile.updateMany({
+    where: { providerId: "anthropic-sub" },
+    data: { supportsToolUse: false },
+  });
+
+  console.log("Seeded anthropic-sub credential scope (toolUse=false)");
 }
 
 /**
@@ -1388,20 +1478,24 @@ async function seedAgentModelDefaults(): Promise<void> {
     budgetClass: string;
     pinnedProviderId?: string;
     pinnedModelId?: string;
+    minimumCapabilities?: Record<string, boolean>;
+    minimumContextTokens?: number;
   }> = [
-      { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedModelId: "claude-sonnet-4-6" },
-    { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced" },
-    { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced" },
-    { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced" },
-    { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "onboarding-coo",     minimumTier: "basic",    budgetClass: "minimize_cost" },
-    { agentId: "doc-specialist",     minimumTier: "adequate", budgetClass: "balanced" },
-    { agentId: "data-architect",     minimumTier: "adequate", budgetClass: "balanced" },
+    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedModelId: "claude-sonnet-4-6", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "onboarding-coo",      minimumTier: "basic",    budgetClass: "minimize_cost", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "doc-specialist",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "data-architect",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "compliance-officer",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "finance-controller",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   ];
 
   let seeded = 0;
@@ -1411,19 +1505,31 @@ async function seedAgentModelDefaults(): Promise<void> {
       where: { agentId: d.agentId },
     });
     if (existing) {
-      // Admin has already configured this agent — don't overwrite tier/budget.
-      // But DO apply pinned provider/model if the seed specifies them and
-      // the existing row doesn't have them (prevents recurring routing bugs).
-      if ((d.pinnedProviderId && !existing.pinnedProviderId) ||
-          (d.pinnedModelId && !existing.pinnedModelId)) {
+      // Admin-configured rows are preserved for tier/budget.
+      // But capability floor and context minimum ARE backfilled if null —
+      // these are system defaults, not admin choices.
+      const needsPinUpdate =
+        (d.pinnedProviderId && !existing.pinnedProviderId) ||
+        (d.pinnedModelId && !existing.pinnedModelId);
+      const needsCapUpdate =
+        (d.minimumCapabilities !== undefined && existing.minimumCapabilities === null) ||
+        (d.minimumContextTokens !== undefined && existing.minimumContextTokens === null);
+
+      if (needsPinUpdate || needsCapUpdate) {
         await prisma.agentModelConfig.update({
           where: { agentId: d.agentId },
           data: {
             ...(d.pinnedProviderId && !existing.pinnedProviderId ? { pinnedProviderId: d.pinnedProviderId } : {}),
             ...(d.pinnedModelId && !existing.pinnedModelId ? { pinnedModelId: d.pinnedModelId } : {}),
+            ...(d.minimumCapabilities !== undefined && existing.minimumCapabilities === null
+              ? { minimumCapabilities: d.minimumCapabilities }
+              : {}),
+            ...(d.minimumContextTokens !== undefined && existing.minimumContextTokens === null
+              ? { minimumContextTokens: d.minimumContextTokens }
+              : {}),
           },
         });
-        console.log(`  Updated pins for ${d.agentId}: provider=${d.pinnedProviderId}, model=${d.pinnedModelId}`);
+        console.log(`  Updated config for ${d.agentId}`);
       }
       existed++;
       continue;
@@ -1435,6 +1541,8 @@ async function seedAgentModelDefaults(): Promise<void> {
         budgetClass: d.budgetClass,
         pinnedProviderId: d.pinnedProviderId ?? null,
         pinnedModelId: d.pinnedModelId ?? null,
+        ...(d.minimumCapabilities !== undefined ? { minimumCapabilities: d.minimumCapabilities } : {}),
+        minimumContextTokens: d.minimumContextTokens ?? null,
         configuredAt: new Date(),
         // configuredById left null — system seed, not a user action
       },
@@ -1514,6 +1622,7 @@ async function main(): Promise<void> {
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
+  await syncCapabilities(prisma);
   console.log("Seed complete.");
 }
 

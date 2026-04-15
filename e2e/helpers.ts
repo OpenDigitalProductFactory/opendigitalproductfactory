@@ -176,6 +176,17 @@ export async function sendAndWait(
   // 4. Confirm the message was accepted (textarea goes disabled)
   const accepted = await waitForCoworkerBusy(page, 10_000);
   if (!accepted) {
+    // The agent may have processed so fast that we missed the disabled window.
+    // Check if a new assistant message already appeared (fast response).
+    await page.waitForTimeout(2_000);
+    const quickCount = await countAssistantMessages(page);
+    if (quickCount > countBefore) {
+      console.log("[helper] Fast response detected — agent already replied before busy check");
+      const response = await extractAssistantMessageAt(page, quickCount - 1);
+      console.log(`\n[send] >>> ${message.slice(0, 80)}`);
+      console.log(`[recv] <<< ${response.slice(0, 200)}`);
+      return response;
+    }
     console.log("[helper] Warning: message may not have been sent (textarea never disabled)");
   }
 

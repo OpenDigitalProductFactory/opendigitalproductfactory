@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import { normalizeHappyPathState } from "@/lib/feature-build-types";
 
 export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow | null> {
   const session = await auth();
@@ -31,6 +32,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     taskResults: build.taskResults as FeatureBuildRow["taskResults"],
     verificationOut: build.verificationOut as FeatureBuildRow["verificationOut"],
     acceptanceMet: build.acceptanceMet as FeatureBuildRow["acceptanceMet"],
+    happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: build.digitalProduct
       ? { productId: build.digitalProduct.productId, version: build.digitalProduct.version, backlogCount: 0 }
       : null,
