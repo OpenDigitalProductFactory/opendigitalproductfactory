@@ -4584,7 +4584,7 @@ export async function executeTool(
     }
 
     case "list_project_directory": {
-      const { listProjectDirectory } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { listProjectDirectory } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       const result = await listProjectDirectory(String(params.path ?? "."));
       if ("error" in result) return { success: false, error: result.error, message: result.error };
       const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
@@ -4592,7 +4592,7 @@ export async function executeTool(
     }
 
     case "read_project_file": {
-      const { readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { readProjectFile } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       const opts: { startLine?: number; endLine?: number } = {};
       if (typeof params.startLine === "number") opts.startLine = params.startLine;
       if (typeof params.endLine === "number") opts.endLine = params.endLine;
@@ -4636,7 +4636,7 @@ export async function executeTool(
     }
 
     case "search_project_files": {
-      const { searchProjectFiles } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { searchProjectFiles } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       let query = String(params.query ?? "");
       const opts: { glob?: string; maxResults?: number } = {};
 
@@ -4725,7 +4725,7 @@ export async function executeTool(
     }
 
     case "generate_codebase_manifest": {
-      const { isDevInstance } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { isDevInstance } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
 
       const { generateManifest } = await import("@/lib/manifest-generator");
@@ -4774,7 +4774,7 @@ export async function executeTool(
       }
 
       // Fall back to reading the file (dev instances only)
-      const { isDevInstance, readProjectFile } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { isDevInstance, readProjectFile } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       if (isDevInstance()) {
         const result = await readProjectFile("codebase-manifest.json");
         if ("content" in result) {
@@ -4833,7 +4833,7 @@ export async function executeTool(
     }
 
     case "propose_file_change": {
-      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import(/* turbopackIgnore: true */ "@/lib/codebase-tools");
+      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import(/* turbopackIgnore: true */ "./integrate/codebase-tools");
       const path = String(params.path ?? "");
       const newContent = String(params.newContent ?? "");
       const description = String(params.description ?? "");
