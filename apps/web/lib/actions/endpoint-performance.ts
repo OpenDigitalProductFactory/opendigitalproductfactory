@@ -65,18 +65,19 @@ export async function getEndpointPerformance(endpointId: string) {
 
 export async function triggerEndpointTests(endpointId: string, probesOnly: boolean = false) {
   const userId = await requireViewAccess();
-  // Check manage_capabilities for running tests
   const session = await auth();
   if (!session?.user || !can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_capabilities")) {
     throw new Error("Running tests requires manage_capabilities permission");
   }
 
-  const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
-  return runEndpointTests({
-    endpointId,
-    probesOnly,
-    triggeredBy: userId,
+  // Fire-and-forget via Inngest — returns immediately to the UI
+  const { inngest } = await import("@/lib/queue/inngest-client");
+  await inngest.send({
+    name: "ai/probe.run",
+    data: { endpointId, probesOnly, userId },
   });
+
+  return { queued: true, message: probesOnly ? "Probes running in background..." : "Full tests running in background..." };
 }
 
 export async function getRoutingProfile(endpointId: string) {
@@ -167,10 +168,28 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
   }
 
   if (modelId) {
-    const { runDimensionEval } = await import("@/lib/routing/eval-runner");
-    return runDimensionEval(endpointId, modelId, userId);
+    // Fire-and-forget via Inngest — returns immediately to the UI
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send({
+      name: "ai/eval.run",
+      data: { endpointId, modelId, userId },
+    });
+
+    return { queued: true, message: "Eval running in background..." };
   } else {
-    const { runAllDimensionEvals } = await import("@/lib/routing/eval-runner");
-    return runAllDimensionEvals(userId);
+    // All-model eval: fire one event per active model
+    const { prisma } = await import("@dpf/db");
+    const profiles = await prisma.modelProfile.findMany({
+      where: { modelStatus: "active" },
+      select: { modelId: true },
+    });
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    for (const p of profiles) {
+      await inngest.send({
+        name: "ai/eval.run",
+        data: { endpointId, modelId: p.modelId, userId },
+      });
+    }
+    return { queued: true, message: `${profiles.length} eval(s) running in background...` };
   }
 }

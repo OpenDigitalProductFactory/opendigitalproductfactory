@@ -54,3 +54,13 @@ export interface QualityIssueTriageEvent {
   name: "quality/issue-triage.run";
   data: Record<string, never>;
 }
+
+export interface AiEvalRunEvent {
+  name: "ai/eval.run";
+  data: { endpointId: string; modelId: string; userId: string };
+}
+
+export interface AiProbeRunEvent {
+  name: "ai/probe.run";
+  data: { endpointId?: string; modelId?: string; probesOnly: boolean; userId: string };
+}

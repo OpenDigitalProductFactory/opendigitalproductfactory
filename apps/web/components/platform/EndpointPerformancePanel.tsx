@@ -98,10 +98,18 @@ export default function EndpointPerformancePanel({
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<"performance" | "evaluations" | "tests">("performance");
 
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+
   function handleRunTests(probesOnly: boolean) {
+    setTestMessage(null);
     startTransition(async () => {
-      await triggerEndpointTests(endpointId, probesOnly);
-      router.refresh();
+      const result = await triggerEndpointTests(endpointId, probesOnly) as { queued?: boolean; message?: string };
+      if (result?.queued) {
+        setTestMessage(result.message ?? "Running in background...");
+        setTimeout(() => router.refresh(), 8000);
+      } else {
+        router.refresh();
+      }
     });
   }
 
@@ -140,6 +148,7 @@ export default function EndpointPerformancePanel({
           </button>
         </div>
         <div className="text-[10px] text-[var(--dpf-muted)] mt-1">
+          {testMessage && <span style={{ color: "var(--dpf-accent)" }}>{testMessage} </span>}
           Optional diagnostics. The platform automatically tests providers on startup and when they are configured.
         </div>
       </div>

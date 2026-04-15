@@ -3653,10 +3653,10 @@ export async function executeTool(
           designDoc: true, buildPlan: true,
           productVersions: {
             take: 1,
-            orderBy: { createdAt: "desc" },
+            orderBy: { shippedAt: "desc" },
             select: {
               id: true,
-              changePromotions: { take: 1, orderBy: { createdAt: "desc" }, select: { promotionId: true, status: true } },
+              promotions: { take: 1, orderBy: { createdAt: "desc" }, select: { promotionId: true, status: true } },
             },
           },
         },
@@ -3810,7 +3810,7 @@ export async function executeTool(
             data: { phase: "complete" },
           });
 
-          const promotion = build.productVersions[0]?.changePromotions[0];
+          const promotion = build.productVersions[0]?.promotions[0];
           if (promotion) {
             await prisma.changePromotion.update({
               where: { promotionId: promotion.promotionId },
