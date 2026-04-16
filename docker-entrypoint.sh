@@ -111,16 +111,25 @@ else
   echo "  -- /workspace not mounted, skipping"
 fi
 
-# Ensure codex provider is active and build-specialist is pinned to it.
-# The CLI adapter (anthropic-sub) cannot execute MCP tools — codex via the
-# responses adapter is required for tool-based agentic coworker conversations.
-echo "[post-init] Ensuring codex provider active + build-specialist pinned..."
+# Configure provider capabilities and build-specialist pinning.
+# codex is only activated if a credential exists — otherwise it stays
+# "unconfigured" so the admin UI accurately reflects what's ready to use.
+echo "[post-init] Configuring provider capabilities..."
 psql "$DATABASE_URL" -c "
-  UPDATE \"ModelProvider\" SET status = 'active', \"supportsToolUse\" = true WHERE \"providerId\" = 'codex';
+  -- codex: activate ONLY if a credential has been stored for it
+  UPDATE \"ModelProvider\" SET status = 'active', \"supportsToolUse\" = true
+    WHERE \"providerId\" = 'codex'
+    AND EXISTS (SELECT 1 FROM \"CredentialEntry\" WHERE \"providerId\" = 'codex' AND status = 'active');
+  -- codex without credentials: mark as discovered (seeded but not configured)
+  UPDATE \"ModelProvider\" SET \"supportsToolUse\" = true
+    WHERE \"providerId\" = 'codex'
+    AND NOT EXISTS (SELECT 1 FROM \"CredentialEntry\" WHERE \"providerId\" = 'codex' AND status = 'active');
+  -- anthropic-sub CLI adapter cannot execute MCP tools
   UPDATE \"ModelProvider\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
   UPDATE \"ModelProfile\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
+  -- Pin build-specialist to codex (takes effect when codex becomes active)
   UPDATE \"AgentModelConfig\" SET \"pinnedProviderId\" = 'codex', \"pinnedModelId\" = 'gpt-5.4' WHERE \"agentId\" = 'build-specialist';
 " 2>/dev/null || echo "  WARN post-init SQL had warnings (non-fatal)"
-echo "  OK Provider config locked"
+echo "  OK Provider config set"
 
 echo "=== Init complete ==="
