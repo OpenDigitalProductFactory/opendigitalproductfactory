@@ -14,6 +14,13 @@ import { advanceStep, skipStep, pauseSetup, completeSetup } from "@/lib/actions/
 /** Build a context-aware trigger prompt for the current setup step.
  * Sent as an autoMessage — triggers a real LLM call so the COO responds
  * with personalised guidance rather than pre-written text.
+ *
+ * NOTE: These are NOT system prompts and intentionally NOT DB-managed via
+ * Admin > Prompts. They are user-facing conversation triggers — the equivalent
+ * of "typing" a first message into the chat. The COO's persona, heuristics,
+ * and behavior come from its DB-managed system prompt (editable in Admin >
+ * Prompts under "Route Personas"). Customizing the COO's guidance during setup
+ * is done by editing the onboarding-coo prompt, not these trigger strings.
  */
 function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   const org = ctx.orgName ? `Organisation: ${ctx.orgName}` : "Organisation: not yet entered";
