@@ -160,7 +160,10 @@ function deriveDeploymentWindows(
 
 // ─── getOperatingHours ───────────────────────────────────────────────────
 
-export async function getOperatingHours(): Promise<{
+export async function getOperatingHours(opts?: {
+  suggestedTimezone?: string;
+  suggestedIndustry?: string;
+}): Promise<{
   schedule: WeeklySchedule;
   timezone: string;
   isConfirmed: boolean;
@@ -172,12 +175,17 @@ export async function getOperatingHours(): Promise<{
     select: { businessHours: true, timezone: true, hoursConfirmedAt: true },
   });
 
+  // Resolve timezone: confirmed profile > suggested from URL import > UTC fallback
+  const resolvedTimezone = profile?.timezone && profile.timezone !== "UTC"
+    ? profile.timezone
+    : opts?.suggestedTimezone ?? profile?.timezone ?? "UTC";
+
   // Priority 1: Existing confirmed hours
   if (profile?.hoursConfirmedAt) {
     const businessHours = profile.businessHours as Record<string, { open: string; close: string } | null>;
     return {
       schedule: profileHoursToSchedule(businessHours),
-      timezone: profile.timezone,
+      timezone: resolvedTimezone,
       isConfirmed: true,
     };
   }
@@ -186,11 +194,14 @@ export async function getOperatingHours(): Promise<{
   const config = await prisma.storefrontConfig.findFirst({
     select: { archetypeId: true },
   });
-  if (config?.archetypeId) {
-    const category = config.archetypeId.split("/")[0];
+  const archetypeCategory = config?.archetypeId?.split("/")[0];
+  // Use storefront archetype if available, otherwise fall back to suggested industry from URL
+  const categoryForDefaults = archetypeCategory ?? opts?.suggestedIndustry;
+
+  if (categoryForDefaults) {
     return {
-      schedule: await getDefaultHoursForArchetype(category),
-      timezone: profile?.timezone ?? "UTC",
+      schedule: await getDefaultHoursForArchetype(categoryForDefaults),
+      timezone: resolvedTimezone,
       isConfirmed: false,
     };
   }
@@ -198,7 +209,7 @@ export async function getOperatingHours(): Promise<{
   // Priority 4: Generic fallback
   return {
     schedule: { ...GENERIC_DEFAULTS },
-    timezone: profile?.timezone ?? "UTC",
+    timezone: resolvedTimezone,
     isConfirmed: false,
   };
 }

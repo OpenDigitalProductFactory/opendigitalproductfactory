@@ -1,11 +1,15 @@
 import { prisma } from "@dpf/db";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { BusinessContextForm } from "@/components/admin/BusinessContextForm";
+import { getSetupContext } from "@/lib/actions/setup-progress";
 
 export default async function AdminBusinessContextPage() {
-  const org = await prisma.organization.findFirst({
-    select: { id: true, email: true, phone: true },
-  });
+  const [org, setupContext] = await Promise.all([
+    prisma.organization.findFirst({
+      select: { id: true, email: true, phone: true },
+    }),
+    getSetupContext(),
+  ]);
 
   const bc = org
     ? await prisma.businessContext.findUnique({
@@ -13,16 +17,32 @@ export default async function AdminBusinessContextPage() {
       })
     : null;
 
+  // Only apply suggestions during initial setup (no existing business context record)
+  const suggestions = !bc && setupContext ? {
+    industry: setupContext.suggestedIndustry ?? "",
+    description: setupContext.suggestedDescription ?? "",
+    contactEmail: setupContext.suggestedContactEmail ?? "",
+    contactPhone: setupContext.suggestedContactPhone ?? "",
+    geographicScope: setupContext.suggestedGeographicScope ?? null,
+  } : null;
+
   const initial = {
-    description: bc?.description ?? "",
+    description: bc?.description ?? suggestions?.description ?? "",
     targetMarket: bc?.targetMarket ?? "",
-    industry: bc?.industry ?? "",
+    industry: bc?.industry ?? suggestions?.industry ?? "",
     companySize: bc?.companySize ?? null,
-    geographicScope: bc?.geographicScope ?? null,
+    geographicScope: bc?.geographicScope ?? suggestions?.geographicScope ?? null,
     revenueModel: bc?.revenueModel ?? "",
-    contactEmail: org?.email ?? "",
-    contactPhone: org?.phone ?? "",
+    contactEmail: org?.email ?? suggestions?.contactEmail ?? "",
+    contactPhone: org?.phone ?? suggestions?.contactPhone ?? "",
   };
+
+  // Track which fields were auto-filled from URL import
+  const autoFilledFields = suggestions
+    ? Object.entries(suggestions)
+        .filter(([, v]) => v != null && v !== "")
+        .map(([k]) => k)
+    : [];
 
   return (
     <div>
@@ -36,7 +56,7 @@ export default async function AdminBusinessContextPage() {
       <AdminTabNav />
 
       <div className="mt-6">
-        <BusinessContextForm initial={initial} isEdit={!!bc} />
+        <BusinessContextForm initial={initial} isEdit={!!bc} autoFilledFields={autoFilledFields} />
       </div>
     </div>
   );
