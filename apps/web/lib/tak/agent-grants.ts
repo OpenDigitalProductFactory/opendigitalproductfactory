@@ -6,7 +6,7 @@ const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknow
 /**
  * Maps platform tool names to agent grant categories.
  * A tool is allowed if the agent has ANY of the grants it maps to.
- * Tools not in this map are allowed by default (backward-compatible).
+ * Tools not in this map are DENIED by default — every tool must have an entry.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Backlog
@@ -117,6 +117,45 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_ontology_graph:   ["ea_graph_read"],
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
+
+  // Marketing / Storefront
+  get_marketing_summary:        ["marketing_read"],
+  suggest_campaign_ideas:       ["marketing_read"],
+  analyze_seo_opportunity:      ["marketing_read"],
+  generate_custom_archetype:    ["marketing_write"],
+  assess_archetype_refinement:  ["marketing_read"],
+
+  // Admin
+  admin_view_logs:        ["admin_read"],
+  admin_query_db:         ["admin_read"],
+  admin_read_file:        ["admin_read"],
+  admin_restart_service:  ["admin_write"],
+  admin_run_migration:    ["admin_write"],
+  admin_run_seed:         ["admin_write"],
+  admin_run_command:       ["admin_write"],
+
+  // Build lifecycle (sandbox-adjacent)
+  check_sandbox:              ["sandbox_execute"],
+  start_sandbox:              ["sandbox_execute"],
+  start_build:                ["sandbox_execute"],
+  start_ideate_research:      ["sandbox_execute", "file_read"],
+  create_portal_pr:           ["sandbox_execute"],
+  suggest_taxonomy_placement: ["registry_read"],
+  confirm_taxonomy_placement: ["backlog_write"],
+  analyze_reusability:        ["backlog_read"],
+  save_phase_handoff:         ["backlog_write"],
+
+  // Hive Mind / Platform updates
+  assess_contribution:    ["backlog_read"],
+  contribute_to_hive:     ["backlog_write"],
+  apply_platform_update:  ["admin_write"],
+
+  // Design intelligence (read-only references)
+  search_design_intelligence: ["file_read"],
+  generate_design_system:     ["file_read"],
+
+  // HR — query
+  query_employees: ["consumer_read", "registry_read"],
 };
 
 const grantCache = new Map<string, string[]>();
@@ -183,8 +222,13 @@ export function isToolAllowedByGrants(
   agentGrants: string[],
 ): boolean {
   const requiredGrants = TOOL_TO_GRANTS[toolName];
-  // Tools not in the mapping are allowed by default (backward-compatible)
-  if (!requiredGrants) return true;
+  // Tools not in the mapping are DENIED — every tool must have a grant entry.
+  // This prevents silent permission escalation when new tools are added without
+  // a corresponding grant mapping.
+  if (!requiredGrants) {
+    console.warn(`[agent-grants] Tool "${toolName}" has no TOOL_TO_GRANTS entry — denied by default`);
+    return false;
+  }
   // Agent must have at least ONE of the required grants
   return requiredGrants.some((g) => agentGrants.includes(g));
 }
