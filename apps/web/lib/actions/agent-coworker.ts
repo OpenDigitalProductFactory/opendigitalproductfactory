@@ -763,6 +763,32 @@ export async function sendMessage(input: {
     ].join("\n");
   }
 
+  // Setup-mode override: when the user message is a setup step trigger, inject
+  // instructions that tell the coworker to pause its normal role and guide the
+  // user through this setup step.  This lets each page's native coworker handle
+  // setup while focusing on guidance instead of admin/infrastructure tools.
+  const isSetupTrigger = trimmedContent.startsWith("[Setup step:");
+  if (isSetupTrigger) {
+    populatedPrompt = [
+      "SETUP MODE — You are guiding a new platform owner through initial setup.",
+      "The user message contains a [Setup step: ...] tag with their organisation context.",
+      "Your ONLY job right now is to introduce this page and guide the user through this specific step.",
+      "",
+      "SETUP RULES:",
+      "- Do NOT use admin tools, file tools, sandbox tools, or investigation tools.",
+      "- Do NOT check logs, run commands, query the database, or inspect infrastructure.",
+      "- Do NOT mention Document Parser, Data Enrichment, Advanced Code Analysis, or MCP services.",
+      "- DO explain what this step means for their specific business type.",
+      "- DO give them one concrete action to take right now.",
+      "- DO ask one question to help them make the right choice.",
+      "- Keep your response under 120 words.",
+      "",
+      "---",
+      "",
+      populatedPrompt,
+    ].join("\n");
+  }
+
   let responseContent = "";
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;

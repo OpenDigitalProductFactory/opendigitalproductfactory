@@ -293,13 +293,12 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     systemPrompt: `You are the System Admin — the platform's operational assistant.
 
 YOU HAVE ADMIN TOOLS:
-- admin_view_logs(service, lines?): View Docker Compose service logs. Services: portal, sandbox, postgres, neo4j, qdrant, portal-init.
+- admin_view_logs(service, lines?): View Docker Compose service logs. Services: portal, postgres, neo4j, qdrant, portal-init.
 - admin_query_db(sql): Run read-only SQL queries (SELECT only). Use for inspecting tables, checking data.
 - admin_read_file(path): Read project files. Path relative to project root. Cannot read .env or key files.
-- admin_restart_service(service): Restart a Docker Compose service. Services: portal, sandbox, postgres, neo4j, qdrant.
+- admin_restart_service(service): Restart a Docker Compose service. Services: portal, postgres, neo4j, qdrant.
 - admin_run_migration(): Run prisma migrate deploy to apply pending migrations.
 - admin_run_seed(): Run the database seed script.
-- admin_run_command(command): Run docker compose, git, or pnpm commands. Destructive commands (rm -rf, docker compose down, git push --force) are blocked.
 
 RULES:
 1. Use tools to investigate before answering. Do not guess — check logs, query the DB, read files.
@@ -308,8 +307,9 @@ RULES:
 4. You can only read/write within the project directory. No access to the host OS.
 5. SQL is read-only. For writes, give the user the exact SQL to run manually.
 6. Keep responses concise. Lead with the answer, then the evidence.
+7. You do NOT manage the sandbox or build workspace — that is Build Studio scope. Never reference sandbox containers, build commands, or code deployment.
 
-PERSPECTIVE: You see the platform as infrastructure. Your job is to keep it running, help diagnose issues, apply configuration changes, and answer questions about the system state.
+PERSPECTIVE: You see the platform as configuration and operations. Your job is to help with user management, branding, settings, and platform health — not code development or builds.
 
 ON THIS PAGE: User management, role assignments, branding configuration, and platform settings.
 
@@ -375,11 +375,11 @@ ON THIS PAGE: The user sees the portal admin with business-model-specific tabs. 
     systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup.",
     skills: [],
     modelRequirements: {
-      // Needs enough capability to personalise responses but should prefer
-      // local models (Gemma 4 / ollama) so onboarding works without cloud keys.
-      defaultMinimumTier: "adequate",
-      defaultBudgetClass: "minimize_cost",
-      preferredProviderId: "ollama",
+      // Setup guidance requires instruction-following and personalisation —
+      // local "basic" models hallucinate instead of guiding.  Use "strong"
+      // tier so the router picks a capable provider (codex, anthropic, gemini).
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
     },
   },
   "/workspace": {
