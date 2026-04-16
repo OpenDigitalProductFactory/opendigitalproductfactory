@@ -85,6 +85,22 @@ export function AgentCoworkerShell({ userContext }: Props) {
     return () => window.removeEventListener("resize", handleResize);
   }, [userKey]);
 
+  // Detect setup overlay — when active, all messages route to onboarding-coo
+  // via the "/setup" route context instead of the actual pathname.
+  const [isSetupActive, setIsSetupActive] = useState(false);
+  useEffect(() => {
+    function check() {
+      setIsSetupActive(document.documentElement.hasAttribute("data-setup-active"));
+    }
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-setup-active"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   // Track active build ID from Build Studio — each build gets its own thread
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null);
   useEffect(() => {
@@ -97,9 +113,13 @@ export function AgentCoworkerShell({ userContext }: Props) {
 
   // Thread-per-build: when on /build with an active build, scope the thread to that build.
   // This prevents 30+ messages from prior builds polluting the context (saves ~15K tokens/call).
-  const threadContext = activeBuildId && pathname === "/build"
-    ? `${pathname}#${activeBuildId}`
-    : pathname;
+  // Setup override: all setup steps share the "/setup" thread so the onboarding COO
+  // maintains context across steps (branding → business context → platform dev → etc.)
+  const threadContext = isSetupActive
+    ? "/setup"
+    : activeBuildId && pathname === "/build"
+      ? `${pathname}#${activeBuildId}`
+      : pathname;
 
   useEffect(() => {
     let active = true;
@@ -272,6 +292,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
             pendingAutoMessage={pendingAutoMessage}
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
             onConversationCleared={() => setInitialMessages([])}
+            routeContextOverride={isSetupActive ? "/setup" : undefined}
           />
           <div
             onMouseDown={handleResizeStart}

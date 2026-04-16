@@ -18,15 +18,17 @@ import { advanceStep, skipStep, pauseSetup, completeSetup } from "@/lib/actions/
 function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   const org = ctx.orgName ? `Organisation: ${ctx.orgName}` : "Organisation: not yet entered";
   const archetype = ctx.suggestedArchetypeName ? `Business type: ${ctx.suggestedArchetypeName}` : "";
-  const industry = ctx.industry ? `Industry: ${ctx.industry}` : "";
+  const industry = ctx.industry || ctx.suggestedIndustry ? `Industry: ${ctx.industry || ctx.suggestedIndustry}` : "";
+  const country = ctx.suggestedCountryCode ? `Country: ${ctx.suggestedCountryCode}` : "";
+  const timezone = ctx.suggestedTimezone ? `Timezone: ${ctx.suggestedTimezone}` : "";
 
-  const contextLine = [org, archetype, industry].filter(Boolean).join(" | ");
+  const contextLine = [org, archetype, industry, country, timezone].filter(Boolean).join(" | ");
 
   const stepLabels: Record<string, string> = {
     "ai-providers": "AI Providers — configure inference engines",
     "branding": "Branding — logo, colours, tagline",
     "business-context": "Your Business — describe what you do and who you serve",
-    "operating-hours": "Operating Hours — when your business is open",
+    "operating-hours": "Operating Hours — when your business is open, and in what timezone",
     "storefront": "Storefront — customer-facing portal",
     "platform-development": "Platform Development — contribution and governance mode",
     "build-studio": "Build Studio — custom feature development",
@@ -34,6 +36,19 @@ function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   };
 
   const label = stepLabels[step] ?? step;
+
+  // Build Studio is a preview-only step during setup — the user will come back
+  // to actually build features after the wizard completes.
+  if (step === "build-studio") {
+    return `[Setup step: ${label}]\n${contextLine}\n\nThis is a preview step. Introduce Build Studio briefly — explain what it does (self-development: the platform can build new features for itself) and that the user will return here after setup is complete to create their first feature. Do NOT ask the user to build anything now. Keep it to 2-3 sentences.`;
+  }
+
+  // Workspace is the final step — welcome the user and orient them, but do NOT
+  // create epics, backlog items, or start building anything.
+  if (step === "workspace") {
+    return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
   return `[Setup step: ${label}]\n${contextLine}\n\nGuide me through this step.`;
 }
 

@@ -46,16 +46,32 @@ type BusinessContextFormProps = {
   initial: BusinessContextData;
   /** When true, show the compact quick-edit layout (returning user). */
   isEdit?: boolean;
+  /** Fields that were auto-populated from URL import during setup. */
+  autoFilledFields?: string[];
 };
 
-export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProps) {
+function AutoFillHint({ field, editedFields }: { field: string; editedFields: Set<string> }) {
+  if (editedFields.has(field)) return null;
+  return (
+    <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
+      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--dpf-accent)", opacity: 0.6, flexShrink: 0 }} />
+      Pre-filled from your website — edit if needed
+    </div>
+  );
+}
+
+export function BusinessContextForm({ initial, isEdit, autoFilledFields }: BusinessContextFormProps) {
   const [data, setData] = useState<BusinessContextData>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
+
+  const hasAutoFill = (autoFilledFields?.length ?? 0) > 0;
 
   function update<K extends keyof BusinessContextData>(field: K, value: BusinessContextData[K]) {
     setData((prev) => ({ ...prev, [field]: value }));
+    setEditedFields((prev) => new Set(prev).add(field));
     setSaved(false);
   }
 
@@ -106,6 +122,18 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
         </>
       )}
 
+      {hasAutoFill && !isEdit && (
+        <div style={{
+          borderLeft: "4px solid var(--dpf-accent)",
+          paddingLeft: 12,
+          marginBottom: 16,
+          fontSize: 12,
+          color: "var(--dpf-muted)",
+        }}>
+          We pre-filled some fields from your website. Review and adjust anything that doesn&apos;t look right.
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {/* Industry */}
         <label style={labelStyle}>
@@ -122,6 +150,7 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
               </option>
             ))}
           </select>
+          {autoFilledFields?.includes("industry") && <AutoFillHint field="industry" editedFields={editedFields} />}
         </label>
 
         {/* Description */}
@@ -137,6 +166,7 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
           <div style={hintStyle}>
             Your AI coworker uses this to understand your business when building features and providing guidance.
           </div>
+          {autoFilledFields?.includes("description") && <AutoFillHint field="description" editedFields={editedFields} />}
         </label>
 
         {/* Target market */}
@@ -206,6 +236,7 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
               </button>
             ))}
           </div>
+          {autoFilledFields?.includes("geographicScope") && <AutoFillHint field="geographicScope" editedFields={editedFields} />}
         </div>
 
         {/* Contact details */}
@@ -219,6 +250,7 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
               placeholder="info@example.com"
               style={inputStyle}
             />
+            {autoFilledFields?.includes("contactEmail") && <AutoFillHint field="contactEmail" editedFields={editedFields} />}
           </label>
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact phone</div>
@@ -229,6 +261,7 @@ export function BusinessContextForm({ initial, isEdit }: BusinessContextFormProp
               placeholder="+1 555 000 0000"
               style={inputStyle}
             />
+            {autoFilledFields?.includes("contactPhone") && <AutoFillHint field="contactPhone" editedFields={editedFields} />}
           </label>
         </div>
 

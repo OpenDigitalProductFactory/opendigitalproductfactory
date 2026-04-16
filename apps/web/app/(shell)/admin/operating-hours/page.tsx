@@ -2,13 +2,20 @@ import { getOperatingHours, saveOperatingHours } from "@/lib/actions/operating-h
 import { OperatingHoursEditor } from "@/components/admin/OperatingHoursEditor";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getSetupContext } from "@/lib/actions/setup-progress";
 
 export default async function OperatingHoursPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  const setupContext = await getSetupContext();
+
   // Smart defaults handled inside getOperatingHours (archetype > industry > fallback)
-  const { schedule, timezone } = await getOperatingHours();
+  // Pass suggested timezone and industry from URL import for better defaults during setup
+  const { schedule, timezone } = await getOperatingHours({
+    suggestedTimezone: setupContext?.suggestedTimezone,
+    suggestedIndustry: setupContext?.suggestedIndustry,
+  });
 
   async function handleSave(newSchedule: Parameters<typeof saveOperatingHours>[0]["schedule"]) {
     "use server";

@@ -55,4 +55,11 @@ export type SetupContext = {
   suggestedCurrency?: string;
   suggestedCountryCode?: string;
   brandingSourceUrl?: string;
+  // Populated by importBrandFromUrl — derived from archetype + page scrape
+  suggestedIndustry?: string;
+  suggestedDescription?: string;
+  suggestedContactEmail?: string;
+  suggestedContactPhone?: string;
+  suggestedGeographicScope?: string;
+  suggestedTimezone?: string;
 };

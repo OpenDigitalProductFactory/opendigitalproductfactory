@@ -6,6 +6,8 @@ import { deriveThemeTokens, validateTokenContrast, type Correction, type ThemeTo
 import {
   fetchPublicWebsiteEvidence,
   analyzePublicWebsiteBranding,
+  ARCHETYPE_TO_INDUSTRY,
+  COUNTRY_TO_TIMEZONE,
   type BrandingAnalysisResult,
 } from "@/lib/public-web-tools";
 import { updateSetupContext } from "@/lib/actions/setup-progress";
@@ -181,6 +183,9 @@ export type BrandImportResult = {
   archetypeConfidence: "high" | "medium" | null;
   suggestedCurrency: string | null;
   suggestedCountryCode: string | null;
+  suggestedDescription: string | null;
+  suggestedContactEmail: string | null;
+  suggestedContactPhone: string | null;
 } | {
   ok: false;
   error: string;
@@ -222,6 +227,14 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
       logoForDarkBg = logoForLightBg;
     }
 
+    // Derive industry from archetype and timezone from country
+    const suggestedIndustry = analysis.suggestedArchetypeId
+      ? ARCHETYPE_TO_INDUSTRY[analysis.suggestedArchetypeId] ?? null
+      : null;
+    const suggestedTimezone = analysis.suggestedCountryCode
+      ? COUNTRY_TO_TIMEZONE[analysis.suggestedCountryCode] ?? null
+      : null;
+
     // Write suggestions to the active setup progress context (fire-and-forget, no throw on error)
     const contextPatch: Record<string, string> = {};
     if (analysis.companyName) contextPatch.suggestedCompanyName = analysis.companyName;
@@ -230,6 +243,13 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
     if (analysis.archetypeConfidence) contextPatch.archetypeConfidence = analysis.archetypeConfidence;
     if (analysis.suggestedCurrency) contextPatch.suggestedCurrency = analysis.suggestedCurrency;
     if (analysis.suggestedCountryCode) contextPatch.suggestedCountryCode = analysis.suggestedCountryCode;
+    if (suggestedIndustry) contextPatch.suggestedIndustry = suggestedIndustry;
+    if (analysis.suggestedDescription) contextPatch.suggestedDescription = analysis.suggestedDescription;
+    if (analysis.suggestedContactEmail) contextPatch.suggestedContactEmail = analysis.suggestedContactEmail;
+    if (analysis.suggestedContactPhone) contextPatch.suggestedContactPhone = analysis.suggestedContactPhone;
+    if (suggestedTimezone) contextPatch.suggestedTimezone = suggestedTimezone;
+    // Most SMBs on this platform are local businesses
+    if (analysis.suggestedCountryCode) contextPatch.suggestedGeographicScope = "local";
     contextPatch.brandingSourceUrl = url;
     await updateSetupContext(contextPatch).catch(() => undefined);
 
@@ -244,6 +264,9 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
       archetypeConfidence: analysis.archetypeConfidence,
       suggestedCurrency: analysis.suggestedCurrency,
       suggestedCountryCode: analysis.suggestedCountryCode,
+      suggestedDescription: analysis.suggestedDescription,
+      suggestedContactEmail: analysis.suggestedContactEmail,
+      suggestedContactPhone: analysis.suggestedContactPhone,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to analyze URL";
