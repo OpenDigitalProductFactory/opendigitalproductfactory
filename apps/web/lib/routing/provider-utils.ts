@@ -20,11 +20,16 @@ export function usesCliAdapter(providerId: string): boolean {
   return providerId === "anthropic-sub";
 }
 
+export function usesCodexCli(providerId: string): boolean {
+  // Codex subscription OAuth tokens are NOT supported via direct HTTP calls to
+  // chatgpt.com/backend-api — the backend requires session auth that only the
+  // Codex CLI binary provides.  Route through `codex exec` in the sandbox
+  // container (same pattern as anthropic-sub → claude -p).
+  return providerId === "codex";
+}
+
 export function usesResponsesApi(providerId: string): boolean {
-  // Both codex and chatgpt require the Responses API.
-  // Codex models (gpt-5.3-codex, gpt-5.4, codex-mini) are Responses-only — Chat Completions
-  // is deprecated for these models per OpenAI docs.
-  // OAuth auth → chatgpt.com/backend-api (SSE streaming).
-  // API key auth → api.openai.com/v1/responses (JSON response).
-  return providerId === "codex" || providerId === "chatgpt";
+  // ChatGPT provider uses the Responses API via chatgpt.com/backend-api.
+  // Codex is handled separately by the codex-cli adapter (see usesCodexCli).
+  return providerId === "chatgpt";
 }

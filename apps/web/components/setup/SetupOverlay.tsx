@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useMemo, useRef, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SetupProgressBar } from "./SetupProgressBar";
 import {
@@ -74,9 +74,25 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext }: P
   // Auto-open the coworker panel and trigger a live COO response for this step.
   // Uses autoMessage so the LLM generates personalised guidance from the setup
   // context rather than displaying a pre-written string.
+  //
+  // Stabilise the trigger: setupContext is a new object reference on every
+  // server render (layout re-renders when a provider is saved), but the *content*
+  // rarely changes during a single setup step.  Derive a stable trigger string
+  // and only fire the effect when the trigger text actually changes.
+  const trigger = useMemo(
+    () => buildStepTrigger(currentStep, setupContext),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentStep, JSON.stringify(setupContext)],
+  );
+  const lastFiredTrigger = useRef<string | null>(null);
+
   useEffect(() => {
-    const trigger = buildStepTrigger(currentStep, setupContext);
     if (!trigger) return;
+    // Don't re-fire the same trigger (e.g. after a provider save that
+    // re-renders the layout but doesn't change the setup step or context).
+    if (lastFiredTrigger.current === trigger) return;
+    lastFiredTrigger.current = trigger;
+
     const timer = setTimeout(() => {
       document.dispatchEvent(
         new CustomEvent("open-agent-panel", {
@@ -85,7 +101,7 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext }: P
       );
     }, 300);
     return () => clearTimeout(timer);
-  }, [currentStep, pathname, setupContext]);
+  }, [trigger]);
 
   const navigateToStep = (step: string, completed?: boolean) => {
     if (completed) {

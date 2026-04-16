@@ -42,6 +42,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const lastAutoMessageRef = useRef<string | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
@@ -159,7 +160,8 @@ export function AgentCoworkerShell({ userContext }: Props) {
       setIsOpen(true);
       savePanelOpen(userKey, true);
       const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string } | undefined>).detail;
-      if (detail?.autoMessage) {
+      if (detail?.autoMessage && detail.autoMessage !== lastAutoMessageRef.current) {
+        lastAutoMessageRef.current = detail.autoMessage;
         setPendingAutoMessage(detail.autoMessage);
       }
       // welcomeMessage: inject a pre-written assistant message without LLM call

@@ -101,9 +101,13 @@ describe("geminiAdapter", () => {
         expect(card.capabilities.webSearch).toBe(true);
       });
 
-      it("sets streaming null (no streamGenerateContent in fixture)", () => {
-        // The fixture only has generateContent and countTokens
-        expect(card.capabilities.streaming).toBeNull();
+      it("sets streaming true when generateContent is supported", () => {
+        // generateContent implies streaming support
+        expect(card.capabilities.streaming).toBe(true);
+      });
+
+      it("marks sunset alias gemini-2.0-flash as deprecated", () => {
+        expect(card.status).toBe("deprecated");
       });
 
       it("sets metadataSource to api", () => {

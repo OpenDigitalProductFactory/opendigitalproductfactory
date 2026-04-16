@@ -10,7 +10,7 @@
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
-import { usesResponsesApi, usesCliAdapter } from "./provider-utils";
+import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
 
 // EP-INF-009c: Model class → execution adapter mapping
 const MODEL_CLASS_ADAPTER: Record<string, string> = {
@@ -67,11 +67,13 @@ export function buildPlanFromRecipe(
   // anthropic-sub uses OAuth tokens which only work with Claude CLI, not the
   // direct Messages API. Always route through CLI adapter for this provider.
   // MCP tool execution happens via the agentic loop, not the adapter itself.
-  const executionAdapter = usesResponsesApi(recipe.providerId)
-    ? "responses"
-    : usesCliAdapter(recipe.providerId)
-      ? "claude-cli"
-      : (recipe.executionAdapter ?? "chat");
+  const executionAdapter = usesCodexCli(recipe.providerId)
+    ? "codex-cli"
+    : usesResponsesApi(recipe.providerId)
+      ? "responses"
+      : usesCliAdapter(recipe.providerId)
+        ? "claude-cli"
+        : (recipe.executionAdapter ?? "chat");
 
   const plan: RoutedExecutionPlan = {
     providerId: recipe.providerId,
@@ -120,12 +122,14 @@ export function buildDefaultPlan(
   };
 
   // EP-INF-009c: Select adapter based on required model class
-  const adapterType = usesResponsesApi(endpoint.providerId)
-    ? "responses"
-    : usesCliAdapter(endpoint.providerId)
-      ? "claude-cli"
-      : contract.requiredModelClass
-        ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
+  const adapterType = usesCodexCli(endpoint.providerId)
+    ? "codex-cli"
+    : usesResponsesApi(endpoint.providerId)
+      ? "responses"
+      : usesCliAdapter(endpoint.providerId)
+        ? "claude-cli"
+        : contract.requiredModelClass
+          ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
         : "chat";
 
   return {
