@@ -35,6 +35,7 @@ FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
+COPY prompts/ ./prompts/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
 RUN pnpm install --frozen-lockfile
@@ -64,6 +65,7 @@ COPY --from=init /app/packages/db ./packages/db
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json ./
 COPY --from=init /app/docs/user-guide ./docs/user-guide
+COPY --from=init /app/prompts ./prompts
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
