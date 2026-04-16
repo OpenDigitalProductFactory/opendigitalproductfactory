@@ -49,7 +49,16 @@ const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
 };
 
 export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<void> {
-  let ARCHETYPE_SEED_DATA: Array<Record<string, unknown>>;
+  let ARCHETYPE_SEED_DATA: Array<{
+    archetypeId: string;
+    name: string;
+    category: string;
+    ctaType: string;
+    itemTemplates: unknown;
+    sectionTemplates: unknown;
+    formSchema: unknown;
+    tags: string[];
+  }>;
   try {
     const mod = await import("@dpf/storefront-templates/seed");
     ARCHETYPE_SEED_DATA = mod.ARCHETYPE_SEED_DATA;
