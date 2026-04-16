@@ -701,7 +701,10 @@ export async function profileModelsInternal(
     // means a model discovered before the seed runs would become routable even
     // if the seed catalog marks it retired.  Use the adapter's card status so
     // deprecated models are never created as "active".
-    const createStatus = card.status === "deprecated" || card.status === "retired"
+    // Note: TS narrows card.status after the early-return checks above, but the
+    // adapter could still return unexpected values at runtime — cast to string.
+    const cardStatus = card.status as string;
+    const createStatus = cardStatus === "deprecated" || cardStatus === "retired"
       ? "retired" : "active";
 
     await prisma.modelProfile.upsert({
