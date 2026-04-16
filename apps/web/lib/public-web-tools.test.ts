@@ -17,6 +17,8 @@ function makeEvidence(overrides: Partial<PublicWebsiteEvidence> = {}): PublicWeb
     themeColor: null,
     logoCandidates: [],
     colorCandidates: [],
+    contactEmailCandidates: [],
+    contactPhoneCandidates: [],
     ...overrides,
   };
 }
@@ -57,7 +59,7 @@ describe("public web tools", () => {
   });
 
   it("derives a branding proposal from fetched public page evidence", () => {
-    const proposal = analyzePublicWebsiteBranding({
+    const proposal = analyzePublicWebsiteBranding(makeEvidence({
       url: "https://jackjackspack.org",
       finalUrl: "https://jackjackspack.org/",
       title: "Jack Jack's Pack",
@@ -68,7 +70,7 @@ describe("public web tools", () => {
         "https://jackjackspack.org/logo.svg",
       ],
       colorCandidates: ["#4f46e5"],
-    });
+    }));
 
     expect(proposal.companyName).toBe("Jack Jack's Pack");
     expect(proposal.logoUrl).toBe("https://jackjackspack.org/logo.svg");

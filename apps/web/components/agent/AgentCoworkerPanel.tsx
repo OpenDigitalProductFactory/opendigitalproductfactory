@@ -65,6 +65,9 @@ type Props = {
   pendingAutoMessage?: string | null;
   onAutoMessageConsumed?: () => void;
   onConversationCleared?: () => void;
+  /** When set, overrides pathname for agent routing and message routeContext.
+   *  Used during setup so all steps route to the onboarding-coo agent. */
+  routeContextOverride?: string;
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
@@ -91,8 +94,11 @@ export function AgentCoworkerPanel({
   pendingAutoMessage,
   onAutoMessageConsumed,
   onConversationCleared,
+  routeContextOverride,
 }: Props) {
   const pathname = usePathname();
+  // During setup, use the override so the onboarding-coo agent handles all steps
+  const effectiveRoute = routeContextOverride ?? pathname;
   const [messages, setMessages] = useState<AgentRenderableMessage[]>(() => filterMessages(initialMessages));
   // EP-ASYNC-COWORKER-001: isBusy replaces useTransition's isPending for message flow.
   // This is a plain useState — it does NOT block the Next.js router or prevent navigation.
@@ -113,7 +119,7 @@ export function AgentCoworkerPanel({
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const routeAgent: AgentInfo = resolveAgentForRouteSync(pathname, userContext);
+  const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = routeAgent;
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
@@ -204,7 +210,7 @@ export function AgentCoworkerPanel({
             role: "system" as const,
             content: data.message ?? "An error occurred during agent execution.",
             agentId: agent.agentId,
-            routeContext: pathname,
+            routeContext: effectiveRoute,
             createdAt: new Date().toISOString(),
           }]);
         }
@@ -224,7 +230,7 @@ export function AgentCoworkerPanel({
           }
 
           // Refresh messages from DB — authoritative source
-          getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
+          getOrCreateThreadSnapshot({ routeContext: effectiveRoute }).then((snapshot) => {
             if (snapshot) {
               setMessages(filterMessages(snapshot.messages));
             }
@@ -258,7 +264,7 @@ export function AgentCoworkerPanel({
     // Periodic recovery: check DB every 15 seconds while busy.
     // Catches missed SSE "done" events (connection drops, server restart, etc.)
     const recoveryInterval = setInterval(() => {
-      getOrCreateThreadSnapshot({ routeContext: pathname }).then((snapshot) => {
+      getOrCreateThreadSnapshot({ routeContext: effectiveRoute }).then((snapshot) => {
         if (!snapshot) return;
         const latestMsg = snapshot.messages[snapshot.messages.length - 1];
         if (latestMsg && (latestMsg.role === "assistant" || latestMsg.role === "system")) {
@@ -356,7 +362,7 @@ export function AgentCoworkerPanel({
 
   function submitMessage(
     content: string,
-    optimisticMessage = createOptimisticUserMessage(content, pathname),
+    optimisticMessage = createOptimisticUserMessage(content, effectiveRoute),
     appendOptimistic = true,
   ) {
     if (!threadId) return;
@@ -381,7 +387,7 @@ export function AgentCoworkerPanel({
       body: JSON.stringify({
         threadId,
         content,
-        routeContext: pathname,
+        routeContext: effectiveRoute,
         coworkerMode: devMode || pathname.startsWith("/build") ? "act" : coworkerMode,
         externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,

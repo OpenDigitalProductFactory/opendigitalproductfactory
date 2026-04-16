@@ -23,6 +23,8 @@ export type PublicWebsiteEvidence = {
   themeColor: string | null;
   logoCandidates: string[];
   colorCandidates: string[];
+  contactEmailCandidates: string[];
+  contactPhoneCandidates: string[];
 };
 
 export type BrandingAnalysisResult = {
@@ -35,6 +37,9 @@ export type BrandingAnalysisResult = {
   archetypeConfidence: "high" | "medium" | null;
   suggestedCountryCode: string | null;
   suggestedCurrency: string | null;
+  suggestedDescription: string | null;
+  suggestedContactEmail: string | null;
+  suggestedContactPhone: string | null;
 };
 
 const PRIVATE_HOST_PATTERNS = [
@@ -262,6 +267,77 @@ export async function searchPublicWeb(query: string): Promise<NormalizedSearchRe
   return normalizeBraveSearchResults(raw);
 }
 
+const SYSTEM_EMAIL_PATTERNS = /^(noreply|no-reply|donotreply|do-not-reply|webmaster|postmaster|mailer-daemon|hostmaster|abuse)@/i;
+
+/** Extract contact email addresses from HTML — mailto: links first, then visible text. */
+function extractContactEmails(html: string): string[] {
+  const seen = new Set<string>();
+  const priority: string[] = [];
+  const secondary: string[] = [];
+
+  function add(email: string, isPriority: boolean) {
+    const lower = email.toLowerCase().trim();
+    if (!lower || seen.has(lower) || SYSTEM_EMAIL_PATTERNS.test(lower)) return;
+    seen.add(lower);
+    (isPriority ? priority : secondary).push(lower);
+  }
+
+  // 1. mailto: links (highest confidence — explicitly published as contact)
+  const mailtoMatches = html.matchAll(/<a[^>]+href=["']mailto:([^"'?]+)/gi);
+  for (const m of mailtoMatches) {
+    if (m[1]) add(m[1], true);
+  }
+
+  // 2. Visible text email patterns (strip tags first)
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const textMatches = stripped.matchAll(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Z]{2,}\b/gi);
+  for (const m of textMatches) {
+    add(m[0], false);
+  }
+
+  return [...priority, ...secondary].slice(0, 3);
+}
+
+/** Extract contact phone numbers from HTML — tel: links first, then visible text patterns. */
+function extractContactPhones(html: string): string[] {
+  const seen = new Set<string>();
+  const priority: string[] = [];
+  const secondary: string[] = [];
+
+  function normalizePhone(raw: string): string {
+    return raw.replace(/[\s\-().]/g, "").replace(/^tel:/i, "");
+  }
+
+  function add(phone: string, isPriority: boolean) {
+    const normalized = normalizePhone(phone);
+    if (!normalized || normalized.length < 7 || seen.has(normalized)) return;
+    seen.add(normalized);
+    // Store the original (human-readable) form
+    (isPriority ? priority : secondary).push(phone.trim());
+  }
+
+  // 1. tel: links (highest confidence — explicitly clickable)
+  const telMatches = html.matchAll(/<a[^>]+href=["']tel:([^"']+)/gi);
+  for (const m of telMatches) {
+    if (m[1]) add(m[1], true);
+  }
+
+  // 2. Visible text phone patterns (reuse PHONE_PATTERNS for extraction)
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  for (const { pattern } of PHONE_PATTERNS) {
+    const match = stripped.match(pattern);
+    if (match?.[0]) add(match[0], false);
+  }
+
+  return [...priority, ...secondary].slice(0, 3);
+}
+
 const FETCH_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -311,6 +387,8 @@ export async function fetchPublicWebsiteEvidence(url: string): Promise<PublicWeb
     themeColor: extractMetaContent(html, "theme-color"),
     logoCandidates: extractLogoCandidates(html, finalUrl),
     colorCandidates: extractColorCandidates(html),
+    contactEmailCandidates: extractContactEmails(html),
+    contactPhoneCandidates: extractContactPhones(html),
   };
 }
 
@@ -578,6 +656,82 @@ function detectCountryAndCurrency(
   return null;
 }
 
+/** Maps detected archetype ID → industry dropdown value used in BusinessContextForm. */
+export const ARCHETYPE_TO_INDUSTRY: Record<string, string> = {
+  "dental-practice": "healthcare-wellness",
+  "optician": "healthcare-wellness",
+  "physiotherapy-clinic": "healthcare-wellness",
+  "gp-surgery": "healthcare-wellness",
+  "pharmacy": "healthcare-wellness",
+  "hair-salon": "beauty-personal-care",
+  "beauty-salon": "beauty-personal-care",
+  "tattoo-studio": "beauty-personal-care",
+  "fitness-gym": "fitness-recreation",
+  "yoga-pilates-studio": "fitness-recreation",
+  "restaurant": "food-hospitality",
+  "cafe-coffeeshop": "food-hospitality",
+  "bakery": "food-hospitality",
+  "bar-pub": "food-hospitality",
+  "fast-food": "food-hospitality",
+  "hotel": "food-hospitality",
+  "holiday-lettings": "food-hospitality",
+  "estate-agent": "hoa-property-management",
+  "law-firm": "professional-services",
+  "accountancy-firm": "professional-services",
+  "financial-adviser": "professional-services",
+  "mortgage-broker": "professional-services",
+  "insurance-broker": "professional-services",
+  "recruitment-agency": "professional-services",
+  "marketing-agency": "professional-services",
+  "web-design-agency": "professional-services",
+  "it-managed-services": "professional-services",
+  "consulting-firm": "professional-services",
+  "architecture-firm": "professional-services",
+  "interior-design": "professional-services",
+  "photography-studio": "professional-services",
+  "events-venue": "professional-services",
+  "childcare-nursery": "education-training",
+  "tutoring-centre": "education-training",
+  "retail-fashion": "retail-goods",
+  "retail-homeware": "retail-goods",
+  "ecommerce-general": "retail-goods",
+  "nonprofit": "nonprofit-community",
+};
+
+/** Maps ISO 3166-1 alpha-2 country code → primary IANA timezone. */
+export const COUNTRY_TO_TIMEZONE: Record<string, string> = {
+  GB: "Europe/London",
+  IE: "Europe/Dublin",
+  DE: "Europe/Berlin",
+  FR: "Europe/Paris",
+  ES: "Europe/Madrid",
+  IT: "Europe/Rome",
+  NL: "Europe/Amsterdam",
+  BE: "Europe/Brussels",
+  AT: "Europe/Vienna",
+  PT: "Europe/Lisbon",
+  CH: "Europe/Zurich",
+  SE: "Europe/Stockholm",
+  NO: "Europe/Oslo",
+  DK: "Europe/Copenhagen",
+  FI: "Europe/Helsinki",
+  PL: "Europe/Warsaw",
+  CZ: "Europe/Prague",
+  AU: "Australia/Sydney",
+  NZ: "Pacific/Auckland",
+  CA: "America/Toronto",
+  US: "America/New_York",
+  JP: "Asia/Tokyo",
+  CN: "Asia/Shanghai",
+  IN: "Asia/Kolkata",
+  SG: "Asia/Singapore",
+  ZA: "Africa/Johannesburg",
+  AE: "Asia/Dubai",
+  BR: "America/Sao_Paulo",
+  MX: "America/Mexico_City",
+  EU: "Europe/Brussels",
+};
+
 export function analyzePublicWebsiteBranding(
   evidence: PublicWebsiteEvidence,
 ): BrandingAnalysisResult {
@@ -612,5 +766,8 @@ export function analyzePublicWebsiteBranding(
     archetypeConfidence: archetypeMatch?.confidence ?? null,
     suggestedCountryCode: locationMatch?.countryCode ?? null,
     suggestedCurrency: locationMatch?.currency ?? null,
+    suggestedDescription: evidence.description ?? null,
+    suggestedContactEmail: evidence.contactEmailCandidates[0] ?? null,
+    suggestedContactPhone: evidence.contactPhoneCandidates[0] ?? null,
   };
 }
