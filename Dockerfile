@@ -62,7 +62,7 @@ COPY --from=build /app/apps/web/public ./apps/web/public
 # Copy init dependencies: pnpm workspace, migrations, seed, Prisma client, tsx
 COPY --from=init /app/packages/db ./packages/db
 COPY --from=init /app/node_modules ./node_modules
-COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json ./
+COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json ./
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
