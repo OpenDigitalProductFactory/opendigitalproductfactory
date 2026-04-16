@@ -86,7 +86,16 @@ export function ServiceRow({ pw, modelSummary }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  const statusColor = STATUS_COLORS[provider.status] ?? "var(--dpf-muted)";
+  // Show actual readiness, not just the DB status field.
+  // A provider marked "active" but with no credential is NOT ready.
+  const needsCredential = provider.authMethod !== "none" && !credential;
+  const effectiveStatus = (provider.status === "active" && needsCredential) ? "needs-credentials" : provider.status;
+
+  const STATUS_COLORS_EXT: Record<string, string> = {
+    ...STATUS_COLORS,
+    "needs-credentials": "var(--dpf-warning)",
+  };
+  const statusColor = STATUS_COLORS_EXT[effectiveStatus] ?? "var(--dpf-muted)";
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const billingLabel = getBillingLabel(provider);
 
@@ -116,7 +125,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
       >
         {/* Status dot */}
         <span
-          title={provider.status}
+          title={effectiveStatus === "needs-credentials" ? "Active but missing credentials — configure to use" : provider.status}
           style={{
             width: 7,
             height: 7,
@@ -158,6 +167,23 @@ export function ServiceRow({ pw, modelSummary }: Props) {
         >
           {typeLabel}
         </span>
+
+        {/* Credential warning */}
+        {needsCredential && (
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              color: "var(--dpf-warning)",
+              background: "color-mix(in srgb, var(--dpf-warning) 10%, transparent)",
+              padding: "1px 5px",
+              borderRadius: 3,
+              flexShrink: 0,
+            }}
+          >
+            needs credentials
+          </span>
+        )}
 
         {/* Model count — LLM only */}
         {provider.endpointType === "llm" && modelSummary && (
