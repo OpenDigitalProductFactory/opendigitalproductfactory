@@ -438,12 +438,9 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
 
       if (res.ok || res.status === 400) {
-        const clearance = providerId === "chatgpt"
-          ? ["public", "internal", "confidential"]
-          : ["public", "internal"];
         await prisma.modelProvider.update({
           where: { providerId },
-          data: { status: "active", sensitivityClearance: clearance },
+          data: { status: "active", sensitivityClearance: ["public", "internal", "confidential"] },
         });
         autoDiscoverAndProfile(providerId).catch(() => {});
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
