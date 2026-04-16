@@ -26,6 +26,7 @@ import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" ada
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
 import "../routing/async-adapter"; // EP-INF-009d: registers "async" adapter
 import "../routing/cli-adapter"; // anthropic-sub: registers "claude-cli" adapter
+import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -347,9 +348,10 @@ export async function callProvider(
     responsePolicy: {},
   };
 
-  // CLI adapter (anthropic-sub) resolves its own auth via the credential store
-  // and spawns Claude Code CLI — it does not need HTTP base URL or auth headers.
-  const isCliAdapter = effectivePlan.executionAdapter === "claude-cli";
+  // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
+  // binaries — they do not need HTTP base URL or auth headers.
+  const isCliAdapter = effectivePlan.executionAdapter === "claude-cli"
+    || effectivePlan.executionAdapter === "codex-cli";
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
   const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);

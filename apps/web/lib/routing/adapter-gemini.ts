@@ -42,8 +42,22 @@ function stripModelsPrefix(name: string): string {
  * Determine if this is an embedding-only model based on supported generation methods.
  * Embedding models only support "embedContent", not "generateContent".
  */
+/**
+ * Unversioned Gemini aliases that Google has sunset for new users.
+ * The model list API still returns them, but generateContent rejects
+ * calls with "no longer available to new users".  We mark them as
+ * deprecated at discovery time so the router never selects them.
+ */
+const GEMINI_SUNSET_ALIASES = new Set([
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+]);
+
 /** Detect if a Gemini model is deprecated from its metadata. */
 function detectGeminiDeprecation(raw: GeminiModel): boolean {
+  const modelId = stripModelsPrefix(raw.name);
+  // Known sunset aliases — still listed by API but rejected at call time
+  if (GEMINI_SUNSET_ALIASES.has(modelId)) return true;
   const desc = (raw.description ?? "").toLowerCase();
   if (desc.includes("deprecated") || desc.includes("no longer available")) return true;
   // Models with no supported generation methods are effectively unusable

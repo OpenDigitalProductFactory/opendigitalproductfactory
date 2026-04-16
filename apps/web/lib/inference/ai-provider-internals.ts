@@ -367,8 +367,19 @@ export async function discoverModelsInternal(
             where: { id: known.id },
             data: { missedDiscoveryCount: 0 },
           });
+          // Don't reactivate models retired due to a provider-confirmed error
+          // (model_not_found, deprecated by provider).  Google still lists
+          // sunset aliases in their model catalog even though calls are rejected.
           await prisma.modelProfile.updateMany({
-            where: { providerId, modelId: known.modelId, modelStatus: "retired" },
+            where: {
+              providerId,
+              modelId: known.modelId,
+              modelStatus: "retired",
+              retiredReason: { notIn: [
+                "model_not_found from provider",
+                "Deprecated by provider at discovery time",
+              ] },
+            },
             data: { modelStatus: "active", retiredAt: null, retiredReason: null },
           });
         }
@@ -686,6 +697,13 @@ export async function profileModelsInternal(
       qualityTierSource: "auto" as const,
     } : {};
 
+    // Explicit modelStatus on CREATE — the Prisma default is "active", which
+    // means a model discovered before the seed runs would become routable even
+    // if the seed catalog marks it retired.  Use the adapter's card status so
+    // deprecated models are never created as "active".
+    const createStatus = card.status === "deprecated" || card.status === "retired"
+      ? "retired" : "active";
+
     await prisma.modelProfile.upsert({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
       create: {
@@ -697,6 +715,9 @@ export async function profileModelsInternal(
         costTier,
         bestFor:       ["general purpose tasks"],
         avoidFor:      [],
+        modelStatus:   createStatus,
+        retiredAt:     createStatus === "retired" ? new Date() : null,
+        retiredReason: createStatus === "retired" ? "Deprecated by provider at discovery time" : null,
         ...metadataFields,
         qualityTier,
         qualityTierSource: "auto",
