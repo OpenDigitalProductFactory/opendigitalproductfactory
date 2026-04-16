@@ -1,5 +1,4 @@
 import { PrismaClient } from "../generated/client/client";
-import { ARCHETYPE_SEED_DATA } from "@dpf/storefront-templates/seed";
 
 // Prisma 7 Json fields accept plain objects at runtime but the generated types
 // are strict. Seed data is static JSON — safe to widen.
@@ -50,6 +49,14 @@ const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
 };
 
 export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<void> {
+  let ARCHETYPE_SEED_DATA: Array<Record<string, unknown>>;
+  try {
+    const mod = await import("@dpf/storefront-templates/seed");
+    ARCHETYPE_SEED_DATA = mod.ARCHETYPE_SEED_DATA;
+  } catch {
+    console.warn("[seed] @dpf/storefront-templates not available — skipping storefront archetypes");
+    return;
+  }
   console.log(`[seed] upserting ${ARCHETYPE_SEED_DATA.length} storefront archetypes…`);
 
   for (const archetype of ARCHETYPE_SEED_DATA) {
