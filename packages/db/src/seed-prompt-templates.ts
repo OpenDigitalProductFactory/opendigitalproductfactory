@@ -31,7 +31,10 @@ type PromptFrontmatter = {
  * Does not handle nested objects or multi-line values (not needed here).
  */
 function parseFrontmatter(raw: string): { frontmatter: PromptFrontmatter; content: string } {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  // Normalise Windows \r\n to \n before parsing — git on Windows may
+  // check out files with CRLF even inside the Docker build context.
+  const normalised = raw.replace(/\r\n/g, "\n");
+  const match = normalised.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) {
     throw new Error("Missing YAML frontmatter delimiters (---)");
   }
@@ -143,60 +146,64 @@ export async function seedPromptTemplates(prisma: PrismaClient): Promise<void> {
   let skipped = 0;
 
   for (const { category, slug, filePath } of files) {
-    const raw = readFileSync(filePath, "utf-8");
-    const { frontmatter, content } = parseFrontmatter(raw);
+    try {
+      const raw = readFileSync(filePath, "utf-8");
+      const { frontmatter, content } = parseFrontmatter(raw);
 
-    // Build metadata from extra frontmatter fields
-    const metadata: Record<string, unknown> = {};
-    if (frontmatter.valueStream) metadata.valueStream = frontmatter.valueStream;
-    if (frontmatter.stage) metadata.stage = frontmatter.stage;
-    if (frontmatter.sensitivity) metadata.sensitivity = frontmatter.sensitivity;
-    if (frontmatter.perspective) metadata.perspective = frontmatter.perspective;
-    if (frontmatter.heuristics) metadata.heuristics = frontmatter.heuristics;
-    if (frontmatter.interpretiveModel) metadata.interpretiveModel = frontmatter.interpretiveModel;
+      // Build metadata from extra frontmatter fields
+      const metadata: Record<string, unknown> = {};
+      if (frontmatter.valueStream) metadata.valueStream = frontmatter.valueStream;
+      if (frontmatter.stage) metadata.stage = frontmatter.stage;
+      if (frontmatter.sensitivity) metadata.sensitivity = frontmatter.sensitivity;
+      if (frontmatter.perspective) metadata.perspective = frontmatter.perspective;
+      if (frontmatter.heuristics) metadata.heuristics = frontmatter.heuristics;
+      if (frontmatter.interpretiveModel) metadata.interpretiveModel = frontmatter.interpretiveModel;
 
-    const existing = await prisma.promptTemplate.findUnique({
-      where: { category_slug: { category, slug } },
-    });
+      const existing = await prisma.promptTemplate.findUnique({
+        where: { category_slug: { category, slug } },
+      });
 
-    if (existing) {
-      if (existing.isOverridden) {
-        // Admin has customized — don't overwrite
-        skipped++;
-        continue;
+      if (existing) {
+        if (existing.isOverridden) {
+          // Admin has customized — don't overwrite
+          skipped++;
+          continue;
+        }
+        // Update from file (source of truth)
+        await prisma.promptTemplate.update({
+          where: { id: existing.id },
+          data: {
+            name: frontmatter.displayName,
+            description: frontmatter.description ?? null,
+            content,
+            contentFormat: frontmatter.contentFormat ?? "markdown",
+            composesFrom: frontmatter.composesFrom ?? [],
+            variables: frontmatter.variables ?? Prisma.DbNull,
+            metadata: Object.keys(metadata).length > 0 ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
+          },
+        });
+        updated++;
+      } else {
+        await prisma.promptTemplate.create({
+          data: {
+            category,
+            slug,
+            name: frontmatter.displayName,
+            description: frontmatter.description ?? null,
+            content,
+            contentFormat: frontmatter.contentFormat ?? "markdown",
+            composesFrom: frontmatter.composesFrom ?? [],
+            variables: frontmatter.variables ?? Prisma.DbNull,
+            metadata: Object.keys(metadata).length > 0 ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
+            isOverridden: false,
+            enabled: true,
+            version: 1,
+          },
+        });
+        created++;
       }
-      // Update from file (source of truth)
-      await prisma.promptTemplate.update({
-        where: { id: existing.id },
-        data: {
-          name: frontmatter.displayName,
-          description: frontmatter.description ?? null,
-          content,
-          contentFormat: frontmatter.contentFormat ?? "markdown",
-          composesFrom: frontmatter.composesFrom ?? [],
-          variables: frontmatter.variables ?? Prisma.DbNull,
-          metadata: Object.keys(metadata).length > 0 ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
-        },
-      });
-      updated++;
-    } else {
-      await prisma.promptTemplate.create({
-        data: {
-          category,
-          slug,
-          name: frontmatter.displayName,
-          description: frontmatter.description ?? null,
-          content,
-          contentFormat: frontmatter.contentFormat ?? "markdown",
-          composesFrom: frontmatter.composesFrom ?? [],
-          variables: frontmatter.variables ?? Prisma.DbNull,
-          metadata: Object.keys(metadata).length > 0 ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
-          isOverridden: false,
-          enabled: true,
-          version: 1,
-        },
-      });
-      created++;
+    } catch (err) {
+      console.warn(`[seed-prompts] Failed to seed ${category}/${slug}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
