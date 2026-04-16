@@ -161,12 +161,17 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     });
   }
 
-  // Guided setup: determine which step the user is on
+  // Guided setup: determine which step the user is on.
+  // A provider is only truly "credentialed" if auth is "none" OR a credential exists.
   const hasProfiles = profiles.length > 0 || (profilingResult != null && profilingResult.profiled > 0);
-  const step = provider.status === "active" && hasProfiles ? 5
-    : provider.status === "active" ? 4
+  const hasCredential = selectedAuthMethod === "none"
+    || credential?.secretHint
+    || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")
+    || secretRef;
+  const step = provider.status === "active" && hasProfiles && hasCredential ? 5
+    : provider.status === "active" && hasCredential ? 4
     : testResult?.ok ? 3
-    : (secretRef || credential?.secretHint || selectedAuthMethod === "none" || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")) ? 2
+    : hasCredential ? 2
     : 1;
 
   const STEPS = [
