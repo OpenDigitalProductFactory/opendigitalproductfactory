@@ -179,11 +179,18 @@ export async function exchangeOAuthCode(
     },
   });
 
-  // Switch the provider's active auth method — the admin initiated OAuth sign-in,
-  // so this is now the active credential method (not api_key).
+  // Activate the provider with full clearance — the admin completed OAuth sign-in,
+  // so this is now the active credential method (not api_key).  Must set
+  // sensitivityClearance here, not just in testProviderAuth, because the user
+  // may never click "Test Auth" separately.  Without clearance, the router
+  // excludes the provider ("Sensitivity clearance missing for 'internal'").
   await prisma.modelProvider.update({
     where: { providerId: flow.providerId },
-    data: { authMethod: "oauth2_authorization_code" },
+    data: {
+      authMethod: "oauth2_authorization_code",
+      status: "active",
+      sensitivityClearance: ["public", "internal", "confidential"],
+    },
   });
 
   // Auto-discover and profile models now that the provider has valid credentials.
