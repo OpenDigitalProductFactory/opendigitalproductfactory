@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
+import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import Link from "next/link";
@@ -54,7 +55,13 @@ export default async function StorefrontAdminPage() {
       prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
     ]);
     return (
-      <StorefrontDashboard
+      <div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Admin</h1>
+          <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Portal Management</p>
+        </div>
+        <AdminTabNav />
+        <StorefrontDashboard
         config={{
           id: config.id,
           isPublished: config.isPublished,
@@ -68,6 +75,7 @@ export default async function StorefrontAdminPage() {
         }}
         counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
       />
+      </div>
     );
   }
 
@@ -81,6 +89,12 @@ export default async function StorefrontAdminPage() {
   const SETUP_STEPS = getSetupSteps(vocab.portalLabel, vocab.stakeholderLabel);
 
   return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Admin</h1>
+        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Portal Setup</p>
+      </div>
+      <AdminTabNav />
     <div style={{ maxWidth: 640 }}>
       <div style={{
         background: "var(--dpf-surface-1, #1a1a2e)",
@@ -142,6 +156,7 @@ export default async function StorefrontAdminPage() {
           </Link>
         </div>
       </div>
+    </div>
     </div>
   );
 }

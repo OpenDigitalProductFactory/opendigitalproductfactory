@@ -154,7 +154,7 @@ export function SkillsCatalogView({
       {filtered.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">
           {skills.length === 0
-            ? "No skills discovered yet. Ingest SKILL.md files to populate the catalog."
+            ? "No skills in the catalog yet. Skills are added by placing .skill.md files in the skills/ directory and running the seed. Built-in coworker actions still work from route configuration."
             : "No skills match the current filters."}
         </p>
       ) : (

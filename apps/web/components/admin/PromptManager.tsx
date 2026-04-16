@@ -17,6 +17,8 @@ export function PromptManager({
   initialCatalog: PromptCatalogGroup[];
 }) {
   const [catalog] = useState(initialCatalog);
+  // All categories start expanded; clicking a header toggles collapse
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<{
     category: string;
     slug: string;
@@ -98,46 +100,71 @@ export function PromptManager({
         className="w-[240px] shrink-0 overflow-y-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2"
         aria-label="Prompt categories"
       >
-        {catalog.map((group) => (
-          <div key={group.category} className="mb-3">
-            <h3 className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-              {group.label}
-              <span className="ml-1 text-[var(--dpf-muted)]">
-                ({group.prompts.length})
-              </span>
-            </h3>
-            <ul>
-              {group.prompts.map((p) => {
-                const isActive =
-                  selected?.category === p.category &&
-                  selected?.slug === p.slug;
-                return (
-                  <li key={p.id}>
-                    <button
-                      onClick={() => loadPrompt(p.category, p.slug)}
-                      className={[
-                        "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs transition-colors cursor-pointer",
-                        isActive
-                          ? "bg-[var(--dpf-accent)] text-white"
-                          : "text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]",
-                      ].join(" ")}
-                    >
-                      <span className="truncate">{p.name}</span>
-                      {p.isOverridden && (
-                        <span
-                          className="ml-auto shrink-0 rounded bg-[var(--dpf-warning)] px-1 text-[10px] font-medium text-[var(--dpf-bg)]"
-                          title="Modified from default"
+        {catalog.map((group) => {
+          const isCollapsed = collapsed[group.category] ?? false;
+          return (
+            <div key={group.category} className="mb-1">
+              <button
+                onClick={() =>
+                  setCollapsed((prev) => ({
+                    ...prev,
+                    [group.category]: !prev[group.category],
+                  }))
+                }
+                className="flex w-full items-center gap-1 rounded px-2 py-1.5 text-left cursor-pointer hover:bg-[var(--dpf-surface-2)] transition-colors"
+                aria-expanded={!isCollapsed}
+              >
+                <span
+                  className="text-[10px] text-[var(--dpf-muted)] transition-transform"
+                  style={{
+                    display: "inline-block",
+                    transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                  }}
+                >
+                  ▼
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  {group.label}
+                </span>
+                <span className="ml-auto text-[10px] text-[var(--dpf-muted)]">
+                  {group.prompts.length}
+                </span>
+              </button>
+              {!isCollapsed && (
+                <ul className="mb-2">
+                  {group.prompts.map((p) => {
+                    const isActive =
+                      selected?.category === p.category &&
+                      selected?.slug === p.slug;
+                    return (
+                      <li key={p.id}>
+                        <button
+                          onClick={() => loadPrompt(p.category, p.slug)}
+                          className={[
+                            "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs transition-colors cursor-pointer",
+                            isActive
+                              ? "bg-[var(--dpf-accent)] text-white"
+                              : "text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]",
+                          ].join(" ")}
                         >
-                          mod
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+                          <span className="truncate">{p.name}</span>
+                          {p.isOverridden && (
+                            <span
+                              className="ml-auto shrink-0 rounded bg-[var(--dpf-warning)] px-1 text-[10px] font-medium text-[var(--dpf-bg)]"
+                              title="Modified from default"
+                            >
+                              mod
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Main editor area */}
