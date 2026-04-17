@@ -42,6 +42,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       claimStatus: true,
       uxTestResults: true,
       buildExecState: true,
+      scoutFindings: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -66,6 +67,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
@@ -109,6 +111,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       claimStatus: true,
       uxTestResults: true,
       buildExecState: true,
+      scoutFindings: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -135,6 +138,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }

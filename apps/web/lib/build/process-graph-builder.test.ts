@@ -46,6 +46,7 @@ function makeRow(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
     taskResults: null,
     verificationOut: null,
     acceptanceMet: null,
+    scoutFindings: null,
     uxTestResults: null,
     accountableEmployeeId: null,
     claimedByAgentId: null,
