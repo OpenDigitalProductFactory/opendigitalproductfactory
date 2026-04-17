@@ -1087,6 +1087,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate"],
   },
   {
+    name: "start_scout_research",
+    description: "Start a fast codebase scout + URL parse before asking clarification questions. Call this immediately after the user describes their feature. Returns immediately — results appear in Build Studio Context on the next turn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        externalUrls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Any URLs the user mentioned (website, design doc, reference). Will be fetched and parsed for domain structure.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate"],
+  },
+  {
     name: "read_project_file",
     description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
     inputSchema: {
@@ -4880,6 +4899,40 @@ export async function executeTool(
         success: true,
         message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now. IMPORTANT: Do NOT call saveBuildEvidence with field 'designDoc' — the research system saves the design document and runs the review automatically when research completes. Just wait and tell the user.",
         data: { reusabilityScope: scope, userContext: context },
+      };
+    }
+
+    case "start_scout_research": {
+      // Scout dispatch: similar to ideate research, but runs a fast parallel search + URL fetch
+      const externalUrls = (params.externalUrls as string[] | undefined) ?? [];
+
+      const activeBuild = await prisma.featureBuild.findFirst({
+        where: { phase: "ideate" },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+      });
+      if (!activeBuild) {
+        return { success: false, message: "No active ideate build found." };
+      }
+
+      const current = (await prisma.featureBuild.findUnique({ where: { buildId: activeBuild.buildId }, select: { buildExecState: true } }))?.buildExecState as Record<string, unknown> | null;
+
+      await prisma.featureBuild.update({
+        where: { buildId: activeBuild.buildId },
+        data: {
+          buildExecState: {
+            ...(current ?? {}),
+            scoutResearchRequested: true,
+            scoutUrls: externalUrls,
+            scoutRequestedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: "Scout started. Codebase search and URL parsing running in background — takes about 30 seconds. Results will appear in your Build Studio Context on the next turn.",
+        data: { urlCount: externalUrls.length },
       };
     }
 

@@ -974,6 +974,60 @@ export async function sendMessage(input: {
     responseProviderId = result.providerId;
     responseModelId = result.modelId;
 
+    // ── Scout research dispatch: runs BEFORE ideate research ──
+    if (activeBuildPhase === "ideate" && resolvedBuildId) {
+      const buildForScout = await prisma.featureBuild.findUnique({
+        where: { buildId: resolvedBuildId },
+        select: { buildExecState: true, title: true, description: true },
+      });
+      const scoutState = buildForScout?.buildExecState as Record<string, unknown> | null;
+
+      if (scoutState?.scoutResearchRequested) {
+        console.log(`[coworker] Scout research requested — dispatching scout dispatch`);
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        agentEventBus.emit(input.threadId, { type: "tool:start", tool: "scout_research", iteration: 0 });
+
+        try {
+          const { dispatchScoutResearch } = await import("@/lib/integrate/scout-dispatch");
+          const scoutResult = await dispatchScoutResearch({
+            featureTitle: buildForScout?.title ?? "",
+            featureDescription: buildForScout?.description ?? "",
+            externalUrls: (scoutState.scoutUrls as string[] | undefined) ?? [],
+          });
+
+          if (scoutResult.success && scoutResult.result) {
+            console.log(
+              `[coworker] Scout success: ${scoutResult.result.relatedModels.length} models, ${scoutResult.result.gaps.length} gaps, complexity=${scoutResult.result.estimatedComplexity}`
+            );
+            const { executeTool } = await import("@/lib/mcp-tools");
+            await executeTool(
+              "saveBuildEvidence",
+              { field: "scoutFindings", value: scoutResult.result },
+              user.id!,
+              { routeContext: input.routeContext }
+            );
+          } else {
+            console.log(`[coworker] Scout failed: ${scoutResult.error}`);
+          }
+        } catch (err) {
+          console.error(`[coworker] Scout dispatch error (non-fatal):`, err);
+        }
+
+        // Clear flag regardless of success
+        await prisma.featureBuild.update({
+          where: { buildId: resolvedBuildId },
+          data: {
+            buildExecState: {
+              ...(scoutState as object),
+              scoutResearchRequested: false,
+            },
+          },
+        });
+
+        agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "scout_research", success: true });
+      }
+    }
+
     // ── Ideate research dispatch: if the agentic loop called start_ideate_research,
     // dispatch the research to Codex CLI and save the result ──
     if (activeBuildPhase === "ideate" && resolvedBuildId) {
