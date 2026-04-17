@@ -34,6 +34,14 @@ export async function getDecryptedCredential(providerId: string) {
   const allFailed = hadEncrypted && !secretRef && !clientSecret && !cachedToken && !refreshToken;
   if (allFailed) {
     console.warn(`[credentials] All encrypted fields for "${providerId}" failed to decrypt — re-configure this provider.`);
+    // Flag for the admin UI so it stops showing green.  Fire-and-forget — we
+    // already know the decrypt failed, so we return null either way.  See
+    // PROVIDER-ACTIVATION-AUDIT.md F-16.
+    if (cred.status !== "key_rotated") {
+      prisma.credentialEntry
+        .update({ where: { providerId }, data: { status: "key_rotated" } })
+        .catch((err) => console.warn(`[credentials] Failed to mark ${providerId} as key_rotated:`, err));
+    }
     return null;
   }
   return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };

@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { checkBundledProviders, getOllamaHardwareInfo } from "./ollama";
 import { getOllamaBaseUrl } from "./ollama-url";
 import { isFirstRun, createSetupProgress } from "../actions/setup-progress";
+import { activateProvider } from "@/lib/govern/activate-provider";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -139,12 +140,12 @@ export async function executeFirstRunBootstrap(
         // Now run the standard bundled provider check (discover + profile)
         await checkBundledProviders();
 
-        // Set sensitivity clearance for local provider
-        await prisma.modelProvider.update({
-          where: { providerId: "local" },
-          data: {
-            sensitivityClearance: ["public", "internal", "confidential", "restricted"],
-          },
+        // Activate local provider with full clearance (including "restricted"
+        // since local models never leave the machine).  Discovery is skipped
+        // because checkBundledProviders() already ran it above.
+        await activateProvider("local", {
+          trigger: "bootstrap",
+          skipDiscovery: true,
         });
       } else {
         console.warn("[bootstrap] Ollama not reachable — proceeding without local AI");

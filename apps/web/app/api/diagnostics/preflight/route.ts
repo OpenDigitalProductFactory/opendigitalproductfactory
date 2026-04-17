@@ -102,6 +102,23 @@ export async function GET(): Promise<Response> {
 
     const valid = credentials.filter(c => c.status === "ok" || c.status === "configured");
     const invalid = credentials.filter(c => c.status !== "ok" && c.status !== "configured");
+    const keyRotated = credentials.filter(c => c.status === "key_rotated");
+
+    // Key rotation is a distinct failure mode — surface it with a clear fix.
+    // Startup credential-health-check flagged these as undecryptable with the
+    // current CREDENTIAL_ENCRYPTION_KEY.  See PROVIDER-ACTIVATION-AUDIT.md F-15/F-16.
+    if (keyRotated.length > 0) {
+      return {
+        status: "fail",
+        message: `${keyRotated.length} provider(s) need re-authentication — encryption key changed since credentials were stored: ${keyRotated.map(c => c.providerId).join(", ")}. Go to Admin > AI Workforce > External Services and re-enter the API key or re-authorize OAuth.`,
+        detail: {
+          keyRotated: keyRotated.map(c => c.providerId),
+          valid: valid.map(c => c.providerId),
+          invalid: invalid.filter(c => c.status !== "key_rotated").map(c => ({ id: c.providerId, status: c.status })),
+          fix: "Re-enter API key or re-authorize OAuth for each provider with status=key_rotated",
+        },
+      };
+    }
 
     if (valid.length === 0) {
       return {
@@ -260,7 +277,7 @@ export async function GET(): Promise<Response> {
 
     // Check for Build Studio critical tools
     const buildTools = ["read_sandbox_file", "write_sandbox_file", "search_sandbox",
-      "list_sandbox_files", "run_sandbox_command", "generate_code", "describe_model",
+      "list_sandbox_files", "run_sandbox_command", "describe_model",
       "validate_schema", "saveBuildEvidence"];
     const available = buildTools.filter(t => tools.some(tool => tool.name === t));
     const missing = buildTools.filter(t => !tools.some(tool => tool.name === t));
@@ -398,8 +415,12 @@ export async function GET(): Promise<Response> {
     if (!available) {
       return {
         status: "fail",
-        message: "Embedding model not found. Pull ai/nomic-embed-text-v1.5 into Docker Model Runner.",
-        detail: { modelAvailable: false },
+        message: "Embedding model not found. Run: docker model pull ai/nomic-embed-text-v1.5",
+        detail: {
+          modelAvailable: false,
+          fix: "docker model pull ai/nomic-embed-text-v1.5",
+          note: "This model is auto-pulled on fresh install, but Docker Model Runner must be enabled in Docker Desktop settings.",
+        },
       };
     }
 
@@ -424,12 +445,18 @@ export async function GET(): Promise<Response> {
   steps.push(await runStep("11. Vector Memory (Qdrant)", async () => {
     const { isQdrantHealthy, QDRANT_COLLECTIONS } = await import("@dpf/db");
 
+    const qdrantConfiguredUrl = process.env.QDRANT_INTERNAL_URL ?? process.env.QDRANT_URL ?? "http://localhost:6333";
     const healthy = await isQdrantHealthy();
     if (!healthy) {
       return {
         status: "fail",
-        message: "Qdrant is unreachable. Check that the qdrant container is running.",
-        detail: { reachable: false },
+        message: `Qdrant is unreachable at ${qdrantConfiguredUrl}. Run: docker compose ps qdrant — restart if stopped.`,
+        detail: {
+          reachable: false,
+          url: qdrantConfiguredUrl,
+          fix: "docker compose restart qdrant",
+          note: "Qdrant is included in the default compose stack. If the container keeps crashing, check logs with: docker compose logs qdrant",
+        },
       };
     }
 
