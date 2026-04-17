@@ -122,6 +122,51 @@ export type HappyPathStatePatch = {
   verification?: Partial<HappyPathVerificationState>;
 };
 
+// ─── Scout Research Types ────────────────────────────────────────────────────
+
+export type ScoutRelatedModel = {
+  name: string;
+  file: string;
+  line: number;
+  usage: string;
+};
+
+export type ScoutRelatedRoute = {
+  name: string;
+  file: string;
+  purpose: string;
+};
+
+export type ScoutRelatedComponent = {
+  name: string;
+  file: string;
+  purpose: string;
+};
+
+export type ScoutGap = {
+  entity: string;
+  reason: string;
+};
+
+export type ScoutExternalStructure = {
+  url: string;
+  title: string;
+  sections: Array<{ heading: string; content: string }>;
+  estimatedEntityCount: number;
+};
+
+export type ScoutResult = {
+  relatedModels: ScoutRelatedModel[];
+  relatedRoutes: ScoutRelatedRoute[];
+  relatedComponents: ScoutRelatedComponent[];
+  externalStructure?: ScoutExternalStructure;
+  gaps: ScoutGap[];
+  suggestedQuestions: string[];
+  estimatedComplexity: "low" | "medium" | "high";
+  complexityReason: string;
+  scoutDurationMs: number;
+};
+
 export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed";
 
 export type FeatureBuildRow = {
@@ -151,6 +196,7 @@ export type FeatureBuildRow = {
   taskResults: TaskResult[] | null;
   verificationOut: VerificationOutput | null;
   acceptanceMet: AcceptanceCriterion[] | null;
+  scoutFindings: ScoutResult | null;
   uxTestResults: Array<{ step: string; passed: boolean; screenshotUrl: string | null; error: string | null }> | null;
   accountableEmployeeId: string | null;
   claimedByAgentId: string | null;

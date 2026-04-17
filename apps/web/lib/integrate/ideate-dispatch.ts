@@ -146,6 +146,7 @@ function buildResearchPrompt(params: {
   reusabilityScope: string;
   userContext: string;
   businessContext?: string;
+  scoutFindings?: { relatedModels: Array<{ name: string; file: string; line: number }>; gaps: Array<{ entity: string; reason: string }>; externalStructure?: Record<string, unknown>; suggestedQuestions: string[] };
 }): string {
   return `You are researching the codebase to design a new feature.
 
@@ -154,6 +155,16 @@ DESCRIPTION: ${params.featureDescription}
 REUSABILITY: ${params.reusabilityScope}
 ${params.userContext ? `USER CONTEXT: ${params.userContext}` : ""}
 ${params.businessContext ? `BUSINESS CONTEXT: ${params.businessContext}` : ""}
+${
+  params.scoutFindings
+    ? `SCOUT FINDINGS (pre-validated — trust these):
+Related models found: ${params.scoutFindings.relatedModels.map((m) => `${m.name} at ${m.file}:${m.line}`).join(", ")}
+Gaps identified: ${params.scoutFindings.gaps.map((g) => `${g.entity} — ${g.reason}`).join("; ")}
+${params.scoutFindings.externalStructure ? `External URL structure identified` : ""}
+
+Use these as the basis for your existingFunctionalityAudit. The related models above are confirmed to exist — cite them with file and line numbers.`
+    : ""
+}
 
 YOUR TASK:
 1. Search the codebase for existing patterns related to this feature:
@@ -297,6 +308,7 @@ export async function dispatchIdeateResearch(params: {
   reusabilityScope: string;
   userContext: string;
   businessContext?: string;
+  scoutFindings?: { relatedModels: Array<{ name: string; file: string; line: number }>; gaps: Array<{ entity: string; reason: string }>; externalStructure?: Record<string, unknown>; suggestedQuestions: string[] };
   providerId?: string;
   model?: string;
   dispatchEngine?: "claude" | "codex" | "agentic";

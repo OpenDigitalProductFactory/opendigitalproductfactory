@@ -189,6 +189,7 @@ export async function getFeatureBuildForContext(
       plan: true,
       portfolioId: true,
       createdById: true,
+      scoutFindings: true,
       phaseHandoffs: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -318,6 +319,64 @@ export async function getFeatureBuildForContext(
     // Non-fatal — proceed without business context
   }
 
+  // Format scout findings if available
+  let scoutFindings: string | undefined;
+  if (r.scoutFindings) {
+    try {
+      const scout = r.scoutFindings as Record<string, unknown>;
+      const lines: string[] = [];
+
+      const relatedModels = scout.relatedModels as Array<{ name: string; file: string; line: number }> | undefined;
+      if (relatedModels && relatedModels.length > 0) {
+        lines.push("Related models found in codebase:");
+        relatedModels.forEach((m) => {
+          lines.push(`  - ${m.name} (${m.file}:${m.line})`);
+        });
+      }
+
+      const gaps = scout.gaps as Array<{ entity: string; reason: string }> | undefined;
+      if (gaps && gaps.length > 0) {
+        lines.push("");
+        lines.push("Gaps (concepts not yet modeled):");
+        gaps.forEach((g) => {
+          lines.push(`  - ${g.entity}: ${g.reason}`);
+        });
+      }
+
+      const externalStructure = scout.externalStructure as Record<string, unknown> | undefined;
+      if (externalStructure) {
+        lines.push("");
+        lines.push(`External URL: ${externalStructure.url}`);
+        const sections = externalStructure.sections as Array<{ heading: string }> | undefined;
+        if (sections && sections.length > 0) {
+          lines.push(`  Sections found: ${sections.map((s) => s.heading).join(", ")}`);
+        }
+      }
+
+      const suggestedQuestions = scout.suggestedQuestions as string[] | undefined;
+      if (suggestedQuestions && suggestedQuestions.length > 0) {
+        lines.push("");
+        lines.push("Suggested clarification questions:");
+        suggestedQuestions.forEach((q) => {
+          lines.push(`  - ${q}`);
+        });
+      }
+
+      const complexity = scout.estimatedComplexity as string | undefined;
+      const reason = scout.complexityReason as string | undefined;
+      if (complexity && reason) {
+        lines.push("");
+        lines.push(`Estimated complexity: ${complexity} — ${reason}`);
+      }
+
+      if (lines.length > 0) {
+        scoutFindings = lines.join("\n");
+      }
+    } catch {
+      // Non-fatal — proceed without formatted scout findings
+    }
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -330,6 +389,7 @@ export async function getFeatureBuildForContext(
     taxonomyContext,
     designSystem,
     businessContext,
+    scoutFindings,
   };
 }
 

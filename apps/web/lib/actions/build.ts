@@ -840,7 +840,7 @@ export async function releaseBuildClaim(buildId: string): Promise<void> {
 
 export async function saveBuildEvidence(
   buildId: string,
-  field: "designDoc" | "designReview" | "buildPlan" | "planReview" | "taskResults" | "verificationOut" | "acceptanceMet",
+  field: "designDoc" | "designReview" | "buildPlan" | "planReview" | "taskResults" | "verificationOut" | "acceptanceMet" | "scoutFindings",
   value: unknown,
 ): Promise<void> {
   const userId = await requireBuildAccess();

@@ -2301,6 +2301,7 @@ model FeatureBuild {
   taskResultsVersion    Int               @default(0)
   verificationOut       Json?
   acceptanceMet         Json?
+  scoutFindings         Json?
   accountableEmployeeId String?
   claimedByAgentId      String?
   claimedAt             DateTime?
