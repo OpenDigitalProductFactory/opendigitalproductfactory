@@ -38,6 +38,14 @@ cd /app
 pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts || echo "  WARN Catalog reconciliation had warnings (non-fatal)"
 echo "  OK Catalog reconciliation complete"
 
+# Detect credentials that can no longer be decrypted (e.g. .env regenerated
+# after DB volumes persisted) and flag them so the admin UI can prompt for
+# re-authentication.  See PROVIDER-ACTIVATION-AUDIT.md F-15, F-16.
+echo "[3c/5] Checking credential health..."
+cd /app
+pnpm --filter @dpf/db exec tsx scripts/credential-health-check.ts || echo "  WARN Credential health check had warnings (non-fatal)"
+echo "  OK Credential health check complete"
+
 echo "[4/5] Detecting hardware..."
 if [ -n "$DPF_HOST_PROFILE" ]; then
   cd /app
@@ -131,5 +139,26 @@ psql "$DATABASE_URL" -c "
   UPDATE \"AgentModelConfig\" SET \"pinnedProviderId\" = 'codex', \"pinnedModelId\" = 'gpt-5.4' WHERE \"agentId\" = 'build-specialist';
 " 2>/dev/null || echo "  WARN post-init SQL had warnings (non-fatal)"
 echo "  OK Provider config set"
+
+# ─── Pull embedding model into Docker Model Runner if available ──────────
+echo "[post-init] Checking embedding model..."
+# Docker Model Runner exposes an OpenAI-compatible API on the host.
+# The portal talks to it via LLM_BASE_URL. Try to pull the embedding model
+# so preflight check 10 passes on fresh install. This is best-effort —
+# Model Runner may not be available (e.g. CI or non-Docker hosts).
+EMB_BASE_URL="${LLM_BASE_URL:-http://model-runner.docker.internal/v1}"
+EMB_MODEL="ai/nomic-embed-text-v1.5"
+emb_already=$(wget -qO- --timeout=5 "${EMB_BASE_URL}/models" 2>/dev/null || true)
+if echo "$emb_already" | grep -q "nomic-embed-text"; then
+  echo "  OK Embedding model already available"
+else
+  echo "  Pulling ${EMB_MODEL} via Model Runner (first run only)..."
+  # Model Runner accepts POST /models/create with {"model":"..."} to pull
+  wget -qO- --timeout=120 --post-data "{\"model\":\"${EMB_MODEL}\"}" \
+    --header="Content-Type: application/json" \
+    "${EMB_BASE_URL%/v1}/models/create" 2>/dev/null \
+    && echo "  OK Embedding model pulled" \
+    || echo "  WARN Could not auto-pull embedding model. Run: docker model pull ${EMB_MODEL}"
+fi
 
 echo "=== Init complete ==="

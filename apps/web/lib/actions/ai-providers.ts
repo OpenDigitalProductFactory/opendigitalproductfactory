@@ -27,6 +27,7 @@ import {
   collectProviderCatalogSignals,
   summarizeCatalogSignal,
 } from "@/lib/provider-catalog-reconciliation";
+import { activateProvider } from "@/lib/govern/activate-provider";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -244,28 +245,30 @@ export async function configureProvider(input: {
     });
   }
 
+  // Save admin-supplied settings that are orthogonal to activation state.
   await prisma.modelProvider.update({
     where: { providerId: input.providerId },
     data: {
       enabledFamilies: input.enabledFamilies,
-      ...(input.authMethod !== undefined         && { authMethod:         input.authMethod }),
       ...(input.endpoint !== undefined           && { endpoint:           input.endpoint }),
       ...(input.computeWatts !== undefined       && { computeWatts:       input.computeWatts }),
       ...(input.electricityRateKwh !== undefined && { electricityRateKwh: input.electricityRateKwh }),
     },
   });
 
+  // Activate the provider: set status → active, derive sensitivityClearance,
+  // run model discovery + profiling.  Previously configureProvider left the
+  // provider as "unconfigured" with null clearance, requiring a separate
+  // Test Auth click — see PROVIDER-ACTIVATION-AUDIT.md F-01, F-03.
+  await activateProvider(input.providerId, {
+    trigger: "api_key_configure",
+    authMethod: input.authMethod,
+  });
+
   // Auto-configure Build Studio dispatch if no explicit config exists yet.
   // When a user configures a provider, the build system should automatically
   // pick it up without requiring manual Build Studio configuration.
   await autoConfigureBuildStudio(input.providerId);
-
-  // Trigger model discovery + profiling so ModelProfile rows are created
-  // immediately after configuration — not only after testProviderAuth().
-  // Uses fire-and-forget: the UI doesn't need to wait for discovery.
-  autoDiscoverAndProfile(input.providerId).catch((err) => {
-    console.warn(`[configureProvider] Auto-discover failed for ${input.providerId}:`, err);
-  });
 
   return {};
 }
@@ -438,11 +441,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
 
       if (res.ok || res.status === 400) {
-        await prisma.modelProvider.update({
-          where: { providerId },
-          data: { status: "active", sensitivityClearance: ["public", "internal", "confidential"] },
-        });
-        autoDiscoverAndProfile(providerId).catch(() => {});
+        await activateProvider(providerId, { trigger: "test_auth" });
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
 
@@ -471,11 +470,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
       // A 200 or even a 400 "max_tokens too low" means auth worked
       if (res.ok || res.status === 400) {
-        await prisma.modelProvider.update({
-          where: { providerId },
-          data: { status: "active", sensitivityClearance: ["public", "internal", "confidential"] },
-        });
-        autoDiscoverAndProfile(providerId).catch(() => {});
+        await activateProvider(providerId, { trigger: "test_auth" });
         return { ok: true, message: `Connected via subscription token — auth verified` };
       }
       const body = await res.text().catch(() => "");
@@ -484,15 +479,8 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
-      // Cloud LLM providers get public/internal/confidential clearance by default
-      const clearance = provider.providerId === "local" || provider.providerId === "ollama"
-        ? ["public", "internal", "confidential", "restricted"]
-        : ["public", "internal", "confidential"];
-      await prisma.modelProvider.update({
-        where: { providerId },
-        data: { status: "active", sensitivityClearance: clearance },
-      });
-      autoDiscoverAndProfile(providerId).catch(() => {});
+      // Clearance derived automatically: local/ollama → 4 levels, cloud → 3 levels
+      await activateProvider(providerId, { trigger: "test_auth" });
       return { ok: true, message: `Connected — HTTP ${res.status}` };
     }
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };

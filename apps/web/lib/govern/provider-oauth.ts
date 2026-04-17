@@ -6,6 +6,7 @@ import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
+import { activateProvider } from "@/lib/govern/activate-provider";
 
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
@@ -179,41 +180,18 @@ export async function exchangeOAuthCode(
     },
   });
 
-  // Activate the provider with full clearance — the admin completed OAuth sign-in,
-  // so this is now the active credential method (not api_key).  Must set
-  // sensitivityClearance here, not just in testProviderAuth, because the user
-  // may never click "Test Auth" separately.  Without clearance, the router
-  // excludes the provider ("Sensitivity clearance missing for 'internal'").
-  await prisma.modelProvider.update({
-    where: { providerId: flow.providerId },
-    data: {
-      authMethod: "oauth2_authorization_code",
-      status: "active",
-      sensitivityClearance: ["public", "internal", "confidential"],
-    },
+  // Activate the provider: set status/clearance/authMethod, run model discovery,
+  // activate linked MCP services, and sync the codex↔chatgpt sibling.
+  // Replaces ad-hoc mutations — see PROVIDER-ACTIVATION-AUDIT.md §5 (F-01, F-03).
+  await activateProvider(flow.providerId, {
+    trigger: "oauth_exchange",
+    authMethod: "oauth2_authorization_code",
+    activateLinked: true,
   });
 
-  // Auto-discover and profile models now that the provider has valid credentials.
-  // Fire-and-forget — don't block the OAuth redirect. Errors are logged internally.
-  autoDiscoverAndProfile(flow.providerId).catch(() => {});
-
-  // Auto-activate linked MCP services (e.g. codex-agent when codex provider connects)
-  const linkedServers = await prisma.mcpServer.findMany({
-    where: { config: { path: ["linkedProviderId"], equals: flow.providerId } },
-  });
-  for (const server of linkedServers) {
-    if (server.status !== "active") {
-      await prisma.mcpServer.update({ where: { id: server.id }, data: { status: "active" } });
-      // Also activate the corresponding ModelProvider if one exists
-      await prisma.modelProvider.updateMany({
-        where: { providerId: server.serverId, status: { not: "active" } },
-        data: { status: "active" },
-      });
-    }
-  }
-
-  // Bidirectional sync: codex and chatgpt share the same OpenAI OAuth token.
-  // Signing in via either provider activates both.
+  // Bidirectional credential sync: codex and chatgpt share the same OpenAI OAuth
+  // token. The credential upsert stays here because activateProvider doesn't
+  // handle credential storage (that's the caller's responsibility).
   const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
   const sibling = OPENAI_PAIR[flow.providerId];
   if (sibling) {
@@ -235,16 +213,7 @@ export async function exchangeOAuthCode(
           status: "ok",
         },
       });
-      await prisma.modelProvider.update({
-        where: { providerId: sibling },
-        data: {
-          status: "active",
-          authMethod: "oauth2_authorization_code",
-          sensitivityClearance: ["public", "internal", "confidential"],
-        },
-      });
-      // Also discover models for the sibling provider
-      autoDiscoverAndProfile(sibling).catch(() => {});
+      // Sibling's status/clearance/discovery already handled by activateLinked
     }
   }
 
