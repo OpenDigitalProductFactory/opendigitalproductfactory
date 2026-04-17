@@ -369,6 +369,16 @@ export async function getFeatureBuildForContext(
         lines.push(`Estimated complexity: ${complexity} — ${reason}`);
       }
 
+      const effort = scout.estimatedEffort as string | undefined;
+      const effortReason = scout.effortReason as string | undefined;
+      const executionApproach = scout.executionApproach as string | undefined;
+      if (effort && effortReason) {
+        lines.push(`Estimated effort: ${effort} — ${effortReason}`);
+        if (executionApproach === "epic-decompose") {
+          lines.push("⚠️ NOTE: This feature appears large enough to decompose into an Epic with 3-5 builds. After design approval, consider breaking it into smaller feature builds for faster iteration.");
+        }
+      }
+
       if (lines.length > 0) {
         scoutFindings = lines.join("\n");
       }

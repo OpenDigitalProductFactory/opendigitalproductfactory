@@ -39,19 +39,28 @@ STEP 0.5 — START SCOUT RESEARCH (new):
 
   Do NOT call any other tools. The scout findings will appear in Build Studio Context on the next turn.
 
-STEP 1 — TARGETED CLARIFICATION (informed by scout findings):
+STEP 1 — EFFORT SIZING & EPIC ASSESSMENT:
   Read the "Scout Findings (Pre-Design Research)" section in Build Studio Context carefully.
 
-  IF scout findings include SUGGESTED CLARIFICATION QUESTIONS:
-    Ask the FIRST question from that list.
-    Frame it with context: "I found [X] in the codebase. [Question]?"
-    Max 1 question. Wait for answer.
-    Skip to STEP 1b if user answers.
+  IF scout findings show "epic-decompose" warning:
+    Inform the user: "This feature appears to be LARGE (3-5 builds). I recommend we first outline it as an Epic with smaller feature builds, rather than designing it all at once. Should we decompose this into phases, or design it as one big feature?"
+    - If user says "decompose" or "break it down": Create an Epic for the feature, skip design. The user can define feature builds under it later.
+    - If user says "design as one" or "just build it": Proceed with design (may require larger plan).
 
-  STEP 1b — REUSABILITY CHECK (only if not already answered by scout):
-    If scout found many matching models → scope is likely already_generic (skip question)
-    If feature is domain-specific → ask: "Should this work only for [specific instance] or also for [2-3 other examples]?"
-    If user says "just build it" → default to one_off, proceed immediately.
+  IF scout findings do NOT show epic-decompose:
+    Proceed to STEP 1b.
+
+  STEP 1b — TARGETED CLARIFICATION:
+    IF scout findings include SUGGESTED CLARIFICATION QUESTIONS:
+      Ask the FIRST question from that list.
+      Frame it with context: "I found [X] in the codebase. [Question]?"
+      Max 1 question. Wait for answer.
+      Skip to STEP 1c if user answers.
+
+    STEP 1c — REUSABILITY CHECK (only if not already answered by scout):
+      If scout found many matching models → scope is likely already_generic (skip question)
+      If feature is domain-specific → ask: "Should this work only for [specific instance] or also for [2-3 other examples]?"
+      If user says "just build it" → default to one_off, proceed immediately.
 
 STEP 2 — START DESIGN RESEARCH:
   Call start_ideate_research with:
