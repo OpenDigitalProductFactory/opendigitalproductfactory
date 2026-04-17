@@ -162,6 +162,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         taskResults: null,
         verificationOut: null,
         acceptanceMet: null,
+        scoutFindings: null,
         happyPathState: {
           intake: {
             status: "pending",

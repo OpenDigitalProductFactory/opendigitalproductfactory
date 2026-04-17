@@ -97,8 +97,8 @@ export async function dispatchScoutResearch(params: {
         const schemaResults: ScoutResult["relatedModels"] = [];
         for (const keyword of keywords) {
           const hits = await searchProjectFiles(keyword, { glob: "**/*.prisma" });
-          if (hits.results) {
-            hits.results.forEach((hit) => {
+          if ("results" in hits) {
+            hits.results.forEach((hit: { path: string; line: number; text: string }) => {
               // Extract model name from line (simple heuristic)
               const modelMatch = hit.text.match(/model\s+(\w+)/);
               if (modelMatch) {
@@ -124,8 +124,8 @@ export async function dispatchScoutResearch(params: {
           const routeHits = await searchProjectFiles(keyword, {
             glob: "apps/web/app/**/*.ts",
           });
-          if (routeHits.results) {
-            routeHits.results.forEach((hit) => {
+          if ("results" in routeHits) {
+            routeHits.results.forEach((hit: { path: string; line: number; text: string }) => {
               if (hit.path.includes("/route.") || hit.path.includes("/route.ts")) {
                 routes.push({
                   name: hit.path.split("/").pop()?.replace(".ts", "") || "route",
@@ -139,8 +139,8 @@ export async function dispatchScoutResearch(params: {
           const componentHits = await searchProjectFiles(keyword, {
             glob: "apps/web/lib/components/**/*.ts*",
           });
-          if (componentHits.results) {
-            componentHits.results.forEach((hit) => {
+          if ("results" in componentHits) {
+            componentHits.results.forEach((hit: { path: string; line: number; text: string }) => {
               components.push({
                 name: hit.path.split("/").pop()?.replace(/\.(tsx?|jsx?)$/, "") || "component",
                 file: hit.path,
