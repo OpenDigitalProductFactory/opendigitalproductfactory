@@ -224,17 +224,49 @@ export async function dispatchScoutResearch(params: {
     // Complexity assessment
     const modelCount = relatedModels.length;
     const integrationCount = routes.length + (externalStructure ? 1 : 0);
+    const gapCount = gaps.length;
+
     let estimatedComplexity: "low" | "medium" | "high" = "low";
     let complexityReason = "";
+    let estimatedEffort: "tiny" | "small" | "medium" | "large" = "small";
+    let effortReason = "";
+    let executionApproach: "single-build" | "epic-decompose" | "requires-epic" = "single-build";
 
-    if (gaps.length > 0 || integrationCount > 2 || modelCount > 3) {
+    // Complexity scoring
+    if (gapCount > 0 || integrationCount > 2 || modelCount > 3) {
       estimatedComplexity = "high";
-      complexityReason = `${gaps.length} gaps + ${integrationCount} integrations + ${modelCount} models`;
-    } else if (gaps.length > 0 || integrationCount > 1 || modelCount > 1) {
+      complexityReason = `${gapCount} gaps + ${integrationCount} integrations + ${modelCount} models`;
+    } else if (gapCount > 0 || integrationCount > 1 || modelCount > 1) {
       estimatedComplexity = "medium";
-      complexityReason = `${gaps.length} gaps + ${integrationCount} integrations + ${modelCount} models`;
+      complexityReason = `${gapCount} gaps + ${integrationCount} integrations + ${modelCount} models`;
     } else {
       complexityReason = `${modelCount} related models found, simple integration`;
+    }
+
+    // Effort sizing: considers whether work fits in single build or needs decomposition
+    const totalEntities = modelCount + gapCount;
+    const totalDependencies = integrationCount + (externalStructure ? 1 : 0);
+
+    if (totalEntities === 0 && totalDependencies === 0) {
+      // Changing existing component, label, or config
+      estimatedEffort = "tiny";
+      effortReason = "No new models or integrations — likely label/config change";
+      executionApproach = "single-build";
+    } else if (totalEntities <= 1 && totalDependencies <= 1) {
+      // Small extension
+      estimatedEffort = "small";
+      effortReason = `${modelCount} model(s), ${integrationCount} integration(s)`;
+      executionApproach = "single-build";
+    } else if (totalEntities <= 2 && totalDependencies <= 2) {
+      // Medium feature
+      estimatedEffort = "medium";
+      effortReason = `${modelCount} model(s), ${gapCount} gap(s), ${integrationCount} integration(s)`;
+      executionApproach = "single-build";
+    } else {
+      // Large feature — consider epic decomposition
+      estimatedEffort = "large";
+      effortReason = `${totalEntities} entities + ${totalDependencies} dependencies — likely 3-5 builds`;
+      executionApproach = "epic-decompose";
     }
 
     const duration = Date.now() - startTime;
@@ -250,6 +282,9 @@ export async function dispatchScoutResearch(params: {
         suggestedQuestions,
         estimatedComplexity,
         complexityReason,
+        estimatedEffort,
+        effortReason,
+        executionApproach,
         scoutDurationMs: duration,
       },
     };

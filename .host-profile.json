@@ -1,1 +1,1 @@
-{"cpuCores":24,"cpuModel":"Intel(R) Core(TM) i9-14900KS","gpuName":"NVIDIA GeForce RTX 4090","selectedModel":"ai/gemma4","ramGB":63.7,"detectedAt":"2026-04-12T14:36:25.1550912-05:00","diskFreeGB":132.6,"gpuVramGB":24}
+{"cpuCores":24,"cpuModel":"Intel(R) Core(TM) i9-14900KS","gpuName":"NVIDIA GeForce RTX 4090","selectedModel":"ai/gemma4","ramGB":63.7,"detectedAt":"2026-04-16T20:47:58.4998068-05:00","diskFreeGB":96.6,"gpuVramGB":24}

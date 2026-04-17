@@ -1,0 +1,164 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - img "Ascension Property Management - Ascension Property Management logo" [ref=e7]
+        - navigation [ref=e8]:
+          - link "My Workspace" [ref=e9] [cursor=pointer]:
+            - /url: /workspace
+          - link "Portfolio" [ref=e10] [cursor=pointer]:
+            - /url: /portfolio
+          - link "Backlog" [ref=e11] [cursor=pointer]:
+            - /url: /ops
+          - link "Inventory" [ref=e12] [cursor=pointer]:
+            - /url: /inventory
+          - link "EA Modeler" [ref=e13] [cursor=pointer]:
+            - /url: /ea
+          - link "AI Workforce" [ref=e14] [cursor=pointer]:
+            - /url: /platform/ai
+          - link "Build" [ref=e15] [cursor=pointer]:
+            - /url: /build
+          - link "Knowledge" [ref=e16] [cursor=pointer]:
+            - /url: /knowledge
+          - link "Docs" [ref=e17] [cursor=pointer]:
+            - /url: /docs
+      - generic [ref=e18]:
+        - button "5" [ref=e20] [cursor=pointer]:
+          - generic [ref=e22]: "5"
+        - button "Feedback" [ref=e24] [cursor=pointer]
+        - generic [ref=e25]: HR-000
+        - button "Sign out" [ref=e27] [cursor=pointer]
+    - main [ref=e28]:
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e34]:
+            - textbox "Describe a new feature..." [ref=e35]
+            - button "New" [disabled]
+          - button "Incorporate main website into this portal https://ascensionpm.com/index.html Delete Incorporate main website into this portal https://ascensionpm.com/index.html FB-358581F3 · ideate" [ref=e37] [cursor=pointer]:
+            - generic [ref=e38]:
+              - generic [ref=e39]: Incorporate main website into this portal https://ascensionpm.com/index.html
+              - button "Delete Incorporate main website into this portal https://ascensionpm.com/index.html" [ref=e40]: ×
+            - generic [ref=e41]: FB-358581F3 · ideate
+        - generic [ref=e42]:
+          - generic [ref=e44]:
+            - heading "Incorporate main website into this portal https://ascensionpm.com/index.html" [level=2] [ref=e46]
+            - generic [ref=e47]:
+              - generic [ref=e48]: FB-358581F3
+              - generic [ref=e49]: ·
+              - generic "Project branch" [ref=e50]:
+                - img [ref=e51]
+                - text: main
+          - generic [ref=e53]:
+            - tablist "Build view tabs" [ref=e54]:
+              - tab "Graph" [selected] [ref=e55] [cursor=pointer]
+              - tab "Details" [ref=e56] [cursor=pointer]
+            - application [ref=e59]:
+              - generic [ref=e61]:
+                - generic:
+                  - generic:
+                    - img:
+                      - group "Edge from phase-ideate to phase-plan"
+                    - img:
+                      - group "Edge from phase-plan to phase-build"
+                    - img:
+                      - group "Edge from phase-build to phase-review"
+                    - img:
+                      - group "Edge from phase-review to phase-ship"
+                  - generic:
+                    - group [ref=e62] [cursor=pointer]:
+                      - generic [ref=e63]:
+                        - generic [ref=e66]:
+                          - generic [ref=e67]: ◈
+                          - generic [ref=e68]: Ideate
+                        - generic [ref=e69]:
+                          - generic [ref=e70]: AI
+                          - generic [ref=e71]: AI Coworker
+                    - group [ref=e72] [cursor=pointer]:
+                      - generic [ref=e73]:
+                        - generic [ref=e76]:
+                          - generic [ref=e77]: ▤
+                          - generic [ref=e78]: Plan
+                        - generic [ref=e79]:
+                          - generic [ref=e80]: AI
+                          - generic [ref=e81]: AI Coworker
+                    - group [ref=e82] [cursor=pointer]:
+                      - generic [ref=e83]:
+                        - generic [ref=e86]:
+                          - generic [ref=e87]: ⚙
+                          - generic [ref=e88]: Build
+                        - generic [ref=e89]:
+                          - generic [ref=e90]: AI
+                          - generic [ref=e91]: AI Coworker
+                    - group [ref=e92] [cursor=pointer]:
+                      - generic [ref=e93]:
+                        - generic [ref=e96]:
+                          - generic [ref=e97]: ◎
+                          - generic [ref=e98]: Review
+                        - generic [ref=e99]:
+                          - generic [ref=e100]: AI
+                          - generic [ref=e101]: AI Coworker
+                    - group [ref=e102] [cursor=pointer]:
+                      - generic [ref=e103]:
+                        - generic [ref=e106]:
+                          - generic [ref=e107]: ▶
+                          - generic [ref=e108]: Ship
+                        - generic [ref=e109]:
+                          - generic [ref=e110]: AI
+                          - generic [ref=e111]: AI Coworker
+              - img
+              - generic "Control Panel" [ref=e112]:
+                - button "Zoom In" [ref=e113] [cursor=pointer]:
+                  - img [ref=e114]
+                - button "Zoom Out" [ref=e116] [cursor=pointer]:
+                  - img [ref=e117]
+                - button "Fit View" [ref=e119] [cursor=pointer]:
+                  - img [ref=e120]
+                - button "Toggle Interactivity" [ref=e122] [cursor=pointer]:
+                  - img [ref=e123]
+              - img "Mini Map" [ref=e126]
+              - link "React Flow attribution" [ref=e133] [cursor=pointer]:
+                - /url: https://reactflow.dev
+                - text: React Flow
+    - generic [ref=e135]:
+      - generic [ref=e136]:
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - generic [ref=e140]: Software Engineer
+            - button "Skills ▼" [ref=e142] [cursor=pointer]
+            - button "Profile" [ref=e143] [cursor=pointer]
+          - generic [ref=e144]:
+            - generic [ref=e145]: Internal
+            - button "Hands Off" [ref=e146] [cursor=pointer]
+            - button "External Access Off" [ref=e147] [cursor=pointer]
+            - button "Dev" [ref=e148] [cursor=pointer]
+            - 'generic "Page sensitivity: internal" [ref=e149]': internal
+          - generic [ref=e150]: Feature development, code generation, and implementation
+        - generic [ref=e151]:
+          - button "Erase" [disabled] [ref=e152]
+          - button "x" [ref=e153] [cursor=pointer]
+      - generic [ref=e154]:
+        - generic "35m ago" [ref=e156]: "[Setup step: Build Studio — custom feature development] Organisation: Ascension Property Management This is a preview step. Introduce Build Studio briefly — explain what it does (self-development: the platform can build new features for itself) and that the user will return here after setup is complete to create their first feature. Do NOT ask the user to build anything now. Keep it to 2-3 sentences."
+        - generic [ref=e157]: Switched to Docker Model Runner (local) after the preferred endpoint was unavailable.
+        - generic "35m ago" [ref=e159]:
+          - paragraph [ref=e161]: Build Studio is where you can design and build new digital features directly within the platform, allowing for self-service development. It acts as your dedicated environment to translate business needs into functional software components. Once this initial setup is complete, you can return here to start creating your first feature for Ascension Property Management.
+        - generic "29m ago" [ref=e163]: I just created a new feature called "Incorporate main website into this portal https://ascensionpm.com/index.html". Help me define it.
+        - generic [ref=e164]:
+          - generic [ref=e165]: Software Engineer
+          - generic "29m ago" [ref=e166]:
+            - paragraph [ref=e168]: Got it. To make sure I build this correctly, are you looking to simply display the existing website within the portal, or should I rebuild its pages and features so they feel like a native part of the portal?
+        - generic "5m ago" [ref=e170]: 100% incorporate
+        - generic [ref=e171]:
+          - generic [ref=e172]: S
+          - generic [ref=e174]:
+            - generic [ref=e175]: Software Engineer is using design review...
+            - button "Cancel" [ref=e180] [cursor=pointer]
+      - generic [ref=e182]:
+        - textbox "Agent is working... type your next message" [ref=e183]: I'd like to learn more about the ideate phase.
+        - button "📎" [disabled] [ref=e184]
+        - button "Send" [disabled] [ref=e185]
+      - generic "Resize coworker panel" [ref=e186]
+  - alert [ref=e187]
+```

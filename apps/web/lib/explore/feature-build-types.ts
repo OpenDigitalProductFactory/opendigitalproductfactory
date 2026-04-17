@@ -164,6 +164,9 @@ export type ScoutResult = {
   suggestedQuestions: string[];
   estimatedComplexity: "low" | "medium" | "high";
   complexityReason: string;
+  estimatedEffort: "tiny" | "small" | "medium" | "large";
+  effortReason: string;
+  executionApproach: "single-build" | "epic-decompose" | "requires-epic";
   scoutDurationMs: number;
 };
 
