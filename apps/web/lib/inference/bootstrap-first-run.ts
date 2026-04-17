@@ -26,17 +26,21 @@ export async function seedOnboardingAgent(): Promise<void> {
     },
   });
 
-  // EP-AI-WORKFORCE-001: Provider pinning via AgentModelConfig (replaces Agent.preferredProviderId)
+  // EP-AI-WORKFORCE-001: Provider selection via capability requirements (not pinning).
+  // Uses capability-based routing: router picks best available provider meeting floor.
   await prisma.agentModelConfig.upsert({
     where: { agentId: "onboarding-coo" },
     create: {
       agentId: "onboarding-coo",
-      minimumTier: "basic",
+      minimumTier: "strong",
       budgetClass: "minimize_cost",
-      pinnedProviderId: "local",
+      minimumCapabilities: { toolUse: true },
     },
     update: {
-      pinnedProviderId: "local",
+      minimumTier: "strong",
+      budgetClass: "minimize_cost",
+      minimumCapabilities: { toolUse: true },
+      pinnedProviderId: null, // Clear any stale pins from prior runs
     },
   });
 }
