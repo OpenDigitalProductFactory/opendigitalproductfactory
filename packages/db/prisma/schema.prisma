@@ -1768,6 +1768,7 @@ model Organization {
   phone                 String?
   address               Json?
   logoUrl               String?
+  designSystem          Json?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   brandingConfig        BrandingConfig?
