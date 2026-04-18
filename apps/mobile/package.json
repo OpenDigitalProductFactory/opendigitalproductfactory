@@ -21,7 +21,7 @@
     "expo-camera": "~16.0.0",
     "expo-local-authentication": "~15.0.0",
     "expo-location": "~18.0.0",
-    "expo-notifications": "~0.29.0",
+    "expo-notifications": "~55.0.19",
     "expo-router": "~4.0.0",
     "expo-secure-store": "~14.0.0",
     "expo-sqlite": "~15.0.0",
