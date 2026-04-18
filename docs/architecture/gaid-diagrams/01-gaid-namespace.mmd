@@ -1,0 +1,17 @@
+%%{init: {'themeVariables': {'fontSize': '26px'}}}%%
+flowchart LR
+    ROOT["GAID<br/>Root"]
+    ISSUER["Issuer<br/>Prefix"]
+    PRIV["Private<br/>GAID"]
+    MAP["Boundary<br/>Mapping"]
+    PUB["Public<br/>GAID"]
+    AGENT["Exposed<br/>Agent"]
+
+    ROOT --> ISSUER --> PRIV --> MAP --> PUB --> AGENT
+
+    style ROOT fill:#dbeafe,stroke:#1e3a5f,color:#0f172a
+    style ISSUER fill:#dbeafe,stroke:#1e3a5f,color:#0f172a
+    style PRIV fill:#e0e7ff,stroke:#4338ca,color:#0f172a
+    style MAP fill:#fef3c7,stroke:#92400e,color:#0f172a
+    style PUB fill:#d1fae5,stroke:#166534,color:#0f172a
+    style AGENT fill:#dcfce7,stroke:#166534,color:#0f172a

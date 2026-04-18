@@ -1,0 +1,9 @@
+flowchart LR
+    ID["GAID"] --> RES["Resolver"]
+    RES --> AIDOC["Agent Identity Document"]
+    AIDOC --> OWN["Owner / Operator"]
+    AIDOC --> KEYS["Keys / Certificates"]
+    AIDOC --> BADGES["Badges / Assurance Claims"]
+    AIDOC --> AUTH["Authorization Classes"]
+    AIDOC --> PROV["Provenance References"]
+    AIDOC --> REV["Revocation / Status Endpoint"]

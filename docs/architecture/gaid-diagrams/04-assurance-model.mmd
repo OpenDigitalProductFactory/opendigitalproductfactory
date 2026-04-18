@@ -1,0 +1,7 @@
+flowchart TB
+    SELF["Self-Asserted Claims"] --> ORG["Organization-Attested Claims"]
+    ORG --> CERT["Independently Certified Claims"]
+    SELF --> BADGES["Capability / Governance Badges"]
+    ORG --> BADGES
+    CERT --> BADGES
+    BADGES --> USE["Enterprise and Public Trust Decisions"]

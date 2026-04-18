@@ -1,41 +1,17 @@
-flowchart TB
-    subgraph HUMANS["HUMAN AUTHORITY LAYER"]
-        HR000["HR-000\nCDIO"]
-        HR100["HR-100\nPortfolio Mgr"]
-        HR200["HR-200\nProduct Mgr"]
-        HR300["HR-300\nEnterprise Arch"]
-        HR400["HR-400\nITFM Director"]
-        HR500["HR-500\nOps Manager"]
-    end
+flowchart LR
+    HUM["Human Authority\nroles, delegation, approvals"]
+    KERNEL["Trusted AI Kernel\nidentity, grants, directives,\nexecution mode, audit"]
+    AGENTS["Agent Layer\ncoordinators and specialists"]
+    PROVIDERS["Inference + Tool Surface\nproviders, MCP, external systems"]
 
-    subgraph TAK["TRUSTED AI KERNEL"]
-        AUTH["Authentication\n& Session"]
-        ROLE["Role & Capability\nResolution"]
-        ROUTE["Route Context\nResolution"]
-        GRANTS["Agent Grant\nIntersection"]
-        EXEC["Execution Mode\nEnforcement"]
-        DIRECTIVES["Immutable\nDirectives"]
-        AUDIT["Audit\nRecorder"]
+    HUM ==>|authorizes| KERNEL
+    KERNEL ==>|constrains| AGENTS
+    AGENTS -->|calls| PROVIDERS
+    PROVIDERS -->|results| AGENTS
+    AGENTS -->|actions + evidence| KERNEL
+    KERNEL -->|oversight + audit| HUM
 
-        AUTH --> ROLE --> ROUTE --> GRANTS --> EXEC
-        DIRECTIVES -.->|injected| ROUTE
-        EXEC -.->|every action| AUDIT
-    end
-
-    subgraph AGENTS["AGENT EXECUTION LAYER"]
-        ORCH["Orchestrators\nTier 1-2"]
-        SPEC["Specialists\nTier 3+"]
-        ORCH -->|delegates| SPEC
-    end
-
-    subgraph PROVIDERS["INFERENCE PROVIDERS"]
-        LOCAL["Local\nOllama / Docker MR"]
-        CLOUD["Cloud\nAnthropic / OpenAI"]
-        MCP["External MCP\nServers"]
-    end
-
-    HUMANS ==>|authority| TAK
-    TAK ==>|constrained capability| AGENTS
-    AGENTS -->|inference calls| PROVIDERS
-    AGENTS -->|tool results| TAK
-    AUDIT -->|"continuous\nimprovement"| HUMANS
+    style HUM fill:#dbeafe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style KERNEL fill:#bfdbfe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style AGENTS fill:#d1fae5,stroke:#166534,color:#0f172a,stroke-width:1.5px
+    style PROVIDERS fill:#fef3c7,stroke:#92400e,color:#0f172a,stroke-width:1.5px
