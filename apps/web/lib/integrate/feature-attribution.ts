@@ -105,7 +105,7 @@ export async function attributeFeatureBuild(
   // findFirst until callers thread organizationId through.
   let portfolioId: string | null = null;
   if (brief.portfolioContext) {
-    const portfolio = await prisma.portfolio.findFirst({
+    const portfolio = await prisma.portfolio.findUnique({
       where: { slug: brief.portfolioContext },
       select: { id: true },
     });

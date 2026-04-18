@@ -64,7 +64,7 @@ export async function reassignTaxonomy(
 
   const rootSlug = node.nodeId.split("/")[0];
   const portfolio = rootSlug
-    ? await prisma.portfolio.findFirst({ where: { slug: rootSlug }, select: { id: true } })
+    ? await prisma.portfolio.findUnique({ where: { slug: rootSlug }, select: { id: true } })
     : null;
 
   await prisma.inventoryEntity.update({
