@@ -1,5 +1,6 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
+import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
 import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
@@ -99,6 +100,38 @@ type DiscoverySyncClient = {
   $transaction<T>(fn: (tx: DiscoverySyncTx) => Promise<T>): Promise<T>;
 };
 
+function countObjectKeys(value: Record<string, unknown> | undefined): number {
+  return value ? Object.keys(value).length : 0;
+}
+
+function dedupeDiscoveredItems(
+  items: NormalizedDiscoveryOutput["discoveredItems"],
+): NormalizedDiscoveryOutput["discoveredItems"] {
+  const byKey = new Map<string, NormalizedDiscoveryOutput["discoveredItems"][number]>();
+
+  for (const item of items) {
+    const existing = byKey.get(item.discoveredKey);
+    if (!existing) {
+      byKey.set(item.discoveredKey, item);
+      continue;
+    }
+
+    const existingConfidence = existing.confidence ?? 0;
+    const candidateConfidence = item.confidence ?? 0;
+    const existingAttributeCount = countObjectKeys(existing.attributes);
+    const candidateAttributeCount = countObjectKeys(item.attributes);
+
+    if (
+      candidateConfidence > existingConfidence
+      || (candidateConfidence === existingConfidence && candidateAttributeCount > existingAttributeCount)
+    ) {
+      byKey.set(item.discoveredKey, item);
+    }
+  }
+
+  return [...byKey.values()];
+}
+
 export function summarizeDiscoveryPersistence(
   summary: Partial<DiscoveryPersistenceSummary>,
 ): DiscoveryPersistenceSummary {
@@ -129,9 +162,16 @@ export async function persistBootstrapDiscoveryRun(
     projectInventoryEntity: options.projectInventoryEntity ?? syncInventoryEntityAsInfraCI,
     projectInventoryRelationship: options.projectInventoryRelationship ?? syncInventoryRelationship,
   };
+  const dedupedDiscoveredItems = dedupeDiscoveredItems(normalized.discoveredItems);
 
   const projected = await db.$transaction(async (tx) => {
     const now = new Date();
+    const softwareEvidenceByEntityKey = new Map<string, NormalizedDiscoveryOutput["softwareEvidence"]>();
+    for (const software of normalized.softwareEvidence) {
+      const existing = softwareEvidenceByEntityKey.get(software.inventoryEntityKey) ?? [];
+      existing.push(software);
+      softwareEvidenceByEntityKey.set(software.inventoryEntityKey, existing);
+    }
     const existingEntityKeys = new Set(
       (await tx.inventoryEntity.findMany({ select: { entityKey: true } }))
         .map((entity) => entity.entityKey),
@@ -152,7 +192,7 @@ export async function persistBootstrapDiscoveryRun(
         trigger: runMeta.trigger ?? "bootstrap",
         status: runMeta.status ?? "completed",
         completedAt: now,
-        itemCount: normalized.discoveredItems.length,
+        itemCount: dedupedDiscoveredItems.length,
         relationshipCount: normalized.inventoryRelationships.length,
       },
       select: { id: true },
@@ -166,12 +206,20 @@ export async function persistBootstrapDiscoveryRun(
 
     for (const entity of normalized.inventoryEntities) {
       const existed = existingEntityKeys.has(entity.entityKey);
+      const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
+        softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
+      );
       const persistedEntity = await tx.inventoryEntity.upsert({
         where: { entityKey: entity.entityKey },
         create: {
           entityKey: entity.entityKey,
           entityType: entity.entityType,
           name: entity.name,
+          manufacturer: evidenceSnapshot.manufacturer,
+          productModel: evidenceSnapshot.productModel,
+          observedVersion: evidenceSnapshot.observedVersion,
+          normalizedVersion: evidenceSnapshot.normalizedVersion,
+          supportStatus: evidenceSnapshot.supportStatus,
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -194,6 +242,10 @@ export async function persistBootstrapDiscoveryRun(
         update: {
           entityType: entity.entityType,
           name: entity.name,
+          ...(evidenceSnapshot.manufacturer ? { manufacturer: evidenceSnapshot.manufacturer } : {}),
+          ...(evidenceSnapshot.productModel ? { productModel: evidenceSnapshot.productModel } : {}),
+          ...(evidenceSnapshot.observedVersion ? { observedVersion: evidenceSnapshot.observedVersion } : {}),
+          ...(evidenceSnapshot.normalizedVersion ? { normalizedVersion: evidenceSnapshot.normalizedVersion } : {}),
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -225,7 +277,7 @@ export async function persistBootstrapDiscoveryRun(
       }
     }
 
-    for (const discoveredItem of normalized.discoveredItems) {
+    for (const discoveredItem of dedupedDiscoveredItems) {
       const persistedDiscoveredItem = await tx.discoveredItem.create({
         data: {
           discoveryRun: { connect: { id: run.id } },
@@ -390,6 +442,9 @@ export async function persistBootstrapDiscoveryRun(
     const qualityEvaluation = evaluateInventoryQuality(
       [
         ...normalized.inventoryEntities.map((entity) => {
+          const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
+            softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
+          );
           const qualityEntity = {
             entityKey: entity.entityKey,
             entityType: entity.entityType,
@@ -402,6 +457,12 @@ export async function persistBootstrapDiscoveryRun(
             })) ?? null,
             taxonomyNodeId: entity.taxonomyNodeId ?? null,
             digitalProductId: null,
+            manufacturer: evidenceSnapshot.manufacturer,
+            observedVersion: evidenceSnapshot.observedVersion,
+            normalizedVersion: evidenceSnapshot.normalizedVersion,
+            supportStatus: evidenceSnapshot.supportStatus,
+            hasSoftwareEvidence: evidenceSnapshot.hasSoftwareEvidence,
+            normalizationStatus: evidenceSnapshot.normalizationStatus,
           };
 
           if (entity.attributionStatus === "needs_review") {
@@ -446,7 +507,9 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          ...(resolvedTaxonomyNodeId ? { taxonomyNodeId: resolvedTaxonomyNodeId } : {}),
+          ...(resolvedTaxonomyNodeId
+            ? { taxonomyNode: { connect: { nodeId: resolvedTaxonomyNodeId } } }
+            : {}),
           ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
         },
         update: {
@@ -454,7 +517,9 @@ export async function persistBootstrapDiscoveryRun(
           status: issue.status,
           severity: issue.severity,
           summary: issue.summary,
-          ...(resolvedTaxonomyNodeId ? { taxonomyNodeId: resolvedTaxonomyNodeId } : {}),
+          ...(resolvedTaxonomyNodeId
+            ? { taxonomyNode: { connect: { nodeId: resolvedTaxonomyNodeId } } }
+            : {}),
           ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
         },
       });

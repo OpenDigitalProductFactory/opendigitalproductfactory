@@ -359,6 +359,14 @@ function categorizeIssue(issueType: string): {
     };
   }
 
+  if (issueType === "catalog_match_ambiguous" || issueType === "identity_rule_candidate") {
+    return {
+      key: "identity",
+      label: (count) => pluralize(count, "identity review", "identity reviews"),
+      tone: "warn",
+    };
+  }
+
   if (issueType === "stale_entity" || issueType === "stale_relationship") {
     return {
       key: "freshness",
@@ -383,7 +391,7 @@ function categorizeIssue(issueType: string): {
     };
   }
 
-  if (/support|eol|eos/i.test(issueType)) {
+  if (/support|lifecycle|eol|eos/i.test(issueType)) {
     return {
       key: "support",
       label: (count) => pluralize(count, "support risk", "support risks"),
@@ -430,7 +438,7 @@ function derivePostureBadges(source: EstateItemSource): EstatePostureBadge[] {
     });
   }
 
-  const order = ["dependency", "attribution", "freshness", "operational", "security", "support", "updates", "other"];
+  const order = ["dependency", "attribution", "identity", "freshness", "operational", "security", "support", "updates", "other"];
   return [...grouped.entries()]
     .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
     .map(([, value]) => ({

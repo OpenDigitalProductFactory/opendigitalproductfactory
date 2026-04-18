@@ -168,4 +168,43 @@ describe("createEstateItem", () => {
       "1 support risk",
     ]);
   });
+
+  it("treats lifecycle and catalog ambiguity as first-class estate review signals", () => {
+    const item = createEstateItem({
+      id: "entity-4",
+      entityKey: "router:main-gateway",
+      name: "Main Gateway",
+      entityType: "router",
+      technicalClass: "router",
+      manufacturer: null,
+      productModel: null,
+      observedVersion: "4.0.2",
+      normalizedVersion: null,
+      supportStatus: "unknown",
+      providerView: "foundational",
+      status: "active",
+      softwareEvidence: [
+        {
+          rawVendor: "Ubiquiti",
+          rawProductName: "Dream Machine Pro",
+          rawPackageName: "unifi-dream-machine-pro",
+          rawVersion: "4.0.2",
+          normalizationStatus: "needs_review",
+          normalizationConfidence: 0.44,
+          lastSeenAt: new Date(),
+        },
+      ],
+      qualityIssues: [
+        { issueType: "lifecycle_unverified", severity: "warn", status: "open" },
+        { issueType: "catalog_match_ambiguous", severity: "warn", status: "open" },
+      ],
+      _count: { fromRelationships: 1, toRelationships: 4 },
+    });
+
+    expect(item.supportSummaryLabel).toBe("Support review needed");
+    expect(item.postureBadges.map((badge) => badge.label)).toEqual([
+      "1 identity review",
+      "1 support risk",
+    ]);
+  });
 });
