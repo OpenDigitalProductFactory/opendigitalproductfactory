@@ -30,7 +30,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.0",
     "i18n-iso-countries": "^7.14.0",
-    "neo4j-driver": "^5.27.0",
+    "neo4j-driver": "^6.0.1",
     "net-snmp": "^3.26.1",
     "pg": "^8.13.0",
     "undici": "^8.1.0",
