@@ -357,6 +357,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  {
+    name: "extract_brand_design_system",
+    description: "Kick off a background brand extraction for the organization. Reads any combination of a public website URL, the platform codebase, and uploaded brand assets, merges them into a BrandDesignSystem (palette, typography, component inventory, tokens), and writes the result to Organization.designSystem. Returns a taskRunId immediately; progress is streamed through the agent panel and the coworker re-surfaces with a summary when done. Use when the user asks to refresh the brand, build a design system, or analyze an existing site.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Public http or https URL to extract brand signals from." },
+        includeCodebase: { type: "boolean", description: "When true, also read the platform's codebase for tokens. Defaults to false; enable only for the platform org." },
+        uploadIds: { type: "array", items: { type: "string" }, description: "IDs of AgentAttachment records to include (logos, brand kit PDFs, style decks)." },
+      },
+    },
+    requiredCapability: "manage_branding",
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+    sideEffect: true,
+  },
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
   // Only register_digital_product_from_build needs HITL approval (creates a real product).
@@ -2141,6 +2157,94 @@ export async function executeTool(
         success: true,
         message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
         data: evidence,
+      };
+    }
+
+    case "extract_brand_design_system": {
+      // Resolve THE single Organization (single-org-per-install architecture;
+      // see memory project_single_org_per_install). No explicit org id is
+      // threaded through executeTool, and there's only one Org per DPF install.
+      const org = await prisma.organization.findFirst({ select: { id: true, slug: true } });
+      if (!org) {
+        return {
+          success: false,
+          message: "Could not resolve an organization. Complete Setup first.",
+          error: "Could not resolve an organization. Complete Setup first.",
+        };
+      }
+
+      // Concurrency guard (AD-7): return early if another extraction is already
+      // running for this user, so the coworker doesn't fire duplicate jobs.
+      const active = await prisma.taskRun.findFirst({
+        where: {
+          userId,
+          title: "Extract brand design system",
+          status: "active",
+        },
+        select: { taskRunId: true },
+      });
+      if (active) {
+        return {
+          success: true,
+          message: "An extraction is already running — I'll ping you when it finishes.",
+          data: { taskRunId: active.taskRunId, status: "already-in-progress" },
+        };
+      }
+
+      const url = typeof params["url"] === "string" && params["url"].trim().length > 0
+        ? String(params["url"]).trim()
+        : undefined;
+      const includeCodebase = params["includeCodebase"] === true;
+      const uploadIdsRaw = params["uploadIds"];
+      const uploadIds = Array.isArray(uploadIdsRaw)
+        ? uploadIdsRaw.filter((id): id is string => typeof id === "string")
+        : undefined;
+
+      // Codebase path: only pass "/app" for the platform org, per codebase-adapter
+      // scoping rule. Non-platform orgs would need a connected-repo path that
+      // doesn't exist in this phase — skip by leaving codebasePath undefined.
+      const codebasePath = includeCodebase && org.slug === "platform" ? "/app" : undefined;
+
+      if (!url && !codebasePath && (!uploadIds || uploadIds.length === 0)) {
+        return {
+          success: false,
+          message: "Provide at least one source: a URL, includeCodebase (platform org), or uploadIds.",
+          error: "Provide at least one source: a URL, includeCodebase (platform org), or uploadIds.",
+        };
+      }
+
+      const taskRunId = `TR-BRAND-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await prisma.taskRun.create({
+        data: {
+          taskRunId,
+          userId,
+          threadId: context?.threadId ?? null,
+          routeContext: context?.routeContext ?? null,
+          title: "Extract brand design system",
+          objective: url
+            ? `Extract brand from ${url}`
+            : "Extract brand from supplied sources",
+          source: "coworker",
+          status: "active",
+        },
+      });
+
+      const { inngest } = await import("@/lib/queue/inngest-client");
+      await inngest.send({
+        name: "brand/extract.run",
+        data: {
+          organizationId: org.id,
+          taskRunId,
+          userId,
+          threadId: context?.threadId ?? null,
+          sources: { url, codebasePath, uploadIds },
+        },
+      });
+
+      return {
+        success: true,
+        message: "Working on it — I'll ping you when the brand is ready.",
+        data: { taskRunId, status: "queued" },
       };
     }
 
