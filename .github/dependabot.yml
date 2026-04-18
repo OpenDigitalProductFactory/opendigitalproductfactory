@@ -45,10 +45,6 @@ updates:
       # mode code. Upgrade deliberately, not through Dependabot.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # neo4j-driver v6 has breaking session/driver API changes. Open
-      # a planned upgrade when it's time; ignore the auto bump.
-      - dependency-name: "neo4j-driver"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
