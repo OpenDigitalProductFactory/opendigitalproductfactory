@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
   { label: "Workforce", href: "/platform/ai" },
   { label: "External Services", href: "/platform/ai/providers" },
-  { label: "Build Studio", href: "/platform/ai/build-studio" },
+  { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
   { label: "Route Log", href: "/platform/ai/routing" },
   { label: "Operations", href: "/platform/ai/operations" },
   { label: "Action History", href: "/platform/ai/history" },

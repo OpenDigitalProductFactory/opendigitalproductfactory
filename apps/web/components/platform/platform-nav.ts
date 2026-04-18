@@ -1,3 +1,5 @@
+import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
+
 export type PlatformFamilyKey =
   | "overview"
   | "ai"
@@ -33,7 +35,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Overview", href: "/platform/ai" },
       { label: "Assignments", href: "/platform/ai/assignments" },
       { label: "Routing & Calibration", href: "/platform/ai/providers" },
-      { label: "Build Studio", href: "/platform/ai/build-studio" },
+      { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
       { label: "Operations", href: "/platform/ai/operations" },
       { label: "Authority", href: "/platform/ai/authority" },
       { label: "Skills", href: "/platform/ai/skills" },

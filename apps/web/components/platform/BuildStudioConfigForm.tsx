@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 type ProviderOption = {
   providerId: string;
@@ -89,9 +90,43 @@ export function BuildStudioConfigForm({ config, claudeProviders, codexProviders,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <section
+        style={{
+          background: "var(--dpf-surface-2)",
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 12,
+          padding: 16,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 640 }}>
+            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              Runtime Setup
+            </div>
+            <p style={{ fontSize: 12, color: "var(--dpf-text)", margin: 0 }}>
+              {BUILD_STUDIO_CONFIG_ROUTE_COPY.description}
+            </p>
+          </div>
+          <Link
+            href={BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioHref}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: "var(--dpf-accent)",
+              color: "white",
+              textDecoration: "none",
+              fontSize: 12,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioLabel}
+          </Link>
+        </div>
+      </section>
 
       {/* Section 1: Active CLI Provider */}
-      <section style={{ background: "var(--dpf-card)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
+      <section style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
         <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
           Build Dispatch Engine
         </div>
@@ -133,7 +168,7 @@ export function BuildStudioConfigForm({ config, claudeProviders, codexProviders,
       </section>
 
       {/* Section 2: Provider Assignments */}
-      <section style={{ background: "var(--dpf-card)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
+      <section style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
         <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
           Credential Source
         </div>
@@ -163,7 +198,7 @@ export function BuildStudioConfigForm({ config, claudeProviders, codexProviders,
 
       {/* Section 3: Model Preferences */}
       {provider !== "agentic" && (
-        <section style={{ background: "var(--dpf-card)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
+        <section style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
             Model Preferences
           </div>
