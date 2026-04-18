@@ -64,3 +64,18 @@ export interface AiProbeRunEvent {
   name: "ai/probe.run";
   data: { endpointId?: string; modelId?: string; probesOnly: boolean; userId: string };
 }
+
+export interface BrandExtractRunEvent {
+  name: "brand/extract.run";
+  data: {
+    organizationId: string;
+    taskRunId: string;
+    userId: string;
+    threadId: string | null;
+    sources: {
+      url?: string;
+      codebasePath?: string;
+      uploadIds?: string[];
+    };
+  };
+}
