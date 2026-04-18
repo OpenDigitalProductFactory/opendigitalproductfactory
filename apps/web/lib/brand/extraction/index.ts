@@ -1,5 +1,15 @@
 import type { BrandDesignSystem } from "../types";
-import type { ExtractionInput, ExtractionResult, ProgressEmitter } from "./types";
+import type {
+  ExtractionInput,
+  ExtractionResult,
+  PartialDesignSystem,
+  ProgressEmitter,
+} from "./types";
+import { urlAdapter } from "./url-adapter";
+import { codebaseAdapter } from "./codebase-adapter";
+import { uploadAdapter } from "./upload-adapter";
+import { merge } from "./merge";
+import { synthesize } from "./synthesize";
 
 function emptyDesignSystem(): BrandDesignSystem {
   return {
@@ -56,20 +66,76 @@ function emptyDesignSystem(): BrandDesignSystem {
 
 export async function extractBrandDesignSystem(
   input: ExtractionInput,
-  _emit: ProgressEmitter,
+  emit: ProgressEmitter,
 ): Promise<ExtractionResult> {
   const start = Date.now();
   const { sources } = input;
-  const hasAnySource = Boolean(sources.url || sources.codebasePath || (sources.uploads && sources.uploads.length > 0));
+  const hasAnySource = Boolean(
+    sources.url || sources.codebasePath || (sources.uploads && sources.uploads.length > 0),
+  );
 
-  const designSystem = emptyDesignSystem();
   if (!hasAnySource) {
+    const designSystem = emptyDesignSystem();
     designSystem.gaps = ["no sources provided"];
+    return {
+      designSystem,
+      sourcesUsed: [],
+      durationMs: Date.now() - start,
+    };
   }
 
+  const tasks: Promise<PartialDesignSystem>[] = [];
+
+  if (sources.url) {
+    await emit({ stage: "scraping", message: `Reading ${sources.url}`, percent: 10 });
+    tasks.push(urlAdapter(sources.url));
+  }
+  if (sources.codebasePath) {
+    await emit({
+      stage: "reading-codebase",
+      message: `Reading codebase at ${sources.codebasePath}`,
+      percent: 20,
+    });
+    tasks.push(codebaseAdapter(sources.codebasePath));
+  }
+  if (sources.uploads && sources.uploads.length > 0) {
+    await emit({
+      stage: "parsing-uploads",
+      message: `Parsing ${sources.uploads.length} upload(s)`,
+      percent: 30,
+    });
+    tasks.push(uploadAdapter(sources.uploads));
+  }
+
+  const settled = await Promise.allSettled(tasks);
+  const partials: PartialDesignSystem[] = [];
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      partials.push(s.value);
+    }
+  }
+
+  await emit({
+    stage: "merging",
+    message: `Merging ${partials.length} source${partials.length === 1 ? "" : "s"}`,
+    percent: 60,
+  });
+  let merged = merge(partials);
+
+  if (merged.gaps.length > 0) {
+    await emit({
+      stage: "synthesizing",
+      message: `Filling ${merged.gaps.length} gap${merged.gaps.length === 1 ? "" : "s"}`,
+      percent: 80,
+    });
+    merged = await synthesize(merged);
+  }
+
+  await emit({ stage: "writing", message: "Extraction complete", percent: 100 });
+
   return {
-    designSystem,
-    sourcesUsed: [],
+    designSystem: merged,
+    sourcesUsed: merged.sources,
     durationMs: Date.now() - start,
   };
 }
