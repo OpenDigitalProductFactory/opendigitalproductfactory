@@ -39,6 +39,10 @@ COPY prompts/ ./prompts/
 COPY skills/ ./skills/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
+# IT4IT functional criteria workbook is read at seed time by
+# seed-ea-reference-models.ts. The rest of docs/Reference/ is large
+# binary content not needed in the image.
+COPY docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx ./docs/Reference/
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
@@ -72,6 +76,7 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
+COPY --from=init /app/docs/Reference ./docs/Reference
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
