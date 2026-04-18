@@ -60,6 +60,12 @@ export type InventoryQualityEntityInput = {
   taxonomyNodeId?: string | null;
   digitalProductId?: string | null;
   qualityStatus?: "warning" | "error";
+  manufacturer?: string | null;
+  observedVersion?: string | null;
+  normalizedVersion?: string | null;
+  supportStatus?: string | null;
+  hasSoftwareEvidence?: boolean;
+  normalizationStatus?: string | null;
 };
 
 export type InventoryQualityRelationshipInput = {
@@ -81,6 +87,12 @@ export type InventoryQualityIssue = {
 export type InventoryQualityEvaluation = {
   issues: InventoryQualityIssue[];
 };
+
+const IDENTITY_OPTIONAL_ENTITY_TYPES = new Set([
+  "network_interface",
+  "subnet",
+  "vlan",
+]);
 
 function normalizeToken(value: string): string {
   return value
@@ -350,6 +362,42 @@ export function evaluateInventoryQuality(
         severity: "warn",
         status: "open",
         summary: `${entity.entityType} ${entity.entityKey} was not confirmed in the latest discovery run`,
+        inventoryEntityKey: entity.entityKey,
+      });
+    }
+
+    const normalizedSupportStatus = entity.supportStatus?.trim().toLowerCase() ?? "unknown";
+    if (normalizedSupportStatus === "unknown") {
+      issues.push({
+        issueKey: `inventory_entity:${entity.entityKey}:lifecycle_unverified`,
+        issueType: "lifecycle_unverified",
+        severity: "warn",
+        status: "open",
+        summary: `${entity.entityType} ${entity.entityKey} still needs support lifecycle verification`,
+        inventoryEntityKey: entity.entityKey,
+      });
+    }
+
+    const identityAmbiguous = !IDENTITY_OPTIONAL_ENTITY_TYPES.has(entity.entityType)
+      && (
+        !entity.manufacturer
+        || (!!entity.observedVersion && !entity.normalizedVersion)
+        || entity.normalizationStatus === "needs_review"
+      );
+
+    if (identityAmbiguous) {
+      const detailParts = [
+        !entity.manufacturer ? "manufacturer" : null,
+        !!entity.observedVersion && !entity.normalizedVersion ? "normalized version" : null,
+        entity.normalizationStatus === "needs_review" ? "catalog match" : null,
+      ].filter((part): part is string => Boolean(part));
+
+      issues.push({
+        issueKey: `inventory_entity:${entity.entityKey}:catalog_match_ambiguous`,
+        issueType: "catalog_match_ambiguous",
+        severity: entity.hasSoftwareEvidence ? "warn" : "error",
+        status: "open",
+        summary: `${entity.entityType} ${entity.entityKey} still needs identity review for ${detailParts.join(", ")}`,
         inventoryEntityKey: entity.entityKey,
       });
     }

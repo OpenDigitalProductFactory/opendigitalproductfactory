@@ -269,4 +269,31 @@ describe("evaluateInventoryQuality", () => {
       "taxonomy_attribution_low_confidence",
     );
   });
+
+  it("creates lifecycle and catalog ambiguity issues when support and identity evidence are incomplete", () => {
+    const result = evaluateInventoryQuality([
+      {
+        entityKey: "router:main-gateway",
+        entityType: "router",
+        attributionStatus: "attributed",
+        attributionMethod: "rule",
+        attributionConfidence: 0.98,
+        taxonomyNodeId: "foundational/network_management/network_connectivity",
+        digitalProductId: null,
+        manufacturer: null,
+        observedVersion: "4.0.2",
+        normalizedVersion: null,
+        supportStatus: "unknown",
+        hasSoftwareEvidence: true,
+        normalizationStatus: "needs_review",
+      },
+    ]);
+
+    expect(result.issues.map((issue) => issue.issueType)).toEqual(
+      expect.arrayContaining([
+        "lifecycle_unverified",
+        "catalog_match_ambiguous",
+      ]),
+    );
+  });
 });

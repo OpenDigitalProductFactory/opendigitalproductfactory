@@ -197,8 +197,116 @@ describe("persistBootstrapDiscoveryRun", () => {
       evidenceKey: "host:hostname:dpf-dev:host_packages:postgresql-16",
       softwareIdentityId: "identity-postgres",
     });
+    expect(upsertedEntityPayloads[0]?.create).toMatchObject({
+      manufacturer: "PostgreSQL Global Development Group",
+      productModel: "PostgreSQL",
+      observedVersion: "16.3-1",
+      normalizedVersion: "16.3",
+      supportStatus: "unknown",
+    });
     expect(qualityIssues.map((issue) => issue.issueType)).toContain(
       "taxonomy_attribution_low_confidence",
     );
+    expect(qualityIssues.map((issue) => issue.issueType)).toEqual(
+      expect.arrayContaining([
+        "lifecycle_unverified",
+        "catalog_match_ambiguous",
+      ]),
+    );
+    expect(qualityIssues.find((issue) => issue.issueKey === "inventory_entity:host:hostname:dpf-dev:lifecycle_unverified")).toMatchObject({
+      taxonomyNode: { connect: { nodeId: "foundational/compute/servers" } },
+    });
+  });
+
+  it("deduplicates repeated discovered items within a single run", async () => {
+    const createdObservedKeys: string[] = [];
+
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        discoveryRun: {
+          create: async () => ({ id: "run-2" }),
+        },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { entityKey: string } }) => ({
+            id: `entity:${where.entityKey}`,
+            entityKey: where.entityKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredItem: {
+          create: async ({ data }: { data: { observedKey: string } }) => {
+            createdObservedKeys.push(data.observedKey);
+            return { id: `discovered:${data.observedKey}` };
+          },
+        },
+        discoveredSoftwareEvidence: {
+          upsert: async () => ({}),
+        },
+        inventoryRelationship: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
+            id: `relationship:${where.relationshipKey}`,
+            relationshipKey: where.relationshipKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredRelationship: {
+          create: async () => ({}),
+        },
+        portfolioQualityIssue: {
+          findMany: async () => [],
+          upsert: async () => ({}),
+        },
+      }),
+    };
+
+    await persistBootstrapDiscoveryRun(
+      db,
+      {
+        discoveredItems: [
+          {
+            discoveredKey: "duplicate:item",
+            sourceKind: "dpf_bootstrap",
+            itemType: "router",
+            name: "Main Gateway",
+            externalRef: "gateway:main",
+            attributes: { source: "collector-a" },
+          },
+          {
+            discoveredKey: "duplicate:item",
+            sourceKind: "dpf_bootstrap",
+            itemType: "router",
+            name: "Main Gateway",
+            externalRef: "gateway:main",
+            attributes: { source: "collector-b" },
+          },
+        ],
+        inventoryEntities: [
+          {
+            entityKey: "router:main",
+            entityType: "router",
+            name: "Main Gateway",
+            discoveredKey: "duplicate:item",
+            portfolioSlug: "foundational",
+            taxonomyNodeId: "foundational/network_management/network_connectivity",
+            attributionStatus: "attributed",
+            attributionMethod: "rule",
+            attributionConfidence: 0.98,
+            providerView: "foundational",
+            properties: {},
+          },
+        ],
+        inventoryRelationships: [],
+        softwareEvidence: [],
+      },
+      { runKey: "run-2", sourceSlug: "dpf_bootstrap" },
+      {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      },
+    );
+
+    expect(createdObservedKeys).toEqual(["duplicate:item"]);
   });
 });
