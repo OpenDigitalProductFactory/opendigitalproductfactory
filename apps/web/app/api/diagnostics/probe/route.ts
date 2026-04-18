@@ -49,7 +49,7 @@ const PROBE_ROUTES: Array<{ route: string; probe: string }> = [
   { route: "/compliance", probe: "What is the current compliance posture?" },
   { route: "/platform", probe: "Which AI providers are active?" },
   { route: "/admin", probe: "What admin tasks are pending?" },
-  { route: "/admin/storefront", probe: "Is the storefront configured?" },
+  { route: "/storefront", probe: "Is the storefront configured?" },
   { route: "/ea", probe: "What EA elements exist?" },
   { route: "/docs", probe: "What documentation exists?" },
   { route: "/setup", probe: "Is initial setup complete?" },

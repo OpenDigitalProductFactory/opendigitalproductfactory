@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentPanelHeader } from "./AgentPanelHeader";
+
+vi.mock("./AgentSkillsDropdown", () => ({
+  AgentSkillsDropdown: () => <span>Skills</span>,
+}));
 
 const baseProps = {
   agent: {

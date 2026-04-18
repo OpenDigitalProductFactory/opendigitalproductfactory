@@ -10,6 +10,10 @@ import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import {
   clampPanelPosition,
   clampPanelSize,
+  getDockedPanelFrame,
+  getReservedPanelWidth,
+  isDockedPanelViewport,
+  type DockedPanelFrame,
   type PanelPosition,
   type PanelSize,
 } from "./agent-panel-layout";
@@ -33,6 +37,11 @@ function getViewport() {
   };
 }
 
+function getShellContentTop(): number {
+  const shellContent = document.querySelector<HTMLElement>("[data-shell-content='true']");
+  return shellContent?.getBoundingClientRect().top ?? 16;
+}
+
 export function AgentCoworkerShell({ userContext }: Props) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -42,6 +51,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
   const lastAutoMessageRef = useRef<string | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
@@ -173,6 +183,8 @@ export function AgentCoworkerShell({ userContext }: Props) {
   }, [userKey]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if (dockedFrame) return;
+
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -201,9 +213,11 @@ export function AgentCoworkerShell({ userContext }: Props) {
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, [userKey]);
+  }, [dockedFrame, userKey]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    if (dockedFrame) return;
+
     e.stopPropagation();
     resizeRef.current = {
       startX: e.clientX,
@@ -236,9 +250,83 @@ export function AgentCoworkerShell({ userContext }: Props) {
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, [userKey]);
+  }, [dockedFrame, userKey]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    function syncPanelLayout() {
+      const viewport = getViewport();
+      const shouldDock = isOpen && isDockedPanelViewport(viewport);
+      const reservedWidth = getReservedPanelWidth({
+        isOpen: shouldDock,
+        size: sizeRef.current,
+        viewport,
+      });
+
+      document.documentElement.style.setProperty("--agent-panel-reserved-width", `${reservedWidth}px`);
+
+      if (shouldDock) {
+        setDockedFrame(
+          getDockedPanelFrame({
+            size: sizeRef.current,
+            viewport,
+            shellTop: getShellContentTop(),
+          }),
+        );
+        return;
+      }
+
+      setDockedFrame(null);
+    }
+
+    syncPanelLayout();
+    window.addEventListener("resize", syncPanelLayout);
+
+    return () => {
+      window.removeEventListener("resize", syncPanelLayout);
+      document.documentElement.style.setProperty("--agent-panel-reserved-width", "0px");
+    };
+  }, [hydrated, isOpen, pathname, size.width, size.height]);
 
   if (!hydrated) return null;
+
+  const isDocked = dockedFrame !== null;
+  const panelStyle = isDocked && dockedFrame
+    ? {
+        position: "fixed" as const,
+        zIndex: 50,
+        left: dockedFrame.left,
+        top: dockedFrame.top,
+        width: dockedFrame.width,
+        height: dockedFrame.height,
+        borderRadius: 16,
+        background: "color-mix(in srgb, var(--dpf-surface-1) 92%, transparent)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        border: "1px solid var(--dpf-border)",
+        boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 30%, transparent), 0 2px 8px rgba(0,0,0,0.12)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column" as const,
+      }
+    : {
+        position: "fixed" as const,
+        zIndex: 50,
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+        borderRadius: 12,
+        background: "color-mix(in srgb, var(--dpf-surface-1) 85%, transparent)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        border: "1px solid var(--dpf-border)",
+        boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 50%, transparent), 0 2px 8px rgba(0,0,0,0.15)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column" as const,
+      };
 
   return (
     <>
@@ -247,23 +335,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
       {isOpen && (
         <div
           data-agent-panel="true"
-          style={{
-            position: "fixed",
-            zIndex: 50,
-            left: position.x,
-            top: position.y,
-            width: size.width,
-            height: size.height,
-            borderRadius: 12,
-            background: "color-mix(in srgb, var(--dpf-surface-1) 85%, transparent)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid var(--dpf-border)",
-            boxShadow: "0 8px 32px color-mix(in srgb, var(--dpf-bg) 50%, transparent), 0 2px 8px rgba(0,0,0,0.15)",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-          }}
+          style={panelStyle}
         >
           <AgentCoworkerPanel
             threadId={threadId}
@@ -275,21 +347,24 @@ export function AgentCoworkerShell({ userContext }: Props) {
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={undefined} /* setup uses each page's native coworker */
+            isDocked={isDocked}
           />
-          <div
-            onMouseDown={handleResizeStart}
-            title="Resize coworker panel"
-            style={{
-              position: "absolute",
-              right: 0,
-              bottom: 0,
-              width: 18,
-              height: 18,
-              cursor: "nwse-resize",
-              background:
-                "linear-gradient(135deg, transparent 0 40%, color-mix(in srgb, var(--dpf-accent) 20%, transparent) 40% 60%, color-mix(in srgb, var(--dpf-accent) 55%, transparent) 60% 100%)",
-            }}
-          />
+          {!isDocked && (
+            <div
+              onMouseDown={handleResizeStart}
+              title="Resize coworker panel"
+              style={{
+                position: "absolute",
+                right: 0,
+                bottom: 0,
+                width: 18,
+                height: 18,
+                cursor: "nwse-resize",
+                background:
+                  "linear-gradient(135deg, transparent 0 40%, color-mix(in srgb, var(--dpf-accent) 20%, transparent) 40% 60%, color-mix(in srgb, var(--dpf-accent) 55%, transparent) 60% 100%)",
+              }}
+            />
+          )}
         </div>
       )}
     </>

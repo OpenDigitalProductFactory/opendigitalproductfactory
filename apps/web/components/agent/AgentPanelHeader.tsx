@@ -33,6 +33,7 @@ type Props = {
   sensitivityLevel?: string;
   useUnified?: boolean;
   marketingSkillRules?: Record<string, { visible?: boolean; label?: string; reframe?: string }> | null;
+  isDocked?: boolean;
 };
 
 export function AgentPanelHeader({
@@ -60,10 +61,14 @@ export function AgentPanelHeader({
   sensitivityLevel,
   useUnified,
   marketingSkillRules,
+  isDocked = false,
 }: Props) {
   return (
     <div
-      onMouseDown={onDragStart}
+      onMouseDown={(e) => {
+        if (isDocked) return;
+        onDragStart(e);
+      }}
       style={{
         display: "flex",
         alignItems: "center",
@@ -72,7 +77,7 @@ export function AgentPanelHeader({
         background: "color-mix(in srgb, var(--dpf-surface-2) 80%, transparent)",
         borderBottom: "1px solid var(--dpf-border)",
         borderRadius: "12px 12px 0 0",
-        cursor: "grab",
+        cursor: isDocked ? "default" : "grab",
         userSelect: "none",
       }}
     >

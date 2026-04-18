@@ -68,6 +68,7 @@ type Props = {
   /** When set, overrides pathname for agent routing and message routeContext.
    *  Used during setup so all steps route to the onboarding-coo agent. */
   routeContextOverride?: string;
+  isDocked?: boolean;
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
@@ -95,6 +96,7 @@ export function AgentCoworkerPanel({
   onAutoMessageConsumed,
   onConversationCleared,
   routeContextOverride,
+  isDocked = false,
 }: Props) {
   const pathname = usePathname();
   // During setup, use the override so the onboarding-coo agent handles all steps
@@ -557,6 +559,7 @@ export function AgentCoworkerPanel({
         onViewProfile={() => setShowProfile(true)}
         sensitivityLevel={agent.sensitivity}
         marketingSkillRules={marketingSkillRules}
+        isDocked={isDocked}
       />
 
       {showProfile && (
