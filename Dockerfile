@@ -36,6 +36,7 @@ COPY pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
+COPY skills/ ./skills/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
 RUN pnpm install --frozen-lockfile
@@ -61,11 +62,16 @@ COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
 
 # Copy init dependencies: pnpm workspace, migrations, seed, Prisma client, tsx
-COPY --from=init /app/packages/db ./packages/db
+# All workspace packages are copied so @dpf/* symlinks in node_modules resolve.
+# Without the full packages/ tree, seeds that import @dpf/storefront-templates
+# (and any future workspace-dep seed) fail to resolve and either throw or
+# silently skip depending on the call site.
+COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json ./
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/prompts ./prompts
+COPY --from=init /app/skills ./skills
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 

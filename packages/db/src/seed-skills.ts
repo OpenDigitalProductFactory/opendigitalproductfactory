@@ -48,7 +48,8 @@ const ALL_AGENT_IDS = [
  * Handles the subset of YAML used: scalars, inline arrays, booleans, null.
  */
 function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: string } {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const normalized = raw.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) {
     throw new Error("Missing YAML frontmatter delimiters (---)");
   }
