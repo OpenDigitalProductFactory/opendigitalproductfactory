@@ -3,13 +3,17 @@ import type { BrandDesignSystem } from "./types";
 
 const mocks = vi.hoisted(() => ({
   organizationFindUnique: vi.fn(),
+  organizationFindFirst: vi.fn(),
   storefrontFindUnique: vi.fn(),
   storefrontFindFirst: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    organization: { findUnique: mocks.organizationFindUnique },
+    organization: {
+      findUnique: mocks.organizationFindUnique,
+      findFirst: mocks.organizationFindFirst,
+    },
     storefrontConfig: {
       findUnique: mocks.storefrontFindUnique,
       findFirst: mocks.storefrontFindFirst,
@@ -69,6 +73,7 @@ function makeValidDesignSystem(name = "Acme"): BrandDesignSystem {
 describe("readBrandContext", () => {
   beforeEach(() => {
     mocks.organizationFindUnique.mockReset();
+    mocks.organizationFindFirst.mockReset();
     mocks.storefrontFindUnique.mockReset();
     mocks.storefrontFindFirst.mockReset();
   });
@@ -120,7 +125,21 @@ describe("readBrandContext", () => {
     );
   });
 
-  it("legacy fallback: no IDs passed, returns any storefront's legacy blob", async () => {
+  it("single-org fallback: no IDs passed, the only org has a structured designSystem", async () => {
+    const ds = makeValidDesignSystem("SoleOrg");
+    mocks.organizationFindFirst.mockResolvedValue({ designSystem: ds });
+
+    const result = await readBrandContext({});
+
+    expect(result.source).toBe("organization");
+    expect(result.structured?.identity.name).toBe("SoleOrg");
+    expect(result.legacyMarkdown).toBeNull();
+    expect(mocks.organizationFindFirst).toHaveBeenCalled();
+    expect(mocks.storefrontFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("legacy fallback: no IDs passed, org has no designSystem but a storefront has legacy blob", async () => {
+    mocks.organizationFindFirst.mockResolvedValue({ designSystem: null });
     mocks.storefrontFindFirst.mockResolvedValue({ designSystem: "# Any storefront blob" });
 
     const result = await readBrandContext({});
@@ -131,7 +150,8 @@ describe("readBrandContext", () => {
     expect(mocks.storefrontFindFirst).toHaveBeenCalled();
   });
 
-  it("returns source: none when no IDs and no storefronts exist", async () => {
+  it("returns source: none when no IDs, no org designSystem, and no storefronts exist", async () => {
+    mocks.organizationFindFirst.mockResolvedValue(null);
     mocks.storefrontFindFirst.mockResolvedValue(null);
 
     const result = await readBrandContext({});
