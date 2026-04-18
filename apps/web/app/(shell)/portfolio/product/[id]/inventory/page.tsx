@@ -35,13 +35,30 @@ export default async function ProductInventoryPage({ params }: Props) {
         supportStatus: true,
         providerView: true,
         status: true,
+        firstSeenAt: true,
+        lastSeenAt: true,
+        attributionStatus: true,
+        attributionConfidence: true,
         taxonomyNode: { select: { name: true, nodeId: true } },
         softwareEvidence: {
           orderBy: [{ lastSeenAt: "desc" }, { firstSeenAt: "desc" }],
-          take: 1,
+          take: 3,
           select: {
             rawVendor: true,
             rawVersion: true,
+            normalizationStatus: true,
+            normalizationConfidence: true,
+            lastSeenAt: true,
+          },
+        },
+        qualityIssues: {
+          where: { status: "open" },
+          orderBy: [{ severity: "desc" }, { lastDetectedAt: "desc" }],
+          take: 8,
+          select: {
+            issueType: true,
+            severity: true,
+            status: true,
           },
         },
         _count: {
@@ -74,6 +91,13 @@ export default async function ProductInventoryPage({ params }: Props) {
   const estateItems = entities.map((entity) => createEstateItem(entity));
   const unknownSupportCount = estateItems.filter((item) => item.supportStatus === "unknown").length;
   const dependencyCount = estateItems.reduce((total, item) => total + item.upstreamCount + item.downstreamCount, 0);
+  const staleEvidenceCount = estateItems.filter((item) => item.freshnessTone === "danger").length;
+  const attentionCount = estateItems.filter((item) =>
+    item.openIssueCount > 0
+    || item.freshnessTone === "danger"
+    || item.supportTone === "danger"
+    || item.versionConfidenceTone !== "good"
+  ).length;
 
   const groups = new Map<string, typeof estateItems>();
   for (const item of estateItems) {
@@ -103,9 +127,24 @@ export default async function ProductInventoryPage({ params }: Props) {
             <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{estateItems.length}</p>
           </div>
           <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Needs attention</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{attentionCount}</p>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              {staleEvidenceCount} stale evidence item(s), {unknownSupportCount} with unknown support posture
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
             <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Dependency links</p>
             <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{dependencyCount}</p>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">{unknownSupportCount} item(s) still have unknown support posture</p>
+          </div>
+          <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Evidence confidence</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">
+              {estateItems.filter((item) => item.versionConfidenceTone === "good").length}
+            </p>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              {estateItems.filter((item) => item.versionConfidenceTone !== "good").length} item(s) still need stronger version evidence
+            </p>
           </div>
         </section>
       </div>

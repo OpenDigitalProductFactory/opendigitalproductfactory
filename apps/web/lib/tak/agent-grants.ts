@@ -65,6 +65,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_release_status: ["release_plan_read"],
 
   // Discovery / Monitoring
+  summarize_estate_posture: ["registry_read"],
+  validate_version_confidence: ["registry_read"],
+  explain_blast_radius: ["registry_read"],
   discovery_sweep: ["telemetry_read"],
 
   // UX / Page evaluation

@@ -66,7 +66,7 @@ ON THIS PAGE: The user sees discovery operations with a review queue, subnet evi
     { label: "Check support posture", description: "Assess support lifecycle and update posture", capability: "view_inventory", prompt: "Check the support posture for this item." },
     { label: "Check version confidence", description: "Explain how confident we are in the observed version", capability: "view_inventory", prompt: "How confident are we in the version information for this item?" },
     { label: "Review discovery quality", description: "Assess freshness, evidence quality, and attribution confidence", capability: "view_inventory", prompt: "Review the discovery quality and evidence confidence for this item." },
-    { label: "Run discovery sweep", description: "Guide a fresh discovery pass to improve evidence quality", capability: "view_inventory", prompt: "Help me run a discovery sweep for this area." },
+    { label: "Run discovery sweep", description: "Guide a fresh discovery pass to improve evidence quality", capability: "manage_provider_connections", prompt: "Help me run a discovery sweep for this area." },
     { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
   ],
 };

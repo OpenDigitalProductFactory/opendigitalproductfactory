@@ -19,6 +19,16 @@ describe("EstateItemCard", () => {
           supportStatus: "supported",
           supportStatusLabel: "Supported",
           supportTone: "good",
+          versionConfidenceLabel: "High confidence version",
+          versionConfidenceTone: "good",
+          freshnessLabel: "Seen recently",
+          freshnessTone: "good",
+          blastRadiusLabel: "Failure impacts 5 downstream dependencies",
+          postureBadges: [
+            { label: "1 dependency gap", tone: "warn" },
+            { label: "1 active alert", tone: "danger" },
+          ],
+          openIssueCount: 2,
           providerViewLabel: "foundational",
           taxonomyPath: "foundational / connectivity / network",
           upstreamCount: 2,
@@ -34,6 +44,11 @@ describe("EstateItemCard", () => {
     expect(html).toContain("Dream Machine Pro");
     expect(html).toContain("4.0.2");
     expect(html).toContain("Supported");
+    expect(html).toContain("High confidence version");
+    expect(html).toContain("Seen recently");
+    expect(html).toContain("Failure impacts 5 downstream dependencies");
+    expect(html).toContain("1 dependency gap");
+    expect(html).toContain("1 active alert");
     expect(html).toContain("2 upstream");
     expect(html).toContain("5 downstream");
     expect(html).toContain("foundational / connectivity / network");

@@ -106,38 +106,91 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
 
   "/inventory": {
     routePrefix: "/inventory",
-    domain: "Product Inventory",
+    domain: "Discovery Operations",
     sensitivity: "internal",
     domainContext:
-      "This page shows the digital product inventory with lifecycle stages (plan, design, build, production, retirement) and statuses (draft, active, inactive). Users manage individual product records, stage-gate readiness, and portfolio attribution.",
+      "This route is the legacy alias for discovery operations. Treat discovery as evidence for the shared product estate, not as a standalone inventory list. Focus on ownership, purpose, dependency mapping, evidence freshness, and posture gaps that need review before humans act on the estate.",
     domainTools: [
-      "create_digital_product",
-      "update_lifecycle",
-      "query_version_history",
+      "summarize_estate_posture",
+      "validate_version_confidence",
+      "explain_blast_radius",
+      "discovery_sweep",
       "search_knowledge",
       "search_knowledge_base",
     ],
     docsPath: "/docs/products/index",
     skills: [
       {
-        label: "Advance a product",
-        description: "Move a product to the next lifecycle stage",
+        label: "Summarize estate posture",
+        description: "Highlight the biggest support, freshness, and evidence risks",
         capability: "view_inventory",
-        prompt: "Help me advance a product to the next lifecycle stage. Check the stage-gate criteria and update the lifecycle.",
+        prompt: "Summarize the current estate posture and tell me what needs attention first.",
       },
       {
-        label: "Lifecycle review",
-        description: "Analyse products by lifecycle stage",
+        label: "Explain blast radius",
+        description: "Show what breaks or becomes unreachable if an item fails",
         capability: "view_inventory",
-        prompt:
-          "Which products need attention based on their lifecycle stage?",
+        prompt: "Explain the blast radius for the item I'm looking at.",
       },
       {
-        label: "Stage-gate check",
-        description: "Evaluate whether a product is ready to advance",
+        label: "Check version confidence",
+        description: "Explain how strong the version evidence really is",
         capability: "view_inventory",
-        prompt:
-          "Help me evaluate whether a product is ready to advance to the next stage",
+        prompt: "Check how confident we are in the version information for this item.",
+      },
+      {
+        label: "Run discovery sweep",
+        description: "Run a fresh discovery pass to improve evidence quality",
+        capability: "manage_provider_connections",
+        prompt: "Run a discovery sweep to refresh the evidence on this route.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/portfolio/product": {
+    routePrefix: "/portfolio/product",
+    domain: "Digital Product Estate",
+    sensitivity: "internal",
+    domainContext:
+      "This page shows the managed estate for one digital product. The goal is to explain what supports the product, what it depends on, how strong the discovery evidence is, and where lifecycle or vulnerability posture may create risk. Emphasize manufacturer, version confidence, support status, dependencies, and purpose alignment.",
+    domainTools: [
+      "summarize_estate_posture",
+      "validate_version_confidence",
+      "explain_blast_radius",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/products/index",
+    skills: [
+      {
+        label: "Summarize estate posture",
+        description: "Highlight the biggest support, freshness, and evidence risks",
+        capability: "view_inventory",
+        prompt: "Summarize the estate posture for this product and tell me what needs attention first.",
+      },
+      {
+        label: "Explain blast radius",
+        description: "Show what breaks or becomes unreachable if an item fails",
+        capability: "view_inventory",
+        prompt: "Explain the blast radius for the item I'm looking at.",
+      },
+      {
+        label: "Check support posture",
+        description: "Assess vendor support lifecycle and update posture",
+        capability: "view_inventory",
+        prompt: "Check the support posture for this item.",
+      },
+      {
+        label: "Check version confidence",
+        description: "Explain how strong the version evidence really is",
+        capability: "view_inventory",
+        prompt: "Check how confident we are in the version information for this item.",
       },
       {
         label: "Report an issue",
@@ -445,12 +498,61 @@ When generating or reviewing UI code, enforce these rules:
     ],
   },
 
+  "/platform/tools/discovery": {
+    routePrefix: "/platform/tools/discovery",
+    domain: "Discovery Operations",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the specialist evidence workspace for discovery operations. Use it to improve attribution, vendor and version accuracy, topology understanding, dependency mapping, and support posture across the shared product estate. Discovery outputs are evidence, not the primary human-facing inventory.",
+    domainTools: [
+      "summarize_estate_posture",
+      "validate_version_confidence",
+      "explain_blast_radius",
+      "discovery_sweep",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/platform/index",
+    skills: [
+      {
+        label: "Summarize estate posture",
+        description: "Highlight the biggest support, freshness, and evidence risks",
+        capability: "view_inventory",
+        prompt: "Summarize the current discovery posture and tell me what needs attention first.",
+      },
+      {
+        label: "Review discovery quality",
+        description: "Assess freshness, evidence quality, and attribution confidence",
+        capability: "view_inventory",
+        prompt: "Review the discovery quality and evidence confidence for the items on this page.",
+      },
+      {
+        label: "Explain blast radius",
+        description: "Show what breaks or becomes unreachable if an item fails",
+        capability: "view_inventory",
+        prompt: "Explain the blast radius for the item I'm looking at.",
+      },
+      {
+        label: "Run discovery sweep",
+        description: "Run a fresh discovery pass to improve evidence quality",
+        capability: "manage_provider_connections",
+        prompt: "Run a discovery sweep to refresh the evidence on this route.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/admin": {
     routePrefix: "/admin",
     domain: "Administration",
     sensitivity: "restricted",
     domainContext:
-      "This page handles user management, role assignments, branding configuration, platform settings, and infrastructure administration. The admin coworker has tools to view logs, query the database, restart services, run migrations, and execute project-level commands. All tool calls are audit-logged to AdminActivity.",
+      "This page handles user management, role assignments, branding configuration, platform settings, and infrastructure administration. Data here is classified as restricted — the admin coworker can view logs, query the database, restart services, run migrations, and execute project-level commands. All tool calls are audit-logged to AdminActivity.",
     domainTools: [
       "admin_view_logs",
       "admin_query_db",
@@ -551,8 +653,8 @@ When generating or reviewing UI code, enforce these rules:
     ],
   },
 
-  "/admin/storefront": {
-    routePrefix: "/admin/storefront",
+  "/storefront": {
+    routePrefix: "/storefront",
     domain: "Business Portal & Engagement",
     sensitivity: "confidential",
     domainContext:
@@ -627,7 +729,14 @@ When generating or reviewing UI code, enforce these rules:
     domainContext:
       "The user is going through initial platform setup. Guide them through each step: business identity, account creation, AI capabilities, branding, financials, and workspace creation. Be professional, understanding, and transparent about the local AI model's limitations.",
     domainTools: [],
-    skills: [],
+    skills: [
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
   },
 
   "/workspace": {

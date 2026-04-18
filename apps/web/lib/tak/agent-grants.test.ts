@@ -72,6 +72,28 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS — Estate specialist entries", () => {
+  it("summarize_estate_posture requires registry_read", () => {
+    expect(isToolAllowedByGrants("summarize_estate_posture", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("summarize_estate_posture", ["telemetry_read"])).toBe(false);
+  });
+
+  it("validate_version_confidence requires registry_read", () => {
+    expect(isToolAllowedByGrants("validate_version_confidence", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("validate_version_confidence", [])).toBe(false);
+  });
+
+  it("explain_blast_radius requires registry_read", () => {
+    expect(isToolAllowedByGrants("explain_blast_radius", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("explain_blast_radius", ["ea_graph_read"])).toBe(false);
+  });
+
+  it("discovery_sweep requires telemetry_read", () => {
+    expect(isToolAllowedByGrants("discovery_sweep", ["telemetry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("discovery_sweep", ["registry_read"])).toBe(false);
+  });
+});
+
 describe("TOOL_TO_GRANTS — Admin entries", () => {
   it("admin_view_logs requires admin_read", () => {
     expect(isToolAllowedByGrants("admin_view_logs", ["admin_read"])).toBe(true);
@@ -207,6 +229,14 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["admin_view_logs"]).toEqual(["admin_read"]);
     expect(mapping["admin_restart_service"]).toEqual(["admin_write"]);
     expect(mapping["admin_run_command"]).toEqual(["admin_write"]);
+  });
+
+  it("includes estate specialist tools", () => {
+    const mapping = getToolGrantMapping();
+    expect(mapping["summarize_estate_posture"]).toEqual(["registry_read"]);
+    expect(mapping["validate_version_confidence"]).toEqual(["registry_read"]);
+    expect(mapping["explain_blast_radius"]).toEqual(["registry_read"]);
+    expect(mapping["discovery_sweep"]).toEqual(["telemetry_read"]);
   });
 
   it("includes hive mind tools", () => {

@@ -8,6 +8,11 @@ describe("mcp tools", () => {
     platformRole: "HR-000",
     isSuperuser: false,
   };
+  const inventoryUser = {
+    userId: "user-2",
+    platformRole: "HR-300",
+    isSuperuser: false,
+  };
 
   it("hides external tools when external access is off", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
@@ -71,6 +76,25 @@ describe("mcp tools", () => {
       expect(tool).toBeDefined();
       expect(tool!.executionMode).toBe("immediate");
     }
+  });
+
+  it("exposes read-only estate tools to inventory users", async () => {
+    const tools = await getAvailableTools(inventoryUser, { externalAccessEnabled: false });
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain("summarize_estate_posture");
+    expect(toolNames).toContain("validate_version_confidence");
+    expect(toolNames).toContain("explain_blast_radius");
+    expect(toolNames).not.toContain("discovery_sweep");
+  });
+
+  it("keeps discovery sweep available only to provider managers", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const sweep = tools.find((tool) => tool.name === "discovery_sweep");
+
+    expect(sweep).toBeDefined();
+    expect(sweep!.requiredCapability).toBe("manage_provider_connections");
+    expect(sweep!.sideEffect).toBe(true);
   });
 });
 

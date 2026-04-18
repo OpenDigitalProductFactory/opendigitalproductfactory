@@ -23,6 +23,20 @@ describe("resolveRouteContext", () => {
     expect(ctx.domain).toBe("Enterprise Architecture");
   });
 
+  it("matches discovery operations routes ahead of the generic platform context", () => {
+    const ctx = resolveRouteContext("/platform/tools/discovery");
+    expect(ctx.domain).toBe("Discovery Operations");
+    expect(ctx.routePrefix).toBe("/platform/tools/discovery");
+    expect(ctx.domainTools).toContain("summarize_estate_posture");
+  });
+
+  it("matches product estate routes ahead of the broader portfolio context", () => {
+    const ctx = resolveRouteContext("/portfolio/product/prod-123/inventory");
+    expect(ctx.domain).toBe("Digital Product Estate");
+    expect(ctx.routePrefix).toBe("/portfolio/product");
+    expect(ctx.domainTools).toContain("explain_blast_radius");
+  });
+
   it("falls back to workspace for unknown routes", () => {
     const ctx = resolveRouteContext("/unknown/path");
     expect(ctx.domain).toBe("Workspace");
@@ -67,7 +81,9 @@ describe("ROUTE_CONTEXT_MAP", () => {
   it("has entries for all expected routes", () => {
     const expected = [
       "/portfolio",
+      "/portfolio/product",
       "/inventory",
+      "/platform/tools/discovery",
       "/ea",
       "/employee",
       "/customer",
@@ -116,6 +132,17 @@ describe("ROUTE_CONTEXT_MAP", () => {
     for (const [key, def] of Object.entries(ROUTE_CONTEXT_MAP)) {
       expect(def.routePrefix).toBe(key);
     }
+  });
+
+  it("keeps discovery sweep gated behind provider-management capability", () => {
+    const aliasRoute = ROUTE_CONTEXT_MAP["/inventory"]!;
+    const discoveryRoute = ROUTE_CONTEXT_MAP["/platform/tools/discovery"]!;
+    const aliasSkill = aliasRoute.skills.find((skill) => skill.label === "Run discovery sweep");
+    const discoverySkill = discoveryRoute.skills.find((skill) => skill.label === "Run discovery sweep");
+
+    expect(aliasRoute.domain).toBe("Discovery Operations");
+    expect(aliasSkill?.capability).toBe("manage_provider_connections");
+    expect(discoverySkill?.capability).toBe("manage_provider_connections");
   });
 });
 
