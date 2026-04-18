@@ -62,4 +62,7 @@ export type SetupContext = {
   suggestedContactPhone?: string;
   suggestedGeographicScope?: string;
   suggestedTimezone?: string;
+  // Tracks which steps have already dispatched their COO auto-message trigger.
+  // Guards against duplicate welcomes across page reloads / component remounts.
+  triggeredSteps?: string[];
 };

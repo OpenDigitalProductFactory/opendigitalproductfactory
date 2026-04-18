@@ -119,6 +119,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             currentStep={activeSetup.currentStep}
             steps={activeSetup.steps as Record<string, "pending" | "completed" | "skipped">}
             setupContext={(activeSetup.context ?? {}) as Record<string, string>}
+            triggeredSteps={
+              ((activeSetup.context ?? {}) as { triggeredSteps?: string[] }).triggeredSteps ?? []
+            }
           />
         )}
         <StatusBanner />

@@ -9,7 +9,7 @@ import {
   type SetupStep,
   type StepStatus,
 } from "@/lib/actions/setup-constants";
-import { advanceStep, skipStep, pauseSetup, completeSetup } from "@/lib/actions/setup-progress";
+import { advanceStep, skipStep, pauseSetup, completeSetup, markStepTriggered } from "@/lib/actions/setup-progress";
 
 /** Build a context-aware trigger prompt for the current setup step.
  * Sent as an autoMessage — triggers a real LLM call so the COO responds
@@ -64,6 +64,7 @@ type Props = {
   currentStep: string;
   steps: Record<string, StepStatus>;
   setupContext: Record<string, string>;
+  triggeredSteps: string[];
 };
 
 /**
@@ -73,7 +74,7 @@ type Props = {
  *
  * Auto-opens the coworker panel so the COO can provide guidance.
  */
-export function SetupOverlay({ progressId, currentStep, steps, setupContext }: Props) {
+export function SetupOverlay({ progressId, currentStep, steps, setupContext, triggeredSteps }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
@@ -82,23 +83,19 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext }: P
   // Uses autoMessage so the LLM generates personalised guidance from the setup
   // context rather than displaying a pre-written string.
   //
-  // Stabilise the trigger: setupContext is a new object reference on every
-  // server render (layout re-renders when a provider is saved), but the *content*
-  // rarely changes during a single setup step.  Derive a stable trigger string
-  // and only fire the effect when the trigger text actually changes.
+  // Fire-once-per-step is enforced via the DB: triggeredSteps on the progress
+  // record. A component-local ref isn't enough because SetupOverlay remounts
+  // on full reloads (navigateToStep uses window.location.href) and in React
+  // Strict Mode, which would re-fire the welcome every time.
   const trigger = useMemo(
     () => buildStepTrigger(currentStep, setupContext),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentStep, JSON.stringify(setupContext)],
   );
-  const lastFiredTrigger = useRef<string | null>(null);
+  const alreadyFired = triggeredSteps.includes(currentStep);
 
   useEffect(() => {
-    if (!trigger) return;
-    // Don't re-fire the same trigger (e.g. after a provider save that
-    // re-renders the layout but doesn't change the setup step or context).
-    if (lastFiredTrigger.current === trigger) return;
-    lastFiredTrigger.current = trigger;
+    if (!trigger || alreadyFired) return;
 
     const timer = setTimeout(() => {
       document.dispatchEvent(
@@ -106,9 +103,10 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext }: P
           detail: { autoMessage: trigger },
         }),
       );
+      void markStepTriggered(progressId, currentStep);
     }, 300);
     return () => clearTimeout(timer);
-  }, [trigger]);
+  }, [trigger, alreadyFired, progressId, currentStep]);
 
   const navigateToStep = (step: string, completed?: boolean) => {
     if (completed) {
