@@ -205,6 +205,32 @@ export function AgentCoworkerPanel({
             return next;
           });
         }
+        // Brand-extraction progress from the Inngest worker (cross-process)
+        if (data.type === "brand:extract.progress") {
+          setOrchestratorStatus(`${data.stage}: ${data.message} (${data.percent}%)`);
+        }
+        if (data.type === "brand:extract.complete") {
+          setOrchestratorStatus("Brand ready");
+          setMessages((prev) => [...prev, {
+            id: `local-brand-complete-${Date.now()}`,
+            role: "system" as const,
+            content: `${data.summary}\n\nView your new brand: /admin/branding`,
+            agentId: agent.agentId,
+            routeContext: effectiveRoute,
+            createdAt: new Date().toISOString(),
+          }]);
+        }
+        if (data.type === "brand:extract.failed") {
+          setOrchestratorStatus(null);
+          setMessages((prev) => [...prev, {
+            id: `local-brand-failed-${Date.now()}`,
+            role: "system" as const,
+            content: `Brand extraction failed: ${data.error}. Try a different URL or source.`,
+            agentId: agent.agentId,
+            routeContext: effectiveRoute,
+            createdAt: new Date().toISOString(),
+          }]);
+        }
         // EP-ASYNC-COWORKER-001: error event — show in chat
         if (data.type === "error") {
           setMessages((prev) => [...prev, {
