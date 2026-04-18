@@ -2446,6 +2446,7 @@ model TaskRun {
   source             String     @default("coworker") // coworker | build | skill | proactive
   status             String     @default("active") // active | awaiting_human | completed | failed | cancelled | archived
   authorityScope     Json?
+  progressPayload    Json?
   repeatedPatternKey String?
   templateId         String?
   startedAt          DateTime   @default(now())

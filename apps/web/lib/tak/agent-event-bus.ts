@@ -43,7 +43,11 @@ export type AgentEvent =
   | { type: "queue:item_completed"; workItemId: string; outcome: "success" | "failed" | "cancelled" }
   | { type: "queue:escalation"; workItemId: string; fromWorker: string; toWorker: string; reason: string }
   | { type: "queue:sla_warning"; workItemId: string; minutesRemaining: number }
-  | { type: "queue:message"; workItemId: string; messageType: string; senderId: string };
+  | { type: "queue:message"; workItemId: string; messageType: string; senderId: string }
+  // Brand extraction events (long-running background job routed through coworker panel)
+  | { type: "brand:extract.progress"; taskRunId: string; stage: string; message: string; percent: number }
+  | { type: "brand:extract.complete"; taskRunId: string; summary: string }
+  | { type: "brand:extract.failed"; taskRunId: string; error: string };
 
 type Handler = (event: AgentEvent) => void;
 
