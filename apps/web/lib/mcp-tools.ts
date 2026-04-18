@@ -1668,6 +1668,62 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_tool_evaluations",
     sideEffect: true,
   },
+  {
+    name: "summarize_estate_posture",
+    description: "Summarize support lifecycle, evidence freshness, version confidence, and open posture issues for an estate item or the current product estate view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "Specific estate item id (optional)" },
+        entityKey: { type: "string", description: "Specific estate item key (optional)" },
+        entityName: { type: "string", description: "Specific estate item name (optional)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_inventory",
+    sideEffect: false,
+  },
+  {
+    name: "validate_version_confidence",
+    description: "Explain how trustworthy the observed version is for a specific estate item, including whether it is normalized or only inferred from raw evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "Specific estate item id (optional)" },
+        entityKey: { type: "string", description: "Specific estate item key (optional)" },
+        entityName: { type: "string", description: "Specific estate item name (optional)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_inventory",
+    sideEffect: false,
+  },
+  {
+    name: "explain_blast_radius",
+    description: "Explain the upstream dependencies and downstream impact for a specific estate item using the shared dependency model.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "Specific estate item id (optional)" },
+        entityKey: { type: "string", description: "Specific estate item key (optional)" },
+        entityName: { type: "string", description: "Specific estate item name (optional)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_inventory",
+    sideEffect: false,
+  },
+  {
+    name: "discovery_sweep",
+    description: "Run a fresh discovery pass to refresh attribution, topology, and evidence quality across the estate.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
 
   // ── EA / Ontology Graph ─────────────────────────────────────────────────────
   {
@@ -5855,6 +5911,154 @@ export async function executeTool(
         proposedBy: userId,
       });
       return { success: true, entityId: evalId, message: `Tool evaluation created: ${evalId}. The evaluation pipeline will review this tool for security, architecture fit, compliance, and integration.` };
+    }
+
+    case "summarize_estate_posture": {
+      const { resolveEstateEntity, summarizeDiscoveryOperations, summarizeProductEstate } = await import("@/lib/estate/estate-tooling");
+      const resolved = await resolveEstateEntity({
+        entityId: typeof params["entityId"] === "string" ? params["entityId"] : undefined,
+        entityKey: typeof params["entityKey"] === "string" ? params["entityKey"] : undefined,
+        entityName: typeof params["entityName"] === "string" ? params["entityName"] : undefined,
+      }, context?.routeContext);
+
+      if (resolved.kind === "resolved") {
+        return {
+          success: true,
+          entityId: resolved.item.id,
+          message: `${resolved.item.name}: ${resolved.item.supportStatusLabel}; ${resolved.item.versionConfidenceLabel}; ${resolved.item.freshnessLabel}.`,
+          data: {
+            item: resolved.item,
+            postureBadges: resolved.item.postureBadges,
+            blastRadiusLabel: resolved.item.blastRadiusLabel,
+          },
+        };
+      }
+
+      if (resolved.kind === "ambiguous") {
+        return {
+          success: false,
+          message: `Multiple estate items matched that request. Please be more specific.`,
+          error: resolved.matches.map((match) => `${match.name} (${match.entityKey})`).join(", "),
+          data: { matches: resolved.matches },
+        };
+      }
+
+      const productSummary = await summarizeProductEstate(context?.routeContext);
+      if (productSummary) {
+        return {
+          success: true,
+          entityId: productSummary.productId,
+          message: `${productSummary.productName}: ${productSummary.itemCount} estate items, ${productSummary.openIssueCount} open issues, ${productSummary.staleCount} stale evidence items.`,
+          data: productSummary as Record<string, unknown>,
+        };
+      }
+
+      const discoverySummary = await summarizeDiscoveryOperations();
+      return {
+        success: true,
+        message: `Discovery operations: ${discoverySummary.needsReviewCount} items need review.`,
+        data: discoverySummary as Record<string, unknown>,
+      };
+    }
+
+    case "validate_version_confidence": {
+      const { resolveEstateEntity } = await import("@/lib/estate/estate-tooling");
+      const resolved = await resolveEstateEntity({
+        entityId: typeof params["entityId"] === "string" ? params["entityId"] : undefined,
+        entityKey: typeof params["entityKey"] === "string" ? params["entityKey"] : undefined,
+        entityName: typeof params["entityName"] === "string" ? params["entityName"] : undefined,
+      }, context?.routeContext);
+
+      if (resolved.kind === "ambiguous") {
+        return {
+          success: false,
+          message: "Multiple estate items matched that request. Please be more specific.",
+          error: resolved.matches.map((match) => `${match.name} (${match.entityKey})`).join(", "),
+          data: { matches: resolved.matches },
+        };
+      }
+
+      if (resolved.kind === "missing") {
+        return {
+          success: false,
+          message: resolved.reason,
+          error: resolved.reason,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: resolved.item.id,
+        message: `${resolved.item.name}: ${resolved.item.versionConfidenceLabel}. Current version shown as ${resolved.item.versionLabel}.`,
+        data: {
+          item: resolved.item,
+          versionLabel: resolved.item.versionLabel,
+          versionConfidenceLabel: resolved.item.versionConfidenceLabel,
+        },
+      };
+    }
+
+    case "explain_blast_radius": {
+      const { loadEstateBlastRadius, resolveEstateEntity } = await import("@/lib/estate/estate-tooling");
+      const resolved = await resolveEstateEntity({
+        entityId: typeof params["entityId"] === "string" ? params["entityId"] : undefined,
+        entityKey: typeof params["entityKey"] === "string" ? params["entityKey"] : undefined,
+        entityName: typeof params["entityName"] === "string" ? params["entityName"] : undefined,
+      }, context?.routeContext);
+
+      if (resolved.kind === "ambiguous") {
+        return {
+          success: false,
+          message: "Multiple estate items matched that request. Please be more specific.",
+          error: resolved.matches.map((match) => `${match.name} (${match.entityKey})`).join(", "),
+          data: { matches: resolved.matches },
+        };
+      }
+
+      if (resolved.kind === "missing") {
+        return {
+          success: false,
+          message: resolved.reason,
+          error: resolved.reason,
+        };
+      }
+
+      const blastRadius = await loadEstateBlastRadius(resolved.item.id);
+      if (!blastRadius) {
+        return {
+          success: false,
+          message: "The estate item could not be loaded for blast-radius analysis.",
+          error: "Estate item not found",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: resolved.item.id,
+        message: `${resolved.item.name}: ${blastRadius.downstream.length} downstream dependenc${blastRadius.downstream.length === 1 ? "y" : "ies"} and ${blastRadius.upstream.length} upstream dependenc${blastRadius.upstream.length === 1 ? "y" : "ies"}.`,
+        data: {
+          item: resolved.item,
+          upstream: blastRadius.upstream,
+          downstream: blastRadius.downstream,
+        },
+      };
+    }
+
+    case "discovery_sweep": {
+      const { triggerBootstrapDiscovery } = await import("@/lib/actions/discovery");
+      const result = await triggerBootstrapDiscovery();
+      if (!result.ok) {
+        return {
+          success: false,
+          message: result.error,
+          error: result.error,
+        };
+      }
+      return {
+        success: true,
+        message: `Discovery sweep completed: ${result.summary.createdEntities + result.summary.updatedEntities} entities refreshed and ${result.summary.createdRelationships + result.summary.updatedRelationships} relationships refreshed.`,
+        data: result.summary as Record<string, unknown>,
+      };
     }
 
     // ── EA / Ontology Graph write tools ──────────────────────────────────────

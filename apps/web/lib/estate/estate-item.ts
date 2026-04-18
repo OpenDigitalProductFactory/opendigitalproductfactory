@@ -1,6 +1,9 @@
 type EstateEvidence = {
   rawVendor?: string | null;
   rawVersion?: string | null;
+  normalizationStatus?: string | null;
+  normalizationConfidence?: number | null;
+  lastSeenAt?: Date | string | null;
 };
 
 type EstateCounts = {
@@ -11,6 +14,12 @@ type EstateCounts = {
 type EstateTaxonomyNode = {
   name: string;
   nodeId: string;
+};
+
+type EstateQualityIssue = {
+  issueType: string;
+  severity?: string | null;
+  status?: string | null;
 };
 
 export type EstateItemSource = {
@@ -27,12 +36,23 @@ export type EstateItemSource = {
   supportStatus?: string | null;
   providerView?: string | null;
   status: string;
+  firstSeenAt?: Date | string | null;
+  lastSeenAt?: Date | string | null;
+  attributionStatus?: string | null;
+  attributionConfidence?: number | null;
   taxonomyNode?: EstateTaxonomyNode | null;
   _count?: EstateCounts | null;
   softwareEvidence?: EstateEvidence[] | null;
+  qualityIssues?: EstateQualityIssue[] | null;
 };
 
 export type EstateSupportTone = "good" | "warn" | "danger" | "neutral";
+export type EstateIndicatorTone = EstateSupportTone;
+
+export type EstatePostureBadge = {
+  label: string;
+  tone: EstateIndicatorTone;
+};
 
 export type EstateItem = {
   id: string;
@@ -46,6 +66,13 @@ export type EstateItem = {
   supportStatus: string;
   supportStatusLabel: string;
   supportTone: EstateSupportTone;
+  versionConfidenceLabel: string;
+  versionConfidenceTone: EstateIndicatorTone;
+  freshnessLabel: string;
+  freshnessTone: EstateIndicatorTone;
+  blastRadiusLabel: string;
+  postureBadges: EstatePostureBadge[];
+  openIssueCount: number;
   providerViewLabel: string;
   taxonomyPath: string | null;
   upstreamCount: number;
@@ -115,12 +142,183 @@ function normalizeSupportStatus(value: string | null | undefined): string {
   return normalized.length > 0 ? normalized : "unknown";
 }
 
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function pluralize(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function deriveVersionConfidence(
+  source: EstateItemSource,
+  evidence: EstateEvidence | undefined,
+): { label: string; tone: EstateIndicatorTone } {
+  const confidence = typeof evidence?.normalizationConfidence === "number"
+    ? evidence.normalizationConfidence
+    : null;
+  const normalizationStatus = evidence?.normalizationStatus?.trim().toLowerCase() ?? null;
+
+  if (source.normalizedVersion) {
+    if ((normalizationStatus === "normalized" || normalizationStatus === "verified") && (confidence ?? 0) >= 0.85) {
+      return { label: "High confidence version", tone: "good" };
+    }
+    return { label: "Normalized version", tone: "neutral" };
+  }
+
+  if (source.observedVersion || evidence?.rawVersion) {
+    return { label: "Observed version only", tone: "warn" };
+  }
+
+  return { label: "Version unknown", tone: "neutral" };
+}
+
+function deriveFreshness(source: EstateItemSource, evidence: EstateEvidence | undefined): {
+  label: string;
+  tone: EstateIndicatorTone;
+} {
+  const lastSeenAt = toDate(evidence?.lastSeenAt) ?? toDate(source.lastSeenAt) ?? toDate(source.firstSeenAt);
+  if (!lastSeenAt) {
+    return { label: "Freshness unknown", tone: "neutral" };
+  }
+
+  const ageMs = Date.now() - lastSeenAt.getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+  if (ageDays <= 7) {
+    return { label: "Seen recently", tone: "good" };
+  }
+  if (ageDays <= 30) {
+    return { label: "Seen this month", tone: "neutral" };
+  }
+  return { label: "Stale evidence", tone: "danger" };
+}
+
+function deriveBlastRadius(source: EstateItemSource): string {
+  const upstreamCount = source._count?.fromRelationships ?? 0;
+  const downstreamCount = source._count?.toRelationships ?? 0;
+
+  if (downstreamCount > 0) {
+    return `Failure impacts ${pluralize(downstreamCount, "downstream dependency", "downstream dependencies")}`;
+  }
+  if (upstreamCount > 0) {
+    return `Depends on ${pluralize(upstreamCount, "upstream dependency", "upstream dependencies")}`;
+  }
+  return "No mapped dependencies";
+}
+
+function categorizeIssue(issueType: string): {
+  key: string;
+  label: (count: number) => string;
+  tone: EstateIndicatorTone;
+} {
+  if (issueType === "gateway_connection_needed") {
+    return {
+      key: "dependency",
+      label: (count) => pluralize(count, "dependency gap", "dependency gaps"),
+      tone: "warn",
+    };
+  }
+
+  if (issueType === "attribution_missing" || issueType === "taxonomy_attribution_low_confidence") {
+    return {
+      key: "attribution",
+      label: (count) => pluralize(count, "attribution gap", "attribution gaps"),
+      tone: "warn",
+    };
+  }
+
+  if (issueType === "stale_entity" || issueType === "stale_relationship") {
+    return {
+      key: "freshness",
+      label: (count) => pluralize(count, "stale signal", "stale signals"),
+      tone: "warn",
+    };
+  }
+
+  if (issueType === "health_alert") {
+    return {
+      key: "operational",
+      label: (count) => pluralize(count, "active alert", "active alerts"),
+      tone: "danger",
+    };
+  }
+
+  if (/vulnerability|advisory|cve/i.test(issueType)) {
+    return {
+      key: "security",
+      label: (count) => pluralize(count, "security finding", "security findings"),
+      tone: "danger",
+    };
+  }
+
+  if (/support|eol|eos/i.test(issueType)) {
+    return {
+      key: "support",
+      label: (count) => pluralize(count, "support risk", "support risks"),
+      tone: "warn",
+    };
+  }
+
+  if (/update|drift/i.test(issueType)) {
+    return {
+      key: "updates",
+      label: (count) => pluralize(count, "update gap", "update gaps"),
+      tone: "warn",
+    };
+  }
+
+  return {
+    key: "other",
+    label: (count) => pluralize(count, "estate issue", "estate issues"),
+    tone: "warn",
+  };
+}
+
+function derivePostureBadges(source: EstateItemSource): EstatePostureBadge[] {
+  const issues = (source.qualityIssues ?? []).filter((issue) => (issue.status ?? "open") === "open");
+  if (issues.length === 0) {
+    return [];
+  }
+
+  const grouped = new Map<string, { count: number; label: (count: number) => string; tone: EstateIndicatorTone }>();
+  for (const issue of issues) {
+    const category = categorizeIssue(issue.issueType);
+    const existing = grouped.get(category.key);
+    if (existing) {
+      existing.count += 1;
+      if (issue.severity === "error" || issue.severity === "critical") {
+        existing.tone = "danger";
+      }
+      continue;
+    }
+    grouped.set(category.key, {
+      count: 1,
+      label: category.label,
+      tone: issue.severity === "error" || issue.severity === "critical" ? "danger" : category.tone,
+    });
+  }
+
+  const order = ["dependency", "attribution", "freshness", "operational", "security", "support", "updates", "other"];
+  return [...grouped.entries()]
+    .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+    .map(([, value]) => ({
+      label: value.label(value.count),
+      tone: value.tone,
+    }));
+}
+
 export function createEstateItem(source: EstateItemSource): EstateItem {
   const firstEvidence = source.softwareEvidence?.find((evidence) =>
-    evidence.rawVendor || evidence.rawVersion
+    evidence.rawVendor || evidence.rawVersion || evidence.normalizationStatus
   );
   const technicalClass = source.technicalClass ?? source.entityType;
   const normalizedSupportStatus = normalizeSupportStatus(source.supportStatus);
+  const versionConfidence = deriveVersionConfidence(source, firstEvidence);
+  const freshness = deriveFreshness(source, firstEvidence);
+  const postureBadges = derivePostureBadges(source);
 
   return {
     id: source.id,
@@ -134,6 +332,13 @@ export function createEstateItem(source: EstateItemSource): EstateItem {
     supportStatus: normalizedSupportStatus,
     supportStatusLabel: SUPPORT_STATUS_LABELS[normalizedSupportStatus] ?? formatWords(normalizedSupportStatus),
     supportTone: SUPPORT_STATUS_TONES[normalizedSupportStatus] ?? "neutral",
+    versionConfidenceLabel: versionConfidence.label,
+    versionConfidenceTone: versionConfidence.tone,
+    freshnessLabel: freshness.label,
+    freshnessTone: freshness.tone,
+    blastRadiusLabel: deriveBlastRadius(source),
+    postureBadges,
+    openIssueCount: (source.qualityIssues ?? []).filter((issue) => (issue.status ?? "open") === "open").length,
     providerViewLabel: source.providerView ?? "Unassigned",
     taxonomyPath: source.taxonomyNode?.nodeId.replace(/\//g, " / ") ?? null,
     upstreamCount: source._count?.fromRelationships ?? 0,

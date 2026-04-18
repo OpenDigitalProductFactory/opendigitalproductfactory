@@ -11,14 +11,16 @@ type RouteContextResult = string | null;
 const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: string) => Promise<RouteContextResult>> = {
   "/platform/ai": getAiWorkforceContext,
   "/platform/ai/providers": getProvidersContext,
+  "/platform/tools/discovery": getDiscoveryOperationsContext,
   "/ops": getOpsContext,
   "/compliance": getComplianceContext,
   "/workspace": getWorkspaceContext,
+  "/portfolio/product": getProductEstateContext,
   "/portfolio": getPortfolioContext,
-  "/inventory": getInventoryContext,
+  "/inventory": getDiscoveryOperationsContext,
   "/employee": getEmployeeContext,
   "/build": getBuildContext,
-  "/admin/storefront": getStorefrontMarketingContext,
+  "/storefront": getStorefrontMarketingContext,
   "/customer/funnel": getCustomerFunnelContext,
 };
 
@@ -328,24 +330,104 @@ async function getPortfolioContext(): Promise<string> {
 
 // ─── Inventory Context ──────────────────────────────────────────────────
 
-async function getInventoryContext(): Promise<string> {
-  const products = await prisma.digitalProduct.findMany({
-    orderBy: { name: "asc" },
-    select: { productId: true, name: true, lifecycleStage: true, lifecycleStatus: true, version: true },
-    take: 30,
-  });
+async function getDiscoveryOperationsContext(): Promise<string> {
+  const [latestRun, connectionCount, needsReviewCount, openIssues] = await Promise.all([
+    prisma.discoveryRun.findFirst({
+      orderBy: { startedAt: "desc" },
+      select: {
+        runKey: true,
+        status: true,
+        startedAt: true,
+        completedAt: true,
+        itemCount: true,
+        relationshipCount: true,
+      },
+    }),
+    prisma.discoveryConnection.count(),
+    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+    prisma.portfolioQualityIssue.groupBy({
+      by: ["issueType"],
+      where: { status: "open" },
+      _count: true,
+      orderBy: { _count: { issueType: "desc" } },
+      take: 8,
+    }),
+  ]);
 
-  const byStage = new Map<string, number>();
-  for (const p of products) {
-    byStage.set(p.lifecycleStage, (byStage.get(p.lifecycleStage) ?? 0) + 1);
-  }
+  const latestRunSummary = latestRun
+    ? `${latestRun.runKey} [${latestRun.status}] items=${latestRun.itemCount}, relationships=${latestRun.relationshipCount}`
+    : "No discovery run recorded";
 
   return [
-    "\nPAGE DATA — Inventory:",
-    `${products.length} products`,
-    `By stage: ${[...byStage.entries()].map(([s, c]) => `${s}=${c}`).join(", ")}`,
+    "\nPAGE DATA — Discovery Operations:",
+    `Connections: ${connectionCount}`,
+    `Needs review: ${needsReviewCount}`,
+    `Latest run: ${latestRunSummary}`,
     "",
-    ...products.map((p) => `- ${p.productId}: ${p.name} [${p.lifecycleStage}/${p.lifecycleStatus}] v${p.version}`),
+    "Open discovery issues:",
+    ...(openIssues.length > 0
+      ? openIssues.map((issue) => `- ${issue.issueType}: ${issue._count}`)
+      : ["- none"]),
+  ].join("\n");
+}
+
+async function getProductEstateContext(_userId: string, routeContext: string): Promise<string> {
+  const parts = routeContext.split("/").filter(Boolean);
+  const productId = parts[2] ?? null;
+  if (!productId) {
+    return "\nPAGE DATA — Product Estate:\nNo product is selected.";
+  }
+
+  const product = await prisma.digitalProduct.findUnique({
+    where: { id: productId },
+    select: {
+      productId: true,
+      name: true,
+      portfolio: { select: { name: true } },
+      taxonomyNode: { select: { nodeId: true } },
+      inventoryEntities: {
+        orderBy: [{ lastSeenAt: "desc" }, { name: "asc" }],
+        take: 10,
+        select: {
+          name: true,
+          entityType: true,
+          manufacturer: true,
+          normalizedVersion: true,
+          observedVersion: true,
+          supportStatus: true,
+          lastSeenAt: true,
+          _count: { select: { fromRelationships: true, toRelationships: true } },
+          qualityIssues: {
+            where: { status: "open" },
+            select: { issueType: true },
+            take: 4,
+          },
+        },
+      },
+    },
+  });
+
+  if (!product) {
+    return "\nPAGE DATA — Product Estate:\nThe selected product could not be loaded.";
+  }
+
+  const taxonomyPath = product.taxonomyNode?.nodeId ?? "unmapped";
+  const attentionCount = product.inventoryEntities.filter((entity) => entity.qualityIssues.length > 0).length;
+
+  return [
+    "\nPAGE DATA — Product Estate:",
+    `Product: ${product.name} (${product.productId})`,
+    `Portfolio: ${product.portfolio?.name ?? "unassigned"}`,
+    `Taxonomy: ${taxonomyPath}`,
+    `Estate items: ${product.inventoryEntities.length}, items with open issues: ${attentionCount}`,
+    "",
+    "Visible estate items:",
+    ...product.inventoryEntities.map((entity) => {
+      const version = entity.normalizedVersion ?? entity.observedVersion ?? "unknown version";
+      const issues = entity.qualityIssues.map((issue) => issue.issueType).join(", ") || "none";
+      const lastSeen = entity.lastSeenAt?.toISOString().slice(0, 10) ?? "unknown";
+      return `- ${entity.name} [${entity.entityType}] ${entity.manufacturer ?? "unknown vendor"} v${version}, support=${entity.supportStatus ?? "unknown"}, last seen=${lastSeen}, upstream=${entity._count.fromRelationships}, downstream=${entity._count.toRelationships}, issues=${issues}`;
+    }),
   ].join("\n");
 }
 

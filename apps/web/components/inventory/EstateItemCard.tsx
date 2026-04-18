@@ -1,10 +1,10 @@
-import type { EstateItem, EstateSupportTone } from "@/lib/estate/estate-item";
+import type { EstateIndicatorTone, EstateItem, EstateSupportTone } from "@/lib/estate/estate-item";
 
 type Props = {
   item: EstateItem;
 };
 
-const SUPPORT_TONE_CLASSES: Record<EstateSupportTone, string> = {
+const TONE_CLASSES: Record<EstateSupportTone | EstateIndicatorTone, string> = {
   good: "border-[var(--dpf-success)]/30 bg-[color-mix(in_srgb,var(--dpf-success)_12%,transparent)] text-[var(--dpf-success)]",
   warn: "border-[var(--dpf-warning)]/30 bg-[color-mix(in_srgb,var(--dpf-warning)_12%,transparent)] text-[var(--dpf-warning)]",
   danger: "border-[var(--dpf-error)]/30 bg-[color-mix(in_srgb,var(--dpf-error)_12%,transparent)] text-[var(--dpf-error)]",
@@ -42,6 +42,35 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
           <rect x="4" y="8" width="12" height="8" rx="2" />
           <path d="M16 11l4-2v6l-4-2z" />
+        </svg>
+      );
+    case "security":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 3l7 3v5c0 4.6-2.7 7.7-7 10-4.3-2.3-7-5.4-7-10V6z" />
+          <path d="M9.5 11.5l1.7 1.7 3.3-3.3" />
+        </svg>
+      );
+    case "facility":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 20V8l8-4 8 4v12" />
+          <path d="M9 20v-5h6v5" />
+          <path d="M8 10h.01M12 10h.01M16 10h.01" />
+        </svg>
+      );
+    case "media":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="4" y="6" width="16" height="12" rx="2" />
+          <path d="M10 10l5 2-5 2z" />
+        </svg>
+      );
+    case "host":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="4" y="5" width="16" height="10" rx="2" />
+          <path d="M10 19h4M8 15h8" />
         </svg>
       );
     case "service":
@@ -92,12 +121,12 @@ export function EstateItemCard({ item }: Props) {
             </p>
           </div>
         </div>
-        <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${SUPPORT_TONE_CLASSES[item.supportTone]}`}>
+        <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.supportTone]}`}>
           {item.supportStatusLabel}
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Manufacturer</p>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">
@@ -107,6 +136,19 @@ export function EstateItemCard({ item }: Props) {
         <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Version</p>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.versionLabel}</p>
+          <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.versionConfidenceTone]}`}>
+            {item.versionConfidenceLabel}
+          </span>
+        </div>
+        <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Discovery freshness</p>
+          <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.freshnessTone]}`}>
+            {item.freshnessLabel}
+          </span>
+        </div>
+        <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Blast radius</p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.blastRadiusLabel}</p>
         </div>
       </div>
 
@@ -123,7 +165,25 @@ export function EstateItemCard({ item }: Props) {
         <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1">
           Status: {item.statusLabel}
         </span>
+        {item.openIssueCount > 0 && (
+          <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1">
+            {item.openIssueCount} open issue{item.openIssueCount === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
+
+      {item.postureBadges.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          {item.postureBadges.map((badge) => (
+            <span
+              key={badge.label}
+              className={`rounded-full border px-2 py-1 ${TONE_CLASSES[badge.tone]}`}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {item.taxonomyPath && (
         <p className="mt-4 text-[11px] font-mono text-[var(--dpf-muted)]">{item.taxonomyPath}</p>
