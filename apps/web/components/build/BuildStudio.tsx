@@ -15,6 +15,12 @@ import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
+import {
+  BUILD_STUDIO_TEST_IDS,
+  getBuildStudioGraphPanelClassName,
+  getBuildStudioShellClassName,
+  getBuildStudioSidebarClassName,
+} from "./build-studio-layout";
 
 type Props = {
   builds: FeatureBuildRow[];
@@ -203,8 +209,8 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 flex overflow-hidden relative">
+    <div className={getBuildStudioShellClassName()} data-testid={BUILD_STUDIO_TEST_IDS.shell}>
+      <div className="relative flex flex-1 overflow-hidden">
         {/* Sidebar toggle (visible on small screens) */}
         <button
           type="button"
@@ -216,7 +222,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         </button>
 
         {/* Left: Build List */}
-        <div className={`border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)] transition-all duration-200 ${sidebarOpen ? "w-[280px] lg:w-[360px]" : "w-0 overflow-hidden border-r-0"}`}>
+        <div className={getBuildStudioSidebarClassName(sidebarOpen)}>
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
@@ -304,10 +310,10 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         </div>
 
         {/* Right: Preview or Brief */}
-        <div className="flex-1 flex flex-col overflow-auto">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
           {activeBuild ? (
             <>
-              <div className="px-4 py-3 border-b border-[var(--dpf-border)] flex items-center justify-between">
+              <div className="flex items-center justify-between border-b border-[var(--dpf-border)] px-4 py-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-bold text-[var(--dpf-text)] m-0">{activeBuild.title}</h2>
@@ -333,7 +339,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                 <BuildFailedBanner execState={activeBuild.buildExecState} />
               )}
 
-              <div className="flex-1 flex flex-col">
+              <div className="flex min-h-0 flex-1 flex-col">
                 {/* Tab selector */}
                 <div role="tablist" aria-label="Build view tabs" className="flex gap-1 px-4 pt-3 pb-0">
                   <button
@@ -383,12 +389,15 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                   )}
                 </div>
                 {buildView === "graph" && (
-                  <div style={{ height: "calc(100vh - 200px)", minHeight: 400 }}>
+                  <div
+                    className={getBuildStudioGraphPanelClassName()}
+                    data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
+                  >
                     <ProcessGraph build={activeBuild} />
                   </div>
                 )}
                 {buildView !== "graph" && (
-                  <div className="flex-1 flex p-4 gap-4">
+                  <div className="flex min-h-0 flex-1 gap-4 p-4">
                     {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
                       <SandboxPreview
                         buildId={activeBuild.buildId}
@@ -414,7 +423,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
               </div>
             </>
           ) : (
-            <div className="flex-1 grid place-items-center">
+            <div className="grid flex-1 place-items-center">
               <div className="text-center max-w-md px-8">
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
                 <h2 className="text-lg font-bold text-[var(--dpf-text)] mb-3">Product Development Studio</h2>
@@ -470,7 +479,7 @@ function BuildFailedBanner({ execState }: { execState: BuildExecutionState | nul
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[var(--dpf-error)]">Build failed at: {stepLabel}</p>
           {errorMsg && (
-            <pre className="text-xs text-[var(--dpf-text-secondary)] mt-1 whitespace-pre-wrap leading-relaxed max-h-24 overflow-auto">{errorMsg}</pre>
+            <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[var(--dpf-text)]">{errorMsg}</pre>
           )}
           <p className="text-xs text-[var(--dpf-muted)] mt-2">{hint}</p>
         </div>
@@ -485,7 +494,7 @@ function Step({ n, text }: { n: number; text: string }) {
       <span className="w-5 h-5 rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-white grid place-items-center shrink-0 mt-0.5">
         {n}
       </span>
-      <span className="text-sm text-[var(--dpf-text-secondary)] leading-snug">{text}</span>
+      <span className="text-sm leading-snug text-[var(--dpf-text)]">{text}</span>
     </div>
   );
 }
