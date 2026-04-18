@@ -142,6 +142,8 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | BUILD-12 | Close coworker panel during active build, reopen | Build state preserved, updates resume via SSE fallback or DB poll |
 | BUILD-13 | Build with all tasks DONE, verify auto-advance | Phase moves from build to review automatically |
 | BUILD-14 | Trigger build when sandbox is not running | Specialist returns BLOCKED, user sees actionable error message |
+| BUILD-15 | Open `/build` on desktop with the coworker pane closed, then open the coworker pane | Build Studio remains inside the shell, central workspace stays visible, content is not hidden under the docked coworker |
+| BUILD-16 | Open `/platform/ai/build-studio`, confirm page language, then click "Open Build Studio" | Page reads as runtime/configuration, not the main working studio, and the CTA returns to `/build` |
 
 ## Phase 11: Storefront
 
