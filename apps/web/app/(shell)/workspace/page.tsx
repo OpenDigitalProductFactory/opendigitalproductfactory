@@ -2,7 +2,7 @@
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getWorkspaceTiles } from "@/lib/permissions";
+import { getWorkspaceSections, getWorkspaceTiles } from "@/lib/permissions";
 import { WorkspaceTiles } from "@/components/shell/WorkspaceTiles";
 import type { TileStatus } from "@/components/shell/WorkspaceTiles";
 import { AttentionStrip } from "@/components/shell/AttentionStrip";
@@ -17,6 +17,10 @@ export default async function WorkspacePage() {
   if (!session?.user) redirect("/login");
 
   const tiles = getWorkspaceTiles({
+    platformRole: session.user.platformRole,
+    isSuperuser: session.user.isSuperuser,
+  });
+  const workspaceSections = getWorkspaceSections({
     platformRole: session.user.platformRole,
     isSuperuser: session.user.isSuperuser,
   });
@@ -130,55 +134,55 @@ export default async function WorkspacePage() {
     },
     ai_workforce: {
       metrics: [
-        { label: "Active agents", value: agentCount, color: "#38bdf8" },
-        { label: "Providers", value: `${activeProviderCount}/${providerCount}`, color: activeProviderCount > 0 ? "#4ade80" : "#fb923c" },
+        { label: "Active agents", value: agentCount, color: "var(--dpf-info)" },
+        { label: "Providers", value: `${activeProviderCount}/${providerCount}`, color: activeProviderCount > 0 ? "var(--dpf-success)" : "var(--dpf-warning)" },
       ],
       ...(agentsWithBrokenProviders > 0
-        ? { badge: `${agentsWithBrokenProviders} agent${agentsWithBrokenProviders !== 1 ? "s" : ""} need attention`, badgeColor: "#fbbf24" }
+        ? { badge: `${agentsWithBrokenProviders} agent${agentsWithBrokenProviders !== 1 ? "s" : ""} need attention`, badgeColor: "var(--dpf-warning)" }
         : {}),
     },
     build: {
       metrics: [
-        { label: "Builds", value: buildCount, color: "#10b981" },
+        { label: "Builds", value: buildCount, color: "var(--dpf-success)" },
       ],
     },
     portfolio: {
       metrics: [
-        { label: "Portfolios", value: portfolioCount, color: "#4ade80" },
-        { label: "Products", value: `${activeProductCount} active`, color: "#4ade80" },
+        { label: "Portfolios", value: portfolioCount, color: "var(--dpf-success)" },
+        { label: "Products", value: `${activeProductCount} active`, color: "var(--dpf-success)" },
       ],
     },
     inventory: {
       metrics: [
-        { label: "Products", value: productCount, color: "#fb923c" },
-        { label: "Active", value: activeProductCount, color: "#4ade80" },
+        { label: "Products", value: productCount, color: "var(--dpf-warning)" },
+        { label: "Active", value: activeProductCount, color: "var(--dpf-success)" },
       ],
     },
     employee: {
       metrics: [
-        { label: "Active", value: activeEmployeeCount, color: "#a78bfa" },
+        { label: "Active", value: activeEmployeeCount, color: "var(--dpf-info)" },
         { label: "Total", value: employeeCount, color: "var(--dpf-muted)" },
       ],
     },
     customer: {
       metrics: [
-        { label: "Accounts", value: customerAccountCount, color: "#f472b6" },
+        { label: "Accounts", value: customerAccountCount, color: "var(--dpf-accent)" },
       ],
     },
     backlog: {
       metrics: [
-        { label: "Open", value: openBacklogCount, color: "#38bdf8" },
-        { label: "In progress", value: inProgressBacklogCount, color: "#fb923c" },
-        { label: "Done", value: doneBacklogCount, color: "#4ade80" },
+        { label: "Open", value: openBacklogCount, color: "var(--dpf-info)" },
+        { label: "In progress", value: inProgressBacklogCount, color: "var(--dpf-warning)" },
+        { label: "Done", value: doneBacklogCount, color: "var(--dpf-success)" },
       ],
       ...(actionableImprovementCount > 0
-        ? { badge: `${actionableImprovementCount} improvement${actionableImprovementCount !== 1 ? "s" : ""} pending`, badgeColor: "#a78bfa" }
+        ? { badge: `${actionableImprovementCount} improvement${actionableImprovementCount !== 1 ? "s" : ""} pending`, badgeColor: "var(--dpf-accent)" }
         : {}),
     },
     platform: {
       metrics: [
-        { label: "Users", value: userCount, color: "#fb923c" },
-        { label: "Epics", value: epicCount, color: "#38bdf8" },
+        { label: "Users", value: userCount, color: "var(--dpf-warning)" },
+        { label: "Epics", value: epicCount, color: "var(--dpf-info)" },
       ],
     },
     admin: {
@@ -188,10 +192,10 @@ export default async function WorkspacePage() {
     },
     compliance: {
       metrics: [
-        { label: "Obligations", value: activeObligationCount, color: "#ef4444" },
-        { label: "Open incidents", value: openIncidentCount, color: openIncidentCount > 0 ? "#fbbf24" : "#4ade80" },
-        { label: "Controls", value: `${implementedControlCount}/${totalControlCount}`, color: "#38bdf8" },
-        { label: "Policies", value: publishedPolicyCount, color: "#a78bfa" },
+        { label: "Obligations", value: activeObligationCount, color: "var(--dpf-error)" },
+        { label: "Open incidents", value: openIncidentCount, color: openIncidentCount > 0 ? "var(--dpf-warning)" : "var(--dpf-success)" },
+        { label: "Controls", value: `${implementedControlCount}/${totalControlCount}`, color: "var(--dpf-info)" },
+        { label: "Policies", value: publishedPolicyCount, color: "var(--dpf-accent)" },
       ],
       ...((overdueActionCount > 0 || pendingAlertCount > 0)
         ? {
@@ -199,7 +203,7 @@ export default async function WorkspacePage() {
               overdueActionCount > 0 ? `${overdueActionCount} overdue` : null,
               pendingAlertCount > 0 ? `${pendingAlertCount} alert${pendingAlertCount !== 1 ? "s" : ""}` : null,
             ].filter(Boolean).join(" · "),
-            badgeColor: "#fbbf24",
+            badgeColor: "var(--dpf-warning)",
           }
         : {}),
     },
@@ -208,21 +212,21 @@ export default async function WorkspacePage() {
         {
           label: "Outstanding",
           value: `${financeOutstanding._count}`,
-          color: financeOutstanding._count > 0 ? "#fbbf24" : "#4ade80",
+          color: financeOutstanding._count > 0 ? "var(--dpf-warning)" : "var(--dpf-success)",
         },
         {
           label: "Overdue",
           value: financeOverdueCount,
-          color: financeOverdueCount > 0 ? "#ef4444" : "#4ade80",
+          color: financeOverdueCount > 0 ? "var(--dpf-error)" : "var(--dpf-success)",
         },
         {
           label: "Bills due",
           value: financeUnpaidBillCount,
-          color: financeUnpaidBillCount > 0 ? "#fb923c" : "#4ade80",
+          color: financeUnpaidBillCount > 0 ? "var(--dpf-warning)" : "var(--dpf-success)",
         },
       ],
       ...(financeOverdueCount > 0
-        ? { badge: `${financeOverdueCount} overdue invoice${financeOverdueCount !== 1 ? "s" : ""}`, badgeColor: "#ef4444" }
+        ? { badge: `${financeOverdueCount} overdue invoice${financeOverdueCount !== 1 ? "s" : ""}`, badgeColor: "var(--dpf-error)" }
         : {}),
     },
   };
@@ -259,20 +263,70 @@ export default async function WorkspacePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">
-          Welcome, {session.user.platformRole ?? "Guest"}
-        </h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {tiles.length} capabilities available
+        <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Workspace</h1>
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+          One human may wear many hats here. Use AI coworkers to fill in specialist expertise while you steer priorities, approvals, and outcomes.
         </p>
+      </div>
+
+      <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+            AI-Assisted Operating Model
+          </p>
+          <h2 className="mt-2 text-lg font-semibold text-[var(--dpf-text)]">
+            Keep the humans on judgment and let AI handle specialist depth
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--dpf-muted)]">
+            The portal is optimized for a small internal team coordinating a much larger AI workforce, plus external customers, contractors, and fractional staff. Start with the grouped areas below, then let the coworker panel help you bridge domains without memorizing every route.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+            Today
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[var(--dpf-surface-2)] p-3">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">AI coworkers</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">{agentCount}</p>
+            </div>
+            <div className="rounded-xl bg-[var(--dpf-surface-2)] p-3">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Open work</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">{openBacklogCount}</p>
+            </div>
+            <div className="rounded-xl bg-[var(--dpf-surface-2)] p-3">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Products</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">{activeProductCount}</p>
+            </div>
+            <div className="rounded-xl bg-[var(--dpf-surface-2)] p-3">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">External accounts</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">{customerAccountCount}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-[var(--dpf-muted)]">
+            {tiles.length} linked areas are available to your current role.
+          </p>
+        </section>
       </div>
 
       <AttentionStrip items={attentionItems} />
 
-      <p className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
-        Your Workspace
-      </p>
-      <WorkspaceTiles tiles={tiles} tileStatus={tileStatus} />
+      <div className="space-y-8">
+        {workspaceSections.map((section) => (
+          <section key={section.key}>
+            <div className="mb-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                {section.label}
+              </p>
+              <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+                {section.description}
+              </p>
+            </div>
+            <WorkspaceTiles tiles={section.tiles} tileStatus={tileStatus} />
+          </section>
+        ))}
+      </div>
 
       {/* Calendar + Activity Feed — side by side */}
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">

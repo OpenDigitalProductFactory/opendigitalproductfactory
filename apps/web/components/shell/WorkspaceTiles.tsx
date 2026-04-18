@@ -52,7 +52,10 @@ export function WorkspaceTiles({ tiles, tileStatus = {} }: Props) {
             {status?.badge !== undefined && (
               <span
                 className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded"
-                style={{ background: `${badgeColor}20`, color: badgeColor }}
+                style={{
+                  background: `color-mix(in srgb, ${badgeColor} 18%, transparent)`,
+                  color: badgeColor,
+                }}
               >
                 {status.badge}
               </span>

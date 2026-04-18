@@ -1,4 +1,6 @@
 // apps/web/components/shell/AttentionStrip.tsx
+import Link from "next/link";
+
 type AttentionItem = {
   id: string;
   label: string;
@@ -15,16 +17,16 @@ export function AttentionStrip({ items }: Props) {
       {items.map((item) => (
         <div
           key={item.id}
-          className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[var(--dpf-surface-1)] border border-[#2a3a6a]"
+          className="flex items-center justify-between rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-2.5"
         >
           <div className="flex items-center gap-3">
-            <span className="text-pink-400 text-xs">●</span>
-            <span className="text-sm text-gray-200">{item.label}</span>
+            <span className="text-xs text-[var(--dpf-warning)]">●</span>
+            <span className="text-sm text-[var(--dpf-text)]">{item.label}</span>
             <span className="text-xs text-[var(--dpf-muted)]">{item.description}</span>
           </div>
-          <a href={item.href} className="text-xs text-[var(--dpf-accent)] hover:underline">
+          <Link href={item.href} className="text-xs text-[var(--dpf-accent)] hover:underline">
             Review →
-          </a>
+          </Link>
         </div>
       ))}
     </div>

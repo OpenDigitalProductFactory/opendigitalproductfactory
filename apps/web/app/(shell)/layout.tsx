@@ -13,6 +13,8 @@ import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
+import { getShellNavSections } from "@/lib/permissions";
+import { AppRail } from "@/components/shell/AppRail";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists
@@ -99,6 +101,13 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   });
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
+  const shellNavSections = activeSetup
+    ? []
+    : getShellNavSections({
+        userId: user.id,
+        platformRole: user.platformRole,
+        isSuperuser: user.isSuperuser,
+      });
 
   return (
     <>
@@ -116,7 +125,6 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <UpdatePendingBanner />
         <Header
           platformRole={user.platformRole}
-          isSuperuser={user.isSuperuser}
           brandName={organization?.name ?? "Open Digital Product Factory"}
           brandLogoUrl={resolveBrandingLogoUrl(
             organization?.logoUrl ?? null,
@@ -128,7 +136,20 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           )}
           userId={user.id}
         />
-        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
+        <div className="flex flex-1 flex-col lg:flex-row">
+          {shellNavSections.length > 0 && (
+            <aside className="shrink-0 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] lg:w-80 lg:border-b-0 lg:border-r">
+              <div className="mx-auto w-full max-w-[1600px] lg:max-w-none">
+                <AppRail sections={shellNavSections} />
+              </div>
+            </aside>
+          )}
+          <main className="min-w-0 flex-1">
+            <div className="mx-auto w-full max-w-[1600px] p-4 lg:p-6">
+              <div className="mx-auto w-full max-w-7xl">{children}</div>
+            </div>
+          </main>
+        </div>
         <AgentCoworkerShell
           userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
         />
