@@ -8,6 +8,7 @@ import { issueReportTriage } from "./issue-report-triage";
 import { agentTaskDispatch } from "./agent-task-dispatch";
 import { evalBackground, probeBackground } from "./eval-background";
 import { hiveScoutIngest } from "./hive-scout-ingest";
+import { brandExtract } from "./brand-extract";
 
 export const allFunctions = [
   prometheusPoll,
@@ -22,4 +23,5 @@ export const allFunctions = [
   evalBackground,
   probeBackground,
   hiveScoutIngest,
+  brandExtract,
 ];
