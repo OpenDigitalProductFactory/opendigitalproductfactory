@@ -1,25 +1,30 @@
-flowchart TB
-    L1["Layer 1: Authentication\nWho is this person?\nAuth.js session or API token"]
-    L2["Layer 2: Identity & Role\nPlatform role: HR-000 to HR-500\nBusiness model roles: product-scoped"]
-    L3["Layer 3: Capability Resolution\n32 capabilities mapped to roles\ncan(user, capability) -> boolean"]
-    L4["Layer 4: Agent Grant Intersection\nTool-to-grant mapping\nEffective = user capabilities AND agent grants"]
-    L5["Layer 5: Execution Mode\nImmediate: execute now\nProposal: human approval required"]
+%%{init: {'themeVariables': {'fontSize': '26px'}}}%%
+flowchart LR
+    L1["1.<br/>Authentication"]
+    L2["2.<br/>Identity + Role"]
+    L3["3.<br/>Capability"]
+    L4["4.<br/>Agent Grant"]
+    L5["5.<br/>Execution Mode"]
 
-    L1 -->|narrows| L2
-    L2 -->|narrows| L3
-    L3 -->|narrows| L4
-    L4 -->|narrows| L5
+    subgraph OUT[" "]
+        direction TB
+        APPROVE["Human<br/>review"]
+        EXEC["Execute<br/>+ log"]
+        LOG["Reject<br/>+ log"]
+        APPROVE -->|approved| EXEC
+        APPROVE -->|rejected| LOG
+    end
 
-    L5 -->|immediate| EXEC["Tool Executes\nResult recorded"]
-    L5 -->|proposal| APPROVE["Human Approves\nor Rejects"]
-    APPROVE -->|approved| EXEC
-    APPROVE -->|rejected| LOG["Rejection\nLogged"]
+    L1 --> L2 --> L3 --> L4 --> L5
+    L5 -->|immediate| EXEC
+    L5 -->|proposal| APPROVE
 
-    style L1 fill:#0d47a1,color:#fff
-    style L2 fill:#1565c0,color:#fff
-    style L3 fill:#1976d2,color:#fff
-    style L4 fill:#1e88e5,color:#fff
-    style L5 fill:#2196f3,color:#fff
-    style EXEC fill:#2e7d32,color:#fff
-    style APPROVE fill:#f57f17,color:#fff
-    style LOG fill:#c62828,color:#fff
+    classDef layer fill:#dbeafe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    classDef success fill:#dcfce7,stroke:#166534,color:#0f172a,stroke-width:1.5px
+    classDef warning fill:#fef3c7,stroke:#92400e,color:#0f172a,stroke-width:1.5px
+    classDef danger fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:1.5px
+
+    class L1,L2,L3,L4,L5 layer
+    class EXEC success
+    class APPROVE warning
+    class LOG danger

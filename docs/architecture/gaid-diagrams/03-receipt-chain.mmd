@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant U as User / Principal
+    participant A as Agent A
+    participant B as Agent B
+    participant T as Tool / External Service
+    participant L as Transparency / Audit Log
+
+    U->>A: Request
+    A->>B: Delegation with trace context
+    B->>T: Tool call with GAID envelope
+    T-->>B: Result
+    B->>L: Signed Agent Action Receipt
+    B-->>A: Result + receipt reference
+    A->>L: Signed parent receipt
+    A-->>U: Response
