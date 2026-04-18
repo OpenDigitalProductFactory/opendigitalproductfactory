@@ -31,9 +31,16 @@ describe("platform-nav", () => {
   it("maps tools and service routes to the Tools & Services family", () => {
     expect(getPlatformFamily("/platform/tools").key).toBe("tools");
     expect(getPlatformFamily("/platform/tools/catalog").key).toBe("tools");
+    expect(getPlatformFamily("/platform/tools/discovery").key).toBe("tools");
     expect(getPlatformFamily("/platform/tools/services").key).toBe("tools");
     expect(getPlatformFamily("/platform/integrations").key).toBe("tools");
     expect(getPlatformFamily("/platform/services").key).toBe("tools");
+  });
+
+  it("includes discovery operations in the tools family", () => {
+    const toolsFamily = getPlatformFamily("/platform/tools/discovery");
+
+    expect(toolsFamily.subItems.some((item) => item.label === "Discovery Operations")).toBe(true);
   });
 
   it("maps audit routes to the Governance & Audit family", () => {

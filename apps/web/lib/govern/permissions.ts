@@ -125,7 +125,6 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "var(--dpf-info)" },
   { key: "build",       label: "Build Studio", route: "/build",       capabilityKey: "view_platform",    accentColor: "var(--dpf-success)" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "var(--dpf-success)" },
-  { key: "inventory",  label: "Inventory",  route: "/inventory", capabilityKey: "view_inventory",   accentColor: "var(--dpf-warning)" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "var(--dpf-info)" },
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "var(--dpf-accent)" },
   { key: "backlog",    label: "Backlog",    route: "/ops",       capabilityKey: "view_operations",  accentColor: "var(--dpf-info)" },
@@ -230,14 +229,6 @@ const SHELL_ITEMS: ShellNavItem[] = [
     capabilityKey: "view_operations",
   },
   {
-    key: "inventory",
-    label: "Inventory",
-    href: "/inventory",
-    description: "Runtime and discovered product estate.",
-    sectionKey: "products",
-    capabilityKey: "view_inventory",
-  },
-  {
     key: "ea_modeler",
     label: "Architecture",
     href: "/ea",
@@ -310,8 +301,8 @@ const WORKSPACE_SECTION_BLUEPRINTS: Array<{
   {
     key: "product-oversight",
     label: "Shape products",
-    description: "Move work from strategy to delivery without bouncing between silos.",
-    tileKeys: ["portfolio", "backlog", "inventory", "ea_modeler"],
+    description: "Move work from strategy to delivery while keeping estate context inside the product flow.",
+    tileKeys: ["portfolio", "backlog", "ea_modeler"],
   },
   {
     key: "business-operations",

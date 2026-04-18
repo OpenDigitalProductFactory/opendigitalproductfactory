@@ -12,6 +12,16 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { encryptSecret, decryptSecret } from "@/lib/govern/credential-crypto";
 
+const DISCOVERY_REVALIDATE_PATHS = [
+  "/platform/tools",
+  "/platform/tools/discovery",
+  "/inventory",
+] as const;
+
+function revalidateDiscoverySurfaces() {
+  DISCOVERY_REVALIDATE_PATHS.forEach((path) => revalidatePath(path));
+}
+
 async function requireManageDiscovery(): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   const user = session?.user;
@@ -44,7 +54,7 @@ export async function triggerBootstrapDiscovery(): Promise<
       decrypt: decryptSecret,
     });
 
-    revalidatePath("/inventory");
+    revalidateDiscoverySurfaces();
     return { ok: true, summary };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Bootstrap discovery failed";
@@ -165,7 +175,7 @@ export async function configureDiscoveryConnection(input: {
     },
   });
 
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
   return { ok: true, connectionId: result.id };
 }
 
@@ -222,7 +232,7 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     },
   });
 
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
 
   if (hasError) {
     return { ok: true, status: testStatus, message: result.warnings?.join(", ") };
@@ -239,6 +249,6 @@ export async function deleteDiscoveryConnection(connectionId: string): Promise<
   if (!authResult.ok) return authResult;
 
   await prisma.discoveryConnection.delete({ where: { id: connectionId } });
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
   return { ok: true };
 }

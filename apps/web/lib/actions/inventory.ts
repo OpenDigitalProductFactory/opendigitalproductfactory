@@ -5,6 +5,16 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 
+const DISCOVERY_REVALIDATE_PATHS = [
+  "/platform/tools",
+  "/platform/tools/discovery",
+  "/inventory",
+] as const;
+
+function revalidateDiscoverySurfaces() {
+  DISCOVERY_REVALIDATE_PATHS.forEach((path) => revalidatePath(path));
+}
+
 async function requireManageDiscovery(): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   const user = session?.user;
@@ -34,7 +44,7 @@ export async function acceptAttribution(
   // Trigger promotion for the newly attributed entity
   await promoteInventoryEntities(prisma as never);
 
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
   return { ok: true };
 }
 
@@ -70,7 +80,7 @@ export async function reassignTaxonomy(
 
   await promoteInventoryEntities(prisma as never);
 
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
   return { ok: true };
 }
 
@@ -85,6 +95,6 @@ export async function dismissEntity(
     data: { attributionStatus: "dismissed" },
   });
 
-  revalidatePath("/inventory");
+  revalidateDiscoverySurfaces();
   return { ok: true };
 }

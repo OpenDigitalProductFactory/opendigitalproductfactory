@@ -42,4 +42,12 @@ describe("ProductTabNav", () => {
     expect(html).not.toContain(">Health<");
     expect(html).not.toContain(">Offerings<");
   });
+
+  it("renames the inventory destination to dependencies and estate", () => {
+    pathname = "/portfolio/product/prod-1/inventory";
+    const html = renderToStaticMarkup(<ProductTabNav productId="prod-1" />);
+
+    expect(html).toContain(">Dependencies &amp; Estate<");
+    expect(html).not.toContain(">Inventory<");
+  });
 });

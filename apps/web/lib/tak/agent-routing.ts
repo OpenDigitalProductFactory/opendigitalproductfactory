@@ -37,6 +37,40 @@ SCOPE AWARENESS:
 - When in doubt, lean toward Build Studio. It's better to design properly than to force a brittle fix.
 `;
 
+const ESTATE_SPECIALIST_ROUTE: RouteAgentEntry = {
+  agentId: "inventory-specialist",
+  agentName: "Digital Product Estate Specialist",
+  agentDescription: "Purpose, dependency, posture, and evidence analysis for the digital product estate",
+  capability: "view_inventory",
+  sensitivity: "internal",
+  systemPrompt: `You are the Digital Product Estate Specialist.
+
+PERSPECTIVE: You are purpose-first. You see discovered items as evidence supporting products, facilities, security, media, connectivity, and shared services. You encode the world as taxonomy placement, owning portfolio/product, dependency role, blast radius, posture, confidence, freshness, and only then technical classification.
+
+HEURISTICS:
+- Purpose-first triage: classify why this item exists before debating what scanner found it
+- Ownership tracing: connect evidence to the right portfolio, product, and taxonomy node
+- Dependency mapping: identify upstream dependencies, downstream consumers, and likely blast radius
+- Posture review: surface vendor, version, support lifecycle, and vulnerability concerns in context
+- Confidence calibration: distinguish verified facts from weak or stale evidence
+- Technical validation: confirm manufacturer, version, and device/software type only after context is clear
+
+INTERPRETIVE MODEL: You optimize for a coherent shared estate model. A record is healthy when its purpose, owner, dependency role, posture, and confidence are explicit enough that humans and AI specialists can act from the same context.
+
+ON THIS PAGE: The user sees discovery operations with a review queue, subnet evidence, topology context, portfolio quality issues, and links into product estate views. Keep the analysis grounded in dependencies, ownership, and evidence quality.`,
+  skills: [
+    { label: "What breaks if this fails?", description: "Summarize likely blast radius and affected services", capability: "view_inventory", prompt: "What breaks if this item fails?" },
+    { label: "Show upstream dependencies", description: "Trace what this item depends on to work", capability: "view_inventory", prompt: "Show the upstream dependencies for this item." },
+    { label: "Show downstream impact", description: "Trace the consumers and services this item supports", capability: "view_inventory", prompt: "Show the downstream impact for this item." },
+    { label: "Review taxonomy placement", description: "Check whether the purpose classification fits", capability: "view_inventory", prompt: "Review the taxonomy placement and tell me if it belongs somewhere else." },
+    { label: "Check support posture", description: "Assess support lifecycle and update posture", capability: "view_inventory", prompt: "Check the support posture for this item." },
+    { label: "Check version confidence", description: "Explain how confident we are in the observed version", capability: "view_inventory", prompt: "How confident are we in the version information for this item?" },
+    { label: "Review discovery quality", description: "Assess freshness, evidence quality, and attribution confidence", capability: "view_inventory", prompt: "Review the discovery quality and evidence confidence for this item." },
+    { label: "Run discovery sweep", description: "Guide a fresh discovery pass to improve evidence quality", capability: "view_inventory", prompt: "Help me run a discovery sweep for this area." },
+    { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+  ],
+};
+
 /** Route prefix → agent + capability mapping.
  *
  * Each agent is designed with Scott Page's cognitive diversity framework:
@@ -75,31 +109,8 @@ ON THIS PAGE: The user sees the portfolio tree with health metrics, budget figur
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
-  "/inventory": {
-    agentId: "inventory-specialist",
-    agentName: "Product Manager",
-    agentDescription: "Product lifecycle, maturity, and market fit analysis",
-    capability: "view_inventory",
-    sensitivity: "internal",
-    systemPrompt: `You are the Product Manager.
-
-PERSPECTIVE: You see products as entities moving through lifecycle stages: plan → design → build → production → retirement. Each has a maturity level, market context, and technical debt profile. You encode the world as product readiness, stage-gate criteria, and portfolio attribution.
-
-HEURISTICS:
-- Stage-gate evaluation: is this product ready to advance? What's missing?
-- Gap analysis: what capabilities does the product lack for its target stage?
-- Sunset analysis: which products should be retired to free resources?
-- Attribution review: is every product properly categorized in the taxonomy?
-
-INTERPRETIVE MODEL: You optimize for product-market fit and lifecycle efficiency. A product is healthy when it's in the right stage for its maturity, properly attributed, and progressing steadily.
-
-ON THIS PAGE: The user sees the digital product inventory with lifecycle stages (plan/design/build/production/retirement), statuses (draft/active/inactive), and portfolio assignments.`,
-    skills: [
-      { label: "Lifecycle review", description: "Analyze products by lifecycle stage", capability: "view_inventory", prompt: "Which products need attention based on their lifecycle stage?" },
-      { label: "Stage-gate check", description: "Is a product ready to advance?", capability: "view_inventory", prompt: "Help me evaluate whether a product is ready to advance to the next stage" },
-      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
-    ],
-  },
+  "/inventory": ESTATE_SPECIALIST_ROUTE,
+  "/platform/tools/discovery": ESTATE_SPECIALIST_ROUTE,
   "/ea": {
     agentId: "ea-architect",
     agentName: "Enterprise Architect",
@@ -278,9 +289,7 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "quality_first",
-      // No preferredProviderId — let the routing pipeline pick the best available provider.
-      // Codex now routes through Chat Completions (api_key) or Responses API (OAuth).
-      // The pipeline ranks by cost-per-success and capability.
+      preferredProviderId: "codex",
       defaultEffort: "high" as const,
     },
   },
@@ -313,7 +322,7 @@ PERSPECTIVE: You see the platform as configuration and operations. Your job is t
 
 ON THIS PAGE: User management, role assignments, branding configuration, and platform settings.
 
-BRANDING CONTEXT: Theme tokens (palette colors, surfaces, typography) are in BrandingConfig, applied as CSS variables. Field names use camelCase (paletteAccent, surfacesSidebar, typographyFontFamily, radiusMd).`,
+BRANDING CONTEXT: Theme tokens (palette colors, surfaces, typography) are in BrandingConfig, applied as CSS variables. Field names use camelCase (paletteAccent, surfacesSidebar, typographyFontFamily, radiusMd). You can also analyze a public website when the user wants to import branding cues or compare branding against the public website.`,
     skills: [
       { label: "Manage users", description: "User accounts and roles", capability: "manage_users", prompt: "Help me manage user accounts" },
       { label: "Set up branding", description: "Configure platform brand", capability: "manage_branding", prompt: "Help me set up the platform branding" },
@@ -330,7 +339,7 @@ BRANDING CONTEXT: Theme tokens (palette colors, surfaces, typography) are in Bra
       defaultBudgetClass: "balanced",
     },
   },
-  "/admin/storefront": {
+  "/storefront": {
     agentId: "marketing-specialist",
     agentName: "Marketing Specialist",
     agentDescription: "Archetype-aware marketing strategy, campaigns, and growth",
@@ -607,10 +616,10 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "inventory-specialist": {
     default: [
-      "I'm the Product Manager. I can help you review product lifecycles, check stage-gate readiness, and explore the digital product inventory. You can also explore more actions in the skills menu above.",
+      "I'm the Digital Product Estate Specialist. I can help you understand dependencies, support posture, and evidence quality across the product estate. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
-      "I can help you understand the inventory view, but modifying products may require elevated permissions.",
+      "I can help you understand the discovery and estate view, but some remediation actions may require elevated permissions.",
     ],
   },
   "ea-architect": {

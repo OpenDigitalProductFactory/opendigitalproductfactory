@@ -44,7 +44,7 @@ export default async function ProductOverviewPage({ params }: Props) {
 
   const stats = [
     { label: "Backlog Items", value: product._count.backlogItems, href: `/portfolio/product/${id}/backlog` },
-    { label: "Inventory Entities", value: product._count.inventoryEntities, href: `/portfolio/product/${id}/inventory` },
+    { label: "Dependencies & Estate", value: product._count.inventoryEntities, href: `/portfolio/product/${id}/inventory` },
     { label: "Architecture Elements", value: product._count.eaElements, href: `/portfolio/product/${id}/architecture` },
     { label: "Versions", value: product._count.versions, href: `/portfolio/product/${id}/versions` },
     { label: "Service Offerings", value: product._count.serviceOfferings, href: `/portfolio/product/${id}/offerings` },
@@ -72,6 +72,9 @@ export default async function ProductOverviewPage({ params }: Props) {
       {/* Metadata */}
       <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-5">
         <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Product Details</h2>
+        <p className="mb-4 text-xs leading-5 text-[var(--dpf-muted)]">
+          Keep discovery and dependency context close to the product. Use the Dependencies &amp; Estate area to understand what supports this product and what it relies on.
+        </p>
         <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-xs">
           <div>
             <dt className="text-[var(--dpf-muted)]">Product ID</dt>

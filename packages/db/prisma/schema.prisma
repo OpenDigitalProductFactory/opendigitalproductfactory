@@ -1913,6 +1913,13 @@ model InventoryEntity {
   entityKey             String                  @unique
   entityType            String
   name                  String
+  technicalClass        String?
+  iconKey               String?
+  manufacturer          String?
+  productModel          String?
+  observedVersion       String?
+  normalizedVersion     String?
+  supportStatus         String                  @default("unknown")
   status                String                  @default("active")
   attributionStatus     String                  @default("needs_review")
   confidence            Float?
