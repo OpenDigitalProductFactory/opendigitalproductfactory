@@ -8,6 +8,27 @@ No vendor lock-in. No consultants. No million-dollar license. One installer to r
 
 ---
 
+## AI Agent Standards
+
+This repository now includes a draft standards family for trustworthy AI agent operation and identity, using `DPF` as the first implementation and conformance case.
+
+- [Trusted AI Kernel (TAK) - Markdown](docs/architecture/trusted-ai-kernel.md)
+- [Trusted AI Kernel (TAK) - Word](docs/architecture/Trusted-AI-Kernel-Architecture.docx)
+- [Global AI Agent Identification and Governance (GAID) - Markdown](docs/architecture/GAID.md)
+- [Global AI Agent Identification and Governance (GAID) - Word](docs/architecture/GAID.docx)
+- [Trusted AI Agent Governance White Paper](docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md)
+- [White Paper - Word](docs/architecture/Trusted-AI-Agent-Governance-White-Paper.docx)
+- [DPF Standards Conformance Assessment](docs/architecture/agent-standards-dpf-conformance.md)
+
+These documents are intended to be read together:
+
+- `TAK` defines the runtime kernel and control model for trustworthy agent execution
+- `GAID` defines identity, badging, issuer, traceability, and governance claims for agents
+- the white paper explains the need, market context, and policy relevance
+- the conformance assessment shows how the platform maps to the proposed standards today
+
+---
+
 ## Why It Exists
 
 Enterprise software — portfolio management, enterprise architecture, backlog tracking, lifecycle governance — has traditionally been locked behind expensive platforms that require specialized teams to operate. The advent of capable AI agents changes the economics: the know-how of the professionals can be commoditized into a limitless workforce, as long as the governance keeps humans in the loop.
@@ -147,12 +168,18 @@ The platform has two deployment models and one shared architectural core:
 
 For the full runtime picture — deployment diagrams, hardware tiers, the Docker Compose breakdown, and the monitoring stack — see [docs/architecture/platform-overview.md](docs/architecture/platform-overview.md).
 
-The platform's AI governance layer is formally documented as the **Trusted AI Kernel**: the layered enforcement, routing, audit, and immutable-directive architecture that makes it safe to let AI agents act on behalf of humans.
+The platform's AI governance layer is now documented as a standards family:
 
-- [TAK Architecture (Markdown)](docs/architecture/trusted-ai-kernel.md)
-- [TAK Architecture (Word)](docs/architecture/Trusted-AI-Kernel-Architecture.docx) — diagrams, tables, and end-to-end flow documentation
+- [Trusted AI Kernel (TAK)](docs/architecture/trusted-ai-kernel.md) — runtime governance, authority mediation, HITL, delegation, audit, provider backpressure, queueing, and failover expectations
+- [Global AI Agent Identification and Governance (GAID)](docs/architecture/GAID.md) — identity, issuer/accreditation, badging, assurance, authorization classes, and chain-of-custody requirements
+- [Trusted AI Agent Governance White Paper](docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md) — the market, policy, and implementation case for the standards family
+- [DPF Standards Conformance Assessment](docs/architecture/agent-standards-dpf-conformance.md) — how the current platform maps to the proposed controls
 
-Regenerate the Word document after edits with `pnpm docs:tak`.
+Publication outputs are generated from the Markdown sources of truth:
+
+- `pnpm docs:tak`
+- `node docs/architecture/generate-gaid-docx.mjs`
+- `node docs/architecture/generate-agent-standards-white-paper-docx.mjs`
 
 ---
 
@@ -186,7 +213,11 @@ Regenerate the Word document after edits with `pnpm docs:tak`.
 
 - [docs/README.md](docs/README.md) — the documentation index.
 - [docs/user-guide/](docs/user-guide/) — end-user operating guides bundled into the portal's in-app help.
-- [docs/architecture/](docs/architecture/) — runtime, deployment, and TAK architecture.
+- [docs/architecture/](docs/architecture/) — runtime, deployment, standards, and governance documentation.
+- [docs/architecture/trusted-ai-kernel.md](docs/architecture/trusted-ai-kernel.md) — the `TAK` runtime standard.
+- [docs/architecture/GAID.md](docs/architecture/GAID.md) — the `GAID` identity and governance standard.
+- [docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md](docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md) — the companion white paper.
+- [docs/architecture/agent-standards-dpf-conformance.md](docs/architecture/agent-standards-dpf-conformance.md) — the `DPF` conformance assessment.
 
 ---
 
