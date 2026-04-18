@@ -122,3 +122,8 @@ export {
   inferProductDependencies,
   type InferenceSummary,
 } from "./discovery-inference";
+export {
+  getCanonicalPortfolios,
+  createCanonicalPortfoliosForOrg,
+  type CanonicalPortfolio,
+} from "./canonical-portfolios";
