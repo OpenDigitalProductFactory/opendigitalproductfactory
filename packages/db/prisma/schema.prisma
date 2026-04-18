@@ -454,15 +454,13 @@ model TerminationRecord {
 
 model Portfolio {
   id                     String                  @id @default(cuid())
-  organizationId         String
-  slug                   String
+  slug                   String                  @unique
   name                   String
   description            String?
   rootNodeId             String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   budgetKUsd             Int?
-  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   agents                 Agent[]
   products               DigitalProduct[]
   eaElements             EaElement[]
@@ -472,9 +470,6 @@ model Portfolio {
   knowledgeArticles      KnowledgeArticlePortfolio[]
   valueStreamTeams       ValueStreamTeam[]
   workQueues             WorkQueue[]
-
-  @@unique([organizationId, slug])
-  @@index([organizationId])
 }
 
 model DigitalProduct {
@@ -1786,7 +1781,6 @@ model Organization {
   storefrontConfig      StorefrontConfig?
   businessContext       BusinessContext?
   platformSetupProgress PlatformSetupProgress? @relation("OrgSetupProgress")
-  portfolios            Portfolio[]
 }
 
 model BusinessContext {

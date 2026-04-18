@@ -52,6 +52,13 @@ export async function readBrandContext(args: {
     return { structured: null, legacyMarkdown: null, source: "none" };
   }
 
+  const anyOrg = await prisma.organization.findFirst({
+    select: { designSystem: true },
+  });
+  if (anyOrg?.designSystem && isBrandDesignSystem(anyOrg.designSystem)) {
+    return { structured: anyOrg.designSystem, legacyMarkdown: null, source: "organization" };
+  }
+
   const anyStorefront = await prisma.storefrontConfig.findFirst({
     select: { designSystem: true },
   });
