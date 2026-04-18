@@ -100,10 +100,12 @@ export async function attributeFeatureBuild(
     };
   }
 
-  // 2. Load taxonomy nodes, scoped to portfolio if provided
+  // 2. Load taxonomy nodes, scoped to portfolio if provided. `slug` is
+  // unique per organization now (compound `organizationId_slug`), so use
+  // findFirst until callers thread organizationId through.
   let portfolioId: string | null = null;
   if (brief.portfolioContext) {
-    const portfolio = await prisma.portfolio.findUnique({
+    const portfolio = await prisma.portfolio.findFirst({
       where: { slug: brief.portfolioContext },
       select: { id: true },
     });

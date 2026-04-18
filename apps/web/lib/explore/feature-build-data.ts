@@ -250,8 +250,10 @@ export async function getFeatureBuildForContext(
       siblingProducts: siblings.map((s) => s.name),
     };
   } else if (r.portfolioId) {
-    // Fallback: resolve portfolio name at minimum
-    const portfolio = await prisma.portfolio.findUnique({
+    // Fallback: resolve portfolio name at minimum. `slug` is unique per
+    // organization now (compound `organizationId_slug`), so use findFirst
+    // until callers thread organizationId through.
+    const portfolio = await prisma.portfolio.findFirst({
       where: { slug: r.portfolioId },
       select: { name: true },
     });
