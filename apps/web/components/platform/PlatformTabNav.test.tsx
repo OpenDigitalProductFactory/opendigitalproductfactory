@@ -40,13 +40,15 @@ describe("PlatformTabNav", () => {
   });
 
   it("shows only the active family's sub-navigation", () => {
-    pathname = "/platform/tools/services";
+    pathname = "/platform/tools/discovery";
     const html = renderToStaticMarkup(<PlatformTabNav />);
 
     expect(html).toContain('href="/platform/tools"');
     expect(html).toContain('href="/platform/tools/catalog"');
+    expect(html).toContain('href="/platform/tools/discovery"');
     expect(html).toContain('href="/platform/tools/services"');
     expect(html).toContain('href="/platform/tools/inventory"');
+    expect(html).toContain(">Discovery Operations<");
     expect(html).not.toContain('href="/platform/ai/providers"');
     expect(html).not.toContain('href="/platform/audit/ledger"');
   });

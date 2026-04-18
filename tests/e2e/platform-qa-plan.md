@@ -106,15 +106,17 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | OPS-06 | Navigate to Changes tab | Change management page loads |
 | OPS-07 | Navigate to Improvements tab | Improvement proposals page loads |
 
-## Phase 8: Portfolio & Inventory
+## Phase 8: Portfolio & Estate
 
 | ID | Steps | Expected |
 |----|-------|----------|
 | PORT-01 | Navigate to `/portfolio` | 4 portfolios visible with metrics |
 | PORT-02 | Expand a portfolio tree node | Child nodes shown |
 | PORT-03 | Click into Manufacturing and Delivery | Portfolio detail with products |
-| INV-01 | Navigate to `/inventory` | Product list with lifecycle stages |
-| INV-02 | Click into a product | Product detail page loads |
+| INV-01 | Navigate to `/platform/tools/discovery` | Discovery Operations loads with run summary, review queue, topology context, and attributed estate cards |
+| INV-02 | Navigate to `/inventory` | Legacy alias loads, banner points to `/platform/tools/discovery` and `/portfolio` |
+| INV-03 | Click a product card from discovery operations | Product Dependencies & Estate page loads |
+| INV-04 | Navigate directly to `/portfolio/product/<known-id>/inventory` | Estate cards show manufacturer, version, support posture, and upstream/downstream counts |
 
 ## Phase 9: EA Modeler
 
@@ -149,17 +151,19 @@ When a test fails, create a backlog item under the active QA epic referencing th
 
 | ID | Steps | Expected |
 |----|-------|----------|
-| STORE-01 | Navigate to `/storefront` | Admin dashboard with sections, items, settings |
+| STORE-01 | Navigate to `/storefront` | Portal workspace loads with a single portal tab row for dashboard, sections, items, team, inbox, and settings |
 | STORE-02 | Click "View Live" | Public storefront loads with catalog |
 | STORE-03 | Click "Book Now" on a service | Calendar loads with available dates |
 | STORE-04 | Select date and time slot | Slot selection shows provider and times |
 | STORE-05 | Fill booking form and confirm | Booking confirmed with reference number |
 | STORE-06 | Check timezone shown | Should match org timezone (America/Chicago default) |
-| STORE-07 | Navigate to `/admin/storefront/setup` after a `.de` branding URL was analyzed | Suggestion banner visible above archetype grid; detected archetype card has accent border and "Suggested for you" label |
+| STORE-07 | Navigate to `/storefront/setup` after a `.de` branding URL was analyzed | Suggestion banner visible above archetype grid; detected archetype card has accent border and "Suggested for you" label |
 | STORE-08 | Proceed to Step 3 (identity) after URL branding | Business name field pre-filled with detected company name; "Pre-filled from your branding URL" hint shown |
 | STORE-09 | Proceed to Step 4 (financial setup) after `.de` branding URL | Currency selector pre-set to EUR; "Pre-selected based on your website location" note shown |
 | STORE-10 | Change the currency in Step 4 away from the suggestion | Selection updates freely; no error; the changed value is saved |
-| STORE-11 | Navigate to `/admin/storefront/setup` without having used a branding URL | No suggestion banner shown; no pre-fills; archetype grid renders normally |
+| STORE-11 | Navigate to `/storefront/setup` without having used a branding URL | No suggestion banner shown; no pre-fills; archetype grid renders normally |
+| STORE-12 | Navigate to `/admin/storefront` | Redirected to `/storefront`; the portal workspace loads without the extra Admin tab strip above it |
+| STORE-13 | Open the coworker panel on `/storefront` | Marketing Specialist agent loads for the portal workspace and shows portal-specific skills |
 
 ## Phase 12: AI Coworker Cross-Cutting
 
@@ -175,6 +179,9 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AI-08 | Close and reopen coworker panel | Panel resets, input active |
 | AI-09 | Coworker error recovery | After error, panel shows error message and input recovers |
 | AI-10 | **Incomplete request test:** Send vague creation request | Agent asks for required fields, not guesses |
+| AI-11 | Navigate to `/platform/tools/discovery` | Digital Product Estate Specialist shown |
+| AI-12 | **(Coworker)** On `/platform/tools/discovery`, ask "What breaks if this fails?" about an attributed item | Response focuses on dependency impact and blast radius, not just raw scanner output |
+| AI-13 | **(Incomplete info)** On `/platform/tools/discovery`, ask for version confidence without identifying an item | Agent asks for the missing item/context instead of inventing details |
 
 ## Phase 13: Admin & Settings
 

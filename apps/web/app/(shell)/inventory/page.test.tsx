@@ -1,8 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useTransition: () => [false, (callback: () => void) => callback()] as const,
+  };
+});
+vi.mock("@/components/inventory/DiscoveryOperationsPage", () => ({
+  DiscoveryOperationsPage: ({ isLegacyAlias = false }: { isLegacyAlias?: boolean }) => (
+    <div data-page="discovery-operations" data-legacy-alias={String(isLegacyAlias)} />
+  ),
+}));
+vi.mock("@/lib/actions/discovery", () => ({
+  triggerBootstrapDiscovery: vi.fn(),
+}));
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
 import { InventoryEntityPanel } from "@/components/inventory/InventoryEntityPanel";
+
+describe("InventoryPage", () => {
+  it("renders the discovery operations alias in legacy mode", async () => {
+    const { default: InventoryPage } = await import("./page");
+    const html = renderToStaticMarkup(await InventoryPage());
+
+    expect(html).toContain('data-page="discovery-operations"');
+    expect(html).toContain('data-legacy-alias="true"');
+  });
+});
 
 describe("DiscoveryRunSummary", () => {
   it("renders latest discovery run counts", () => {

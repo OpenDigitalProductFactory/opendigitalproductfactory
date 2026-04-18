@@ -59,15 +59,15 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).not.toContain("admin");
   });
 
-  it("HR-300 gets EA Modeler, Portfolio, Inventory", () => {
+  it("HR-300 gets EA Modeler and Portfolio without a top-level inventory tile", () => {
     const tiles = getWorkspaceTiles(hr300).map((t) => t.key);
     expect(tiles).toContain("ea_modeler");
     expect(tiles).toContain("portfolio");
-    expect(tiles).toContain("inventory");
+    expect(tiles).not.toContain("inventory");
   });
 
-  it("superuser gets all 13 tiles regardless of role", () => {
-    expect(getWorkspaceTiles(superuser).length).toBe(13);
+  it("superuser gets all 12 top-level tiles regardless of role", () => {
+    expect(getWorkspaceTiles(superuser).length).toBe(12);
   });
 });
 
@@ -83,6 +83,7 @@ describe("getShellNavSections()", () => {
       "knowledge",
     ]);
     expect(sections.find((section) => section.key === "products")?.items.map((item) => item.key)).toContain("portfolio");
+    expect(sections.find((section) => section.key === "products")?.items.map((item) => item.key)).not.toContain("inventory");
     expect(sections.find((section) => section.key === "platform")?.items.map((item) => item.key)).toContain("ai_workforce");
   });
 
@@ -116,6 +117,7 @@ describe("getWorkspaceSections()", () => {
       "product-oversight",
       "business-operations",
     ]);
+    expect(sections.find((section) => section.key === "product-oversight")?.tiles.map((tile) => tile.key)).not.toContain("inventory");
     expect(sections.find((section) => section.key === "business-operations")?.tiles.map((tile) => tile.key)).toContain("finance");
   });
 });

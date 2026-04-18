@@ -27,7 +27,6 @@ export default async function WorkspacePage() {
 
   // Fetch all metrics in parallel
   const [
-    productCount,
     activeProductCount,
     portfolioCount,
     agentCount,
@@ -56,7 +55,6 @@ export default async function WorkspacePage() {
     financeOverdueCount,
     financeUnpaidBillCount,
   ] = await Promise.all([
-    prisma.digitalProduct.count(),
     prisma.digitalProduct.count({ where: { lifecycleStatus: "active" } }),
     prisma.portfolio.count(),
     prisma.agent.count({ where: { status: "active" } }),
@@ -150,12 +148,6 @@ export default async function WorkspacePage() {
       metrics: [
         { label: "Portfolios", value: portfolioCount, color: "var(--dpf-success)" },
         { label: "Products", value: `${activeProductCount} active`, color: "var(--dpf-success)" },
-      ],
-    },
-    inventory: {
-      metrics: [
-        { label: "Products", value: productCount, color: "var(--dpf-warning)" },
-        { label: "Active", value: activeProductCount, color: "var(--dpf-success)" },
       ],
     },
     employee: {

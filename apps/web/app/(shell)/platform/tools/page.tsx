@@ -2,12 +2,21 @@ import { prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 
 export default async function ToolsHubPage() {
-  const [catalogCount, activeServices, unconfiguredServices, enabledTools] =
+  const [
+    catalogCount,
+    activeServices,
+    unconfiguredServices,
+    enabledTools,
+    activeDiscoveryConnections,
+    needsReviewCount,
+  ] =
     await Promise.all([
       prisma.mcpIntegration.count({ where: { status: "active" } }),
       prisma.mcpServer.count({ where: { status: "active" } }),
       prisma.mcpServer.count({ where: { status: "unconfigured" } }),
       prisma.mcpServerTool.count({ where: { isEnabled: true } }),
+      prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
+      prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
     ]);
 
   return (
@@ -15,11 +24,11 @@ export default async function ToolsHubPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tools &amp; Services</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Discover integrations, activate MCP services, and confirm what tools are really available to agents.
+          Discover integrations, run discovery operations, activate MCP services, and confirm what tools are really available to agents.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PlatformSummaryCard
           title="Catalog"
           description="Browse the integration registry and decide what is worth activating."
@@ -28,6 +37,16 @@ export default async function ToolsHubPage() {
           metrics={[
             { label: "Available", value: catalogCount },
             { label: "Pending setup", value: unconfiguredServices },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Discovery Operations"
+          description="Turn raw network findings into purpose-aware estate evidence with attribution and dependency review."
+          href="/platform/tools/discovery"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Active connections", value: activeDiscoveryConnections },
+            { label: "Needs review", value: needsReviewCount },
           ]}
         />
         <PlatformSummaryCard
@@ -44,7 +63,7 @@ export default async function ToolsHubPage() {
           title="Capability Inventory"
           description="See the merged inventory of built-in tools, MCP tools, and provider-facing capabilities."
           href="/platform/tools/inventory"
-          accent="var(--dpf-warning)"
+          accent="var(--dpf-info)"
           metrics={[
             { label: "Inventory source", value: "Unified" },
             { label: "Primary use", value: "Agent tooling" },
@@ -57,8 +76,8 @@ export default async function ToolsHubPage() {
           Recommended Flow
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          Start in the catalog when you are researching options, move to services when you are activating and health-checking them,
-          and use capability inventory when you need to confirm what the AI workforce can actually call.
+          Start in the catalog when you are researching options, move to discovery operations when you need to understand what was found and why it matters,
+          then use services and capability inventory to manage the platform tooling the AI workforce relies on.
         </p>
       </div>
     </div>

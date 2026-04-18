@@ -45,7 +45,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     key: "tools",
     label: "Tools & Services",
     href: "/platform/tools",
-    description: "Keep integrations, MCP services, and tool inventory healthy.",
+    description: "Keep integrations, discovery operations, MCP services, and tool inventory healthy.",
     matchPrefixes: [
       "/platform/tools",
       "/platform/integrations",
@@ -54,6 +54,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     subItems: [
       { label: "Hub", href: "/platform/tools" },
       { label: "Catalog", href: "/platform/tools/catalog" },
+      { label: "Discovery Operations", href: "/platform/tools/discovery" },
       { label: "Services", href: "/platform/tools/services" },
       { label: "Capability Inventory", href: "/platform/tools/inventory" },
     ],

@@ -18,6 +18,15 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("routes discovery operations to the estate specialist", () => {
+    const result = resolveAgentForRoute("/platform/tools/discovery", superuser);
+    expect(result.agentId).toBe("inventory-specialist");
+    expect(result.agentName).toBe("Digital Product Estate Specialist");
+    expect(result.canAssist).toBe(true);
+    expect(result.systemPrompt).toContain("purpose-first");
+    expect(result.skills.some((skill) => skill.label === "What breaks if this fails?")).toBe(true);
+  });
+
   it("returns coo for unknown routes (workspace fallback)", () => {
     const result = resolveAgentForRoute("/unknown/path", superuser);
     expect(result.agentId).toBe("coo");
@@ -72,7 +81,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("every route agent has a non-empty systemPrompt", () => {
-    const routes = ["/portfolio", "/inventory", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.systemPrompt.length).toBeGreaterThan(0);
@@ -80,7 +89,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("returns skills array for each agent", () => {
-    const routes = ["/portfolio", "/inventory", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.skills.length).toBeGreaterThan(0);
@@ -123,5 +132,12 @@ describe("generateCannedResponse", () => {
     expect(opsResponse).toBeTruthy();
     // HR-000 draws from default pool, HR-500 from restricted pool
     expect(adminResponse).not.toBe(opsResponse);
+  });
+
+  it("uses estate-oriented canned copy for the inventory specialist", () => {
+    const response = generateCannedResponse("inventory-specialist", "/platform/tools/discovery", "HR-000");
+
+    expect(response).toContain("Digital Product Estate Specialist");
+    expect(response).toContain("dependencies");
   });
 });
