@@ -115,7 +115,9 @@ describe("GET /api/v1/customer/accounts", () => {
     expect(prisma.customerAccount.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          name: { contains: "Acme", mode: "insensitive" },
+          OR: expect.arrayContaining([
+            { name: { contains: "Acme", mode: "insensitive" } },
+          ]),
         }),
       }),
     );
