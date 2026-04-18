@@ -63,3 +63,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    ignore:
+      # Node base image: pinned to the current LTS line (24-alpine).
+      # Node odd-numbered majors are non-LTS (6-month support window)
+      # and not suitable for a runtime we expect to keep production-
+      # ready. Minor/patch tags within the pinned major still flow.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
