@@ -1,6 +1,6 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 # Cache bust: 2026-04-09-ideate-dispatch
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 

@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:25-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN apk add --no-cache git postgresql16-client curl bubblewrap
 # Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
