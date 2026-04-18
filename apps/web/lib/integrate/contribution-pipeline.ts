@@ -141,7 +141,8 @@ function generateCommitMessage(input: {
   authorName: string;
   dcoSignoff?: string;
 }): string {
-  // authorName should be "dpf-agent" (platform identity), not a personal name.
+  // authorName should be the pseudonym "dpf-agent-<shortId>" from
+  // identity-privacy.getPlatformIdentity(), not a personal name.
   // Defensive redaction catches any hostname leaks that slip through.
   const safeName = redactHostnames(input.authorName);
   const lines = [

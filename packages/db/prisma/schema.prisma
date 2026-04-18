@@ -454,13 +454,15 @@ model TerminationRecord {
 
 model Portfolio {
   id                     String                  @id @default(cuid())
-  slug                   String                  @unique
+  organizationId         String
+  slug                   String
   name                   String
   description            String?
   rootNodeId             String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   budgetKUsd             Int?
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   agents                 Agent[]
   products               DigitalProduct[]
   eaElements             EaElement[]
@@ -470,6 +472,9 @@ model Portfolio {
   knowledgeArticles      KnowledgeArticlePortfolio[]
   valueStreamTeams       ValueStreamTeam[]
   workQueues             WorkQueue[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
 }
 
 model DigitalProduct {
@@ -843,6 +848,9 @@ model BacklogItem {
   claimedByAgentId      String?
   claimedAt             DateTime?
   claimStatus           String?
+  upstreamIssueNumber   Int?
+  upstreamIssueUrl      String?
+  upstreamSyncedAt      DateTime?
   accountableEmployee   EmployeeProfile? @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
   digitalProduct        DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
   epic                  Epic?            @relation(fields: [epicId], references: [id])
@@ -866,6 +874,9 @@ model Epic {
   claimedByAgentId      String?
   claimedAt             DateTime?
   claimStatus           String?
+  upstreamIssueNumber   Int?
+  upstreamIssueUrl      String?
+  upstreamSyncedAt      DateTime?
   items                 BacklogItem[]
   accountableEmployee   EmployeeProfile? @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
   submittedBy           User?            @relation("EpicSubmissions", fields: [submittedById], references: [id])
@@ -1775,6 +1786,7 @@ model Organization {
   storefrontConfig      StorefrontConfig?
   businessContext       BusinessContext?
   platformSetupProgress PlatformSetupProgress? @relation("OrgSetupProgress")
+  portfolios            Portfolio[]
 }
 
 model BusinessContext {
@@ -2244,24 +2256,27 @@ model DynamicView {
 }
 
 model PlatformIssueReport {
-  id               String   @id @default(cuid())
-  reportId         String   @unique
-  type             String
-  severity         String   @default("medium")
-  status           String   @default("open")
-  title            String
-  description      String?
-  routeContext     String?
-  errorStack       String?
-  userAgent        String?
-  reportedById     String?
-  digitalProductId String?
-  portfolioId      String?
-  agentId          String?
-  source           String   @default("manual")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  reportedBy       User?    @relation(fields: [reportedById], references: [id])
+  id                  String    @id @default(cuid())
+  reportId            String    @unique
+  type                String
+  severity            String    @default("medium")
+  status              String    @default("open")
+  title               String
+  description         String?
+  routeContext        String?
+  errorStack          String?
+  userAgent           String?
+  reportedById        String?
+  digitalProductId    String?
+  portfolioId         String?
+  agentId             String?
+  source              String    @default("manual")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  upstreamIssueNumber Int?
+  upstreamIssueUrl    String?
+  upstreamSyncedAt    DateTime?
+  reportedBy          User?     @relation(fields: [reportedById], references: [id])
 }
 
 model ExternalEvidenceRecord {

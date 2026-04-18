@@ -4623,9 +4623,10 @@ export async function executeTool(
         portfolioContext: build.portfolioId,
       };
 
-      // DCO attestation — uses anonymous platform identity, not personal info.
+      // DCO attestation — uses pseudonymous platform identity, not personal info.
       // Real user identity stays in the local DB only; public git metadata
-      // shows "dpf-agent <agent-xxx@hive.dpf>" so installs are indistinguishable.
+      // shows "dpf-agent-<shortId> <agent-<shortId>@hive.dpf>" so the community
+      // can recognize repeat contributors without exposing the real user.
       const { getPlatformIdentity } = await import("@/lib/integrate/identity-privacy");
       const platformId = await getPlatformIdentity();
       const dcoAttestation = platformId.dcoSignoff;
