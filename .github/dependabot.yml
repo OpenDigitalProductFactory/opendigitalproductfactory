@@ -13,6 +13,17 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*`
+      # companion package must move together to the same SDK line.
+      # Major-version PRs cross SDK boundaries and break the mobile
+      # build. Minor/patch updates within the current SDK are fine.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
