@@ -35,6 +35,8 @@ export default async function ProductBacklogPage({ params }: Props) {
         createdAt: true,
         epicId: true,
         epic: { select: { epicId: true, title: true } },
+        upstreamIssueNumber: true,
+        upstreamIssueUrl: true,
       },
     }),
     prisma.epic.findMany({
@@ -134,6 +136,17 @@ export default async function ProductBacklogPage({ params }: Props) {
                 <span className="text-[9px] text-[var(--dpf-muted)] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)]">
                   {item.type}
                 </span>
+                {item.upstreamIssueNumber != null && item.upstreamIssueUrl && (
+                  <a
+                    href={item.upstreamIssueUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[9px] text-[var(--dpf-accent)] hover:underline"
+                    title="Filed with the project team"
+                  >
+                    GH #{item.upstreamIssueNumber}
+                  </a>
+                )}
                 {item.epic && (
                   <span className="text-[9px] text-[var(--dpf-muted)]">{item.epic.epicId}</span>
                 )}

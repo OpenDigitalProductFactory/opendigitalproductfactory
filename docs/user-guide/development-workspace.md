@@ -53,8 +53,11 @@ Every self-developing install begins in `policy_pending`.
 
 - governed promotion to this install's production runtime is allowed
 - governed upstream contribution is allowed
+- local backlog items, epics, and platform issue reports can be mirrored upstream as GitHub Issues on the Hive Mind repo — useful for users who don't run Build Studio and would rather have items addressed by the project team
 
 This lets people begin working before they have decided how their install should participate in the Hive Mind.
+
+Contributions carry a **stable pseudonym** (`dpf-agent-<shortId>`) that is the same across every commit, PR, and issue raised by the install. Real identity (name, email, hostname) stays on the local install and never reaches the upstream repository. The pseudonym lets the community recognize repeat contributors without exposing anyone's personal identity. Admins can see their install's pseudonym on the Platform Development page.
 
 ## Shared Workspace
 

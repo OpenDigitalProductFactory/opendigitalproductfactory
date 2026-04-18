@@ -27,6 +27,8 @@ export type BacklogItemWithRelations = {
   agentId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  upstreamIssueNumber: number | null;
+  upstreamIssueUrl: string | null;
 };
 
 export type DigitalProductSelect = {

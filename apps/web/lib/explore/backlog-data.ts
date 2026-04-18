@@ -31,6 +31,8 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       submittedBy: { select: { email: true } },
       digitalProduct: { select: { id: true, productId: true, name: true } },
       taxonomyNode: { select: { id: true, nodeId: true, name: true } },
+      upstreamIssueNumber: true,
+      upstreamIssueUrl: true,
     },
   });
 });

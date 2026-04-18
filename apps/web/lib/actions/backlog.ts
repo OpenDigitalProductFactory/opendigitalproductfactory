@@ -97,6 +97,25 @@ export async function deleteBacklogItem(id: string): Promise<void> {
   await prisma.backlogItem.delete({ where: { id } });
 }
 
+// ─── Upstream escalation ──────────────────────────────────────────────────────
+
+export type EscalateResult =
+  | { status: "created"; issueNumber: number; url: string }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; error: string };
+
+export async function escalateBacklogItemUpstream(id: string): Promise<EscalateResult> {
+  await requireManageBacklog();
+  const { escalateToUpstreamIssue } = await import("@/lib/integrate/issue-bridge");
+  return escalateToUpstreamIssue({ kind: "backlog", id });
+}
+
+export async function escalateEpicUpstream(id: string): Promise<EscalateResult> {
+  await requireManageBacklog();
+  const { escalateToUpstreamIssue } = await import("@/lib/integrate/issue-bridge");
+  return escalateToUpstreamIssue({ kind: "epic", id });
+}
+
 // ─── Epic actions ─────────────────────────────────────────────────────────────
 
 export type EpicOverlap = { epicId: string; title: string; status: string; score: number };
