@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { FinancialSetupStep } from "./FinancialSetupStep";
+import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
 
 type Archetype = {
   archetypeId: string;
@@ -480,7 +481,17 @@ export function SetupWizard({
         archetypeSlug={financeSlugFromCategory(selected?.category ?? "")}
         archetypeName={selected?.name ?? "your business"}
         suggestedCurrency={suggestedCurrency ?? null}
-        onComplete={() => { window.location.href = "/storefront"; }}
+        onComplete={async () => {
+          // Seed the onboarding coworker's first message offering to build
+          // the brand in the background — the first-run wow moment.
+          // Non-fatal: proceed to the tour even if seeding fails.
+          try {
+            await seedOnboardingBrandOffer();
+          } catch {
+            // Best-effort.
+          }
+          window.location.href = "/storefront";
+        }}
       />
     );
   }
