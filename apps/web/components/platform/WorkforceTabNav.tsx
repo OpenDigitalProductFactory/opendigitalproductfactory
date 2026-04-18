@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
   { label: "Overview", href: "/platform/ai" },
   { label: "Assignments", href: "/platform/ai/assignments" },
   { label: "Routing & Calibration", href: "/platform/ai/providers" },
-  { label: "Build Studio CLI", href: "/platform/ai/build-studio" },
+  { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
   { label: "Skills", href: "/platform/ai/skills" },
 ];
 

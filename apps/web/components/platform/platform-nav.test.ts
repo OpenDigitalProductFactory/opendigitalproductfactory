@@ -19,6 +19,13 @@ describe("platform-nav", () => {
     expect(getPlatformFamily("/platform/ai").key).toBe("ai");
     expect(getPlatformFamily("/platform/ai/providers").key).toBe("ai");
     expect(getPlatformFamily("/platform/ai/operations").key).toBe("ai");
+    expect(getPlatformFamily("/platform/ai/build-studio").key).toBe("ai");
+  });
+
+  it("labels the build-studio route as configuration, not the primary studio", () => {
+    const aiFamily = getPlatformFamily("/platform/ai/build-studio");
+
+    expect(aiFamily.subItems.some((item) => item.label === "Build Runtime")).toBe(true);
   });
 
   it("maps tools and service routes to the Tools & Services family", () => {
