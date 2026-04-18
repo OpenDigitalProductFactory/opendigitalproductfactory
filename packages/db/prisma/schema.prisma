@@ -4915,6 +4915,9 @@ model SkillDefinition {
 
 model SkillAssignment {
   id              String            @id @default(cuid())
+  // Business skill identifier (e.g. "code-runner"), references SkillDefinition.skillId.
+  // Not the cuid primary key — the column name and every caller treat this as the
+  // stable business identifier so it stays legible in logs and cross-install exports.
   skillId         String
   agentId         String            // Which coworker gets this skill
   priority        Int               @default(0) // Higher = loaded first
@@ -4922,7 +4925,7 @@ model SkillAssignment {
   assignedBy      String            // User who approved
   assignedAt      DateTime          @default(now())
 
-  skill           SkillDefinition   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skill           SkillDefinition   @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
 
   @@unique([skillId, agentId])
   @@index([agentId])
@@ -4930,7 +4933,7 @@ model SkillAssignment {
 
 model SkillMetric {
   id              String            @id @default(cuid())
-  skillId         String
+  skillId         String            // Business id; see SkillAssignment.skillId comment
   agentId         String
   period          String            // "2026-W13", "2026-03"
   invocationCount Int               @default(0)
@@ -4941,7 +4944,7 @@ model SkillMetric {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  skill           SkillDefinition   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skill           SkillDefinition   @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
 
   @@unique([skillId, agentId, period])
   @@index([skillId])

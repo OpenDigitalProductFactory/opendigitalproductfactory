@@ -12,7 +12,9 @@ import type {
   ValueStreamActivityRow,
 } from "./reference-model-types.js";
 
-const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..", "..");
+// __dirname is packages/db/src at runtime (tsx) — three levels up is repo root (/app in container).
+// The prior four-level climb landed at / and made the IT4IT workbook unfindable on every install.
+const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..");
 const REFERENCE_ROOT = join(REPO_ROOT, "docs", "Reference");
 const IT4IT_WORKBOOK_PATH = join(REFERENCE_ROOT, "IT4IT_Functional_Criteria_Taxonomy.xlsx");
 

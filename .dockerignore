@@ -16,5 +16,8 @@ node_modules
 !docs/user-guide/**/index.md
 docs/superpowers/
 docs/Reference/
+# IT4IT functional criteria workbook is needed at seed time; the rest of
+# docs/Reference/ is large binary content we intentionally exclude.
+!docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx
 docs/architecture/
 apps/mobile/
