@@ -7,9 +7,9 @@ export const SETUP_STEPS = [
   "account-bootstrap",   // /setup — the ONE custom page (org + user creation)
   "ai-providers",        // /platform/ai/providers — configure AI providers
   "branding",            // /admin/branding — logo, colors, tagline
-  "business-context",    // /admin/business-context — tell us about your business
-  "operating-hours",     // /admin/operating-hours — business hours
-  "storefront",          // /admin/storefront — customer-facing portal setup
+  "business-context",    // /storefront/settings/business — tell us about your business
+  "operating-hours",     // /storefront/settings/operations — business hours
+  "storefront",          // /storefront — customer-facing portal setup
   "platform-development",// /admin/platform-development — contribution mode
   "build-studio",        // /build — show the self-development capability
   "workspace",           // /workspace — see the workspace, meet the COO
@@ -19,9 +19,9 @@ export const SETUP_STEPS = [
 export const STEP_ROUTES: Record<string, string> = {
   "ai-providers": "/platform/ai/providers",
   "branding": "/admin/branding",
-  "business-context": "/admin/business-context",
-  "operating-hours": "/admin/operating-hours",
-  "storefront": "/admin/storefront",
+  "business-context": "/storefront/settings/business",
+  "operating-hours": "/storefront/settings/operations",
+  "storefront": "/storefront",
   "platform-development": "/admin/platform-development",
   "build-studio": "/build",
   "workspace": "/workspace",

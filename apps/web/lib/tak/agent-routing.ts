@@ -63,6 +63,7 @@ ON THIS PAGE: The user sees discovery operations with a review queue, subnet evi
     { label: "Show upstream dependencies", description: "Trace what this item depends on to work", capability: "view_inventory", prompt: "Show the upstream dependencies for this item." },
     { label: "Show downstream impact", description: "Trace the consumers and services this item supports", capability: "view_inventory", prompt: "Show the downstream impact for this item." },
     { label: "Review taxonomy placement", description: "Check whether the purpose classification fits", capability: "view_inventory", prompt: "Review the taxonomy placement and tell me if it belongs somewhere else." },
+    { label: "Review item identity", description: "Assess vendor, product identity, and how confident we are in that evidence", capability: "view_inventory", prompt: "Review the identity evidence for this item and tell me what still needs review." },
     { label: "Check support posture", description: "Assess support lifecycle and update posture", capability: "view_inventory", prompt: "Check the support posture for this item." },
     { label: "Check version confidence", description: "Explain how confident we are in the observed version", capability: "view_inventory", prompt: "How confident are we in the version information for this item?" },
     { label: "Review discovery quality", description: "Assess freshness, evidence quality, and attribution confidence", capability: "view_inventory", prompt: "Review the discovery quality and evidence confidence for this item." },
@@ -616,7 +617,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "inventory-specialist": {
     default: [
-      "I'm the Digital Product Estate Specialist. I can help you understand dependencies, support posture, and evidence quality across the product estate. You can also explore more actions in the skills menu above.",
+      "I'm the Digital Product Estate Specialist. I can help you understand item identity, dependencies, support posture, and evidence quality across the product estate. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you understand the discovery and estate view, but some remediation actions may require elevated permissions.",

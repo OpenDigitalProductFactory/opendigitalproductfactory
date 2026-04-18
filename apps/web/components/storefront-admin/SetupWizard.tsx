@@ -464,7 +464,7 @@ export function SetupWizard({
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
           <button onClick={handleComplete} disabled={submitting || !orgSlug}
-            style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting || !orgSlug ? 0.7 : 1 }}>
+            style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "white", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting || !orgSlug ? 0.7 : 1 }}>
             {submitting ? "Creating..." : `Create ${displayPortalLabel}`}
           </button>
         </div>
@@ -480,7 +480,7 @@ export function SetupWizard({
         archetypeSlug={financeSlugFromCategory(selected?.category ?? "")}
         archetypeName={selected?.name ?? "your business"}
         suggestedCurrency={suggestedCurrency ?? null}
-        onComplete={() => { window.location.href = "/admin/storefront"; }}
+        onComplete={() => { window.location.href = "/storefront"; }}
       />
     );
   }
