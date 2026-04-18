@@ -847,9 +847,47 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "restricted" },
   ];
 
+  // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
+  // without them, isToolAllowedByGrants() denies every tool and the agent can
+  // only hallucinate tool calls. Grant keys must match TOOL_TO_GRANTS in
+  // apps/web/lib/tak/agent-grants.ts. Registry-driven agents get their grants
+  // from agent_registry.json; these hardcoded ones need them here.
+  const HARDCODED_COWORKER_GRANTS: Record<string, string[]> = {
+    "portfolio-advisor":    ["portfolio_read", "registry_read", "backlog_read"],
+    "inventory-specialist": ["portfolio_read", "registry_read", "backlog_read", "backlog_write"],
+    "ea-architect":         ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
+    "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
+    "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write"],
+    "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
+    "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
+    "build-specialist":     ["file_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
+    "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
+    "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read"],
+    "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
+    "doc-specialist":       ["file_read", "registry_read", "portfolio_read"],
+    "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
+    "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
+  };
+
+  // Grants for onboarding-coo — the agent itself is created by
+  // seedOnboardingAgent() in bootstrap-first-run.ts at portal start. But if
+  // that agent already exists in the DB (re-seed of an initialised cluster),
+  // ensure its grants stay in sync here so the invariant guard always passes.
+  const ONBOARDING_AGENT_GRANTS: Record<string, string[]> = {
+    "onboarding-coo": [
+      "file_read",
+      "web_search",
+      "data_governance_validate",
+      "registry_read",
+      "backlog_read",
+      "portfolio_read",
+    ],
+  };
+
+  let grantCount = 0;
   for (const cw of coworkers) {
     const { agentId, slugId, ...rest } = cw;
-    await prisma.agent.upsert({
+    const agent = await prisma.agent.upsert({
       where: { agentId },
       create: { agentId, slugId, ...rest, lifecycleStage: "production" },
       update: {
@@ -860,8 +898,35 @@ async function seedCoworkerAgents(): Promise<void> {
         sensitivity: rest.sensitivity,
       },
     });
+
+    const grants = HARDCODED_COWORKER_GRANTS[agentId];
+    if (grants) {
+      for (const grantKey of grants) {
+        await prisma.agentToolGrant.upsert({
+          where: { agentId_grantKey: { agentId: agent.id, grantKey } },
+          update: {},
+          create: { agentId: agent.id, grantKey },
+        });
+        grantCount++;
+      }
+    }
   }
-  console.log(`Seeded ${coworkers.length} coworker agents`);
+
+  // Backfill grants for onboarding agents already in the DB.
+  for (const [agentId, grants] of Object.entries(ONBOARDING_AGENT_GRANTS)) {
+    const agent = await prisma.agent.findUnique({ where: { agentId } });
+    if (!agent) continue; // Not yet bootstrapped — first-run flow will seed it with grants
+    for (const grantKey of grants) {
+      await prisma.agentToolGrant.upsert({
+        where: { agentId_grantKey: { agentId: agent.id, grantKey } },
+        update: {},
+        create: { agentId: agent.id, grantKey },
+      });
+      grantCount++;
+    }
+  }
+
+  console.log(`Seeded ${coworkers.length} coworker agents with ${grantCount} tool grants`);
 }
 
 /** EP-AI-WORKFORCE-001: Seed skills for coworker agents */
@@ -1763,6 +1828,7 @@ async function main(): Promise<void> {
   await seedSkills(prisma);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
+  await assertCoworkerAgentsHaveGrants();
   console.log("Seed complete.");
 }
 
@@ -1789,6 +1855,37 @@ async function assertActiveProvidersHaveClearance(): Promise<void> {
   }
 }
 
+/**
+ * Every coworker and onboarding agent the user can talk to must have at least
+ * one tool grant. Without grants, isToolAllowedByGrants() denies every tool
+ * and the agent can only hallucinate tool calls (it will claim reviews passed,
+ * claim evidence was saved, etc. — all with no DB effect). Fail the seed
+ * loudly rather than ship a broken configuration.
+ */
+async function assertCoworkerAgentsHaveGrants(): Promise<void> {
+  const offenders = await prisma.agent.findMany({
+    where: {
+      type: { in: ["coworker", "onboarding"] },
+      archived: false,
+    },
+    select: { agentId: true, name: true, type: true, toolGrants: { select: { id: true } } },
+  });
+  const missing = offenders.filter((a) => a.toolGrants.length === 0);
+  if (missing.length > 0) {
+    const list = missing.map((a) => `${a.agentId} (${a.name}, type=${a.type})`).join(", ");
+    throw new Error(
+      `Seed invariant violated: ${missing.length} interactive agent(s) without tool grants: ${list}. ` +
+        `Without grants these agents will silently fail every tool call and hallucinate successful outcomes. ` +
+        `Add grants to HARDCODED_COWORKER_GRANTS in seedCoworkerAgents() (for hardcoded coworkers), ` +
+        `to seedOnboardingAgent() in apps/web/lib/inference/bootstrap-first-run.ts (for onboarding agents), ` +
+        `or to tool_grants in packages/db/data/agent_registry.json (for registry agents).`,
+    );
+  }
+}
+
 main()
-  .catch(console.error)
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());
