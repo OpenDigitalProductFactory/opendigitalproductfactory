@@ -2,13 +2,19 @@
  * Identity Privacy — sanitizes git metadata to prevent leaking personal
  * information (hostnames, real names, emails) to public repositories.
  *
- * The platform uses anonymous identities for all public-facing git operations:
- *   - Author name:  "dpf-agent"  (identical across all installs)
- *   - Author email:  agent-<hash>@hive.dpf  (unique per install, anonymous)
- *   - Branch names:  dpf/<instanceId>/... or build/<buildId>/... (no hostnames)
- *   - DCO signoff:   uses platform identity, not personal identity
+ * The platform uses pseudonymous identities for all public-facing git operations.
+ * Every install carries a stable per-install discriminator (shortId) so the
+ * community can recognize repeat contributors without exposing real identity:
+ *   - Author name:  "dpf-agent-<shortId>"  (stable pseudonym, distinguishable per install)
+ *   - Author email:  agent-<shortId>@hive.dpf  (matches the name)
+ *   - Branch names:  dpf/<shortId>/... or build/<buildId>/... (no hostnames)
+ *   - DCO signoff:   uses platform pseudonym, not personal identity
  *
  * Personal identity (real name, email) stays in the LOCAL database only.
+ *
+ * Pseudonymous (default): stable per-install identity, no personal info.
+ * Attributed (opt-in, not yet implemented): customer-supplied org name for
+ * partners who want recognition. See phase1-identity-privacy-decisions.md.
  */
 
 import { prisma } from "@dpf/db";
@@ -16,10 +22,11 @@ import { prisma } from "@dpf/db";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface PlatformIdentity {
-  authorName: string;      // Always "dpf-agent"
-  authorEmail: string;     // agent-<hash>@hive.dpf
+  authorName: string;      // "dpf-agent-<shortId>" — stable pseudonym per install
+  authorEmail: string;     // agent-<shortId>@hive.dpf
   clientId: string;        // UUID from PlatformDevConfig
-  dcoSignoff: string;      // "Signed-off-by: dpf-agent <agent-xxx@hive.dpf>"
+  shortId: string;         // 8-char SHA256 slice derived from clientId
+  dcoSignoff: string;      // "Signed-off-by: dpf-agent-<shortId> <agent-<shortId>@hive.dpf>"
 }
 
 // ─── Cached Identity ────────────────────────────────────────────────────────
@@ -27,7 +34,29 @@ export interface PlatformIdentity {
 let _cached: PlatformIdentity | null = null;
 
 /**
- * Returns the anonymous platform identity for this install.
+ * Derives the 8-char public pseudonym from the seeded `gitAgentEmail`
+ * (`agent-<16-char-sha256>@hive.dpf`). Taking 8 chars of the email's 16-char
+ * hash keeps author name + email visibly consistent while staying short
+ * enough to be readable. 8 hex chars = 2^32 namespace — no practical
+ * collision risk at 10k+ installs.
+ *
+ * Note: `generatePrivateBranchName()` below uses a different 8-char slice
+ * (derived from the raw clientId UUID) for branch naming. Branches are
+ * internal routing; the display pseudonym here is what the community sees.
+ */
+function deriveShortIdFromEmail(gitAgentEmail: string): string {
+  const localPart = gitAgentEmail.split("@")[0] ?? "";
+  const hashPart = localPart.replace(/^agent-/, "");
+  if (hashPart.length < 8) {
+    throw new Error(
+      `gitAgentEmail has unexpected format: ${gitAgentEmail} — expected agent-<hash>@hive.dpf`
+    );
+  }
+  return hashPart.slice(0, 8);
+}
+
+/**
+ * Returns the pseudonymous platform identity for this install.
  * Used for all git metadata that may flow to public repositories.
  */
 export async function getPlatformIdentity(): Promise<PlatformIdentity> {
@@ -44,14 +73,37 @@ export async function getPlatformIdentity(): Promise<PlatformIdentity> {
     );
   }
 
+  const shortId = deriveShortIdFromEmail(config.gitAgentEmail);
+  const authorName = `dpf-agent-${shortId}`;
+
   _cached = {
-    authorName: "dpf-agent",
+    authorName,
     authorEmail: config.gitAgentEmail,
     clientId: config.clientId,
-    dcoSignoff: `Signed-off-by: dpf-agent <${config.gitAgentEmail}>`,
+    shortId,
+    dcoSignoff: `Signed-off-by: ${authorName} <${config.gitAgentEmail}>`,
   };
 
   return _cached;
+}
+
+/**
+ * Returns the install's public pseudonym (e.g. `dpf-agent-a1b2c3d4`).
+ * Callers that only need the display handle — UI labels, issue titles, PR
+ * body headers — should prefer this over loading the full identity.
+ */
+export async function getDisplayPseudonym(): Promise<string> {
+  const identity = await getPlatformIdentity();
+  return identity.authorName;
+}
+
+/**
+ * Clears the cached identity. Test-only — lets Vitest swap mocked prisma
+ * state between cases without leaking the first-call cache.
+ * @internal
+ */
+export function __resetPlatformIdentityCacheForTests(): void {
+  _cached = null;
 }
 
 // ─── Sanitization ───────────────────────────────────────────────────────────

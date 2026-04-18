@@ -36,11 +36,16 @@ type WizardStep = "mode" | "explain" | "github-account" | "create-token" | "past
 
 // ─── DCO Items ──────────────────────────────────────────────────────────────
 
-const DCO_PLAIN = [
-  "The features I share are my original work, or based on work I have the right to share.",
-  "I give permission for others to use these features under the Apache License 2.0, the same license as the platform itself.",
-  "I understand that shared features become part of the public project. My contributions are anonymous — the platform uses a pseudonymous identity, not my personal information.",
-];
+function buildDcoItems(pseudonym: string | null): string[] {
+  const identityItem = pseudonym
+    ? `I understand that shared features become part of the public project. My contributions carry a stable pseudonym (${pseudonym}) so the community can recognize repeat contributors, but reveal nothing about my real identity.`
+    : "I understand that shared features become part of the public project. My contributions carry a stable pseudonym so the community can recognize repeat contributors, but reveal nothing about my real identity.";
+  return [
+    "The features I share are my original work, or based on work I have the right to share.",
+    "I give permission for others to use these features under the Apache License 2.0, the same license as the platform itself.",
+    identityItem,
+  ];
+}
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +59,7 @@ interface PlatformDevelopmentFormProps {
   dcoAcceptedByEmail?: string | null;
   untrackedFeatureCount?: number;
   hasGitCredential?: boolean;
+  pseudonym?: string | null;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -314,9 +320,15 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               before it becomes available to others.
             </p>
             <p>
-              Your contributions are <strong>anonymous</strong> — the platform uses a
-              pseudonymous identity so no one can tell which install a contribution
-              came from. No GitHub account is needed.
+              Your contributions are <strong>pseudonymous</strong>
+              {props.pseudonym ? (
+                <> — they appear on the community repository as <span className="font-mono text-[var(--dpf-accent)]">{props.pseudonym}</span>.</>
+              ) : (
+                <> — they appear on the community repository under a stable handle derived from this install.</>
+              )}{" "}
+              The handle is the same across all your contributions so the community
+              can recognize repeat contributors, but reveals nothing about you or your
+              organization. No GitHub account is needed.
             </p>
             <p>
               {selected === "selective"
@@ -505,11 +517,19 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
                 </p>
               </div>
             )}
+            {props.pseudonym && (
+              <div className="rounded border border-[var(--dpf-accent)]/40 bg-[var(--dpf-accent)]/5 px-3 py-2">
+                <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
+                  Contributions from this install will appear publicly as{" "}
+                  <span className="font-mono text-[var(--dpf-accent)]">{props.pseudonym}</span>.
+                </p>
+              </div>
+            )}
             <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
               Before sharing features, please confirm that you agree to the following:
             </p>
             <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 space-y-2">
-              {DCO_PLAIN.map((item, i) => (
+              {buildDcoItems(props.pseudonym ?? null).map((item, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs text-[var(--dpf-text)]">
                   <span className="text-[var(--dpf-accent)] font-bold mt-0.5">{i + 1}.</span>
                   <span>{item}</span>

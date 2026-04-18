@@ -5,13 +5,14 @@
 //   client/<clientId>   — persistent per-install branch, never deleted
 //       └── build/<buildId>  — per-feature branch, merges into client/<clientId> on promotion
 //
-// Git author identity:
-//   name:  dpf-agent                              (identical across all installs)
-//   email: agent-<sha256(clientId)[:16]>@hive.dpf (unique per install, anonymous)
+// Git author identity (pseudonymous — see identity-privacy.ts):
+//   name:  dpf-agent-<shortId>                    (stable pseudonym per install)
+//   email: agent-<shortId>@hive.dpf               (matches the pseudonym)
 //
-// This makes every client's contributions indistinguishable by name in the
-// upstream log but traceable and conflict-free by email. The hash cannot be
-// reversed to identify the client or their organization.
+// The shortId is derived from clientId so contributions from one install are
+// consistently attributed to the same pseudonym across commits, PRs, and
+// issues — the community can recognize repeat contributors without the hash
+// revealing anything about the real user or organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
 import { prisma } from "@dpf/db";
@@ -25,7 +26,8 @@ const WORKSPACE = "/workspace";
 type ClientIdentity = {
   clientId: string;
   gitAgentEmail: string;
-  clientBranch: string; // "client/<clientId>"
+  gitAuthorName: string; // "dpf-agent-<shortId>" — matches identity-privacy.getPlatformIdentity()
+  clientBranch: string;  // "client/<clientId>"
 };
 
 let _cachedIdentity: ClientIdentity | null = null;
@@ -48,9 +50,16 @@ export async function getClientIdentity(): Promise<ClientIdentity> {
     );
   }
 
+  // Author name matches identity-privacy.getPlatformIdentity() — use the
+  // 8-char hash prefix from the seeded gitAgentEmail so commits and PRs
+  // carry a consistent pseudonym across code paths.
+  const emailLocalPart = config.gitAgentEmail.split("@")[0] ?? "";
+  const shortId = emailLocalPart.replace(/^agent-/, "").slice(0, 8);
+
   _cachedIdentity = {
     clientId: config.clientId,
     gitAgentEmail: config.gitAgentEmail,
+    gitAuthorName: `dpf-agent-${shortId}`,
     clientBranch: `client/${config.clientId}`,
   };
 
@@ -78,7 +87,7 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   await execInSandbox(
     SANDBOX_CONTAINER,
     [
-      `git -C ${WORKSPACE} config user.name "dpf-agent"`,
+      `git -C ${WORKSPACE} config user.name "${identity.gitAuthorName}"`,
       `git -C ${WORKSPACE} config user.email "${identity.gitAgentEmail}"`,
     ].join(" && "),
   ).catch(() => {});
@@ -94,7 +103,7 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
       [
         `cd ${WORKSPACE}`,
         `git init`,
-        `git config user.name "dpf-agent"`,
+        `git config user.name "${identity.gitAuthorName}"`,
         `git config user.email "${identity.gitAgentEmail}"`,
         `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
         `git commit -m 'sandbox baseline' --allow-empty`,
@@ -114,7 +123,7 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
       SANDBOX_CONTAINER,
       [
         `cd ${WORKSPACE}`,
-        `git config user.name "dpf-agent"`,
+        `git config user.name "${identity.gitAuthorName}"`,
         `git config user.email "${identity.gitAgentEmail}"`,
         `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
         `git commit -m 'sandbox baseline' --allow-empty`,

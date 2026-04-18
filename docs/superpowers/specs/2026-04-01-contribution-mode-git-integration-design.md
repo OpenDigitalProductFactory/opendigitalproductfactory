@@ -9,6 +9,8 @@
 | **Created** | 2026-04-01 |
 | **Author** | Claude (Software Engineer) + Mark Bodman (CEO) |
 
+> **Amendment 2026-04-18:** The default contribution identity changed from "anonymous" (every install pushes as the same `dpf-agent`) to "pseudonymous" (every install pushes as `dpf-agent-<shortId>`, where `<shortId>` is the first 8 chars of the hash already in `gitAgentEmail`). The mode names `fork_only` / `selective` / `contribute_all` and their semantics in this spec are unchanged — only the public author identity carried by `selective` / `contribute_all` was corrected so the community can recognize repeat contributors. See [docs/superpowers/specs/2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md](2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md) for the rationale and the same-spec backlog-to-issue bridge for non-Build-Studio users.
+
 ## Problem Statement
 
 The platform has three contribution modes (`fork_only`, `selective`, `contribute_all`) configured during onboarding Step 7, and a mode-aware ship phase prompt that directs the AI Coworker to call `assess_contribution` and `contribute_to_hive` tools. However, several gaps remain:

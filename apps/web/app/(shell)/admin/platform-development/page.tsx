@@ -5,6 +5,7 @@ import {
   getUntrackedFeatureCount,
   hasGitBackupCredential,
 } from "@/lib/actions/platform-dev-config";
+import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
 import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 
 export default async function AdminPlatformDevelopmentPage() {
@@ -14,6 +15,9 @@ export default async function AdminPlatformDevelopmentPage() {
     ? await getUntrackedFeatureCount()
     : 0;
   const hasCredential = await hasGitBackupCredential();
+  // Pseudonym is only defined once the install has seeded its client identity.
+  // Catch: during the first boot the identity may not be ready yet.
+  const pseudonym = await getDisplayPseudonym().catch(() => null);
 
   return (
     <div>
@@ -32,6 +36,7 @@ export default async function AdminPlatformDevelopmentPage() {
         dcoAcceptedByEmail={(config?.dcoAcceptedBy as { email: string } | null)?.email ?? null}
         untrackedFeatureCount={untrackedCount}
         hasGitCredential={hasCredential}
+        pseudonym={pseudonym}
       />
     </div>
   );

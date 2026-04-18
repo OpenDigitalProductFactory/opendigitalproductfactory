@@ -1080,18 +1080,19 @@ async function seedPlatformConfig(): Promise<void> {
 }
 
 /**
- * Generate a stable anonymous client identity at first install.
+ * Generate a stable pseudonymous client identity at first install.
  * Called every seed — only writes if clientId is not already set.
  *
- * Identity design for 10,000-client hive:
- * - name:  "dpf-agent"  — identical for every client (indistinguishable in upstream log)
- * - email: agent-<sha256(clientId)[:16]>@hive.dpf — unique per install, reveals nothing
+ * Identity design for 10,000-client hive (see identity-privacy.ts):
+ * - email: agent-<sha256(clientId)[:16]>@hive.dpf  — unique per install
+ * - name:  derived at render time as "dpf-agent-<first 8 chars of the email hash>"
  *
  * The SHA256 hash of the clientId means:
- * - The same install always produces the same email (stable across restarts)
- * - Two installs never collide (UUID entropy)
- * - The upstream repo sees a pseudonymous contributor, not a real identity
- * - The email cannot be reverse-engineered to reveal the client or their org
+ * - The same install always produces the same pseudonym (stable across restarts)
+ * - Two installs never collide (UUID entropy + 2^32 name namespace)
+ * - The upstream repo sees a distinguishable pseudonymous contributor
+ * - The hash cannot be reverse-engineered to reveal the client or their org
+ * - Repeat contributions from one install group under one pseudonym in GitHub UI
  */
 async function seedClientIdentity(): Promise<void> {
   const existing = await prisma.platformDevConfig.findUnique({
@@ -1122,7 +1123,8 @@ async function seedClientIdentity(): Promise<void> {
     },
   });
 
-  console.log(`[seed] Client identity generated: dpf-agent <${gitAgentEmail}>`);
+  const shortId = hash.slice(0, 8);
+  console.log(`[seed] Client identity generated: dpf-agent-${shortId} <${gitAgentEmail}>`);
 }
 
 /**

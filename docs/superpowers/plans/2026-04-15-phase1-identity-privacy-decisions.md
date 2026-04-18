@@ -3,6 +3,8 @@
 Date: 2026-04-15
 Status: Implemented (code) + Decided (architecture)
 
+> **Amendment 2026-04-18:** Decision 6's "anonymous default" was reversed. The default identity track is now **pseudonymous** — every install carries a stable per-install discriminator (`dpf-agent-<shortId>`) visible in author name, DCO signoff, and issue/PR metadata. The `<shortId>` is the first 8 chars of the SHA256 hash already present in `gitAgentEmail` (`agent-<16-char-hash>@hive.dpf`), so name and email visibly share the same discriminator. Rationale and the full updated identity table live in [docs/superpowers/specs/2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md](../specs/2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md). The "attributed" opt-in track described in Decision 6 is unchanged and still planned for Phase 2. The term "anonymous" is retired across the codebase to avoid the misleading "all installs look identical" implication.
+
 ---
 
 ## What was built
