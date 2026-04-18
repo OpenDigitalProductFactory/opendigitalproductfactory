@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* Light mode defaults (fallback when no BrandingConfig exists) */
 :root {
