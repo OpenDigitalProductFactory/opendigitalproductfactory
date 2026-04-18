@@ -27,6 +27,8 @@ const ESTATE_ENTITY_SELECT: Prisma.InventoryEntitySelect = {
     take: 3,
     select: {
       rawVendor: true,
+      rawProductName: true,
+      rawPackageName: true,
       rawVersion: true,
       normalizationStatus: true,
       normalizationConfidence: true,
@@ -196,6 +198,11 @@ export async function summarizeProductEstate(routeContext?: string | null) {
   const items = product.inventoryEntities.map((entity) => createEstateItem(entity));
   const staleCount = items.filter((item) => item.freshnessTone === "danger").length;
   const uncertainVersionCount = items.filter((item) => item.versionConfidenceTone !== "good").length;
+  const lowIdentityConfidenceCount = items.filter((item) => item.identityConfidenceTone !== "good").length;
+  const supportReviewCount = items.filter((item) => item.supportStatus === "unknown").length;
+  const securityFindingCount = items.filter((item) =>
+    item.postureBadges.some((badge) => /security finding/i.test(badge.label))
+  ).length;
   const attentionItems = items
     .filter((item) => item.openIssueCount > 0 || item.supportTone === "danger" || item.freshnessTone === "danger")
     .sort((left, right) => right.openIssueCount - left.openIssueCount)
@@ -203,8 +210,12 @@ export async function summarizeProductEstate(routeContext?: string | null) {
     .map((item) => ({
       id: item.id,
       name: item.name,
+      identityLabel: item.identityLabel,
+      identityConfidenceLabel: item.identityConfidenceLabel,
       blastRadiusLabel: item.blastRadiusLabel,
       freshnessLabel: item.freshnessLabel,
+      supportSummaryLabel: item.supportSummaryLabel,
+      advisorySummaryLabel: item.advisorySummaryLabel,
       posture: item.postureBadges.map((badge) => badge.label),
     }));
 
@@ -214,7 +225,9 @@ export async function summarizeProductEstate(routeContext?: string | null) {
     itemCount: items.length,
     staleCount,
     uncertainVersionCount,
-    unknownSupportCount: items.filter((item) => item.supportStatus === "unknown").length,
+    lowIdentityConfidenceCount,
+    unknownSupportCount: supportReviewCount,
+    securityFindingCount,
     openIssueCount: items.reduce((total, item) => total + item.openIssueCount, 0),
     attentionItems,
   };

@@ -66,6 +66,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Discovery / Monitoring
   summarize_estate_posture: ["registry_read"],
+  review_estate_identity: ["registry_read"],
   validate_version_confidence: ["registry_read"],
   explain_blast_radius: ["registry_read"],
   discovery_sweep: ["telemetry_read"],

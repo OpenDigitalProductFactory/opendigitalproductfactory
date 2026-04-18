@@ -112,6 +112,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This route is the legacy alias for discovery operations. Treat discovery as evidence for the shared product estate, not as a standalone inventory list. Focus on ownership, purpose, dependency mapping, evidence freshness, and posture gaps that need review before humans act on the estate.",
     domainTools: [
       "summarize_estate_posture",
+      "review_estate_identity",
       "validate_version_confidence",
       "explain_blast_radius",
       "discovery_sweep",
@@ -125,6 +126,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Highlight the biggest support, freshness, and evidence risks",
         capability: "view_inventory",
         prompt: "Summarize the current estate posture and tell me what needs attention first.",
+      },
+      {
+        label: "Review item identity",
+        description: "Explain who made the item, what it likely is, and how solid that identity is",
+        capability: "view_inventory",
+        prompt: "Review the identity evidence for this item and tell me what we know versus what still needs review.",
       },
       {
         label: "Explain blast radius",
@@ -161,6 +168,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This page shows the managed estate for one digital product. The goal is to explain what supports the product, what it depends on, how strong the discovery evidence is, and where lifecycle or vulnerability posture may create risk. Emphasize manufacturer, version confidence, support status, dependencies, and purpose alignment.",
     domainTools: [
       "summarize_estate_posture",
+      "review_estate_identity",
       "validate_version_confidence",
       "explain_blast_radius",
       "search_knowledge",
@@ -173,6 +181,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Highlight the biggest support, freshness, and evidence risks",
         capability: "view_inventory",
         prompt: "Summarize the estate posture for this product and tell me what needs attention first.",
+      },
+      {
+        label: "Review item identity",
+        description: "Explain who made the item, what it likely is, and how solid that identity is",
+        capability: "view_inventory",
+        prompt: "Review the identity evidence for this item and tell me what we know versus what still needs review.",
       },
       {
         label: "Explain blast radius",
@@ -506,6 +520,7 @@ When generating or reviewing UI code, enforce these rules:
       "This page is the specialist evidence workspace for discovery operations. Use it to improve attribution, vendor and version accuracy, topology understanding, dependency mapping, and support posture across the shared product estate. Discovery outputs are evidence, not the primary human-facing inventory.",
     domainTools: [
       "summarize_estate_posture",
+      "review_estate_identity",
       "validate_version_confidence",
       "explain_blast_radius",
       "discovery_sweep",
@@ -519,6 +534,12 @@ When generating or reviewing UI code, enforce these rules:
         description: "Highlight the biggest support, freshness, and evidence risks",
         capability: "view_inventory",
         prompt: "Summarize the current discovery posture and tell me what needs attention first.",
+      },
+      {
+        label: "Review item identity",
+        description: "Explain who made the item, what it likely is, and how solid that identity is",
+        capability: "view_inventory",
+        prompt: "Review the identity evidence for the items on this page and tell me what still needs review.",
       },
       {
         label: "Review discovery quality",

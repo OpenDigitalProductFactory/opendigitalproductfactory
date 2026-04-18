@@ -1684,6 +1684,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "review_estate_identity",
+    description: "Explain what an estate item most likely is, who made it, how confident the identity evidence is, and what still needs review.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "Specific estate item id (optional)" },
+        entityKey: { type: "string", description: "Specific estate item key (optional)" },
+        entityName: { type: "string", description: "Specific estate item name (optional)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_inventory",
+    sideEffect: false,
+  },
+  {
     name: "validate_version_confidence",
     description: "Explain how trustworthy the observed version is for a specific estate item, including whether it is normalized or only inferred from raw evidence.",
     inputSchema: {
@@ -5925,11 +5940,14 @@ export async function executeTool(
         return {
           success: true,
           entityId: resolved.item.id,
-          message: `${resolved.item.name}: ${resolved.item.supportStatusLabel}; ${resolved.item.versionConfidenceLabel}; ${resolved.item.freshnessLabel}.`,
+          message: `${resolved.item.name}: ${resolved.item.supportSummaryLabel}; ${resolved.item.advisorySummaryLabel}; ${resolved.item.freshnessLabel}.`,
           data: {
             item: resolved.item,
             postureBadges: resolved.item.postureBadges,
             blastRadiusLabel: resolved.item.blastRadiusLabel,
+            supportSummaryLabel: resolved.item.supportSummaryLabel,
+            advisorySummaryLabel: resolved.item.advisorySummaryLabel,
+            identityConfidenceLabel: resolved.item.identityConfidenceLabel,
           },
         };
       }
@@ -5948,7 +5966,7 @@ export async function executeTool(
         return {
           success: true,
           entityId: productSummary.productId,
-          message: `${productSummary.productName}: ${productSummary.itemCount} estate items, ${productSummary.openIssueCount} open issues, ${productSummary.staleCount} stale evidence items.`,
+          message: `${productSummary.productName}: ${productSummary.itemCount} estate items, ${productSummary.openIssueCount} open issues, ${productSummary.unknownSupportCount} with unverified lifecycle, ${productSummary.lowIdentityConfidenceCount} with identity review still needed.`,
           data: productSummary as Record<string, unknown>,
         };
       }
@@ -5958,6 +5976,48 @@ export async function executeTool(
         success: true,
         message: `Discovery operations: ${discoverySummary.needsReviewCount} items need review.`,
         data: discoverySummary as Record<string, unknown>,
+      };
+    }
+
+    case "review_estate_identity": {
+      const { resolveEstateEntity } = await import("@/lib/estate/estate-tooling");
+      const resolved = await resolveEstateEntity({
+        entityId: typeof params["entityId"] === "string" ? params["entityId"] : undefined,
+        entityKey: typeof params["entityKey"] === "string" ? params["entityKey"] : undefined,
+        entityName: typeof params["entityName"] === "string" ? params["entityName"] : undefined,
+      }, context?.routeContext);
+
+      if (resolved.kind === "ambiguous") {
+        return {
+          success: false,
+          message: "Multiple estate items matched that request. Please be more specific.",
+          error: resolved.matches.map((match) => `${match.name} (${match.entityKey})`).join(", "),
+          data: { matches: resolved.matches },
+        };
+      }
+
+      if (resolved.kind === "missing") {
+        return {
+          success: false,
+          message: resolved.reason,
+          error: resolved.reason,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: resolved.item.id,
+        message: `${resolved.item.name}: ${resolved.item.identityConfidenceLabel}; ${resolved.item.manufacturerLabel}; ${resolved.item.versionSourceLabel}.`,
+        data: {
+          item: resolved.item,
+          identityLabel: resolved.item.identityLabel,
+          identityConfidenceLabel: resolved.item.identityConfidenceLabel,
+          manufacturerLabel: resolved.item.manufacturerLabel,
+          versionLabel: resolved.item.versionLabel,
+          versionSourceLabel: resolved.item.versionSourceLabel,
+          supportSummaryLabel: resolved.item.supportSummaryLabel,
+          advisorySummaryLabel: resolved.item.advisorySummaryLabel,
+        },
       };
     }
 
@@ -5989,10 +6049,11 @@ export async function executeTool(
       return {
         success: true,
         entityId: resolved.item.id,
-        message: `${resolved.item.name}: ${resolved.item.versionConfidenceLabel}. Current version shown as ${resolved.item.versionLabel}.`,
+        message: `${resolved.item.name}: ${resolved.item.versionConfidenceLabel}. ${resolved.item.versionSourceLabel}. Current version shown as ${resolved.item.versionLabel}.`,
         data: {
           item: resolved.item,
           versionLabel: resolved.item.versionLabel,
+          versionSourceLabel: resolved.item.versionSourceLabel,
           versionConfidenceLabel: resolved.item.versionConfidenceLabel,
         },
       };

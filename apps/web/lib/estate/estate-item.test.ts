@@ -32,6 +32,8 @@ describe("createEstateItem", () => {
       softwareEvidence: [
         {
           rawVendor: "Ubiquiti",
+          rawProductName: "UniFi Dream Machine Pro",
+          rawPackageName: "unifi-dream-machine-pro",
           rawVersion: "4.0.2",
           normalizationStatus: "normalized",
           normalizationConfidence: 0.96,
@@ -44,8 +46,13 @@ describe("createEstateItem", () => {
     expect(item.technicalClassLabel).toBe("Network Gateway");
     expect(item.manufacturerLabel).toBe("Ubiquiti");
     expect(item.modelLabel).toBe("Dream Machine Pro");
+    expect(item.identityLabel).toBe("Dream Machine Pro");
+    expect(item.identityConfidenceLabel).toBe("Normalized identity");
     expect(item.versionLabel).toBe("4.0.2");
+    expect(item.versionSourceLabel).toBe("Normalized from software evidence");
     expect(item.supportStatusLabel).toBe("Supported");
+    expect(item.supportSummaryLabel).toBe("Covered by vendor support");
+    expect(item.advisorySummaryLabel).toBe("No advisory findings recorded");
     expect(item.upstreamCount).toBe(2);
     expect(item.downstreamCount).toBe(5);
     expect(item.taxonomyPath).toBe("foundational / connectivity / network");
@@ -88,6 +95,8 @@ describe("createEstateItem", () => {
       softwareEvidence: [
         {
           rawVendor: "Axis",
+          rawProductName: "Axis M1054",
+          rawPackageName: "axis-m1054",
           rawVersion: "11.8.42",
           normalizationStatus: "raw_only",
           normalizationConfidence: 0.33,
@@ -99,8 +108,13 @@ describe("createEstateItem", () => {
     expect(item.iconKey).toBe("camera");
     expect(item.technicalClassLabel).toBe("Camera");
     expect(item.manufacturerLabel).toBe("Axis");
+    expect(item.identityLabel).toBe("Axis M1054");
+    expect(item.identityConfidenceLabel).toBe("Observed identity");
     expect(item.versionLabel).toBe("11.8.42");
+    expect(item.versionSourceLabel).toBe("Observed from discovery evidence");
     expect(item.supportStatusLabel).toBe("Unknown");
+    expect(item.supportSummaryLabel).toBe("Vendor lifecycle not verified");
+    expect(item.advisorySummaryLabel).toBe("No advisory findings recorded");
     expect(item.providerViewLabel).toBe("Unassigned");
     expect(item.versionConfidenceLabel).toBe("Observed version only");
     expect(item.freshnessLabel).toBe("Stale evidence");
@@ -110,5 +124,48 @@ describe("createEstateItem", () => {
       "1 stale signal",
     ]);
     expect(item.openIssueCount).toBe(2);
+  });
+
+  it("surfaces lifecycle and advisory posture from open estate issues", () => {
+    const item = createEstateItem({
+      id: "entity-3",
+      entityKey: "container:dpf-postgres",
+      name: "dpf-postgres-1",
+      entityType: "container",
+      technicalClass: "container",
+      manufacturer: null,
+      productModel: null,
+      observedVersion: null,
+      normalizedVersion: null,
+      supportStatus: "unknown",
+      providerView: "foundational",
+      status: "active",
+      softwareEvidence: [
+        {
+          rawVendor: "postgres",
+          rawProductName: "postgres:16-alpine",
+          rawPackageName: "postgres:16-alpine",
+          rawVersion: null,
+          normalizationStatus: "needs_review",
+          normalizationConfidence: 0.22,
+          lastSeenAt: new Date(),
+        },
+      ],
+      qualityIssues: [
+        { issueType: "support_review_needed", severity: "warn", status: "open" },
+        { issueType: "cve_detected", severity: "error", status: "open" },
+      ],
+      _count: { fromRelationships: 1, toRelationships: 2 },
+    });
+
+    expect(item.iconKey).toBe("container");
+    expect(item.identityLabel).toBe("postgres:16-alpine");
+    expect(item.identityConfidenceLabel).toBe("Identity needs review");
+    expect(item.supportSummaryLabel).toBe("Support review needed");
+    expect(item.advisorySummaryLabel).toBe("1 security finding recorded");
+    expect(item.postureBadges.map((badge) => badge.label)).toEqual([
+      "1 security finding",
+      "1 support risk",
+    ]);
   });
 });

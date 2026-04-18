@@ -73,6 +73,14 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
           <path d="M10 19h4M8 15h8" />
         </svg>
       );
+    case "device":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="5" y="4" width="10" height="16" rx="2" />
+          <path d="M17 8h2.5M17 12h2.5M17 16h2.5" />
+          <circle cx="10" cy="16.5" r="0.8" fill="currentColor" stroke="none" />
+        </svg>
+      );
     case "service":
       return (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -89,11 +97,44 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
         </svg>
       );
     case "storage":
+    case "database":
       return (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
           <ellipse cx="12" cy="6.5" rx="7.5" ry="2.5" />
           <path d="M4.5 6.5v5c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-5" />
           <path d="M4.5 11.5v5c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-5" />
+        </svg>
+      );
+    case "container":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="4.5" y="6" width="15" height="12" rx="2" />
+          <path d="M8 6v12M12 6v12M16 6v12" />
+          <path d="M4.5 10h15M4.5 14h15" />
+        </svg>
+      );
+    case "application":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="4" y="4" width="16" height="16" rx="3" />
+          <path d="M8 8h8v8H8z" />
+        </svg>
+      );
+    case "monitoring":
+    case "network":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="6" cy="12" r="2" />
+          <circle cx="18" cy="7" r="2" />
+          <circle cx="18" cy="17" r="2" />
+          <path d="M8 12h4M14 8.2l-2.2 2.1M14 15.8l-2.2-2.1" />
+        </svg>
+      );
+    case "ai":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 4l1.6 3.2L17 8.5l-2.5 2.4.6 3.4L12 12.8 8.9 14.3l.6-3.4L7 8.5l3.4-1.3z" />
+          <path d="M5 20h14" />
         </svg>
       );
     default:
@@ -128,14 +169,19 @@ export function EstateItemCard({ item }: Props) {
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Manufacturer</p>
-          <p className="mt-1 text-sm text-[var(--dpf-text)]">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Identity</p>
+          <p className="mt-1 text-sm font-medium text-[var(--dpf-text)]">{item.identityLabel}</p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
             {item.manufacturerLabel}{item.modelLabel ? ` · ${item.modelLabel}` : ""}
           </p>
+          <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.identityConfidenceTone]}`}>
+            {item.identityConfidenceLabel}
+          </span>
         </div>
         <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Version</p>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.versionLabel}</p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">{item.versionSourceLabel}</p>
           <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.versionConfidenceTone]}`}>
             {item.versionConfidenceLabel}
           </span>
@@ -149,6 +195,17 @@ export function EstateItemCard({ item }: Props) {
         <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Blast radius</p>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.blastRadiusLabel}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Support posture</p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.supportSummaryLabel}</p>
+        </div>
+        <div className="rounded-xl bg-[var(--dpf-surface-2)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Advisories</p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">{item.advisorySummaryLabel}</p>
         </div>
       </div>
 

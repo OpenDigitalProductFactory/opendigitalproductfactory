@@ -3,6 +3,7 @@
 // Each route can have a context provider that summarizes what the user sees.
 
 import { prisma } from "@dpf/db";
+import { createEstateItem } from "@/lib/estate/estate-item";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
@@ -391,15 +392,35 @@ async function getProductEstateContext(_userId: string, routeContext: string): P
         select: {
           name: true,
           entityType: true,
+          technicalClass: true,
+          iconKey: true,
           manufacturer: true,
+          productModel: true,
           normalizedVersion: true,
           observedVersion: true,
           supportStatus: true,
+          providerView: true,
+          status: true,
+          firstSeenAt: true,
           lastSeenAt: true,
+          taxonomyNode: { select: { name: true, nodeId: true } },
+          softwareEvidence: {
+            orderBy: [{ lastSeenAt: "desc" }, { firstSeenAt: "desc" }],
+            take: 2,
+            select: {
+              rawVendor: true,
+              rawProductName: true,
+              rawPackageName: true,
+              rawVersion: true,
+              normalizationStatus: true,
+              normalizationConfidence: true,
+              lastSeenAt: true,
+            },
+          },
           _count: { select: { fromRelationships: true, toRelationships: true } },
           qualityIssues: {
             where: { status: "open" },
-            select: { issueType: true },
+            select: { issueType: true, status: true, severity: true },
             take: 4,
           },
         },
@@ -423,10 +444,30 @@ async function getProductEstateContext(_userId: string, routeContext: string): P
     "",
     "Visible estate items:",
     ...product.inventoryEntities.map((entity) => {
-      const version = entity.normalizedVersion ?? entity.observedVersion ?? "unknown version";
+      const item = createEstateItem({
+        id: `${productId}:${entity.name}`,
+        entityKey: `${entity.entityType}:${entity.name}`,
+        name: entity.name,
+        entityType: entity.entityType,
+        technicalClass: entity.technicalClass,
+        iconKey: entity.iconKey,
+        manufacturer: entity.manufacturer,
+        productModel: entity.productModel,
+        observedVersion: entity.observedVersion,
+        normalizedVersion: entity.normalizedVersion,
+        supportStatus: entity.supportStatus,
+        providerView: entity.providerView,
+        status: entity.status,
+        firstSeenAt: entity.firstSeenAt,
+        lastSeenAt: entity.lastSeenAt,
+        taxonomyNode: entity.taxonomyNode,
+        softwareEvidence: entity.softwareEvidence,
+        _count: entity._count,
+        qualityIssues: entity.qualityIssues,
+      });
       const issues = entity.qualityIssues.map((issue) => issue.issueType).join(", ") || "none";
       const lastSeen = entity.lastSeenAt?.toISOString().slice(0, 10) ?? "unknown";
-      return `- ${entity.name} [${entity.entityType}] ${entity.manufacturer ?? "unknown vendor"} v${version}, support=${entity.supportStatus ?? "unknown"}, last seen=${lastSeen}, upstream=${entity._count.fromRelationships}, downstream=${entity._count.toRelationships}, issues=${issues}`;
+      return `- ${item.name} [${item.technicalClassLabel}] identity=${item.identityLabel} (${item.identityConfidenceLabel}), vendor=${item.manufacturerLabel}, version=${item.versionLabel} (${item.versionSourceLabel}), support=${item.supportSummaryLabel}, advisories=${item.advisorySummaryLabel}, last seen=${lastSeen}, upstream=${item.upstreamCount}, downstream=${item.downstreamCount}, issues=${issues}`;
     }),
   ].join("\n");
 }

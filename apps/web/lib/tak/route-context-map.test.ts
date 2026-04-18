@@ -34,6 +34,7 @@ describe("resolveRouteContext", () => {
     const ctx = resolveRouteContext("/portfolio/product/prod-123/inventory");
     expect(ctx.domain).toBe("Digital Product Estate");
     expect(ctx.routePrefix).toBe("/portfolio/product");
+    expect(ctx.domainTools).toContain("review_estate_identity");
     expect(ctx.domainTools).toContain("explain_blast_radius");
   });
 
@@ -143,6 +144,16 @@ describe("ROUTE_CONTEXT_MAP", () => {
     expect(aliasRoute.domain).toBe("Discovery Operations");
     expect(aliasSkill?.capability).toBe("manage_provider_connections");
     expect(discoverySkill?.capability).toBe("manage_provider_connections");
+  });
+
+  it("exposes identity review skills on estate routes", () => {
+    const productRoute = ROUTE_CONTEXT_MAP["/portfolio/product"]!;
+    const discoveryRoute = ROUTE_CONTEXT_MAP["/platform/tools/discovery"]!;
+
+    expect(productRoute.domainTools).toContain("review_estate_identity");
+    expect(discoveryRoute.domainTools).toContain("review_estate_identity");
+    expect(productRoute.skills.some((skill) => skill.label === "Review item identity")).toBe(true);
+    expect(discoveryRoute.skills.some((skill) => skill.label === "Review item identity")).toBe(true);
   });
 });
 

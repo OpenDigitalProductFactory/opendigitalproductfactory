@@ -83,6 +83,7 @@ describe("mcp tools", () => {
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toContain("summarize_estate_posture");
+    expect(toolNames).toContain("review_estate_identity");
     expect(toolNames).toContain("validate_version_confidence");
     expect(toolNames).toContain("explain_blast_radius");
     expect(toolNames).not.toContain("discovery_sweep");
