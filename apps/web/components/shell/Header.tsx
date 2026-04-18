@@ -2,38 +2,20 @@
 "use client";
 
 import { signOutAction } from "@/lib/actions";
-import { can, type CapabilityKey } from "@/lib/permissions";
-import { NavBar } from "./NavBar";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type Props = {
   platformRole: string | null;
-  isSuperuser: boolean;
   brandName: string;
   brandLogoUrl: string | null;
   brandLogoUrlLight?: string | null;
   userId?: string | null;
 };
 
-const NAV_ITEMS: Array<{ label: string; href: string; capability: CapabilityKey | null }> = [
-  { label: "My Workspace", href: "/workspace", capability: null },
-  { label: "Portfolio",    href: "/portfolio",  capability: "view_portfolio" },
-  { label: "Backlog",      href: "/ops",        capability: "view_operations" },
-  { label: "Inventory",    href: "/inventory",  capability: "view_inventory" },
-  { label: "EA Modeler",   href: "/ea",           capability: "view_ea_modeler" },
-  { label: "AI Workforce", href: "/platform/ai",  capability: "view_platform" },
-  { label: "Build",        href: "/build",        capability: "view_platform" },
-  { label: "Knowledge",    href: "/knowledge",    capability: null },
-  { label: "Docs",         href: "/docs",         capability: null },
-];
-
-export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, brandLogoUrlLight, userId }: Props) {
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => item.capability === null || can({ platformRole, isSuperuser }, item.capability)
-  );
-
+export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId }: Props) {
   const companyName = brandName.trim().length > 0 ? brandName : "DPF";
   const logoSource = brandLogoUrl?.trim() ?? "";
   const hasLogo = logoSource.length > 0;
@@ -58,9 +40,9 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, bra
   };
 
   return (
-    <header className="flex items-center justify-between px-4 py-1.5 bg-[var(--dpf-surface-1)] border-b border-[var(--dpf-border)]">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+    <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+      <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-2.5 lg:px-6">
+        <Link href="/workspace" className="flex min-w-0 items-center gap-3">
           {hasLogo && !logoFailed ? (
             <div className="h-14 flex items-center">
               {hasLightLogo ? (
@@ -95,24 +77,40 @@ export function Header({ platformRole, isSuperuser, brandName, brandLogoUrl, bra
               <span className="text-[10px] font-bold text-[var(--dpf-muted)]">{initials()}</span>
             </div>
           )}
-          {(!hasLogo || logoFailed) && (<span className="font-extrabold text-[var(--dpf-accent)] tracking-tight text-sm">{companyName}</span>)}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              {(!hasLogo || logoFailed) && (
+                <span className="font-extrabold tracking-tight text-sm text-[var(--dpf-accent)]">
+                  {companyName}
+                </span>
+              )}
+              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                Internal cockpit
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-[var(--dpf-muted)]">
+              Small human team, AI coworkers filling in specialist expertise
+            </p>
+          </div>
+        </Link>
+
+        <div className="flex items-center gap-3">
+          <PlatformHealthIndicator />
+          <HeaderFeedbackButton userId={userId ?? null} />
+          {platformRole !== null && (
+            <span className="hidden text-xs text-[var(--dpf-muted)] sm:inline">
+              {platformRole}
+            </span>
+          )}
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="text-xs text-[var(--dpf-muted)] transition-colors hover:text-[var(--dpf-text)]"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
-        <NavBar items={visibleItems} />
-      </div>
-      <div className="flex items-center gap-3">
-        <PlatformHealthIndicator />
-        <HeaderFeedbackButton userId={userId ?? null} />
-        {platformRole !== null && (
-          <span className="text-xs text-[var(--dpf-muted)]">{platformRole}</span>
-        )}
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-          >
-            Sign out
-          </button>
-        </form>
       </div>
     </header>
   );

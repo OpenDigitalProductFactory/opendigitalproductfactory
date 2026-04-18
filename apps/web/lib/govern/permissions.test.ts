@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { can, getWorkspaceTiles, type CapabilityKey } from "./permissions.js";
+import {
+  can,
+  getShellNavSections,
+  getWorkspaceSections,
+  getWorkspaceTiles,
+  type CapabilityKey,
+} from "./permissions.js";
 
 const hr000 = { platformRole: "HR-000", isSuperuser: false };
 const hr300 = { platformRole: "HR-300", isSuperuser: false };
@@ -62,6 +68,55 @@ describe("getWorkspaceTiles()", () => {
 
   it("superuser gets all 13 tiles regardless of role", () => {
     expect(getWorkspaceTiles(superuser).length).toBe(13);
+  });
+});
+
+describe("getShellNavSections()", () => {
+  it("groups navigation into durable areas for admin users", () => {
+    const sections = getShellNavSections(hr000);
+
+    expect(sections.map((section) => section.key)).toEqual([
+      "workspace",
+      "business",
+      "products",
+      "platform",
+      "knowledge",
+    ]);
+    expect(sections.find((section) => section.key === "products")?.items.map((item) => item.key)).toContain("portfolio");
+    expect(sections.find((section) => section.key === "platform")?.items.map((item) => item.key)).toContain("ai_workforce");
+  });
+
+  it("omits empty sections for more limited roles", () => {
+    const sections = getShellNavSections(hr500);
+
+    expect(sections.map((section) => section.key)).toEqual([
+      "workspace",
+      "business",
+      "products",
+      "knowledge",
+    ]);
+    expect(sections.find((section) => section.key === "platform")).toBeUndefined();
+  });
+});
+
+describe("getWorkspaceSections()", () => {
+  it("prioritizes AI coworker oversight for admins", () => {
+    const sections = getWorkspaceSections(hr000);
+
+    expect(sections[0]?.key).toBe("ai-control");
+    expect(sections[0]?.tiles.map((tile) => tile.key)).toContain("ai_workforce");
+    expect(sections[0]?.tiles.map((tile) => tile.key)).toContain("build");
+  });
+
+  it("organizes workspace by jobs to be done instead of one flat launcher", () => {
+    const sections = getWorkspaceSections(hr000);
+
+    expect(sections.map((section) => section.key)).toEqual([
+      "ai-control",
+      "product-oversight",
+      "business-operations",
+    ]);
+    expect(sections.find((section) => section.key === "business-operations")?.tiles.map((tile) => tile.key)).toContain("finance");
   });
 });
 
