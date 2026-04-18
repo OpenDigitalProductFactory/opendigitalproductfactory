@@ -68,8 +68,11 @@ groups:
           summary: "Host disk usage above 90% -- immediate attention required"
 
       # ─── Network Topology ──────────────────────────────────
+      # node-exporter runs inside the Docker Desktop WSL2 VM; its eth0 is a
+      # transient VM-internal NIC and is not a reliable signal. Real physical
+      # host interfaces are scraped from windows_exporter (`windows-host` job).
       - alert: HostNetworkInterfaceDown
-        expr: node_network_up{device!~"lo|veth.*|br-.*|docker.*"} == 0
+        expr: node_network_up{device!~"lo|eth.*|veth.*|br-.*|docker.*"} == 0
         for: 1m
         labels:
           severity: critical
@@ -121,13 +124,10 @@ groups:
         annotations:
           summary: "HTTP 5xx error rate above 5%"
 
-      - alert: AIInferenceDown
-        expr: up{job="model-runner"} == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Docker Model Runner is unreachable -- all AI inference offline"
+      # AIInferenceDown was removed: Docker Model Runner does not expose a
+      # Prometheus metrics endpoint, so `up{job="model-runner"}` was always 0.
+      # Inference failures now surface via AIInferenceHighLatency and via
+      # `dpf_http_requests_total{status_code=~"5.."}` on the portal job.
 
       - alert: AIInferenceHighLatency
         expr: histogram_quantile(0.95, rate(dpf_ai_inference_duration_seconds_bucket[5m])) > 30

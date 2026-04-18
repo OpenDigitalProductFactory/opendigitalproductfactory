@@ -47,16 +47,13 @@ scrape_configs:
     static_configs:
       - targets:
           - "sandbox:3000"
-          - "sandbox-2:3000"
-          - "sandbox-3:3000"
     metrics_path: /api/metrics
 
   # ─── AI Inference ───────────────────────────────────────────
-  - job_name: "model-runner"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["model-runner.docker.internal:80"]
-    metrics_path: /metrics
+  # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
+  # (all paths 404). Inference health is tracked via the portal's
+  # `dpf_ai_inference_duration_seconds_*` application metrics instead.
+  # If/when Model Runner ships a metrics endpoint, re-add the scrape here.
 
   # ─── Windows Host (real hardware via windows_exporter) ───────
   # windows_exporter runs natively on the Windows host (not in Docker).
