@@ -1,8 +1,0 @@
-[     298ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/favicon.ico:0
-[  116333ms] SyntaxError: Failed to execute 'querySelector' on 'Document': 'button:has-text("Send")' is not a valid selector.
-    at eval (eval at predicate (eval at evaluate (:301:30)), <anonymous>:2:26)
-    at predicate (eval at evaluate (:301:30), <anonymous>:7:23)
-    at next (eval at evaluate (:301:30), <anonymous>:29:29)
-    at eval (eval at evaluate (:301:30), <anonymous>:42:9)
-    at UtilityScript.evaluate (<anonymous>:303:16)
-    at UtilityScript.<anonymous> (<anonymous>:1:44)

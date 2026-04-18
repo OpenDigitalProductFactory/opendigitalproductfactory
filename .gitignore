@@ -27,3 +27,10 @@ backups/
 e2e-report/
 e2e-results/
 test-results/
+
+# Local agent / codex caches
+.codex/
+
+# Python bytecode caches
+__pycache__/
+*.pyc
