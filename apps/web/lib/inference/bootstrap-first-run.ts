@@ -11,7 +11,7 @@ export async function checkBootstrapNeeded(): Promise<boolean> {
 
 /** Seed the onboarding-coo agent definition. */
 export async function seedOnboardingAgent(): Promise<void> {
-  await prisma.agent.upsert({
+  const agent = await prisma.agent.upsert({
     where: { agentId: "onboarding-coo" },
     create: {
       agentId: "onboarding-coo",
@@ -25,6 +25,28 @@ export async function seedOnboardingAgent(): Promise<void> {
       status: "active",
     },
   });
+
+  // Grants for the setup wizard tools the onboarding COO calls:
+  //   analyze_brand_document, analyze_public_website_branding → file_read, web_search
+  //   prefill_onboarding_wizard → data_governance_validate
+  //   list_products / read references → registry_read, backlog_read, portfolio_read
+  // Without grants, every tool call is silently denied — the COO then claims
+  // success on operations that never happened.
+  const grants = [
+    "file_read",
+    "web_search",
+    "data_governance_validate",
+    "registry_read",
+    "backlog_read",
+    "portfolio_read",
+  ];
+  for (const grantKey of grants) {
+    await prisma.agentToolGrant.upsert({
+      where: { agentId_grantKey: { agentId: agent.id, grantKey } },
+      update: {},
+      create: { agentId: agent.id, grantKey },
+    });
+  }
 
   // EP-AI-WORKFORCE-001: Provider selection via capability requirements (not pinning).
   // Uses capability-based routing: router picks best available provider meeting floor.

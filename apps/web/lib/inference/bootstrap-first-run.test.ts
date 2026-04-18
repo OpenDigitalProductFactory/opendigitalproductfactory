@@ -9,6 +9,12 @@ vi.mock("@dpf/db", () => ({
     agent: {
       upsert: vi.fn(),
     },
+    agentModelConfig: {
+      upsert: vi.fn(),
+    },
+    agentToolGrant: {
+      upsert: vi.fn(),
+    },
     platformSetupProgress: {
       findFirst: vi.fn(),
       create: vi.fn(),
@@ -50,6 +56,7 @@ describe("bootstrap-first-run", () => {
   describe("seedOnboardingAgent", () => {
     it("upserts the onboarding-coo agent and pins provider via AgentModelConfig", async () => {
       (prisma.agent.upsert as any).mockResolvedValue({
+        id: "cuid-onboarding-coo",
         agentId: "onboarding-coo",
       });
       (prisma.agentModelConfig.upsert as any).mockResolvedValue({
