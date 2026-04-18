@@ -1,16 +1,34 @@
 import { prisma } from "@dpf/db";
+import { auth } from "@/lib/auth";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { BrandingPageClient } from "@/components/admin/BrandingPageClient";
+import { BrandExtractionSection } from "@/components/storefront-admin/BrandExtractionSection";
+import { isBrandDesignSystem, type BrandDesignSystem } from "@/lib/brand/types";
 
 export default async function AdminBrandingPage() {
-  const [activeBranding, organization] = await Promise.all([
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
+  const [activeBranding, organization, thread, activeTaskRun] = await Promise.all([
     prisma.brandingConfig.findUnique({
       where: { scope: "organization" },
       select: { tokens: true },
     }),
     prisma.organization.findFirst({
-      select: { name: true, logoUrl: true },
+      select: { id: true, name: true, slug: true, logoUrl: true, designSystem: true },
     }),
+    userId
+      ? prisma.agentThread.findUnique({
+          where: { userId_contextKey: { userId, contextKey: "coworker" } },
+          select: { id: true },
+        })
+      : null,
+    userId
+      ? prisma.taskRun.findFirst({
+          where: { userId, title: "Extract brand design system", status: "active" },
+          select: { taskRunId: true },
+        })
+      : null,
   ]);
 
   let currentAccent = "#7c8cf8";
@@ -24,6 +42,12 @@ export default async function AdminBrandingPage() {
     if (typeof typography.fontFamily === "string") currentFont = typography.fontFamily;
   }
 
+  const initialSystem: BrandDesignSystem | null =
+    organization?.designSystem && isBrandDesignSystem(organization.designSystem)
+      ? organization.designSystem
+      : null;
+  const isPlatformOrg = organization?.slug === "platform";
+
   return (
     <div>
       <div className="mb-6">
@@ -31,6 +55,15 @@ export default async function AdminBrandingPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Brand Configuration</p>
       </div>
       <AdminTabNav />
+      {organization && (
+        <BrandExtractionSection
+          organizationId={organization.id}
+          isPlatformOrg={isPlatformOrg}
+          initialSystem={initialSystem}
+          initialThreadId={thread?.id ?? null}
+          hasActiveExtraction={!!activeTaskRun}
+        />
+      )}
       <BrandingPageClient
         hasExistingBrand={!!(activeBranding || organization?.name)}
         currentName={organization?.name ?? ""}
