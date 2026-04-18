@@ -15,7 +15,7 @@ const EVENT_META: Record<string, { label: string; href?: string; icon: string }>
   // Operations
   "change-request":    { label: "Change Request",      href: "/ops/changes",                icon: "\uD83D\uDD04" },
   blackout:            { label: "Blackout Period",      href: "/ops/changes",                icon: "\uD83D\uDEAB" },
-  "deployment-window": { label: "Maintenance Window",  href: "/admin/operating-hours",       icon: "\uD83D\uDD27" },
+  "deployment-window": { label: "Maintenance Window",  href: "/storefront/settings/operations", icon: "\uD83D\uDD27" },
 
   // Platform / Scheduled
   "recurring-digest":  { label: "Scheduled Job (digest)", href: "/platform",                icon: "\u2699\uFE0F" },
@@ -35,7 +35,7 @@ const EVENT_META: Record<string, { label: string; href?: string; icon: string }>
   booking:              { label: "Booking",              href: "/storefront",               icon: "\uD83D\uDCC6" },
   "crm-activity":       { label: "CRM Activity",        href: "/customer",                 icon: "\uD83D\uDCDE" },
   "pipeline-deadline":  { label: "Pipeline Deadline",    href: "/customer",                 icon: "\uD83C\uDFAF" },
-  "operating-hours":    { label: "Operating Hours",      href: "/admin/operating-hours",    icon: "\uD83D\uDD53" },
+  "operating-hours":    { label: "Operating Hours",      href: "/storefront/settings/operations", icon: "\uD83D\uDD53" },
   "provider-schedule":  { label: "Provider Schedule",    href: "/storefront",               icon: "\uD83D\uDC64" },
 
   // Scheduled agent tasks

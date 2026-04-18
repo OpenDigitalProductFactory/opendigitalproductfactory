@@ -25,6 +25,7 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
     expect(result.systemPrompt).toContain("purpose-first");
     expect(result.skills.some((skill) => skill.label === "What breaks if this fails?")).toBe(true);
+    expect(result.skills.some((skill) => skill.label === "Review item identity")).toBe(true);
   });
 
   it("returns coo for unknown routes (workspace fallback)", () => {

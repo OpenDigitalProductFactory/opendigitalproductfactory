@@ -117,6 +117,7 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | INV-02 | Navigate to `/inventory` | Legacy alias loads, banner points to `/platform/tools/discovery` and `/portfolio` |
 | INV-03 | Click a product card from discovery operations | Product Dependencies & Estate page loads |
 | INV-04 | Navigate directly to `/portfolio/product/<known-id>/inventory` | Estate cards show manufacturer, version, support posture, and upstream/downstream counts |
+| INV-05 | On `/portfolio/product/<known-id>/inventory`, inspect an estate card with discovery evidence only | Card shows identity label, identity confidence, support posture summary, advisory summary, and version source without inventing unsupported lifecycle certainty |
 
 ## Phase 9: EA Modeler
 
@@ -164,6 +165,8 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | STORE-11 | Navigate to `/storefront/setup` without having used a branding URL | No suggestion banner shown; no pre-fills; archetype grid renders normally |
 | STORE-12 | Navigate to `/admin/storefront` | Redirected to `/storefront`; the portal workspace loads without the extra Admin tab strip above it |
 | STORE-13 | Open the coworker panel on `/storefront` | Marketing Specialist agent loads for the portal workspace and shows portal-specific skills |
+| STORE-14 | Navigate to `/storefront/settings/business` | Settings sub-nav shows Portal, Your Business, and Operating Hours; Your Business is active and the business context form loads |
+| STORE-15 | Navigate to `/storefront/settings/operations` | Settings sub-nav shows Portal, Your Business, and Operating Hours; Operating Hours is active and the schedule editor loads |
 
 ## Phase 12: AI Coworker Cross-Cutting
 
@@ -182,6 +185,7 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AI-11 | Navigate to `/platform/tools/discovery` | Digital Product Estate Specialist shown |
 | AI-12 | **(Coworker)** On `/platform/tools/discovery`, ask "What breaks if this fails?" about an attributed item | Response focuses on dependency impact and blast radius, not just raw scanner output |
 | AI-13 | **(Incomplete info)** On `/platform/tools/discovery`, ask for version confidence without identifying an item | Agent asks for the missing item/context instead of inventing details |
+| AI-14 | **(Coworker)** On `/platform/tools/discovery`, ask "Review the identity evidence for this item" about an attributed item | Response explains likely identity, vendor, evidence confidence, and what still needs review using shared estate context |
 
 ## Phase 13: Admin & Settings
 
@@ -192,6 +196,8 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | ADMIN-03 | Change accent color and save | Preview updates, platform reflects change |
 | ADMIN-04 | Navigate to `/admin/settings` | Settings page loads |
 | ADMIN-05 | Navigate to `/admin/reference-data` | Reference data editor loads |
+| ADMIN-06 | Navigate to `/admin/business-context` | Redirected to `/storefront/settings/business` |
+| ADMIN-07 | Navigate to `/admin/operating-hours` | Redirected to `/storefront/settings/operations` |
 
 ## Phase 14: Documentation
 

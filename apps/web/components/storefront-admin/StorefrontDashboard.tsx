@@ -52,7 +52,7 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
           View Live ↗
         </a>
         <button onClick={togglePublish} disabled={toggling}
-          style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: published ? "var(--dpf-error)" : "var(--dpf-accent)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+          style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: published ? "var(--dpf-error)" : "var(--dpf-accent)", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           {toggling ? "..." : published ? "Unpublish" : "Publish"}
         </button>
       </div>
@@ -66,7 +66,7 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
       <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
         Status: <strong style={{ color: published ? "var(--dpf-success)" : "var(--dpf-muted)" }}>{published ? "Published" : "Unpublished"}</strong>
         {" · "} Archetype: {config.archetypeId}
-        {" · "} <a href="/admin/storefront/settings" style={{ color: "var(--dpf-accent)" }}>Edit settings</a>
+        {" · "} <a href="/storefront/settings" style={{ color: "var(--dpf-accent)" }}>Edit settings</a>
       </div>
     </div>
   );

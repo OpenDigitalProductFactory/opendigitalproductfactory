@@ -11,25 +11,27 @@ export function StorefrontAdminTabNav({ vocabulary }: Props) {
   const path = usePathname();
 
   const tabs = [
-    { label: "Dashboard", href: "/admin/storefront" },
-    { label: "Sections", href: "/admin/storefront/sections" },
-    { label: vocabulary.itemsLabel, href: "/admin/storefront/items" },
-    { label: vocabulary.teamLabel, href: "/admin/storefront/team" },
-    { label: vocabulary.inboxLabel, href: "/admin/storefront/inbox" },
-    { label: "Settings", href: "/admin/storefront/settings" },
+    { label: "Dashboard", href: "/storefront" },
+    { label: "Sections", href: "/storefront/sections" },
+    { label: vocabulary.itemsLabel, href: "/storefront/items" },
+    { label: vocabulary.teamLabel, href: "/storefront/team" },
+    { label: vocabulary.inboxLabel, href: "/storefront/inbox" },
+    { label: "Settings", href: "/storefront/settings" },
   ];
 
   return (
     <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--dpf-border)", marginBottom: 24 }}>
       {tabs.map((tab) => {
-        const active = tab.href === "/admin/storefront" ? path === "/admin/storefront" : path === tab.href;
+        const active = tab.href === "/storefront"
+          ? path === "/storefront"
+          : path === tab.href || path.startsWith(`${tab.href}/`);
         return (
           <Link key={tab.href} href={tab.href} style={{
             padding: "10px 16px",
             fontSize: 13,
             fontWeight: active ? 600 : 400,
-            color: active ? "var(--dpf-accent, #4f46e5)" : "var(--dpf-muted)",
-            borderBottom: active ? "2px solid var(--dpf-accent, #4f46e5)" : "2px solid transparent",
+            color: active ? "var(--dpf-accent)" : "var(--dpf-muted)",
+            borderBottom: active ? "2px solid var(--dpf-accent)" : "2px solid transparent",
             textDecoration: "none",
           }}>
             {tab.label}

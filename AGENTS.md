@@ -101,6 +101,23 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included so the user can verify.
 
+## Portal Runtime & Navigation
+
+- Internal portal management uses `/storefront` as the canonical route. Treat `/admin/storefront` and its sub-routes as legacy compatibility redirects only.
+- Keep `/portal` reserved for the external/customer-facing portal experience. Do not collapse internal management and external portal routes into the same namespace.
+- Portal management belongs in the Business shell. Do not render the Admin tab strip above portal-management pages or move the primary portal workspace back under Admin.
+- Business-operational portal setup now lives under the Business-side settings family:
+  - `/storefront/settings` for portal presentation and live URL settings
+  - `/storefront/settings/business` for business context
+  - `/storefront/settings/operations` for operating hours
+- Treat `/admin/business-context` and `/admin/operating-hours` as legacy redirects only. Do not reintroduce them as primary Admin destinations.
+- When a UI change needs verification in the shipped runtime, prefer the VS Code task `DPF: Rebuild Production Runtime` or the equivalent command:
+  `docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal`
+- After rebuilding, verify against the Docker-served app at `http://localhost:3000`. Do not rely on stale ad hoc `next dev` / `next start` sessions for final confirmation of production-path behavior.
+- Portal QA should explicitly cover both `/storefront` and the legacy `/admin/storefront` redirect so regressions in canonical routing are caught early.
+- Business setup QA should explicitly cover `/storefront/settings/business`, `/storefront/settings/operations`, and the legacy Admin redirects.
+- The coworker for `/storefront` should resolve to the Marketing Specialist route context unless a deliberate design change replaces it.
+
 ## Release Testing — Platform QA
 
 Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 15 phases across all functional areas.
