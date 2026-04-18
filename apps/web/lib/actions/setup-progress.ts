@@ -97,6 +97,25 @@ export async function skipStep(progressId: string) {
   });
 }
 
+/** Record that the COO auto-message trigger has fired for this step.
+ * Used by SetupOverlay to avoid re-firing the welcome on page reloads. */
+export async function markStepTriggered(progressId: string, step: string) {
+  const progress = await prisma.platformSetupProgress.findUniqueOrThrow({
+    where: { id: progressId },
+    select: { context: true },
+  });
+  const context = (progress.context ?? {}) as SetupContext;
+  const triggered = context.triggeredSteps ?? [];
+  if (triggered.includes(step)) return;
+
+  await prisma.platformSetupProgress.update({
+    where: { id: progressId },
+    data: {
+      context: { ...context, triggeredSteps: [...triggered, step] },
+    },
+  });
+}
+
 /** Pause the setup for later resumption. */
 export async function pauseSetup(progressId: string) {
   return prisma.platformSetupProgress.update({
