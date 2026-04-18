@@ -389,7 +389,7 @@ Creates a new item:
 | File | Change |
 |---|---|
 | `apps/web/components/storefront-admin/ItemsManager.tsx` | Replace read-only table with card layout, add/edit/delete/reorder |
-| `apps/web/app/(shell)/admin/storefront/items/page.tsx` | Load archetype context, pass vocabulary + defaults to ItemsManager |
+| `apps/web/app/(shell)/storefront/items/page.tsx` | Load archetype context, pass vocabulary + defaults to ItemsManager |
 | `apps/web/app/api/storefront/admin/items/[id]/route.ts` | Add PUT (full update) and DELETE endpoints alongside existing PATCH |
 
 ### No Schema Changes

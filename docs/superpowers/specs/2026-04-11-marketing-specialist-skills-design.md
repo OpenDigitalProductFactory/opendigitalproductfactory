@@ -369,5 +369,5 @@ The `skillId` is the join key between the route config and `marketingSkillRules`
 - **Skill files:** Validate YAML frontmatter parsing and skill assignment in seed.
 - **MCP tool:** Unit test `analyze_seo_opportunity` handler returns correct shape for each archetype.
 - **Archetype rules:** Unit test that `AgentSkillsDropdown` correctly hides, relabels, and shows skills for each archetype category.
-- **Integration:** Manual test each skill via the coworker panel on `/admin/storefront` for at least 3 different archetypes (HOA, restaurant, nonprofit) to verify vocabulary adaptation and reframing.
+- **Integration:** Manual test each skill via the coworker panel on `/storefront` for at least 3 different archetypes (HOA, restaurant, nonprofit) to verify vocabulary adaptation and reframing.
 - **Migration:** Verify `marketingSkillRules` column is nullable and existing archetypes continue to work with null (all skills shown).

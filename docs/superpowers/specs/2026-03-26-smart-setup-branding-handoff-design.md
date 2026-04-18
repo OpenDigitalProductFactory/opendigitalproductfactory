@@ -163,7 +163,7 @@ Detected from your branding URL — scroll down to find it highlighted
 
 ### 7. Server Component Wiring
 
-**File:** `apps/web/app/(shell)/admin/storefront/setup/page.tsx`
+**File:** `apps/web/app/(shell)/storefront/setup/page.tsx`
 
 The server component calls `getSetupContext()` in parallel with the archetypes DB query and passes all suggestion props to `<SetupWizard>`.
 
@@ -187,7 +187,7 @@ No Prisma schema changes. All new state lives in:
 - `apps/web/lib/actions/setup-constants.ts` — extend `SetupContext` with seven new optional fields
 - `apps/web/lib/actions/setup-progress.ts` — add `getSetupContext()` and `updateSetupContext()` server actions
 - `apps/web/lib/actions/branding.ts` — extend `BrandImportResult` type; call `updateSetupContext` fire-and-forget after analysis; return new fields to caller
-- `apps/web/app/(shell)/admin/storefront/setup/page.tsx` — call `getSetupContext()` in parallel, pass suggestion props to `<SetupWizard>`
+- `apps/web/app/(shell)/storefront/setup/page.tsx` — call `getSetupContext()` in parallel, pass suggestion props to `<SetupWizard>`
 - `apps/web/components/storefront-admin/SetupWizard.tsx` — accept suggestion props; add banner + highlighted card in Step 1; pre-fill `orgName` from suggestion; pass `suggestedCurrency` to Step 4
 - `apps/web/components/storefront-admin/FinancialSetupStep.tsx` — accept `suggestedCurrency` prop; initialize `baseCurrency` from it; show attribution note
 

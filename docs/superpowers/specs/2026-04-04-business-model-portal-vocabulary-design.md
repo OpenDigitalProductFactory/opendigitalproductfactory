@@ -293,7 +293,7 @@ export type ArchetypeVocabulary = {
 | `apps/web/lib/tak/route-context-map.ts` | Update domain label; add category-specific skills |
 | `apps/web/lib/tak/route-context.ts` | Include portal label and stakeholder label in PAGE DATA |
 | `apps/web/lib/govern/permissions.ts` | Consider dynamic workspace tile label |
-| `apps/web/app/(shell)/admin/storefront/page.tsx` | Use portal label in dashboard heading |
+| `apps/web/app/(shell)/storefront/page.tsx` | Use portal label in dashboard heading |
 
 ## 6. HOA Deep Dive — What Makes It Fundamentally Different
 

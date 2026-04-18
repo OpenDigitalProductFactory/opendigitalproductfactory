@@ -65,7 +65,7 @@ For businesses that have already selected an archetype (if storefront setup was 
 In `apps/web/lib/actions/setup-constants.ts`:
 
 - Add `"operating-hours"` to the `SETUP_STEPS` array, positioned after `"org-settings"`
-- Add to `STEP_ROUTES`: `"operating-hours"` → `"/admin/operating-hours"`
+- Add to `STEP_ROUTES`: `"operating-hours"` → `"/storefront/settings/operations"`
 - Add to `STEP_LABELS`: `"operating-hours"` → `"Operating Hours"`
 
 ---
@@ -95,8 +95,8 @@ A weekly schedule grid:
 
 The `OperatingHoursEditor` component is used in two places:
 
-1. **Onboarding step** — `/admin/operating-hours` (setup context, COO-guided)
-2. **Admin settings** — `/admin/settings` or `/ops/changes` Windows tab (post-setup editing)
+1. **Onboarding step** — `/storefront/settings/operations` (setup context, COO-guided)
+2. **Business-side settings** — `/storefront/settings/operations` or `/ops/changes` Windows tab (post-setup editing)
 
 The component accepts `defaultHours` (pre-filled schedule) and `onSave` (callback with the validated schedule). It does not handle persistence — the parent page decides what to do with the data.
 
@@ -292,7 +292,7 @@ File: `apps/web/lib/actions/operating-hours.ts`
 
 ### 7.1 New Route
 
-`/admin/operating-hours` — setup page with `OperatingHoursEditor` component.
+`/storefront/settings/operations` — setup page with `OperatingHoursEditor` component.
 
 Server page loads current hours (or defaults), renders the editor, handles save via server action.
 
@@ -312,7 +312,7 @@ Server page loads current hours (or defaults), renders the editor, handles save 
 | Component | File | Purpose |
 |-----------|------|---------|
 | `OperatingHoursEditor` | `apps/web/components/admin/OperatingHoursEditor.tsx` | Reusable weekly schedule editor with day toggles and time pickers |
-| `OperatingHoursSetupPage` | `apps/web/app/(shell)/admin/operating-hours/page.tsx` | Setup step page wrapping the editor |
+| `OperatingHoursSetupPage` | `apps/web/app/(shell)/storefront/settings/operations/page.tsx` | Setup step page wrapping the editor |
 
 ### 8.2 OperatingHoursEditor Props
 
