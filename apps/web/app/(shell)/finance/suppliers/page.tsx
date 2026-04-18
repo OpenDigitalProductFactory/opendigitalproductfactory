@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/suppliers/page.tsx
 import { listSuppliers } from "@/lib/actions/ap";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const SUPPLIER_STATUS_COLOURS: Record<string, string> = {
@@ -32,6 +33,8 @@ export default async function SuppliersPage() {
           New Supplier
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {suppliers.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No suppliers yet.</p>

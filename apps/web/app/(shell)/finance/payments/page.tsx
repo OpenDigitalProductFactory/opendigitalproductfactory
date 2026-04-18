@@ -2,6 +2,7 @@
 import { prisma } from "@dpf/db";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 type Props = { searchParams: Promise<{ direction?: string }> };
@@ -69,6 +70,8 @@ export default async function PaymentsPage({ searchParams }: Props) {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Payments</h1>
       </div>
+
+      <FinanceTabNav />
 
       {/* Direction filter pills */}
       <div className="flex gap-2 mb-6">

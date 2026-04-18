@@ -3,6 +3,7 @@ import { listBills } from "@/lib/actions/ap";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -53,6 +54,8 @@ export default async function BillsPage({ searchParams }: Props) {
           New Bill
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-6">

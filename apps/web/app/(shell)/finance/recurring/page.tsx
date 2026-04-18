@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/recurring/page.tsx
 import { listRecurringSchedules } from "@/lib/actions/recurring";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const SCHEDULE_STATUS_COLOURS: Record<string, string> = {
@@ -57,6 +58,8 @@ export default async function RecurringPage({ searchParams }: Props) {
           New Schedule
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-6">

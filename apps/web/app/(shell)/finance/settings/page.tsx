@@ -4,6 +4,7 @@ import { getDefaultDunningSequence } from "@/lib/actions/dunning";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import Link from "next/link";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 export default async function FinancialSettingsPage() {
   const [setupStatus, orgSettings, dunningSequence] = await Promise.all([
@@ -51,6 +52,8 @@ export default async function FinancialSettingsPage() {
           Overview of your financial configuration.
         </p>
       </div>
+
+      <FinanceTabNav />
 
       {/* Settings cards grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">

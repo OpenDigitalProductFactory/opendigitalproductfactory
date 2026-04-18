@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/reports/page.tsx
 import Link from "next/link";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 const REPORTS = [
   {
@@ -68,6 +69,8 @@ export default function ReportsIndexPage() {
           Financial reports and analysis
         </p>
       </div>
+
+      <FinanceTabNav />
 
       {/* Report cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

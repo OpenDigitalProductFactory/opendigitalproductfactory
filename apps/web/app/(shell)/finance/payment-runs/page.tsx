@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/payment-runs/page.tsx
 import { listPaymentRuns, listBills } from "@/lib/actions/ap";
 import { PaymentRunBuilder } from "@/components/finance/PaymentRunBuilder";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 export default async function PaymentRunsPage() {
@@ -24,6 +25,8 @@ export default async function PaymentRunsPage() {
       </div>
 
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">Payment Runs</h1>
+
+      <FinanceTabNav />
 
       {/* New Payment Run Builder */}
       <section className="mb-10">

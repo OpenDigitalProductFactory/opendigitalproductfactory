@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/settings/currency/page.tsx
 import { getOrgSettings } from "@/lib/actions/currency";
 import { prisma } from "@dpf/db";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 import { BaseCurrencySelector } from "@/components/finance/BaseCurrencySelector";
 import { FetchRatesButton } from "@/components/finance/FetchRatesButton";
@@ -59,6 +60,8 @@ export default async function CurrencySettingsPage() {
           Configure your base currency and exchange rates.
         </p>
       </div>
+
+      <FinanceTabNav />
 
       {/* Base currency */}
       <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] mb-6">
