@@ -678,7 +678,7 @@
   cd /d/DPF && pnpm dev
   ```
 
-- [ ] **Step 2: Navigate to `/admin/storefront`**
+- [ ] **Step 2: Navigate to `/storefront`**
 
   Open the coworker panel (FAB button). Verify the Skills dropdown shows the 3 new skills alongside the existing ones.
 

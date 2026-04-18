@@ -191,7 +191,7 @@ The `getVocabulary()` function checks `customVocabulary` first, then falls back 
 
 ### 4.1 "Improve Template" Action
 
-A new button in `/admin/storefront/settings` (visible only to admins):
+A new button in `/storefront/settings` (visible only to admins):
 
 ```
 [Improve template]
@@ -304,7 +304,7 @@ model StorefrontArchetype {
 | `apps/web/lib/storefront/archetype-vocabulary.ts` | Check `customVocabulary` before category fallback |
 | `apps/web/lib/mcp-tools.ts` | Add `generate_custom_archetype` and `assess_archetype_refinement` tools |
 | `apps/web/lib/tak/route-context-map.ts` | Add "Improve template" skill to /storefront route |
-| `apps/web/app/(shell)/admin/storefront/settings/page.tsx` | Add "Improve template" button |
+| `apps/web/app/(shell)/storefront/settings/page.tsx` | Add "Improve template" button |
 
 ## 7. Integration with Existing Systems
 

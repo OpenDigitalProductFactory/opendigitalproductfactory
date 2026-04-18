@@ -18,7 +18,7 @@
 
 Today the platform has three distinct concepts that all involve "setting up your business":
 
-1. **Storefront Setup Wizard** (`/admin/storefront`) — asks "choose your business type" (StorefrontArchetype), then collects business name, description, target market, company size, geographic scope, and CTA type. Creates a `StorefrontConfig` and populates `BusinessContext`.
+1. **Storefront Setup Wizard** (`/storefront`) — asks "choose your business type" (StorefrontArchetype), then collects business name, description, target market, company size, geographic scope, and CTA type. Creates a `StorefrontConfig` and populates `BusinessContext`.
 
 2. **Business Models admin page** (`/admin/business-models`) — lists 8 built-in operating model templates (SaaS, Marketplace, E-commerce, etc.) with governance roles. Allows cloning and creating custom models.
 
@@ -293,7 +293,7 @@ Because `BusinessContext` already exists from Step 4, the portal wizard can now 
 | File | Change | Type |
 |------|--------|------|
 | `apps/web/lib/actions/setup-constants.ts` | Replace `"org-settings"` with `"business-context"` in SETUP_STEPS; update STEP_ROUTES and STEP_LABELS | Modify |
-| `apps/web/app/(shell)/admin/business-context/page.tsx` | New page: Business Context editor (quick-edit form for returning users) | Create |
+| `apps/web/app/(shell)/storefront/settings/business/page.tsx` | New canonical page: Business Context editor (quick-edit form for returning users) | Create |
 | `apps/web/components/admin/BusinessContextForm.tsx` | New component: form for business description, target market, industry, size, scope | Create |
 | `apps/web/app/api/business-context/setup/route.ts` | New API: creates/updates BusinessContext and Organization fields, independent of storefront | Create |
 | `apps/web/components/setup/SetupOverlay.tsx` | Update STEP_WELCOME messages for renamed steps | Modify |
@@ -302,19 +302,19 @@ Because `BusinessContext` already exists from Step 4, the portal wizard can now 
 | `apps/web/components/admin/AdminTabNav.tsx` | Rename "Settings" tab to "Organization"; add/rename entry for "Business Context" if not already present | Modify |
 | `apps/web/app/(shell)/admin/settings/page.tsx` | Slim down to pure org identity (name, address, logo). Business strategy fields move to business-context page. | Modify |
 
-### 5.6 Admin Tab Reorganization
+### 5.6 Business + Admin Navigation Reorganization
 
-Current admin tabs include both "Business Models" and "Settings" without clear hierarchy. After this change:
+Current admin tabs include both "Business Models" and "Settings" without clear hierarchy. After the storefront/business consolidation, the business-operational entries live under the canonical `/storefront` workspace while Admin keeps governance/configuration concerns:
 
 | Tab | URL | Content |
 |-----|-----|---------|
 | Access | `/admin` | Access control |
 | Branding | `/admin/branding` | Visual identity |
-| **Your Business** | `/admin/business-context` | Business description, market, industry, size, scope |
+| **Your Business** | `/storefront/settings/business` | Business description, market, industry, size, scope |
 | **Organization** | `/admin/settings` | Legal name, contact, address (slim) |
 | Business Models | `/admin/business-models` | Operating model templates + roles |
-| Portal | `/admin/storefront` | Customer-facing portal config |
-| Operating Hours | `/admin/operating-hours` | Business hours, deployment windows |
+| Portal | `/storefront` | Customer-facing portal config |
+| Operating Hours | `/storefront/settings/operations` | Business hours, deployment windows |
 | Platform Dev | `/admin/platform-development` | Contribution mode |
 | Prompts | `/admin/prompts` | AI prompt management |
 | Skills | `/admin/skills` | Skill definitions |
@@ -374,7 +374,7 @@ This can be a data-only migration or applied in the setup-progress loader as a r
 |------|---------|--------|
 | Create `POST /api/business-context/setup` endpoint | `apps/web/app/api/business-context/setup/route.ts` | S |
 | Create `BusinessContextForm.tsx` component | `apps/web/components/admin/BusinessContextForm.tsx` | M |
-| Create `/admin/business-context` page (quick-edit for returning users) | `apps/web/app/(shell)/admin/business-context/page.tsx` | S |
+| Create canonical business settings page (quick-edit for returning users) | `apps/web/app/(shell)/storefront/settings/business/page.tsx` | S |
 | Update `setup-constants.ts`: rename `org-settings` → `business-context`, update routes/labels | `apps/web/lib/actions/setup-constants.ts` | S |
 | Update `SetupOverlay.tsx`: new welcome message for `business-context` step | `apps/web/components/setup/SetupOverlay.tsx` | S |
 | Add migration to rename step key in existing `PlatformSetupProgress` | `packages/db/prisma/migrations/` | S |
@@ -388,7 +388,7 @@ This can be a data-only migration or applied in the setup-progress loader as a r
 | Refactor `SetupWizard.tsx`: remove Step 3 (business identity fields) | `apps/web/components/storefront-admin/SetupWizard.tsx` | M |
 | Update `route.ts`: remove BusinessContext upsert; read existing BusinessContext for defaults | `apps/web/app/api/storefront/admin/setup/route.ts` | M |
 | Pre-select archetype from `BusinessContext.industry` mapping | `apps/web/components/storefront-admin/SetupWizard.tsx` | S |
-| Update storefront admin page to pass BusinessContext data to wizard | `apps/web/app/(shell)/admin/storefront/page.tsx` | S |
+| Update storefront page to pass BusinessContext data to wizard | `apps/web/app/(shell)/storefront/page.tsx` | S |
 
 ### Phase 3: Terminology & Navigation (P1 — Polish)
 
