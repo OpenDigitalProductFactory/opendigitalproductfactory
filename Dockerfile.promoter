@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:25-alpine
 LABEL org.opencontainers.image.title="DPF Promoter"
 LABEL org.opencontainers.image.description="One-shot container that executes sandbox-to-production promotions"
 RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl jq
