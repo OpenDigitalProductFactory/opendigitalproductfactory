@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/settings/dunning/page.tsx
 import { getDefaultDunningSequence } from "@/lib/actions/dunning";
 import { SeedDunningButton } from "@/components/finance/SeedDunningButton";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const SEVERITY_COLOURS: Record<string, string> = {
@@ -46,6 +47,8 @@ export default async function DunningSettingsPage() {
           </p>
         </div>
       </div>
+
+      <FinanceTabNav />
 
       {!sequence || sequence.steps.length === 0 ? (
         <div className="p-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-center">

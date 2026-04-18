@@ -4,6 +4,8 @@ import Link from "next/link";
 import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -208,7 +210,7 @@ export default async function FinancePage() {
         <div>
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Finance</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-            Invoicing &amp; payments
+            Run cash, receivables, payables, and close work from one place.
           </p>
         </div>
         <Link
@@ -217,6 +219,51 @@ export default async function FinancePage() {
         >
           New Invoice
         </Link>
+      </div>
+
+      <FinanceTabNav />
+
+      <div className="grid gap-4 lg:grid-cols-2 mb-8">
+        <FinanceSummaryCard
+          title="Revenue"
+          description="Track invoices, outstanding receivables, and inbound payments."
+          href="/finance/revenue"
+          accentColor="var(--dpf-accent)"
+          metrics={[
+            { label: "Outstanding", value: `${sym}${formatMoney(owedAmount)}` },
+            { label: "Paid this month", value: `${sym}${formatMoney(paidAmount)}` },
+          ]}
+        />
+        <FinanceSummaryCard
+          title="Spend"
+          description="Handle bills, suppliers, expenses, and outgoing commitments."
+          href="/finance/spend"
+          accentColor="var(--dpf-warning)"
+          metrics={[
+            { label: "Bills due", value: `${moneyOweCount}` },
+            { label: "Pending claims", value: `${pendingExpenseCount}` },
+          ]}
+        />
+        <FinanceSummaryCard
+          title="Close"
+          description="Jump into recurring work, reports, assets, and period-end checks."
+          href="/finance/close"
+          accentColor="var(--dpf-info)"
+          metrics={[
+            { label: "Recurring", value: `${activeRecurringCount}` },
+            { label: "Assets", value: `${activeAssets.length}` },
+          ]}
+        />
+        <FinanceSummaryCard
+          title="Configuration"
+          description="Keep banking, base currency, reminders, and setup aligned."
+          href="/finance/configuration"
+          accentColor="var(--dpf-success)"
+          metrics={[
+            { label: "Configured", value: setupStatus.isConfigured ? "Yes" : "No" },
+            { label: "Bank accounts", value: `${bankAccounts.length}` },
+          ]}
+        />
       </div>
 
       {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}

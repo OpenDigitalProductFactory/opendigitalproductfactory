@@ -20,22 +20,14 @@ export function AppRail({ sections }: Props) {
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   return (
-    <nav aria-label="Primary" className="grid gap-4 p-4 lg:p-5">
+    <nav aria-label="Primary" className="grid gap-3 p-3 lg:p-4">
       {sections.map((section) => (
-        <section
-          key={section.key}
-          className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
-        >
-          <div className="mb-2 px-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-              {section.label}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
-              {section.description}
-            </p>
-          </div>
+        <section key={section.key}>
+          <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+            {section.label}
+          </p>
 
-          <div className="space-y-1.5">
+          <div className="mt-1 space-y-1">
             {section.items.map((item) => {
               const isActive = activeHref === item.href;
               return (
@@ -43,19 +35,14 @@ export function AppRail({ sections }: Props) {
                   key={item.key}
                   href={item.href}
                   className={[
-                    "block rounded-xl border px-3 py-2.5 transition-colors",
+                    "block rounded-lg border px-3 py-2 transition-colors",
                     isActive
                       ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)]"
                       : "border-transparent hover:border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span
-                      className={[
-                        "text-sm font-semibold",
-                        isActive ? "text-[var(--dpf-text)]" : "text-[var(--dpf-text)]",
-                      ].join(" ")}
-                    >
+                    <span className="text-sm font-semibold text-[var(--dpf-text)]">
                       {item.label}
                     </span>
                     {isActive && (
@@ -64,9 +51,6 @@ export function AppRail({ sections }: Props) {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
-                    {item.description}
-                  </p>
                 </Link>
               );
             })}

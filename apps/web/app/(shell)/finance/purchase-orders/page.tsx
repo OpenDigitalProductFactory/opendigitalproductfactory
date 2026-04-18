@@ -2,6 +2,7 @@
 import { listPurchaseOrders } from "@/lib/actions/ap";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -52,6 +53,8 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
           New PO
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-6">

@@ -2,6 +2,7 @@
 import { listAssets } from "@/lib/actions/assets";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -77,6 +78,8 @@ export default async function AssetsPage({ searchParams }: Props) {
           New Asset
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-3">

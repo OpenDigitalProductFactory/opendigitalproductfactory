@@ -4,6 +4,7 @@
 import { listExpenseClaims } from "@/lib/actions/expenses";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -41,6 +42,8 @@ export default async function MyExpensesPage() {
           New Expense Claim
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Claims list */}
       {claims.length === 0 ? (

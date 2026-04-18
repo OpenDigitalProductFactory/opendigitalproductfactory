@@ -2,6 +2,7 @@
 import { listBankAccounts } from "@/lib/actions/banking";
 import Link from "next/link";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 export default async function BankingPage() {
   const accounts = await listBankAccounts();
@@ -39,6 +40,8 @@ export default async function BankingPage() {
           Add Bank Account
         </Link>
       </div>
+
+      <FinanceTabNav />
 
       {/* Accounts */}
       {accounts.length === 0 ? (

@@ -4,6 +4,7 @@
 import { listExpenseClaims } from "@/lib/actions/expenses";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -49,6 +50,8 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
       <div className="mb-6 flex items-start justify-between">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Expense Claims</h1>
       </div>
+
+      <FinanceTabNav />
 
       {/* Pending approval alert */}
       {pendingCount > 0 && (
