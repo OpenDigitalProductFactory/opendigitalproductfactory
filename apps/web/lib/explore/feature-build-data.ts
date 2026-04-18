@@ -250,10 +250,7 @@ export async function getFeatureBuildForContext(
       siblingProducts: siblings.map((s) => s.name),
     };
   } else if (r.portfolioId) {
-    // Fallback: resolve portfolio name at minimum. `slug` is unique per
-    // organization now (compound `organizationId_slug`), so use findFirst
-    // until callers thread organizationId through.
-    const portfolio = await prisma.portfolio.findFirst({
+    const portfolio = await prisma.portfolio.findUnique({
       where: { slug: r.portfolioId },
       select: { name: true },
     });
@@ -262,21 +259,22 @@ export async function getFeatureBuildForContext(
     }
   }
 
-  // Look up design system from linked storefront (if any), or generate from brief.
-  // Pre-generating here means the ideate agent always has design recommendations
-  // available without needing to call generate_design_system as a tool call.
+  // Pre-resolve the brand design system so the ideate agent has design
+  // recommendations without needing to call generate_design_system as a tool.
+  // readBrandContext reads the single Org's designSystem first (structured),
+  // falls back to any storefront's legacy markdown blob.
   let designSystem: string | undefined;
   try {
-    const storefront = await prisma.storefrontConfig.findFirst({
-      select: { designSystem: true },
-    });
-    if (storefront?.designSystem) {
-      designSystem = typeof storefront.designSystem === "string"
-        ? storefront.designSystem
-        : JSON.stringify(storefront.designSystem);
+    const { readBrandContext } = await import("@/lib/brand/read");
+    const ctx = await readBrandContext({});
+    if (ctx.structured) {
+      const s = ctx.structured;
+      designSystem = `Brand: ${s.identity.name}\nPrimary color: ${s.palette.primary}\nBody font: ${s.typography.families.sans}\nConfidence: ${(s.confidence.overall * 100).toFixed(0)}%\n---\n${JSON.stringify(s, null, 2).slice(0, 3000)}`;
+    } else if (ctx.legacyMarkdown) {
+      designSystem = ctx.legacyMarkdown;
     }
   } catch {
-    // Non-fatal — proceed without storefront design system
+    // Non-fatal — proceed without brand context
   }
 
   if (!designSystem) {

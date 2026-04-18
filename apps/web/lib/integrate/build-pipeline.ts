@@ -249,16 +249,18 @@ async function stepGenerateCode(
   const brief = build.brief as import("@/lib/feature-build-types").FeatureBrief;
   const plan = (build.plan ?? {}) as Record<string, unknown>;
 
-  // Look up design system from storefront (if available)
+  // Pre-resolve the brand design system for the build-phase agent.
+  // readBrandContext prefers the structured Organization.designSystem,
+  // falls back to any storefront's legacy markdown blob.
   let designSystem: string | undefined;
   try {
-    const storefront = await prisma.storefrontConfig.findFirst({
-      select: { designSystem: true },
-    });
-    if (storefront?.designSystem) {
-      designSystem = typeof storefront.designSystem === "string"
-        ? storefront.designSystem
-        : JSON.stringify(storefront.designSystem);
+    const { readBrandContext } = await import("@/lib/brand/read");
+    const ctx = await readBrandContext({});
+    if (ctx.structured) {
+      const s = ctx.structured;
+      designSystem = `Brand: ${s.identity.name}\nPrimary color: ${s.palette.primary}\nBody font: ${s.typography.families.sans}\nConfidence: ${(s.confidence.overall * 100).toFixed(0)}%\n---\n${JSON.stringify(s, null, 2).slice(0, 3000)}`;
+    } else if (ctx.legacyMarkdown) {
+      designSystem = ctx.legacyMarkdown;
     }
   } catch { /* non-fatal */ }
 

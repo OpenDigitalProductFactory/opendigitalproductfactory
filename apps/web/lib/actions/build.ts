@@ -469,7 +469,7 @@ export async function shipBuild(input: {
 
   // Resolve portfolio + taxonomy node for the product.
   // Use confirmed attribution from ideate phase if available; fall back to portfolio root.
-  const portfolio = await prisma.portfolio.findFirst({
+  const portfolio = await prisma.portfolio.findUnique({
     where: { slug: input.portfolioSlug },
     select: { id: true, slug: true },
   });
@@ -739,7 +739,7 @@ export async function createBuildEpic(input: {
   // Resolve portfolio slug to internal ID
   let portfolioInternalId: string | null = null;
   if (input.portfolioSlug) {
-    const portfolio = await prisma.portfolio.findFirst({
+    const portfolio = await prisma.portfolio.findUnique({
       where: { slug: input.portfolioSlug },
       select: { id: true },
     });

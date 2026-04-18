@@ -249,11 +249,12 @@ async function seedBusinessModels(): Promise<void> {
 }
 
 /**
- * Ensure the platform bootstrap Organization exists. Every Portfolio now
- * belongs to an Organization (`@@unique([organizationId, slug])`), so the
- * canonical platform-level portfolios need an owner org. Customer
- * organizations are created separately through the Setup wizard
- * (see apps/web/lib/actions/setup-entities.ts).
+ * Ensure the platform bootstrap Organization exists. DPF is
+ * single-org-per-install (see memory: project_single_org_per_install); the
+ * seed guarantees an Organization exists before any downstream content,
+ * so the single-org invariant holds from the first container start. The
+ * Setup wizard later upgrades this bootstrap row with the real company
+ * name and details (see apps/web/lib/actions/setup-entities.ts).
  */
 async function ensureBootstrapOrganization(): Promise<string> {
   const org = await prisma.organization.upsert({
@@ -268,7 +269,7 @@ async function ensureBootstrapOrganization(): Promise<string> {
   return org.id;
 }
 
-async function seedPortfolios(organizationId: string): Promise<void> {
+async function seedPortfolios(): Promise<void> {
   const registry = readJson<{
     portfolios: Array<{
       id: string;
@@ -279,10 +280,9 @@ async function seedPortfolios(organizationId: string): Promise<void> {
 
   for (const p of registry.portfolios) {
     await prisma.portfolio.upsert({
-      where: { organizationId_slug: { organizationId, slug: p.id } },
+      where: { slug: p.id },
       update: { name: p.name, description: p.description ?? null, budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null },
       create: {
-        organizationId,
         slug: p.id,
         name: p.name,
         description: p.description ?? null,
@@ -420,7 +420,7 @@ async function seedDigitalProducts(): Promise<void> {
   for (const p of products) {
     let portfolioDbId: string | undefined;
     if (p.portfolio_id) {
-      const portfolio = await prisma.portfolio.findFirst({ where: { slug: p.portfolio_id } });
+      const portfolio = await prisma.portfolio.findUnique({ where: { slug: p.portfolio_id } });
       portfolioDbId = portfolio?.id;
     }
     // Resolve taxonomy node for portfolio tree placement
@@ -460,7 +460,7 @@ async function seedDigitalProducts(): Promise<void> {
 async function seedDpfSelfRegistration(): Promise<void> {
   // The portal is a platform service under Foundational — it's the user-facing
   // web application that provides lifecycle views for all digital products.
-  const portfolio = await prisma.portfolio.findFirst({
+  const portfolio = await prisma.portfolio.findUnique({
     where: { slug: "foundational" },
   });
   if (!portfolio) throw new Error("foundational portfolio not seeded");
@@ -1812,12 +1812,12 @@ async function seedWorkQueues(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
-  const bootstrapOrganizationId = await ensureBootstrapOrganization();
+  await ensureBootstrapOrganization();
   await seedGeographicData(prisma);
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
-  await seedPortfolios(bootstrapOrganizationId);
+  await seedPortfolios();
   await seedBusinessModels();
   await seedAgents();
   await seedCoworkerAgents();
