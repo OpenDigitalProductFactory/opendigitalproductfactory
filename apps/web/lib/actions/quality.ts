@@ -40,7 +40,7 @@ export async function reportQualityIssue(input: {
   let portfolioId: string | null = null;
   const slug = resolvePortfolioSlug(input.routeContext);
   if (slug) {
-    const portfolio = await prisma.portfolio.findUnique({
+    const portfolio = await prisma.portfolio.findFirst({
       where: { slug },
       select: { id: true },
     });

@@ -1525,7 +1525,7 @@ async function getKnowledgePointersForRoute(routeContext: string): Promise<strin
 
   if (portfolioMatch) {
     const portfolioSlug = portfolioMatch[1];
-    const portfolio = await prisma.portfolio.findUnique({
+    const portfolio = await prisma.portfolio.findFirst({
       where: { slug: portfolioSlug },
       select: { id: true, name: true },
     });
