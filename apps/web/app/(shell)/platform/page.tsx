@@ -1,194 +1,112 @@
-// apps/web/app/(shell)/platform/page.tsx
 import { prisma } from "@dpf/db";
-import Link from "next/link";
-import { GovernanceOverviewPanel } from "@/components/platform/GovernanceOverviewPanel";
-
-const STATE_COLOURS: Record<string, string> = {
-  active: "#4ade80",
-};
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
+import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
+import { getProposalStats } from "@/lib/evaluate/proposal-data";
+import { getToolExecutionStats } from "@/lib/tool-execution-data";
 
 export default async function PlatformPage() {
   const now = new Date();
-  const [capabilities, teams, governedAgents, activeGrants, recentGrants] = await Promise.all([
-    prisma.platformCapability.findMany({
-      orderBy: { capabilityId: "asc" },
-      select: {
-        id: true,
-        capabilityId: true,
-        name: true,
-        description: true,
-        state: true,
-      },
-    }),
-    prisma.team.count(),
-    prisma.agentGovernanceProfile.count(),
+  const [
+    agentCount,
+    activeProviderCount,
+    catalogCount,
+    activeServiceCount,
+    enabledToolCount,
+    activeGrantCount,
+    toolStats,
+    proposalStats,
+    userCount,
+    roleCount,
+    capabilityCount,
+  ] = await Promise.all([
+    prisma.agent.count(),
+    prisma.modelProvider.count({ where: { status: "active" } }),
+    prisma.mcpIntegration.count({ where: { status: "active" } }),
+    prisma.mcpServer.count({ where: { status: "active" } }),
+    prisma.mcpServerTool.count({ where: { isEnabled: true } }),
     prisma.delegationGrant.count({
       where: {
         status: "active",
         expiresAt: { gt: now },
       },
     }),
-    prisma.delegationGrant.findMany({
-      where: {
-        status: "active",
-        expiresAt: { gt: now },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: {
-        grantId: true,
-        status: true,
-        expiresAt: true,
-        workflowKey: true,
-        objectRef: true,
-        grantorUser: { select: { email: true } },
-        granteeAgent: { select: { name: true } },
-      },
-    }),
+    getToolExecutionStats(),
+    getProposalStats(),
+    prisma.user.count(),
+    prisma.platformRole.count(),
+    prisma.platformCapability.count(),
   ]);
 
-  const governanceSummary = {
-    teams,
-    governedAgents,
-    activeGrants,
-    pendingApprovals: 0,
-  };
-
-  const grantRows = recentGrants.map((grant) => ({
-    grantId: grant.grantId,
-    agentName: grant.granteeAgent.name,
-    grantorLabel: grant.grantorUser.email,
-    status: grant.status,
-    expiresAt: grant.expiresAt.toLocaleString(),
-    scopeSummary: [grant.workflowKey, grant.objectRef].filter(Boolean).join(" • ") || null,
-  }));
-
   return (
-    <div>
-      <div className="mb-6">
+    <div className="space-y-6">
+      <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Platform</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          {capabilities.length} capabilit{capabilities.length !== 1 ? "ies" : "y"}
+        <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
+          Keep the AI workforce, external services, governance evidence, and controlled admin surfaces manageable for a small human team.
         </p>
       </div>
 
-      <GovernanceOverviewPanel summary={governanceSummary} recentGrants={grantRows} />
+      <PlatformTabNav />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {capabilities.map((c) => {
-          const stateColour = STATE_COLOURS[c.state] ?? "#8888a0";
-
-          return (
-            <div
-              key={c.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
-              style={{ borderLeftColor: "#fb923c" }}
-            >
-              <p className="text-[10px] font-mono text-[var(--dpf-muted)] mb-1">
-                {c.capabilityId}
-              </p>
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight">
-                  {c.name}
-                </p>
-                <span
-                  className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
-                  style={{ background: `${stateColour}20`, color: stateColour }}
-                >
-                  {c.state}
-                </span>
-              </div>
-              {c.description != null && (
-                <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2">
-                  {c.description}
-                </p>
-              )}
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <PlatformSummaryCard
+          title="AI Operations"
+          description="Supervise the AI workforce, routing, build studio, and escalation surfaces."
+          href="/platform/ai"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Agents", value: agentCount },
+            { label: "Providers", value: activeProviderCount },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Tools & Services"
+          description="Discover integrations, activate MCP services, and confirm available tools."
+          href="/platform/tools"
+          accent="var(--dpf-success)"
+          metrics={[
+            { label: "Catalog", value: catalogCount },
+            { label: "Active services", value: activeServiceCount },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Governance & Audit"
+          description="Review proposals, execution evidence, and temporary authority grants."
+          href="/platform/audit"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Active grants", value: activeGrantCount },
+            { label: "Executions", value: toolStats.total },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Core Admin"
+          description="Reach the narrower admin surface for access, organization, and controlled configuration."
+          href="/admin"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Users", value: userCount },
+            { label: "Roles", value: roleCount },
+          ]}
+        />
       </div>
 
-      {capabilities.length === 0 && (
-        <p className="text-sm text-[var(--dpf-muted)]">No capabilities registered yet.</p>
-      )}
-
-      <div style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 12 }}>Platform Services</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
-          <Link
-            href="/platform/ai"
-            style={{
-              display: "block",
-              padding: 16,
-              background: "var(--dpf-surface-1)",
-              border: "1px solid var(--dpf-border)",
-              borderLeft: "4px solid #7c8cf8",
-              borderRadius: 8,
-              textDecoration: "none",
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>AI Workforce</p>
-            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              Coworkers, routing, build studio, skills
-            </p>
-          </Link>
-          <Link
-            href="/platform/tools/catalog"
-            style={{
-              display: "block",
-              padding: 16,
-              background: "var(--dpf-surface-1)",
-              border: "1px solid var(--dpf-border)",
-              borderLeft: "4px solid #10b981",
-              borderRadius: 8,
-              textDecoration: "none",
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-              Tools &amp; Integrations
-            </p>
-            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              MCP catalog, activated services, tool grants
-            </p>
-          </Link>
-          <Link
-            href="/platform/tools/services"
-            style={{
-              display: "block",
-              padding: 16,
-              background: "var(--dpf-surface-1)",
-              border: "1px solid var(--dpf-border)",
-              borderLeft: "4px solid #7c8cf8",
-              borderRadius: 8,
-              textDecoration: "none",
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-              Services
-            </p>
-            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              Registered MCP services, health, tools
-            </p>
-          </Link>
-          <Link
-            href="/platform/audit/ledger"
-            style={{
-              display: "block",
-              padding: 16,
-              background: "var(--dpf-surface-1)",
-              border: "1px solid var(--dpf-border)",
-              borderLeft: "4px solid #f59e0b",
-              borderRadius: 8,
-              textDecoration: "none",
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 4px" }}>
-              Audit &amp; Operations
-            </p>
-            <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-              Action ledger, routes, operations, authority
-            </p>
-          </Link>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Enabled tools</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{enabledToolCount}</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Pending proposals</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{proposalStats.proposed}</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Capabilities</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{capabilityCount}</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Failed executions</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{toolStats.failed}</p>
         </div>
       </div>
     </div>

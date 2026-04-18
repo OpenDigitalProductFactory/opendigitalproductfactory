@@ -1,10 +1,10 @@
 // apps/web/app/(shell)/platform/audit/layout.tsx
-import { AuditTabNav } from "@/components/platform/AuditTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 
 export default function AuditLayout({ children }: { children: React.ReactNode }) {
   return (
     <div>
-      <AuditTabNav />
+      <PlatformTabNav />
       {children}
     </div>
   );

@@ -31,7 +31,7 @@ export function ServiceCard({ server }: { server: McpServerSummary }) {
 
   return (
     <Link
-      href={`/platform/services/${server.id}`}
+      href={`/platform/tools/services/${server.id}`}
       className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-card"
     >
       <div className="flex items-start gap-3">

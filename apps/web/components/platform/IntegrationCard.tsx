@@ -49,7 +49,7 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
             )}
             {integration.activeServerId && (
               <a
-                href={`/platform/services/${integration.activeServerId}`}
+                href={`/platform/tools/services/${integration.activeServerId}`}
                 className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded hover:underline"
               >
                 Active
@@ -93,7 +93,7 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
           )}
           {!integration.activeServerId && (
             <a
-              href={`/platform/services/activate?integrationId=${integration.id}`}
+              href={`/platform/tools/services/activate?integrationId=${integration.id}`}
               className="text-xs text-primary hover:underline"
             >
               Activate &rarr;
