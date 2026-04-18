@@ -13,7 +13,8 @@
       "expo-secure-store",
       "expo-camera",
       "expo-location",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-sqlite"
     ],
     "ios": {
       "supportsTablet": false,
