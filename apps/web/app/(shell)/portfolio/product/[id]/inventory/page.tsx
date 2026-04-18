@@ -45,6 +45,8 @@ export default async function ProductInventoryPage({ params }: Props) {
           take: 3,
           select: {
             rawVendor: true,
+            rawProductName: true,
+            rawPackageName: true,
             rawVersion: true,
             normalizationStatus: true,
             normalizationConfidence: true,

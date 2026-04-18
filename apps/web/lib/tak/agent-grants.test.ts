@@ -78,6 +78,11 @@ describe("TOOL_TO_GRANTS — Estate specialist entries", () => {
     expect(isToolAllowedByGrants("summarize_estate_posture", ["telemetry_read"])).toBe(false);
   });
 
+  it("review_estate_identity requires registry_read", () => {
+    expect(isToolAllowedByGrants("review_estate_identity", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("review_estate_identity", ["telemetry_read"])).toBe(false);
+  });
+
   it("validate_version_confidence requires registry_read", () => {
     expect(isToolAllowedByGrants("validate_version_confidence", ["registry_read"])).toBe(true);
     expect(isToolAllowedByGrants("validate_version_confidence", [])).toBe(false);
@@ -234,6 +239,7 @@ describe("getToolGrantMapping reflects all entries", () => {
   it("includes estate specialist tools", () => {
     const mapping = getToolGrantMapping();
     expect(mapping["summarize_estate_posture"]).toEqual(["registry_read"]);
+    expect(mapping["review_estate_identity"]).toEqual(["registry_read"]);
     expect(mapping["validate_version_confidence"]).toEqual(["registry_read"]);
     expect(mapping["explain_blast_radius"]).toEqual(["registry_read"]);
     expect(mapping["discovery_sweep"]).toEqual(["telemetry_read"]);

@@ -15,10 +15,16 @@ describe("EstateItemCard", () => {
           technicalClassLabel: "Network Gateway",
           manufacturerLabel: "Ubiquiti",
           modelLabel: "Dream Machine Pro",
+          identityLabel: "Dream Machine Pro",
+          identityConfidenceLabel: "Normalized identity",
+          identityConfidenceTone: "good",
           versionLabel: "4.0.2",
+          versionSourceLabel: "Normalized from software evidence",
           supportStatus: "supported",
           supportStatusLabel: "Supported",
           supportTone: "good",
+          supportSummaryLabel: "Covered by vendor support",
+          advisorySummaryLabel: "No advisory findings recorded",
           versionConfidenceLabel: "High confidence version",
           versionConfidenceTone: "good",
           freshnessLabel: "Seen recently",
@@ -42,8 +48,12 @@ describe("EstateItemCard", () => {
     expect(html).toContain("Network Gateway");
     expect(html).toContain("Ubiquiti");
     expect(html).toContain("Dream Machine Pro");
+    expect(html).toContain("Normalized identity");
     expect(html).toContain("4.0.2");
+    expect(html).toContain("Normalized from software evidence");
     expect(html).toContain("Supported");
+    expect(html).toContain("Covered by vendor support");
+    expect(html).toContain("No advisory findings recorded");
     expect(html).toContain("High confidence version");
     expect(html).toContain("Seen recently");
     expect(html).toContain("Failure impacts 5 downstream dependencies");

@@ -1,5 +1,7 @@
 type EstateEvidence = {
   rawVendor?: string | null;
+  rawProductName?: string | null;
+  rawPackageName?: string | null;
   rawVersion?: string | null;
   normalizationStatus?: string | null;
   normalizationConfidence?: number | null;
@@ -62,10 +64,16 @@ export type EstateItem = {
   technicalClassLabel: string;
   manufacturerLabel: string;
   modelLabel: string | null;
+  identityLabel: string;
+  identityConfidenceLabel: string;
+  identityConfidenceTone: EstateIndicatorTone;
   versionLabel: string;
+  versionSourceLabel: string;
   supportStatus: string;
   supportStatusLabel: string;
   supportTone: EstateSupportTone;
+  supportSummaryLabel: string;
+  advisorySummaryLabel: string;
   versionConfidenceLabel: string;
   versionConfidenceTone: EstateIndicatorTone;
   freshnessLabel: string;
@@ -91,6 +99,17 @@ const TECHNICAL_CLASS_LABELS: Record<string, string> = {
   package: "Software Package",
   storage: "Storage",
   host: "Host",
+  container: "Container",
+  application: "Application",
+  database: "Database",
+  monitoring_service: "Monitoring Service",
+  network_client: "Network Client",
+  network_interface: "Network Interface",
+  subnet: "Subnet",
+  vlan: "VLAN",
+  ai_service: "AI Service",
+  docker_host: "Docker Host",
+  runtime: "Runtime",
   gateway: "Gateway",
   switch: "Switch",
   access_point: "Access Point",
@@ -111,6 +130,17 @@ const ICON_KEY_ALIASES: Record<string, string> = {
   security_device: "security",
   facility_device: "facility",
   camera: "camera",
+  container: "container",
+  application: "application",
+  database: "database",
+  monitoring_service: "monitoring",
+  network_client: "device",
+  network_interface: "network",
+  subnet: "network",
+  vlan: "network",
+  ai_service: "ai",
+  docker_host: "host",
+  runtime: "service",
 };
 
 const SUPPORT_STATUS_LABELS: Record<string, string> = {
@@ -142,6 +172,11 @@ function normalizeSupportStatus(value: string | null | undefined): string {
   return normalized.length > 0 ? normalized : "unknown";
 }
 
+function normalizeEvidenceStatus(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? null;
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
 function toDate(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -150,6 +185,88 @@ function toDate(value: Date | string | null | undefined): Date | null {
 
 function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getOpenIssues(source: EstateItemSource): EstateQualityIssue[] {
+  return (source.qualityIssues ?? []).filter((issue) => (issue.status ?? "open") === "open");
+}
+
+function findPrimaryEvidence(source: EstateItemSource): EstateEvidence | undefined {
+  return source.softwareEvidence?.find((evidence) =>
+    evidence.rawVendor
+    || evidence.rawProductName
+    || evidence.rawPackageName
+    || evidence.rawVersion
+    || evidence.normalizationStatus
+  );
+}
+
+function deriveIdentity(
+  source: EstateItemSource,
+  evidence: EstateEvidence | undefined,
+): {
+  label: string;
+  confidenceLabel: string;
+  confidenceTone: EstateIndicatorTone;
+  modelLabel: string | null;
+} {
+  const normalizationStatus = normalizeEvidenceStatus(evidence?.normalizationStatus);
+  const normalizationConfidence = typeof evidence?.normalizationConfidence === "number"
+    ? evidence.normalizationConfidence
+    : null;
+  const evidenceIdentity = evidence?.rawProductName?.trim()
+    || evidence?.rawPackageName?.trim()
+    || null;
+  const modelLabel = source.productModel?.trim() || evidenceIdentity || null;
+  const label = modelLabel || source.name;
+
+  if (source.productModel?.trim() || normalizationStatus === "normalized" || normalizationStatus === "verified") {
+    return {
+      label,
+      confidenceLabel: "Normalized identity",
+      confidenceTone: "good",
+      modelLabel,
+    };
+  }
+
+  if (normalizationStatus === "raw_only" || normalizationStatus === "observed") {
+    return {
+      label,
+      confidenceLabel: "Observed identity",
+      confidenceTone: "neutral",
+      modelLabel,
+    };
+  }
+
+  if (
+    normalizationStatus === "needs_review"
+    || normalizationStatus === "ambiguous"
+    || normalizationStatus === "conflict"
+    || ((normalizationConfidence !== null && normalizationConfidence < 0.5) && !evidenceIdentity)
+  ) {
+    return {
+      label,
+      confidenceLabel: "Identity needs review",
+      confidenceTone: "warn",
+      modelLabel,
+    };
+  }
+
+  if (evidenceIdentity || source.manufacturer?.trim() || evidence?.rawVendor?.trim()) {
+    return {
+      label,
+      confidenceLabel: "Observed identity",
+      confidenceTone: "neutral",
+      modelLabel,
+    };
+  }
+
+  return {
+    label,
+    confidenceLabel: "Identity needs review",
+    confidenceTone: "warn",
+    modelLabel,
+  };
 }
 
 function deriveVersionConfidence(
@@ -173,6 +290,18 @@ function deriveVersionConfidence(
   }
 
   return { label: "Version unknown", tone: "neutral" };
+}
+
+function deriveVersionSource(source: EstateItemSource, evidence: EstateEvidence | undefined): string {
+  if (source.normalizedVersion) {
+    return "Normalized from software evidence";
+  }
+
+  if (source.observedVersion || evidence?.rawVersion) {
+    return "Observed from discovery evidence";
+  }
+
+  return "Version not verified";
 }
 
 function deriveFreshness(source: EstateItemSource, evidence: EstateEvidence | undefined): {
@@ -278,7 +407,7 @@ function categorizeIssue(issueType: string): {
 }
 
 function derivePostureBadges(source: EstateItemSource): EstatePostureBadge[] {
-  const issues = (source.qualityIssues ?? []).filter((issue) => (issue.status ?? "open") === "open");
+  const issues = getOpenIssues(source);
   if (issues.length === 0) {
     return [];
   }
@@ -310,12 +439,48 @@ function derivePostureBadges(source: EstateItemSource): EstatePostureBadge[] {
     }));
 }
 
+function countIssueCategory(source: EstateItemSource, key: string): number {
+  return getOpenIssues(source)
+    .map((issue) => categorizeIssue(issue.issueType).key)
+    .filter((issueKey) => issueKey === key)
+    .length;
+}
+
+function deriveSupportSummary(source: EstateItemSource, normalizedSupportStatus: string): string {
+  if (normalizedSupportStatus === "supported") {
+    return "Covered by vendor support";
+  }
+  if (normalizedSupportStatus === "nearing_eol") {
+    return "Vendor lifecycle is nearing end of support";
+  }
+  if (normalizedSupportStatus === "unsupported" || normalizedSupportStatus === "eol") {
+    return "Vendor lifecycle has ended";
+  }
+  if (countIssueCategory(source, "support") > 0) {
+    return "Support review needed";
+  }
+  return "Vendor lifecycle not verified";
+}
+
+function deriveAdvisorySummary(source: EstateItemSource): string {
+  const securityCount = countIssueCategory(source, "security");
+  if (securityCount > 0) {
+    return `${pluralize(securityCount, "security finding", "security findings")} recorded`;
+  }
+
+  const updateCount = countIssueCategory(source, "updates");
+  if (updateCount > 0) {
+    return `${pluralize(updateCount, "update gap", "update gaps")} tracked`;
+  }
+
+  return "No advisory findings recorded";
+}
+
 export function createEstateItem(source: EstateItemSource): EstateItem {
-  const firstEvidence = source.softwareEvidence?.find((evidence) =>
-    evidence.rawVendor || evidence.rawVersion || evidence.normalizationStatus
-  );
+  const firstEvidence = findPrimaryEvidence(source);
   const technicalClass = source.technicalClass ?? source.entityType;
   const normalizedSupportStatus = normalizeSupportStatus(source.supportStatus);
+  const identity = deriveIdentity(source, firstEvidence);
   const versionConfidence = deriveVersionConfidence(source, firstEvidence);
   const freshness = deriveFreshness(source, firstEvidence);
   const postureBadges = derivePostureBadges(source);
@@ -327,18 +492,24 @@ export function createEstateItem(source: EstateItemSource): EstateItem {
     iconKey: source.iconKey ?? ICON_KEY_ALIASES[technicalClass] ?? technicalClass,
     technicalClassLabel: TECHNICAL_CLASS_LABELS[technicalClass] ?? formatWords(technicalClass),
     manufacturerLabel: source.manufacturer ?? firstEvidence?.rawVendor ?? "Unknown vendor",
-    modelLabel: source.productModel ?? null,
+    modelLabel: identity.modelLabel,
+    identityLabel: identity.label,
+    identityConfidenceLabel: identity.confidenceLabel,
+    identityConfidenceTone: identity.confidenceTone,
     versionLabel: source.normalizedVersion ?? source.observedVersion ?? firstEvidence?.rawVersion ?? "Unknown version",
+    versionSourceLabel: deriveVersionSource(source, firstEvidence),
     supportStatus: normalizedSupportStatus,
     supportStatusLabel: SUPPORT_STATUS_LABELS[normalizedSupportStatus] ?? formatWords(normalizedSupportStatus),
     supportTone: SUPPORT_STATUS_TONES[normalizedSupportStatus] ?? "neutral",
+    supportSummaryLabel: deriveSupportSummary(source, normalizedSupportStatus),
+    advisorySummaryLabel: deriveAdvisorySummary(source),
     versionConfidenceLabel: versionConfidence.label,
     versionConfidenceTone: versionConfidence.tone,
     freshnessLabel: freshness.label,
     freshnessTone: freshness.tone,
     blastRadiusLabel: deriveBlastRadius(source),
     postureBadges,
-    openIssueCount: (source.qualityIssues ?? []).filter((issue) => (issue.status ?? "open") === "open").length,
+    openIssueCount: getOpenIssues(source).length,
     providerViewLabel: source.providerView ?? "Unassigned",
     taxonomyPath: source.taxonomyNode?.nodeId.replace(/\//g, " / ") ?? null,
     upstreamCount: source._count?.fromRelationships ?? 0,
