@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { deleteBacklogItem } from "@/lib/actions/backlog";
+import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
 import { BACKLOG_STATUS_COLOURS, type BacklogItemWithRelations } from "@/lib/backlog";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 
@@ -16,11 +16,27 @@ export function BacklogItemRow({ item, onEdit }: Props) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [escalateMessage, setEscalateMessage] = useState<string | null>(null);
 
   function handleDelete() {
     startTransition(async () => {
       await deleteBacklogItem(item.id);
       router.refresh();
+    });
+  }
+
+  function handleEscalate() {
+    setEscalateMessage(null);
+    startTransition(async () => {
+      const result = await escalateBacklogItemUpstream(item.id);
+      if (result.status === "created") {
+        setEscalateMessage(`reported as #${result.issueNumber}`);
+        router.refresh();
+      } else if (result.status === "skipped") {
+        setEscalateMessage(`skipped: ${result.reason}`);
+      } else {
+        setEscalateMessage(`failed: ${result.error}`);
+      }
     });
   }
 
@@ -55,6 +71,19 @@ export function BacklogItemRow({ item, onEdit }: Props) {
         >
           product
         </Link>
+      )}
+
+      {/* Upstream-issue link — only when this item has been escalated */}
+      {item.upstreamIssueNumber != null && item.upstreamIssueUrl && (
+        <a
+          href={item.upstreamIssueUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 text-[9px] text-[var(--dpf-accent)] hover:underline px-1"
+          title="Filed with the project team"
+        >
+          GH #{item.upstreamIssueNumber}
+        </a>
       )}
 
       {/* Status badge */}
@@ -92,6 +121,17 @@ export function BacklogItemRow({ item, onEdit }: Props) {
             >
               edit
             </button>
+            {item.upstreamIssueNumber == null && (
+              <button
+                onClick={handleEscalate}
+                disabled={isPending}
+                className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-accent)] px-1"
+                aria-label="Report to project team"
+                title="Open a GitHub issue with the project team"
+              >
+                {isPending ? "…" : "report"}
+              </button>
+            )}
             <button
               onClick={() => setConfirmDelete(true)}
               className="text-[10px] text-[var(--dpf-muted)] hover:text-red-400 px-1"
@@ -102,6 +142,9 @@ export function BacklogItemRow({ item, onEdit }: Props) {
           </>
         )}
       </div>
+      {escalateMessage && (
+        <p className="w-full text-[10px] text-[var(--dpf-muted)] mt-1">{escalateMessage}</p>
+      )}
     </div>
   );
 }
