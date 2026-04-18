@@ -10,7 +10,7 @@ Thanks for wanting to contribute. This project is built to grow through communit
 4. CI gates typecheck, unit tests, and a production build. Keep them green.
 5. A maintainer reviews and merges once the checks pass.
 
-External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). `main` is protected by branch protection: direct pushes are rejected and the required CI checks (typecheck, unit tests, production build) must pass before merge.
+External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). The required CI checks (`Typecheck` and `Production Build`) must pass before merge; `Unit Tests` runs informationally while the broken-test surface is being cleaned up. GitHub branch protection activates automatically once the repo flips to public — until then, the workflow is maintained by discipline.
 
 ## Branch naming
 
