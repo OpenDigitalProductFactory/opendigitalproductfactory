@@ -195,7 +195,7 @@ describe("persistBootstrapDiscoveryRun", () => {
     });
     expect(createdSoftwareEvidence[0]).toMatchObject({
       evidenceKey: "host:hostname:dpf-dev:host_packages:postgresql-16",
-      softwareIdentity: { connect: { id: "identity-postgres" } },
+      softwareIdentityId: "identity-postgres",
     });
     expect(qualityIssues.map((issue) => issue.issueType)).toContain(
       "taxonomy_attribution_low_confidence",
