@@ -60,7 +60,7 @@ jobs:
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build and push portal image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: runner
@@ -70,7 +70,7 @@ jobs:
             ${{ env.PORTAL_IMAGE }}:latest
 
       - name: Build and push sandbox image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.sandbox
