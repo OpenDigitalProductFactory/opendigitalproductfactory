@@ -45,6 +45,24 @@
       "problemMatcher": "$tsc"
     },
     {
+      "label": "DPF: Run E2E Tests",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "pnpm test:e2e"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Run Playwright against the running portal (requires docker compose up -d first)"
+    },
+    {
+      "label": "DPF: Run E2E Demo",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "pnpm test:e2e:demo"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Run the sandbox-preview demo spec with the headed demo config"
+    },
+    {
       "label": "DPF: Shared Workspace Infrastructure",
       "type": "shell",
       "command": "cmd",

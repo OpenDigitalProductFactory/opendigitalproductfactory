@@ -6,6 +6,8 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "test": "pnpm --filter web test && pnpm --filter @dpf/db test && pnpm --filter mobile test",
+    "test:e2e": "playwright test",
+    "test:e2e:demo": "playwright test -c playwright-demo.config.ts",
     "typecheck": "pnpm --filter web typecheck && pnpm --filter @dpf/db typecheck && pnpm --filter @dpf/types typecheck && pnpm --filter @dpf/validators typecheck && pnpm --filter @dpf/api-client typecheck && pnpm --filter mobile typecheck",
     "db:generate": "pnpm --filter @dpf/db generate",
     "db:migrate": "pnpm --filter @dpf/db migrate",
