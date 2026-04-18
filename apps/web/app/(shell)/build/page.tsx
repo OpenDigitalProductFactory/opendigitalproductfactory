@@ -57,10 +57,9 @@ export default async function BuildPage() {
 
   const projectBranch = getProjectBranch();
 
-  // Break out of the shell's max-w-7xl + p-6 container for full-bleed layout
   return (
-    <div className="fixed inset-0 top-[48px]">
+    <section className="min-h-full">
       <BuildStudio builds={builds} portfolios={portfolios} dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"} projectBranch={projectBranch} />
-    </div>
+    </section>
   );
 }
