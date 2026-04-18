@@ -1265,10 +1265,12 @@ async function seedCodexModels(): Promise<void> {
       supportsToolUse: true,
       supportsStreaming: true,
       supportsStructuredOutput: true,
+      sensitivityClearance: ["public", "internal", "confidential"],
     },
     update: {
       status: "active",
       supportsToolUse: true,
+      sensitivityClearance: ["public", "internal", "confidential"],
     },
   });
 
@@ -1760,7 +1762,31 @@ async function main(): Promise<void> {
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
   await syncCapabilities(prisma);
+  await assertActiveProvidersHaveClearance();
   console.log("Seed complete.");
+}
+
+/**
+ * Every active ModelProvider must declare sensitivityClearance. An empty array
+ * silently excludes the provider from all routing (hard-filter in pipeline-v2),
+ * which has caused the Codex pin to regress repeatedly after Docker rebuilds.
+ * Fail the seed loudly rather than ship a broken configuration.
+ */
+async function assertActiveProvidersHaveClearance(): Promise<void> {
+  const offenders = await prisma.modelProvider.findMany({
+    where: { status: "active" },
+    select: { providerId: true, name: true, sensitivityClearance: true },
+  });
+  const empty = offenders.filter(
+    (p) => !Array.isArray(p.sensitivityClearance) || p.sensitivityClearance.length === 0,
+  );
+  if (empty.length > 0) {
+    const list = empty.map((p) => `${p.providerId} (${p.name})`).join(", ");
+    throw new Error(
+      `Seed invariant violated: active providers without sensitivityClearance: ${list}. ` +
+        `Add sensitivityClearance to the relevant seed function (see seedLocalModels/seedCodexModels for reference).`,
+    );
+  }
 }
 
 main()
