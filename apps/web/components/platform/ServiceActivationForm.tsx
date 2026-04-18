@@ -87,7 +87,7 @@ export function ServiceActivationForm({ integrationId, prefillName, prefillCateg
         return;
       }
 
-      router.push(`/platform/services/${result.serverId ?? result.id}`);
+      router.push(`/platform/tools/services/${result.serverId ?? result.id}`);
       router.refresh();
     });
   }

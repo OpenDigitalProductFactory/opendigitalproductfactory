@@ -173,14 +173,14 @@ export function McpServiceRow({ server }: { server: McpServerGridRow }) {
           {/* Links */}
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <Link
-              href={`/platform/services/${server.id}`}
+              href={`/platform/tools/services/${server.id}`}
               style={{ color: "var(--dpf-accent)", fontSize: 10 }}
             >
               Manage Tools →
             </Link>
             {server.integrationName && (
               <Link
-                href="/platform/integrations"
+                href="/platform/tools/catalog"
                 style={{ color: "var(--dpf-muted)", fontSize: 10 }}
               >
                 View in Catalog
