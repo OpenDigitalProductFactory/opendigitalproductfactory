@@ -7,6 +7,7 @@ import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
 import { agentTaskDispatch } from "./agent-task-dispatch";
 import { evalBackground, probeBackground } from "./eval-background";
+import { hiveScoutIngest } from "./hive-scout-ingest";
 
 export const allFunctions = [
   prometheusPoll,
@@ -20,4 +21,5 @@ export const allFunctions = [
   agentTaskDispatch,
   evalBackground,
   probeBackground,
+  hiveScoutIngest,
 ];
