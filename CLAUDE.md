@@ -49,10 +49,13 @@
 
 ## Git Workflow
 
-- **Solo dev mode (current):** Commit directly to `main` and push. No feature branches, no PRs.
-- **Always push** after committing — local-only commits are invisible to the build pipeline and other agents.
-- **Future — customer branch model:** When customers contribute, each customer gets one persistent branch (`customer/<id>`). Branches are not named by fix or feature — they are named by who owns them. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale when there are thousands of contributors.
-- **Do not create `feat/`, `fix/`, or `refactor/` branches** — these add noise without value for a solo developer.
+- **`main` is protected.** All changes ship via pull request, including the maintainer's. Direct pushes to `main` are rejected by branch protection.
+- **Maintainer work uses short-lived branches named by intent:** `feat/*` for features, `fix/*` for fixes, `chore/*` for dependency and housekeeping work, `doc/*` for documentation-only changes, `clean/*` for repo hygiene. One concern per branch, one concern per PR.
+- **External contributors** fork the repo, branch from `main`, and open a PR against `main`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Required CI on every PR:** typecheck, unit tests, and a Next.js production build. All three must pass before merge is allowed.
+- **Branch protection includes administrators** — the rule applies to the maintainer too. That's the point.
+- **Always push** after committing — local-only commits are invisible to CI, the build pipeline, and other agents.
+- **Future — customer branch model:** When customers contribute, each gets one persistent branch (`customer/<id>`), named by who owns them rather than by fix or feature. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale for thousands of contributors.
 
 ## AI Coworker Prompts
 

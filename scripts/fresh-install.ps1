@@ -76,7 +76,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "Dependencies installed"
 
-Write-Host "========================================================" 
+Write-Step "Configuring in-repo git hooks (.githooks/)"
+git -C $InstallRoot config core.hooksPath .githooks
+if ($LASTEXITCODE -ne 0) {
+    Write-Warn "Could not set core.hooksPath. Run 'git config core.hooksPath .githooks' manually."
+} else {
+    Write-Ok "Git hooks path set to .githooks (Prisma migration guard enabled)"
+}
+
+Write-Host "========================================================"
 
 Write-Step "Creating .env file for Docker Compose"
 

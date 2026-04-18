@@ -10,7 +10,30 @@ Thanks for wanting to contribute. This project is built to grow through communit
 4. CI gates typecheck, unit tests, and a production build. Keep them green.
 5. A maintainer reviews and merges once the checks pass.
 
-External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`).
+External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). `main` is protected by branch protection: direct pushes are rejected and the required CI checks (typecheck, unit tests, production build) must pass before merge.
+
+## Branch naming
+
+Use a short prefix that names the **intent**, not the issue number:
+
+- `feat/<slug>` — new feature or capability
+- `fix/<slug>` — bug fix or regression repair
+- `chore/<slug>` — dependency bumps, build tooling, CI wiring
+- `doc/<slug>` — documentation-only changes
+- `clean/<slug>` — repo hygiene, dead-code removal, config cleanup
+- `customer/<id>` — reserved for the future customer-branch contribution model; do not use for solo maintainer work
+
+One concern per branch, one concern per PR. If you find a refactor that's adjacent but not entangled, open a separate PR for it.
+
+## Repo bootstrap (contributors)
+
+Once cloned, enable the in-repo git hooks so the Prisma migration guard runs locally:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`scripts/fresh-install.ps1` and `scripts/setup.ps1` / `scripts/setup.sh` configure this automatically when you use them to set the repo up. Run the one-liner above manually if you cloned without those helpers.
 
 ## Before you start
 
