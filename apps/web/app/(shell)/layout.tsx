@@ -147,10 +147,25 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           <main className="min-w-0 flex-1">
             <div
               className="mx-auto w-full max-w-[1600px] transition-[padding-right] duration-200"
-              style={{ paddingRight: "var(--agent-panel-reserved-width, 0px)" }}
+              style={{
+                maxWidth: "var(--shell-page-frame-max-width, 1600px)",
+                paddingRight: "var(--agent-panel-reserved-width, 0px)",
+              }}
             >
-              <div className="p-4 lg:p-6" data-shell-content="true">
-                <div className="mx-auto w-full max-w-7xl">{children}</div>
+              <div
+                data-shell-content="true"
+                style={{
+                  padding: "var(--shell-page-padding, clamp(1rem, 1vw + 0.75rem, 1.5rem))",
+                  minHeight:
+                    "calc(100dvh - var(--shell-content-top, 16px) - var(--shell-page-bottom-gap, 16px))",
+                }}
+              >
+                <div
+                  className="mx-auto w-full"
+                  style={{ maxWidth: "var(--shell-page-content-max-width, 80rem)" }}
+                >
+                  {children}
+                </div>
               </div>
             </div>
           </main>
