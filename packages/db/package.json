@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
-    "@prisma/adapter-pg": "^7.5.0",
+    "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.0",
@@ -33,12 +33,12 @@
     "neo4j-driver": "^5.27.0",
     "net-snmp": "^3.26.1",
     "pg": "^8.13.0",
-    "undici": "^8.0.1",
+    "undici": "^8.1.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/pg": "^8.11.0",
+    "@types/pg": "^8.20.0",
     "prisma": "^7.7.0",
     "tsx": "^4.15.0",
     "typescript": "^5.4.0",
