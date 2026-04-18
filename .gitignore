@@ -9,9 +9,21 @@ packages/db/generated/
 .superpowers/
 .worktrees/
 .playwright-mcp/
+.playwright-cli/
 .pnpm-store/
 docker-compose.override.yml
 backups/
+
+# Local install runtime state
 .host-profile.json
 .dpf-instance-id
 .admin-credentials
+.install-mode
+.install-progress
+.selected-model
+.tmp-codex-config.toml*
+
+# Test artifacts
+e2e-report/
+e2e-results/
+test-results/
