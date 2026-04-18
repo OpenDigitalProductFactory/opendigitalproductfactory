@@ -24,6 +24,31 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@expo/*"
         update-types: ["version-update:semver-major"]
+      # React Native and its ecosystem packages are version-coupled to
+      # the Expo SDK line (see note above). Block major bumps for the
+      # same reason.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major"]
+      # React majors land across web + mobile. The mobile workspace
+      # can only take React 19+ after RN 0.78+ / a matching Expo SDK
+      # upgrade, so React needs to move alongside that plan, not
+      # independently.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      # TypeScript majors usually surface type errors across strict
+      # mode code. Upgrade deliberately, not through Dependabot.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # neo4j-driver v6 has breaking session/driver API changes. Open
+      # a planned upgrade when it's time; ignore the auto bump.
+      - dependency-name: "neo4j-driver"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
