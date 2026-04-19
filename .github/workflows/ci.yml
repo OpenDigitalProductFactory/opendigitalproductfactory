@@ -34,12 +34,43 @@ jobs:
       - name: Typecheck all workspaces
         run: pnpm typecheck
 
+  routing-contract:
+    name: Routing Tier Contract
+    runs-on: ubuntu-latest
+    # Merge-blocking. Locks the "right LLM for the right job" principle
+    # into CI — asserts that for every task type in BUILT_IN_TASK_REQUIREMENTS,
+    # routing picks a model that meets the tier floor, required capabilities,
+    # and dimension thresholds. Regressions here (new model with wrong tier,
+    # missing pricing seed, task requirement wrong) fail CI loudly instead
+    # of silently routing trivial tasks to Opus or frontier tasks to Haiku.
+    # See docs/superpowers/specs/2026-04-20-routing-architecture-current.md.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Run tier-contract test
+        run: pnpm --filter web exec vitest run lib/routing/tier-contract.test.ts
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     # Unit Tests runs informationally while the broken-test backlog is drained
-    # (issue #104). Typecheck and Production Build are the binding gates.
-    # Flip this back to blocking once the suite is honest again.
+    # (issue #104). Typecheck, Production Build, and Routing Tier Contract
+    # are the binding gates. Flip this back to blocking once the suite is
+    # honest again.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
