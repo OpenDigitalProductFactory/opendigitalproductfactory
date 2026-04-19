@@ -46,6 +46,46 @@ async function requireAuthUser() {
   return user;
 }
 
+/**
+ * Build the coworker's chat summary of the ideate-research + design-review
+ * outcome. Reads the build's CURRENT phase after the review tool finished
+ * (the review tool auto-advances to plan when the gate is satisfied) so the
+ * message reflects what ACTUALLY happened rather than a stale "Ready to
+ * move to the planning phase?" question that sends users in circles.
+ */
+async function summariseIdeateOutcome(
+  approach: string,
+  reviewPassed: boolean,
+  buildId: string,
+): Promise<string> {
+  let currentPhase: string | null = null;
+  try {
+    const refreshed = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { phase: true },
+    });
+    currentPhase = refreshed?.phase ?? null;
+  } catch {
+    // Non-fatal — fall through to a generic message below.
+  }
+
+  const head = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n`;
+
+  if (!reviewPassed) {
+    return `${head}Design review flagged some issues — I'll revise and re-run the review.`;
+  }
+
+  if (currentPhase === "plan") {
+    return `${head}Design review passed and we're now in the Plan phase. I'll draft the implementation plan next.`;
+  }
+  if (currentPhase === "ideate") {
+    // Review passed but auto-advance gate held us. Make the blocker visible
+    // instead of asking a rhetorical "ready?" question.
+    return `${head}Design review passed, but the phase gate is holding advance (usually missing intake anchors — taxonomy, backlog, epic, or a constrained goal). I'll complete the remaining anchors and retry.`;
+  }
+  return `${head}Design review passed. Current phase: ${currentPhase ?? "unknown"}.`;
+}
+
 // ─── Server Actions ─────────────────────────────────────────────────────────
 
 /**
@@ -1154,10 +1194,11 @@ export async function sendMessage(input: {
                 console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${reviewResult.message?.slice(0, 100)}`);
                 agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
-                // Build a user-friendly summary
-                responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
-                  reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
-                } Ready to move to the planning phase?`;
+                responseContent = await summariseIdeateOutcome(
+                  approach,
+                  reviewResult.success,
+                  resolvedBuildId,
+                );
               }
             } else {
               // If the only issue is a missing/short codebase audit, auto-patch the doc and retry once.
@@ -1187,9 +1228,11 @@ export async function sendMessage(input: {
                     agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                     const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
                     agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
-                    responseContent = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n${
-                      reviewResult.success ? "Design review passed." : "Design review flagged some issues — I'll revise."
-                    } Ready to move to the planning phase?`;
+                    responseContent = await summariseIdeateOutcome(
+                      approach,
+                      reviewResult.success,
+                      resolvedBuildId,
+                    );
                   }
                 } else {
                   responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
