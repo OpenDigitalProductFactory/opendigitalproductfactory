@@ -23,6 +23,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
     name: "Default Endpoint",
     endpointType: "chat",
     status: "active",
+    providerTier: "user_configured",
     sensitivityClearance: ["public", "internal"],
     supportsToolUse: true,
     supportsStructuredOutput: true,

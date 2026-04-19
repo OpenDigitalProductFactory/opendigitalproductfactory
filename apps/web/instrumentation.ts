@@ -10,6 +10,38 @@ export async function register() {
       console.error("[instrumentation] Failed to register discovery jobs:", err),
     );
 
+    // Self-sync our function catalog with the Inngest server.
+    // In self-hosted mode (INNGEST_DEV=0) the Inngest server does NOT auto-
+    // discover apps — events are silently acked with no dispatch target,
+    // which manifests as UI flows stuck in "Working on it..." forever.
+    // Hitting our own PUT /api/inngest triggers the serve() handler to
+    // register/refresh the app with the Inngest server. Runs after a small
+    // delay to give Next.js time to bind the HTTP listener.
+    if (process.env.INNGEST_BASE_URL) {
+      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      setTimeout(async () => {
+        let lastErr: unknown = null;
+        for (let i = 0; i < 6; i++) {
+          try {
+            const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
+            if (res.ok) {
+              const body = await res.json().catch(() => ({}));
+              console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
+              return;
+            }
+            lastErr = `HTTP ${res.status}`;
+          } catch (err) {
+            lastErr = err instanceof Error ? err.message : String(err);
+          }
+          await new Promise((r) => setTimeout(r, 2_000));
+        }
+        console.error(
+          `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
+          `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
+        );
+      }, 3_000);
+    }
+
     // ── First-boot auto-provisioning ───────────────────────────────────────
     // Runs 15s after startup. Detects active providers with zero model
     // profiles (the exact state after a fresh install where the seed +

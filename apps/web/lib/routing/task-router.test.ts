@@ -14,6 +14,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest>): EndpointManifest {
     name: "Mock Endpoint",
     endpointType: "llm",
     status: "active",
+    providerTier: "user_configured",
     sensitivityClearance: ["internal", "confidential"],
     supportsToolUse: true,
     supportsStructuredOutput: true,
