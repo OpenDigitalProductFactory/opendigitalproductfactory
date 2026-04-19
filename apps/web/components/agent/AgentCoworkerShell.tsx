@@ -53,6 +53,14 @@ export function AgentCoworkerShell({ userContext }: Props) {
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
   const lastAutoMessageRef = useRef<string | null>(null);
+  // Queue auto-messages whose target thread hasn't loaded yet. The panel
+  // can't submit to a thread until threadId is set; if the open-agent-panel
+  // event arrives while the thread is mid-switch, we hold the message
+  // here and release it when the thread context stabilises.
+  const [queuedAutoMessage, setQueuedAutoMessage] = useState<{
+    message: string;
+    targetBuildId: string | null;
+  } | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
@@ -134,6 +142,18 @@ export function AgentCoworkerShell({ userContext }: Props) {
     };
   }, [threadContext]);
 
+  // Release a queued auto-message once the thread context has switched to
+  // its target build. Without this, a new build's "help me define it"
+  // prompt fires against the previously-active thread because the event
+  // lands before the thread swap completes. See BuildStudio.handleCreate.
+  useEffect(() => {
+    if (!queuedAutoMessage) return;
+    if (!threadId) return; // thread still switching — wait
+    if (queuedAutoMessage.targetBuildId && queuedAutoMessage.targetBuildId !== activeBuildId) return;
+    setPendingAutoMessage(queuedAutoMessage.message);
+    setQueuedAutoMessage(null);
+  }, [queuedAutoMessage, threadId, activeBuildId]);
+
   function handleOpen() {
     setIsOpen(true);
     savePanelOpen(userKey, true);
@@ -149,10 +169,19 @@ export function AgentCoworkerShell({ userContext }: Props) {
     function handleOpenPanel(e: Event) {
       setIsOpen(true);
       savePanelOpen(userKey, true);
-      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string } | undefined>).detail;
+      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string; targetBuildId?: string } | undefined>).detail;
       if (detail?.autoMessage && detail.autoMessage !== lastAutoMessageRef.current) {
         lastAutoMessageRef.current = detail.autoMessage;
-        setPendingAutoMessage(detail.autoMessage);
+        // If the event targets a specific build, queue the message until the
+        // Shell's threadContext advances to that build. Otherwise submit
+        // immediately (legacy behaviour — route-level auto-messages, e.g.
+        // the onboarding COO introducing each setup step, don't have a
+        // targetBuildId and must fire right away).
+        if (detail.targetBuildId) {
+          setQueuedAutoMessage({ message: detail.autoMessage, targetBuildId: detail.targetBuildId });
+        } else {
+          setPendingAutoMessage(detail.autoMessage);
+        }
       }
       // welcomeMessage: inject a pre-written assistant message without LLM call
       if (detail?.welcomeMessage) {
