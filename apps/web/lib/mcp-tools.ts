@@ -364,7 +364,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         url: { type: "string", description: "Public http or https URL to extract brand signals from." },
-        includeCodebase: { type: "boolean", description: "When true, also read the platform's codebase for tokens. Defaults to false; enable only for the platform org." },
+        includeCodebase: { type: "boolean", description: "When true, also read the installed platform codebase for tokens. Defaults to false." },
         uploadIds: { type: "array", items: { type: "string" }, description: "IDs of AgentAttachment records to include (logos, brand kit PDFs, style decks)." },
       },
     },
@@ -2164,7 +2164,7 @@ export async function executeTool(
       // Resolve THE single Organization (single-org-per-install architecture;
       // see memory project_single_org_per_install). No explicit org id is
       // threaded through executeTool, and there's only one Org per DPF install.
-      const org = await prisma.organization.findFirst({ select: { id: true, slug: true } });
+      const org = await prisma.organization.findFirst({ select: { id: true } });
       if (!org) {
         return {
           success: false,
@@ -2200,16 +2200,15 @@ export async function executeTool(
         ? uploadIdsRaw.filter((id): id is string => typeof id === "string")
         : undefined;
 
-      // Codebase path: only pass "/app" for the platform org, per codebase-adapter
-      // scoping rule. Non-platform orgs would need a connected-repo path that
-      // doesn't exist in this phase — skip by leaving codebasePath undefined.
-      const codebasePath = includeCodebase && org.slug === "platform" ? "/app" : undefined;
+      // DPF is single-org-per-install, so the installed org can always read
+      // the local platform codebase when includeCodebase is requested.
+      const codebasePath = includeCodebase ? "/app" : undefined;
 
       if (!url && !codebasePath && (!uploadIds || uploadIds.length === 0)) {
         return {
           success: false,
-          message: "Provide at least one source: a URL, includeCodebase (platform org), or uploadIds.",
-          error: "Provide at least one source: a URL, includeCodebase (platform org), or uploadIds.",
+          message: "Provide at least one source: a URL, includeCodebase, or uploadIds.",
+          error: "Provide at least one source: a URL, includeCodebase, or uploadIds.",
         };
       }
 

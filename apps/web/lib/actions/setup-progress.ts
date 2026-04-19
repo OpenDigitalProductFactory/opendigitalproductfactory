@@ -3,10 +3,29 @@
 import { prisma } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
 
+const BOOTSTRAP_PLATFORM_ORG = {
+  orgId: "ORG-PLATFORM",
+  slug: "platform",
+} as const;
+
 /** Check if this is a first-run scenario (no org + no completed setup). */
 export async function isFirstRun(): Promise<boolean> {
-  const orgCount = await prisma.organization.count();
-  if (orgCount > 0) return false;
+  const [orgCount, bootstrapOrg] = await Promise.all([
+    prisma.organization.count(),
+    prisma.organization.findFirst({
+      where: {
+        ...BOOTSTRAP_PLATFORM_ORG,
+        storefrontConfig: { is: null },
+        businessContext: { is: null },
+        platformSetupProgress: { is: null },
+        brandingConfig: { is: null },
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  const effectiveOrgCount = bootstrapOrg ? Math.max(orgCount - 1, 0) : orgCount;
+  if (effectiveOrgCount > 0) return false;
 
   const completedSetup = await prisma.platformSetupProgress.findFirst({
     where: { completedAt: { not: null } },

@@ -10,6 +10,7 @@ vi.mock("@dpf/db", () => ({
     },
     organization: {
       count: vi.fn(),
+      findFirst: vi.fn(),
     },
   },
 }));
@@ -42,15 +43,25 @@ describe("setup-progress", () => {
 
     it("returns false when an org exists", async () => {
       (prisma.organization.count as any).mockResolvedValue(1);
+      (prisma.organization.findFirst as any).mockResolvedValue(null);
       expect(await isFirstRun()).toBe(false);
     });
 
     it("returns false when a completed setup exists", async () => {
       (prisma.organization.count as any).mockResolvedValue(0);
+      (prisma.organization.findFirst as any).mockResolvedValue(null);
       (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
         completedAt: new Date(),
       });
       expect(await isFirstRun()).toBe(false);
+    });
+
+    it("treats an unlinked bootstrap platform org as still first-run", async () => {
+      (prisma.organization.count as any).mockResolvedValue(1);
+      (prisma.organization.findFirst as any).mockResolvedValue({ id: "bootstrap-org" });
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue(null);
+
+      expect(await isFirstRun()).toBe(true);
     });
   });
 

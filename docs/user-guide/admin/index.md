@@ -16,7 +16,7 @@ The Admin area is the control centre for platform configuration. It is where adm
 - **Role & Capability Matrix** — The mapping of roles to capabilities. Admins can review the full matrix and understand what each role can and cannot do.
 - **Branding Configuration** — The organization's name, logo, colours, and display preferences. Applied across the internal shell and the customer-facing storefront.
 - **Reference Data** — Lookup tables and configurable values used throughout the platform (e.g., product categories, status labels, regulation types). Changes here affect all areas.
-- **Storefront Admin** — Configuration for the public-facing storefront, including domain routing, archetype selection, and tenant settings.
+- **Storefront Admin** — Configuration for the public-facing storefront, including domain routing, archetype selection, and presentation settings.
 
 ## What You Can Do
 
@@ -24,4 +24,4 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Review the capability matrix to understand and communicate access rules
 - Update branding settings and preview how they appear across the platform
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
-- Configure storefront settings including domain routing and multi-tenant behaviour
+- Configure storefront settings including domain routing and public storefront behaviour

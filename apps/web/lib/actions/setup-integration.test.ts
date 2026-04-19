@@ -5,7 +5,10 @@ vi.mock("@dpf/db", () => {
   const records: Record<string, any> = {};
   return {
     prisma: {
-      organization: { count: vi.fn(() => 0) },
+      organization: {
+        count: vi.fn(() => 0),
+        findFirst: vi.fn(() => null),
+      },
       platformSetupProgress: {
         findFirst: vi.fn(() => null),
         findUniqueOrThrow: vi.fn((args: any) => {
@@ -38,12 +41,16 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 5 entries:
+// SETUP_STEPS has 9 entries:
 //   0: account-bootstrap
 //   1: ai-providers
 //   2: branding
 //   3: business-context
-//   4: workspace
+//   4: operating-hours
+//   5: storefront
+//   6: platform-development
+//   7: build-studio
+//   8: workspace
 
 describe("setup flow integration", () => {
   it("walks through the full step sequence", async () => {
@@ -66,12 +73,36 @@ describe("setup flow integration", () => {
     const step3 = await advanceStep(progress.id);
     expect(step3.currentStep).toBe("business-context");
 
-    // Advance step 3 → step 4 (last)
+    // Advance step 3 → step 4
     const step4 = await advanceStep(progress.id);
-    expect(step4.currentStep).toBe("workspace");
+    expect(step4.currentStep).toBe("operating-hours");
 
-    // Advance step 4 — final, sets completedAt
+    const step5 = await advanceStep(progress.id);
+    expect(step5.currentStep).toBe("storefront");
+
+    const step6 = await advanceStep(progress.id);
+    expect(step6.currentStep).toBe("platform-development");
+
+    const step7 = await advanceStep(progress.id);
+    expect(step7.currentStep).toBe("build-studio");
+
+    // Advance into the final workspace step
+    const step8 = await advanceStep(progress.id);
+    expect(step8.currentStep).toBe("workspace");
+
+    // Advance workspace — final, sets completedAt
     const final = await advanceStep(progress.id);
     expect(final.completedAt).toBeTruthy();
+  });
+
+  it("keeps the final setup step at workspace before completion", async () => {
+    const progress = await createSetupProgress();
+
+    let current = progress;
+    for (let i = 0; i < SETUP_STEPS.length - 1; i += 1) {
+      current = await advanceStep(current.id);
+    }
+
+    expect(current.currentStep).toBe("workspace");
   });
 });
