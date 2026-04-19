@@ -15,7 +15,7 @@ The Storefront is the public-facing side of the platform — the interface your 
 - **Archetypes** — The type of storefront you're running (e.g., service booking, product catalogue, donation page). The archetype determines which sections and flows are available.
 - **Sections** — Configurable blocks that make up the storefront pages: hero, featured items, booking calendar, checkout, testimonials, etc.
 - **Items** — The products or services listed for sale or booking. Each item has a price, description, and availability settings.
-- **Multi-tenant Routing** — The storefront supports multiple organizations or brands under one platform instance, each with their own URL path and branding.
+- **Domain Routing** — The storefront serves your organization's public experience under its configured path or domain with its selected branding.
 - **Inbox** — Messages and enquiries submitted by visitors through the storefront. Managed by staff from inside the platform.
 
 ## What You Can Do

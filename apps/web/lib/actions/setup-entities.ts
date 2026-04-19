@@ -4,8 +4,10 @@ import { prisma } from "@dpf/db";
 import { hashPassword } from "../password";
 import { linkSetupToOrg, linkSetupToUser } from "./setup-progress";
 
+const BOOTSTRAP_PLATFORM_ORG_ID = "ORG-PLATFORM";
+
 /**
- * Create the Organization record from Step 1 data.
+ * Create or upgrade the single Organization record from Step 1 data.
  * `orgId` is a human-readable unique identifier derived from timestamp.
  * `slug` is derived from the org name; a suffix is appended on collision.
  */
@@ -23,25 +25,42 @@ export async function createOrganization(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+  const existingOrg = await prisma.organization.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true, orgId: true },
+  });
+
   // Resolve slug uniqueness by appending a numeric suffix if needed
   let slug = baseSlug;
   let attempt = 0;
-  while (await prisma.organization.findUnique({ where: { slug } })) {
+  while (true) {
+    const found = await prisma.organization.findUnique({ where: { slug } });
+    if (!found || found.id === existingOrg?.id) break;
     attempt += 1;
     slug = `${baseSlug}-${attempt}`;
   }
 
-  const org = await prisma.organization.create({
-    data: {
-      orgId: `ORG-${Date.now()}`,
-      name: data.orgName,
-      slug,
-      industry: data.industry ?? null,
-      address: data.location
-        ? ({ location: data.location, timezone: data.timezone } as Record<string, string>)
-        : undefined,
-    },
-  });
+  const orgData = {
+    orgId:
+      existingOrg?.orgId === BOOTSTRAP_PLATFORM_ORG_ID
+        ? `ORG-${Date.now()}`
+        : (existingOrg?.orgId ?? `ORG-${Date.now()}`),
+    name: data.orgName,
+    slug,
+    industry: data.industry ?? null,
+    address: data.location
+      ? ({ location: data.location, timezone: data.timezone } as Record<string, string>)
+      : undefined,
+  };
+
+  const org = existingOrg
+    ? await prisma.organization.update({
+        where: { id: existingOrg.id },
+        data: orgData,
+      })
+    : await prisma.organization.create({
+        data: orgData,
+      });
 
   await linkSetupToOrg(setupId, org.id);
   return org;

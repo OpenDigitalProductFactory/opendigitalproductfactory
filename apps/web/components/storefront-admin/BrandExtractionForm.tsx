@@ -7,8 +7,8 @@ export type BrandExtractionInputs = {
 };
 
 type Props = {
-  /** True only for the platform org (codebase-adapter scoping rule). */
-  isPlatformOrg: boolean;
+  /** True when this single-install org may read the local platform codebase. */
+  allowCodebaseSource: boolean;
   /** Called when the user clicks "Extract design system". */
   onExtract: (inputs: BrandExtractionInputs) => void;
   /** Called when the user clicks "Skip for now". */
@@ -17,11 +17,11 @@ type Props = {
   busy?: boolean;
 };
 
-export function BrandExtractionForm({ isPlatformOrg, onExtract, onSkip, busy = false }: Props) {
+export function BrandExtractionForm({ allowCodebaseSource, onExtract, onSkip, busy = false }: Props) {
   const [url, setUrl] = useState("");
-  const [includeCodebase, setIncludeCodebase] = useState(isPlatformOrg);
+  const [includeCodebase, setIncludeCodebase] = useState(allowCodebaseSource);
 
-  const hasSource = url.trim().length > 0 || (isPlatformOrg && includeCodebase);
+  const hasSource = url.trim().length > 0 || (allowCodebaseSource && includeCodebase);
   const disabled = !hasSource || busy;
 
   return (
@@ -70,7 +70,7 @@ export function BrandExtractionForm({ isPlatformOrg, onExtract, onSkip, busy = f
         </div>
       </label>
 
-      {isPlatformOrg && (
+      {allowCodebaseSource && (
         <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--dpf-text)" }}>
           <input
             type="checkbox"
@@ -87,7 +87,7 @@ export function BrandExtractionForm({ isPlatformOrg, onExtract, onSkip, busy = f
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
         <button
           type="button"
-          onClick={() => onExtract({ url: url.trim() || undefined, includeCodebase: isPlatformOrg && includeCodebase })}
+          onClick={() => onExtract({ url: url.trim() || undefined, includeCodebase: allowCodebaseSource && includeCodebase })}
           disabled={disabled}
           style={{
             padding: "8px 20px",

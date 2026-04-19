@@ -253,10 +253,16 @@ async function seedBusinessModels(): Promise<void> {
  * single-org-per-install (see memory: project_single_org_per_install); the
  * seed guarantees an Organization exists before any downstream content,
  * so the single-org invariant holds from the first container start. The
- * Setup wizard later upgrades this bootstrap row with the real company
- * name and details (see apps/web/lib/actions/setup-entities.ts).
+ * Setup wizard later upgrades this bootstrap row in place with the real
+ * company name and details (see apps/web/lib/actions/setup-entities.ts).
  */
 async function ensureBootstrapOrganization(): Promise<string> {
+  const existing = await prisma.organization.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
   const org = await prisma.organization.upsert({
     where: { slug: "platform" },
     update: {},

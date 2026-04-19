@@ -10,7 +10,7 @@ import type { BrandDesignSystem } from "@/lib/brand/types";
 
 type Props = {
   organizationId: string;
-  isPlatformOrg: boolean;
+  allowCodebaseSource: boolean;
   initialSystem: BrandDesignSystem | null;
   initialThreadId: string | null;
   hasActiveExtraction: boolean;
@@ -31,7 +31,7 @@ type SSEEvent =
 
 export function BrandExtractionSection({
   organizationId,
-  isPlatformOrg,
+  allowCodebaseSource,
   initialSystem,
   initialThreadId,
   hasActiveExtraction,
@@ -122,7 +122,7 @@ export function BrandExtractionSection({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
-      <BrandExtractionForm isPlatformOrg={isPlatformOrg} onExtract={handleExtract} busy={busy} />
+      <BrandExtractionForm allowCodebaseSource={allowCodebaseSource} onExtract={handleExtract} busy={busy} />
 
       {status.kind === "queued" && (
         <StatusStrip tone="info">{status.message}</StatusStrip>

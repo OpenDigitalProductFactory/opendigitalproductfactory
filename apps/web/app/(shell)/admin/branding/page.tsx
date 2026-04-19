@@ -15,7 +15,7 @@ export default async function AdminBrandingPage() {
       select: { tokens: true },
     }),
     prisma.organization.findFirst({
-      select: { id: true, name: true, slug: true, logoUrl: true, designSystem: true },
+      select: { id: true, name: true, logoUrl: true, designSystem: true },
     }),
     userId
       ? prisma.agentThread.findUnique({
@@ -46,7 +46,6 @@ export default async function AdminBrandingPage() {
     organization?.designSystem && isBrandDesignSystem(organization.designSystem)
       ? organization.designSystem
       : null;
-  const isPlatformOrg = organization?.slug === "platform";
 
   return (
     <div>
@@ -58,7 +57,7 @@ export default async function AdminBrandingPage() {
       {organization && (
         <BrandExtractionSection
           organizationId={organization.id}
-          isPlatformOrg={isPlatformOrg}
+          allowCodebaseSource
           initialSystem={initialSystem}
           initialThreadId={thread?.id ?? null}
           hasActiveExtraction={!!activeTaskRun}
