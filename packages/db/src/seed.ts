@@ -1374,13 +1374,24 @@ async function seedCodexModels(): Promise<void> {
     },
   });
 
-  // Pin build-specialist to codex/gpt-5.4 so it gets MCP tools.
-  // anthropic-sub uses the CLI adapter which has no tool execution.
-  await prisma.agentModelConfig.upsert({
-    where: { agentId: "build-specialist" },
-    create: { agentId: "build-specialist", pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
-    update: { pinnedProviderId: "codex", pinnedModelId: "gpt-5.4" },
-  });
+  // INTENTIONALLY NO PIN for build-specialist.
+  //
+  // Previous seed pinned build-specialist to codex/gpt-5.4 so "it gets MCP
+  // tools". That framing was obsolete after two shipments:
+  //   * #107 introduced provider-tier preference so user-configured
+  //     providers always beat bundled local in routing — no pin needed to
+  //     keep build-specialist off Gemma4.
+  //   * #112 and #118 broadened the codex-cli and claude-cli tool_use
+  //     parsers so anthropic-sub can also execute MCP tools — no reason
+  //     to force codex specifically.
+  //
+  // Per feedback_no_provider_pinning: routing picks the right LLM for the
+  // job from capability tier + task type. Pins are a lie about the world —
+  // they force one model regardless of health, superseded by better ones,
+  // or actual task fit. No agent in the system should have a seeded pin.
+  // If build-specialist needs specific capabilities, encode them in
+  // minimumCapabilities / minimumTier / requiredModelClass (done below in
+  // seedAgentModelDefaults).
 
   const provider = await prisma.modelProvider.findFirst({ where: { providerId: "codex" } });
   if (!provider) return;
@@ -1709,16 +1720,20 @@ async function ensureBuildStudioModelConfig(): Promise<void> {
  * Uses upsert — existing admin overrides are NOT clobbered.
  */
 async function seedAgentModelDefaults(): Promise<void> {
+  // No pinnedProviderId / pinnedModelId fields here by design.
+  // See feedback_no_provider_pinning: routing picks the right LLM
+  // dynamically from capability tier + task type. Pins would overwrite
+  // routing's decision and drag agents down to stale models as the
+  // provider landscape shifts. Encode real requirements as
+  // minimumTier / minimumCapabilities / minimumContextTokens.
   const defaults: Array<{
     agentId: string;
     minimumTier: string;
     budgetClass: string;
-    pinnedProviderId?: string;
-    pinnedModelId?: string;
     minimumCapabilities?: Record<string, boolean>;
     minimumContextTokens?: number;
   }> = [
-    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", pinnedModelId: "claude-sonnet-4-6", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
@@ -1743,21 +1758,16 @@ async function seedAgentModelDefaults(): Promise<void> {
     });
     if (existing) {
       // Admin-configured rows are preserved for tier/budget.
-      // But capability floor and context minimum ARE backfilled if null —
+      // Only capability floor and context minimum are backfilled if null —
       // these are system defaults, not admin choices.
-      const needsPinUpdate =
-        (d.pinnedProviderId && !existing.pinnedProviderId) ||
-        (d.pinnedModelId && !existing.pinnedModelId);
       const needsCapUpdate =
         (d.minimumCapabilities !== undefined && existing.minimumCapabilities === null) ||
         (d.minimumContextTokens !== undefined && existing.minimumContextTokens === null);
 
-      if (needsPinUpdate || needsCapUpdate) {
+      if (needsCapUpdate) {
         await prisma.agentModelConfig.update({
           where: { agentId: d.agentId },
           data: {
-            ...(d.pinnedProviderId && !existing.pinnedProviderId ? { pinnedProviderId: d.pinnedProviderId } : {}),
-            ...(d.pinnedModelId && !existing.pinnedModelId ? { pinnedModelId: d.pinnedModelId } : {}),
             ...(d.minimumCapabilities !== undefined && existing.minimumCapabilities === null
               ? { minimumCapabilities: d.minimumCapabilities }
               : {}),
@@ -1776,8 +1786,8 @@ async function seedAgentModelDefaults(): Promise<void> {
         agentId: d.agentId,
         minimumTier: d.minimumTier,
         budgetClass: d.budgetClass,
-        pinnedProviderId: d.pinnedProviderId ?? null,
-        pinnedModelId: d.pinnedModelId ?? null,
+        // pinnedProviderId / pinnedModelId deliberately left null —
+        // see feedback_no_provider_pinning.
         ...(d.minimumCapabilities !== undefined ? { minimumCapabilities: d.minimumCapabilities } : {}),
         minimumContextTokens: d.minimumContextTokens ?? null,
         configuredAt: new Date(),

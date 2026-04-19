@@ -42,6 +42,38 @@ export async function register() {
       }, 3_000);
     }
 
+    // ── Pin audit invariant ────────────────────────────────────────────────
+    // Principle: routing must pick the right LLM dynamically from capability
+    // tier + task type — no hard pins (see feedback_no_provider_pinning).
+    // Pin rows are not removed on read, so a stray one from a legacy seed
+    // or manual admin change would silently override routing for that agent.
+    // Surface any surviving pins loudly so they get noticed and cleared.
+    setTimeout(async () => {
+      try {
+        const { prisma } = await import("@dpf/db");
+        const pinnedAgents = await prisma.agentModelConfig.findMany({
+          where: {
+            OR: [
+              { pinnedProviderId: { not: null } },
+              { pinnedModelId: { not: null } },
+            ],
+          },
+          select: { agentId: true, pinnedProviderId: true, pinnedModelId: true },
+        });
+        if (pinnedAgents.length > 0) {
+          console.warn(
+            `[pin-audit] ${pinnedAgents.length} AgentModelConfig row(s) carry a pin. Routing should be tier-based; pins override it. Clear them or document why: ` +
+              pinnedAgents
+                .map((a) => `${a.agentId}=${a.pinnedProviderId ?? "?"}/${a.pinnedModelId ?? "?"}`)
+                .join(", "),
+          );
+        }
+      } catch (err) {
+        // Non-fatal; guard is advisory.
+        console.warn("[pin-audit] check failed:", err);
+      }
+    }, 20_000);
+
     // ── First-boot auto-provisioning ───────────────────────────────────────
     // Runs 15s after startup. Detects active providers with zero model
     // profiles (the exact state after a fresh install where the seed +
