@@ -2646,7 +2646,7 @@ export async function executeTool(
       const latestBuild = await prisma.featureBuild.findFirst({
         where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
         orderBy: { updatedAt: "desc" },
-        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true },
+        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
@@ -2704,10 +2704,14 @@ export async function executeTool(
 
       // Actually advance the phase — the agent calls this as its last action
       // before transitioning, so this is the right place to do the DB update.
-      // Gate check ensures we don't skip required evidence.
+      // Gate check ensures we don't skip required evidence, and crucially
+      // passes happyPathState (intake anchors) so the gate's intake check
+      // evaluates against the real build state rather than default-null.
       try {
-        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
         if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
+          const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
+          const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate(
             latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
             toPhase as import("@/lib/feature-build-types").BuildPhase,
@@ -2716,6 +2720,7 @@ export async function executeTool(
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
               verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
               uxTestResults: latestBuild.uxTestResults,
+              happyPathState,
             },
           );
           if (gate.allowed) {
@@ -3076,17 +3081,29 @@ export async function executeTool(
       // Passed review → auto-advance if gate is satisfied.
       // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
       // has no HTTP request context inside the agentic loop. Direct DB update instead.
+      //
+      // Same pattern as reviewDesignDoc's auto-advance: checkPhaseGate also
+      // evaluates evidence.happyPathState, which must be passed from
+      // build.plan or the intake check fails silently. Reading the plan and
+      // pulling happyPathState out so the gate sees the real anchors —
+      // see the fix in reviewDesignDoc for the backstory.
       try {
-        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
         const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
         if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
+          const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
+          const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
-            buildPlan: updatedBuild.buildPlan, planReview: updatedBuild.planReview,
+            buildPlan: updatedBuild.buildPlan,
+            planReview: updatedBuild.planReview,
+            happyPathState,
           });
           if (gate.allowed) {
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build");
+          } else {
+            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
           }
         }
       } catch (err) {
