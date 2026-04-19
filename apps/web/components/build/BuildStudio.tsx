@@ -199,9 +199,17 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
       });
       setNewTitle("");
       router.refresh();
-      // Open the co-worker panel and auto-prompt about the new feature
+      // Open the co-worker panel and auto-prompt about the new feature.
+      // Include targetBuildId so Shell can queue the message until its
+      // thread context matches the new build — without the guard, the
+      // auto-message can fire against the previously-active thread
+      // because Shell's thread switch lags the panel's receipt of the
+      // event by one React render cycle.
       document.dispatchEvent(new CustomEvent("open-agent-panel", {
-        detail: { autoMessage: `I just created a new feature called "${title}". Help me define it.` },
+        detail: {
+          autoMessage: `I just created a new feature called "${title}". Help me define it.`,
+          targetBuildId: buildId,
+        },
       }));
     } finally {
       setCreating(false);
