@@ -4796,6 +4796,31 @@ export async function executeTool(
         };
       }
 
+      // Prerequisite checks for PR creation — fail loudly up front rather
+      // than silently producing a FeaturePack with prUrl:null downstream.
+      // Previously both conditions below gated the PR attempt inside a
+      // try/catch at line ~4866 and a falsy result was swallowed: the tool
+      // returned success:true with no prUrl, leaving the coworker claiming
+      // "contributed" when no upstream PR ever landed.
+      if (!devConfig?.dcoAcceptedAt) {
+        return {
+          success: false,
+          error: "DCO not accepted.",
+          message:
+            "Upstream contributions require the Developer Certificate of Origin. Visit Admin > Platform Development and accept the DCO, then retry.",
+        };
+      }
+      const { resolveHiveToken: resolveHiveTokenEarly } = await import("@/lib/integrate/identity-privacy");
+      const hiveTokenEarly = await resolveHiveTokenEarly();
+      if (!hiveTokenEarly) {
+        return {
+          success: false,
+          error: "No GitHub token configured for hive contributions.",
+          message:
+            "Upstream contributions need a GitHub token. Set HIVE_CONTRIBUTION_TOKEN on the portal container, seed a 'hive-contribution' credential in admin, or fall back to GITHUB_TOKEN. Then retry.",
+        };
+      }
+
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
         select: {
@@ -4855,17 +4880,21 @@ export async function executeTool(
       // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
       // No customer fork needed — the hive token provides write access.
       let prUrl: string | null = null;
+      let prError: string | null = null;
       try {
         const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
-        const hasDco = !!devConfig?.dcoAcceptedAt;
 
-        // Resolve token: hive-contribution > HIVE_CONTRIBUTION_TOKEN > GITHUB_TOKEN > git-backup
-        const { resolveHiveToken, generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
-        const hiveToken = await resolveHiveToken();
+        // DCO + token already validated up-front (see prerequisite checks
+        // earlier in this case); reuse the resolved token so we don't hit
+        // the credential store a second time.
+        const { generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
+        const hiveToken = hiveTokenEarly;
 
-        if (hasDco && hiveToken) {
+        {
           const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-          if (upstreamMatch) {
+          if (!upstreamMatch) {
+            prError = `upstreamRemoteUrl "${upstreamUrl}" is not a recognizable GitHub URL.`;
+          } else {
             const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
 
             const branchName = generatePrivateBranchName(platformId.clientId, build.title);
@@ -4933,12 +4962,16 @@ export async function executeTool(
                   logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
                 } catch (reviewErr) {
                   console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
+                  prError = prError ?? `Contribution review failed: ${reviewErr instanceof Error ? reviewErr.message : String(reviewErr)}`;
                 }
               }
+            } else {
+              prError = `createBranchAndPR returned no prUrl (owner=${upstreamMatch[1]} repo=${upstreamMatch[2]} branch=${branchName}).`;
             }
           }
         }
       } catch (err) {
+        prError = err instanceof Error ? err.message : String(err);
         console.warn("[contribute_to_hive] upstream PR creation failed:", err);
       }
 
@@ -4948,9 +4981,24 @@ export async function executeTool(
         data: { contributionStatus: "contributed" },
       }).catch(() => {});
 
-      logBuildActivity(buildId, "contribute_to_hive", `FeaturePack ${packId} created. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`);
+      logBuildActivity(
+        buildId,
+        "contribute_to_hive",
+        prUrl
+          ? `FeaturePack ${packId} created + PR ${prUrl}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`
+          : `FeaturePack ${packId} created but upstream PR FAILED: ${prError ?? "unknown"}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`,
+      );
 
-      const prMessage = prUrl ? ` A pull request has been created: ${prUrl}` : "";
+      if (!prUrl) {
+        return {
+          success: false,
+          error: prError ?? "Upstream PR creation failed.",
+          message: `Feature Pack ${packId} was created locally but the upstream pull request could not be opened: ${prError ?? "unknown error"}. Review the token, DCO, and upstream URL and retry.`,
+          data: { packId, manifest, dcoAttestation, prUrl: null, prError },
+        };
+      }
+
+      const prMessage = ` A pull request has been created: ${prUrl}`;
       return {
         success: true,
         message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation.${prMessage} Thank you for contributing!`,
