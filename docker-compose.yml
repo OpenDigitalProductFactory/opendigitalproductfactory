@@ -103,6 +103,14 @@ services:
       INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
       INNGEST_DEV: ${INNGEST_DEV:-0}
+      # Tell Inngest's serve() the externally-reachable URL for this app so
+      # sync registrations announce the Docker-DNS hostname (not the Host
+      # header of the /api/inngest PUT, which would be "localhost:3000"
+      # when the instrumentation hook self-syncs from inside the container).
+      # Without this, Inngest records the app URL as localhost:3000, then
+      # retries forever against itself when dispatching queued steps —
+      # symptom: events publish + initialize but never execute, UI hangs.
+      INNGEST_SERVE_HOST: http://portal:3000
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
     depends_on:
