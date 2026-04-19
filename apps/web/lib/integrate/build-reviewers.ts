@@ -23,6 +23,7 @@ Reuse Plan: ${doc.reusePlan}
 Proposed Approach: ${doc.proposedApproach}
 Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : doc.acceptanceCriteria ?? "Not specified"}
 ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalysis.scope}, Entities=${doc.reusabilityAnalysis.domainEntities.map((e) => `${e.hardcodedValue}->${e.parameterName}`).join(", ") || "none"}, Boundary="${doc.reusabilityAnalysis.abstractionBoundary}", Readiness=${doc.reusabilityAnalysis.contributionReadiness}` : ""}
+${(doc as { accessibility?: string }).accessibility ? `Accessibility: ${(doc as { accessibility?: string }).accessibility}` : ""}
 
 PROJECT CONTEXT:
 ${projectContext}
@@ -35,7 +36,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 5. Is new code justified where reuse wasn't possible?
 6. Is the proposed approach sound?
 7. Are acceptance criteria testable and specific?
-${hasUI ? `8. Does the design consider accessibility? (semantic HTML structure, keyboard-navigable interactions, ARIA labels for non-text interactive elements, color not the sole conveyor of meaning)` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
+${hasUI ? `8. Does the design's "Accessibility" field explicitly address a11y? (semantic HTML, keyboard operability, ARIA labels, visible focus, color-not-sole-conveyor.) If the Accessibility field is present and covers these points, accept it — do NOT re-demand the same criteria as a failure reason. If the Accessibility field is missing or says "Not applicable" despite obvious UI surface, THAT's a critical issue.` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
 
 SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss, security vulnerabilities, or broken functionality. Use "important" for design gaps that should be addressed but don't block implementation. Use "minor" for style, naming, or nice-to-have improvements. A health endpoint or simple utility does NOT need the same rigor as a payment system — calibrate accordingly.
