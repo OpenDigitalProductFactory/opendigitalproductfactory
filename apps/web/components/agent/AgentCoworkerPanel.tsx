@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { clearConversation, getOrCreateThreadSnapshot, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentMessageBubble } from "./AgentMessageBubble";
@@ -257,15 +257,24 @@ export function AgentCoworkerPanel({
             activeFormAssistRef.current.applyFieldUpdates(data.formAssistUpdate);
           }
 
-          // Refresh messages from DB — authoritative source
-          getOrCreateThreadSnapshot({ routeContext: effectiveRoute }).then((snapshot) => {
-            if (snapshot) {
-              setMessages(filterMessages(snapshot.messages));
-            }
+          // Refresh messages from DB — authoritative source.
+          // Fetch by threadId (which we already have as a prop) rather than
+          // by routeContext. The thread may be bound to a sub-context like
+          // "/build#FB-xxx" while pathname is just "/build"; fetching by
+          // routeContext would return the wrong (empty) thread and blow
+          // the panel's message list away.
+          if (threadId) {
+            getThreadSnapshotById({ threadId }).then((snapshot) => {
+              if (snapshot) {
+                setMessages(filterMessages(snapshot.messages));
+              }
+              setIsBusy(false);
+            }).catch(() => {
+              setIsBusy(false);
+            });
+          } else {
             setIsBusy(false);
-          }).catch(() => {
-            setIsBusy(false);
-          });
+          }
         }
 
         // Relay build-relevant events to BuildStudio via DOM event.
@@ -291,8 +300,10 @@ export function AgentCoworkerPanel({
 
     // Periodic recovery: check DB every 15 seconds while busy.
     // Catches missed SSE "done" events (connection drops, server restart, etc.)
+    // Fetches by threadId for the same reason as the "done" handler above.
     const recoveryInterval = setInterval(() => {
-      getOrCreateThreadSnapshot({ routeContext: effectiveRoute }).then((snapshot) => {
+      if (!threadId) return;
+      getThreadSnapshotById({ threadId }).then((snapshot) => {
         if (!snapshot) return;
         const latestMsg = snapshot.messages[snapshot.messages.length - 1];
         if (latestMsg && (latestMsg.role === "assistant" || latestMsg.role === "system")) {
