@@ -5084,13 +5084,40 @@ export async function executeTool(
       const activeBuild = await prisma.featureBuild.findFirst({
         where: { phase: "ideate" },
         orderBy: { updatedAt: "desc" },
-        select: { buildId: true },
+        select: { buildId: true, buildExecState: true, scoutFindings: true },
       });
       if (!activeBuild) {
         return { success: false, message: "No active ideate build found." };
       }
 
-      const current = (await prisma.featureBuild.findUnique({ where: { buildId: activeBuild.buildId }, select: { buildExecState: true } }))?.buildExecState as Record<string, unknown> | null;
+      const current = activeBuild.buildExecState as Record<string, unknown> | null;
+
+      // Idempotency: if scout has already delivered findings, do NOT re-run.
+      // The agentic loop otherwise re-calls this tool every iteration because
+      // the initial response says "results will appear on the next turn" and
+      // the model doesn't see the findings in its prompt context. The stuck-
+      // detector eventually bails, but not before burning 4-5 iterations and
+      // preventing phase advance. Tell the agent plainly the work is done.
+      if (activeBuild.scoutFindings !== null && activeBuild.scoutFindings !== undefined) {
+        return {
+          success: true,
+          message:
+            "Scout already ran for this build. Findings are saved to Build Studio Context — proceed with ideate using the existing scout results; do NOT call start_scout_research again.",
+          data: { alreadyComplete: true },
+        };
+      }
+
+      // Idempotency: if a scout request is already pending dispatch (flag set
+      // by a prior call but not yet cleared by the coworker post-turn hook),
+      // don't stack up another request. Same guidance.
+      if (current?.scoutResearchRequested === true) {
+        return {
+          success: true,
+          message:
+            "Scout already requested and is running now. Wait for the next turn to see findings — do NOT call start_scout_research again.",
+          data: { alreadyRequested: true },
+        };
+      }
 
       await prisma.featureBuild.update({
         where: { buildId: activeBuild.buildId },
@@ -5106,7 +5133,7 @@ export async function executeTool(
 
       return {
         success: true,
-        message: "Scout started. Codebase search and URL parsing running in background — takes about 30 seconds. Results will appear in your Build Studio Context on the next turn.",
+        message: "Scout started. Codebase search and URL parsing running in background — takes about 30 seconds. Results will appear in your Build Studio Context on the next turn. Do NOT call start_scout_research again; wait for the results.",
         data: { urlCount: externalUrls.length },
       };
     }
