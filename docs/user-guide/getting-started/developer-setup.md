@@ -111,6 +111,22 @@ pnpm test:e2e          # Playwright end-to-end against running portal
 pnpm test:e2e:demo     # Headed sandbox-preview demo
 ```
 
+### Branching
+
+After `install-dpf.ps1` runs in Customizable mode, your clone sits on a per-install branch named `dpf/<instance-id>`. That branch is the shared workspace for Build Studio and VS Code on this install — leave it where it is.
+
+**For feature work, create short-lived topic branches off `main`:**
+
+```bash
+git fetch origin
+git checkout -b feat/my-thing origin/main
+# ... work, commit ...
+git push -u origin feat/my-thing
+gh pr create --base main
+```
+
+Branch prefixes by intent: `feat/*`, `fix/*`, `chore/*`, `doc/*`, `clean/*`. One concern per branch. See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full PR workflow.
+
 ### Related
 
 - [Dev Container Setup](dev-container) — fully containerized alternative, no local Node.js required

@@ -61,25 +61,25 @@ function Save-Progress($step) {
     $progress | ConvertTo-Json | Set-Content $PROGRESS_FILE
 }
 
-function Is-StepDone($step) {
+function Test-StepDone($step) {
     $progress = Get-Progress
     return $progress.completedSteps -contains $step
 }
 
-function Generate-RandomPassword($length = 32) {
+function New-RandomPassword($length = 32) {
     $bytes = New-Object byte[] $length
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     return ($bytes | ForEach-Object { $_.ToString("x2") }) -join "" | Select-Object -First 1
 }
 
-function Generate-RandomAlphanumeric($length = 16) {
+function New-RandomAlphanumeric($length = 16) {
     $chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     $bytes = New-Object byte[] $length
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     return -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
-function Ensure-DPFStartupTask {
+function Register-DPFStartupTask {
     param([string]$taskName, [string]$startScriptPath)
 
     if (-not (Test-Path $startScriptPath)) {
@@ -123,7 +123,7 @@ if (-not (Test-Path $DPF_DIR)) {
 # --- Step 1: Check Windows ----------------------------------------------------
 
 Write-Step 1 10 "Checking Windows version..."
-if (-not (Is-StepDone "windows_check")) {
+if (-not (Test-StepDone "windows_check")) {
     $os = Get-CimInstance Win32_OperatingSystem
     $build = [int]$os.BuildNumber
     if ($build -lt 19041) {
@@ -141,7 +141,7 @@ if (-not (Is-StepDone "windows_check")) {
 # --- Step 2: WSL2 -------------------------------------------------------------
 
 Write-Step 2 10 "Setting up WSL2..."
-if (-not (Is-StepDone "wsl2")) {
+if (-not (Test-StepDone "wsl2")) {
     # Windows 11 24H2+ (build 26100+) ships WSL as an inbox component, not a DISM
     # optional feature. Detect this by checking if "wsl --version" succeeds.
     $wslInbox = $false
@@ -198,7 +198,7 @@ if (-not (Is-StepDone "wsl2")) {
 }
 
 # Handle partial WSL2 (resume after reboot)
-if ((Is-StepDone "wsl2_partial") -and -not (Is-StepDone "wsl2")) {
+if ((Test-StepDone "wsl2_partial") -and -not (Test-StepDone "wsl2")) {
     wsl --set-default-version 2 2>$null
     Write-OK "WSL2 is ready (resumed after restart)"
     Save-Progress "wsl2"
@@ -207,7 +207,7 @@ if ((Is-StepDone "wsl2_partial") -and -not (Is-StepDone "wsl2")) {
 # --- Step 3: Docker Desktop ---------------------------------------------------
 
 Write-Step 3 10 "Installing Docker Desktop..."
-if (-not (Is-StepDone "docker")) {
+if (-not (Test-StepDone "docker")) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
         Write-Action "Downloading Docker Desktop (this takes a minute)..."
@@ -279,7 +279,7 @@ if (-not (Is-StepDone "docker")) {
 # --- Step 4: Install Windows Exporter (host metrics for network discovery) ----
 
 Write-Step 4 10 "Installing Windows metrics exporter..."
-if (-not (Is-StepDone "windows_exporter")) {
+if (-not (Test-StepDone "windows_exporter")) {
     $weService = Get-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
     if ($weService) {
         Write-OK "windows_exporter service already installed"
@@ -330,7 +330,7 @@ if (-not (Is-StepDone "windows_exporter")) {
 # --- Step 5: Choose install mode and set up files ----------------------------
 
 Write-Step 5 10 "Setting up Digital Product Factory..."
-if (-not (Is-StepDone "download")) {
+if (-not (Test-StepDone "download")) {
 
     # If we already have a compose file, detect mode from prior install
     if (Test-Path "$DPF_DIR\docker-compose.yml") {
@@ -414,7 +414,8 @@ if (-not (Is-StepDone "download")) {
             git -C "$DPF_DIR" checkout -b $branchName 2>&1 | Out-Null
             $ErrorActionPreference = $oldEAP
             Write-OK "Cloned source on branch '$branchName'"
-            Write-Action "Your local work goes on this install branch. Build Studio and VS Code should both use this same checkout."
+            Write-Action "This is the per-install branch. Build Studio and VS Code share this workspace."
+            Write-Action "For feature work, create short-lived topic branches off 'main' (feat/*, fix/*, chore/*) and open PRs -- see CONTRIBUTING.md."
 
             # Convenience scripts for customizer mode
             Copy-Item "$DPF_DIR\scripts\dpf-start.ps1" "$DPF_DIR\dpf-start.ps1" -ErrorAction SilentlyContinue
@@ -943,7 +944,7 @@ Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
 # This runs as its own step so it executes even when "download" was already
 # saved by a previous install run (e.g. with an older version of this script).
 
-if ($InstallMode -eq "customizer" -and -not (Is-StepDone "dev_setup")) {
+if ($InstallMode -eq "customizer" -and -not (Test-StepDone "dev_setup")) {
     Write-Host ""
     Write-Host "  Setting up developer environment..." -ForegroundColor Cyan
 
@@ -1040,7 +1041,7 @@ services:
 # --- Step 5: Hardware Detection ------------------------------------------------
 
 Write-Step 6 10 "Detecting your hardware..."
-if (-not (Is-StepDone "hardware")) {
+if (-not (Test-StepDone "hardware")) {
     $cpu = Get-CimInstance Win32_Processor
     $mem = Get-CimInstance Win32_ComputerSystem
     $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
@@ -1124,11 +1125,11 @@ if (-not (Is-StepDone "hardware")) {
 # --- Generate .env -------------------------------------------------------------
 
 if (-not (Test-Path "$DPF_DIR\.env")) {
-    $pgPass = Generate-RandomPassword 16
-    $neoPass = Generate-RandomPassword 16
-    $authSecret = Generate-RandomPassword 32
-    $encKey = Generate-RandomPassword 32
-    $adminPass = Generate-RandomAlphanumeric 16
+    $pgPass = New-RandomPassword 16
+    $neoPass = New-RandomPassword 16
+    $authSecret = New-RandomPassword 32
+    $encKey = New-RandomPassword 32
+    $adminPass = New-RandomAlphanumeric 16
     $hostProfileJson = if (Test-Path "$DPF_DIR\.host-profile.json") { Get-Content "$DPF_DIR\.host-profile.json" -Raw } else { "{}" }
 
     @"
@@ -1153,7 +1154,7 @@ GF_ADMIN_PASSWORD=$adminPass
 # --- Step 6: Start Platform ---------------------------------------------------
 
 Write-Step 7 10 "Starting the platform..."
-if (-not (Is-StepDone "started")) {
+if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR
 
     if ($InstallMode -eq "consumer") {
@@ -1259,7 +1260,7 @@ if (-not (Is-StepDone "started")) {
 # --- Step 7: Wait for AI Model -------------------------------------------------
 
 Write-Step 8 10 "Setting up your AI Coworker..."
-if (-not (Is-StepDone "model")) {
+if (-not (Test-StepDone "model")) {
     # Pull model via Docker Model Runner (built into Docker Desktop 4.40+)
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
     Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
@@ -1282,8 +1283,8 @@ if (-not (Is-StepDone "model")) {
 # --- Step 8: Open Browser -----------------------------------------------------
 
 Write-Step 9 10 "Configuring auto-start on logon..."
-if (-not (Is-StepDone "autostart")) {
-    if (Ensure-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\dpf-start.ps1") {
+if (-not (Test-StepDone "autostart")) {
+    if (Register-DPFStartupTask -taskName $AUTOSTART_TASK_NAME -startScriptPath "$DPF_DIR\dpf-start.ps1") {
         Save-Progress "autostart"
     }
 } else {
