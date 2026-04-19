@@ -120,6 +120,14 @@ export function AgentCoworkerShell({ userContext }: Props) {
     ? `${pathname}#${activeBuildId}`
     : pathname;
 
+  // Keep a ref in sync so the async load effect below can read the latest
+  // queue without needing queuedAutoMessage in its dependency array (adding
+  // it would cancel the in-flight load every time a message is queued).
+  const queuedAutoMessageRef = useRef<typeof queuedAutoMessage>(null);
+  useEffect(() => {
+    queuedAutoMessageRef.current = queuedAutoMessage;
+  }, [queuedAutoMessage]);
+
   useEffect(() => {
     let active = true;
     setThreadId(null);
@@ -130,6 +138,18 @@ export function AgentCoworkerShell({ userContext }: Props) {
       if (!active) return;
       setThreadId(snapshot?.threadId ?? null);
       setInitialMessages(snapshot?.messages ?? []);
+
+      // Release a queued auto-message targeted at THIS build now that its
+      // thread is loaded. Draining inside the load callback avoids the race
+      // where a separate effect fires with activeBuildId already updated
+      // but threadId still holding the previous build's id, which would
+      // submit the message to the wrong thread.
+      const queued = queuedAutoMessageRef.current;
+      const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
+      if (queued && snapshot?.threadId && queued.targetBuildId === expectedBuildId) {
+        setPendingAutoMessage(queued.message);
+        setQueuedAutoMessage(null);
+      }
     })().catch((error) => {
       console.warn("getOrCreateThreadSnapshot error:", error);
       if (!active) return;
@@ -140,19 +160,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
     return () => {
       active = false;
     };
-  }, [threadContext]);
-
-  // Release a queued auto-message once the thread context has switched to
-  // its target build. Without this, a new build's "help me define it"
-  // prompt fires against the previously-active thread because the event
-  // lands before the thread swap completes. See BuildStudio.handleCreate.
-  useEffect(() => {
-    if (!queuedAutoMessage) return;
-    if (!threadId) return; // thread still switching — wait
-    if (queuedAutoMessage.targetBuildId && queuedAutoMessage.targetBuildId !== activeBuildId) return;
-    setPendingAutoMessage(queuedAutoMessage.message);
-    setQueuedAutoMessage(null);
-  }, [queuedAutoMessage, threadId, activeBuildId]);
+  }, [threadContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleOpen() {
     setIsOpen(true);
