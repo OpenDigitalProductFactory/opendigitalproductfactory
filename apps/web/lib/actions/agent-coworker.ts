@@ -48,6 +48,53 @@ async function requireAuthUser() {
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
 
+/**
+ * Load a thread's messages by its DB id (not by route context).
+ *
+ * Use this when the caller already knows which thread it's displaying
+ * (e.g. AgentCoworkerPanel has `threadId` as a prop). The generic
+ * `getOrCreateThreadSnapshot({routeContext})` lookup can land on a
+ * DIFFERENT thread when the route context differs from the thread's
+ * original context — e.g. on /build the panel is bound to
+ * `/build#FB-xxx` via the Shell, but `pathname === "/build"`, and
+ * fetching by route context would return the empty generic /build
+ * thread, blowing away the active-build messages. This overload
+ * binds the fetch to the actual thread id.
+ */
+export async function getThreadSnapshotById(input: {
+  threadId: string;
+}): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
+  const user = await requireAuthUser();
+
+  const thread = await prisma.agentThread.findFirst({
+    where: { id: input.threadId, userId: user.id },
+    select: { id: true },
+  });
+  if (!thread) return null;
+
+  const messages = await prisma.agentMessage.findMany({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      role: true,
+      content: true,
+      agentId: true,
+      routeContext: true,
+      createdAt: true,
+      attachments: {
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
+      },
+    },
+  });
+
+  return {
+    threadId: thread.id,
+    messages: messages.reverse().map((m) => serializeMessage(m)),
+  };
+}
+
 export async function getOrCreateThreadSnapshot(input: {
   routeContext: string;
 }): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
