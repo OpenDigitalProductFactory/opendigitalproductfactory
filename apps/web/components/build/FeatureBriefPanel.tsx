@@ -264,6 +264,24 @@ function Section({ label, value }: { label: string; value: string }) {
 }
 
 function DocSection({ label, value }: { label: string; value: string }) {
+  // Sections evaluated by the agent as "Not applicable — <reason>" are rendered
+  // as a single muted line so the reader isn't scanning past a wall of boilerplate
+  // when the answer is "nothing to do here". The agent still had to evaluate the
+  // section to reach this conclusion — we just don't amplify the void.
+  const trimmed = value.trim();
+  const na = /^not\s+applicable\b/i.test(trimmed);
+  if (na) {
+    // Strip leading "Not applicable —" so the muted line reads like prose.
+    const reason = trimmed.replace(/^not\s+applicable\s*[—\-:]*\s*/i, "").trim();
+    return (
+      <div>
+        <span className="text-xs text-[var(--dpf-muted)] uppercase tracking-wider">{label}</span>
+        <p className="text-xs text-[var(--dpf-muted)] mt-0.5 leading-snug italic">
+          Not applicable{reason ? ` — ${reason}` : ""}
+        </p>
+      </div>
+    );
+  }
   return (
     <div>
       <span className="text-xs text-[var(--dpf-muted)] uppercase tracking-wider">{label}</span>
