@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED** — this design doc captures an earlier iteration of routing. See [2026-04-20-routing-architecture-current.md](./2026-04-20-routing-architecture-current.md) for the current authoritative architecture.
+
 # EP-INF-001: AI Endpoint Routing and Model Profiling
 
 **Date:** 2026-03-18
