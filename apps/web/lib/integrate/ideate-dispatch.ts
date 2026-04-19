@@ -194,6 +194,8 @@ YOUR TASK:
 
   "acceptanceCriteria": ["criterion 1 — written as a testable statement", "criterion 2", "..."],
 
+  "accessibility": "REQUIRED for any feature with UI changes. Explicit, testable accessibility requirements: semantic HTML structure, keyboard-operable interactions (tab order, focus states, Enter/Escape handlers), ARIA labels and live regions for non-text affordances, color-is-not-the-sole-conveyor-of-meaning, visible focus indicators. If the feature has NO user-facing UI at all (pure backend / API-only / cron / utility), write exactly: 'Not applicable — <one-sentence reason, e.g. backend-only, no UI surface>'. The review rejects UI features that omit accessibility; this field is how you demonstrate you considered it.",
+
   "reusabilityAnalysis": {
     "scope": "${params.reusabilityScope}",
     "domainEntities": [{"hardcodedValue": "example", "parameterName": "exampleParam", "otherInstances": ["other1"]}],

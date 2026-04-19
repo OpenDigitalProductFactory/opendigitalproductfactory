@@ -49,6 +49,11 @@ export type BuildDesignDoc = {
   proposedApproach: string;
   acceptanceCriteria: string[];
   reusabilityAnalysis?: ReusabilityAnalysis;
+  /** Accessibility requirements (or "Not applicable — <reason>"). The
+   *  review prompt checks this explicit field rather than re-asking
+   *  the reviewer to derive a11y on every run, which was producing
+   *  review-rejection loops. */
+  accessibility?: string;
 };
 
 export type BuildPlanDoc = {
