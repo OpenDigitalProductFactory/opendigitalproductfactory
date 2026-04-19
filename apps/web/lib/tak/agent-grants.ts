@@ -144,6 +144,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   start_sandbox:              ["sandbox_execute"],
   start_build:                ["sandbox_execute"],
   start_ideate_research:      ["sandbox_execute", "file_read"],
+  start_scout_research:       ["sandbox_execute", "file_read", "web_search"],
   create_portal_pr:           ["sandbox_execute"],
   suggest_taxonomy_placement: ["registry_read"],
   confirm_taxonomy_placement: ["backlog_write"],
