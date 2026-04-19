@@ -127,13 +127,20 @@ export async function getTaskRequirement(
     return taskRequirementCache.get(taskType);
   }
 
-  const dbRow = await prisma.taskRequirement.findUnique({ where: { taskType } });
-  if (dbRow) {
-    // Prisma returns Json fields as `unknown`. We control the shape via seed + UI,
-    // so the cast is safe.
-    const requirement = dbRow as unknown as TaskRequirement;
-    taskRequirementCache.set(taskType, requirement);
-    return requirement;
+  // Try DB first; fall back to the built-in catalogue if the query fails
+  // (e.g. tests running without a provisioned Prisma client, or a transient
+  // connection blip). BUILT_IN_TASK_REQUIREMENTS is the canonical fallback
+  // so routing always gets a contract — missing DB must never break tier
+  // enforcement.
+  try {
+    const dbRow = await prisma.taskRequirement.findUnique({ where: { taskType } });
+    if (dbRow) {
+      const requirement = dbRow as unknown as TaskRequirement;
+      taskRequirementCache.set(taskType, requirement);
+      return requirement;
+    }
+  } catch {
+    // Fall through to built-in.
   }
 
   const builtIn = BUILT_IN_TASK_REQUIREMENTS[taskType];

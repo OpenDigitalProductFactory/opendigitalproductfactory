@@ -131,8 +131,17 @@ export async function inferContract(
   const requiresStreaming = interactionMode === "sync" && !routeContext?.requiredModelClass && !TASK_MODEL_CLASS[taskType];
 
   // ── Capability requirements ────────────────────────────────────────────
+  //
+  // Note: "requiresWebSearch" is the NATIVE capability (e.g. Gemini search-
+  // grounding, OpenAI web_search tool built into the provider). A task type
+  // of "web-search" does NOT automatically need this — almost every model
+  // can perform web search when given an MCP search tool, and the contract
+  // already demands `toolUse` for web-search via BUILT_IN_TASK_REQUIREMENTS.
+  // Only set requiresWebSearch when the caller explicitly asks for native
+  // grounding, otherwise the hard filter excludes every model that doesn't
+  // declare capabilities.webSearch (which is virtually all of them).
   const requiresCodeExecution = routeContext?.requiresCodeExecution === true;
-  const requiresWebSearch = taskType === "web-search" || routeContext?.requiresWebSearch === true;
+  const requiresWebSearch = routeContext?.requiresWebSearch === true;
   const requiresComputerUse = routeContext?.requiresComputerUse === true;
 
   // ── Input modality detection ──────────────────────────────────────────
@@ -240,6 +249,35 @@ export async function inferContract(
   if (routeContext?.residencyPolicy !== undefined) {
     contract.residencyPolicy = routeContext.residencyPolicy as
       RequestContract["residencyPolicy"];
+  }
+
+  // ── Tier floor from task requirements ───────────────────────────────────
+  // BUILT_IN_TASK_REQUIREMENTS (and the DB-overridable TaskRequirement table
+  // below) sets a `minimumTier` per task type — "code-gen" is frontier,
+  // "summarization" is adequate, etc. That tier choice encodes a dimension-
+  // score floor (TIER_MINIMUM_DIMENSIONS). Translate it into contract.
+  // minimumDimensions so pipeline-v2's hard filter excludes anything that
+  // doesn't meet the floor, and cost-per-success ranking can't route a
+  // frontier task to a strong-tier model just because it's cheaper.
+  try {
+    const [{ getTaskRequirement }, { TIER_MINIMUM_DIMENSIONS, isValidTier }] = await Promise.all([
+      import("./task-requirements"),
+      import("./quality-tiers"),
+    ]);
+    const req = await getTaskRequirement(taskType);
+    const tier = req?.minimumTier;
+    if (tier && isValidTier(tier)) {
+      const tierFloor = TIER_MINIMUM_DIMENSIONS[tier];
+      if (Object.keys(tierFloor).length > 0) {
+        contract.minimumDimensions = {
+          ...tierFloor,
+          ...(contract.minimumDimensions ?? {}),
+        };
+      }
+    }
+  } catch {
+    // Non-fatal: if the tier lookup fails, contract continues without
+    // a tier floor (defaulting to existing behaviour).
   }
 
   return contract;

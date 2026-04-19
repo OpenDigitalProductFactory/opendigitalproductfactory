@@ -1638,6 +1638,90 @@ async function seedModelProfiles(): Promise<void> {
    * This runs on every seed to fix profiles that may have been incorrectly
    * set by model discovery or provider sync.
    */
+/**
+ * Seed known per-M-token pricing for recognized model-name patterns.
+ *
+ * Why this matters: cost-per-success ranking in pipeline-v2 compares
+ * paid candidates by `pricing.inputPerMToken` + `outputPerMToken`.
+ * When pricing is null (as it was for every paid model in model-profiles.json
+ * before this seed), every paid candidate gets the same penalized
+ * rank of `successProb * 50`, they all tie, and routing picks whichever
+ * is first in the list. Net effect: summarization on Opus, code-gen on
+ * Opus, greeting on Opus — every task lands on the same model.
+ *
+ * Using public API rates as proxy values works even for subscription-
+ * backed providers (anthropic-sub, codex). The routing uses RELATIVE
+ * cost ordering, so as long as Haiku < Sonnet < Opus and cheaper coder
+ * models < frontier generalist models, the ranking picks the right
+ * model for the job. Real subscription users pay a flat fee; the
+ * ranking just tells the router to prefer the cheapest capable option.
+ *
+ * Only touches rows where pricing.inputPerMToken is currently null —
+ * admin-tuned prices are preserved.
+ */
+async function seedModelPricing(): Promise<void> {
+  // Public API rates (per 1M tokens) as of early 2026.
+  // Pattern matching is substring-on-modelId — new model versions pick
+  // up the right bracket automatically.
+  const priceBrackets: Array<{
+    match: (providerId: string, modelId: string) => boolean;
+    inputPerMToken: number;
+    outputPerMToken: number;
+  }> = [
+    // Anthropic Claude family
+    { match: (p, m) => p === "anthropic-sub" && m.includes("haiku"), inputPerMToken: 1, outputPerMToken: 5 },
+    { match: (p, m) => p === "anthropic-sub" && m.includes("sonnet"), inputPerMToken: 3, outputPerMToken: 15 },
+    { match: (p, m) => p === "anthropic-sub" && m.includes("opus"), inputPerMToken: 15, outputPerMToken: 75 },
+    // Anthropic direct API
+    { match: (p, m) => p === "anthropic" && m.includes("haiku"), inputPerMToken: 1, outputPerMToken: 5 },
+    { match: (p, m) => p === "anthropic" && m.includes("sonnet"), inputPerMToken: 3, outputPerMToken: 15 },
+    { match: (p, m) => p === "anthropic" && m.includes("opus"), inputPerMToken: 15, outputPerMToken: 75 },
+    // OpenAI subscription (codex CLI) + ChatGPT
+    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.includes("codex"), inputPerMToken: 5, outputPerMToken: 20 },
+    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.startsWith("gpt-5"), inputPerMToken: 10, outputPerMToken: 40 },
+    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.startsWith("gpt-4"), inputPerMToken: 5, outputPerMToken: 15 },
+    // OpenAI direct
+    { match: (p, m) => p === "openai" && m.startsWith("gpt-5"), inputPerMToken: 10, outputPerMToken: 40 },
+    { match: (p, m) => p === "openai" && m.startsWith("gpt-4"), inputPerMToken: 5, outputPerMToken: 15 },
+    // Bundled local — always free
+    { match: (p) => p === "local" || p === "ollama", inputPerMToken: 0, outputPerMToken: 0 },
+  ];
+
+  const profiles = await prisma.modelProfile.findMany({
+    select: { id: true, providerId: true, modelId: true, pricing: true },
+  });
+
+  let updated = 0;
+  let skipped = 0;
+  for (const mp of profiles) {
+    const currentPricing = (mp.pricing as Record<string, unknown>) ?? {};
+    // Preserve admin-tuned values: skip if input/output per M is already non-null.
+    if (currentPricing.inputPerMToken != null && currentPricing.outputPerMToken != null) {
+      skipped++;
+      continue;
+    }
+    const bracket = priceBrackets.find((b) => b.match(mp.providerId, mp.modelId));
+    if (!bracket) {
+      skipped++;
+      continue;
+    }
+    await prisma.modelProfile.update({
+      where: { id: mp.id },
+      data: {
+        pricing: {
+          ...currentPricing,
+          inputPerMToken: bracket.inputPerMToken,
+          outputPerMToken: bracket.outputPerMToken,
+        } as never,
+        inputPricePerMToken: bracket.inputPerMToken,
+        outputPricePerMToken: bracket.outputPerMToken,
+      },
+    });
+    updated++;
+  }
+  console.log(`  Seeded pricing for ${updated} model profiles (${skipped} already set or unknown)`);
+}
+
 async function ensureBuildStudioModelConfig(): Promise<void> {
   // ── Ensure all current Anthropic models have correct status ──────────────
   // Sonnet 4.6 and Opus 4.6 are the primary models for Build Studio and
@@ -1864,6 +1948,7 @@ async function main(): Promise<void> {
   await seedLocalModels();
   await seedModelProfiles();
   await ensureBuildStudioModelConfig();
+  await seedModelPricing();
   await seedAgentModelDefaults();
   await seedPlatformConfig();
   await seedClientIdentity();
