@@ -2740,7 +2740,7 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build found.", message: "No active build." };
       const field = String(params.field ?? "");
-      const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"];
+      const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet", "scoutFindings"];
       if (!allowedFields.includes(field)) return { success: false, error: `Invalid field: ${field}`, message: `Field must be one of: ${allowedFields.join(", ")}` };
       const topLevelValue = Object.fromEntries(
         Object.entries(params).filter(([key]) => key !== "field" && key !== "value"),
