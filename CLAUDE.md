@@ -49,10 +49,14 @@
 
 ## Git Workflow
 
-- **Solo dev mode (current):** Commit directly to `main` and push. No feature branches, no PRs.
-- **Always push** after committing — local-only commits are invisible to the build pipeline and other agents.
-- **Future — customer branch model:** When customers contribute, each customer gets one persistent branch (`customer/<id>`). Branches are not named by fix or feature — they are named by who owns them. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale when there are thousands of contributors.
-- **Do not create `feat/`, `fix/`, or `refactor/` branches** — these add noise without value for a solo developer.
+- **All changes go through pull requests**, including the maintainer's. This is the rule, enforced by discipline today and by branch protection once the repo flips public (GitHub Free does not expose branch protection for private repos).
+- **CI runs on every PR:** typecheck, unit tests, production build. Typecheck and production build are the merge-blocking gates today. Unit tests run but are temporarily informational — see the "broken tests" tracking issue.
+- **Maintainer work uses short-lived branches named by intent:** `feat/*` for features, `fix/*` for fixes, `chore/*` for dependency and housekeeping work, `doc/*` for documentation-only changes, `clean/*` for repo hygiene. One concern per branch, one concern per PR.
+- **External contributors** fork the repo, branch from `main`, and open a PR against `main`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Do not push directly to `main`** even though the tier-locked branch protection cannot block you today. The rule is the rule; cutting corners here defeats the workflow that lets CI catch issues on the maintainer's work too.
+- **Always push** after committing — local-only commits are invisible to CI, the build pipeline, and other agents.
+- **Future — customer branch model:** When customers contribute, each gets one persistent branch (`customer/<id>`), named by who owns them rather than by fix or feature. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale for thousands of contributors.
+- **Branch protection activation:** enabling the GitHub-level enforcement on `main` requires either (a) flipping the repo visibility to public, or (b) upgrading the plan to GitHub Pro/Team. Configure `Typecheck` and `Production Build` as required status checks, include administrators, allow squash-merge or linear history — whichever the maintainer picks.
 
 ## AI Coworker Prompts
 
