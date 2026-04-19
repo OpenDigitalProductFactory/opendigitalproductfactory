@@ -11,17 +11,42 @@ import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Window during which terminal-status TaskRuns are still replayed.
+ * Short-lived async jobs (e.g. brand extract completes in ~7s) finish
+ * before the browser's EventSource connects. If we only replay
+ * status="active", the subscriber misses the terminal event entirely
+ * and the panel sits on "Working on it..." until the user refreshes
+ * and the server-rendered state takes over.
+ *
+ * Including recently-completed/failed runs in replay gives the panel a
+ * last-write-wins view of the latest progress event, regardless of
+ * whether the producer outraced the subscriber.
+ */
+const TERMINAL_REPLAY_WINDOW_MS = 5 * 60 * 1000;
+
 async function loadReplayEvents(
   threadId: string,
 ): Promise<Array<Record<string, unknown>>> {
   try {
-    const activeRuns = await prisma.taskRun.findMany({
-      where: { threadId, status: "active", progressPayload: { not: null as never } },
+    const terminalFloor = new Date(Date.now() - TERMINAL_REPLAY_WINDOW_MS);
+    const runs = await prisma.taskRun.findMany({
+      where: {
+        threadId,
+        progressPayload: { not: null as never },
+        OR: [
+          { status: "active" },
+          {
+            status: { in: ["completed", "failed"] },
+            updatedAt: { gte: terminalFloor },
+          },
+        ],
+      },
       select: { progressPayload: true, updatedAt: true },
       orderBy: { updatedAt: "desc" },
       take: 5,
     });
-    return activeRuns
+    return runs
       .map((r) => r.progressPayload as Record<string, unknown> | null)
       .filter((p): p is Record<string, unknown> => p !== null);
   } catch {
