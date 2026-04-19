@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED** — this design doc captures an earlier iteration of routing. See [2026-04-20-routing-architecture-current.md](./2026-04-20-routing-architecture-current.md) for the current authoritative architecture.
+
 # EP-INF-012: Model Routing Simplification — Tiers, Assignment & Admin Control
 
 **Date:** 2026-03-29
