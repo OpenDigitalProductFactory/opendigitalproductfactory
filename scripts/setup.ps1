@@ -36,6 +36,16 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
 }
 Write-Ok "pnpm found: $(pnpm -v)"
 
+# -- Git hooks -------------------------------------------------------------------
+
+Write-Step "Configuring in-repo git hooks (.githooks/)"
+git config core.hooksPath .githooks
+if ($LASTEXITCODE -eq 0) {
+    Write-Ok "Git hooks path set to .githooks (Prisma migration guard enabled)"
+} else {
+    Write-Warn "Could not set core.hooksPath. Run 'git config core.hooksPath .githooks' manually from the repo root."
+}
+
 # -- Dependencies ----------------------------------------------------------------
 
 Write-Step "Installing dependencies"

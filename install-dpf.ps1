@@ -422,6 +422,10 @@ if (-not (Is-StepDone "download")) {
             Copy-Item "$DPF_DIR\scripts\dpf-start.bat" "$DPF_DIR\dpf-start.bat" -ErrorAction SilentlyContinue
             Copy-Item "$DPF_DIR\scripts\dpf-stop.bat" "$DPF_DIR\dpf-stop.bat" -ErrorAction SilentlyContinue
 
+            # Enable in-repo git hooks (Prisma migration guard) for customizer installs.
+            # Consumer installs have no git checkout so this does not apply to that branch.
+            git -C $DPF_DIR config core.hooksPath .githooks 2>&1 | Out-Null
+
         } else {
             # --- Consumer path ---
             $InstallMode = "consumer"

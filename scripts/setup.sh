@@ -40,6 +40,15 @@ if ! command -v pnpm &>/dev/null; then
 fi
 ok "pnpm found: $(pnpm -v)"
 
+# ── Git hooks ────────────────────────────────────────────────────────────────
+
+step "Configuring in-repo git hooks (.githooks/)"
+if git config core.hooksPath .githooks; then
+  ok "Git hooks path set to .githooks (Prisma migration guard enabled)"
+else
+  warn "Could not set core.hooksPath. Run 'git config core.hooksPath .githooks' manually from the repo root."
+fi
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 step "Installing dependencies"
