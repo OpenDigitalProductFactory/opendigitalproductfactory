@@ -133,18 +133,9 @@ export function AgentCoworkerShell({ userContext }: Props) {
     setThreadId(null);
     setInitialMessages([]);
 
-    console.log("[dpf-debug] Shell fetching snapshot", { threadContext, activeBuildId, pathname });
     (async () => {
       const snapshot = await getOrCreateThreadSnapshot({ routeContext: threadContext });
-      if (!active) {
-        console.log("[dpf-debug] Shell fetch cancelled (stale)", { threadContext });
-        return;
-      }
-      console.log("[dpf-debug] Shell fetch result", {
-        threadContext,
-        threadId: snapshot?.threadId,
-        messageCount: snapshot?.messages?.length ?? 0,
-      });
+      if (!active) return;
       setThreadId(snapshot?.threadId ?? null);
       setInitialMessages(snapshot?.messages ?? []);
 

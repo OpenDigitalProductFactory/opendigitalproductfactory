@@ -60,8 +60,17 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
 
   useEffect(() => {
     const detail = activeBuild?.buildId ?? null;
-    window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail }));
+    // Defer the dispatch: React fires child effects before parent effects on
+    // initial mount, so AgentCoworkerShell (in the layout) hasn't attached
+    // its "build-studio-active-build" listener yet when this effect runs on
+    // first render. Dispatching synchronously loses the event and the Shell
+    // fetches the wrong thread (/build instead of /build#<buildId>).
+    // A microtask is enough — Shell's useEffect runs after BuildStudio's.
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail }));
+    }, 0);
     return () => {
+      clearTimeout(timer);
       window.dispatchEvent(new CustomEvent("build-studio-active-build", { detail: null }));
     };
   }, [activeBuild?.buildId]);
