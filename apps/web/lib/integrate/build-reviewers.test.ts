@@ -88,4 +88,35 @@ describe("parseReviewResponse", () => {
     const result = parseReviewResponse('{"decision":"fail","issues":[{"severity":"unknown","description":"test"}],"summary":"ok"}');
     expect(result.issues[0].severity).toBe("minor");
   });
+
+  it("overrides reviewer's 'fail' decision when only important/minor issues exist", () => {
+    // Matches the real-world loop: reviewer lists 2 important issues and
+    // decides fail, which contradicts its own severity calibration
+    // ("important doesn't block implementation"). Severity-driven logic
+    // returns pass because no critical issues exist — issues are still
+    // surfaced for the author to address.
+    const result = parseReviewResponse(JSON.stringify({
+      decision: "fail",
+      issues: [
+        { severity: "important", description: "Race condition edge case" },
+        { severity: "important", description: "Missing alternatives note" },
+      ],
+      summary: "Reviewer 2: state-consistency safeguards needed",
+    }));
+    expect(result.decision).toBe("pass");
+    expect(result.issues).toHaveLength(2);
+  });
+
+  it("still fails when any issue is critical, regardless of reviewer's decision field", () => {
+    const result = parseReviewResponse(JSON.stringify({
+      decision: "pass",
+      issues: [
+        { severity: "critical", description: "Auth bypass" },
+        { severity: "minor", description: "Naming nit" },
+      ],
+      summary: "technically fine but",
+    }));
+    expect(result.decision).toBe("fail");
+    expect(result.issues).toHaveLength(2);
+  });
 });

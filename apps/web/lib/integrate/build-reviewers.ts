@@ -169,7 +169,7 @@ export function parseReviewResponse(raw: string): ReviewResult {
 
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
 
-    const decision = parsed.decision === "pass" ? "pass" : "fail";
+    const rawDecision = parsed.decision === "pass" ? "pass" : "fail";
     const issues = Array.isArray(parsed.issues)
       ? parsed.issues.map((issue: Record<string, unknown>) => ({
           severity: (["critical", "important", "minor"].includes(String(issue.severity))
@@ -181,6 +181,26 @@ export function parseReviewResponse(raw: string): ReviewResult {
         }))
       : [];
     const summary = String(parsed.summary ?? "Review complete");
+
+    // Honor the reviewer prompt's own severity calibration:
+    //   "Use 'critical' ONLY for issues that would cause data loss,
+    //    security vulnerabilities, or broken functionality. Use
+    //    'important' for design gaps that should be addressed but
+    //    don't block implementation."
+    //
+    // In practice reviewers routinely return decision:"fail" with
+    // only "important" issues, which contradicts the prompt and
+    // trapped real builds (observed 2026-04-19 on FB-21EEA510) in an
+    // endless dual-reviewer loop that kept finding new important
+    // issues each iteration. Overriding the decision to match the
+    // declared severity of the issues — critical fails, anything else
+    // passes (issues are still surfaced for the author to address).
+    const hasCritical = issues.some((i) => i.severity === "critical");
+    const decision: "pass" | "fail" = hasCritical ? "fail" : "pass";
+    // rawDecision retained for diagnostics in logs if the LLM's own decision
+    // diverges from the severity-driven one. The severity-driven decision is
+    // authoritative — see comment above.
+    void rawDecision;
 
     return { decision, issues, summary };
   } catch {
