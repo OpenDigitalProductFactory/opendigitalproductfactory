@@ -184,13 +184,13 @@ YOUR TASK:
 {
   "problemStatement": "What problem this solves, who it affects, and why it matters. Write 2-3 sentences a non-technical stakeholder can understand.",
 
-  "dataModel": "Describe the data model in PLAIN ENGLISH with a structured layout. For each model: name, purpose (one sentence), then list its fields as: fieldName (Type) — description. Use line breaks between models. Example format:\\n\\nCertificationAuthority — Represents an external certification provider.\\n- slug (String, unique) — short identifier, e.g. 'open-group'\\n- displayName (String) — human-readable name\\n- apiBaseUrl (String) — API endpoint for this provider\\n\\nDo NOT use Prisma syntax or code blocks. Do NOT omit fields. List every field with its type and purpose.",
+  "dataModel": "Describe the data model in PLAIN ENGLISH with a structured layout. For each model: name, purpose (one sentence), then list its fields as: fieldName (Type) — description. Use line breaks between models. Example format:\\n\\nCertificationAuthority — Represents an external certification provider.\\n- slug (String, unique) — short identifier, e.g. 'open-group'\\n- displayName (String) — human-readable name\\n- apiBaseUrl (String) — API endpoint for this provider\\n\\nDo NOT use Prisma syntax or code blocks. Do NOT omit fields. List every field with its type and purpose.\\n\\nIf this feature truly requires NO data model change (e.g. a UI-only tweak on existing data), you MUST still evaluate by confirming what existing models will be used, then write exactly: 'Not applicable — <one-sentence reason, naming the existing models being relied on>'. Never leave empty and never skip the evaluation step.",
 
   "existingFunctionalityAudit": "REQUIRED — never leave empty. What existing files, models, and patterns you found in the codebase that this feature will build on. Reference specific file paths (apps/web/...) and model names. If nothing related exists, write: 'No existing implementation found. Searched for [list the exact terms you searched for]. This is a new feature.' That format is accepted — but an empty string is not.",
 
   "proposedApproach": "A clear, readable description of how this will work. Structure it with labeled sections:\\n- Data Model: summarize the models (detail is in the dataModel field)\\n- API Routes: what endpoints, what each does, auth requirements\\n- UI Pages: what pages, what they show, what actions they support\\n- Integration Flow: step-by-step of what happens when the feature is triggered (automatic and manual paths)\\n- Configuration: how admins set up and manage the feature\\nWrite each section so a developer can implement from it without ambiguity.",
 
-  "reusePlan": "What existing code, patterns, and utilities from the codebase will be reused. Be specific — name files and functions.",
+  "reusePlan": "What existing code, patterns, and utilities from the codebase will be reused. Be specific — name files and functions. If this feature genuinely cannot reuse existing code (truly novel surface), write exactly: 'Not applicable — <one-sentence reason>'. Only use this when you have searched and confirmed nothing reusable exists.",
 
   "acceptanceCriteria": ["criterion 1 — written as a testable statement", "criterion 2", "..."],
 
@@ -206,6 +206,7 @@ RULES:
 - Search thoroughly before writing. Your audit must reference real files.
 - existingFunctionalityAudit MUST never be empty or null. If you find nothing relevant, write what you searched for.
 - If reusability scope is "parameterizable", the proposedApproach MUST describe how domain-specific values are stored as configuration, not hardcoded.
+- "Not applicable" convention: you MUST still evaluate every section. For sections that genuinely do not apply to this feature after evaluation (e.g. a UI-only fix has no data model change, a standalone utility has no reuse target), write the section value as exactly: "Not applicable — <one-sentence reason>". The reviewer accepts this format. Never use it to skip work — only when evaluation concluded the section legitimately does not apply.
 - Output ONLY the JSON block. No commentary, no explanations.
 - VALID JSON ONLY: The output must parse with JSON.parse(). Do NOT put double-quote characters inside string values — they break parsing. Version numbers (1.0.0), product names, and file paths must NOT be wrapped in quotes inside a JSON string. WRONG: "assigns version \\"1.0.0\\" to each" — RIGHT: "assigns version 1.0.0 to each". If you need to emphasize something, use parentheses or dashes instead of quotes.`;
 }
