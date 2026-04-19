@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED** — this design doc captures an earlier iteration of routing. See [2026-04-20-routing-architecture-current.md](./2026-04-20-routing-architecture-current.md) for the current authoritative architecture.
+
 # EP-INF-UTIL-001: Utility Inference Tier
 
 | Field | Value |
