@@ -119,24 +119,36 @@ else
   echo "  -- /workspace not mounted, skipping"
 fi
 
-# Configure provider capabilities and build-specialist pinning.
-# codex is only activated if a credential exists — otherwise it stays
-# "unconfigured" so the admin UI accurately reflects what's ready to use.
+# Configure provider capabilities.
+# The only seed we keep is auto-activating codex when its credential exists —
+# that reflects reality (credentials present = usable) and is cheap to reassert.
+#
+# REMOVED (were clobbering admin config on every restart):
+#   * Hard pin of build-specialist to codex/gpt-5.4.
+#     Obsolete since provider-tier preference (#107): routing now prefers
+#     user_configured providers over bundled locals automatically, and the
+#     fallback chain diversifies across providers. The pin turned every codex
+#     hiccup (disabled, rate-limit, auth) into a full collapse to local
+#     Gemma4 instead of a clean fallback to anthropic-sub.
+#   * Forcing anthropic-sub.supportsToolUse = false.
+#     Obsolete since #112 and #118: the codex-cli and claude-cli adapters
+#     now both rescue tool_use blocks out of assistant text. Claude CLI can
+#     execute MCP tools — the override was wrong once those shipped.
+#
+# If either seed needs to come back, add it to the Prisma seed (packages/db
+# src/seed.ts) as initial state only, NOT as a post-init UPDATE that
+# overrides what the admin set in the UI.
 echo "[post-init] Configuring provider capabilities..."
 psql "$DATABASE_URL" -c "
   -- codex: activate ONLY if a credential has been stored for it
   UPDATE \"ModelProvider\" SET status = 'active', \"supportsToolUse\" = true
     WHERE \"providerId\" = 'codex'
     AND EXISTS (SELECT 1 FROM \"CredentialEntry\" WHERE \"providerId\" = 'codex' AND status = 'active');
-  -- codex without credentials: mark as discovered (seeded but not configured)
+  -- codex without credentials: mark the tool-use bit so it's ready the
+  -- moment an admin configures a credential. Does not change status.
   UPDATE \"ModelProvider\" SET \"supportsToolUse\" = true
     WHERE \"providerId\" = 'codex'
     AND NOT EXISTS (SELECT 1 FROM \"CredentialEntry\" WHERE \"providerId\" = 'codex' AND status = 'active');
-  -- anthropic-sub CLI adapter cannot execute MCP tools
-  UPDATE \"ModelProvider\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
-  UPDATE \"ModelProfile\" SET \"supportsToolUse\" = false WHERE \"providerId\" = 'anthropic-sub';
-  -- Pin build-specialist to codex (takes effect when codex becomes active)
-  UPDATE \"AgentModelConfig\" SET \"pinnedProviderId\" = 'codex', \"pinnedModelId\" = 'gpt-5.4' WHERE \"agentId\" = 'build-specialist';
 " 2>/dev/null || echo "  WARN post-init SQL had warnings (non-fatal)"
 echo "  OK Provider config set"
 
