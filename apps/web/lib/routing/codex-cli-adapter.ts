@@ -20,6 +20,7 @@ import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes
@@ -278,135 +279,12 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 };
 
 /**
- * Extract tool_use blocks from Codex CLI text output.
- *
- * The model emits several shapes in practice, and each variant has to be
- * accepted or the agentic loop silently drops the call and the coworker
- * "explains" that the tool isn't available. Shapes handled:
- *
- *   1. {"type":"tool_use","id":"x","name":"t","input":{...}}   (spec)
- *   2. {"name":"t","input":{...}}                              (missing type/id)
- *   3. {"tool":"t","arguments":{...}}                          (alt key names)
- *   4. <tool_use>{...}</tool_use>                              (XML-ish wrapper)
- *   5. ```json\n{...}\n```                                     (markdown fence)
- *
- * Any recognisable object is normalised to ToolCallEntry. We look for
- * candidate JSON objects inside the entire text (fenced, tagged, or
- * inline) and accept the first valid shape each.
+ * Thin wrapper re-export so the unit test file continues to work without
+ * being rewritten. The actual logic lives in extract-tool-calls.ts so both
+ * codex-cli and claude cli-adapter can use it.
  */
-/**
- * Deterministic JSON stringify with sorted object keys — used to build a
- * content-based dedup key for tool calls that the same response expresses
- * in two different wrappers (e.g. XML-ish + inline).
- */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(",")}]`;
-  const keys = Object.keys(value as Record<string, unknown>).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`).join(",")}}`;
-}
-
-/**
- * Returns the index of the `}` that closes the object starting at `openIdx`,
- * or -1 if the object is not well-balanced. Respects JSON string literals so
- * braces inside strings don't throw off the depth counter.
- */
-function findBalancedEnd(text: string, openIdx: number): number {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = openIdx; i < text.length; i++) {
-    const ch = text[i]!;
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
 export function extractToolCalls(text: string): ToolCallEntry[] {
-  const toolCalls: ToolCallEntry[] = [];
-  const seen = new Set<string>();
-
-  // Strip XML-ish <tool_use>...</tool_use> and markdown ```json ... ``` wrappers
-  // by collecting their inner content as candidate JSON strings. Then also
-  // scan the raw text for inline JSON objects.
-  const candidates: string[] = [];
-
-  // a) <tool_use>...</tool_use> blocks
-  const xmlPattern = /<tool_use>\s*([\s\S]*?)\s*<\/tool_use>/gi;
-  for (let m; (m = xmlPattern.exec(text)) !== null; ) {
-    if (m[1]) candidates.push(m[1].trim());
-  }
-
-  // b) ```json ... ``` fenced blocks (accept 'json', 'tool_use', or unlabeled)
-  const fencePattern = /```(?:json|tool_use)?\s*([\s\S]*?)```/g;
-  for (let m; (m = fencePattern.exec(text)) !== null; ) {
-    if (m[1]) candidates.push(m[1].trim());
-  }
-
-  // c) Raw inline JSON objects in the text. Regex can't balance braces across
-  //    nested objects, so scan for `{` then walk forward counting brace depth
-  //    (respecting strings) to find the matching close. Start only at braces
-  //    whose first key looks like a tool call — `type`, `name`, or `tool`.
-  const keyStartPattern = /\{\s*"(?:type|name|tool)"\s*:/g;
-  for (let start; (start = keyStartPattern.exec(text)) !== null; ) {
-    const end = findBalancedEnd(text, start.index);
-    if (end > start.index) candidates.push(text.slice(start.index, end + 1));
-  }
-
-  for (const raw of candidates) {
-    let parsed: Record<string, unknown> | null = null;
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    if (!parsed || typeof parsed !== "object") continue;
-
-    // Normalise variants into {name, input}
-    const name =
-      (typeof parsed.name === "string" && parsed.name) ||
-      (typeof parsed.tool === "string" && parsed.tool) ||
-      null;
-    const input =
-      (parsed.input && typeof parsed.input === "object" ? parsed.input : null) ??
-      (parsed.arguments && typeof parsed.arguments === "object" ? parsed.arguments : null) ??
-      {};
-    if (!name) continue;
-
-    // Accept either type:"tool_use" or no type (when the shape is clear)
-    if (parsed.type !== undefined && parsed.type !== "tool_use") continue;
-
-    const id =
-      (typeof parsed.id === "string" && parsed.id) ||
-      `call_${toolCalls.length}_${name}`;
-
-    // Dedupe by semantic content (same name + same args) so the XML wrapper
-    // candidate and the inline-JSON candidate of the same call don't both
-    // get dispatched. The auto-generated id differs between candidates so
-    // it can't be part of the dedup key.
-    const semanticKey = `${name}:${stableStringify(input)}`;
-    if (seen.has(semanticKey)) continue;
-    seen.add(semanticKey);
-
-    toolCalls.push({
-      id,
-      name,
-      arguments: input as Record<string, unknown>,
-    });
-  }
-
-  return toolCalls;
+  return sharedExtractToolCalls(text);
 }
 
 // ── Auto-register at import time ─────────────────────────────────────────────

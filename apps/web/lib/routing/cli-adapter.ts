@@ -21,6 +21,7 @@ import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes — matches chat adapter's AbortSignal.timeout
@@ -125,8 +126,20 @@ function parseCliStreamOutput(output: string): {
     }
   }
 
+  const finalText = textParts.join("");
+  // Rescue: if the model emitted tool_use JSON as assistant text instead of
+  // a structured tool_use event (observed on anthropic-sub CLI when Claude
+  // writes the canonical {"type":"tool_use",…} JSON in a chat turn),
+  // extract the tool calls from the text so the agentic loop dispatches.
+  if (toolCalls.length === 0 && finalText.includes('"tool_use"')) {
+    const rescued = extractToolCallsFromText(finalText);
+    if (rescued.length > 0) {
+      toolCalls.push(...rescued);
+    }
+  }
+
   return {
-    text: textParts.join(""),
+    text: finalText,
     toolCalls,
     usage: { inputTokens, outputTokens },
   };
@@ -162,6 +175,15 @@ function parseCliJsonOutput(output: string): {
 
     const usage = parsed.usage as { input_tokens?: number; output_tokens?: number } | undefined;
 
+    // Same rescue as parseCliStreamOutput: tool_use may appear in the text
+    // instead of in a content-block tool_use entry.
+    if (toolCalls.length === 0 && text.includes('"tool_use"')) {
+      const rescued = extractToolCallsFromText(text);
+      if (rescued.length > 0) {
+        toolCalls.push(...rescued);
+      }
+    }
+
     return {
       text,
       toolCalls,
@@ -171,10 +193,14 @@ function parseCliJsonOutput(output: string): {
       },
     };
   } catch {
-    // Not JSON — return raw text
+    // Not JSON — return raw text. Try to extract tool calls from the raw
+    // text before giving up; the CLI occasionally prints a single JSON
+    // tool_use block with no wrapper.
+    const raw = output.trim();
+    const rescued = raw.includes('"tool_use"') ? extractToolCallsFromText(raw) : [];
     return {
-      text: output.trim(),
-      toolCalls: [],
+      text: raw,
+      toolCalls: rescued,
       usage: { inputTokens: 0, outputTokens: 0 },
     };
   }
@@ -225,7 +251,19 @@ export const cliAdapter: ExecutionAdapterHandler = {
         }
         return `- ${JSON.stringify(t)}`;
       });
-      toolContext = `\n\nAvailable tools (respond with tool_use blocks to invoke):\n${toolDescriptions.join("\n")}`;
+      // Be explicit about the tool_use JSON shape. The Claude CLI's
+      // stream-json parser only recognises STRUCTURED tool_use events emitted
+      // as top-level stream entries — tool_use JSON embedded inside
+      // assistant-text content leaks through as plain chat (observed on
+      // /build with anthropic-sub). The downstream fallback extractor below
+      // rescues such cases; the prompt still asks for the canonical shape.
+      toolContext =
+        `\n\nAvailable tools. To invoke a tool, output ONE JSON object per ` +
+        `invocation using exactly this shape:\n` +
+        `{"type":"tool_use","id":"<unique_id>","name":"<tool_name>","input":{<args>}}\n` +
+        `Do NOT wrap in XML tags, markdown code fences, or rename the keys. ` +
+        `Output only the JSON (no surrounding prose) when invoking a tool.\n\n` +
+        `Tools:\n${toolDescriptions.join("\n")}`;
     }
 
     const fullSystemPrompt = systemPrompt + toolContext;
