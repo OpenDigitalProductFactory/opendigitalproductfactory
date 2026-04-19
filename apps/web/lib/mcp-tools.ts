@@ -2921,20 +2921,105 @@ export async function executeTool(
         };
       }
 
-      // Passed review → auto-advance if gate is satisfied.
-      // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
-      // has no HTTP request context inside the agentic loop. Direct DB update instead.
+      // Passed review → auto-complete intake anchors the user didn't
+      // explicitly set, then try to advance the phase.
+      //
+      // Before: only designDoc + designReview were passed to checkPhaseGate,
+      // which evaluates evidence.happyPathState too and silently failed on
+      // null (default-all-null from normalizeHappyPathState). Phase stayed
+      // ideate forever, the coworker kept saying "Ready to move to planning?"
+      // and nothing moved. Observed by Mark 2026-04-20 on the subnet-filter
+      // graph build.
+      //
+      // Fix:
+      //   1. Read plan from DB so we have the real happyPathState.
+      //   2. If backlogItemId or epicId are null (user didn't manually
+      //      create them), auto-create them here. constrainedGoal and
+      //      taxonomyNodeId are normally populated by update_feature_brief
+      //      and confirm_taxonomy_placement which the agent already calls
+      //      in the ideate loop.
+      //   3. Pass happyPathState to checkPhaseGate so the full intake
+      //      check actually runs.
       try {
-        const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
-        const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+        const updatedBuild = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: {
+            phase: true,
+            designDoc: true,
+            designReview: true,
+            plan: true,
+            title: true,
+            description: true,
+            digitalProductId: true,
+            digitalProduct: { select: { portfolio: { select: { slug: true } } } },
+          },
+        });
+
         if (updatedBuild && updatedBuild.phase === "ideate" && canTransitionPhase("ideate", "plan")) {
+          const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
+          let happyPathState = normalizeHappyPathState(plan.happyPathState);
+
+          // Auto-create epic if missing.
+          if (!happyPathState.intake.epicId) {
+            try {
+              const { createBuildEpic } = await import("@/lib/actions/build");
+              const epicTitle = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
+              const portfolioSlug = updatedBuild.digitalProduct?.portfolio?.slug ?? undefined;
+              const epicResult = await createBuildEpic({
+                buildId,
+                title: epicTitle,
+                ...(portfolioSlug ? { portfolioSlug } : {}),
+                ...(updatedBuild.digitalProductId ? { digitalProductId: updatedBuild.digitalProductId } : {}),
+              });
+              await updateBuildHappyPathState(userId, {
+                intake: { epicId: epicResult.epicId },
+              }, buildId);
+              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: epicResult.epicId } };
+              logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${epicResult.epicId} (${epicTitle})`);
+            } catch (err) {
+              console.warn("[reviewDesignDoc] auto-create epic failed:", err);
+            }
+          }
+
+          // Auto-create backlog item if missing.
+          if (!happyPathState.intake.backlogItemId) {
+            try {
+              const itemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+              const title = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
+              const body = String(updatedBuild.description ?? "").slice(0, 2000);
+              await prisma.backlogItem.create({
+                data: {
+                  itemId,
+                  title,
+                  type: "product",
+                  status: "in-progress",
+                  submittedById: userId,
+                  ...(body ? { body } : {}),
+                  ...(happyPathState.intake.epicId ? { epicId: happyPathState.intake.epicId } : {}),
+                },
+              });
+              await updateBuildHappyPathState(userId, {
+                intake: { backlogItemId: itemId },
+              }, buildId);
+              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, backlogItemId: itemId } };
+              logBuildActivity(buildId, "auto-intake:backlog", `Auto-created backlog item ${itemId} (${title})`);
+            } catch (err) {
+              console.warn("[reviewDesignDoc] auto-create backlog item failed:", err);
+            }
+          }
+
           const gate = checkPhaseGate("ideate", "plan", {
-            designDoc: updatedBuild.designDoc, designReview: updatedBuild.designReview,
+            designDoc: updatedBuild.designDoc,
+            designReview: updatedBuild.designReview,
+            happyPathState,
           });
           if (gate.allowed) {
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
+          } else {
+            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
           }
         }
       } catch (err) {
