@@ -1194,9 +1194,11 @@ export async function sendMessage(input: {
                 console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${reviewResult.message?.slice(0, 100)}`);
                 agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
+                const reviewDecision = (reviewResult.data as { review?: { decision?: string }; blocked?: boolean } | undefined);
+                const reviewPassed = reviewDecision?.review?.decision === "pass" && !reviewDecision?.blocked;
                 responseContent = await summariseIdeateOutcome(
                   approach,
-                  reviewResult.success,
+                  reviewPassed,
                   resolvedBuildId,
                 );
               }
@@ -1228,9 +1230,11 @@ export async function sendMessage(input: {
                     agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                     const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
                     agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
+                    const reviewDecision = (reviewResult.data as { review?: { decision?: string }; blocked?: boolean } | undefined);
+                    const reviewPassed = reviewDecision?.review?.decision === "pass" && !reviewDecision?.blocked;
                     responseContent = await summariseIdeateOutcome(
                       approach,
-                      reviewResult.success,
+                      reviewPassed,
                       resolvedBuildId,
                     );
                   }
