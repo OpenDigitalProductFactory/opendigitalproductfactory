@@ -361,6 +361,21 @@ export async function routeEndpointV2(
   }
   ranked.sort((a, b) => b.rankScore - a.rankScore);
 
+  // ── Stage 5b: Provider-tier preference ─────────────────────────────────
+  // Architectural principle: when the user has configured an external
+  // provider (OAuth completed or API key saved), that explicit action
+  // signals the user's preference. Bundled local defaults remain available
+  // as fallback, but never win over a user-configured endpoint — otherwise
+  // fresh installs silently route to the bundled default because paid
+  // providers have no pricing/eval metadata yet and are penalized by
+  // cost-per-success ranking.
+  //
+  // Stable-sort puts user_configured ahead of bundled while preserving
+  // rankScore order within each tier. No-op when only one tier is present.
+  const tierOrder = (ep: EndpointManifest): number =>
+    ep.providerTier === "user_configured" ? 0 : 1;
+  ranked.sort((a, b) => tierOrder(a.endpoint) - tierOrder(b.endpoint));
+
   // ── Stage 6: Select winner + build fallback chain ──────────────────────
   const winner = ranked[0]!;
   // Select up to 3 fallbacks, preferring provider diversity.

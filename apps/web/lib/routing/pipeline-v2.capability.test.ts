@@ -11,6 +11,7 @@ function activeEp(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
     name: "GPT-5.3",
     endpointType: "chat",
     status: "active",
+    providerTier: "user_configured",
     sensitivityClearance: ["public", "internal", "confidential", "restricted"],
     supportsToolUse: true,
     supportsStructuredOutput: true,
