@@ -112,6 +112,31 @@ const MARKDOWN_COMPONENTS = {
   ),
 };
 
+// Detect assistant messages that surface an error/failure state so we can
+// render them visibly differently from normal conversation. This is a
+// heuristic — the coworker backend doesn't tag errors explicitly, so we
+// match on common failure phrasing we produce in agent-coworker.ts and the
+// provider/dispatch path (e.g. "Invalid API key", "encountered an issue",
+// "Fix external API key"). Conservative on purpose: a false negative just
+// renders a normal bubble; a false positive paints a warning on a benign
+// message.
+function looksLikeAgentError(content: string): boolean {
+  if (!content) return false;
+  const c = content.toLowerCase();
+  return (
+    c.includes("invalid api key") ||
+    c.includes("fix external api key") ||
+    c.includes("encountered an issue") ||
+    c.includes("had trouble") ||
+    c.includes("couldn't generate") ||
+    c.includes("could not parse") ||
+    c.includes("didn't produce a complete") ||
+    c.startsWith("error:") ||
+    c.startsWith("failed ") ||
+    c.startsWith("failed:")
+  );
+}
+
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -344,10 +369,13 @@ export function AgentMessageBubble({
     );
   }
 
+  const isAssistantError = !isUser && looksLikeAgentError(message.content);
+
   return (
     <div
       data-testid="agent-message"
       data-message-role={isUser ? "user" : "assistant"}
+      data-message-error={isAssistantError ? "true" : undefined}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -370,8 +398,15 @@ export function AgentMessageBubble({
           borderRadius: isUser ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
           fontSize: 13,
           lineHeight: 1.5,
-          background: isUser ? "var(--dpf-accent)" : "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
+          background: isUser
+            ? "var(--dpf-accent)"
+            : isAssistantError
+              ? "color-mix(in srgb, var(--dpf-error) 12%, transparent)"
+              : "color-mix(in srgb, var(--dpf-surface-1) 80%, transparent)",
           color: "var(--dpf-text)",
+          border: isAssistantError
+            ? "1px solid color-mix(in srgb, var(--dpf-error) 40%, transparent)"
+            : undefined,
           wordBreak: "break-word",
           opacity: isUser && deliveryState === "sending" ? 0.74 : 1,
         }}
@@ -380,6 +415,24 @@ export function AgentMessageBubble({
           message.content
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {isAssistantError && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--dpf-error)",
+                  marginBottom: 4,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.4,
+                }}
+              >
+                <span aria-hidden>⚠</span>
+                <span>Issue</span>
+              </div>
+            )}
             <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
           </div>
         )}
