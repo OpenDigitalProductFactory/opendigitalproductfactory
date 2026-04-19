@@ -11,6 +11,21 @@ export type SensitivityLevel = "public" | "internal" | "confidential" | "restric
 
 // ── Endpoint Manifest (loaded from ModelProfile joined with ModelProvider) ──
 
+/**
+ * Provider tier for routing preference.
+ *
+ * `bundled` — providers that ship with DPF and require no user action
+ *   to be usable (Docker Model Runner, Ollama). Treated as a fallback
+ *   default: always available, but never preferred when a user has
+ *   explicitly configured an external provider.
+ * `user_configured` — providers the user had to actively connect (OAuth
+ *   completed or API key saved). Preferred over bundled because the user's
+ *   configuration action expresses an explicit preference that the routing
+ *   layer must honour on fresh installs — before any eval or pricing
+ *   metadata has populated.
+ */
+export type ProviderTier = "bundled" | "user_configured";
+
 export interface EndpointManifest {
   // Identity
   id: string;
@@ -19,6 +34,7 @@ export interface EndpointManifest {
   name: string;
   endpointType: string;
   status: "active" | "degraded" | "disabled" | "unconfigured" | "retired";
+  providerTier: ProviderTier;
 
   // Hard constraints
   sensitivityClearance: SensitivityLevel[];

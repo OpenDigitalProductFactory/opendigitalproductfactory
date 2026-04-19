@@ -27,6 +27,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManife
     name: "Default Endpoint",
     endpointType: "chat",
     status: "active",
+    providerTier: "user_configured",
     sensitivityClearance: ["public", "internal"],
     supportsToolUse: true,
     supportsStructuredOutput: true,
@@ -597,5 +598,107 @@ describe("routeEndpointV2", () => {
     });
     const decision = await routeEndpointV2([ep], makeContract(), [], []);
     expect(decision.explorationMode).toBe("champion");
+  });
+});
+
+describe("routeEndpointV2 — provider-tier preference", () => {
+  // Principle: when the user has configured an external provider (OAuth or
+  // API key saved), that explicit action signals preference. Bundled local
+  // defaults stay available as fallback but never win over user-configured
+  // endpoints — otherwise fresh installs silently route to the bundled
+  // default because paid providers have no pricing/eval metadata yet.
+  //
+  // Regression guards the onboarding flow: with Codex + Claude configured,
+  // admin-assistant must hit them, not the bundled Docker Model Runner.
+
+  it("prefers user_configured over bundled even when bundled is free and scores high", async () => {
+    // Bundled local: free (best cost-per-success) but lower quality scores
+    const bundled = makeEndpoint({
+      id: "ep-bundled",
+      providerId: "local",
+      modelId: "gemma4",
+      name: "Local Gemma",
+      providerTier: "bundled",
+      sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+      reasoning: 60, codegen: 55, toolFidelity: 55, instructionFollowing: 60,
+      structuredOutput: 55, conversational: 65, contextRetention: 60,
+      costPerOutputMToken: 0,
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 0, outputPerMToken: 0 },
+    });
+
+    // User-configured paid: no pricing seeded yet (the fresh-install state).
+    // Before this fix, `cost === null` got rankScore * 50 — losing to bundled.
+    const userConfigured = makeEndpoint({
+      id: "ep-user",
+      providerId: "anthropic-sub",
+      modelId: "claude-opus-4-7",
+      name: "Claude Opus",
+      providerTier: "user_configured",
+      reasoning: 85, codegen: 85, toolFidelity: 80, instructionFollowing: 85,
+      structuredOutput: 80, conversational: 85, contextRetention: 80,
+      costPerOutputMToken: null,
+      pricing: EMPTY_PRICING,
+    });
+
+    const decision = await routeEndpointV2(
+      [bundled, userConfigured],
+      makeContract(),
+      [],
+      [],
+    );
+
+    expect(decision.selectedEndpoint).toBe("ep-user");
+    expect(decision.fallbackChain).toContain("ep-bundled");
+  });
+
+  it("falls back to bundled when no user_configured endpoint is eligible", async () => {
+    const bundled = makeEndpoint({
+      id: "ep-bundled-only",
+      providerId: "local",
+      providerTier: "bundled",
+      sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+      costPerOutputMToken: 0,
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 0, outputPerMToken: 0 },
+    });
+
+    const decision = await routeEndpointV2(
+      [bundled],
+      makeContract(),
+      [],
+      [],
+    );
+
+    expect(decision.selectedEndpoint).toBe("ep-bundled-only");
+  });
+
+  it("preserves rankScore order within the user_configured tier", async () => {
+    const cheap = makeEndpoint({
+      id: "ep-cheap-user",
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      providerTier: "user_configured",
+      reasoning: 60, codegen: 60,
+      costPerOutputMToken: 0.6,
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 0.15, outputPerMToken: 0.6 },
+    });
+    const expensive = makeEndpoint({
+      id: "ep-expensive-user",
+      providerId: "anthropic",
+      modelId: "opus",
+      providerTier: "user_configured",
+      reasoning: 90, codegen: 88,
+      costPerOutputMToken: 75,
+      pricing: { ...EMPTY_PRICING, inputPerMToken: 15, outputPerMToken: 75 },
+    });
+
+    const decision = await routeEndpointV2(
+      [cheap, expensive],
+      makeContract({ budgetClass: "minimize_cost" }),
+      [],
+      [],
+    );
+
+    // Tier is the same for both — cost-per-success rules, cheap wins.
+    expect(decision.selectedEndpoint).toBe("ep-cheap-user");
   });
 });

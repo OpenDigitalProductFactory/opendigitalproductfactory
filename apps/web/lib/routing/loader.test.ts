@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveToolUse } from "./loader";
+import { resolveToolUse, classifyProviderTier } from "./loader";
 
 const baseProfile = {
   profileSource: "seed",
@@ -43,5 +43,28 @@ describe("resolveToolUse", () => {
   it("returns null when everything unknown", () => {
     const profile = { ...baseProfile, profileSource: "seed", capabilities: {}, supportsToolUse: null, provider: { supportsToolUse: null } };
     expect(resolveToolUse(profile as any)).toBeNull();
+  });
+});
+
+describe("classifyProviderTier", () => {
+  it("classifies local Docker Model Runner as bundled", () => {
+    expect(classifyProviderTier("local")).toBe("bundled");
+  });
+
+  it("classifies ollama as bundled", () => {
+    expect(classifyProviderTier("ollama")).toBe("bundled");
+  });
+
+  it("classifies external OAuth providers as user_configured", () => {
+    expect(classifyProviderTier("anthropic-sub")).toBe("user_configured");
+    expect(classifyProviderTier("codex")).toBe("user_configured");
+    expect(classifyProviderTier("chatgpt")).toBe("user_configured");
+  });
+
+  it("classifies unknown providers as user_configured by default", () => {
+    // Any provider that isn't explicitly a bundled-default is treated as
+    // user_configured — keeps the rule durable as new providers are added.
+    expect(classifyProviderTier("xai")).toBe("user_configured");
+    expect(classifyProviderTier("mistral")).toBe("user_configured");
   });
 });

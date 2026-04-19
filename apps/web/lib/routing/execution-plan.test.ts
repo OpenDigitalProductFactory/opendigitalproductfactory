@@ -59,6 +59,7 @@ function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManife
     name: "GPT-4o",
     endpointType: "chat",
     status: "active",
+    providerTier: "user_configured",
     sensitivityClearance: ["public", "internal"],
     supportsToolUse: true,
     supportsStructuredOutput: true,

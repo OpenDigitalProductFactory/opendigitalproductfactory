@@ -5,11 +5,24 @@
 import { prisma } from "@dpf/db";
 import type {
   EndpointManifest,
+  ProviderTier,
   TaskRequirementContract,
   PolicyRuleEval,
   EndpointOverride,
   SensitivityLevel,
 } from "./types";
+
+/**
+ * Providers that ship with DPF and require no user action to be usable.
+ * All other providers are classified as `user_configured` — the user
+ * had to actively connect them (OAuth or API key), and that action
+ * expresses a preference the router must honour over bundled defaults.
+ */
+const BUNDLED_PROVIDER_IDS = new Set<string>(["local", "ollama"]);
+
+export function classifyProviderTier(providerId: string): ProviderTier {
+  return BUNDLED_PROVIDER_IDS.has(providerId) ? "bundled" : "user_configured";
+}
 import type { QualityTier } from "./quality-tiers";
 import type { ModelCardCapabilities, ModelCardPricing } from "./model-card-types";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
@@ -91,6 +104,7 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
     status: (mp.modelStatus === "degraded" || mp.provider.status === "degraded"
       ? "degraded"
       : mp.provider.status) as EndpointManifest["status"],
+    providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
     supportsToolUse: resolveToolUse(mp) ?? false,
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,

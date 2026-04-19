@@ -17,6 +17,7 @@ const BASE_ENDPOINT: EndpointManifest = {
   name: "Base",
   endpointType: "chat",
   status: "active",
+  providerTier: "user_configured",
   sensitivityClearance: ["public", "internal"],
   supportsToolUse: true,
   supportsStructuredOutput: true,
