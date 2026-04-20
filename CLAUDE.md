@@ -40,12 +40,15 @@
 - **browser-use** replaces Playwright as the primary browser automation layer.
 - Service lives in `services/browser-use/` — Python 3.11 + browser-use library + Chromium.
 - Exposed as an MCP server at `http://browser-use:8500/mcp` (HTTP JSON-RPC transport).
-- Profile-gated: start with `docker compose --profile browser-use up -d`.
+- Always-on in the default compose stack. Portal `depends_on` waits for browser-use to report healthy at startup.
 - MCP tools: `browse_open`, `browse_act`, `browse_extract`, `browse_screenshot`, `browse_run_tests`, `browse_close`.
 - Tool handlers in `apps/web/lib/mcp-tools.ts` (`evaluate_page`, `run_ux_test`) call browser-use, not Playwright.
 - Client utilities in `apps/web/lib/operate/browser-use-client.ts`.
 - LLM backend configurable via `BROWSER_USE_MODEL` env var (default: `gpt-4o`).
-- Design spec: `docs/superpowers/specs/2026-04-06-browser-use-integration-design.md`.
+- Sandbox URL resolution goes through `apps/web/lib/integrate/sandbox/resolve-sandbox-url.ts` — server-to-server calls (including `run_ux_test`) use the `.internal` URL (e.g. `http://sandbox:3000`), not the host-mapped port.
+- **Review-phase verification is automatic.** Entering the `review` phase fires a `build/review.verify` Inngest event (handler at `apps/web/lib/queue/functions/build-review-verification.ts`). The handler writes results to `FeatureBuild.uxTestResults` + `uxVerificationStatus` and persists per-step screenshots via `evidence_dir` to the shared `browser_evidence` volume. Do NOT call `run_ux_test` manually during review — the `build-phase: review` allowlist excludes it; the Inngest handler owns that flow.
+- Screenshots are served through `/api/build/<buildId>/evidence/<fileName>` — owner-or-superuser auth, regex-validated path segments, `path.resolve` containment check.
+- Design spec: `docs/superpowers/specs/2026-04-06-browser-use-integration-design.md` (§ 8 "Review-phase verification" covers the landed end-to-end flow).
 
 ## Git Workflow
 

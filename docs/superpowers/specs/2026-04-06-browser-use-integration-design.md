@@ -231,14 +231,14 @@ Tool discovery will automatically populate `McpServerTool` rows on first health 
 ## 4. Activation
 
 ```bash
-# Start the browser-use service
-docker compose --profile browser-use up -d browser-use
+# Part of the default stack — comes up with the rest of the services
+docker compose up -d
 
-# Or include in full stack
-docker compose --profile browser-use up -d
+# To build / restart just browser-use
+docker compose up -d --build browser-use
 ```
 
-Profile-gated so it doesn't affect default startup.
+As of 2026-04-20 browser-use is always-on (see § 8 "Review-phase verification"). Earlier revisions of this doc described it as `profile`-gated; that's no longer the case — the portal's `depends_on` waits for `browser-use` to report healthy before accepting traffic.
 
 ---
 
@@ -272,4 +272,87 @@ The migration is clean because the Playwright container was inactive (profile: `
 1. **Deterministic replay mode** — Record an AI-driven session, export as a replayable action sequence (no LLM needed). This gives CI-grade speed when you want it, with AI-grade adaptability when you need it.
 2. **Visual regression** — Compare screenshots across builds to detect unintended visual changes.
 3. **Cloud scaling** — Swap self-hosted for `api.browser-use.com` cloud API for parallel browser sessions at scale.
-4. **Build Studio integration** — Auto-trigger `browse_run_tests` after each sandbox build phase, surface results in the Build Studio UI as a QA evidence panel.
+
+---
+
+## 8. Review-phase verification (landed 2026-04-20)
+
+This section captures how browser-use moved from "opt-in QA helper" to
+"gate-enforcing Release Acceptance tool" in the Build Studio flow.
+
+### What changed
+
+- **Profile gate removed.** `browser-use` is a core compose service.
+  `portal` / `portal-init` `depends_on` include
+  `browser-use: { condition: service_healthy }`, so the portal never
+  accepts traffic until its health endpoint responds.
+- **Inngest-driven automatic dispatch.** Entering the `review` phase
+  fires a `build/review.verify` event. The handler at
+  `apps/web/lib/queue/functions/build-review-verification.ts` owns the
+  full sequence — no coworker calls `run_ux_test` manually. The v2
+  review prompt tells the coworker to INSPECT results, not drive them.
+  The previous `autoA11yAudit` fire-and-forget is deleted.
+- **Sandbox URL resolver** at
+  `apps/web/lib/integrate/sandbox/resolve-sandbox-url.ts`. Returns both
+  `internal` (compose-network) and `host` URLs. The handler passes the
+  internal URL to browser-use so tests hit `http://sandbox:3000`, not
+  the user's host-exposed port.
+- **Screenshot persistence.** `browse_run_tests` accepts an optional
+  `evidence_dir` parameter. When set, per-step screenshots write to
+  `/evidence/<evidence_dir>/<i>.png` on the shared `browser_evidence`
+  volume. The portal mounts that volume read-only and serves
+  screenshots through `/api/build/<buildId>/evidence/<fileName>` —
+  auth-gated (owner or superuser), regex-validated path segments,
+  `path.resolve` containment check.
+- **Typed state.** Two fields on `FeatureBuild`:
+  - `uxTestResults` — unchanged JSON shape: `UxTestStep[] | null`
+  - `uxVerificationStatus` — new scalar: `"running" | "complete" | "failed" | "skipped" | null`
+
+  Split into two fields so existing array consumers
+  (`EvidenceSummary`, `checkPhaseGate`, `save_phase_handoff`, test
+  fixtures) keep working without a JSON-wrapper migration.
+- **Ship gate.** `checkPhaseGate(review -> ship)` blocks when status is
+  `running`, when status is `null` with non-empty acceptance criteria,
+  or when any step failed. `skipped` (zero criteria) is allowed.
+  `advanceBuildPhase` gains `overrideUxFailure: { reason }` — only
+  bypasses UX blockers, writes a `ux-override` BuildActivity for audit.
+- **UI surface.** The embedded iframe (`SandboxPreview.tsx`) was
+  redundant with the host-exposed sandbox port and posed an auth-bleed
+  risk. Replaced with `PreviewUrlCard` — a copy-and-open CTA that
+  sends the user to a real browser tab. The ReviewPanel's UX section
+  shows a spinner for `running`, a muted banner for `skipped`, and the
+  normal pass/fail rendering with inline screenshots when complete.
+
+### Contract extension on `browse_run_tests`
+
+One change to the tool surface:
+
+- **Input:** optional `evidence_dir: string` (segment name only; no
+  traversal). When present, per-step PNG screenshots write to
+  `/evidence/<evidence_dir>/<i>.png` and each result carries
+  `screenshot_path: string` (filename relative to the subdir).
+- **Output:** unchanged for callers that don't pass `evidence_dir` —
+  legacy `screenshot_base64` payload is still returned.
+
+### Why a new Inngest function instead of a coworker call
+
+- **Asynchronous + durable.** The user can leave Build Studio while
+  verification runs; results appear through the agent event bus.
+  Matches the "agent as main conduit" principle.
+- **Retriable.** Inngest's retry machinery gives one free retry on
+  transient browser-use failures.
+- **Observable.** Every step appears in the Inngest UI with timing
+  and inputs — a real audit trail for a gate-enforcing action.
+
+### Severity gate interop
+
+The verification handler does NOT write to `FeatureBuild.designReview`.
+That structure is regenerated by `parseReviewResponse` every time a
+reviewer runs; any write from the handler would be silently overwritten.
+The single source of truth for UX gating is `uxTestResults +
+uxVerificationStatus`, read directly by `checkPhaseGate`.
+
+A source-level shape assertion in
+`apps/web/lib/integrate/build-verification-e2e.test.ts` fails the
+build if anyone re-introduces a dual-write to `designReview.issues`
+from the handler.
