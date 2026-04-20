@@ -215,6 +215,7 @@ export type FeatureBuildRow = {
   acceptanceMet: AcceptanceCriterion[] | null;
   scoutFindings: ScoutResult | null;
   uxTestResults: Array<{ step: string; passed: boolean; screenshotUrl: string | null; error: string | null }> | null;
+  uxVerificationStatus: UxVerificationStatus | null;
   accountableEmployeeId: string | null;
   claimedByAgentId: string | null;
   claimedAt: Date | null;

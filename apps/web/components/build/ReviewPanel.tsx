@@ -36,7 +36,10 @@ export function ReviewPanel({ build }: Props) {
       <AcceptanceSection criteria={build.acceptanceMet} />
       <CodeChangesSection diffSummary={build.diffSummary} diffPatch={build.diffPatch} />
       <ManualTestSteps criteria={build.acceptanceMet} title={build.title} />
-      <UxTestsSection results={build.uxTestResults} />
+      <UxTestsSection
+        results={build.uxTestResults}
+        status={build.uxVerificationStatus}
+      />
     </div>
   );
 }
@@ -715,10 +718,52 @@ function ManualTestSteps({
 
 function UxTestsSection({
   results,
+  status,
 }: {
   results: FeatureBuildRow["uxTestResults"];
+  status: FeatureBuildRow["uxVerificationStatus"];
 }) {
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
+
+  // Verification is live — show a running banner even when no results have
+  // landed yet. Without this the panel would collapse back to "null" while
+  // the Inngest job is mid-flight and the user would lose signal.
+  if (status === "running") {
+    return (
+      <Section
+        title="UX Test Results"
+        badge="running"
+        badgeColor="var(--dpf-accent)"
+        defaultOpen={true}
+      >
+        <div className="flex items-center gap-2 px-2 py-2">
+          <span className="w-3 h-3 rounded-full border-2 border-[var(--dpf-accent)] border-t-transparent animate-spin" />
+          <span className="text-xs text-[var(--dpf-muted)]">
+            Running UX verification against the sandbox&hellip;
+          </span>
+        </div>
+      </Section>
+    );
+  }
+
+  // Skipped: zero acceptance criteria. Not a failure — user just didn't give
+  // anything verifiable. Display as a muted info note so the user sees the
+  // step happened without alarming them.
+  if (status === "skipped") {
+    return (
+      <Section
+        title="UX Test Results"
+        badge="skipped"
+        badgeColor="var(--dpf-muted)"
+        defaultOpen={false}
+      >
+        <p className="px-2 py-1.5 text-xs text-[var(--dpf-muted)]">
+          UX verification skipped &mdash; no acceptance criteria were provided to test against.
+        </p>
+      </Section>
+    );
+  }
+
   if (!results || results.length === 0) return null;
 
   const passCount = results.filter((s) => s.passed).length;
