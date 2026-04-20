@@ -90,7 +90,7 @@ vi.mock("react", () => ({
   useCallback: <T extends (...args: never[]) => unknown>(callback: T) => callback,
 }));
 
-vi.mock("@/lib/actions/graph", () => ({
+vi.mock("@/lib/graph/scope-helpers", () => ({
   hasSubnetScopeNode: (data: GraphData, subnetId: string | null) => {
     if (!subnetId || subnetId === "all") {
       return false;

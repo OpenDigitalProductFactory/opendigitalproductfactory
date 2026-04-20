@@ -31,33 +31,10 @@ export type GraphData = {
   }>;
 };
 
-export function hasSubnetScopeNode(
-  data: GraphData,
-  subnetId: string | null,
-): boolean {
-  if (!subnetId || subnetId === "all") {
-    return false;
-  }
-
-  return data.nodes.some((node) => {
-    if (node.id !== subnetId) {
-      return false;
-    }
-    const ciType = (node as { ciType?: string | null }).ciType;
-    return ciType === "subnet" || ciType === "vlan";
-  });
-}
-
-export function getSubnetScopeSignal(
-  data: GraphData,
-  subnetId: string | null,
-): "valid" | "invalid-scope" | "unscoped" {
-  if (!subnetId || subnetId === "all") {
-    return "unscoped";
-  }
-
-  return hasSubnetScopeNode(data, subnetId) ? "valid" : "invalid-scope";
-}
+// NOTE: `hasSubnetScopeNode` and `getSubnetScopeSignal` moved to
+// `@/lib/graph/scope-helpers`. They are pure sync functions; a file with
+// `"use server"` may only export async functions, so Turbopack's client
+// bundle fails on sync exports here. See scope-helpers.ts for details.
 
 const LABEL_COLORS: Record<string, string> = {
   DigitalProduct: "#4ade80",

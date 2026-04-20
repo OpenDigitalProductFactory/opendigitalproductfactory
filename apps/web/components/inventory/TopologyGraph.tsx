@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { hasSubnetScopeNode, type GraphData } from "@/lib/actions/graph";
+import type { GraphData } from "@/lib/actions/graph";
+import { hasSubnetScopeNode } from "@/lib/graph/scope-helpers";
 import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/types";
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
