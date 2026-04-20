@@ -262,6 +262,39 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // Attempt to extract tool calls if the model responded with tool_use blocks
       const toolCalls = extractToolCalls(text);
 
+      // ── Durable tool-call extraction trace ────────────────────────────
+      // Every codex response is logged under a single `[tool-trace]` prefix
+      // so we can see the full extraction path end-to-end: raw output, which
+      // tool-name keywords the text mentions, and what the parser returned.
+      // Kept on until tool dispatch is 100% reliable — when it is, this can
+      // be gated behind a DEBUG_TOOL_TRACE env flag rather than removed
+      // outright. Meanwhile every stuck-agent incident produces the exact
+      // data needed to tell "model emitted an unrecognized shape" from
+      // "model hallucinated a tool call it never emitted".
+      const toolKeywordPattern = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
+      const mentionedNames = Array.from(new Set(text.match(toolKeywordPattern) ?? []));
+      const extractedNames = toolCalls.map((c) => c.name);
+      console.log(
+        `[tool-trace] extracted=${toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,
+      );
+
+      // Full dump on the diagnostically-interesting mismatches: the text
+      // references a tool name but the parser returned nothing — this is
+      // the classic "stuck agent" signature. 8k chars covers any realistic
+      // codex response.
+      if (toolCalls.length === 0 && mentionedNames.length > 0) {
+        console.log(
+          `[tool-trace] NO-CALL-BUT-MENTIONED raw=${JSON.stringify(text.slice(0, 8000))}`,
+        );
+      } else if (toolCalls.length > 0) {
+        // Also log a compact head of the raw text when calls DID parse —
+        // lets us correlate "the model meant to call N things and we got N-1"
+        // style bugs without the full dump every turn.
+        console.log(
+          `[tool-trace] CALLS-PARSED head=${JSON.stringify(text.slice(0, 600))}`,
+        );
+      }
+
       return {
         text: toolCalls.length > 0 ? text.replace(/```json\n?\{[\s\S]*?```/g, "").trim() : text,
         toolCalls,
