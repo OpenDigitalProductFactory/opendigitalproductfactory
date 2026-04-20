@@ -58,6 +58,12 @@ The DB phase stays `ship`. The USER-FACING LABEL becomes "Ready to Ship" to set 
 
 ### 3.2 Two-fork render model
 
+**Fork order:** Upstream PR on the LEFT, Promote-to-Prod on the RIGHT. Rationale:
+the current ship.prompt.md already sequences contribution (step 4) before
+deployment (step 5) — reading left-to-right matches the temporal order of
+what actually happens. This is a render-time choice; swapping it later is
+a one-line change in the fork renderer.
+
 ```
 ┌───────────┐    ┌───────┐    ┌───────┐    ┌───────┐    ┌───────────────┐
 │  Ideate   │ →  │ Plan  │ →  │ Build │ →  │Review │ →  │ Ready to Ship │
@@ -135,7 +141,34 @@ No schema changes. The spec derives every displayed state from:
 
 A new server action `getBuildFlowState(buildId): BuildFlowState` bundles the above into a single typed result. The `BuildFlowState` type is declared in a new file `apps/web/lib/build-flow-state.ts`; no existing types change.
 
-### 3.6 MCP tool signal changes
+### 3.6 `complete` phase semantics
+
+The existing `BuildPhase` has `complete` as the next state after `ship`. After
+this redesign, `complete` is written to the DB when **all applicable forks
+have reached a terminal state**:
+
+- Upstream PR fork: `shipped` | `skipped` | `errored` (user decided or resolved)
+- Promote-to-Prod fork: `shipped` | `scheduled` | `awaiting_operator` | `rolled_back`
+
+A fork in a terminal state counts as resolved whether it succeeded, was
+skipped, got queued, or landed in operator-handoff. Only `in_progress`
+blocks the `ship → complete` transition. This matches Mark's
+"complete when moved into the next phase" rule: every ship-phase piece of
+work has been dispositioned before we advance.
+
+The transition is written by a reconciler that fires whenever:
+
+- `contribute_to_hive` returns (success or failure);
+- `execute_promotion` / `schedule_promotion` returns; or
+- A polled `ChangePromotion.status` changes (already-queued promotions
+  that the portal didn't run directly).
+
+On every fire, the reconciler reads `getBuildFlowState(buildId)` and, if
+both applicable forks are terminal and the build is currently `phase:
+"ship"`, updates to `phase: "complete"` and emits `phase:change` on the
+event bus. No user action required.
+
+### 3.7 MCP tool signal changes
 
 **A1 (`execute_promotion`)** already returns `data: { status: "awaiting_operator" }` when the promoter image is missing. The fork renderer consumes this.
 
@@ -231,22 +264,23 @@ Listed in implementation order; each task is ~1 subagent-hour or less.
 - **C.1** Update [prompts/build-phase/ship.prompt.md](../../../prompts/build-phase/ship.prompt.md) intro to say "Ready to Ship — two forks follow" so the coworker's narration to the user matches the UI.
 - **C.2** After each fork completes, the coworker should summarize which fork landed and link the evidence (PR URL / ChangePromotion ID), rather than saying "shipped" generically.
 
-### Chunk D — Cleanup
+### Chunk D — `complete` reconciler + cleanup
 
-- **D.1** Replace `PHASE_LABELS.ship = "Ship"` string everywhere it's hardcoded in tests and fixtures. Test-only churn.
-- **D.2** Remove any "Ship complete" assertions in e2e specs that conflate fork completion with phase completion.
+- **D.1** Implement `reconcileBuildCompletion(buildId)` in `apps/web/lib/build-flow-state.ts`: reads `getBuildFlowState`, and if both applicable forks are terminal and the build is `phase: "ship"`, advances to `phase: "complete"` and emits `phase:change`.
+- **D.2** Call the reconciler at every fork-terminal-state write site: end of `contribute_to_hive`, end of `execute_promotion`, end of `schedule_promotion`, and whenever `ChangePromotion.status` changes via operator action from Operations > Promotions.
+- **D.3** Unit test the reconciler — every combination of `contributionMode × upstreamFork terminal × promoteFork terminal` should produce the correct `ship` vs. `complete` outcome.
+- **D.4** Replace `PHASE_LABELS.ship = "Ship"` string everywhere it's hardcoded in tests and fixtures. Test-only churn.
+- **D.5** Remove any "Ship complete" assertions in e2e specs that conflate fork completion with phase completion.
 
 ---
 
-## 7. Alignment Questions
+## 7. Alignment Decisions (resolved 2026-04-20)
 
-Before implementation, these need Mark's call:
-
-1. **Label wording.** "Ready to Ship" feels right to me but could also be "Deployable" or "Ship-ready." Pick one.
-2. **Fork order / position.** Upstream PR on the left, Promote-to-Prod on the right? Or prioritize by mode (Promote first for fork-only, Upstream first for contribute_all)?
-3. **Awaiting-operator state styling.** Amber (action required) or blue (informational)? Amber matches A1's Platform Development CTA pattern.
-4. **Completion semantics.** When does `phase: "complete"` get written to the DB? Options: (a) both applicable forks in terminal state, (b) at least one fork in `shipped`, (c) drop the status change from auto-advance logic entirely and only flip `complete` when user confirms. I recommend (a) — deterministic, no user gate, matches the existing "agentic loop decides" pattern.
-5. **Scope of this spec.** Current draft covers rendering + derivation + prompt alignment but leaves refactoring `phase: "complete"` semantics for a later spec. Keep the split, or bundle the semantics rework in here?
+1. **Label wording.** → **"Ready to Ship"** (Mark).
+2. **Fork order.** → **Upstream PR on left, Promote-to-Prod on right** (Claude's choice; matches ship.prompt.md step 4 before step 5). Swappable at render time.
+3. **Awaiting-operator state styling.** → **Amber** (Claude's choice; matches A1's Platform Development CTA pattern for "action required").
+4. **`phase: "complete"` semantics.** → "Complete when moved into the next phase" (Mark). Formalized in §3.6: `complete` is written when all applicable forks reach a terminal state (any of `shipped` / `skipped` / `scheduled` / `awaiting_operator` / `rolled_back` / `errored`). Only `in_progress` blocks the transition. Reconciler auto-advances; no user gate.
+5. **Scope bundling.** → **Bundled.** The `complete`-semantics rework is folded into this spec (§3.6) because decision #4 required it. Chunk D of §6 now includes the reconciler implementation.
 
 ---
 
