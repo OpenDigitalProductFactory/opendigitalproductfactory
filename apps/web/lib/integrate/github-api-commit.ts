@@ -369,7 +369,23 @@ export async function createBranchAndPR(input: {
     }
   } catch (err) {
     console.warn(`[github-api-commit] PR creation failed: ${(err as Error).message}`);
-    // Branch was created successfully even if PR fails
+    // A second call for the same branch commonly fails here because an open PR
+    // already exists (GitHub returns 422 "A pull request already exists for …").
+    // Recover the existing PR's URL so the caller can back-write it onto the
+    // FeaturePack — otherwise the pack's manifest.prUrl stays null forever
+    // even though the PR is live on GitHub.
+    try {
+      const existing = await githubGet<Array<GitHubPR & { state?: string }>>(
+        `${apiBase}/pulls?head=${owner}:${branchName}&state=open`,
+        token,
+      );
+      if (Array.isArray(existing) && existing.length > 0) {
+        prUrl = existing[0].html_url;
+        prNumber = existing[0].number;
+      }
+    } catch (lookupErr) {
+      console.warn(`[github-api-commit] existing-PR lookup failed: ${(lookupErr as Error).message?.slice(0, 200)}`);
+    }
   }
 
   return { branchName, commitSha: commit.sha, prUrl, prNumber };
