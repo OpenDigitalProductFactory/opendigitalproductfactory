@@ -272,6 +272,31 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // Attempt to extract tool calls if the model responded with tool_use blocks
       const toolCalls = extractToolCalls(text);
 
+      // Codex CLI can emit short auth-failure messages on stdout with exit=0
+      // (observed payloads: "Invalid API key · Fix external API key",
+      // "ERROR: unexpected status 401 Unauthorized: Missing bearer..."). The
+      // stderr-keyword check earlier only catches stderr; mirror that logic
+      // on stdout to ensure fallback kicks in instead of the error text
+      // being shipped as assistant content.
+      const CLI_AUTH_ERROR_PATTERNS = [
+        /invalid api key/i,
+        /fix external api key/i,
+        /please log in/i,
+        /401 unauthorized/i,
+        /not authenticated/i,
+      ];
+      const looksLikeAuthError =
+        toolCalls.length === 0 &&
+        text.length < 300 &&
+        CLI_AUTH_ERROR_PATTERNS.some((p) => p.test(text));
+      if (looksLikeAuthError) {
+        throw new InferenceError(
+          `Codex CLI auth error (from stdout): ${text.slice(0, 200)}`,
+          "auth",
+          providerId,
+        );
+      }
+
       // ── Durable tool-call extraction trace ────────────────────────────
       // Every codex response is logged under a single `[tool-trace]` prefix
       // so we can see the full extraction path end-to-end: raw output, which
