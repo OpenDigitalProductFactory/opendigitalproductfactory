@@ -147,6 +147,16 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | BUILD-14 | Trigger build when sandbox is not running | Specialist returns BLOCKED, user sees actionable error message |
 | BUILD-15 | Open `/build` on desktop with the coworker pane closed, then open the coworker pane | Build Studio remains inside the shell, central workspace stays visible, content is not hidden under the docked coworker |
 | BUILD-16 | Open `/platform/ai/build-studio`, confirm page language, then click "Open Build Studio" | Page reads as runtime/configuration, not the main working studio, and the CTA returns to `/build` |
+| BUILD-17 | Navigate to an active build in build phase, open the Preview tab | Shows "Preview in your browser" card with "Open http://localhost:PORT ↗" button and a "Copy URL" button. No `<iframe>` is rendered. |
+| BUILD-18 | Click "Open ↗" on the preview card | A new browser tab opens pointing to the sandbox host URL (`http://localhost:{sandboxPort}`). |
+| BUILD-19 | Click "Copy URL" on the preview card | The sandbox host URL is written to the clipboard; the button briefly flips to "Copied" and back within ~2s. |
+| BUILD-20 | Advance a build from plan → build → review with ≥ 2 acceptance criteria in the brief | Within 30s of entering review, `FeatureBuild.uxVerificationStatus` flips to `running`; ReviewPanel's UX section shows "Running UX verification…" spinner; coworker panel shows busy state. |
+| BUILD-21 | Wait for verification to complete with all steps passing | `uxVerificationStatus = "complete"`; ReviewPanel UX section shows `N/N passed` with inline screenshots per step. Screenshots resolve through `/api/build/<buildId>/evidence/<file>.png` with 200 + `Content-Type: image/png`. |
+| BUILD-22 | Set up a build with one deliberately impossible acceptance criterion, advance to review | `uxVerificationStatus = "failed"`; ReviewPanel highlights the failing step + screenshot; a "Ship anyway" button appears. |
+| BUILD-23 | With UX verification failed and no override, attempt review → ship | Phase gate blocks with reason starting `UX verification failed: …` and names the failing step. |
+| BUILD-24 | Click "Ship anyway", submit a 10+ character reason | Phase advances to ship; `BuildActivity` gains a `tool: ux-override` row with the submitted reason. |
+| BUILD-25 | Advance to review with ZERO acceptance criteria in the brief | `uxVerificationStatus = "skipped"`; ReviewPanel shows "UX verification skipped — no acceptance criteria"; review → ship is allowed. |
+| BUILD-26 | Stop the browser-use container mid-verification (`docker stop dpf-browser-use-1`) | Inngest handler records failure; `uxVerificationStatus = "failed"` with a diagnostic error in `uxTestResults[0].error`. Gate blocks ship advance. |
 
 ## Phase 11: Storefront
 
