@@ -11,6 +11,8 @@ import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
+import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
+import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
@@ -43,6 +45,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
+  const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
     const now = Date.now();
@@ -51,11 +54,30 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
     lastFetchRef.current = now;
     fetchInFlightRef.current = true;
     try {
-      const fresh = await getFeatureBuild(activeBuild.buildId);
+      // Fetch build row + flow state in parallel. Flow state is derived
+      // from existing columns (see lib/build-flow-state.ts) so the cost
+      // is one extra Prisma round-trip, not a new source of truth.
+      const [fresh, nextFlow] = await Promise.all([
+        getFeatureBuild(activeBuild.buildId),
+        getBuildFlowStateAction(activeBuild.buildId),
+      ]);
       if (fresh) setActiveBuild(fresh);
+      setFlowState(nextFlow);
     } finally {
       fetchInFlightRef.current = false;
     }
+  }, [activeBuild?.buildId]);
+
+  // Fetch initial flow state when the active build changes so the first
+  // paint shows substep counts and fork nodes without waiting for an SSE
+  // event. debouncedRefetch handles subsequent updates.
+  useEffect(() => {
+    if (!activeBuild) { setFlowState(null); return; }
+    let cancelled = false;
+    getBuildFlowStateAction(activeBuild.buildId).then((s) => {
+      if (!cancelled) setFlowState(s);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [activeBuild?.buildId]);
 
   useEffect(() => {
@@ -469,7 +491,9 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         </div>
       </div>
 
-      {activeBuild && buildView !== "graph" && <PhaseIndicator currentPhase={activeBuild.phase} />}
+      {activeBuild && buildView !== "graph" && (
+        <PhaseIndicator currentPhase={activeBuild.phase} flowState={flowState} />
+      )}
     </div>
   );
 }
