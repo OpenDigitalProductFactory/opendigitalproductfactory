@@ -4776,7 +4776,14 @@ export async function executeTool(
 
       // ── Criterion 4: Proprietary Sensitivity ──
       const concerns: string[] = [];
-      if (/api[_-]?key|secret|password|token/i.test(diff)) concerns.push("Contains references to API keys or secrets");
+      // Only flag *assignments* of a secret-shaped identifier to a 20+ char opaque
+      // string, or known secret token prefixes (GitHub / OpenAI / Slack / AWS / JWT).
+      // The old bare-word match flagged benign identifiers like `scopeToken`,
+      // `cancellationToken`, `accessTokenName`, `secretRef` — every round of
+      // assess_contribution drowned in false positives.
+      const secretAssignment = /[A-Za-z0-9_]*(api[_-]?key|apikey|secret|password|token)[A-Za-z0-9_]*\s*[:=]\s*["'`][A-Za-z0-9_\-+/.=]{20,}/i;
+      const knownSecretPrefix = /(ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{15,}|AKIA[A-Z0-9]{16})/;
+      if (secretAssignment.test(diff) || knownSecretPrefix.test(diff)) concerns.push("Contains references to API keys or secrets");
       if (/acme|our company|internal use only|confidential/i.test(diff)) concerns.push("Contains organization-specific references");
       if (/\$\d+[\d,.]*|pricing|rate.*card|margin/i.test(diff)) concerns.push("Contains pricing or financial constants");
       if (/customer.*name|client.*id|account.*number/i.test(diff)) concerns.push("Contains customer data references");
