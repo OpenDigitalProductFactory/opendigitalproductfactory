@@ -1083,7 +1083,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "run_ux_test",
-    description: "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots.",
+    description: "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots. NOTE: UX verification runs automatically on review-phase entry via build/review.verify — this tool is retained for ad-hoc manual invocations only and is not in the review phase's tool allowlist.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1097,7 +1097,10 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
-    buildPhases: ["review"],
+    // Empty buildPhases — the Inngest handler owns UX verification during
+    // review; leaving this in the review allowlist leads to duplicate runs.
+    // Kept callable outside a build phase for Dev-mode / debugging use.
+    buildPhases: [],
   },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
