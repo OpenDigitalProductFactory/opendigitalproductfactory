@@ -4393,6 +4393,24 @@ export async function executeTool(
       const execFileAsync = promisify(execFileCb);
       const execAsync = promisify((lazyChildProcess()).exec);
 
+      // Preflight: the promoter image has to exist locally for `docker run
+      // dpf-promoter` to work. On most installs today it doesn't — the image
+      // is built separately and isn't on the default compose path. Detect
+      // that up front and hand off to the operator UI instead of attempting
+      // the run and returning a scary "Could not start the promoter
+      // container." message. The promotion stays approved; the operator
+      // triggers it from Operations > Promotions.
+      try {
+        await execAsync("docker image inspect dpf-promoter");
+      } catch {
+        logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", "Promoter image not present — handing off to operator");
+        return {
+          success: true,
+          message: `Promotion ${promotionId} is approved and ready. This install doesn't have the "dpf-promoter" container image built locally, so automatic deployment is disabled here. An operator needs to run the promotion manually from Operations > Promotions, which will stream the deployment log and handle rollback. The promotion stays in "approved" status until then.`,
+          data: { status: "awaiting_operator", reason: "promoter_image_missing", promotionId },
+        };
+      }
+
       // Start promoter container (array form — no shell injection)
       try {
         await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
@@ -4415,7 +4433,11 @@ export async function executeTool(
         dockerArgs.push("dpf-promoter");
         await execFileAsync("docker", dockerArgs);
       } catch (err) {
-        return { success: false, error: `Failed to start promoter: ${(err as Error).message?.slice(0, 200)}`, message: "Could not start the promoter container." };
+        return {
+          success: false,
+          error: `Failed to start promoter: ${(err as Error).message?.slice(0, 200)}`,
+          message: `Could not start the promoter container. An operator can run this promotion manually from Operations > Promotions — the promotion stays in "approved" status until deployed.`,
+        };
       }
 
       // Poll for completion (max 10 minutes)
