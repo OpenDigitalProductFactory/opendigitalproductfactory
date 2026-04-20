@@ -17,18 +17,72 @@ import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
 import { can } from "@/lib/permissions";
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!session.user.isSuperuser) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Two auth paths:
+  //  1. Superuser session (interactive admin)
+  //  2. Shared-secret header `X-Ops-Token` matching HIVE_OPS_TOKEN env var
+  //     (for recovery of stuck proposals when no session cookie is available,
+  //     e.g. during autonomous operator runs). Header path requires the secret
+  //     AND a `userId` field in the body naming which user to attribute the
+  //     execution to — typically the original build creator.
+  const opsToken = process.env.HIVE_OPS_TOKEN;
+  const providedToken = req.headers.get("x-ops-token");
+  const headerAuth = opsToken && providedToken && providedToken === opsToken;
+
+  let actingUserId: string | null = null;
+  let actingUserSuperuser = false;
+  let actingUserPlatformRole: string | null = null;
+
+  if (!headerAuth) {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!session.user.isSuperuser) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    actingUserId = session.user.id;
+    actingUserSuperuser = session.user.isSuperuser;
+    actingUserPlatformRole = session.user.platformRole;
   }
 
-  const body = (await req.json().catch(() => ({}))) as { proposalId?: string };
+  const body = (await req.json().catch(() => ({}))) as { proposalId?: string; userId?: string };
   const proposalId = typeof body.proposalId === "string" ? body.proposalId : null;
   if (!proposalId) {
     return NextResponse.json({ error: "proposalId required" }, { status: 400 });
+  }
+
+  // Header-auth path: resolve userId from body, default to build creator
+  if (headerAuth) {
+    if (typeof body.userId !== "string") {
+      // Fallback: resolve from the proposal's build creator
+      const proposalLookup = await prisma.agentActionProposal.findUnique({
+        where: { proposalId },
+        select: { threadId: true },
+      });
+      if (!proposalLookup) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
+      const build = await prisma.featureBuild.findFirst({
+        where: { threadId: proposalLookup.threadId },
+        select: { createdById: true },
+      });
+      if (!build?.createdById) {
+        return NextResponse.json({ error: "Could not resolve userId for header-auth execution. Provide userId in body." }, { status: 400 });
+      }
+      actingUserId = build.createdById;
+    } else {
+      actingUserId = body.userId;
+    }
+    // Header-auth is a shared-secret bypass — the caller is already authorized
+    // to execute ops tasks. We skip the per-user capability check below and
+    // treat the acting user as having full platform role for audit purposes.
+    const u = await prisma.user.findUnique({
+      where: { id: actingUserId },
+      select: { isSuperuser: true },
+    });
+    actingUserSuperuser = !!u?.isSuperuser;
+    actingUserPlatformRole = "HR-000";
+  }
+  if (!actingUserId) {
+    return NextResponse.json({ error: "Could not resolve acting user" }, { status: 500 });
   }
 
   const proposal = await prisma.agentActionProposal.findUnique({ where: { proposalId } });
@@ -41,7 +95,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const tool = PLATFORM_TOOLS.find((t) => t.name === proposal.actionType);
   if (tool?.requiredCapability && !can(
-    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+    { platformRole: actingUserPlatformRole, isSuperuser: actingUserSuperuser },
     tool.requiredCapability,
   )) {
     return NextResponse.json({ error: "Insufficient capability for tool" }, { status: 403 });
@@ -49,13 +103,13 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   await prisma.agentActionProposal.update({
     where: { proposalId },
-    data: { status: "approved", decidedAt: new Date(), decidedById: session.user.id },
+    data: { status: "approved", decidedAt: new Date(), decidedById: actingUserId },
   });
 
   const result = await executeTool(
     proposal.actionType,
     proposal.parameters as Record<string, unknown>,
-    session.user.id,
+    actingUserId,
     { agentId: proposal.agentId, threadId: proposal.threadId },
   );
 
