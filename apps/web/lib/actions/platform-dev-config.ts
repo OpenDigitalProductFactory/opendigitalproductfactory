@@ -237,12 +237,18 @@ export async function saveContributionSetup(input: {
     },
   });
 
-  // Encrypt and save the token
+  // Encrypt and save the token to the hive-contribution slot.
+  //
+  // resolveHiveToken's priority #2 reads "hive-contribution"; writing there
+  // makes the primary contribution path match the primary resolver lookup.
+  // The "git-backup" slot remains reserved for saveGitBackupCredential
+  // (fork_only backup) — resolveHiveToken still falls back to it at #4 so
+  // existing installs that stored tokens via the old code path keep working.
   const { encryptSecret } = await import("@/lib/credential-crypto");
   const encrypted = encryptSecret(input.token);
   await prisma.credentialEntry.upsert({
-    where: { providerId: "git-backup" },
-    create: { providerId: "git-backup", secretRef: encrypted, status: "active" },
+    where: { providerId: "hive-contribution" },
+    create: { providerId: "hive-contribution", secretRef: encrypted, status: "active" },
     update: { secretRef: encrypted, status: "active" },
   });
 
