@@ -31,6 +31,34 @@ export type GraphData = {
   }>;
 };
 
+export function hasSubnetScopeNode(
+  data: GraphData,
+  subnetId: string | null,
+): boolean {
+  if (!subnetId || subnetId === "all") {
+    return false;
+  }
+
+  return data.nodes.some((node) => {
+    if (node.id !== subnetId) {
+      return false;
+    }
+    const ciType = (node as { ciType?: string | null }).ciType;
+    return ciType === "subnet" || ciType === "vlan";
+  });
+}
+
+export function getSubnetScopeSignal(
+  data: GraphData,
+  subnetId: string | null,
+): "valid" | "invalid-scope" | "unscoped" {
+  if (!subnetId || subnetId === "all") {
+    return "unscoped";
+  }
+
+  return hasSubnetScopeNode(data, subnetId) ? "valid" : "invalid-scope";
+}
+
 const LABEL_COLORS: Record<string, string> = {
   DigitalProduct: "#4ade80",
   Portfolio: "#7c8cf8",

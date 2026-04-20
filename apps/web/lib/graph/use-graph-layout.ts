@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { GraphData } from "@/lib/actions/graph";
 import type { LayoutResult, ViewConfig } from "./types";
 import { computeHierarchicalLayout } from "./layout-hierarchical";
@@ -9,25 +9,30 @@ import { computeSwimLaneLayout } from "./layout-swimlane";
  * Computes positioned node coordinates for the given view.
  * Returns null for "force" layout (signals the component to use its own simulation).
  */
+export function shouldApplyLayoutResult(scopeToken: string, latestScopeToken: string) {
+  return scopeToken === latestScopeToken;
+}
+
 export function useGraphLayout(
   data: GraphData,
   view: ViewConfig,
   focusNodeId: string | null,
   dimensions: { width: number; height: number },
+  scopeToken: string,
 ): LayoutResult | null {
   const [result, setResult] = useState<LayoutResult | null>(null);
+  const requestIdRef = useRef(0);
+  const latestScopeTokenRef = useRef(scopeToken);
 
   useEffect(() => {
-    // Filter data by view config
-    const filteredNodes = data.nodes.filter((n) => view.nodeTypesShown.has(n.label));
-    const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
-    const filteredLinks = data.links.filter(
-      (l) =>
-        view.edgesShown.has(l.type) &&
-        filteredNodeIds.has(l.source) &&
-        filteredNodeIds.has(l.target),
-    );
-    const filtered: GraphData = { nodes: filteredNodes, links: filteredLinks };
+    latestScopeTokenRef.current = scopeToken;
+  }, [scopeToken]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const requestId = ++requestIdRef.current;
+    const dispatchScopeToken = scopeToken;
+    const filtered = data;
 
     if (filtered.nodes.length === 0) {
       setResult({ nodes: [], links: [] });
@@ -37,26 +42,31 @@ export function useGraphLayout(
     switch (view.layout) {
       case "hierarchical": {
         const roots = detectRoots(filtered, view);
-        setResult(
-          computeHierarchicalLayout(filtered, {
-            direction: view.direction,
-            rootIds: roots,
-          }),
-        );
+        if (!isCancelled) {
+          setResult(
+            computeHierarchicalLayout(filtered, {
+              direction: view.direction,
+              rootIds: roots,
+            }),
+          );
+        }
         break;
       }
       case "radial": {
         const rootId = focusNodeId ?? filtered.nodes[0]?.id ?? "";
-        setResult(
-          computeRadialLayout(filtered, {
-            rootId,
-            centerX: dimensions.width / 2,
-            centerY: dimensions.height / 2,
-          }),
-        );
+        if (!isCancelled) {
+          setResult(
+            computeRadialLayout(filtered, {
+              rootId,
+              centerX: dimensions.width / 2,
+              centerY: dimensions.height / 2,
+            }),
+          );
+        }
         break;
       }
       case "swimlane": {
+        setResult(null);
         if (view.name === "subnet-topology") {
           // Build subnet membership map from MEMBER_OF edges
           const subnetMap = new Map<string, string>();
@@ -84,7 +94,15 @@ export function useGraphLayout(
             filtered,
             (id) => subnetMap.get(id) ?? null,
             { partitionLabels: subnetNames },
-          ).then(setResult);
+          ).then((nextResult) => {
+            if (
+              !isCancelled &&
+              requestId === requestIdRef.current &&
+              shouldApplyLayoutResult(dispatchScopeToken, latestScopeTokenRef.current)
+            ) {
+              setResult(nextResult);
+            }
+          });
         } else {
           // Default OSI layer partitioning
           const osiMap = new Map(
@@ -94,7 +112,15 @@ export function useGraphLayout(
             ]),
           );
           computeSwimLaneLayout(filtered, (id) => osiMap.get(id) ?? null).then(
-            setResult,
+            (nextResult) => {
+              if (
+                !isCancelled &&
+                requestId === requestIdRef.current &&
+                shouldApplyLayoutResult(dispatchScopeToken, latestScopeTokenRef.current)
+              ) {
+                setResult(nextResult);
+              }
+            },
           );
         }
         break;
@@ -102,10 +128,16 @@ export function useGraphLayout(
       case "force":
       default:
         // Return null to signal the existing force simulation should be used
-        setResult(null);
+        if (!isCancelled) {
+          setResult(null);
+        }
         break;
     }
-  }, [data, view, focusNodeId, dimensions]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [data, view, focusNodeId, dimensions, scopeToken]);
 
   return result;
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import type { GraphData } from "@/lib/actions/graph";
+import { hasSubnetScopeNode, type GraphData } from "@/lib/actions/graph";
 import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/types";
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
 import { getDeviceVisual, LEGEND_ENTRIES } from "@/lib/graph/device-icons";
+import { describeGraphScope, filterBySubnet, filterGraphData } from "@/lib/graph/subnet-scope";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -45,6 +46,78 @@ type Props = {
 };
 
 type SimNode = PositionedNode & { vx?: number; vy?: number };
+
+export function createScopeToken(
+  sequence: number,
+  selectedView: GraphViewName,
+  activeSubnetId: string | null,
+) {
+  return `${selectedView}:${activeSubnetId ?? "all"}:${sequence}`;
+}
+
+export function resolveSubnetScopeState(
+  graph: GraphData,
+  selectedView: GraphViewName,
+  activeSubnetId: string | null,
+): {
+  graphData: GraphData;
+  activeSubnetId: string | null;
+  invalidScope: boolean;
+} {
+  if (selectedView !== "subnet-topology" || !activeSubnetId) {
+    return {
+      graphData: graph,
+      activeSubnetId: null,
+      invalidScope: false,
+    };
+  }
+
+  if (!hasSubnetScopeNode(graph, activeSubnetId)) {
+    return {
+      graphData: graph,
+      activeSubnetId: null,
+      invalidScope: true,
+    };
+  }
+
+  return {
+    graphData: filterBySubnet(graph, activeSubnetId),
+    activeSubnetId,
+    invalidScope: false,
+  };
+}
+
+export function resolveDisplayedGraphData(
+  graph: GraphData,
+  selectedView: GraphViewName,
+  activeSubnetId: string | null,
+  focusNodeId: string | null,
+  maxHops: number,
+) {
+  const viewConfig = VIEW_CONFIGS[selectedView];
+  const scopeState = resolveSubnetScopeState(graph, selectedView, activeSubnetId);
+
+  return filterGraphData(scopeState.graphData, {
+    focusNodeId,
+    maxHops,
+    selectedView,
+    subnetFilter: "all",
+    viewConfig,
+  });
+}
+
+export function isResetScopeKey(key: string) {
+  return key === "Enter" || key === " ";
+}
+
+export function isSubnetSelectorKey(key: string) {
+  return key === "Enter" || key === " ";
+}
+
+export const TOPOLOGY_GRAPH_LIVE_REGION_PROPS = {
+  "aria-live": "polite",
+  "aria-atomic": "true",
+} as const;
 
 // ─── Theme palette ──────────────────────────────────────────────────────────
 // Canvas pixels don't inherit CSS variables, so we resolve theme tokens at
@@ -115,10 +188,12 @@ function useCanvasPalette(): CanvasPalette {
 
 export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusNodeId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scopeSequenceRef = useRef(0);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(initialFocusNodeId ?? null);
   const [maxHops, setMaxHops] = useState(0);
+  const [liveMessage, setLiveMessage] = useState("");
   const palette = useCanvasPalette();
 
   // Pan and zoom state
@@ -131,9 +206,13 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const autoView = defaultView ?? resolveViewForTaxonomy(taxonomyNodeId ?? null);
   const [selectedView, setSelectedView] = useState<GraphViewName>(autoView);
   const viewConfig = VIEW_CONFIGS[selectedView];
+  const isForceLayout = viewConfig.layout === "force";
 
   // Subnet filter (for subnet-topology view)
-  const [subnetFilter, setSubnetFilter] = useState<string>("all");
+  const [activeSubnetId, setActiveSubnetId] = useState<string | null>(null);
+  const [scopeToken, setScopeToken] = useState(() =>
+    createScopeToken(scopeSequenceRef.current, autoView, null),
+  );
   const availableSubnets = useMemo(() => {
     if (selectedView !== "subnet-topology") return [];
     return data.nodes
@@ -150,68 +229,116 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       });
   }, [data.nodes, selectedView]);
 
+  const scopeState = useMemo(
+    () => resolveSubnetScopeState(data, selectedView, activeSubnetId),
+    [data, selectedView, activeSubnetId],
+  );
+  const filteredData = useMemo(
+    () => resolveDisplayedGraphData(data, selectedView, activeSubnetId, focusNodeId, maxHops),
+    [data, selectedView, activeSubnetId, focusNodeId, maxHops],
+  );
+
   // Layout computation
-  const layoutResult = useGraphLayout(data, viewConfig, focusNodeId, dimensions);
+  const layoutResult = useGraphLayout(filteredData, viewConfig, focusNodeId, dimensions, scopeToken);
+  const isLayoutPending = !isForceLayout && layoutResult == null;
+  const isSubnetScoped = selectedView === "subnet-topology" && activeSubnetId != null;
+  const activeSubnet = useMemo(
+    () => availableSubnets.find((subnet) => subnet.id === activeSubnetId) ?? null,
+    [availableSubnets, activeSubnetId],
+  );
 
   // Force simulation state (only for exploration view)
   const nodesRef = useRef<SimNode[]>([]);
   const animRef = useRef<number>(0);
   const temperatureRef = useRef(1.0);
 
-  // ─── Filtered data for force layout ─────────────────────────────────────
-  const filteredData = useMemo(() => {
-    let nodes = data.nodes.filter((n) => viewConfig.nodeTypesShown.has(n.label));
-    let links = data.links.filter((l) => viewConfig.edgesShown.has(l.type));
+  const bumpScopeToken = useCallback(
+    (nextSelectedView: GraphViewName, nextActiveSubnetId: string | null) => {
+      setScopeToken(
+        createScopeToken(++scopeSequenceRef.current, nextSelectedView, nextActiveSubnetId),
+      );
+    },
+    [],
+  );
 
-    // Subnet isolation filter
-    if (selectedView === "subnet-topology" && subnetFilter !== "all") {
-      // Find all entities that are MEMBER_OF the selected subnet
-      const memberIds = new Set<string>();
-      memberIds.add(subnetFilter); // include the subnet node itself
-      for (const link of links) {
-        if (link.type === "MEMBER_OF" && link.target === subnetFilter) {
-          memberIds.add(link.source);
-        }
-      }
-      // Also include gateways connected via ROUTES_THROUGH
-      for (const link of links) {
-        if (link.type === "ROUTES_THROUGH" && link.source === subnetFilter) {
-          memberIds.add(link.target);
-        }
-      }
-      nodes = nodes.filter((n) => memberIds.has(n.id));
-      const nodeIdSet = new Set(nodes.map((n) => n.id));
-      links = links.filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target));
+  const applySubnetSelection = useCallback(
+    (nextActiveSubnetId: string | null) => {
+      setActiveSubnetId(nextActiveSubnetId);
+      bumpScopeToken(selectedView, nextActiveSubnetId);
+    },
+    [bumpScopeToken, selectedView],
+  );
+
+  useEffect(() => {
+    if (!scopeState.invalidScope) {
+      return;
     }
 
-    // Hop filtering when a focus node is set
-    if (focusNodeId && maxHops > 0) {
-      const nodeIds = new Set<string>();
-      const queue: Array<{ id: string; depth: number }> = [{ id: focusNodeId, depth: 0 }];
-      nodeIds.add(focusNodeId);
-      while (queue.length > 0) {
-        const current = queue.shift()!;
-        if (current.depth >= maxHops) continue;
-        for (const link of links) {
-          const src = link.source;
-          const tgt = link.target;
-          if (src === current.id && !nodeIds.has(tgt)) {
-            nodeIds.add(tgt);
-            queue.push({ id: tgt, depth: current.depth + 1 });
-          }
-          if (tgt === current.id && !nodeIds.has(src)) {
-            nodeIds.add(src);
-            queue.push({ id: src, depth: current.depth + 1 });
-          }
-        }
-      }
-      nodes = nodes.filter((n) => nodeIds.has(n.id));
-      const nodeIdSet = new Set(nodes.map((n) => n.id));
-      links = links.filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target));
+    setActiveSubnetId(null);
+    bumpScopeToken(selectedView, null);
+    setHoveredNode(null);
+    setFocusNodeId(null);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [bumpScopeToken, scopeState.invalidScope, selectedView]);
+
+  useEffect(() => {
+    if (focusNodeId && !filteredData.nodes.some((node) => node.id === focusNodeId)) {
+      setFocusNodeId(null);
+    }
+  }, [filteredData.nodes, focusNodeId]);
+
+  useEffect(() => {
+    if (selectedView !== "subnet-topology") {
+      return;
     }
 
-    return { nodes, links };
-  }, [data, viewConfig, focusNodeId, maxHops, selectedView, subnetFilter]);
+    setHoveredNode(null);
+    setFocusNodeId(null);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [selectedView, activeSubnetId]);
+
+  useEffect(() => {
+    if (scopeState.invalidScope) {
+      return;
+    }
+    setLiveMessage(
+      describeGraphScope(
+        filteredData,
+        selectedView,
+        activeSubnetId ?? "all",
+        availableSubnets,
+      ),
+    );
+  }, [activeSubnetId, availableSubnets, filteredData, scopeState.invalidScope, selectedView]);
+
+  const handleSubnetSelectionKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLSelectElement>) => {
+      if (!isSubnetSelectorKey(event.key)) {
+        return;
+      }
+
+      const nextActiveSubnetId = event.currentTarget.value === "all"
+        ? null
+        : event.currentTarget.value;
+      event.preventDefault?.();
+      applySubnetSelection(nextActiveSubnetId);
+    },
+    [applySubnetSelection],
+  );
+
+  const handleResetSubnetScopeKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (!isResetScopeKey(event.key)) {
+        return;
+      }
+
+      event.preventDefault?.();
+      applySubnetSelection(null);
+    },
+    [applySubnetSelection],
+  );
 
   // ─── Force simulation (exploration view only) ──────────────────────────
   const simulate = useCallback(() => {
@@ -281,6 +408,10 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
 
     // Determine which nodes to draw
     const isPositioned = layoutResult != null;
+    if (!isForceLayout && !isPositioned) {
+      ctx.clearRect(0, 0, dimensions.width, dimensions.height);
+      return;
+    }
     const drawNodes: PositionedNode[] = isPositioned
       ? layoutResult.nodes
       : nodesRef.current;
@@ -379,11 +510,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       }
     }
     ctx.restore();
-  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, viewConfig.layout, zoom, pan, palette]);
+  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, isForceLayout, zoom, pan, palette]);
 
   // ─── Initialize force simulation nodes ────────────────────────────────
   useEffect(() => {
-    if (layoutResult != null) return; // Positioned layout, no simulation
+    if (!isForceLayout || layoutResult != null) return;
     nodesRef.current = filteredData.nodes.map((n) => ({
       ...n,
       x: dimensions.width / 2 + (Math.random() - 0.5) * 300,
@@ -392,7 +523,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       vy: 0,
     }));
     temperatureRef.current = 1.0;
-  }, [filteredData.nodes, layoutResult, dimensions]);
+  }, [filteredData.nodes, layoutResult, dimensions, isForceLayout]);
 
   // ─── Resize observer ──────────────────────────────────────────────────
   useEffect(() => {
@@ -413,13 +544,13 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     let running = true;
     function tick() {
       if (!running) return;
-      if (layoutResult == null) simulate(); // Only simulate for force layout
+      if (isForceLayout && layoutResult == null) simulate();
       draw();
       animRef.current = requestAnimationFrame(tick);
     }
     tick();
     return () => { running = false; cancelAnimationFrame(animRef.current); };
-  }, [simulate, draw, layoutResult]);
+  }, [simulate, draw, layoutResult, isForceLayout]);
 
   // Convert screen coordinates to graph coordinates (accounting for zoom/pan)
   function screenToGraph(screenX: number, screenY: number) {
@@ -529,12 +660,19 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     );
   }
 
-  const focusNode = data.nodes.find((n) => n.id === focusNodeId);
-  const displayNodes = layoutResult?.nodes ?? nodesRef.current;
-  const displayLinks = layoutResult?.links ?? filteredData.links;
+  const focusNode = filteredData.nodes.find((n) => n.id === focusNodeId) ?? null;
+  const displayNodes = isLayoutPending
+    ? filteredData.nodes
+    : layoutResult?.nodes ?? nodesRef.current;
+  const displayLinks = isLayoutPending
+    ? filteredData.links
+    : layoutResult?.links ?? filteredData.links;
 
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 -mx-6 lg:-mx-8">
+      <p {...TOPOLOGY_GRAPH_LIVE_REGION_PROPS} className="sr-only">
+        {liveMessage}
+      </p>
       {/* ─── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
@@ -544,6 +682,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
             <select
               value={selectedView}
               onChange={(e) => setSelectedView(e.target.value as GraphViewName)}
+              aria-label="Select graph view"
               className="text-[10px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-1.5 py-0.5 text-[var(--dpf-text)]"
             >
               {Object.values(VIEW_CONFIGS).map((vc) => (
@@ -588,8 +727,13 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] text-[var(--dpf-muted)]">Subnet:</span>
             <select
-              value={subnetFilter}
-              onChange={(e) => setSubnetFilter(e.target.value)}
+              value={activeSubnetId ?? "all"}
+              onChange={(e) => {
+                const nextActiveSubnetId = e.target.value === "all" ? null : e.target.value;
+                applySubnetSelection(nextActiveSubnetId);
+              }}
+              onKeyDown={handleSubnetSelectionKeyDown}
+              aria-label="Filter graph by subnet"
               className="text-[10px] bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-1.5 py-0.5 text-[var(--dpf-text)]"
             >
               <option value="all">All subnets</option>
@@ -597,6 +741,21 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => applySubnetSelection(null)}
+              onKeyDown={handleResetSubnetScopeKeyDown}
+              disabled={!isSubnetScoped}
+              aria-label="Reset subnet scope"
+              className="text-[9px] rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[var(--dpf-muted)] enabled:hover:text-[var(--dpf-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Reset
+            </button>
+            {isSubnetScoped && (
+              <span className="text-[9px] text-[var(--dpf-text)]">
+                Scoped to {activeSubnet?.name ?? activeSubnetId}
+              </span>
+            )}
           </div>
         )}
 
@@ -631,6 +790,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           ref={canvasRef}
           width={dimensions.width}
           height={dimensions.height}
+          aria-label={liveMessage}
           onClick={handleClick}
           onMouseMove={handleMouseMove}
           onMouseDown={handleMouseDown}
@@ -643,6 +803,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
             cursor: isPanningRef.current ? "grabbing" : hoveredNode ? "pointer" : "grab",
           }}
         />
+        {!isForceLayout && layoutResult == null && (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--dpf-muted)]">
+            Updating graph...
+          </div>
+        )}
         <div className="absolute bottom-2 left-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-[var(--dpf-muted)]">
           {LEGEND_ENTRIES.map((entry) => (
             <span key={entry.ciType} className="flex items-center gap-1">
@@ -652,7 +817,10 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           ))}
         </div>
         <div className="absolute bottom-2 right-2 text-[9px] text-[var(--dpf-muted)] flex items-center gap-2">
-          <span>{displayNodes.length} nodes / {displayLinks.length} edges</span>
+          <span>
+            {displayNodes.length} nodes / {displayLinks.length} edges
+            {isSubnetScoped ? " / scoped" : ""}
+          </span>
           <span>{Math.round(zoom * 100)}%</span>
           {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
             <button
