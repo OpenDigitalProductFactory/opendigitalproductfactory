@@ -91,6 +91,7 @@ export async function updateFeatureBrief(
 export async function advanceBuildPhase(
   buildId: string,
   targetPhase: BuildPhase,
+  options?: { overrideUxFailure?: { reason: string } },
 ): Promise<void> {
   const userId = await requireBuildAccess();
 
@@ -103,11 +104,14 @@ export async function advanceBuildPhase(
       designDoc: true,
       designReview: true,
       plan: true,
+      brief: true,
       buildPlan: true,
       planReview: true,
       taskResults: true,
       verificationOut: true,
       acceptanceMet: true,
+      uxTestResults: true,
+      uxVerificationStatus: true,
     },
   });
   if (!build) throw new Error("Build not found");
@@ -118,6 +122,7 @@ export async function advanceBuildPhase(
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
   }
 
+  const brief = build.brief as { acceptanceCriteria?: string[] } | null;
   const gate = checkPhaseGate(currentPhase, targetPhase, {
     designDoc: build.designDoc,
     designReview: build.designReview,
@@ -127,10 +132,28 @@ export async function advanceBuildPhase(
     taskResults: build.taskResults,
     verificationOut: build.verificationOut,
     acceptanceMet: build.acceptanceMet,
+    uxTestResults: build.uxTestResults,
+    uxVerificationStatus: build.uxVerificationStatus,
+    acceptanceCriteria: brief?.acceptanceCriteria ?? [],
   });
 
   if (!gate.allowed) {
-    throw new Error(gate.reason ?? "Phase gate check failed");
+    // Operator override: only bypasses UX-verification blockers, never the
+    // acceptance-criteria / design-doc / verification-output prerequisites.
+    // The gate message for UX failures always starts with "UX verification".
+    const override = options?.overrideUxFailure;
+    const isUxBlocker = gate.reason?.startsWith("UX verification") ?? false;
+    if (override && isUxBlocker && override.reason.trim().length >= 10) {
+      await prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "ux-override",
+          summary: `UX verification override applied for ${targetPhase}: ${override.reason.trim()}`,
+        },
+      }).catch(() => {});
+    } else {
+      throw new Error(gate.reason ?? "Phase gate check failed");
+    }
   }
 
   await prisma.featureBuild.update({

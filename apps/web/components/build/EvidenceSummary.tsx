@@ -62,15 +62,26 @@ export function EvidenceSummary({ build, loading }: Props) {
         ? (Array.isArray(build.acceptanceMet) ? `${build.acceptanceMet.filter((c) => c.met).length}/${build.acceptanceMet.length} met` : safeRenderValue(build.acceptanceMet))
         : "Not evaluated",
     },
-    {
-      label: "UX Acceptance Tests",
-      status: (build as Record<string, unknown>).uxTestResults
-        ? ((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).every((s) => s.passed) ? "pass" : "fail"
-        : "missing",
-      detail: (build as Record<string, unknown>).uxTestResults
-        ? `${((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).filter((s) => s.passed).length}/${((build as Record<string, unknown>).uxTestResults as Array<{ passed: boolean }>).length} passed`
-        : "Not run",
-    },
+    (() => {
+      const b = build as Record<string, unknown>;
+      const status = b.uxVerificationStatus as string | null | undefined;
+      const tests = b.uxTestResults as Array<{ passed: boolean }> | null | undefined;
+      if (status === "running") {
+        return { label: "UX Acceptance Tests", status: "pending", detail: "Running…" };
+      }
+      if (status === "skipped") {
+        return { label: "UX Acceptance Tests", status: "pass", detail: "No acceptance criteria" };
+      }
+      if (tests && tests.length > 0) {
+        const passed = tests.filter((s) => s.passed).length;
+        return {
+          label: "UX Acceptance Tests",
+          status: tests.every((s) => s.passed) ? "pass" : "fail",
+          detail: `${passed}/${tests.length} passed`,
+        };
+      }
+      return { label: "UX Acceptance Tests", status: "missing", detail: "Not run" };
+    })(),
   ];
 
   const STATUS_COLORS: Record<string, string> = {
