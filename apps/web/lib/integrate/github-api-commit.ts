@@ -163,6 +163,44 @@ async function githubGet<T>(url: string, token: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/**
+ * Build a specific error for a base-branch lookup failure.
+ *
+ * GitHub returns 404 for BOTH "repo doesn't exist" and "token can't see this
+ * repo" (this is deliberate — it hides private-repo existence from unauthorized
+ * callers). The raw "GitHub API GET …: 404 Not Found" reads like a GitHub outage
+ * when in practice it's almost always a token-access problem.
+ *
+ * 401 means token itself is invalid. 403 usually means a scope or rate limit.
+ */
+function explainBaseRefFailure(
+  err: unknown,
+  owner: string,
+  repo: string,
+  baseBranch: string,
+): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  const is404 = /:\s*404\b/.test(msg);
+  const is401 = /:\s*401\b/.test(msg);
+  const is403 = /:\s*403\b/.test(msg);
+  if (is404) {
+    return new Error(
+      `Could not read ${owner}/${repo}@${baseBranch}. Token likely lacks Contents: Read access to this repo, or the repo is private and the token wasn't granted access to it. (GitHub returns 404 for unauthorized reads of private repos.) Original: ${msg}`,
+    );
+  }
+  if (is401) {
+    return new Error(
+      `Token rejected by GitHub (401 Unauthorized) when reading ${owner}/${repo}@${baseBranch}. The token is invalid or revoked. Reissue it and update the hive-contribution credential. Original: ${msg}`,
+    );
+  }
+  if (is403) {
+    return new Error(
+      `Token forbidden (403) from reading ${owner}/${repo}@${baseBranch}. Likely missing Contents: Read scope or hitting a rate limit. Original: ${msg}`,
+    );
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
+
 async function githubPost<T>(url: string, body: unknown, token: string): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -209,10 +247,18 @@ export async function createBranchAndPR(input: {
   const apiBase = `https://api.github.com/repos/${owner}/${repo}`;
 
   // 1. Get the SHA of the base branch
-  const baseRef = await githubGet<GitHubRef>(
-    `${apiBase}/git/ref/heads/${baseBranch}`,
-    token,
-  );
+  //
+  // Wrap the raw GitHub error with a token-access-aware hint. A 404 here is
+  // almost never a GitHub outage — it's a token that can't see the repo.
+  let baseRef: GitHubRef;
+  try {
+    baseRef = await githubGet<GitHubRef>(
+      `${apiBase}/git/ref/heads/${baseBranch}`,
+      token,
+    );
+  } catch (err) {
+    throw explainBaseRefFailure(err, owner, repo, baseBranch);
+  }
   const baseSha = baseRef.object.sha;
 
   // 2. Parse file operations from the diff
