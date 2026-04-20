@@ -42,6 +42,18 @@ export type ToolDefinition = {
   buildPhases?: BuildPhaseTag[] | null;
   /** MCP-spec tool annotations for governance and safety classification */
   annotations?: ToolAnnotations;
+  /**
+   * Predicate that lets an `executionMode: "proposal"` tool skip the proposal
+   * card and execute immediately when the user has already pre-authorized the
+   * action through platform configuration. Returning true means the agentic
+   * loop treats this tool call as immediate; false (or undefined) preserves
+   * the normal proposal-approval flow. Used for `contribute_to_hive` under
+   * `contributionMode=contribute_all` — with DCO already accepted, the user
+   * has given standing authorization for every shipped build to contribute
+   * upstream, so the per-build proposal card is redundant ceremony that
+   * silently stalls autonomous runs.
+   */
+  autoApproveWhen?: (ctx: { userId: string }) => Promise<boolean>;
 };
 
 /** Derive tool annotations from existing ToolDefinition fields.
@@ -1035,6 +1047,17 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "proposal",
     sideEffect: true,
     buildPhases: ["ship"],
+    // Skip the proposal card when the user has pre-authorized via `contribute_all`
+    // and accepted the DCO. In that configuration every shipped build is cleared
+    // to contribute upstream; an extra per-build approval step is redundant and
+    // silently stalls autonomous runs (no human is present to click approve).
+    autoApproveWhen: async () => {
+      const cfg = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: { contributionMode: true, dcoAcceptedAt: true },
+      });
+      return cfg?.contributionMode === "contribute_all" && !!cfg.dcoAcceptedAt;
+    },
   },
   {
     name: "apply_platform_update",
