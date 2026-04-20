@@ -6,6 +6,15 @@ import type { BuildExecutionState } from "@/lib/build-exec-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * Canonical values for FeatureBuild.uxVerificationStatus. Defined as an
+ * `as const` array so runtime checks and the TypeScript union stay in sync,
+ * following the String-typed-enum pattern documented in CLAUDE.md. The DB
+ * column is plain TEXT — this array is the authority for valid values.
+ */
+export const UX_VERIFICATION_STATUSES = ["running", "complete", "failed", "skipped"] as const;
+export type UxVerificationStatus = typeof UX_VERIFICATION_STATUSES[number];
+
 export type FeatureBrief = {
   title: string;
   description: string;

@@ -2325,6 +2325,7 @@ model FeatureBuild {
   claimStatus           String?
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
+  uxVerificationStatus  String?           // null | "running" | "complete" | "failed" | "skipped"
   buildExecState        Json?
   taxonomyAttribution   Json?
   releaseBundleId       String?

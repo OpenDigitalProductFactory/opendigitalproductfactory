@@ -252,6 +252,11 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 }
 
 export async function extractDiff(containerId: string): Promise<string> {
+  // Unstage first so a prior extractDiff call's index doesn't leak into this one.
+  // Without this, files an earlier (possibly buggy) `git add -A` staged stay in the
+  // index forever — the current diff ends up carrying ghosts from past runs.
+  await execInSandbox(containerId, "cd /workspace && git reset");
+
   // Stage ALL changes (including new untracked files) so git diff --cached sees them.
   // Without this, new files created by write_sandbox_file are untracked and invisible.
   //
