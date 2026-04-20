@@ -768,40 +768,22 @@ export async function createBuildEpic(input: {
       });
     }
 
-    // Create "done" backlog item for the shipped work
-    const doneItemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    await tx.backlogItem.create({
-      data: {
-        itemId: doneItemId,
-        title: `Ship: ${input.title}`,
-        type: "product",
-        status: "done",
-        body: `Feature shipped via Build Studio (${input.buildId}).`,
-        epicId: created.id,
-        ...(input.digitalProductId ? { digitalProductId: input.digitalProductId } : {}),
-      },
-    });
-
-    // Seed initial feedback-gathering item
-    const feedbackItemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    await tx.backlogItem.create({
-      data: {
-        itemId: feedbackItemId,
-        title: `Gather user feedback on ${input.title.replace(/\sv[\d.]+$/, "")}`,
-        type: "product",
-        status: "open",
-        body: "Collect initial user feedback and file follow-up items.",
-        epicId: created.id,
-        ...(input.digitalProductId ? { digitalProductId: input.digitalProductId } : {}),
-      },
-    });
+    // NOTE: previously this block pre-seeded a "Ship: <title>" item with
+    // status=done plus a "Gather user feedback" item with status=open at
+    // epic-create time. That ran during ideate auto-intake (design review
+    // pass) — long before the feature actually shipped — and produced a
+    // misleading backlog view showing the work as already done. The real
+    // in-progress backlog item is created separately by the auto-intake
+    // path in reviewDesignDoc (see mcp-tools.ts ~line 2990). Feedback items
+    // should be auto-created on actual ship, not at ideate-pass. Removed
+    // per Mark's observation 2026-04-20.
 
     return created;
   });
 
   return {
     epicId: epic.epicId,
-    message: `Created epic ${epic.epicId} with 2 backlog items (1 done, 1 open for feedback).`,
+    message: `Created epic ${epic.epicId}. The in-progress backlog item is created separately by the ideate auto-intake path.`,
   };
 }
 
