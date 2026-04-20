@@ -401,6 +401,24 @@ export const cliAdapter: ExecutionAdapterHandler = {
         `${parsed.toolCalls.length} tool calls, ${inferenceMs}ms`,
       );
 
+      // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
+      // See note there. Kept on until tool dispatch is 100% reliable.
+      const toolKeywordPattern = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
+      const mentionedNames = Array.from(new Set(parsed.text.match(toolKeywordPattern) ?? []));
+      const extractedNames = parsed.toolCalls.map((c) => c.name);
+      console.log(
+        `[tool-trace] adapter=claude-cli extracted=${parsed.toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,
+      );
+      if (parsed.toolCalls.length === 0 && mentionedNames.length > 0) {
+        console.log(
+          `[tool-trace] adapter=claude-cli NO-CALL-BUT-MENTIONED raw=${JSON.stringify(parsed.text.slice(0, 8000))}`,
+        );
+      } else if (parsed.toolCalls.length > 0) {
+        console.log(
+          `[tool-trace] adapter=claude-cli CALLS-PARSED head=${JSON.stringify(parsed.text.slice(0, 600))}`,
+        );
+      }
+
       return {
         text: parsed.text,
         toolCalls: parsed.toolCalls,
