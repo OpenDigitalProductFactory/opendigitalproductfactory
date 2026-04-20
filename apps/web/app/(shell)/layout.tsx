@@ -17,10 +17,15 @@ import { getShellNavSections } from "@/lib/permissions";
 import { AppRail } from "@/components/shell/AppRail";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
-  // First-run check — redirect to setup if no org exists
-  const { isFirstRun } = await import("@/lib/actions/setup-progress");
-  if (await isFirstRun()) {
-    redirect("/setup");
+  // First-run check — redirect to setup if no org exists.
+  // Skip in the sandbox: it's a preview container for Build Studio feature
+  // output, not a user install, and the /setup redirect blocks users from
+  // viewing the actual change they built.
+  if (process.env.DPF_ENVIRONMENT !== "sandbox") {
+    const { isFirstRun } = await import("@/lib/actions/setup-progress");
+    if (await isFirstRun()) {
+      redirect("/setup");
+    }
   }
 
   const session = await auth();
@@ -94,11 +99,18 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     }
   }
 
-  // Check for active setup progress (onboarding tour in progress)
-  const activeSetup = await prisma.platformSetupProgress.findFirst({
-    where: { completedAt: null, userId: user.id },
-    select: { id: true, currentStep: true, steps: true, context: true },
-  });
+  // Check for active setup progress (onboarding tour in progress).
+  // Skip entirely for the sandbox environment — the sandbox is a
+  // dev-preview container for inspecting Build Studio feature output,
+  // not a user-facing install. The setup tour has no meaning there and
+  // blocks the preview view.
+  const isSandbox = process.env.DPF_ENVIRONMENT === "sandbox";
+  const activeSetup = isSandbox
+    ? null
+    : await prisma.platformSetupProgress.findFirst({
+        where: { completedAt: null, userId: user.id },
+        select: { id: true, currentStep: true, steps: true, context: true },
+      });
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
   const shellNavSections = activeSetup
