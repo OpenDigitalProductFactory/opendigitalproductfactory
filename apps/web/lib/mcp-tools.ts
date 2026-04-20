@@ -5257,7 +5257,7 @@ export async function executeTool(
         return {
           success: false,
           error: e instanceof Error ? e.message : String(e),
-          message: "Could not launch browser-use for live page evaluation. Ensure the browser-use service is running (docker compose --profile browser-use up -d). Try code-only analysis using read_project_file instead.",
+          message: "UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can fall back to code-only analysis using read_project_file.",
         };
       }
     }
@@ -5334,7 +5334,7 @@ export async function executeTool(
         return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps, browserUseResults: testContent } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
-        return { success: false, error: `UX test run failed: ${msg}`, message: `Could not run UX tests. Ensure the browser-use service is running (docker compose --profile browser-use up -d). You can skip UX tests and proceed with the review.` };
+        return { success: false, error: `UX test run failed: ${msg}`, message: `UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can skip UX tests and proceed with the review if you have to.` };
       }
     }
 
