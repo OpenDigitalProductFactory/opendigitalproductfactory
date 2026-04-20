@@ -25,6 +25,7 @@ import {
 } from "@/lib/ai-inference";
 import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
@@ -397,6 +398,19 @@ export const chatAdapter: ExecutionAdapterHandler = {
         const extracted = extractTextualToolCalls(text);
         toolCalls = extracted.toolCalls;
         text = extracted.cleanText;
+      } else if (text && text.includes('"tool_use"')) {
+        // Fallback 2: local/Docker Model Runner (Gemma, Llama) emits the
+        // canonical Anthropic-style {"type":"tool_use",...} JSON as plain
+        // content rather than a structured tool_calls field. Without this
+        // every tool-requiring turn that fallback-routes to local is a
+        // silent dead-end: the agentic loop sees toolCalls=0 and gives up.
+        // Share the CLI adapters' extractor so the behaviour is identical
+        // regardless of provider.
+        const textualUse = extractTextualToolUse(text);
+        if (textualUse.length > 0) {
+          toolCalls = textualUse;
+          console.log(`[tool-trace] adapter=chat rescued=${toolCalls.length} names=${JSON.stringify(toolCalls.map(c => c.name))} provider=local-or-chat`);
+        }
       }
 
       const usage = typeof data.usage === "object" && data.usage !== null
