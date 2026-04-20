@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
-import { SandboxPreview } from "./SandboxPreview";
+import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
@@ -401,7 +401,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                         borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
                       }}
                     >
-                      Live Preview
+                      Preview
                     </button>
                   )}
                 </div>
@@ -416,7 +416,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                 {buildView !== "graph" && (
                   <div className="flex min-h-0 flex-1 gap-4 p-4">
                     {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
-                      <SandboxPreview
+                      <PreviewUrlCard
                         buildId={activeBuild.buildId}
                         phase={activeBuild.phase}
                         sandboxPort={activeBuild.sandboxPort}
