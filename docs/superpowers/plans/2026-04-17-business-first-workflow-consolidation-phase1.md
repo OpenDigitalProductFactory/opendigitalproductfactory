@@ -627,7 +627,7 @@ git commit -m "feat(finance): introduce workflow hubs and compact shell rail"
 
 ## Notes For The Implementer
 
-- Work directly on `main` in this repository. Do **not** create a branch or worktree unless the user explicitly asks for it.
+- Use the PR workflow in this repository. Create one short-lived intent-named branch (`feat/*`, `fix/*`, `chore/*`, `doc/*`, or `clean/*`) for this slice, and do not push directly to `main`.
 - The workspace is already dirty with unrelated local files and in-progress coworker layout work. Do not stage or revert:
   - `.admin-credentials`
   - `.host-profile.json`

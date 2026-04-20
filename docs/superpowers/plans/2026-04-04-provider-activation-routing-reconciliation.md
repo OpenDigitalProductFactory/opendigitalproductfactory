@@ -99,7 +99,7 @@ it("codex catalog uses canonical code model class and includes GPT-5-Codex", () 
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/auto-discover.test.ts
+pnpm --filter web exec vitest run apps/web/lib/auto-discover.test.ts
 ```
 
 Expected:
@@ -143,7 +143,7 @@ Do not change unrelated provider seeds.
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/auto-discover.test.ts
+pnpm --filter web exec vitest run apps/web/lib/auto-discover.test.ts
 ```
 
 Expected:
@@ -183,7 +183,7 @@ Prefer mocking Prisma and `autoDiscoverAndProfile()` rather than using a real DB
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
+pnpm --filter web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
 ```
 
 Expected:
@@ -200,7 +200,7 @@ If needed, patch `apps/web/lib/govern/provider-oauth.ts` so successful OAuth act
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
+pnpm --filter web exec vitest run apps/web/lib/govern/provider-oauth.test.ts
 ```
 
 Expected:
@@ -228,7 +228,7 @@ Also assert auth failures do not trigger reconciliation.
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run apps/web/lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -245,7 +245,7 @@ If any success path does not trigger reconciliation, update `apps/web/lib/action
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run apps/web/lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -297,7 +297,7 @@ it("does not exclude code-class endpoints for coding-oriented requests", () => {
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/routing/pipeline-v2.test.ts
+pnpm --filter web exec vitest run apps/web/lib/routing/pipeline-v2.test.ts
 ```
 
 Expected:
@@ -325,7 +325,7 @@ This is the least invasive fix because it:
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/routing/pipeline-v2.test.ts
+pnpm --filter web exec vitest run apps/web/lib/routing/pipeline-v2.test.ts
 ```
 
 Expected:
@@ -354,7 +354,7 @@ it("prefers codex for the build route by default", () => {
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/tak/agent-routing.test.ts
+pnpm --filter web exec vitest run apps/web/lib/tak/agent-routing.test.ts
 ```
 
 Expected:
@@ -377,7 +377,7 @@ This gives Build Studio Codex-first behavior while still allowing runtime fallba
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/tak/agent-routing.test.ts
+pnpm --filter web exec vitest run apps/web/lib/tak/agent-routing.test.ts
 ```
 
 Expected:
@@ -436,7 +436,7 @@ describe("shouldReconcileProviderAfterError", () => {
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/inference/provider-reconciliation.test.ts
+pnpm --filter web exec vitest run apps/web/lib/inference/provider-reconciliation.test.ts
 ```
 
 Expected:
@@ -467,7 +467,7 @@ Do not embed DB writes in this helper. It should only make decisions.
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/inference/provider-reconciliation.test.ts
+pnpm --filter web exec vitest run apps/web/lib/inference/provider-reconciliation.test.ts
 ```
 
 Expected:
@@ -505,7 +505,7 @@ it("degrades and reconciles a model after interface drift", async () => {
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/routing/fallback.test.ts
+pnpm --filter web exec vitest run apps/web/lib/routing/fallback.test.ts
 ```
 
 Expected:
@@ -532,7 +532,7 @@ Do not change the existing `model_not_found` retirement behavior.
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run apps/web/lib/routing/fallback.test.ts
+pnpm --filter web exec vitest run apps/web/lib/routing/fallback.test.ts
 ```
 
 Expected:
@@ -560,7 +560,7 @@ git commit -m "feat(routing): reconcile provider drift after runtime failures"
 Run:
 
 ```bash
-pnpm --filter @dpf/web exec vitest run \
+pnpm --filter web exec vitest run \
   apps/web/lib/auto-discover.test.ts \
   apps/web/lib/govern/provider-oauth.test.ts \
   apps/web/lib/actions/ai-providers.test.ts \

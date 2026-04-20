@@ -772,7 +772,7 @@ git commit -m "feat(estate): introduce discovery operations and purpose-first es
 
 ## Notes For The Implementer
 
-- Work directly on `main`. Do **not** create a branch or worktree unless the user explicitly asks for one.
+- Use the PR workflow in this repository. Create one short-lived intent-named branch (`feat/*`, `fix/*`, `chore/*`, `doc/*`, or `clean/*`) for this slice, and do not push directly to `main`.
 - The workspace is already dirty with unrelated local changes. Leave them untouched.
 - Follow the absorption rule from the approved spec:
   - discovery, vulnerability, version, and posture capabilities feed one shared estate model

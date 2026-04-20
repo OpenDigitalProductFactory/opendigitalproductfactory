@@ -414,7 +414,7 @@ But do not claim the full spec is done until proposal tools work.
   - any updated agentic loop tests
 
 - [ ] Run production build gate
-  - `cd apps/web && npx next build`
+  - `pnpm --filter web exec next build`
 
 - [ ] If any migration or seed behavior changed materially, verify the affected DB workflow still applies cleanly
 
@@ -491,7 +491,7 @@ This work is done when all of the following are true:
 - Proposal tools return approval-needed results and persist proposals.
 - The agentic loop does not double-execute tools after native-MCP CLI calls.
 - Affected Vitest coverage passes.
-- `cd apps/web && npx next build` passes cleanly.
+- `pnpm --filter web exec next build` passes cleanly.
 
 ---
 

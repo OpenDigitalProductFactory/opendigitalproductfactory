@@ -27,7 +27,7 @@ Do **not** fold Admin regrouping or unrelated Platform IA work into this plan. R
 
 ## Constraints
 
-- Work directly on `main`.
+- Use the PR workflow for this slice. Create one short-lived intent-named branch and do not push directly to `main`.
 - Do not touch unrelated dirty files already present in the worktree:
   - `.admin-credentials`
   - `.host-profile.json`

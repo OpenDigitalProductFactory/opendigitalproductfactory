@@ -60,7 +60,7 @@ Cover:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/provider-catalog-reconciliation.test.ts
+pnpm --filter web exec vitest run lib/provider-catalog-reconciliation.test.ts
 ```
 
 Expected:
@@ -80,7 +80,7 @@ Create `apps/web/lib/provider-catalog-reconciliation.ts` with:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/provider-catalog-reconciliation.test.ts
+pnpm --filter web exec vitest run lib/provider-catalog-reconciliation.test.ts
 ```
 
 Expected:
@@ -108,7 +108,7 @@ Cover:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/actions/ai-providers.test.ts
 ```
 
 - [ ] **Step 3: Implement the action wiring**
@@ -123,7 +123,7 @@ Add:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -151,7 +151,7 @@ Cover:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/provider-catalog-reconciliation.test.ts
+pnpm --filter web exec vitest run lib/provider-catalog-reconciliation.test.ts
 ```
 
 - [ ] **Step 3: Implement minimal safe retirement/reseed behavior**
@@ -166,7 +166,7 @@ Update activation/reconciliation so:
 Run:
 
 ```bash
-cd apps/web && npx vitest run lib/provider-catalog-reconciliation.test.ts lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/provider-catalog-reconciliation.test.ts lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -194,7 +194,7 @@ Document:
 Run:
 
 ```bash
-npx tsc --noEmit -p apps/web/tsconfig.json
+pnpm --filter web exec tsc --noEmit
 ```
 
 Expected:
@@ -205,7 +205,7 @@ Expected:
 Run:
 
 ```bash
-cd apps/web && npx next build
+pnpm --filter web exec next build
 ```
 
 Expected:

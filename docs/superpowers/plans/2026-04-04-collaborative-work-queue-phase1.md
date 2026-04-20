@@ -116,7 +116,7 @@
 
 - [ ] **Step 1: Install inngest**
   ```bash
-  cd h:\opendigitalproductfactory && pnpm --filter @dpf/web add inngest
+  cd h:\opendigitalproductfactory && pnpm --filter web add inngest
   ```
 
 - [ ] **Step 2: Create Inngest client with typed events**
@@ -167,7 +167,7 @@
 
 - [ ] **Step 5: Verify build compiles**
   ```bash
-  cd h:\opendigitalproductfactory && pnpm --filter @dpf/web build
+  cd h:\opendigitalproductfactory && pnpm --filter web build
   ```
   Expected: Build succeeds with no type errors.
 
@@ -240,7 +240,7 @@
 
 - [ ] **Step 6: Verify build compiles**
   ```bash
-  cd h:\opendigitalproductfactory && pnpm --filter @dpf/web build
+  cd h:\opendigitalproductfactory && pnpm --filter web build
   ```
 
 - [ ] **Step 7: Commit**
@@ -328,7 +328,7 @@
 
 - [ ] **Step 6: Verify build compiles**
   ```bash
-  cd h:\opendigitalproductfactory && pnpm --filter @dpf/web build
+  cd h:\opendigitalproductfactory && pnpm --filter web build
   ```
 
 - [ ] **Step 7: Update existing test files**
@@ -1087,7 +1087,7 @@
 
 - [ ] **Step 1: Full build**
   ```bash
-  cd h:\opendigitalproductfactory && pnpm --filter @dpf/web build
+  cd h:\opendigitalproductfactory && pnpm --filter web build
   ```
   Expected: No type errors, no missing imports.
 

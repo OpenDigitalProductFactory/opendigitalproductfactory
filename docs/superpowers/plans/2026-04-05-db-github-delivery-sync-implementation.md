@@ -1,6 +1,6 @@
 # DB to GitHub Delivery Sync Implementation Plan
 
-> **For implementation after approval:** use branch/PR workflow for this spec. Create a feature branch from `main`, keep commits focused, open a draft PR early, and do not mark the work complete until targeted Vitest coverage and `cd apps/web && npx next build` both pass.
+> **For implementation after approval:** use the branch/PR workflow for this spec. Create one short-lived intent-named branch from `main`, keep commits focused, open a draft PR early, and do not mark the work complete until targeted Vitest coverage and `pnpm --filter web exec next build` both pass.
 
 **Spec:** `docs/superpowers/specs/2026-04-05-db-github-delivery-sync-design.md`
 
@@ -226,9 +226,9 @@ This keeps GitHub execution state flowing back into the backlog without turning 
 
 ## Verification Gate
 
-- [ ] Run focused tests for the touched files with `npx vitest run ...`
+- [ ] Run focused tests for the touched files with `pnpm --filter web exec vitest run ...`
 - [ ] If a migration is added, verify it applies cleanly without drift
-- [ ] Run `cd apps/web && npx next build`
+- [ ] Run `pnpm --filter web exec next build`
 - [ ] Do not claim completion until all three are green or any pre-existing blocker is explicitly identified
 
 ## Assumptions

@@ -51,26 +51,30 @@ Epics must be actively managed — not just created and forgotten.
 
 ### Core Rule
 
-- **Work directly on `main`.** Do not create feature branches or worktrees unless the user explicitly asks for one.
-- Commit early, commit often. Small, focused commits on `main` are preferred over long-lived branches.
+- **All changes go through pull requests**, including maintainer work.
+- **Do not push directly to `main`.** Use a short-lived branch and open a PR so CI validates the change before merge.
+- **Maintainer work uses intent-named branches:** `feat/*`, `fix/*`, `chore/*`, `doc/*`, `clean/*`.
+- **External contributors** use fork -> branch from `main` -> PR back to `main`.
 
 ### Why
 
-- Worktrees and feature branches caused lost uncommitted work across multiple directories.
-- This is a single-developer project where `main` is the working branch.
-- Simplicity beats process overhead — if something breaks, `git revert` is straightforward.
+- The repo is being prepared for public/open-source contribution, so maintainer work needs the same PR + CI path as external work.
+- CI catches breakage on maintainer changes too, not just on community submissions.
+- Short-lived, single-concern branches keep review, rollback, and merge risk manageable.
 
 ### Commits
 
 - Commit completed work promptly so nothing is lost.
 - Use descriptive commit messages that explain *why*, not just *what*.
-- Do not batch unrelated changes into a single commit.
+- Do not batch unrelated changes into a single branch or PR.
+- Push after committing so CI can validate the branch.
 
-### When to Branch (exception, not default)
+### Branch Shape
 
-- Only create a branch if the user explicitly requests one.
-- Only create a branch for experimental work the user wants to isolate.
-- If a branch is created, merge or discard it quickly — do not let branches linger.
+- One concern per branch, one concern per PR.
+- Name the branch by intent, not by ticket number.
+- Merge or close short-lived branches quickly — do not let them linger after the PR resolves.
+- Future customer-specific contribution flows may use persistent `customer/<id>` branches, but maintainer work should continue to use short-lived intent branches.
 
 ### Verification — Build Gate (mandatory)
 
@@ -78,8 +82,8 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 
 **Required checks before claiming any task, epic, or session is done:**
 
-1. **Unit tests pass** — `npx vitest run` for affected test files (at minimum)
-2. **Production build succeeds** — `cd apps/web && npx next build` must complete with zero errors
+1. **Unit tests pass** — `pnpm --filter web exec vitest run` for affected suites (at minimum)
+2. **Production build succeeds** — `pnpm --filter web exec next build` must complete with zero errors
 3. **Migration applies cleanly** — if a migration was added, verify it applies without drift
 
 **When to run the build:**
@@ -94,7 +98,7 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 - Do not defer build fixes to a later session
 - If the failure is pre-existing (not caused by your changes), note it explicitly but still fix if feasible
 
-**Subagent dispatchers:** When dispatching implementation subagents for the final task in an epic, include "run `cd apps/web && npx next build` and fix any errors" as part of the task.
+**Subagent dispatchers:** When dispatching implementation subagents for the final task in an epic, include "run `pnpm --filter web exec next build` and fix any errors" as part of the task.
 
 ### Communication
 

@@ -153,7 +153,7 @@ Include tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-signal.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-signal.test.ts`
 Expected: FAIL because the module does not exist yet
 
 - [ ] **Step 3: Implement minimal normalization code**
@@ -167,7 +167,7 @@ Create:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-signal.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-signal.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -196,7 +196,7 @@ Add cases proving:
 
 - [ ] **Step 2: Run focused tests to verify failures**
 
-Run: `npx vitest run apps/web/lib/operate/process-observer-triage.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/operate/process-observer-triage.test.ts`
 Expected: FAIL on missing signal behavior
 
 - [ ] **Step 3: Implement minimal source-to-signal hooks**
@@ -205,7 +205,7 @@ Do not over-automate yet. Add thin emission points only where the source already
 
 - [ ] **Step 4: Re-run focused tests**
 
-Run: `npx vitest run apps/web/lib/operate/process-observer-triage.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/operate/process-observer-triage.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -236,7 +236,7 @@ Cover:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-evaluator.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-evaluator.test.ts`
 Expected: FAIL because evaluator is missing
 
 - [ ] **Step 3: Implement minimal evaluator**
@@ -249,7 +249,7 @@ Implement:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-evaluator.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-evaluator.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -278,7 +278,7 @@ Add cases for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run apps/web/lib/explore/backlog.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/explore/backlog.test.ts`
 Expected: FAIL on unsupported status or metadata
 
 - [ ] **Step 3: Implement minimal proposal persistence**
@@ -291,7 +291,7 @@ Add:
 
 - [ ] **Step 4: Run tests to verify it passes**
 
-Run: `npx vitest run apps/web/lib/explore/backlog.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/explore/backlog.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -321,7 +321,7 @@ Cover:
 
 - [ ] **Step 2: Run tests to verify failures**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-execution-candidate.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-execution-candidate.test.ts`
 Expected: FAIL because the module is missing
 
 - [ ] **Step 3: Implement minimal candidate generator**
@@ -337,7 +337,7 @@ Generate a brief JSON object containing:
 
 - [ ] **Step 4: Run tests to verify passes**
 
-Run: `npx vitest run apps/web/lib/improve/improvement-execution-candidate.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/improve/improvement-execution-candidate.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -360,7 +360,7 @@ Add a focused test proving a candidate brief can be consumed by Build Studio as 
 
 - [ ] **Step 2: Run the focused test to verify failure**
 
-Run: `npx vitest run apps/web/lib/explore/feature-build-data.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/explore/feature-build-data.test.ts`
 Expected: FAIL on missing candidate support
 
 - [ ] **Step 3: Implement minimal Build Studio handoff**
@@ -369,7 +369,7 @@ Pass the candidate brief into the build context without launching builds automat
 
 - [ ] **Step 4: Re-run the focused test**
 
-Run: `npx vitest run apps/web/lib/explore/feature-build-data.test.ts`
+Run: `pnpm --filter web exec vitest run apps/web/lib/explore/feature-build-data.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -401,7 +401,7 @@ Cover:
 
 - [ ] **Step 2: Run the failing tests**
 
-Run: `npx vitest run apps/web/components/ops/improvement-flywheel-dashboard.test.tsx`
+Run: `pnpm --filter web exec vitest run apps/web/components/ops/improvement-flywheel-dashboard.test.tsx`
 Expected: FAIL because the UI is missing
 
 - [ ] **Step 3: Implement minimal theme-aware UI**
@@ -411,8 +411,8 @@ Use existing CSS variables only and follow the established ops/portfolio page pa
 - [ ] **Step 4: Run tests and build check**
 
 Run:
-- `npx vitest run apps/web/components/ops/improvement-flywheel-dashboard.test.tsx`
-- `cd apps/web && npx next build`
+- `pnpm --filter web exec vitest run apps/web/components/ops/improvement-flywheel-dashboard.test.tsx`
+- `pnpm --filter web exec next build`
 
 Expected:
 - tests PASS
@@ -471,7 +471,7 @@ git commit -m "docs: add continuous improvement flywheel guide"
 Run:
 
 ```bash
-npx vitest run apps/web/lib/improve/improvement-signal.test.ts apps/web/lib/improve/improvement-evaluator.test.ts apps/web/lib/improve/improvement-execution-candidate.test.ts apps/web/lib/explore/backlog.test.ts apps/web/lib/operate/process-observer-triage.test.ts
+pnpm --filter web exec vitest run apps/web/lib/improve/improvement-signal.test.ts apps/web/lib/improve/improvement-evaluator.test.ts apps/web/lib/improve/improvement-execution-candidate.test.ts apps/web/lib/explore/backlog.test.ts apps/web/lib/operate/process-observer-triage.test.ts
 ```
 
 Expected: PASS
@@ -491,7 +491,7 @@ Expected: PASS
 Run:
 
 ```bash
-cd apps/web && npx next build
+pnpm --filter web exec next build
 ```
 
 Expected: build succeeds with no new errors

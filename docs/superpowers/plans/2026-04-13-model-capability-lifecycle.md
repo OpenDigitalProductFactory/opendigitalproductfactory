@@ -21,7 +21,7 @@
 - `ModelProfile.profileSource` defaults to `"seed"`. Values: `"seed"`, `"auto-discover"`, `"evaluated"`, `"admin"`. New value `"catalog"` added by this plan.
 - `ModelProfile.supportsToolUse` is currently `Boolean @default(false)` — non-nullable. This plan makes it nullable.
 - Migration timestamp convention: `YYYYMMDDHHMMSS_snake_case_name`. Latest existing: `20260412230000_reset_codex_tool_fidelity_scores`. New migrations use `202604130NNNNN_...`.
-- Tests live alongside source files as `*.test.ts`. Run with `pnpm --filter @dpf/web test` (vitest).
+- Tests live alongside source files as `*.test.ts`. Run with `pnpm --filter web test` (vitest).
 
 ---
 
@@ -609,7 +609,7 @@
 - [ ] **Step 2: Run to confirm tests fail**
 
   ```bash
-  pnpm --filter @dpf/web test loader
+  pnpm --filter web test loader
   ```
 
   Expected: `Cannot find 'resolveToolUse'` or test failures.
@@ -681,7 +681,7 @@
 - [ ] **Step 5: Run tests to verify they pass**
 
   ```bash
-  pnpm --filter @dpf/web test loader
+  pnpm --filter web test loader
   ```
 
   Expected: all 7 tests pass.
@@ -738,7 +738,7 @@
 - [ ] **Step 4: Verify TypeScript compiles clean**
 
   ```bash
-  pnpm --filter @dpf/web exec tsc --noEmit
+  pnpm --filter web exec tsc --noEmit
   ```
 
   Expected: no errors. If `supportsToolUse: boolean | null` type mismatch appears, the schema change from Task 1 must be regenerated first (Step 5 of Task 1).
@@ -1136,7 +1136,7 @@
 - [ ] **Step 6: Verify no TypeScript errors**
 
   ```bash
-  pnpm --filter @dpf/web exec tsc --noEmit
+  pnpm --filter web exec tsc --noEmit
   ```
 
 - [ ] **Step 7: Commit**

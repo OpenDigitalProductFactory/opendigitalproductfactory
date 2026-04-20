@@ -38,7 +38,7 @@
 - For process graph role/phase colors, add dedicated `--pg-*` variables in the shared theme layer and pass those CSS variable strings through node data.
 - `text-white` is allowed only on solid accent/error/success badges and buttons.
 
-**Test command:** `pnpm --filter @dpf/web test` (run from `d:/DPF`)
+**Test command:** `pnpm --filter web test` (run from `d:/DPF`)
 **TypeScript check:** `cd apps/web && pnpm tsc --noEmit 2>&1 | head -30`
 
 ---
@@ -334,7 +334,7 @@ describe("buildTaskGraph", () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test lib/build/process-graph-builder 2>&1 | tail -20
+cd d:/DPF && pnpm --filter web test lib/build/process-graph-builder 2>&1 | tail -20
 ```
 
 Expected: `Cannot find module` or similar — file doesn't exist yet.
@@ -829,7 +829,7 @@ export function buildTaskGraph(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test lib/build/process-graph-builder 2>&1 | tail -20
+cd d:/DPF && pnpm --filter web test lib/build/process-graph-builder 2>&1 | tail -20
 ```
 
 Expected: all tests pass.
@@ -1847,7 +1847,7 @@ cd d:/DPF/apps/web && pnpm tsc --noEmit 2>&1 | head -30
 - [ ] **Step 8: Run tests**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test 2>&1 | tail -10
+cd d:/DPF && pnpm --filter web test 2>&1 | tail -10
 ```
 
 - [ ] **Step 9: Commit**
@@ -1952,7 +1952,7 @@ cd d:/DPF/apps/web && pnpm tsc --noEmit 2>&1 | head -30
 - [ ] **Step 4: Run tests**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test 2>&1 | tail -10
+cd d:/DPF && pnpm --filter web test 2>&1 | tail -10
 ```
 
 - [ ] **Step 5: Commit**
@@ -2182,7 +2182,7 @@ cd d:/DPF/apps/web && pnpm tsc --noEmit 2>&1 | head -30
 - [ ] **Step 6: Run tests**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test 2>&1 | tail -10
+cd d:/DPF && pnpm --filter web test 2>&1 | tail -10
 ```
 
 - [ ] **Step 7: Commit**
@@ -2367,7 +2367,7 @@ cd d:/DPF/apps/web && pnpm tsc --noEmit 2>&1 | head -30
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test 2>&1 | tail -10
+cd d:/DPF && pnpm --filter web test 2>&1 | tail -10
 ```
 
 - [ ] **Step 6: Commit**
@@ -2385,7 +2385,7 @@ cd d:/DPF && git add apps/web/lib/actions/ea-traversal.ts apps/web/components/ea
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-cd d:/DPF && pnpm --filter @dpf/web test 2>&1 | tail -10
+cd d:/DPF && pnpm --filter web test 2>&1 | tail -10
 ```
 
 Expected: all tests pass.

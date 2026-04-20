@@ -112,8 +112,7 @@ Add tests that expect the orchestrator to classify representative failures as:
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/inference/provider-reconciliation-orchestrator.test.ts
+pnpm --filter web exec vitest run lib/inference/provider-reconciliation-orchestrator.test.ts
 ```
 
 Expected:
@@ -143,8 +142,7 @@ The minimal implementation should:
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/inference/provider-reconciliation-orchestrator.test.ts
+pnpm --filter web exec vitest run lib/inference/provider-reconciliation-orchestrator.test.ts
 ```
 
 Expected:
@@ -188,8 +186,7 @@ Extend `ai-providers.test.ts` to assert that a successful `testProviderAuth(prov
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/govern/provider-oauth.test.ts lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/govern/provider-oauth.test.ts lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -213,8 +210,7 @@ Update `apps/web/lib/actions/ai-providers.ts` so successful provider test/config
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/govern/provider-oauth.test.ts lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/govern/provider-oauth.test.ts lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -268,8 +264,7 @@ If a scheduled job default is required:
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/actions/ai-providers.test.ts
+pnpm --filter web exec vitest run lib/actions/ai-providers.test.ts
 ```
 
 Expected:
@@ -339,8 +334,7 @@ If a schema change is truly required:
 Run:
 
 ```bash
-cd apps/web
-npx vitest run components/platform/ProviderDetailForm.test.tsx components/monitoring/CoworkerHealthStatus.test.tsx
+pnpm --filter web exec vitest run components/platform/ProviderDetailForm.test.tsx components/monitoring/CoworkerHealthStatus.test.tsx
 ```
 
 Expected:
@@ -377,8 +371,7 @@ Add or extend tests so `Run full reconciliation` invokes the shared orchestrator
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/routing/fallback.test.ts components/platform/ProviderDetailForm.test.tsx
+pnpm --filter web exec vitest run lib/routing/fallback.test.ts components/platform/ProviderDetailForm.test.tsx
 ```
 
 Expected:
@@ -404,8 +397,7 @@ so:
 Run:
 
 ```bash
-cd apps/web
-npx vitest run lib/routing/fallback.test.ts components/platform/ProviderDetailForm.test.tsx
+pnpm --filter web exec vitest run lib/routing/fallback.test.ts components/platform/ProviderDetailForm.test.tsx
 ```
 
 Expected:
@@ -431,8 +423,7 @@ git commit -m "feat(ai): unify manual and automatic provider reconciliation"
 Run:
 
 ```bash
-cd apps/web
-npx vitest run \
+pnpm --filter web exec vitest run \
   lib/inference/provider-reconciliation-orchestrator.test.ts \
   lib/govern/provider-oauth.test.ts \
   lib/actions/ai-providers.test.ts \
@@ -452,7 +443,7 @@ Expected:
 Run:
 
 ```bash
-npx tsc --noEmit -p apps/web/tsconfig.json
+pnpm --filter web exec tsc --noEmit
 ```
 
 Expected:
@@ -464,8 +455,7 @@ Expected:
 Run:
 
 ```bash
-cd apps/web
-npx next build
+pnpm --filter web exec next build
 ```
 
 Expected:

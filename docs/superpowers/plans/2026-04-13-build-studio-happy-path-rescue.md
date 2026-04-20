@@ -109,7 +109,7 @@ If a nearby test file exists, add a case that verifies null-safe defaults and ty
 
 Run:
 ```bash
-npx vitest run apps/web/lib/explore/feature-build-data.test.ts
+pnpm --filter web exec vitest run apps/web/lib/explore/feature-build-data.test.ts
 ```
 
 Expected: FAIL because the state is not yet projected or normalized.
@@ -136,7 +136,7 @@ Update all code paths that materialize build rows so the UI and actions read a c
 
 Run:
 ```bash
-npx vitest run apps/web/lib/explore/feature-build-data.test.ts
+pnpm --filter web exec vitest run apps/web/lib/explore/feature-build-data.test.ts
 ```
 
 Expected: PASS
@@ -166,7 +166,7 @@ Add a test that attempts to advance a build without full intake anchors and expe
 
 Run:
 ```bash
-npx vitest run apps/web/lib/actions/build.test.ts
+pnpm --filter web exec vitest run apps/web/lib/actions/build.test.ts
 ```
 
 Expected: FAIL because missing intake does not yet block progression.
@@ -198,7 +198,7 @@ Do not just throw an opaque error. Update state so the UI can show the missing p
 
 Run:
 ```bash
-npx vitest run apps/web/lib/actions/build.test.ts
+pnpm --filter web exec vitest run apps/web/lib/actions/build.test.ts
 ```
 
 Expected: PASS
@@ -239,7 +239,7 @@ Add tests that verify:
 
 Run:
 ```bash
-npx vitest run apps/web/lib/mcp-tools.test.ts
+pnpm --filter web exec vitest run apps/web/lib/mcp-tools.test.ts
 ```
 
 Expected: FAIL on the new intake persistence expectations.
@@ -256,7 +256,7 @@ When the Build Studio tools resolve taxonomy or backlog/epic information, persis
 
 Run:
 ```bash
-npx vitest run apps/web/lib/mcp-tools.test.ts
+pnpm --filter web exec vitest run apps/web/lib/mcp-tools.test.ts
 ```
 
 Expected: PASS
@@ -291,7 +291,7 @@ Add tests that cover:
 
 Run:
 ```bash
-npx vitest run apps/web/lib/integrate/build-studio-config.test.ts
+pnpm --filter web exec vitest run apps/web/lib/integrate/build-studio-config.test.ts
 ```
 
 Expected: FAIL on the new cases.
@@ -304,7 +304,7 @@ Ensure the returned config is deterministic and safe for a per-run engine lock.
 
 Run:
 ```bash
-npx vitest run apps/web/lib/integrate/build-studio-config.test.ts
+pnpm --filter web exec vitest run apps/web/lib/integrate/build-studio-config.test.ts
 ```
 
 Expected: PASS
@@ -336,7 +336,7 @@ Cover:
 
 Run:
 ```bash
-npx vitest run apps/web/lib/integrate/build-orchestrator.test.ts
+pnpm --filter web exec vitest run apps/web/lib/integrate/build-orchestrator.test.ts
 ```
 
 Expected: FAIL on the new assertions.
@@ -368,7 +368,7 @@ Implement logic that can tell the caller whether a failure can be retried at the
 
 Run:
 ```bash
-npx vitest run apps/web/lib/integrate/build-orchestrator.test.ts
+pnpm --filter web exec vitest run apps/web/lib/integrate/build-orchestrator.test.ts
 ```
 
 Expected: PASS
@@ -457,7 +457,7 @@ git commit -m "feat(build-studio): surface rescue-path intake and execution stat
 
 Run:
 ```bash
-npx vitest run \
+pnpm --filter web exec vitest run \
   apps/web/lib/integrate/build-studio-config.test.ts \
   apps/web/lib/integrate/build-orchestrator.test.ts \
   apps/web/lib/mcp-tools.test.ts \
@@ -474,7 +474,7 @@ If a test fails, fix the minimal affected code before continuing.
 
 Run:
 ```bash
-cd apps/web && npx next build
+pnpm --filter web exec next build
 ```
 
 Expected: PASS with zero errors

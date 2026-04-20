@@ -9,7 +9,7 @@
  * the tool would call routeAndCall() for AI review. Everything else
  * uses the real tool pipeline.
  *
- * Run: cd apps/web && npx vitest run tests/build-lifecycle.test.ts
+ * Run: pnpm --filter web exec vitest run tests/build-lifecycle.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "@dpf/db";
