@@ -123,6 +123,8 @@ services:
         condition: service_completed_successfully
       inngest:
         condition: service_healthy
+      browser-use:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -216,12 +218,14 @@ services:
     restart: "no"
 
   # ─── Browser-Use (AI-powered browser automation, replaces Playwright) ──
+  # Core service — review-phase UX verification depends on it. Kept always-on
+  # in the default stack; the portal waits for its healthcheck before
+  # accepting traffic so run_ux_test calls never hit a cold target.
   browser-use:
     build:
       context: ./services/browser-use
       dockerfile: Dockerfile
     restart: unless-stopped
-    profiles: ["browser-use"]
     ports:
       - "8500:8500"
     volumes:
