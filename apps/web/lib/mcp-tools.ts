@@ -4311,7 +4311,10 @@ export async function executeTool(
 
       const promotion = await prisma.changePromotion.findUnique({
         where: { promotionId },
-        include: { changeItem: { include: { changeRequest: true } } },
+        include: {
+          changeItem: { include: { changeRequest: true } },
+          productVersion: { include: { featureBuild: { select: { buildId: true } } } },
+        },
       });
       if (!promotion) return { success: false, error: "Promotion not found.", message: `No promotion with ID ${promotionId}.` };
       if (promotion.status !== "approved") return { success: false, error: "Promotion must be approved first.", message: `Current status: ${promotion.status}` };
@@ -4350,7 +4353,22 @@ export async function executeTool(
       }
 
       const windowDesc = matchingWindows.map((w) => `${w.name}: days ${w.dayOfWeek.join(",")}, ${w.startTime}-${w.endTime}`).join("; ");
+
+      // Persist the scheduled state on the ChangePromotion so getBuildFlowState
+      // reads it without peeking at ChangeRequest. deploymentLog carries the
+      // window description so the fork can render "Scheduled for <window>".
+      await prisma.changePromotion.update({
+        where: { promotionId },
+        data: { status: "scheduled", deploymentLog: `window: ${windowDesc}` },
+      }).catch(() => {});
+
       logBuildActivity(promotionId, "schedule_promotion", `Scheduled for window: ${windowDesc}`);
+
+      const scheduleBuildId = promotion.productVersion?.featureBuild?.buildId ?? null;
+      if (scheduleBuildId) {
+        const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+        await reconcileBuildCompletion(scheduleBuildId).catch(() => {});
+      }
 
       return {
         success: true,
@@ -4409,10 +4427,23 @@ export async function executeTool(
       try {
         await execAsync("docker image inspect dpf-promoter");
       } catch {
+        // Persist the awaiting_operator state so getBuildFlowState reads it
+        // from the ChangePromotion column directly (no BuildActivity detour)
+        // and the reconciler can treat the fork as dispositioned. The prior
+        // version returned awaiting_operator only in the tool response, which
+        // the fork state machine couldn't see.
+        await prisma.changePromotion.update({
+          where: { promotionId },
+          data: { status: "awaiting_operator" },
+        }).catch(() => {});
         logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", "Promoter image not present — handing off to operator");
+        if (promoBuildId) {
+          const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+          await reconcileBuildCompletion(promoBuildId).catch(() => {});
+        }
         return {
           success: true,
-          message: `Promotion ${promotionId} is approved and ready. This install doesn't have the "dpf-promoter" container image built locally, so automatic deployment is disabled here. An operator needs to run the promotion manually from Operations > Promotions, which will stream the deployment log and handle rollback. The promotion stays in "approved" status until then.`,
+          message: `Promotion ${promotionId} is approved and ready. This install doesn't have the "dpf-promoter" container image built locally, so automatic deployment is disabled here. An operator needs to run the promotion manually from Operations > Promotions, which will stream the deployment log and handle rollback. The promotion stays in "awaiting_operator" status until then.`,
           data: { status: "awaiting_operator", reason: "promoter_image_missing", promotionId },
         };
       }
@@ -4474,6 +4505,11 @@ export async function executeTool(
 
       await execAsync("docker rm dpf-promoter-1 2>/dev/null || true").catch(() => {});
       logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", promoSuccess ? "Deployed successfully" : `Rolled back: ${finalPromo?.rollbackReason ?? "unknown"}`);
+
+      if (promoBuildId) {
+        const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+        await reconcileBuildCompletion(promoBuildId).catch(() => {});
+      }
 
       return {
         success: promoSuccess,
@@ -5142,6 +5178,15 @@ export async function executeTool(
           ? `FeaturePack ${packId} created + PR ${prUrl}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`
           : `FeaturePack ${packId} created but upstream PR FAILED: ${prError ?? "unknown"}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`,
       );
+
+      // Fork disposition has changed — ask the reconciler whether the build
+      // is ready to advance ship → complete. Success and failure both count
+      // as a terminal disposition for the upstream fork (errored is still
+      // terminal); the only state that blocks complete is in_progress.
+      {
+        const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+        await reconcileBuildCompletion(buildId).catch(() => {});
+      }
 
       if (!prUrl) {
         return {
