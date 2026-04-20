@@ -471,6 +471,25 @@ export async function routeAndCall(
     options?.previousResponseId,
   );
 
+  // 5c. Local-fallback signal.
+  //
+  // The fallback chain sets downgraded=true when i>0 (we skipped the winner
+  // due to failure). That covers the "preferred provider rate-limited, fell
+  // to local" case. But when the pipeline's STAGE-5b tier sort lands on
+  // bundled because all user_configured endpoints were already excluded
+  // (status=unconfigured/disabled, hard-constraint violations, etc.), i=0
+  // and downgraded stays false — so the user has no signal that the turn
+  // ran on the local model. Patch that gap here so the observability is
+  // correct regardless of whether we fell through at ranking or runtime.
+  const selectedTier = decision.selectedEndpoint?.providerTier;
+  const hasUserConfiguredActive = manifests.some(
+    (m) => m.providerTier === "user_configured" && (m.status === "active" || m.status === "degraded"),
+  );
+  const fellToLocal = selectedTier === "bundled" && hasUserConfiguredActive && !result.downgraded;
+  const localFallbackBanner = fellToLocal
+    ? `This turn ran on the bundled local model because configured paid providers were unavailable. Tool calls and complex reasoning may be unreliable on local — retry in a moment, or check provider status in Admin > AI.`
+    : null;
+
   // 6. Normalize result to RoutedInferenceResult
   return {
     providerId: result.providerId,
@@ -479,8 +498,8 @@ export async function routeAndCall(
     toolCalls: result.toolCalls,
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
-    downgraded: result.downgraded,
-    downgradeMessage: result.downgradeMessage,
+    downgraded: result.downgraded || fellToLocal,
+    downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
     toolsStripped,
     routeDecision: decision,
     responseId: result.responseId,
