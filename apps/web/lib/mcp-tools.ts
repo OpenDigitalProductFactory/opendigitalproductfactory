@@ -1982,6 +1982,19 @@ export async function executeTool(
         ? params["itemId"].trim()
         : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = String(params["status"] ?? "open");
+
+      // BacklogItem.epicId is a FK to Epic.id (cuid). Agents typically pass
+      // the semantic epicId ("EP-..."), so resolve to cuid before inserting.
+      let epicCuid: string | null = null;
+      if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
+        const raw = params["epicId"].trim();
+        const epicRow = await prisma.epic.findFirst({
+          where: { OR: [{ epicId: raw }, { id: raw }] },
+          select: { id: true },
+        });
+        epicCuid = epicRow?.id ?? null;
+      }
+
       const item = await prisma.backlogItem.create({
         data: {
           itemId,
@@ -1992,7 +2005,7 @@ export async function executeTool(
           agentId: context?.agentId ?? null,
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
-          ...(typeof params["epicId"] === "string" ? { epicId: params["epicId"] } : {}),
+          ...(epicCuid ? { epicId: epicCuid } : {}),
         },
       });
       // Index in platform knowledge for semantic search
@@ -2993,6 +3006,23 @@ export async function executeTool(
               const itemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
               const title = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
               const body = String(updatedBuild.description ?? "").slice(0, 2000);
+
+              // BacklogItem.epicId is the FK to Epic.id (cuid), NOT the
+              // semantic "EP-BUILD-xxx" string. happyPathState stores the
+              // semantic id, so we must resolve it to the cuid before
+              // passing it as a FK — otherwise the FK check fails with
+              // BacklogItem_epicId_fkey and the auto-create swallows silently
+              // (observed 2026-04-20 on FB-21EEA510: epic linked, backlog
+              // stuck null, phase gate blocked forever).
+              let epicCuid: string | null = null;
+              if (happyPathState.intake.epicId) {
+                const epicRow = await prisma.epic.findUnique({
+                  where: { epicId: happyPathState.intake.epicId },
+                  select: { id: true },
+                });
+                epicCuid = epicRow?.id ?? null;
+              }
+
               await prisma.backlogItem.create({
                 data: {
                   itemId,
@@ -3001,7 +3031,7 @@ export async function executeTool(
                   status: "in-progress",
                   submittedById: userId,
                   ...(body ? { body } : {}),
-                  ...(happyPathState.intake.epicId ? { epicId: happyPathState.intake.epicId } : {}),
+                  ...(epicCuid ? { epicId: epicCuid } : {}),
                 },
               });
               await updateBuildHappyPathState(userId, {
