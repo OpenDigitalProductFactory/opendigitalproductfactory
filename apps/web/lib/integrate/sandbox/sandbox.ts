@@ -254,14 +254,30 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 export async function extractDiff(containerId: string): Promise<string> {
   // Stage ALL changes (including new untracked files) so git diff --cached sees them.
   // Without this, new files created by write_sandbox_file are untracked and invisible.
-  // Filter out node_modules, .next, lock files — they produce a 200MB+ diff.
+  //
+  // Filter out build artifacts and caches — they produce a 200MB+ diff AND trigger
+  // false positives in assess_contribution (e.g. minified bundles in .next/ contain
+  // the word "token" thousands of times, which looks like an API-key leak).
+  //
+  // Pathspec gotcha: `:!node_modules` matches only a top-level `node_modules/`
+  // directory, NOT `apps/web/node_modules/`. Same for `:!.next`. Use `:!**/X/**`
+  // to match at any depth. pnpm v10 added `.pnpm-store/` at repo root — exclude
+  // that too.
   await execInSandbox(containerId,
-    "cd /workspace && git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'",
+    "cd /workspace && git add -A -- " +
+    "':!**/node_modules/**' ':!node_modules/**' " +
+    "':!**/.next/**' ':!.next/**' " +
+    "':!.pnpm-store/**' " +
+    "':!**/*.tsbuildinfo' " +
+    "':!pnpm-lock*'",
   );
 
-  // Get the list of staged source files
+  // Get the list of staged source files (defense in depth — the pathspec above
+  // should have excluded these, but `grep -v` catches any that slipped through).
   const changedFiles = await execInSandbox(containerId,
-    "cd /workspace && git diff --cached --name-only | grep -v node_modules | grep -v '.next/' | grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
+    "cd /workspace && git diff --cached --name-only | " +
+    "grep -v node_modules | grep -v '.next/' | grep -v '.pnpm-store/' | " +
+    "grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
   );
   const files = changedFiles.trim().split("\n").filter(Boolean);
   if (files.length === 0) return "";
