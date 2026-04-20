@@ -3158,9 +3158,26 @@ export async function executeTool(
             happyPathState,
           });
           if (gate.allowed) {
-            await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
-            if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-            logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build");
+            // Initialize the build branch BEFORE flipping the phase. If the
+            // phase flip lands without buildBranch set, deploy_feature runs
+            // on whatever the current sandbox HEAD is — picking up leftover
+            // work from earlier builds. Gate the transition on the branch
+            // actually being ready so the "phase: build" record is always
+            // paired with a valid buildBranch on the FeatureBuild row.
+            try {
+              const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+              const sandboxUp = await isSandboxAvailable();
+              if (!sandboxUp) {
+                logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
+              } else {
+                await startBuildBranch(buildId);
+                await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+                if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+                logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+              }
+            } catch (branchErr) {
+              logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
+            }
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
           }
@@ -3850,8 +3867,20 @@ export async function executeTool(
     case "deploy_feature": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, buildBranch: true, phase: true } });
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
+      // Invariant: buildBranch must be set once we're in build phase or later.
+      // Its absence means startBuildBranch never ran — so the sandbox tree
+      // is on whatever HEAD happened to be (client branch or baseline), and
+      // any diff we extract will pick up leaked work from earlier builds.
+      // Refuse to deploy until start_build runs and registers a buildBranch.
+      if (!build.buildBranch) {
+        return {
+          success: false,
+          error: "Build branch not initialized.",
+          message: "This build has no buildBranch on record — start_build never completed. Run start_build to create and register build/<buildId>, then retry deploy_feature. Deploying without a build branch would include leaked changes from prior builds.",
+        };
+      }
 
       const devConfig = await prisma.platformDevConfig.findUnique({
         where: { id: "singleton" },
