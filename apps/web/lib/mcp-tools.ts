@@ -4956,20 +4956,51 @@ export async function executeTool(
       const platformId = await getPlatformIdentity();
       const dcoAttestation = platformId.dcoSignoff;
 
-      // Create FeaturePack
-      const packId = `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await prisma.featurePack.create({
-        data: {
-          packId,
-          title: build.title,
-          description: String(brief?.description ?? ""),
-          portfolioContext: build.portfolioId,
-          version: "1.0.0",
-          manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-          buildId: build.id,
-          status: "contributed",
-        },
+      // FeaturePack is upserted by buildId — NOT create-every-call.
+      //
+      // Two FeaturePack rows for the same build (with prUrl:null on both) was
+      // the observed symptom of contribute_to_hive being invoked twice. The
+      // old code created a fresh pack on each call; if the first call's PR
+      // creation failed, the pack stayed with prUrl:null. A retry then made
+      // a SECOND empty pack — and even when the retry's PR succeeded, its
+      // back-write only touched the second pack's manifest. The first pack
+      // was orphaned without its URL forever.
+      //
+      // Reusing the most recent pack for this build means:
+      //   - first call: create, get prUrl, back-write the same row.
+      //   - retry after failure: update the same row, try PR again; success
+      //     back-writes prUrl onto the existing pack (idempotent).
+      const existingPack = await prisma.featurePack.findFirst({
+        where: { buildId: build.id },
+        orderBy: { createdAt: "desc" },
+        select: { packId: true },
       });
+      const packId = existingPack?.packId ?? `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      if (existingPack) {
+        await prisma.featurePack.update({
+          where: { packId },
+          data: {
+            title: build.title,
+            description: String(brief?.description ?? ""),
+            portfolioContext: build.portfolioId,
+            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+            status: "contributed",
+          },
+        });
+      } else {
+        await prisma.featurePack.create({
+          data: {
+            packId,
+            title: build.title,
+            description: String(brief?.description ?? ""),
+            portfolioContext: build.portfolioId,
+            version: "1.0.0",
+            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+            buildId: build.id,
+            status: "contributed",
+          },
+        });
+      }
 
       // Create upstream PR via direct branch push (Option B).
       // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
