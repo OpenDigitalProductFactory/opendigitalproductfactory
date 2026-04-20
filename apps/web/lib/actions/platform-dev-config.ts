@@ -154,6 +154,31 @@ export async function hasGitBackupCredential(): Promise<boolean> {
 }
 
 /**
+ * True if resolveHiveToken() would return a non-null value from any source.
+ *
+ * Mirrors the four-priority chain in identity-privacy.ts so the admin UI can
+ * tell the user accurately whether hive contributions will work without
+ * leaking which slot the token lives in. Use this for CTAs like "Add a token"
+ * — never use hasGitBackupCredential for that check, since it only looks at
+ * the fork-only backup slot and misses HIVE_CONTRIBUTION_TOKEN /
+ * hive-contribution credential.
+ */
+export async function hasContributionToken(): Promise<boolean> {
+  if (process.env.HIVE_CONTRIBUTION_TOKEN) return true;
+  if (process.env.GITHUB_TOKEN) return true;
+  const hive = await prisma.credentialEntry.findUnique({
+    where: { providerId: "hive-contribution" },
+    select: { status: true, secretRef: true },
+  });
+  if (hive?.status === "active" && hive.secretRef) return true;
+  const backup = await prisma.credentialEntry.findUnique({
+    where: { providerId: "git-backup" },
+    select: { status: true, secretRef: true },
+  });
+  return backup?.status === "active" && !!backup.secretRef;
+}
+
+/**
  * Retrieve the stored GitHub token (decrypted). Used by the contribution
  * pipeline when process.env.GITHUB_TOKEN is not set.
  * Returns null if no credential is stored or decryption fails.

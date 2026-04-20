@@ -59,6 +59,7 @@ interface PlatformDevelopmentFormProps {
   dcoAcceptedByEmail?: string | null;
   untrackedFeatureCount?: number;
   hasGitCredential?: boolean;
+  hasContributionToken?: boolean;
   pseudonym?: string | null;
 }
 
@@ -601,6 +602,32 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               {" on "}
               {new Date(props.dcoAcceptedAt).toLocaleDateString()}.
             </p>
+          )}
+
+          {/* Prominent CTA when DCO is accepted but no token is on file.
+              Previously the only way back to the token entry step was the
+              small "Reconfigure sharing settings" text link below — too
+              easy to miss, and contribute_to_hive failed loudly at the
+              next PR attempt instead. Surfacing this up front closes the
+              gap between "sharing is set up" and "contributions actually
+              work." */}
+          {props.dcoAcceptedAt && props.hasContributionToken === false && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+              <p className="text-xs font-semibold text-[var(--dpf-text)]">
+                Add a GitHub token to enable contributions
+              </p>
+              <p className="text-xs text-[var(--dpf-muted)]">
+                The contributor agreement is accepted but no token is on file
+                yet, so upstream pull requests will fail. Add one now — it
+                takes about a minute.
+              </p>
+              <button
+                onClick={handleReconfigure}
+                className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              >
+                Add or rotate GitHub token
+              </button>
+            </div>
           )}
 
           <button
