@@ -156,7 +156,13 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   };
 
   const handleReconfigure = () => {
-    setWizardStep("explain");
+    // Reconfigure routes into the GitHub-token entry path so users who
+    // accepted DCO without setting up a token can add/rotate one later.
+    // Previously this jumped to the "explain" step whose Next button
+    // skipped straight to DCO — leaving no way to reach the paste-token
+    // input after initial setup. (Regression from pseudonymous-by-default
+    // rework, commit a232d0d6.)
+    setWizardStep("github-account");
     setToken("");
     setTokenError(null);
     setGithubUsername(null);
@@ -336,7 +342,13 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
                 : "Features are shared by default, but you can keep any individual one private."}
             </p>
           </div>
-          <div className="flex justify-end mt-4">
+          <div className="flex justify-between items-center mt-4">
+            <button
+              onClick={() => setWizardStep("github-account")}
+              className="text-xs text-[var(--dpf-accent)] hover:underline"
+            >
+              Use my GitHub account for attributed contributions
+            </button>
             <button
               onClick={() => setWizardStep("dco")}
               className="rounded px-4 py-1.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-colors"
