@@ -260,7 +260,11 @@ export const PHASE_LABELS: Record<BuildPhase, string> = {
   plan:     "Plan",
   build:    "Build",
   review:   "Review",
-  ship:     "Ship",
+  // Label-only rename per ship-phase-fork-redesign spec §3.1. The DB column
+  // value stays "ship" — this is what the user sees, not what's persisted.
+  // "Ready to Ship" signals that two independent fork outcomes may follow
+  // (upstream PR + promote to prod), rather than a single binary checkbox.
+  ship:     "Ready to Ship",
   complete: "Complete",
   failed:   "Failed",
 };
