@@ -845,21 +845,39 @@ export async function runAgenticLoop(params: {
       // Proposal tools (side-effecting, need approval) — break the loop and return
       // Check for explicit "proposal" only — undefined executionMode defaults to immediate
       if (toolDef && toolDef.executionMode === "proposal") {
-        return {
-          content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
-          providerId: result.providerId,
-          modelId: result.modelId,
-          downgraded: result.downgraded,
-          downgradeMessage: result.downgradeMessage,
-          totalInputTokens,
-          totalOutputTokens,
-          executedTools,
-          proposal: {
-            name: tc.name,
-            arguments: tc.arguments,
-            content: result.content || "",
-          },
-        };
+        // Pre-authorization gate: a tool can declare `autoApproveWhen` to skip
+        // the proposal card when platform config already constitutes approval
+        // (e.g. contribute_to_hive under contributionMode=contribute_all + DCO).
+        // Without this gate, autonomous runs — where no human is present to
+        // click approve — silently stall forever after emitting the tool call.
+        let preAuthorized = false;
+        if (toolDef.autoApproveWhen) {
+          try {
+            preAuthorized = await toolDef.autoApproveWhen({ userId });
+          } catch (err) {
+            console.warn(`[agentic-tool] autoApproveWhen threw for ${tc.name}:`, err);
+            preAuthorized = false;
+          }
+        }
+        if (!preAuthorized) {
+          return {
+            content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: {
+              name: tc.name,
+              arguments: tc.arguments,
+              content: result.content || "",
+            },
+          };
+        }
+        console.log(`[agentic-tool] auto-approved iter=${iteration} tool=${tc.name} (pre-authorized via platform config)`);
+        // Fall through to immediate execution below.
       }
 
       // Tool not in available list — capability-gated or not exposed on this route
