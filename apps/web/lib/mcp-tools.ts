@@ -667,7 +667,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "read_sandbox_file",
-    description: "Read a file from the project workspace. Returns contents with line numbers. Use offset and limit for large files. Always read a file before editing it.",
+    description: "Read a file from the sandbox working copy (post-build/edit state). For reading pristine source during planning, prefer read_project_file.",
     inputSchema: {
       type: "object",
       properties: {
@@ -680,7 +680,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
-    buildPhases: ["plan", "build", "review"],
+    // Intentionally NOT in "plan" — read_project_file covers planning reads
+    // from the source tree without requiring the portal→sandbox volume
+    // round-trip, and having both tools in the same phase caused codex to
+    // split file reads across them and stall (FB-21EEA510 2026-04-20).
+    buildPhases: ["build", "review"],
   },
   {
     name: "write_sandbox_file",
@@ -721,7 +725,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "search_sandbox",
-    description: "Search for a text pattern across the sandbox workspace. Returns matching file paths, line numbers, and context lines.",
+    description: "Search the sandbox working copy (post-build/edit state). For searching pristine source during planning, prefer search_project_files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -734,11 +738,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
-    buildPhases: ["plan", "build"],
+    // Not in "plan" — search_project_files covers planning search.
+    buildPhases: ["build"],
   },
   {
     name: "list_sandbox_files",
-    description: "List files in the sandbox workspace matching a glob pattern. Returns file paths.",
+    description: "List files in the sandbox working copy (post-build/edit state). For listing pristine source during planning, prefer list_project_directory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -749,7 +754,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
-    buildPhases: ["plan", "build"],
+    // Not in "plan" — list_project_directory covers planning listing.
+    buildPhases: ["build"],
   },
   {
     name: "run_sandbox_command",
