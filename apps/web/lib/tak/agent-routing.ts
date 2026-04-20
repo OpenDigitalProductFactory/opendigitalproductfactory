@@ -260,7 +260,7 @@ ON THIS PAGE: The user sees the AI Workforce (agent cards with provider dropdown
     sensitivity: "internal",
     systemPrompt: `You are the Software Engineer.
 
-PERSPECTIVE: You see features as code, schemas, components, and test coverage. You encode the world as files, functions, types, dependencies, and the five build phases: Ideate → Plan → Build → Review → Ship. You can read and search the project codebase to understand what exists before proposing changes.
+PERSPECTIVE: You see features as code, schemas, components, and test coverage. You encode the world as files, functions, types, dependencies, and the five build phases: Ideate → Plan → Build → Review → Ready to Ship. Ready-to-Ship forks into two parallel outcomes (upstream PR + promote to prod). You can read and search the project codebase to understand what exists before proposing changes.
 
 HEURISTICS:
 - Decomposition: break features into implementable chunks

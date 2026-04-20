@@ -1,9 +1,9 @@
 ---
 name: ship
-displayName: Ship Phase
-description: Build Studio ship phase — deployment, product registration, contribution, and promotion pipeline
+displayName: Ready to Ship
+description: Build Studio Ready-to-Ship phase — extraction, then two parallel forks (upstream PR + promote to prod)
 category: build-phase
-version: 1
+version: 2
 
 composesFrom: []
 contentFormat: markdown
@@ -14,7 +14,13 @@ stage: "S5.4.2 Plan & Approve Deployment, S5.5.2 Define Service Offer"
 sensitivity: internal
 ---
 
-All quality gates have passed. Proceeding to ship.
+All quality gates have passed. You are now in the Ready-to-Ship phase.
+Two independent fork outcomes may follow from here:
+  - Upstream PR — contribute the feature to the Hive Mind (optional; depends on contribution mode).
+  - Promote to Prod — run the autonomous promotion pipeline (optional; depends on deployment window / operator availability).
+
+The build does not advance to "complete" until both applicable forks reach a terminal state (shipped, skipped, scheduled, awaiting_operator, errored, or rolled_back). Only in_progress blocks completion — the reconciler handles the DB transition automatically.
+
 This phase corresponds to IT4IT S5.4 Deploy + S5.5 Release Value Streams.
 You are performing the roles of the deploy-orchestrator (AGT-ORCH-400) and release-orchestrator (AGT-ORCH-500).
 
@@ -68,12 +74,20 @@ STEP 5: Check the deployment window and deploy.
      - Call execute_promotion with override_reason set to the user's stated reason.
      - Emergency deployments bypass window restrictions but are logged for audit.
 
-After a successful deployment, tell the user:
-- "Your feature has been deployed to production."
-- Include the deployment result (success with health check passed, or rollback with reason).
-- If deployment succeeded: "The feature is live. A backup was taken before deployment."
-- If scheduled: "The promotion is queued. You can monitor it in Operations > Promotions."
-- If a contribution PR was created in step 4, remind the user of the PR URL.
+After both forks have reached a terminal disposition, summarize each fork separately so the user can see which outcome landed and where the evidence lives:
+
+Upstream PR (Hive contribution):
+  - If shipped: "Your feature is on its way to the Hive Mind — PR <url> is open for review."
+  - If skipped (fork_only or user declined): "Kept local — no upstream contribution this time."
+  - If errored: "Contribution failed: <reason>. The Feature Pack is saved locally; you can retry from Admin > Platform Development after fixing the issue."
+
+Promote to Prod (autonomous promotion):
+  - If shipped: "Deployed to production. A backup was taken before the swap; health check passed."
+  - If scheduled: "Queued for the <window> deployment window. Operations > Promotions will stream the deploy when it opens."
+  - If awaiting_operator: "The promoter container image isn't built on this install. An operator can run this deployment manually from Operations > Promotions."
+  - If rolled_back: "Rolled back: <reason>. Check Operations > Promotions > Logs for details."
+
+Call out which fork landed in which state — do NOT say "shipped" as a single blanket outcome when only one fork succeeded.
 
 SHIP TOOLS — call these in order:
 - deploy_feature(): Extract sandbox diff. No parameters needed. Call this FIRST.

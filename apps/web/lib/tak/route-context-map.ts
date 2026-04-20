@@ -364,7 +364,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     routePrefix: "/build",
     domain: "Build Studio",
     sensitivity: "internal",
-    domainContext: `This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ship. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.
+    domainContext: `This page is the Build Studio where users develop features through five phases: Ideate, Plan, Build, Review, Ready to Ship. The Ready-to-Ship phase forks into two parallel outcomes (upstream PR + promote to prod) that may land or skip independently. The conversation panel, feature brief, and phase indicator guide the workflow. The assistant can read and search project files and propose code changes.
 
 FRONTEND DESIGN SYSTEM — DPF Tokens:
 When generating or reviewing UI code, enforce these rules:
