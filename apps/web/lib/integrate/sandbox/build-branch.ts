@@ -165,6 +165,23 @@ export async function startBuildBranch(buildId: string): Promise<void> {
   await ensureGitBaseline(identity);
   await ensureClientBranch(identity);
 
+  // Scrub any uncommitted leakage from a prior build before switching branches.
+  //
+  // Without this, a previous build's working-tree changes (not yet committed —
+  // e.g. because deploy_feature never ran, or the run crashed) bleed into
+  // the new build's diff. In the subnet-graph run this caused 34 files of
+  // leakage from an earlier HOA build.
+  //
+  // Preserve the large generated/cached directories so pnpm install stays hot.
+  // `git reset --hard HEAD` wipes tracked modifications; `git clean -fd` with
+  // exclusions deletes untracked source files without touching node_modules etc.
+  await execInSandbox(
+    SANDBOX_CONTAINER,
+    `cd ${WORKSPACE} && git reset --hard HEAD && git clean -fd -- ':!node_modules' ':!**/node_modules/**' ':!.next' ':!**/.next/**' ':!.pnpm-store' ':!**/*.tsbuildinfo'`,
+  ).catch((err) => {
+    console.warn(`[build-branch] pre-checkout scrub failed (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
+  });
+
   // Switch to client branch before forking the build branch
   await execInSandbox(
     SANDBOX_CONTAINER,
