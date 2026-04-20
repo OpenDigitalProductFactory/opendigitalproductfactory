@@ -401,6 +401,31 @@ export const cliAdapter: ExecutionAdapterHandler = {
         `${parsed.toolCalls.length} tool calls, ${inferenceMs}ms`,
       );
 
+      // Claude Code CLI returns auth errors on STDOUT with exit=0, not stderr.
+      // Observed payloads: "Invalid API key · Fix external API key",
+      // "Please log in with /login", "Authentication failed". Without this
+      // check the 38-char error string gets shipped as assistant content,
+      // the coworker echoes the error verbatim, and fallback never fires
+      // because the adapter thinks the call succeeded.
+      const CLI_AUTH_ERROR_PATTERNS = [
+        /invalid api key/i,
+        /fix external api key/i,
+        /please log in/i,
+        /authentication failed/i,
+        /not authenticated/i,
+      ];
+      const looksLikeAuthError =
+        parsed.toolCalls.length === 0 &&
+        parsed.text.length < 300 &&
+        CLI_AUTH_ERROR_PATTERNS.some((p) => p.test(parsed.text));
+      if (looksLikeAuthError) {
+        throw new InferenceError(
+          `Claude CLI auth error (from stdout): ${parsed.text.slice(0, 200)}`,
+          "auth",
+          providerId,
+        );
+      }
+
       // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
       // See note there. Kept on until tool dispatch is 100% reliable.
       const toolKeywordPattern = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
