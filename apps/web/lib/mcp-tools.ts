@@ -2688,7 +2688,7 @@ export async function executeTool(
       const latestBuild = await prisma.featureBuild.findFirst({
         where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
         orderBy: { updatedAt: "desc" },
-        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, plan: true },
+        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
@@ -2754,6 +2754,7 @@ export async function executeTool(
         if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
           const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
+          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[] } | null;
           const gate = checkPhaseGate(
             latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
             toPhase as import("@/lib/feature-build-types").BuildPhase,
@@ -2762,6 +2763,8 @@ export async function executeTool(
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
               verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
               uxTestResults: latestBuild.uxTestResults,
+              uxVerificationStatus: latestBuild.uxVerificationStatus,
+              acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
               happyPathState,
             },
           );

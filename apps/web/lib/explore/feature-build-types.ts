@@ -498,11 +498,34 @@ export function checkPhaseGate(
       const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
       if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
     }
-    // UX tests: soft gate — if present, all must pass. New builds always have them (Review prompt runs them).
+    // UX verification gate — three signals in combination:
+    //   status "running"             -> in-flight, block until it settles
+    //   status null + acceptance > 0 -> never ran, block (something's wrong)
+    //   status "skipped"             -> zero acceptance criteria, allow
+    //   status "failed"              -> blocked (unless override)
+    //   failed steps in uxTestResults -> blocked (defense in depth even if
+    //                                    the column got out of sync)
+    const status = evidence.uxVerificationStatus as
+      | "running" | "complete" | "failed" | "skipped" | null | undefined;
+    const hasAcceptance = Array.isArray(evidence.acceptanceCriteria)
+      && (evidence.acceptanceCriteria as unknown[]).length > 0;
+
+    if (status === "running") {
+      return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
+    }
+    if ((status === null || status === undefined) && hasAcceptance) {
+      return { allowed: false, reason: "UX verification has not run yet." };
+    }
     if (evidence.uxTestResults) {
-      const uxResults = evidence.uxTestResults as Array<{ passed?: boolean }>;
-      const failed = uxResults.filter((s) => !s.passed).length;
-      if (failed > 0) return { allowed: false, reason: `${failed} UX test(s) failed. Fix issues before shipping.` };
+      const uxResults = evidence.uxTestResults as Array<{ passed?: boolean; step?: string }>;
+      const failed = uxResults.filter((s) => !s.passed);
+      if (failed.length > 0) {
+        const stepNames = failed.map((s) => s.step).filter(Boolean).slice(0, 3).join("; ");
+        return {
+          allowed: false,
+          reason: `UX verification failed: ${stepNames || `${failed.length} step(s)`}. Fix issues before shipping.`,
+        };
+      }
     }
     return { allowed: true };
   }
