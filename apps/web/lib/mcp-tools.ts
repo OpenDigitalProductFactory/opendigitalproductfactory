@@ -5183,8 +5183,8 @@ export async function executeTool(
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxPort: true, brief: true } });
-      if (!build?.sandboxPort || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
+      if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
 
       const brief = build.brief as { acceptanceCriteria?: string[] };
       const testCases = (params.tests as string[] | undefined) ?? brief.acceptanceCriteria ?? [];
@@ -5192,7 +5192,11 @@ export async function executeTool(
 
       try {
         const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
-        const sandboxUrl = `http://localhost:${build.sandboxPort}`;
+        // browser-use runs inside the docker compose network — use the
+        // internal service URL (http://sandbox:3000), not the host port,
+        // so assets and API calls resolve correctly.
+        const { resolveSandboxUrl } = await import("@/lib/integrate/sandbox/resolve-sandbox-url");
+        const sandboxUrl = resolveSandboxUrl(build.sandboxId, build.sandboxPort).internal;
 
         const testRes = await fetch(BROWSER_USE_URL, {
           method: "POST",

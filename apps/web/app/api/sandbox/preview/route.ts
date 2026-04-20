@@ -2,38 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-
-// Map container IDs to Docker Compose service names (for internal routing)
-const CONTAINER_TO_SERVICE: Record<string, string> = {
-  "dpf-sandbox-1": "sandbox",
-  "dpf-sandbox-2-1": "sandbox-2",
-  "dpf-sandbox-3-1": "sandbox-3",
-};
-
-// Map container IDs to host-mapped ports (for local dev routing)
-const CONTAINER_TO_PORT: Record<string, number> = {
-  "dpf-sandbox-1": 3035,
-  "dpf-sandbox-2-1": 3037,
-  "dpf-sandbox-3-1": 3038,
-};
-
-/**
- * Resolves the sandbox base URL for a given container ID.
- * Inside Docker (SANDBOX_PREVIEW_URL is set): uses Compose service names.
- * Local dev: uses host-mapped ports on localhost.
- */
-function resolveSandboxUrl(sandboxId: string, hostPort: number): string {
-  const isDocker = !!process.env.SANDBOX_PREVIEW_URL;
-  if (isDocker) {
-    const service = CONTAINER_TO_SERVICE[sandboxId];
-    if (service) return `http://${service}:3000`;
-    // Fallback: assume container name IS the service name on port 3000
-    return `http://${sandboxId}:3000`;
-  }
-  // Local dev: use the host-mapped port
-  const port = CONTAINER_TO_PORT[sandboxId] ?? hostPort;
-  return `http://localhost:${port}`;
-}
+import { resolveSandboxUrl } from "@/lib/integrate/sandbox/resolve-sandbox-url";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await auth();
@@ -67,7 +36,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Route to the correct sandbox container based on sandboxId.
   // Inside Docker: Compose service name (e.g. sandbox-2:3000).
   // Local dev: host-mapped port (e.g. localhost:3037).
-  const sandboxBase = resolveSandboxUrl(build.sandboxId, build.sandboxPort);
+  // The proxy runs inside the portal server, so we want the internal URL.
+  const sandboxBase = resolveSandboxUrl(build.sandboxId, build.sandboxPort).internal;
   const targetUrl = `${sandboxBase}${targetPath}`;
 
   try {
