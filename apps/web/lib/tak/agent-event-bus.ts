@@ -47,7 +47,13 @@ export type AgentEvent =
   // Brand extraction events (long-running background job routed through coworker panel)
   | { type: "brand:extract.progress"; taskRunId: string; stage: string; message: string; percent: number }
   | { type: "brand:extract.complete"; taskRunId: string; summary: string }
-  | { type: "brand:extract.failed"; taskRunId: string; error: string };
+  | { type: "brand:extract.failed"; taskRunId: string; error: string }
+  // UX verification (Inngest build/review.verify) events — surfaced in
+  // ReviewPanel and the coworker panel so the user sees verification running
+  // without having to poll the build record.
+  | { type: "verification:started"; buildId: string; testCount: number }
+  | { type: "verification:step"; buildId: string; stepIndex: number; description: string; passed: boolean }
+  | { type: "verification:complete"; buildId: string; passed: number; total: number; status: "complete" | "failed" | "skipped" };
 
 type Handler = (event: AgentEvent) => void;
 

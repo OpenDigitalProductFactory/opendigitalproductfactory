@@ -203,6 +203,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         claimedAt: null,
         claimStatus: null,
         uxTestResults: null,
+        uxVerificationStatus: null,
         buildExecState: null,
         phaseHandoffs: null,
       });
