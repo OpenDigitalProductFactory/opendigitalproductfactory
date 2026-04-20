@@ -50,6 +50,17 @@ export interface OpsMcpCatalogSyncEvent {
   data: { syncId: string };
 }
 
+export interface OpsCodeGraphReconcileEvent {
+  name: "ops/code-graph.reconcile";
+  data: {
+    reason: "git-commit" | "git-backup" | "scheduled" | "manual";
+    graphKey: string;
+    headSha: string | null;
+    branch: string | null;
+    forceFull?: boolean;
+  };
+}
+
 export interface QualityIssueTriageEvent {
   name: "quality/issue-triage.run";
   data: Record<string, never>;

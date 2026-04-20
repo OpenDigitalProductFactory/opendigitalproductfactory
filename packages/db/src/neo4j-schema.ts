@@ -7,6 +7,7 @@
 //   TaxonomyNode    — mirrors Prisma TaxonomyNode   (keyed on nodeId)
 //   Portfolio       — mirrors Prisma Portfolio       (keyed on slug)
 //   InfraCI         — infrastructure configuration item (no Prisma mirror yet)
+//   CodeFile        — committed source-code file projection (keyed on codeFileKey)
 //
 // Relationship types:
 //   BELONGS_TO      — DigitalProduct → Portfolio
@@ -41,6 +42,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE CONSTRAINT tn_nodeId    IF NOT EXISTS FOR (n:TaxonomyNode)    REQUIRE n.nodeId    IS UNIQUE",
   "CREATE CONSTRAINT p_slug       IF NOT EXISTS FOR (n:Portfolio)        REQUIRE n.slug      IS UNIQUE",
   "CREATE CONSTRAINT ci_ciId      IF NOT EXISTS FOR (n:InfraCI)          REQUIRE n.ciId      IS UNIQUE",
+  "CREATE CONSTRAINT cf_codeFileKey IF NOT EXISTS FOR (n:CodeFile)       REQUIRE n.codeFileKey IS UNIQUE",
 
   // ── Existence constraints (enterprise only — skip on community) ───────────
   // Community Neo4j does not support property existence constraints; omitted.
@@ -51,6 +53,8 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX tn_name  IF NOT EXISTS FOR (n:TaxonomyNode)   ON (n.name)",
   "CREATE INDEX ci_type  IF NOT EXISTS FOR (n:InfraCI)        ON (n.ciType)",
   "CREATE INDEX ci_status IF NOT EXISTS FOR (n:InfraCI)       ON (n.status)",
+  "CREATE INDEX cf_graphKey IF NOT EXISTS FOR (n:CodeFile)    ON (n.graphKey)",
+  "CREATE INDEX cf_path     IF NOT EXISTS FOR (n:CodeFile)    ON (n.path)",
 
   // OSI-aware topology indexes
   "CREATE INDEX ci_osi_layer       IF NOT EXISTS FOR (n:InfraCI) ON (n.osiLayer)",

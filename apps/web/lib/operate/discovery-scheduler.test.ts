@@ -10,8 +10,18 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+vi.mock("../inference/model-discovery-scheduler", () => ({
+  registerModelDiscoveryJob: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../integrate/code-graph-refresh", () => ({
+  registerCodeGraphScheduledJob: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Must import after mock setup
 import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs } from "./discovery-scheduler";
+import { registerModelDiscoveryJob } from "../inference/model-discovery-scheduler";
+import { registerCodeGraphScheduledJob } from "../integrate/code-graph-refresh";
 
 describe("registerScheduledJobs", () => {
   it("upserts both ScheduledJob rows", async () => {
@@ -20,7 +30,9 @@ describe("registerScheduledJobs", () => {
     upsert.mockClear();
 
     await registerScheduledJobs();
-    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(upsert).toHaveBeenCalledTimes(3);
+    expect(registerModelDiscoveryJob).toHaveBeenCalledTimes(1);
+    expect(registerCodeGraphScheduledJob).toHaveBeenCalledTimes(1);
   });
 });
 

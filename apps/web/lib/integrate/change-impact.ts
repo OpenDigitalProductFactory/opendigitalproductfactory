@@ -6,6 +6,8 @@
  */
 
 import { prisma } from "@dpf/db";
+import type { CodeGraphCoverageSummary } from "./code-graph-access";
+import { summarizeCodeGraphCoverage } from "./code-graph-access";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +50,7 @@ export interface ChangeImpactReport {
   riskLevel: RiskLevel;
   rollbackComplexity: RollbackComplexity;
   summary: string;
+  codeGraph?: CodeGraphCoverageSummary;
 }
 
 // ─── Diff Parsing ───────────────────────────────────────────────────────────
@@ -256,6 +259,7 @@ function assessRollbackComplexity(schemaChanges: SchemaChange[]): RollbackComple
  */
 export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactReport> {
   const files = parseDiffFiles(diff);
+  const changedFilePaths = files.map((file) => file.file);
 
   // Categorize route changes
   const routeChanges: { new: RouteChange[]; modified: RouteChange[]; deleted: RouteChange[] } = {
@@ -285,6 +289,7 @@ export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactRep
     modified: routeChanges.modified,
     deleted: routeChanges.deleted,
   });
+  const codeGraph = await summarizeCodeGraphCoverage(changedFilePaths);
 
   const riskLevel = assessRisk({ routes: routeChanges, schemaChanges });
   const rollbackComplexity = assessRollbackComplexity(schemaChanges);
@@ -314,6 +319,9 @@ export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactRep
   } else {
     summaryParts.push("No existing users impacted (new functionality only).");
   }
+  if (codeGraph.summary) {
+    summaryParts.push(codeGraph.summary);
+  }
 
   return {
     routes: routeChanges,
@@ -329,6 +337,7 @@ export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactRep
     riskLevel,
     rollbackComplexity,
     summary: summaryParts.join("\n"),
+    codeGraph,
   };
 }
 
@@ -362,6 +371,13 @@ export function formatImpactForChat(report: ChangeImpactReport): string {
     lines.push(`- Impacted roles: ${report.impactedRoles.map((r) => r.role).join(", ")}`);
   } else {
     lines.push("- No existing users impacted (new functionality only)");
+  }
+
+  if (report.codeGraph) {
+    lines.push(`- Code graph: ${report.codeGraph.indexStatus} | ${report.codeGraph.summary}`);
+    if (report.codeGraph.warnings.length > 0) {
+      lines.push(`- Code graph warnings: ${report.codeGraph.warnings.join(" ")}`);
+    }
   }
 
   return lines.join("\n");
