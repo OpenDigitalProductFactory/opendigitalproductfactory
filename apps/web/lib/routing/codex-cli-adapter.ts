@@ -191,6 +191,16 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
       // 5. Spawn the CLI process
       console.log(`[codex-cli-adapter] Dispatching: model=${modelId}, provider=${providerId}, messages=${messages.length}`);
+      console.log(`[tool-trace] adapter=codex-cli PROMPT-FILE ${promptFile} slug=${slug} promptChars=${prompt.length}`);
+
+      // Preserve prompt to a durable location BEFORE spawning codex so we
+      // can inspect what hung if the process times out and the finally
+      // block cleans up the regular temp file. Keep the last 20 to bound
+      // disk use.
+      await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p /tmp/codex-dispatch-archive && cp ${promptFile} /tmp/codex-dispatch-archive/${slug}.txt && ls -1t /tmp/codex-dispatch-archive/*.txt 2>/dev/null | tail -n +21 | xargs -r rm -f'`,
+        { timeout: 5_000 },
+      ).catch(() => {});
 
       const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
         const proc = spawnCb("docker", [
