@@ -72,10 +72,39 @@ export type DpfSession = {
   };
 };
 
+// Port-scoped session cookie isolation.
+//
+// Portal (localhost:3000) and sandbox (localhost:3035) share the same
+// localhost domain. Browsers scope cookies by domain, NOT port, so the
+// default NextAuth cookie name "authjs.session-token" is overwritten
+// whenever you log into one from the same browser — you end up with the
+// other app's session clobbering yours. Symptom: logging into sandbox
+// hides your active FeatureBuild list on the portal because the portal
+// receives a sandbox-DB userId that doesn't exist locally.
+//
+// Fix: give the sandbox a distinct cookie name. Portal keeps the default
+// so existing sessions survive, sandbox gets its own cookie that never
+// collides. `secure: false` because both run over plain http in dev.
+const isSandboxEnv = process.env.DPF_ENVIRONMENT === "sandbox";
+const sessionCookieName = isSandboxEnv
+  ? "authjs.session-token.sandbox"
+  : "authjs.session-token";
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   providers: [
     // Admin/workforce login
     Credentials({
