@@ -44,6 +44,8 @@ describe("mcp tools", () => {
     expect(toolNames).toContain("update_feature_brief");
     expect(toolNames).toContain("register_digital_product_from_build");
     expect(toolNames).toContain("create_build_epic");
+    expect(toolNames).toContain("get_code_graph_freshness");
+    expect(toolNames).toContain("inspect_build_code_impact");
   });
 
   it("update_feature_brief requires view_platform capability", async () => {

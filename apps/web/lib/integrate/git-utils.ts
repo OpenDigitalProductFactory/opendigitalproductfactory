@@ -96,7 +96,17 @@ export async function commitFile(opts: {
     await exec(`git add ${JSON.stringify(opts.filePath)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     await exec(`git commit -m ${JSON.stringify(opts.message)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     const { stdout } = await exec("git rev-parse HEAD", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
-    return { hash: stdout.trim() };
+    const hash = stdout.trim();
+    if (hash) {
+      void import("@/lib/integrate/code-graph-refresh").then(({ queueCodeGraphReconcile }) =>
+        queueCodeGraphReconcile({
+          reason: "git-commit",
+          headSha: hash,
+          branch: null,
+        })
+      ).catch(() => {});
+    }
+    return { hash };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git commit failed" };
   }
@@ -355,7 +365,17 @@ export async function commitAll(message: string): Promise<{ hash: string } | { e
     await exec("git add -A", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     await exec(`git commit -m ${JSON.stringify(message)}`, { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
     const { stdout } = await exec("git rev-parse HEAD", { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS });
-    return { hash: stdout.trim() };
+    const hash = stdout.trim();
+    if (hash) {
+      void import("@/lib/integrate/code-graph-refresh").then(({ queueCodeGraphReconcile }) =>
+        queueCodeGraphReconcile({
+          reason: "git-commit",
+          headSha: hash,
+          branch: null,
+        })
+      ).catch(() => {});
+    }
+    return { hash };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git commit failed" };
   }

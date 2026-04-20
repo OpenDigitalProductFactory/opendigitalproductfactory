@@ -389,6 +389,32 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
   // Only register_digital_product_from_build needs HITL approval (creates a real product).
   {
+    name: "get_code_graph_freshness",
+    description: "Get the current freshness and confidence status of the committed source-code graph used for Build Studio impact analysis.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["plan", "review", "ship"],
+  },
+  {
+    name: "inspect_build_code_impact",
+    description: "Analyze the active build's current diff and return route/schema impact plus code-graph coverage. Build ID is auto-resolved.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["review", "ship"],
+  },
+  {
     name: "update_feature_brief",
     description: "Save the Feature Brief for the current build. Build ID is auto-resolved.",
     inputSchema: {
@@ -3193,6 +3219,46 @@ export async function executeTool(
       }
 
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
+    }
+
+    case "get_code_graph_freshness": {
+      const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
+      const freshness = await getCodeGraphFreshness();
+      return {
+        success: true,
+        message: freshness.summary,
+        data: freshness,
+      };
+    }
+
+    case "inspect_build_code_impact": {
+      const buildId = await resolveActiveBuildId(userId);
+      if (!buildId) {
+        return { success: false, error: "No active build.", message: "No active build." };
+      }
+
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { buildId: true, title: true, diffPatch: true },
+      });
+      if (!build?.diffPatch) {
+        return {
+          success: false,
+          error: "No diff patch saved yet.",
+          message: "No build diff is available yet. Run the build and save a diff before inspecting code impact.",
+        };
+      }
+
+      const { analyzeChangeImpact, formatImpactForChat } = await import("@/lib/change-impact");
+      const report = await analyzeChangeImpact(build.diffPatch);
+      return {
+        success: true,
+        message: `Impact analysis for ${build.title ?? build.buildId}:\n\n${formatImpactForChat(report)}`,
+        data: {
+          buildId: build.buildId,
+          report,
+        },
+      };
     }
 
     case "check_sandbox": {

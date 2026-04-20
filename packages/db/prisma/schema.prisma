@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/client"
+  provider            = "prisma-client"
+  output              = "../generated/client"
+  importFileExtension = "ts"
 }
 
 datasource db {
@@ -1257,6 +1258,36 @@ model ScheduledJob {
   lastError  String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+}
+
+model CodeGraphIndexState {
+  graphKey                 String              @id
+  graphVersion             Int                 @default(1)
+  indexStatus              String              @default("stale")
+  workspaceRoot            String
+  lastIndexedAt            DateTime?
+  lastIndexedBranch        String?
+  lastIndexedHeadSha       String?
+  workspaceDirty           Boolean             @default(false)
+  workspaceDirtyObservedAt DateTime?
+  indexedFileCount         Int                 @default(0)
+  lastError                String?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  fileHashes               CodeGraphFileHash[]
+}
+
+model CodeGraphFileHash {
+  id            String              @id @default(cuid())
+  graphKey      String
+  filePath      String
+  checksum      String
+  authority     String              @default("git")
+  lastIndexedAt DateTime            @default(now())
+  indexState    CodeGraphIndexState @relation(fields: [graphKey], references: [graphKey], onDelete: Cascade)
+
+  @@unique([graphKey, filePath])
+  @@index([graphKey])
 }
 
 model Agent {

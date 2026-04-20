@@ -18,6 +18,7 @@ const ISSUE_TRIAGE_INTERVAL_MS = 15 * 60_000;
 export async function registerScheduledJobs(): Promise<void> {
   const now = new Date();
   const { registerModelDiscoveryJob } = await import("../inference/model-discovery-scheduler");
+  const { registerCodeGraphScheduledJob } = await import("../integrate/code-graph-refresh");
   await Promise.all([
     prisma.scheduledJob.upsert({
       where:  { jobId: JOB_PROMETHEUS_POLL },
@@ -59,6 +60,7 @@ export async function registerScheduledJobs(): Promise<void> {
       },
     }),
     registerModelDiscoveryJob(),
+    registerCodeGraphScheduledJob(),
   ]);
 }
 
