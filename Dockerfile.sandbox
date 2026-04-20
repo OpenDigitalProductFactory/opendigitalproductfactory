@@ -11,9 +11,21 @@ RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
 # Codex CLI defaults: bypass internal sandbox (Docker IS the sandbox),
 # no approval prompts for non-interactive use.
+#
+# Plugins: explicitly disable the OpenAI-curated Gmail + GitHub plugins.
+# On first invocation codex auto-enables these, which adds ~6000 tokens
+# of plugin tool definitions to every call and may trigger plugin init
+# HTTP traffic on each codex exec run. Neither is used by Build Studio.
+# Explicit enabled=false here overrides the auto-enable behaviour.
 RUN mkdir -p /root/.codex && printf '%s\n' \
   'sandbox_mode = "danger-full-access"' \
   'approval_policy = "never"' \
+  '' \
+  '[plugins."gmail@openai-curated"]' \
+  'enabled = false' \
+  '' \
+  '[plugins."github@openai-curated"]' \
+  'enabled = false' \
   > /root/.codex/config.toml
 WORKDIR /workspace
 # No secrets, no Docker socket
