@@ -264,6 +264,16 @@ TOOLS = [
                     "items": {"type": "string"},
                     "description": "List of natural-language test assertions.",
                 },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": (
+                        "Optional subdirectory name under /evidence to write "
+                        "per-test PNG screenshots into (e.g. 'build_FB-1234'). "
+                        "When set, results include screenshot_path (filename "
+                        "relative to the subdir). When omitted, the legacy "
+                        "base64 payload is returned instead."
+                    ),
+                },
             },
             "required": ["url", "tests"],
         },
@@ -435,6 +445,18 @@ async def handle_browse_screenshot(params: dict[str, Any]) -> dict[str, Any]:
 async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
     url = params["url"]
     tests = params["tests"]
+    # Optional: scope per-test screenshots to a subdirectory of /evidence so
+    # the portal can serve them via /api/build/<buildId>/evidence/<file>.png
+    # without cross-build collisions. When absent, we fall back to the
+    # legacy base64-only response (backward compatible).
+    evidence_dir = params.get("evidence_dir")
+    evidence_subdir = None
+    if isinstance(evidence_dir, str) and evidence_dir.strip():
+        # Defense in depth: only allow simple segment names, no traversal
+        safe_name = os.path.basename(evidence_dir.strip())
+        if safe_name and safe_name == evidence_dir.strip():
+            evidence_subdir = os.path.join(EVIDENCE_DIR, safe_name)
+            os.makedirs(evidence_subdir, exist_ok=True)
 
     results = []
     session = await sessions.open(url)
@@ -471,13 +493,32 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
                     for word in ["fail", "not found", "missing", "error", "false", "does not"]
                 )
 
-                screenshot = await _get_screenshot_base64(session)
-                results.append({
+                step_result: dict[str, Any] = {
                     "test": test_case,
                     "status": "pass" if passed else "fail",
                     "detail": str(agent_result),
-                    "screenshot_base64": screenshot,
-                })
+                }
+
+                # Screenshot persistence: when evidence_subdir is set, write
+                # a PNG and return the filename so the portal route can serve
+                # it. Otherwise, keep the legacy base64 payload for callers
+                # that haven't migrated yet.
+                if evidence_subdir:
+                    try:
+                        context = await session.browser.get_context()
+                        pages = context.pages
+                        if pages:
+                            filename = f"{i}.png"
+                            filepath = os.path.join(evidence_subdir, filename)
+                            await pages[-1].screenshot(path=filepath)
+                            step_result["screenshot_path"] = filename
+                    except Exception as e:
+                        logger.warning("Step %d screenshot save failed: %s", i, e)
+                else:
+                    screenshot = await _get_screenshot_base64(session)
+                    step_result["screenshot_base64"] = screenshot
+
+                results.append(step_result)
 
             except Exception as e:
                 results.append({

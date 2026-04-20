@@ -79,6 +79,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-source-code:/workspace
       - sandbox_workspace:/sandbox-workspace
+      # browser-use writes UX verification screenshots here; the portal serves
+      # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
+      # Read-only from the portal's side — only browser-use should write.
+      - browser_evidence:/evidence:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}

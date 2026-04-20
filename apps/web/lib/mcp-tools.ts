@@ -5267,7 +5267,14 @@ export async function executeTool(
             method: "tools/call",
             params: {
               name: "browse_run_tests",
-              arguments: { url: sandboxUrl, tests: testCases },
+              arguments: {
+                url: sandboxUrl,
+                tests: testCases,
+                // Scope per-step screenshots to a build-specific subdir on
+                // the shared /evidence volume. Portal serves them through
+                // /api/build/<buildId>/evidence/<file>.png.
+                evidence_dir: `build_${buildId}`,
+              },
             },
           }),
           signal: AbortSignal.timeout(300000), // 5 min for full test suite
@@ -5275,11 +5282,15 @@ export async function executeTool(
         const testResult = await testRes.json();
         const testContent = JSON.parse(testResult?.result?.content?.[0]?.text ?? "{}");
 
-        // Convert to UxTestStep format for storage
+        // Convert to UxTestStep format for storage. screenshot_path (when
+        // present) is a filename inside the evidence_dir — turn it into a
+        // portal-served URL the ReviewPanel can render.
         const steps = (testContent.results ?? []).map((r: Record<string, unknown>, i: number) => ({
           step: (r.test as string) ?? `Test ${i + 1}`,
           passed: r.status === "pass",
-          screenshotUrl: null, // Screenshots are base64 in the result, not URLs
+          screenshotUrl: typeof r.screenshot_path === "string"
+            ? `/api/build/${encodeURIComponent(buildId)}/evidence/${encodeURIComponent(r.screenshot_path)}`
+            : null,
           error: r.status !== "pass" ? ((r.detail as string) ?? null) : null,
         }));
 
