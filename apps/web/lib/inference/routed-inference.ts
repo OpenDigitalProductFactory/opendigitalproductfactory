@@ -481,7 +481,12 @@ export async function routeAndCall(
   // and downgraded stays false — so the user has no signal that the turn
   // ran on the local model. Patch that gap here so the observability is
   // correct regardless of whether we fell through at ranking or runtime.
-  const selectedTier = decision.selectedEndpoint?.providerTier;
+  // `decision.selectedEndpoint` is a string id — look up the corresponding
+  // manifest to read its tier. `manifests` is already in scope.
+  const selectedManifest = decision.selectedEndpoint
+    ? manifests.find((m) => m.id === decision.selectedEndpoint)
+    : null;
+  const selectedTier = selectedManifest?.providerTier;
   const hasUserConfiguredActive = manifests.some(
     (m) => m.providerTier === "user_configured" && (m.status === "active" || m.status === "degraded"),
   );
