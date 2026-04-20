@@ -46,19 +46,25 @@ async function callBrowserUse(
 export async function runBrowserUseTests(
   sandboxUrl: string,
   testCases: string[],
+  options?: { buildId?: string },
 ): Promise<UxTestStep[]> {
-  const result = await callBrowserUse(
-    "tools/call",
-    "browse_run_tests",
-    { url: sandboxUrl, tests: testCases },
-    300000,
-  );
+  // When buildId is present, ask browser-use to persist per-step screenshots
+  // on the shared /evidence volume under a build-scoped subdirectory. The
+  // portal then serves each PNG through an auth-gated route. Without a
+  // buildId, the browser-use handler falls back to the legacy base64 payload
+  // (which we still drop — there's no disk destination to write it to).
+  const args: Record<string, unknown> = { url: sandboxUrl, tests: testCases };
+  if (options?.buildId) args.evidence_dir = `build_${options.buildId}`;
+
+  const result = await callBrowserUse("tools/call", "browse_run_tests", args, 300000);
 
   const results = (result.results ?? []) as Array<Record<string, unknown>>;
   return results.map((r, i) => ({
     step: (r.test as string) ?? `Test ${i + 1}`,
     passed: r.status === "pass",
-    screenshotUrl: null,
+    screenshotUrl: options?.buildId && typeof r.screenshot_path === "string"
+      ? `/api/build/${encodeURIComponent(options.buildId)}/evidence/${encodeURIComponent(r.screenshot_path)}`
+      : null,
     error: r.status !== "pass" ? ((r.detail as string) ?? null) : null,
   }));
 }
