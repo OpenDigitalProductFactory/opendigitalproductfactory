@@ -29,7 +29,6 @@ export default async function StorefrontBusinessSettingsPage() {
   const initial = {
     description: businessContext?.description ?? suggestions?.description ?? "",
     targetMarket: businessContext?.targetMarket ?? "",
-    industry: businessContext?.industry ?? "",
     companySize: businessContext?.companySize ?? null,
     geographicScope: businessContext?.geographicScope ?? suggestions?.geographicScope ?? null,
     revenueModel: businessContext?.revenueModel ?? "",

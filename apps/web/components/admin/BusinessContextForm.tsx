@@ -24,7 +24,6 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
 type BusinessContextData = {
   description: string;
   targetMarket: string;
-  industry: string;
   companySize: string | null;
   geographicScope: string | null;
   revenueModel: string;

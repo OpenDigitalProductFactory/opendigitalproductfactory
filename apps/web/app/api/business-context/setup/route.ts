@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
   const {
     description,
     targetMarket,
-    industry,
     companySize,
     geographicScope,
     revenueModel,
@@ -20,7 +19,6 @@ export async function POST(req: NextRequest) {
   } = (await req.json()) as {
     description?: string;
     targetMarket?: string;
-    industry?: string;
     companySize?: string;
     geographicScope?: string;
     revenueModel?: string;
@@ -36,11 +34,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Update Organization fields
+  // industry is derived from archetype.category; set only by /api/storefront/admin/setup
   await prisma.organization.update({
     where: { id: org.id },
     data: {
-      ...(industry !== undefined && { industry }),
       ...(contactEmail !== undefined && { email: contactEmail }),
       ...(contactPhone !== undefined && { phone: contactPhone }),
     },
@@ -53,7 +50,6 @@ export async function POST(req: NextRequest) {
       organizationId: org.id,
       description: description ?? null,
       targetMarket: targetMarket ?? null,
-      industry: industry ?? null,
       companySize: companySize ?? null,
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
@@ -62,7 +58,6 @@ export async function POST(req: NextRequest) {
     update: {
       ...(description !== undefined && { description }),
       ...(targetMarket !== undefined && { targetMarket }),
-      ...(industry !== undefined && { industry }),
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
