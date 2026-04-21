@@ -18,9 +18,9 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-# browser-use imports
-from browser_use import Agent, Browser, BrowserConfig
-from langchain_openai import ChatOpenAI
+# browser-use 0.12.x: Agent + BrowserSession live at top-level, ChatOpenAI is
+# shipped by the library (no langchain dependency).
+from browser_use import Agent, BrowserSession, ChatOpenAI
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser-use-mcp")
@@ -50,10 +50,10 @@ class ActionRecord:
 
 
 @dataclass
-class BrowserSession:
+class BrowserSessionWrapper:
     """Persistent browser session with evidence capture."""
     session_id: str
-    browser: Browser
+    browser: BrowserSession
     agent: Agent | None = None
     created_at: float = field(default_factory=time.time)
     last_used: float = field(default_factory=time.time)
@@ -71,7 +71,7 @@ class SessionManager:
     """Manages persistent browser sessions with auto-cleanup."""
 
     def __init__(self):
-        self._sessions: dict[str, BrowserSession] = {}
+        self._sessions: dict[str, BrowserSessionWrapper] = {}
         self._cleanup_task: asyncio.Task | None = None
 
     async def start(self):
@@ -91,10 +91,14 @@ class SessionManager:
                 logger.info("Auto-closing expired session %s", session.session_id)
                 await self._close_session(session)
 
-    async def open(self, url: str | None = None) -> BrowserSession:
+    async def open(self, url: str | None = None) -> BrowserSessionWrapper:
         session_id = str(uuid.uuid4())[:8]
-        browser = Browser(config=BrowserConfig(headless=True))
-        session = BrowserSession(session_id=session_id, browser=browser)
+        # BrowserSession takes profile fields directly as kwargs in 0.12.x.
+        # --no-sandbox is required because the container doesn't run as an
+        # unprivileged user with user-namespace support.
+        browser = BrowserSession(headless=True, args=["--no-sandbox"])
+        await browser.start()
+        session = BrowserSessionWrapper(session_id=session_id, browser=browser)
 
         if url:
             session.url = url
@@ -103,24 +107,24 @@ class SessionManager:
         logger.info("Opened session %s (url=%s)", session_id, url or "none")
         return session
 
-    def get(self, session_id: str) -> BrowserSession | None:
+    def get(self, session_id: str) -> BrowserSessionWrapper | None:
         session = self._sessions.get(session_id)
         if session and not session.is_expired():
             session.touch()
             return session
         return None
 
-    async def close(self, session_id: str) -> BrowserSession | None:
+    async def close(self, session_id: str) -> BrowserSessionWrapper | None:
         session = self._sessions.pop(session_id, None)
         if session:
             await self._close_session(session)
         return session
 
-    async def _close_session(self, session: BrowserSession):
+    async def _close_session(self, session: BrowserSessionWrapper):
         try:
-            await session.browser.close()
+            await session.browser.stop()
         except Exception as e:
-            logger.warning("Error closing browser for session %s: %s", session.session_id, e)
+            logger.warning("Error stopping browser for session %s: %s", session.session_id, e)
         self._sessions.pop(session.session_id, None)
 
 
@@ -133,33 +137,30 @@ def _build_llm() -> ChatOpenAI:
     )
 
 
-async def _save_screenshot(session: BrowserSession, label: str) -> str | None:
-    """Capture and save a screenshot, returning the file path."""
+async def _save_screenshot(session: BrowserSessionWrapper, label: str) -> str | None:
+    """Capture a screenshot and write it to EVIDENCE_DIR, returning the path."""
     try:
-        context = await session.browser.get_context()
-        pages = context.pages
-        if not pages:
+        page = await session.browser.get_current_page()
+        if not page:
             return None
-        page = pages[-1]
+        b64 = await page.screenshot()
         filename = f"{session.session_id}_{label}_{int(time.time())}.png"
         filepath = os.path.join(EVIDENCE_DIR, filename)
-        await page.screenshot(path=filepath)
+        with open(filepath, "wb") as f:
+            f.write(base64.b64decode(b64))
         return filepath
     except Exception as e:
         logger.warning("Screenshot failed: %s", e)
         return None
 
 
-async def _get_screenshot_base64(session: BrowserSession) -> str | None:
-    """Capture a screenshot and return as base64."""
+async def _get_screenshot_base64(session: BrowserSessionWrapper) -> str | None:
+    """Capture a screenshot and return it as a base64 string."""
     try:
-        context = await session.browser.get_context()
-        pages = context.pages
-        if not pages:
+        page = await session.browser.get_current_page()
+        if not page:
             return None
-        page = pages[-1]
-        screenshot_bytes = await page.screenshot()
-        return base64.b64encode(screenshot_bytes).decode("utf-8")
+        return await page.screenshot()
     except Exception as e:
         logger.warning("Screenshot failed: %s", e)
         return None
@@ -316,7 +317,7 @@ async def handle_browse_open(params: dict[str, Any]) -> dict[str, Any]:
                 llm=llm,
                 browser=session.browser,
             )
-            agent_result = await agent.run()
+            await agent.run()
             session.actions.append(ActionRecord(
                 timestamp=time.time(),
                 action="navigate",
@@ -462,7 +463,6 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
     session = await sessions.open(url)
 
     try:
-        # Navigate to the URL first
         llm = _build_llm()
         nav_agent = Agent(
             task=f"Navigate to {url} and wait for the page to load completely.",
@@ -499,18 +499,15 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
                     "detail": str(agent_result),
                 }
 
-                # Screenshot persistence: when evidence_subdir is set, write
-                # a PNG and return the filename so the portal route can serve
-                # it. Otherwise, keep the legacy base64 payload for callers
-                # that haven't migrated yet.
                 if evidence_subdir:
                     try:
-                        context = await session.browser.get_context()
-                        pages = context.pages
-                        if pages:
+                        page = await session.browser.get_current_page()
+                        if page:
                             filename = f"{i}.png"
                             filepath = os.path.join(evidence_subdir, filename)
-                            await pages[-1].screenshot(path=filepath)
+                            b64 = await page.screenshot()
+                            with open(filepath, "wb") as f:
+                                f.write(base64.b64decode(b64))
                             step_result["screenshot_path"] = filename
                     except Exception as e:
                         logger.warning("Step %d screenshot save failed: %s", i, e)

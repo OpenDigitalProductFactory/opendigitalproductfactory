@@ -1,7 +1,10 @@
 FROM python:3.11-slim
 
-# Install system deps for Playwright/Chromium
+# System deps for Chromium (browser-use 0.12.x drives a real Chromium via CDP).
+# chromium pulls its own transitive libs, but we pin the common shared objects
+# explicitly so a `chromium` package bump can't silently drop them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
     curl \
     wget \
     gnupg \
@@ -31,9 +34,6 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright browsers (Chromium only for smaller image)
-RUN python -m playwright install chromium
 
 COPY server.py .
 
