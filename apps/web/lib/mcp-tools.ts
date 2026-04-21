@@ -1813,6 +1813,66 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },
+  {
+    name: "attribute_entity_to_product",
+    description: "Link a discovered inventory entity to a portfolio taxonomy node so it counts toward the managed product estate. Use to resolve catalog_match_ambiguous or attribution_gap quality issues.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "InventoryEntity id (cuid) to attribute" },
+        taxonomyNodeId: { type: "string", description: "TaxonomyNode cuid — use this OR taxonomyNodeSlug" },
+        taxonomyNodeSlug: { type: "string", description: "Taxonomy nodeId path (e.g. 'foundational/compute/physical_compute')" },
+      },
+      required: ["entityId"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "dismiss_entity",
+    description: "Mark a discovered inventory entity as dismissed so it no longer shows in the attribution review queue. Use when the item is noise, out of scope, or superseded.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entityId: { type: "string", description: "InventoryEntity id (cuid) to dismiss" },
+      },
+      required: ["entityId"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "resolve_portfolio_quality_issue",
+    description: "Close a PortfolioQualityIssue by marking it resolved or dismissed. Use after the underlying cause has been fixed (e.g. entity attributed, relationship refreshed) or when the issue does not apply.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issueId: { type: "string", description: "PortfolioQualityIssue cuid" },
+        resolution: { type: "string", enum: ["resolved", "dismissed"], description: "'resolved' if the cause was fixed; 'dismissed' if the issue does not apply" },
+      },
+      required: ["issueId", "resolution"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "configure_gateway_scan",
+    description: "Create or update a DiscoveryConnection for an ARP/subnet gateway scan so physical LAN segments (e.g. 192.168.x) become visible. Use to resolve gateway_connection_needed issues.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name:             { type: "string", description: "Human label for the connection (e.g. 'Home LAN 192.168.0.0/24')" },
+        endpointUrl:      { type: "string", description: "Gateway URL or scan endpoint (e.g. http://192.168.0.1 or arp://192.168.0.0/24)" },
+        apiKey:           { type: "string", description: "Optional API key (encrypted at rest)" },
+        collectorType:    { type: "string", enum: ["arp_scan", "unifi"], description: "Defaults to 'arp_scan' for generic subnet discovery" },
+        gatewayEntityId:  { type: "string", description: "Optional InventoryEntity cuid of the gateway device" },
+        configuration:    { type: "object", description: "Collector-specific configuration JSON (e.g. { subnet: '192.168.0.0/24' })" },
+      },
+      required: ["name", "endpointUrl"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
 
   // ── EA / Ontology Graph ─────────────────────────────────────────────────────
   {
@@ -6680,6 +6740,116 @@ export async function executeTool(
         success: true,
         message: `Discovery sweep completed: ${result.summary.createdEntities + result.summary.updatedEntities} entities refreshed and ${result.summary.createdRelationships + result.summary.updatedRelationships} relationships refreshed.`,
         data: result.summary as Record<string, unknown>,
+      };
+    }
+
+    case "attribute_entity_to_product": {
+      const entityId = String(params["entityId"] ?? "").trim();
+      if (!entityId) return { success: false, message: "entityId is required", error: "missing_entity_id" };
+
+      let taxonomyNodeId = typeof params["taxonomyNodeId"] === "string" ? params["taxonomyNodeId"].trim() : "";
+      const slug = typeof params["taxonomyNodeSlug"] === "string" ? params["taxonomyNodeSlug"].trim() : "";
+      if (!taxonomyNodeId && slug) {
+        const node = await prisma.taxonomyNode.findFirst({
+          where: { nodeId: slug },
+          select: { id: true },
+        });
+        if (!node) {
+          return { success: false, message: `Taxonomy node '${slug}' not found`, error: "taxonomy_node_not_found" };
+        }
+        taxonomyNodeId = node.id;
+      }
+      if (!taxonomyNodeId) {
+        return { success: false, message: "Provide taxonomyNodeId or taxonomyNodeSlug", error: "missing_taxonomy_target" };
+      }
+
+      const { reassignTaxonomy } = await import("@/lib/actions/inventory");
+      const result = await reassignTaxonomy(entityId, taxonomyNodeId);
+      if (!result.ok) {
+        return { success: false, message: result.error ?? "Attribution failed", error: result.error ?? "attribution_failed" };
+      }
+      return {
+        success: true,
+        entityId,
+        message: `Entity attributed to taxonomy node ${slug || taxonomyNodeId}.`,
+        data: { entityId, taxonomyNodeId },
+      };
+    }
+
+    case "dismiss_entity": {
+      const entityId = String(params["entityId"] ?? "").trim();
+      if (!entityId) return { success: false, message: "entityId is required", error: "missing_entity_id" };
+
+      const { dismissEntity } = await import("@/lib/actions/inventory");
+      const result = await dismissEntity(entityId);
+      if (!result.ok) {
+        return { success: false, message: result.error ?? "Dismiss failed", error: result.error ?? "dismiss_failed" };
+      }
+      return {
+        success: true,
+        entityId,
+        message: `Entity ${entityId} dismissed.`,
+        data: { entityId },
+      };
+    }
+
+    case "resolve_portfolio_quality_issue": {
+      const issueId = String(params["issueId"] ?? "").trim();
+      const resolution = String(params["resolution"] ?? "").trim();
+      if (!issueId) return { success: false, message: "issueId is required", error: "missing_issue_id" };
+      if (resolution !== "resolved" && resolution !== "dismissed") {
+        return { success: false, message: "resolution must be 'resolved' or 'dismissed'", error: "invalid_resolution" };
+      }
+
+      const { resolvePortfolioQualityIssue } = await import("@/lib/actions/inventory");
+      const result = await resolvePortfolioQualityIssue(issueId, resolution);
+      if (!result.ok) {
+        return { success: false, message: result.error ?? "Resolve failed", error: result.error ?? "resolve_failed" };
+      }
+      return {
+        success: true,
+        entityId: issueId,
+        message: `Quality issue ${issueId} marked ${resolution}.`,
+        data: { issueId, resolution },
+      };
+    }
+
+    case "configure_gateway_scan": {
+      const name = String(params["name"] ?? "").trim();
+      const endpointUrl = String(params["endpointUrl"] ?? "").trim();
+      if (!name) return { success: false, message: "name is required", error: "missing_name" };
+      if (!endpointUrl) return { success: false, message: "endpointUrl is required", error: "missing_endpoint_url" };
+
+      const collectorType = typeof params["collectorType"] === "string" && params["collectorType"].trim()
+        ? params["collectorType"].trim()
+        : "arp_scan";
+      const apiKey = typeof params["apiKey"] === "string" && params["apiKey"].trim()
+        ? params["apiKey"].trim()
+        : undefined;
+      const gatewayEntityId = typeof params["gatewayEntityId"] === "string" && params["gatewayEntityId"].trim()
+        ? params["gatewayEntityId"].trim()
+        : undefined;
+      const configuration = typeof params["configuration"] === "object" && params["configuration"] !== null
+        ? (params["configuration"] as Record<string, unknown>)
+        : undefined;
+
+      const { configureDiscoveryConnection } = await import("@/lib/actions/discovery");
+      const result = await configureDiscoveryConnection({
+        name,
+        endpointUrl,
+        collectorType,
+        apiKey,
+        gatewayEntityId,
+        configuration,
+      });
+      if (!result.ok) {
+        return { success: false, message: result.error ?? "Configure failed", error: result.error ?? "configure_failed" };
+      }
+      return {
+        success: true,
+        entityId: result.connectionId,
+        message: `Gateway scan '${name}' configured (${collectorType}). ${apiKey ? "Status: active." : "Status: unconfigured — supply an API key to activate."}`,
+        data: { connectionId: result.connectionId, collectorType },
       };
     }
 

@@ -71,6 +71,10 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   validate_version_confidence: ["registry_read"],
   explain_blast_radius: ["registry_read"],
   discovery_sweep: ["telemetry_read"],
+  attribute_entity_to_product: ["registry_write"],
+  dismiss_entity: ["registry_write"],
+  resolve_portfolio_quality_issue: ["registry_write"],
+  configure_gateway_scan: ["agent_control_read"],
 
   // UX / Page evaluation
   evaluate_page: ["file_read"],

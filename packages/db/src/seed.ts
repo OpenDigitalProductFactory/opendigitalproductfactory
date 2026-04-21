@@ -924,7 +924,7 @@ async function seedCoworkerAgents(): Promise<void> {
   // from agent_registry.json; these hardcoded ones need them here.
   const HARDCODED_COWORKER_GRANTS: Record<string, string[]> = {
     "portfolio-advisor":    ["portfolio_read", "registry_read", "backlog_read"],
-    "inventory-specialist": ["portfolio_read", "registry_read", "backlog_read", "backlog_write"],
+    "inventory-specialist": ["portfolio_read", "registry_read", "registry_write", "backlog_read", "backlog_write", "agent_control_read"],
     "ea-architect":         ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
     "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
     "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write"],

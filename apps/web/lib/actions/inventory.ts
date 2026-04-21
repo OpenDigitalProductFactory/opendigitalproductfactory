@@ -98,3 +98,28 @@ export async function dismissEntity(
   revalidateDiscoverySurfaces();
   return { ok: true };
 }
+
+export async function resolvePortfolioQualityIssue(
+  issueId: string,
+  resolution: "resolved" | "dismissed",
+): Promise<{ ok: boolean; error?: string }> {
+  const authResult = await requireManageDiscovery();
+  if (!authResult.ok) return authResult;
+
+  const existing = await prisma.portfolioQualityIssue.findUnique({
+    where: { id: issueId },
+    select: { id: true, status: true },
+  });
+  if (!existing) return { ok: false, error: "Quality issue not found" };
+
+  await prisma.portfolioQualityIssue.update({
+    where: { id: issueId },
+    data: {
+      status: resolution,
+      resolvedAt: new Date(),
+    },
+  });
+
+  revalidateDiscoverySurfaces();
+  return { ok: true };
+}
