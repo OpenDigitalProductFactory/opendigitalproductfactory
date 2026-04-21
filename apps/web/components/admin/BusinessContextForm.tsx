@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { INDUSTRY_OPTIONS, industryLabel } from "@/lib/storefront/industries";
+import {
+  resolveArchetypeSummaryState,
+  type ArchetypeSummary,
+} from "./business-context-form-state";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -31,6 +34,8 @@ type BusinessContextData = {
 
 type BusinessContextFormProps = {
   initial: BusinessContextData;
+  /** Active portal archetype (industry is derived from archetype.category). */
+  archetypeSummary: ArchetypeSummary;
   /** When true, show the compact quick-edit layout (returning user). */
   isEdit?: boolean;
   /** Fields that were auto-populated from URL import during setup. */
@@ -47,7 +52,8 @@ function AutoFillHint({ field, editedFields }: { field: string; editedFields: Se
   );
 }
 
-export function BusinessContextForm({ initial, isEdit, autoFilledFields }: BusinessContextFormProps) {
+export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields }: BusinessContextFormProps) {
+  const archetypeState = resolveArchetypeSummaryState(archetypeSummary);
   const [data, setData] = useState<BusinessContextData>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -122,23 +128,41 @@ export function BusinessContextForm({ initial, isEdit, autoFilledFields }: Busin
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Industry */}
-        <label style={labelStyle}>
-          <div style={fieldLabelStyle}>What industry are you in? *</div>
-          <select
-            value={data.industry}
-            onChange={(e) => update("industry", e.target.value)}
-            style={{ ...inputStyle, cursor: "pointer" }}
-          >
-            <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Select your industry...</option>
-            {INDUSTRY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {autoFilledFields?.includes("industry") && <AutoFillHint field="industry" editedFields={editedFields} />}
-        </label>
+        {/* Portal template / industry (read-only; industry is derived from archetype.category) */}
+        {archetypeState.kind === "picked" ? (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-1)",
+            fontSize: 13,
+          }}>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+              Portal template
+            </div>
+            <div style={{ color: "var(--dpf-text)", fontWeight: 600 }}>
+              {archetypeState.name}
+              <span style={{ color: "var(--dpf-muted)", fontWeight: 400 }}>
+                {" "}— {archetypeState.industryLabel}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px dashed var(--dpf-border)",
+            background: "var(--dpf-surface-1)",
+            fontSize: 12,
+            color: "var(--dpf-muted)",
+          }}>
+            Pick a{" "}
+            <Link href={archetypeState.setupHref} style={{ color: "var(--dpf-accent)" }}>
+              portal template
+            </Link>
+            {" "}— it sets your industry category automatically.
+          </div>
+        )}
 
         {/* Description */}
         <label style={labelStyle}>
@@ -261,7 +285,7 @@ export function BusinessContextForm({ initial, isEdit, autoFilledFields }: Busin
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !data.industry}
+            disabled={submitting}
             style={{
               padding: "8px 20px",
               borderRadius: 6,
@@ -271,33 +295,12 @@ export function BusinessContextForm({ initial, isEdit, autoFilledFields }: Busin
               cursor: submitting ? "wait" : "pointer",
               fontSize: 13,
               fontWeight: 600,
-              opacity: submitting || !data.industry ? 0.7 : 1,
+              opacity: submitting ? 0.7 : 1,
             }}
           >
             {submitting ? "Saving..." : isEdit ? "Save" : "Continue"}
           </button>
         </div>
-
-        {/* Cross-link to business models */}
-        {data.industry && (
-          <div style={{
-            marginTop: 4,
-            padding: "10px 14px",
-            borderRadius: 8,
-            border: "1px solid var(--dpf-border)",
-            background: "var(--dpf-surface-1)",
-            fontSize: 12,
-            color: "var(--dpf-muted)",
-          }}>
-            Your business is classified as <strong style={{ color: "var(--dpf-text)" }}>
-              {INDUSTRY_OPTIONS.find((o) => o.value === data.industry)?.label ?? data.industry}
-            </strong>.{" "}
-            <Link href="/admin/business-models" style={{ color: "var(--dpf-accent)" }}>
-              See operating model templates
-            </Link>{" "}
-            that fit this industry.
-          </div>
-        )}
       </div>
     </div>
   );

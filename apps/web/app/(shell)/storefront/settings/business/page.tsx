@@ -3,11 +3,14 @@ import { BusinessContextForm } from "@/components/admin/BusinessContextForm";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 
 export default async function StorefrontBusinessSettingsPage() {
-  const [org, setupContext] = await Promise.all([
+  const [org, setupContext, storefrontConfig] = await Promise.all([
     prisma.organization.findFirst({
       select: { id: true, email: true, phone: true },
     }),
     getSetupContext(),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { name: true, category: true } } },
+    }),
   ]);
 
   const businessContext = org
@@ -17,7 +20,6 @@ export default async function StorefrontBusinessSettingsPage() {
     : null;
 
   const suggestions = !businessContext && setupContext ? {
-    industry: setupContext.suggestedIndustry ?? "",
     description: setupContext.suggestedDescription ?? "",
     contactEmail: setupContext.suggestedContactEmail ?? "",
     contactPhone: setupContext.suggestedContactPhone ?? "",
@@ -27,7 +29,7 @@ export default async function StorefrontBusinessSettingsPage() {
   const initial = {
     description: businessContext?.description ?? suggestions?.description ?? "",
     targetMarket: businessContext?.targetMarket ?? "",
-    industry: businessContext?.industry ?? suggestions?.industry ?? "",
+    industry: businessContext?.industry ?? "",
     companySize: businessContext?.companySize ?? null,
     geographicScope: businessContext?.geographicScope ?? suggestions?.geographicScope ?? null,
     revenueModel: businessContext?.revenueModel ?? "",
@@ -41,6 +43,10 @@ export default async function StorefrontBusinessSettingsPage() {
         .map(([key]) => key)
     : [];
 
+  const archetypeSummary = storefrontConfig?.archetype
+    ? { name: storefrontConfig.archetype.name, category: storefrontConfig.archetype.category }
+    : null;
+
   return (
     <div>
       <div className="mb-6">
@@ -52,6 +58,7 @@ export default async function StorefrontBusinessSettingsPage() {
 
       <BusinessContextForm
         initial={initial}
+        archetypeSummary={archetypeSummary}
         isEdit={!!businessContext}
         autoFilledFields={autoFilledFields}
       />
