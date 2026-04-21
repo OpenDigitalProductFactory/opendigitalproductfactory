@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { isIndustrySlug } from "@/lib/storefront/industries";
 
 type CreateCustomArchetypeBody = {
   name: string;
@@ -49,6 +50,12 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as CreateCustomArchetypeBody;
   if (!body.name || !body.category || !body.ctaType) {
     return NextResponse.json({ error: "name, category, and ctaType are required" }, { status: 400 });
+  }
+  if (!isIndustrySlug(body.category)) {
+    return NextResponse.json(
+      { error: `category must be one of the 11 canonical industries, got "${body.category}"` },
+      { status: 400 },
+    );
   }
 
   // Generate a unique archetypeId

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { FinancialSetupStep } from "./FinancialSetupStep";
 import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
+import { INDUSTRY_OPTIONS } from "@/lib/storefront/industries";
 
 type Archetype = {
   archetypeId: string;
@@ -47,20 +48,8 @@ function financeSlugFromCategory(category: string): string {
   return map[category] ?? "professional_services";
 }
 
-const CATEGORY_OPTIONS = [
-  { value: "healthcare-wellness", label: "Healthcare & Wellness" },
-  { value: "beauty-personal-care", label: "Beauty & Personal Care" },
-  { value: "trades-maintenance", label: "Trades & Maintenance" },
-  { value: "professional-services", label: "Professional Services" },
-  { value: "education-training", label: "Education & Training" },
-  { value: "pet-services", label: "Pet Services" },
-  { value: "food-hospitality", label: "Food & Hospitality" },
-  { value: "retail-goods", label: "Retail & Goods" },
-  { value: "fitness-recreation", label: "Fitness & Recreation" },
-  { value: "nonprofit-community", label: "Nonprofit & Community" },
-  { value: "hoa-property-management", label: "HOA & Property Management" },
-  { value: "custom", label: "Other / New category" },
-];
+// Canonical 11-industry list comes from @/lib/storefront/industries (INDUSTRY_OPTIONS).
+// Custom archetypes must pick one of these; the API enforces it.
 
 const CTA_OPTIONS = [
   { value: "booking", label: "Booking", description: "Customers book appointments or sessions" },
@@ -158,7 +147,7 @@ export function SetupWizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: customName,
-          category: customCategory === "custom" ? customName.toLowerCase().replace(/[^a-z0-9]+/g, "-") : customCategory,
+          category: customCategory,
           ctaType: customCtaType,
           itemTemplates: offerings.map((name) => ({
             name,
@@ -360,7 +349,7 @@ export function SetupWizard({
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Closest category</div>
             <select value={customCategory} onChange={(e) => setCustomCategory(e.target.value)}
               style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }}>
-              {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {INDUSTRY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
 
