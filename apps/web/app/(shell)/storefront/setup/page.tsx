@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { SetupWizard } from "@/components/storefront-admin/SetupWizard";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 
 export default async function StorefrontSetupPage() {
   const existing = await prisma.storefrontConfig.findFirst({ select: { id: true } });
@@ -28,7 +29,10 @@ export default async function StorefrontSetupPage() {
     prisma.businessContext.findFirst({ select: { industry: true } }),
   ]);
 
-  const vocab = getVocabulary(bc?.industry);
+  // Pre-bootstrap — no archetype yet. Fall back to industry if any.
+  const vocab = getVocabulary(
+    resolveVocabularyKey({ archetypeCategory: null, industry: bc?.industry }),
+  );
 
   return (
     <SetupWizard

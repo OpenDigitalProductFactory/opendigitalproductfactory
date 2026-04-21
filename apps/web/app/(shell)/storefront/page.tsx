@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 
 function getSetupSteps(portalLabel: string, stakeholderLabel: string) {
   return [
@@ -74,7 +75,11 @@ export default async function StorefrontPage() {
   const bc = await prisma.businessContext.findFirst({
     select: { industry: true },
   });
-  const vocabulary = getVocabulary(bc?.industry);
+  // No archetype yet (the early return above covered the config-exists case),
+  // so fall back to industry for pre-bootstrap landing copy.
+  const vocabulary = getVocabulary(
+    resolveVocabularyKey({ archetypeCategory: null, industry: bc?.industry }),
+  );
   const setupSteps = getSetupSteps(vocabulary.portalLabel, vocabulary.stakeholderLabel);
 
   return (
