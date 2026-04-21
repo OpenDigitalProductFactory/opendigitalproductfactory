@@ -120,11 +120,6 @@ export async function POST(req: NextRequest) {
     donation: "Donor-funded",
   };
 
-  const existingBc = await prisma.businessContext.findUnique({
-    where: { organizationId: org.id },
-    select: { industry: true },
-  });
-
   await prisma.businessContext.upsert({
     where: { organizationId: org.id },
     create: {
@@ -136,11 +131,10 @@ export async function POST(req: NextRequest) {
       customerSegments: [],
     },
     update: {
+      industry: archetype.category,
       ctaType: archetype.ctaType,
       archetypeId: archetype.archetypeId,
       revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
-      // Only set industry from archetype if not already set by business-context step
-      ...(existingBc?.industry ? {} : { industry: archetype.category }),
     },
   });
 
