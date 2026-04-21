@@ -1836,6 +1836,7 @@ model BusinessContext {
   // Derived from archetype (auto-populated)
   industry         String?
   ctaType          String?
+  /// @deprecated Read StorefrontConfig.archetypeId. Column kept until next migration cycle.
   archetypeId      String?
 
   createdAt        DateTime @default(now())

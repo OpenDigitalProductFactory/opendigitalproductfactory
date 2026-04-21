@@ -120,20 +120,19 @@ export async function POST(req: NextRequest) {
     donation: "Donor-funded",
   };
 
+  // BusinessContext.archetypeId is deprecated — read StorefrontConfig.archetypeId.
   await prisma.businessContext.upsert({
     where: { organizationId: org.id },
     create: {
       organizationId: org.id,
       industry: archetype.category,
       ctaType: archetype.ctaType,
-      archetypeId: archetype.archetypeId,
       revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
       customerSegments: [],
     },
     update: {
       industry: archetype.category,
       ctaType: archetype.ctaType,
-      archetypeId: archetype.archetypeId,
       revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
     },
   });
