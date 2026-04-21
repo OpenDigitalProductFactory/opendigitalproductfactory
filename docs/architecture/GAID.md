@@ -104,6 +104,7 @@ An implementation of `GAID`:
 
 - `MUST` treat agent identity as a governance artifact, not merely a UI label
 - `MUST` separate stable identity from mutable runtime configuration
+- `MUST` distinguish enduring subject identity from versioned operating state
 - `MUST` preserve a durable mapping from agent identity to issuing authority
 - `MUST` distinguish declared capability from verified capability
 - `MUST` distinguish local authorization from portable authorization class
@@ -219,6 +220,46 @@ A public `GAID`:
 
 Private `GAID` reassignment `SHOULD NOT` occur. If it does occur under local policy, the reassignment `MUST` be explicitly recorded, and prior evidence `MUST` remain distinguishable from the new subject.
 
+### 6.8 Subject Identity, Exposure State, and Continuity
+
+`GAID` identifies the enduring AI subject, not merely one ephemeral runtime instance.
+
+Accordingly:
+
+- routine changes to model binding, prompt bundles, tools, badges, or autonomy posture `MUST NOT` mint a new `GAID` by default
+- the same `GAID` `SHOULD` remain valid when an internal-only agent later becomes federated or publicly exposed
+- identity continuity and exposure-state continuity `MUST` be treated as separate concerns
+
+An implementation `SHOULD` distinguish at least the following exposure states:
+
+- `private`
+- `federated`
+- `public`
+
+Changing exposure state:
+
+- `MAY` require stronger verification or publication controls
+- `MUST NOT` silently break subject continuity
+- `SHOULD` preserve auditable mapping from earlier internal usage to later external usage
+
+### 6.9 Subject Identity Versus Operating State
+
+This standard distinguishes:
+
+- **subject identity** — the enduring `GAID`-identified agent subject
+- **operating state** — the currently governed version of the agent's operational form
+
+The operating state `SHOULD` include materially relevant elements such as:
+
+- model and provider binding
+- prompt and instruction bundle references
+- tool surface
+- autonomy posture
+- verification references
+- current badges and authorization posture
+
+A change to operating state `SHOULD` create a new governed version or state record beneath the same `GAID`, rather than replacing the `GAID` itself.
+
 ## 7. Agent Identity Document (AIDoc)
 
 ### 7.1 Core Requirement
@@ -252,9 +293,13 @@ At minimum, an `AIDoc` `MUST` contain the following fields:
 | `subject_type` | `MUST` | Coordinator, specialist, assistant, service agent, or equivalent |
 | `owner_organization` | `MUST` | Organizational owner or controlling entity |
 | `service_endpoints` | `SHOULD` | Public or internal endpoints through which the agent is reached |
+| `exposure_state` | `SHOULD` | Whether the identity is operating in private, federated, or public posture |
 | `versioning` | `MUST` | Agent software or deployment version references |
 | `model_binding` | `MUST` | Model family, provider, and version where known |
 | `runtime_profile` | `SHOULD` | Runtime type, region, or managed environment references |
+| `operating_profile_ref` | `SHOULD` | Current governed operating profile identifier |
+| `operating_profile_fingerprint` | `SHOULD` | Digest or equivalent marker of the materially relevant operating state |
+| `validation_state` | `SHOULD` | Whether the current operating state is validated, stale, pending review, restricted, or revoked |
 | `tool_surface` | `MUST` | Declared tools, connectors, or protocol surfaces |
 | `skill_surface` | `SHOULD` | Declared skills, capabilities, or specialized repertoires |
 | `prompt_surface` | `SHOULD` | Prompt or instruction classes, including immutable or hidden instruction disclosures by class or hash |
@@ -301,6 +346,20 @@ The `AIDoc` `SHOULD` declare the surfaces that materially affect trust, includin
 - memory and context persistence posture
 
 An implementation `MUST NOT` claim that an agent is narrowly scoped if its declared operating surface is materially broader.
+
+### 7.5 Validation Continuity
+
+An `AIDoc` `SHOULD` make it possible for a relying party to distinguish between:
+
+- the same enduring agent subject
+- the same currently validated operational subject
+
+This means an implementation `SHOULD` expose enough state to answer:
+
+- is this still the same `GAID`?
+- is this still the same materially validated operating state?
+
+The answer to the second question `MAY` change even when the answer to the first remains yes.
 
 ## 8. Badge and Assurance Model
 
@@ -381,6 +440,56 @@ Examples include:
 Capability, safety, and fit-for-purpose badges `SHOULD` expire or be reviewed on a defined cadence.
 
 An issuer `MUST NOT` continue to advertise stale badges as current once the underlying model, runtime, or tool surface has materially changed.
+
+### 8.7 Badge Scope and Version Specificity
+
+Badges `SHOULD` attach to a governed operating state or profile version, not permanently to the `GAID` in the abstract.
+
+This is important because:
+
+- model behavior can improve
+- model behavior can degrade
+- tool-use capability can materially change
+- prompt or runtime changes can alter risk posture
+- a provider can silently alter behavior under the same marketed model line
+
+An implementation `SHOULD` therefore preserve:
+
+- the enduring `GAID`
+- versioned operating-state history
+- badge history by operating-state version
+
+### 8.8 Material Change and Badge Invalidation
+
+When a material change occurs, affected badges `MUST NOT` silently remain current unless policy and evidence explicitly justify doing so.
+
+At minimum, a conforming implementation `SHOULD` support badge states such as:
+
+- `active`
+- `pending-revalidation`
+- `stale`
+- `restricted`
+- `revoked`
+
+Material changes include, at minimum:
+
+- model or provider changes
+- prompt or instruction bundle changes
+- tool-surface changes
+- autonomy or governance changes
+- runtime dependency drift that alters practical capability or risk
+
+### 8.9 Practical Capability Drift
+
+This standard recognizes that provider-side or dependency-side behavior may change without a neatly versioned public release signal.
+
+An implementation `MUST NOT` assume that a stable model marketing name alone guarantees capability continuity.
+
+Where meaningful drift is detected:
+
+- the relevant badge state `SHOULD` change
+- the validation state `SHOULD` become visible to relying parties
+- the prior capability claim `MUST NOT` continue to be represented as fully current without revalidation
 
 ![GAID assurance model](gaid-diagrams/png/04-assurance-model.png)
 
@@ -501,6 +610,29 @@ For `MCP` environments:
 - the agent `SHOULD` expose its `GAID` and relevant `AIDoc` reference in connection or server metadata where possible
 - declared tools in the `AIDoc` `SHOULD` align with the actual exposed tool surface
 - remote tool invocation receipts `SHOULD` preserve acting agent identity and trace context
+
+### 11.5 LDAP Profile
+
+`GAID` does not replace `LDAP`, but a conforming implementation `SHOULD` define how agent identity is projected into enterprise directory systems.
+
+For `LDAP` projections:
+
+- the enduring `GAID` `SHOULD` be published as a stable agent identity attribute
+- agent entries `SHOULD` remain distinguishable from human and service principals
+- profile fingerprint and validation state `SHOULD` be publishable to authorized relying parties
+- group membership `MAY` be used as the primary coarse authority surface for downstream compatibility
+
+An implementation `MUST NOT` rely only on directory placement or display labels to distinguish agent identity type.
+
+### 11.6 SCIM Profile
+
+`GAID` likewise does not replace `SCIM`, but a conforming implementation `SHOULD` define how the enduring agent subject and its selected metadata are projected through lifecycle provisioning interfaces.
+
+For `SCIM` projections:
+
+- the canonical `GAID` `SHOULD` remain the stable subject reference
+- operating-state references, validation state, and selected badge data `MAY` be mapped through appropriate profile extensions
+- lifecycle operations such as activation, suspension, and deprovisioning `SHOULD` preserve `GAID` continuity rather than fragmenting subject identity
 
 ### 11.3 A2A Profile
 

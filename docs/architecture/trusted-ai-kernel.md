@@ -99,6 +99,9 @@ For the purposes of this standard:
 | `capability tier` | A policy classification that defines the minimum acceptable model capability and the allowed substitution set for a task or workflow |
 | `runtime transparency` | The ability for humans and auditors to inspect what the agent was allowed to do, attempted to do, and actually did |
 | `fabrication` | A model output that claims work, change, or completion not supported by tool or runtime evidence |
+| `operating profile` | The governed bundle of materially relevant runtime state for an identified agent, including model binding, instructions, tools, autonomy posture, and verification references |
+| `profile fingerprint` | A digest or equivalent marker derived from the materially relevant operating profile state |
+| `validation continuity` | Whether the currently running operating profile remains the same validated operational subject previously assessed or approved |
 
 ## 5. Core Principle
 
@@ -114,9 +117,11 @@ An implementation of `TAK`:
 
 - `MUST` mediate all consequential agent action through an explicit control plane
 - `MUST` separate human authority from model capability
+- `MUST` load only approved operating profile state for governed agents
 - `MUST` treat tool invocation as governed execution, not model free-form behavior
 - `MUST` treat provider rate, quota, budget, and availability constraints as kernel-governed runtime concerns rather than application-local exception handling
 - `MUST` preserve an auditable chain from human authority to agent action
+- `MUST` make material runtime-state changes visible to policy and audit layers
 - `SHOULD` minimize the tools and context exposed to an agent at any point in time
 - `SHOULD` favor bounded specialists over unconstrained generalists for operational tasks
 - `SHOULD` assume multi-provider operation may be necessary for resilience, policy fit, or capability coverage
@@ -135,6 +140,68 @@ A conforming implementation `MUST` apply runtime control in layers. At minimum, 
 5. execution gating for side-effecting operations
 
 The runtime `MUST NOT` allow a lower layer to widen permissions restricted by a higher layer.
+
+### 7.4 Approved Operating Profiles
+
+A conforming runtime `MUST` treat an agent's approved operating profile as a governed runtime artifact.
+
+At minimum, the operating profile `SHOULD` include:
+
+- model or provider binding
+- immutable and governed instruction references
+- enabled tool surface
+- autonomy and oversight posture
+- relevant verifier references
+- current approved badge or authorization posture references
+
+For governed agents, the runtime `MUST NOT` execute against undeclared or unapproved materially relevant profile state.
+
+### 7.5 Runtime Identity Proof Posture
+
+For an identified governed agent, the runtime `SHOULD` be able to support a stronger claim than:
+
+- "the agent says it is X"
+
+The stronger claim is:
+
+- the subject identity is X
+- the approved operating profile is Y
+- the runtime is executing that profile under trusted kernel enforcement
+
+`TAK` does not define the external identity namespace itself. That belongs to companion identity work such as `GAID`. `TAK` does, however, define the runtime conditions under which such identity claims can be trusted in operation.
+
+### 7.6 Material Change and Validation Continuity
+
+The runtime `MUST` treat material change as a trust-relevant event.
+
+Material change includes:
+
+- changes to model or provider binding
+- changes to immutable or governed instruction bundles
+- changes to tool surface
+- changes to autonomy or approval posture
+- changes in runtime dependencies that materially alter practical capability or risk
+
+The same enduring subject identity `MAY` remain valid while validation continuity is broken.
+
+Therefore, the runtime `SHOULD` distinguish:
+
+- identity continuity
+- validation continuity
+
+and `MUST NOT` silently assume they are equivalent.
+
+### 7.7 Profile Fingerprints and Attestation
+
+For governed agents, the runtime `SHOULD` support:
+
+- a visible fingerprint or version marker for materially relevant operating profile state
+- stronger protected attestation material sufficient to bind that profile state to trusted kernel execution
+
+This allows relying parties and auditors to distinguish between:
+
+- the same enduring agent subject
+- the same validated operational subject
 
 ### 7.2 Effective Permission Rule
 
@@ -235,6 +302,19 @@ The runtime `MUST`:
 - apply backpressure before provider limits are violated where predictive signals are available
 - surface blocking or degraded capacity in both machine-readable and human-consumable form
 - avoid presenting provider-specific failures as unexplained or opaque application errors
+
+### 8.7 Dependency Drift and Revalidation
+
+The runtime `MUST` recognize that material drift can originate from dependencies as well as from deliberate local configuration edits.
+
+Examples include:
+
+- provider-side model behavior changes
+- safety or moderation behavior changes
+- undocumented capability changes under the same marketed model label
+- runtime or harness dependency changes
+
+Where such drift materially affects capability or risk posture, the runtime `SHOULD` trigger revalidation requirements or equivalent policy review rather than continuing to treat prior approval state as unquestionably current.
 
 At minimum, the human-consumable runtime state `SHOULD` distinguish conditions such as:
 
