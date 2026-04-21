@@ -23,7 +23,10 @@ import { KNOWN_PROVIDER_MODELS, type KnownModel } from "@/lib/routing/known-prov
  *  (e.g. the encryption key was rotated after these credentials were stored). */
 export async function getDecryptedCredential(providerId: string) {
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-  if (!cred) return null;
+  if (!cred) {
+    console.warn(`[credentials] getDecryptedCredential("${providerId}") → null: row not found`);
+    return null;
+  }
   const secretRef    = cred.secretRef    ? decryptSecret(cred.secretRef)    : null;
   const clientSecret = cred.clientSecret ? decryptSecret(cred.clientSecret) : null;
   const cachedToken  = cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null;
@@ -34,6 +37,11 @@ export async function getDecryptedCredential(providerId: string) {
   const allFailed = hadEncrypted && !secretRef && !clientSecret && !cachedToken && !refreshToken;
   if (allFailed) {
     console.warn(`[credentials] All encrypted fields for "${providerId}" failed to decrypt — re-configure this provider.`);
+    console.warn(`[credentials] Diagnostic for ${providerId}: ` +
+      `secretRef=${cred.secretRef ? `enc(${cred.secretRef.slice(0,8)})→${secretRef ? "ok" : "null"}` : "none"}, ` +
+      `clientSecret=${cred.clientSecret ? `enc(${cred.clientSecret.slice(0,8)})→${clientSecret ? "ok" : "null"}` : "none"}, ` +
+      `cachedToken=${cred.cachedToken ? `enc(${cred.cachedToken.slice(0,8)})→${cachedToken ? "ok" : "null"}` : "none"}, ` +
+      `refreshToken=${cred.refreshToken ? `enc(${cred.refreshToken.slice(0,8)})→${refreshToken ? "ok" : "null"}` : "none"}`);
     // Flag for the admin UI so it stops showing green.  Fire-and-forget — we
     // already know the decrypt failed, so we return null either way.  See
     // PROVIDER-ACTIVATION-AUDIT.md F-16.
