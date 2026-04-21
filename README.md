@@ -249,3 +249,5 @@ Longer-form contributor guidance (branch model, PR checklist, local verification
 Licensed under the [Apache License, Version 2.0](LICENSE).
 
 Contributions are accepted under the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). By submitting a pull request, you certify that your contribution is your original work and you grant an irrevocable license under the project's Apache-2.0 license.
+
+Required attributions for bundled open-source dependencies are listed in [NOTICE](NOTICE). Credit to the standards bodies, frameworks, and authors whose ideas shaped DPF is in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).

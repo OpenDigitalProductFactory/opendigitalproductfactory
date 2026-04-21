@@ -179,8 +179,6 @@ export async function seedEaReferenceModels(): Promise<void> {
 
   const artifactPaths = [
     { path: "docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx", kind: "xlsx", authority: "authoritative" },
-    { path: "docs/Reference/IT4IT v3.0.1.pdf", kind: "pdf", authority: "authoritative" },
-    { path: "docs/Reference/IT4IT v3.0.1.docx", kind: "docx", authority: "authoritative" },
     { path: "docs/Reference/digital_product_portfolio_mgmt.txt", kind: "txt", authority: "supporting" },
     { path: "docs/Reference/shift_to_digital_product.txt", kind: "txt", authority: "supporting" },
   ] as const;

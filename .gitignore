@@ -34,3 +34,6 @@ test-results/
 # Python bytecode caches
 __pycache__/
 *.pyc
+
+# Third-party copyrighted reference material is kept outside this repository
+# under D:\DPF_References (Windows) — see ACKNOWLEDGMENTS.md for citations.
