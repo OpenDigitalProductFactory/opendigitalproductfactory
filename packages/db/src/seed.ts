@@ -710,7 +710,14 @@ async function seedEaViews(): Promise<void> {
 async function seedMcpServers(): Promise<void> {
   // Default MCP servers bundled with the platform.
   // All are free, open-source (MIT license) from the official MCP project.
-  // Status starts as "unconfigured" — admin activates via Platform > Integrations.
+  //
+  // Status is seeded as "active": these are internal plumbing the platform
+  // requires to function (Build Studio, review-phase verification, hive
+  // contribution) — not optional third-party add-ons. Forcing the admin to
+  // click Register for services the installer just installed is friction
+  // without a governance benefit. A matching `modelProvider` row is upserted
+  // alongside each so the "N new MCP services detected" banner (which fires
+  // on missing modelProvider entries) doesn't show bundled plumbing.
   //
   // SECURITY: Filesystem and PostgreSQL servers are marked sandbox-only.
   // They MUST execute inside the sandbox container (via docker exec), never as
@@ -816,13 +823,44 @@ async function seedMcpServers(): Promise<void> {
           category: server.category,
           tags: server.tags,
           config: server.config,
-          status: "unconfigured",
+          status: "active",
         },
       });
       console.log(`Seeded MCP server: ${server.serverId}`);
     } else {
       console.log(`MCP server ${server.serverId} already exists — skipping (preserving admin config)`);
     }
+
+    // Mirror the server into modelProvider so the "N new MCP services
+    // detected" banner (driven by a missing modelProvider row) doesn't flag
+    // bundled plumbing. Shape matches what registerMcpService() creates when
+    // the admin clicks Register in the UI; keeping them in sync means an
+    // existing install won't regress to the banner after a re-seed.
+    await prisma.modelProvider.upsert({
+      where: { providerId: server.serverId },
+      update: {
+        name: server.name,
+        endpointType: "service",
+        category: "mcp-subscribed",
+        status: "active",
+      },
+      create: {
+        providerId: server.serverId,
+        name: server.name,
+        endpointType: "service",
+        category: "mcp-subscribed",
+        sensitivityClearance: ["public", "internal"],
+        capabilityTier: "basic",
+        costBand: "free",
+        taskTags: [],
+        status: "active",
+        families: [],
+        enabledFamilies: [],
+        costModel: "token",
+        authMethod: "none",
+        supportedAuthMethods: ["none"],
+      },
+    });
   }
 }
 
