@@ -92,6 +92,15 @@
 - Depth limit: max 4 hops (configurable in `delegation-authority.ts`).
 - `DelegationChain` model tracks chain of custody with `chainId`, `depth`, `authorityScope`, and `status`.
 
+## Portal Archetype
+
+- `StorefrontConfig.archetypeId` is the **single source of truth** for a portal's industry category. Selecting an archetype seeds sections, items, vocabulary, finance profile, and design system in one step.
+- `Organization.industry` and `BusinessContext.industry` are **derived** from `archetype.category` and written only by `/api/storefront/admin/setup`. The Settings > Your Business form does NOT edit industry.
+- All vocabulary reads resolve via `resolveVocabularyKey({ archetypeCategory, industry })` in `apps/web/lib/storefront/resolve-vocabulary.ts` — archetype wins, industry is fallback only pre-bootstrap.
+- Custom archetypes must carry a `category` from the 11 canonical industries. Enforced at `/api/storefront/admin/archetypes` via `isIndustrySlug`. The canonical list lives in `apps/web/lib/storefront/industries.ts`.
+- Archetype is effectively **write-once** — changing it after setup is an admin/support operation, not a user-facing flow.
+- `BusinessContext.archetypeId` is deprecated; read `StorefrontConfig.archetypeId` instead.
+
 ## Strongly-Typed String Enums — MANDATORY COMPLIANCE
 
 String fields that carry a fixed set of valid values are **canonical enums** even though the DB column is `String`. Using non-canonical values causes silent data corruption, broken filters, and UI display failures downstream.
