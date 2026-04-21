@@ -2,20 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-
-const INDUSTRY_OPTIONS = [
-  { value: "healthcare-wellness", label: "Healthcare & Wellness" },
-  { value: "beauty-personal-care", label: "Beauty & Personal Care" },
-  { value: "trades-maintenance", label: "Trades & Maintenance" },
-  { value: "professional-services", label: "Professional Services" },
-  { value: "education-training", label: "Education & Training" },
-  { value: "pet-services", label: "Pet Services" },
-  { value: "food-hospitality", label: "Food & Hospitality" },
-  { value: "retail-goods", label: "Retail & Goods" },
-  { value: "fitness-recreation", label: "Fitness & Recreation" },
-  { value: "nonprofit-community", label: "Nonprofit & Community" },
-  { value: "hoa-property-management", label: "HOA & Property Management" },
-];
+import { INDUSTRY_OPTIONS, industryLabel } from "@/lib/storefront/industries";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
