@@ -1,0 +1,23 @@
+{
+  "name": "dpf-adp-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ADP payroll/HRIS MCP server — customer-configured, BYO-credentials. See docs/superpowers/specs/2026-04-21-adp-mcp-integration-design.md.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "undici": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.0"
+  }
+}
