@@ -125,6 +125,8 @@ services:
         condition: service_healthy
       browser-use:
         condition: service_healthy
+      adp:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -245,6 +247,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  adp:
+    build:
+      context: .
+      dockerfile: services/adp/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8600:8600"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      PORT: "8600"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8600/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ─── Dev Environment (isolated databases for development) ──────────────────
   dev-postgres:
