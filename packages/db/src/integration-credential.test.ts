@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IntegrationCredential, Prisma } from "../generated/client";
+import type { IntegrationCredential, Prisma } from "../generated/client/client";
 
 describe("IntegrationCredential model shape", () => {
   it("exposes the polymorphic credential fields", () => {

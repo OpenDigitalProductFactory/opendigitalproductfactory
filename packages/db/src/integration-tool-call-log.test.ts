@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IntegrationToolCallLog, Prisma } from "../generated/client";
+import type { IntegrationToolCallLog, Prisma } from "../generated/client/client";
 
 describe("IntegrationToolCallLog model shape", () => {
   it("accepts a full success row across integrations", () => {
