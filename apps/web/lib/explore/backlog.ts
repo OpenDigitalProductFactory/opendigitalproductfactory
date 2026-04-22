@@ -96,6 +96,30 @@ export function validateBacklogInput(input: BacklogItemInput): string | null {
 export const EPIC_STATUSES = ["open", "in-progress", "done"] as const;
 export type EpicStatus = typeof EPIC_STATUSES[number];
 
+export const BACKLOG_TRIAGE_OUTCOMES = [
+  "build",
+  "runbook",
+  "coworker-task",
+  "defer",
+  "duplicate",
+  "discard",
+] as const;
+export type BacklogTriageOutcome = (typeof BACKLOG_TRIAGE_OUTCOMES)[number];
+
+export const BACKLOG_SOURCE_VALUES = [
+  "feature-gap",
+  "bug",
+  "tool-gap",
+  "skill-gap",
+  "doc-gap",
+  "user-request",
+  "automated-detection",
+] as const;
+export type BacklogSource = (typeof BACKLOG_SOURCE_VALUES)[number];
+
+export const BACKLOG_EFFORT_SIZES = ["small", "medium", "large", "xlarge"] as const;
+export type BacklogEffortSize = (typeof BACKLOG_EFFORT_SIZES)[number];
+
 /** Returns null if valid, or an error message if invalid. */
 export function validateEpicInput(input: EpicInput): string | null {
   if (!input.title.trim()) return "Title is required";
