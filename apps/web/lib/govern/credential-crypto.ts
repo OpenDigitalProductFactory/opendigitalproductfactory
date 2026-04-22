@@ -64,3 +64,20 @@ export function decryptSecret(stored: string): string | null {
     return null;
   }
 }
+
+/** Encrypt a structured value by JSON-stringifying it first. Shape-agnostic — use for polymorphic
+ *  integration credential blobs where the fields vary by provider. */
+export function encryptJson<T>(value: T): string {
+  return encryptSecret(JSON.stringify(value));
+}
+
+/** Decrypt a JSON-encoded blob. Returns null on decryption failure OR JSON parse failure. */
+export function decryptJson<T>(stored: string): T | null {
+  const raw = decryptSecret(stored);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
