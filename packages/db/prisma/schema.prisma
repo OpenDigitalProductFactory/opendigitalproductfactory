@@ -1020,6 +1020,30 @@ model IntegrationCredential {
   @@index([provider, status])
 }
 
+// Call-level audit log for every enterprise-integration MCP tool invocation.
+// Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
+// (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
+// argsHash is sha256 of canonicalized args — raw args are never stored.
+model IntegrationToolCallLog {
+  id            String   @id @default(cuid())
+  calledAt      DateTime @default(now())
+  integration   String
+  coworkerId    String
+  userId        String?
+  toolName      String
+  argsHash      String
+  responseKind  String
+  resultCount   Int?
+  durationMs    Int
+  errorCode     String?
+  errorMessage  String?
+
+  @@index([calledAt])
+  @@index([integration, calledAt])
+  @@index([coworkerId, calledAt])
+  @@index([toolName, calledAt])
+}
+
 model OAuthPendingFlow {
   id           String   @id @default(cuid())
   state        String   @unique
