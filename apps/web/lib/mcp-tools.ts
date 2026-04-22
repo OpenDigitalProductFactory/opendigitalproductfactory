@@ -160,18 +160,66 @@ export type ToolResult = {
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "create_backlog_item",
-    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet.",
+    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake).",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string", description: "Item title" },
         type: { type: "string", enum: ["portfolio", "product"], description: "Item type" },
-        status: { type: "string", enum: ["open", "in-progress"], description: "Initial status" },
+        status: { type: "string", enum: ["triaging", "open", "in-progress"], description: "Initial status (defaults to triaging). Non-triaging requires a paired triageOutcome." },
+        triageOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Required when status is not triaging" },
+        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "What kind of gap or signal produced this item" },
+        proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
         body: { type: "string", description: "Detailed description" },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
-      required: ["title", "type"],
+      required: ["title", "type", "source"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "triage_backlog_item",
+    description: "Decide the outcome for a backlog item currently in status=triaging. Moves the item out of triage with a decided triageOutcome and supporting fields. Authority-gated via the backlog_triage grant category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item ID (e.g. BI-E4A86393)" },
+        outcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "The triage decision" },
+        rationale: { type: "string", description: "Short prose rationale for the decision" },
+        effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when outcome=build" },
+        duplicateOfId: { type: "string", description: "Canonical item ID; required when outcome=duplicate" },
+        reason: { type: "string", description: "Reason text; required when outcome=defer or outcome=discard" },
+      },
+      required: ["itemId", "outcome", "rationale"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "promote_to_build_studio",
+    description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item ID to promote" },
+      },
+      required: ["itemId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "size_backlog_item",
+    description: "Assign effortSize to a backlog item. Useful when sizing is a follow-up step rather than part of a single triage commit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item ID to size" },
+        size: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "T-shirt size estimate" },
+      },
+      required: ["itemId", "size"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
