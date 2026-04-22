@@ -45,9 +45,10 @@ const ALL_AGENT_IDS = [
 
 /**
  * Simple YAML frontmatter parser for .skill.md files.
- * Handles the subset of YAML used: scalars, inline arrays, booleans, null.
+ * Handles the subset of YAML used: scalars, inline arrays, block-style lists,
+ * booleans, null.
  */
-function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: string } {
+export function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: string } {
   const normalized = raw.replace(/\r\n/g, "\n");
   const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) {
@@ -58,15 +59,46 @@ function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: s
   const body = match[2].trim();
 
   const fm: Record<string, unknown> = {};
+  const lines = yamlBlock.split("\n");
+  let i = 0;
 
-  for (const line of yamlBlock.split("\n")) {
-    if (line.trim().startsWith("#") || line.trim() === "") continue;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim().startsWith("#") || line.trim() === "") {
+      i++;
+      continue;
+    }
 
     const kvMatch = line.match(/^(\w[\w.-]*)\s*:\s*(.*)/);
-    if (!kvMatch) continue;
+    if (!kvMatch) {
+      i++;
+      continue;
+    }
 
     const key = kvMatch[1];
     let value: string = kvMatch[2].trim();
+
+    // Block-style list:
+    //   key:
+    //     - item1
+    //     - item2
+    if (value === "") {
+      const items: string[] = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = lines[j];
+        const itemMatch = next.match(/^\s+-\s+(.*)$/);
+        if (!itemMatch) break;
+        items.push(itemMatch[1].trim().replace(/^["']|["']$/g, ""));
+        j++;
+      }
+      if (items.length > 0) {
+        fm[key] = items;
+        i = j;
+        continue;
+      }
+      // Empty value with no block list — fall through to scalar handling below.
+    }
 
     // Inline array: ["item1", "item2"] or [item1, item2]
     if (value.startsWith("[")) {
@@ -76,6 +108,7 @@ function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: s
       } else {
         fm[key] = inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
       }
+      i++;
       continue;
     }
 
@@ -92,6 +125,8 @@ function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; body: s
     else if (value === "false") fm[key] = false;
     else if (value === "null") fm[key] = null;
     else fm[key] = value;
+
+    i++;
   }
 
   return {
@@ -147,6 +182,9 @@ export async function seedSkills(prisma: PrismaClient): Promise<void> {
 
     const skillMdContent = raw; // Store the full file content including frontmatter
 
+    const asStringArray = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
     const data = {
       name: skillId,
       description: frontmatter.description ?? "",
@@ -159,9 +197,9 @@ export async function seedSkills(prisma: PrismaClient): Promise<void> {
       triggerPattern: frontmatter.triggerPattern ?? null,
       userInvocable: frontmatter.userInvocable !== false,
       agentInvocable: frontmatter.agentInvocable !== false,
-      allowedTools: frontmatter.allowedTools ?? [],
-      composesFrom: frontmatter.composesFrom ?? [],
-      contextRequirements: frontmatter.contextRequirements ?? [],
+      allowedTools: asStringArray(frontmatter.allowedTools),
+      composesFrom: asStringArray(frontmatter.composesFrom),
+      contextRequirements: asStringArray(frontmatter.contextRequirements),
       capability: typeof frontmatter.capability === "string" ? frontmatter.capability : null,
       taskType: frontmatter.taskType ?? "conversation",
     };
