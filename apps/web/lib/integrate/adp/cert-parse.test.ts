@@ -7,15 +7,16 @@ const validPem = readFileSync(resolve(__dirname, "fixtures/valid-cert.pem"), "ut
 const malformedPem = readFileSync(resolve(__dirname, "fixtures/malformed-cert.pem"), "utf8");
 
 describe("parseCertExpiry", () => {
-  it("extracts a future expiry date from a valid PEM", () => {
+  it("extracts a future expiry date from a valid PEM (cert is openssl -days 365)", () => {
     const result = parseCertExpiry(validPem);
     expect(result).toBeInstanceOf(Date);
-    const now = Date.now();
-    const fiveMinutesInMs = 5 * 60 * 1000;
-    const aYearAndADayInMs = (365 + 1) * 24 * 60 * 60 * 1000;
-    const msUntilExpiry = result!.getTime() - now;
-    expect(msUntilExpiry).toBeGreaterThan(365 * 24 * 60 * 60 * 1000 - fiveMinutesInMs);
-    expect(msUntilExpiry).toBeLessThan(aYearAndADayInMs);
+    const msUntilExpiry = result!.getTime() - Date.now();
+    // Cert was generated with `-days 365` at fixture-gen time. Loose bounds so
+    // the test doesn't go flaky as the fixture ages. Valid as long as the
+    // fixture hasn't aged more than ~15 days past generation.
+    const days = msUntilExpiry / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThan(350);
+    expect(days).toBeLessThan(366);
   });
 
   it("returns null for a malformed PEM (fail-closed)", () => {
