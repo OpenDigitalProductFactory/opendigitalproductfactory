@@ -1000,6 +1000,26 @@ model CredentialEntry {
   refreshToken   String?
 }
 
+// Polymorphic credentials for enterprise integrations (ADP, QuickBooks, Plaid, Workday, …).
+// Distinct from CredentialEntry, which is OAuth-shaped for LLM providers.
+// fieldsEnc holds a JSON blob encrypted via credential-crypto.ts encryptJson.
+model IntegrationCredential {
+  id             String    @id @default(cuid())
+  integrationId  String    @unique
+  provider       String
+  status         String    @default("unconfigured")
+  fieldsEnc      String    @db.Text
+  tokenCacheEnc  String?   @db.Text
+  lastTestedAt   DateTime?
+  lastErrorAt    DateTime?
+  lastErrorMsg   String?
+  certExpiresAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([provider, status])
+}
+
 model OAuthPendingFlow {
   id           String   @id @default(cuid())
   state        String   @unique
