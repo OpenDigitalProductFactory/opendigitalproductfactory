@@ -7,6 +7,7 @@ settings:
 overrides:
   '@types/react': ^19
   '@hono/node-server': 1.19.13
+  '@expo/cli@0.24.24>picomatch': 3.0.2
   lodash-es: 4.18.0
   '@tootallnate/once': 3.0.1
   '@xmldom/xmldom': 0.8.13
@@ -6863,8 +6864,8 @@ packages:
     resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
 
-  picomatch@3.0.1:
-    resolution: {integrity: sha512-I3EurrIQMlRc9IaAZnqRR044Phh2DXY+55o7uJ0V+hYZAcQYSuFWsc9q5PvyDHUSCe1Qxn/iBz+78s86zWnGag==}
+  picomatch@3.0.2:
+    resolution: {integrity: sha512-cfDHL6LStTEKlNilboNtobT/kEa30PtAf2Q1OgszfrG/rpVl1xaFWT9ktfkS306GmHgmnad1Sw4wabhlvFtsTw==}
     engines: {node: '>=10'}
 
   picomatch@4.0.4:
@@ -9447,7 +9448,7 @@ snapshots:
       node-forge: 1.4.0
       npm-package-arg: 11.0.3
       ora: 3.4.0
-      picomatch: 3.0.1
+      picomatch: 3.0.2
       pretty-bytes: 5.6.0
       pretty-format: 29.7.0
       progress: 2.0.3
@@ -16441,7 +16442,7 @@ snapshots:
 
   picomatch@2.3.2: {}
 
-  picomatch@3.0.1: {}
+  picomatch@3.0.2: {}
 
   picomatch@4.0.4: {}
 
