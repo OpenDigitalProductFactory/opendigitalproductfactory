@@ -1,11 +1,11 @@
 import { join } from "path";
-import { readFile, utils } from "xlsx";
 import { prisma } from "./client.js";
 import type { Prisma } from "../generated/client/client";
 import {
   normalizePriorityClass,
   slugifyReferenceModelName,
 } from "./reference-model-import.js";
+import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
 import type {
   FunctionalCriteriaRow,
   ParticipationMatrixRow,
@@ -30,27 +30,12 @@ function buildElementSlug(kind: string, ...parts: string[]): string {
   return [kind, ...parts.map(slugifyPart)].filter(Boolean).join("__");
 }
 
-function requireSheet(
-  sheets: Record<string, unknown>,
-  name: string,
-): unknown {
-  const sheet = sheets[name];
-  if (!sheet) throw new Error(`Missing worksheet: ${name}`);
-  return sheet;
-}
+async function loadIt4itWorkbook() {
+  const workbook = await readWorkbook(IT4IT_WORKBOOK_PATH);
 
-function loadIt4itWorkbook() {
-  const workbook = readFile(IT4IT_WORKBOOK_PATH);
-
-  const functionalRows = utils.sheet_to_json(
-    requireSheet(workbook.Sheets, "IT4IT Functional Criteria") as Parameters<typeof utils.sheet_to_json>[0]
-  ) as Array<Record<string, unknown>>;
-  const valueStreamRows = utils.sheet_to_json(
-    requireSheet(workbook.Sheets, "Value Stream Activities") as Parameters<typeof utils.sheet_to_json>[0]
-  ) as Array<Record<string, unknown>>;
-  const participationRows = utils.sheet_to_json(
-    requireSheet(workbook.Sheets, "FC Participation Matrix") as Parameters<typeof utils.sheet_to_json>[0]
-  ) as Array<Record<string, unknown>>;
+  const functionalRows = sheetDataToObjects(requireSheetData(workbook, "IT4IT Functional Criteria"));
+  const valueStreamRows = sheetDataToObjects(requireSheetData(workbook, "Value Stream Activities"));
+  const participationRows = sheetDataToObjects(requireSheetData(workbook, "FC Participation Matrix"));
 
   return {
     functionalRows: functionalRows.map<FunctionalCriteriaRow>((row) => ({
@@ -201,7 +186,7 @@ export async function seedEaReferenceModels(): Promise<void> {
     });
   }
 
-  const { functionalRows, valueStreamRows, participationRows } = loadIt4itWorkbook();
+  const { functionalRows, valueStreamRows, participationRows } = await loadIt4itWorkbook();
 
   const domainIds = new Map<string, string>();
   const functionIds = new Map<string, string>();

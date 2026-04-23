@@ -35,24 +35,25 @@ export function parseCsv(buffer: Buffer): ParsedFileContent {
   return { type: "spreadsheet", summary: `${columns.length} columns, ${dataLines.length} rows`, columns, sampleRows, rowCount: dataLines.length };
 }
 
-export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
-  const XLSX = await import(/* turbopackIgnore: true */ "xlsx");
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
+function stringifySpreadsheetCell(value: unknown): string {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
 
-  const sheet = workbook.Sheets[sheetName]!;
-  const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as string[][];
+export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
+  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/node");
+  const rows = await readSheet(buffer);
+  if (rows.length === 0) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
+
   const headerRow = rows[0] ?? [];
-  const columns = headerRow.slice(0, MAX_COLUMNS).map((c) => truncate(String(c), MAX_COLUMN_LEN));
+  const columns = headerRow.slice(0, MAX_COLUMNS).map((c) => truncate(stringifySpreadsheetCell(c), MAX_COLUMN_LEN));
   const dataRows = rows.slice(1);
   const sampleRows = dataRows.slice(0, MAX_SAMPLE_ROWS).map((row) =>
-    row.slice(0, MAX_COLUMNS).map((cell) => truncate(String(cell), MAX_CELL_LEN)),
+    row.slice(0, MAX_COLUMNS).map((cell) => truncate(stringifySpreadsheetCell(cell), MAX_CELL_LEN)),
   );
-  const extraSheets = workbook.SheetNames.length - 1;
-  const sheetNote = extraSheets > 0 ? ` (${extraSheets} additional sheet${extraSheets !== 1 ? "s" : ""})` : "";
 
-  return { type: "spreadsheet", summary: `${columns.length} columns, ${dataRows.length} rows${sheetNote}`, columns, sampleRows, rowCount: dataRows.length };
+  return { type: "spreadsheet", summary: `${columns.length} columns, ${dataRows.length} rows`, columns, sampleRows, rowCount: dataRows.length };
 }
 
 export async function parsePdf(buffer: Buffer): Promise<ParsedFileContent> {
@@ -93,7 +94,7 @@ function parseTextFile(buffer: Buffer, fileName: string): ParsedFileContent {
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
   if (mimeType === "text/csv" || ext === "csv" || ext === "tsv") return parseCsv(buffer);
-  if (ext === "xls" || ext === "xlsx" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || mimeType === "application/vnd.ms-excel") return parseXlsx(buffer);
+  if (ext === "xlsx" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return parseXlsx(buffer);
   if (mimeType === "application/pdf" || ext === "pdf") return parsePdf(buffer);
   if (ext === "doc" || ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") return parseDocx(buffer);
   // Text-based formats

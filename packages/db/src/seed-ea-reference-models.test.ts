@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockReadFile, mockSheetToJson } = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
-  mockSheetToJson: vi.fn(),
+const { mockReadWorkbook } = vi.hoisted(() => ({
+  mockReadWorkbook: vi.fn(),
 }));
 
 vi.mock("./client.js", () => ({
@@ -15,11 +14,24 @@ vi.mock("./client.js", () => ({
   },
 }));
 
-vi.mock("xlsx", () => ({
-  readFile: mockReadFile,
-  utils: {
-    sheet_to_json: mockSheetToJson,
-  },
+vi.mock("./excel-sheet-reader.js", () => ({
+  readWorkbook: mockReadWorkbook,
+  requireSheetData: vi.fn((workbook: Array<{ sheet: string; data: unknown[] }>, sheetName: string) => {
+    const sheet = workbook.find((entry) => entry.sheet === sheetName);
+    if (!sheet) throw new Error(`Missing worksheet: ${sheetName}`);
+    return sheet.data;
+  }),
+  sheetDataToObjects: vi.fn((sheetData: unknown[][]) => {
+    const [headers = [], ...rows] = sheetData;
+    return rows.map((row) =>
+      headers.reduce<Record<string, unknown>>((record, header, index) => {
+        if (typeof header === "string" && header.length > 0) {
+          record[header] = row[index] ?? null;
+        }
+        return record;
+      }, {})
+    );
+  }),
 }));
 
 import { prisma } from "./client.js";
@@ -48,41 +60,29 @@ beforeEach(() => {
     id: `el-${args.where.modelId_slug.slug}`,
   }));
 
-  mockReadFile.mockReturnValue({
-    SheetNames: ["IT4IT Functional Criteria", "Value Stream Activities", "FC Participation Matrix"],
-    Sheets: {
-      "IT4IT Functional Criteria": {},
-      "Value Stream Activities": {},
-      "FC Participation Matrix": {},
+  mockReadWorkbook.mockResolvedValue([
+    {
+      sheet: "IT4IT Functional Criteria",
+      data: [
+        ["Level 1: Capability Group", "Level 2: Function", "Level 3: Functional Component", "Functional Criteria", "Reference Section"],
+        ["Strategy to Portfolio", "Strategy Function", "Policy", "Shall align and map to Enterprise Architecture", "6.1.1"],
+      ],
     },
-  });
-
-  mockSheetToJson
-    .mockReturnValueOnce([
-      {
-        "Level 1: Capability Group": "Strategy to Portfolio",
-        "Level 2: Function": "Strategy Function",
-        "Level 3: Functional Component": "Policy",
-        "Functional Criteria": "Shall align and map to Enterprise Architecture",
-        "Reference Section": "6.1.1",
-      },
-    ])
-    .mockReturnValueOnce([
-      {
-        "Value Stream": "Evaluate",
-        "Value Stream Stage": "Gather Influencers Stage",
-        "Activity Criteria": "Shall define Strategic Themes and Strategic Objectives",
-        "Reference Section": "5.1.2",
-      },
-    ])
-    .mockReturnValueOnce([
-      {
-        "Value Stream": "Evaluate",
-        "Value Stream Stage": "Gather Influencers Stage",
-        Ref: "5.1.2",
-        Policy: "●",
-      },
-    ]);
+    {
+      sheet: "Value Stream Activities",
+      data: [
+        ["Value Stream", "Value Stream Stage", "Activity Criteria", "Reference Section"],
+        ["Evaluate", "Gather Influencers Stage", "Shall define Strategic Themes and Strategic Objectives", "5.1.2"],
+      ],
+    },
+    {
+      sheet: "FC Participation Matrix",
+      data: [
+        ["Value Stream", "Value Stream Stage", "Ref", "Policy"],
+        ["Evaluate", "Gather Influencers Stage", "5.1.2", "●"],
+      ],
+    },
+  ]);
 });
 
 describe("seedEaReferenceModels", () => {

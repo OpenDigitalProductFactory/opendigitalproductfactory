@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseCsv, parseFileContent } from "./file-parsers";
+
+vi.mock("read-excel-file/node", () => ({
+  readSheet: vi.fn(async () => [
+    ["Name", "Score"],
+    ["Alice", 10],
+    ["Bob", 20],
+  ]),
+}));
 
 describe("parseCsv", () => {
   it("extracts columns and sample rows", () => {
@@ -34,6 +42,24 @@ describe("parseFileContent", () => {
     expect(result!.type).toBe("spreadsheet");
     expect(result!.columns).toEqual(["A", "B"]);
   });
+
+  it("parses xlsx files into spreadsheet summaries", async () => {
+    const result = await parseFileContent(Buffer.from("xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "test.xlsx");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("spreadsheet");
+    expect(result!.columns).toEqual(["Name", "Score"]);
+    expect(result!.sampleRows).toEqual([
+      ["Alice", "10"],
+      ["Bob", "20"],
+    ]);
+    expect(result!.rowCount).toBe(2);
+  });
+
+  it("rejects legacy xls uploads", async () => {
+    const result = await parseFileContent(Buffer.from("legacy"), "application/vnd.ms-excel", "test.xls");
+    expect(result).toBeNull();
+  });
+
   it("returns null for unsupported type", async () => {
     const result = await parseFileContent(Buffer.from("hello"), "application/octet-stream", "test.bin");
     expect(result).toBeNull();

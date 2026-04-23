@@ -2,7 +2,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { parseFileContent, capParsedContentSize } from "./file-parsers";
 import { lazyFsPromises, lazyPath, lazyCrypto } from "./lazy-node";
 
-const ALLOWED_EXTENSIONS = new Set(["csv", "xls", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf"]);
+const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf"]);
 const DEFAULT_MAX_SIZE_MB = 10;
 const MAX_ATTACHMENTS_PER_THREAD = 20;
 const MAX_USER_STORAGE_BYTES = 200 * 1024 * 1024;
@@ -12,7 +12,6 @@ const MAGIC_BYTES: Record<string, number[]> = {
   xlsx: [0x50, 0x4b, 0x03, 0x04],
   docx: [0x50, 0x4b, 0x03, 0x04],
   pptx: [0x50, 0x4b, 0x03, 0x04],
-  xls: [0xd0, 0xcf, 0x11, 0xe0],   // OLE compound document
   doc: [0xd0, 0xcf, 0x11, 0xe0],
   ppt: [0xd0, 0xcf, 0x11, 0xe0],
 };

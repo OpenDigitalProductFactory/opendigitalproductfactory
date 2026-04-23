@@ -4,7 +4,7 @@
 
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
-import XLSX from "xlsx";
+import { readWorkbook, requireSheetData, sheetDataToObjects } from "../src/excel-sheet-reader";
 
 const XLSX_PATH = join(__dirname, "..", "..", "..", "docs", "Reference", "4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx");
 const OUT_DIR   = join(__dirname, "..", "data");
@@ -83,14 +83,9 @@ function cleanString(val: unknown): string {
   return String(val).trim().replace(/\u00AD/g, "").replace(/[\u2013\u2014]/g, "-").replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
 }
 
-function processSheet(wb: XLSX.WorkBook, sheetName: string): TaxonomyRow[] {
+function processSheet(rawRows: Array<Record<string, unknown>>, sheetName: string): TaxonomyRow[] {
   const meta = SHEET_MAP[sheetName];
   if (!meta) throw new Error(`Unknown sheet: ${sheetName}`);
-
-  const ws = wb.Sheets[sheetName];
-  if (!ws) throw new Error(`Sheet not found: ${sheetName}`);
-
-  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: null });
   const rows: TaxonomyRow[] = [];
 
   for (const raw of rawRows) {
@@ -136,17 +131,21 @@ function processSheet(wb: XLSX.WorkBook, sheetName: string): TaxonomyRow[] {
   return rows;
 }
 
-// Main
-mkdirSync(OUT_DIR, { recursive: true });
-const wb = XLSX.readFile(XLSX_PATH);
-console.log(`Sheets found: ${wb.SheetNames.join(", ")}`);
+async function main() {
+  mkdirSync(OUT_DIR, { recursive: true });
+  const workbook = await readWorkbook(XLSX_PATH);
+  const sheetNames = Object.keys(SHEET_MAP);
+  console.log(`Sheets found: ${sheetNames.join(", ")}`);
 
-const allRows: TaxonomyRow[] = [];
-for (const sheetName of wb.SheetNames) {
-  const rows = processSheet(wb, sheetName);
-  console.log(`  ${sheetName}: ${rows.length} rows`);
-  allRows.push(...rows);
+  const allRows: TaxonomyRow[] = [];
+  for (const sheetName of sheetNames) {
+    const rows = processSheet(sheetDataToObjects(requireSheetData(workbook, sheetName)), sheetName);
+    console.log(`  ${sheetName}: ${rows.length} rows`);
+    allRows.push(...rows);
+  }
+
+  writeFileSync(OUT_PATH, JSON.stringify(allRows, null, 2), "utf-8");
+  console.log(`\nWritten ${allRows.length} rows to ${OUT_PATH}`);
 }
 
-writeFileSync(OUT_PATH, JSON.stringify(allRows, null, 2), "utf-8");
-console.log(`\nWritten ${allRows.length} rows to ${OUT_PATH}`);
+void main();
