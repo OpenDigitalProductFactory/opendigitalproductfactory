@@ -56,6 +56,32 @@ export interface SchedulingDefaults {
   maxAdvanceDays: number;
 }
 
+export type ArchetypeModule =
+  | "customer-estate"
+  | "service-agreements"
+  | "billing-readiness"
+  | "service-operations"
+  | "projects"
+  | "lifecycle-signals"
+  | "integrations";
+
+export type ArchetypeProfileType = "standard" | "managed-service-provider";
+
+export type BillingReadinessMode = "none" | "prepared-not-prescribed";
+
+export type CustomerGraphMode = "none" | "separate-customer-projection";
+
+export type EstateSeparationMode = "shared" | "strict";
+
+export interface ActivationProfile {
+  profileType: ArchetypeProfileType;
+  modules: ArchetypeModule[];
+  billingReadinessMode: BillingReadinessMode;
+  customerGraph: CustomerGraphMode;
+  estateSeparation: EstateSeparationMode;
+  seededServiceCategories?: string[];
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -66,4 +92,5 @@ export interface ArchetypeDefinition {
   formSchema: FormField[];
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
+  activationProfile?: ActivationProfile;
 }

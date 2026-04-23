@@ -3986,6 +3986,7 @@ model StorefrontArchetype {
   tags             String[]
   isActive         Boolean            @default(true)
   isBuiltIn        Boolean            @default(true)
+  activationProfile   Json?
   customVocabulary    Json?
   marketingSkillRules Json?
   createdAt           DateTime           @default(now())

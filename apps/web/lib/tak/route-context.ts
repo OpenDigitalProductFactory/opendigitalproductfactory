@@ -6,6 +6,10 @@ import { prisma } from "@dpf/db";
 import { createEstateItem } from "@/lib/estate/estate-item";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import {
+  isManagedServiceProviderProfile,
+  readActivationProfile,
+} from "@/lib/storefront/archetype-activation";
 
 type RouteContextResult = string | null;
 
@@ -514,7 +518,14 @@ async function getStorefrontMarketingContext(): Promise<string> {
   const config = await prisma.storefrontConfig.findFirst({
     include: {
       archetype: {
-        select: { archetypeId: true, name: true, category: true, ctaType: true, customVocabulary: true },
+        select: {
+          archetypeId: true,
+          name: true,
+          category: true,
+          ctaType: true,
+          customVocabulary: true,
+          activationProfile: true,
+        },
       },
     },
   });
@@ -526,6 +537,7 @@ async function getStorefrontMarketingContext(): Promise<string> {
   const archetype = config.archetype;
   const playbook = getPlaybook(archetype.category, archetype.ctaType);
   const vocabulary = getVocabulary(archetype.category, archetype.customVocabulary as Record<string, string> | null);
+  const activationProfile = readActivationProfile(archetype.activationProfile);
 
   // Inbox metrics — last 30 days
   const thirtyDaysAgo = new Date();
@@ -560,6 +572,17 @@ async function getStorefrontMarketingContext(): Promise<string> {
     .join(", ");
 
   const totalInbox = bookingCount + inquiryCount + orderCount + donationCount;
+  const activationLines = isManagedServiceProviderProfile(activationProfile)
+    ? [
+        "",
+        "OPERATING PROFILE:",
+        `Archetype activation: ${activationProfile.profileType}`,
+        `Operating modules: ${activationProfile.modules.join(", ")}`,
+        `Billing mode: ${activationProfile.billingReadinessMode}`,
+        `Customer graph: ${activationProfile.customerGraph}`,
+        `Estate separation: ${activationProfile.estateSeparation}`,
+      ]
+    : [];
 
   return [
     `\nPAGE DATA — ${vocabulary.portalLabel}:`,
@@ -577,6 +600,7 @@ async function getStorefrontMarketingContext(): Promise<string> {
     `Key metrics to track: ${playbook.keyMetrics.join("; ")}`,
     `CTA language: ${playbook.ctaLanguage.join(", ")}`,
     `Agent skills for this model: ${playbook.agentSkills.join(", ")}`,
+    ...activationLines,
     "",
     `INBOX (last 30 days): ${totalInbox} total — Bookings: ${bookingCount}, Inquiries: ${inquiryCount}, Orders: ${orderCount}, Donations: ${donationCount}`,
     "",

@@ -4,6 +4,10 @@ import { prisma } from "@dpf/db";
 import { nanoid } from "nanoid";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 import { generateDesignSystem } from "@/lib/design-intelligence";
+import {
+  deriveRevenueModelFromActivationProfile,
+  readActivationProfile,
+} from "@/lib/storefront/archetype-activation";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -113,12 +117,8 @@ export async function POST(req: NextRequest) {
   // Update BusinessContext with archetype-derived fields (ctaType, archetypeId).
   // BusinessContext should already exist from the "Your Business" setup step.
   // If it doesn't (backward compat / direct portal setup), create a minimal one.
-  const REVENUE_MODEL_MAP: Record<string, string> = {
-    booking: "Appointment-based services",
-    purchase: "Product/service sales",
-    inquiry: "Quote-based services",
-    donation: "Donor-funded",
-  };
+  const activationProfile = readActivationProfile(archetype.activationProfile);
+  const revenueModel = deriveRevenueModelFromActivationProfile(activationProfile, archetype.ctaType);
 
   // BusinessContext.archetypeId is deprecated — read StorefrontConfig.archetypeId.
   await prisma.businessContext.upsert({
@@ -127,13 +127,13 @@ export async function POST(req: NextRequest) {
       organizationId: org.id,
       industry: archetype.category,
       ctaType: archetype.ctaType,
-      revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
+      revenueModel,
       customerSegments: [],
     },
     update: {
       industry: archetype.category,
       ctaType: archetype.ctaType,
-      revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
+      revenueModel,
     },
   });
 

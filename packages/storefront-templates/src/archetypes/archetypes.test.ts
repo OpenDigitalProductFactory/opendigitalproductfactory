@@ -35,4 +35,15 @@ describe("archetype catalog", () => {
       expect(a.schedulingDefaults, `${a.archetypeId} missing schedulingDefaults`).toBeDefined();
     }
   });
+
+  it("it-managed-services carries a strong activation profile", () => {
+    const msp = ALL_ARCHETYPES.find((a) => a.archetypeId === "it-managed-services");
+    expect(msp).toBeDefined();
+    expect(msp?.activationProfile?.profileType).toBe("managed-service-provider");
+    expect(msp?.activationProfile?.modules).toContain("customer-estate");
+    expect(msp?.activationProfile?.modules).toContain("service-agreements");
+    expect(msp?.activationProfile?.modules).toContain("service-operations");
+    expect(msp?.activationProfile?.customerGraph).toBe("separate-customer-projection");
+    expect(msp?.activationProfile?.estateSeparation).toBe("strict");
+  });
 });
