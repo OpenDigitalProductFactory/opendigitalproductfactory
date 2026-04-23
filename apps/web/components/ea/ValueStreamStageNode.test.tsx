@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { vi } from "vitest";
+import type { ReactNode } from "react";
+
+vi.mock("@xyflow/react", () => ({
+  ReactFlowProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Handle: ({ id }: { id: string }) => <span data-testid={id} />,
+  Position: {
+    Top: "top",
+    Right: "right",
+    Bottom: "bottom",
+    Left: "left",
+  },
+}));
+
 import { ReactFlowProvider } from "@xyflow/react";
 
 import type { SerializedViewElement } from "@/lib/ea-types";

@@ -44,34 +44,34 @@ beforeEach(() => {
 // ─── convertAmountSync ────────────────────────────────────────────────────────
 
 describe("convertAmountSync", () => {
-  it("converts 100 GBP at rate 1.27 to 127 USD", () => {
-    expect(convertAmountSync(100, 1.27)).toBeCloseTo(127, 5);
+  it("converts 100 GBP at rate 1.27 to 127 USD", async () => {
+    expect(await convertAmountSync(100, 1.27)).toBeCloseTo(127, 5);
   });
 
-  it("returns same amount when rate is 1 (same currency passthrough)", () => {
-    expect(convertAmountSync(250, 1)).toBe(250);
+  it("returns same amount when rate is 1 (same currency passthrough)", async () => {
+    expect(await convertAmountSync(250, 1)).toBe(250);
   });
 
-  it("correctly applies a reducing rate", () => {
-    expect(convertAmountSync(200, 0.787)).toBeCloseTo(157.4, 3);
+  it("correctly applies a reducing rate", async () => {
+    expect(await convertAmountSync(200, 0.787)).toBeCloseTo(157.4, 3);
   });
 });
 
 // ─── calculateFxGainLoss ──────────────────────────────────────────────────────
 
 describe("calculateFxGainLoss", () => {
-  it("returns positive value when payment exceeds invoice (gain)", () => {
-    const result = calculateFxGainLoss(1000, 1050);
+  it("returns positive value when payment exceeds invoice (gain)", async () => {
+    const result = await calculateFxGainLoss(1000, 1050);
     expect(result).toBe(50);
   });
 
-  it("returns negative value when payment is less than invoice (loss)", () => {
-    const result = calculateFxGainLoss(1000, 950);
+  it("returns negative value when payment is less than invoice (loss)", async () => {
+    const result = await calculateFxGainLoss(1000, 950);
     expect(result).toBe(-50);
   });
 
-  it("returns zero when payment matches invoice exactly", () => {
-    const result = calculateFxGainLoss(1000, 1000);
+  it("returns zero when payment matches invoice exactly", async () => {
+    const result = await calculateFxGainLoss(1000, 1000);
     expect(result).toBe(0);
   });
 });
@@ -90,13 +90,13 @@ describe("getOrgSettings", () => {
 
   it("creates default settings when none exist", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(null);
-    const created = { id: "settings-new", baseCurrency: "GBP", autoFetchRates: true };
+    const created = { id: "settings-new", baseCurrency: "USD", autoFetchRates: true };
     mockPrisma.orgSettings.create.mockResolvedValue(created);
 
     const result = await getOrgSettings();
     expect(mockPrisma.orgSettings.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ baseCurrency: "GBP" }),
+        data: expect.objectContaining({ baseCurrency: "USD" }),
       }),
     );
     expect(result).toEqual(created);

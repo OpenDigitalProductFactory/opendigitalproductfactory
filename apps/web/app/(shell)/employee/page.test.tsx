@@ -49,6 +49,66 @@ vi.mock("@/lib/workforce-data", () => ({
 vi.mock("@/lib/actions/users", () => ({
   updateUserLifecycle: vi.fn(),
 }));
+vi.mock("@/components/employee/NewEmployeeButton", () => ({
+  NewEmployeeButton: () => <button type="button">New employee</button>,
+}));
+vi.mock("@/components/employee/EmployeeTabNav", () => ({
+  EmployeeTabNav: () => <nav>Employee tabs</nav>,
+}));
+vi.mock("@/components/employee/EmployeeDirectoryPanel", () => ({
+  EmployeeDirectoryPanel: ({ employees }: { employees: Array<{ employeeId: string; departmentName: string; managerName: string | null }> }) => (
+    <section>
+      <h2>Employee directory</h2>
+      {employees.map((employee) => (
+        <article key={employee.employeeId}>
+          <span>{employee.employeeId}</span>
+          <span>{employee.departmentName}</span>
+          <span>{employee.managerName}</span>
+        </article>
+      ))}
+    </section>
+  ),
+}));
+vi.mock("@/components/employee/EmployeeProfilePanel", () => ({
+  EmployeeProfilePanel: ({ employee }: { employee: { workLocationName: string; startDate: Date } | null }) => (
+    <section>
+      <h2>Employee profile</h2>
+      <span>{employee?.startDate.getUTCFullYear()}</span>
+      <span>{employee?.workLocationName}</span>
+    </section>
+  ),
+}));
+vi.mock("@/components/employee/LifecycleEventPanel", () => ({
+  LifecycleEventPanel: ({ events }: { events: Array<{ eventType: string; reason: string | null }> }) => (
+    <section>
+      <h2>Recent lifecycle events</h2>
+      {events.map((event) => (
+        <article key={`${event.eventType}-${event.reason}`}>
+          <span>{event.eventType}</span>
+          <span>{event.reason}</span>
+        </article>
+      ))}
+    </section>
+  ),
+}));
+vi.mock("@/components/employee/HrUserLifecyclePanel", () => ({
+  HrUserLifecyclePanel: () => <section>HR user lifecycle</section>,
+}));
+vi.mock("@/components/employee/OrgAssignmentPanel", () => ({
+  OrgAssignmentPanel: () => <section>Org assignment</section>,
+}));
+vi.mock("@/components/employee/OrgChartView", () => ({
+  OrgChartView: () => <section>Org chart</section>,
+}));
+vi.mock("@/components/employee/TimesheetGrid", () => ({
+  TimesheetGrid: () => <section>Timesheet grid</section>,
+}));
+vi.mock("@/components/employee/TimesheetApprovalPanel", () => ({
+  TimesheetApprovalPanel: () => <section>Timesheet approvals</section>,
+}));
+vi.mock("@/components/employee/MyPoliciesView", () => ({
+  MyPoliciesView: () => <section>My policies</section>,
+}));
 
 import { prisma } from "@dpf/db";
 import {

@@ -130,7 +130,7 @@ describe("adapter-registry", () => {
       });
 
       expect(card.modelClass).toBe("code");
-      expect(card.capabilities.toolUse).toBe(false);
+      expect(card.capabilities.toolUse).toBe(true);
       expect(card.capabilities.streaming).toBe(true);
       expect(card.capabilities.structuredOutput).toBe(true);
       expect(card.maxInputTokens).toBe(400_000);

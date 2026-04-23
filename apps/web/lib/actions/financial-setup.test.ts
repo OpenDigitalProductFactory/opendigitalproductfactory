@@ -68,14 +68,14 @@ describe("applyFinancialProfile", () => {
 
   it("creates OrgSettings when none exist and uses profile default currency", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(null);
-    mockPrisma.orgSettings.create.mockResolvedValue(makeSettings({ baseCurrency: "USD" }));
+    mockPrisma.orgSettings.create.mockResolvedValue(makeSettings({ baseCurrency: "GBP" }));
 
     const result = await applyFinancialProfile("healthcare_wellness");
 
     expect(result.applied).toBe(true);
     expect(result.profileName).toBe("Healthcare & Wellness");
     expect(mockPrisma.orgSettings.create).toHaveBeenCalledWith({
-      data: { baseCurrency: "USD", autoFetchRates: true },
+      data: { baseCurrency: "GBP", autoFetchRates: true },
     });
   });
 
@@ -88,7 +88,7 @@ describe("applyFinancialProfile", () => {
 
     expect(mockPrisma.orgSettings.update).toHaveBeenCalledWith({
       where: { id: "existing-1" },
-      data: { baseCurrency: "USD", autoFetchRates: true },
+      data: { baseCurrency: "GBP", autoFetchRates: true },
     });
     expect(mockPrisma.orgSettings.create).not.toHaveBeenCalled();
   });

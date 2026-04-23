@@ -24,13 +24,13 @@ vi.mock("@/lib/auth", () => ({
 describe("user skill CRUD", () => {
   it("generateSkillId returns SK-XXXXXXXX format (8 chars for collision safety)", async () => {
     const { generateSkillId } = await import("./user-skills");
-    const id = generateSkillId();
+    const id = await generateSkillId();
     expect(id).toMatch(/^SK-[A-Z0-9]{8}$/);
   });
 
   it("generates unique IDs on successive calls", async () => {
     const { generateSkillId } = await import("./user-skills");
-    const ids = new Set(Array.from({ length: 100 }, () => generateSkillId()));
+    const ids = new Set(await Promise.all(Array.from({ length: 100 }, () => generateSkillId())));
     expect(ids.size).toBe(100);
   });
 

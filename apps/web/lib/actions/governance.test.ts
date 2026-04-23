@@ -43,8 +43,8 @@ vi.mock("next/cache", () => ({
 import { validateDelegationGrantInput } from "./governance";
 
 describe("validateDelegationGrantInput", () => {
-  it("rejects expiry before validFrom", () => {
-    expect(
+  it("rejects expiry before validFrom", async () => {
+    await expect(
       validateDelegationGrantInput({
         granteeAgentId: "AGT-100",
         riskBand: "high",
@@ -56,6 +56,6 @@ describe("validateDelegationGrantInput", () => {
           maxRiskBand: "high",
         },
       }),
-    ).toMatch(/expiry/i);
+    ).resolves.toMatch(/expiry/i);
   });
 });

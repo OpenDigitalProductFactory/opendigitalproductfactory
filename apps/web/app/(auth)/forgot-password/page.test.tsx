@@ -4,6 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("@/lib/actions/users", () => ({
   requestPasswordReset: vi.fn(),
 }));
+vi.mock("@/components/auth/ForgotPasswordForm", () => ({
+  ForgotPasswordForm: () => (
+    <form>
+      <input name="email" type="email" />
+      <p>If an account exists, check your email.</p>
+    </form>
+  ),
+}));
 
 import ForgotPasswordPage from "./page";
 

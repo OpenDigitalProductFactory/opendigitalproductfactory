@@ -54,7 +54,7 @@ describe("bootstrap-first-run", () => {
   });
 
   describe("seedOnboardingAgent", () => {
-    it("upserts the onboarding-coo agent and pins provider via AgentModelConfig", async () => {
+    it("upserts the onboarding-coo agent and configures capability-based routing", async () => {
       (prisma.agent.upsert as any).mockResolvedValue({
         id: "cuid-onboarding-coo",
         agentId: "onboarding-coo",
@@ -78,7 +78,12 @@ describe("bootstrap-first-run", () => {
         expect.objectContaining({
           where: { agentId: "onboarding-coo" },
           create: expect.objectContaining({
-            pinnedProviderId: "local",
+            minimumTier: "strong",
+            budgetClass: "minimize_cost",
+            minimumCapabilities: { toolUse: true },
+          }),
+          update: expect.objectContaining({
+            pinnedProviderId: null,
           }),
         }),
       );

@@ -30,27 +30,35 @@ vi.mock("./execution-adapter-registry", () => ({
 // Mock child_process
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
-vi.mock("child_process", () => ({
-  exec: (_cmd: string, _opts: unknown, cb: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-    const result = mockExecAsync(_cmd);
-    if (result instanceof Promise) {
-      result.then((r: { stdout: string; stderr: string }) => cb(null, r)).catch((e: Error) => cb(e, { stdout: "", stderr: "" }));
-    } else {
-      cb(null, { stdout: "", stderr: "" });
-    }
-  },
-  spawn: (...args: unknown[]) => mockSpawn(...args),
-}));
-
-vi.mock("util", () => ({
-  promisify: (fn: Function) => (...args: unknown[]) => {
-    return new Promise((resolve, reject) => {
-      fn(...args, (err: Error | null, result: unknown) => {
-        if (err) reject(err);
-        else resolve(result);
-      });
-    });
-  },
+vi.mock("@/lib/shared/lazy-node", () => ({
+  lazyChildProcess: () => ({
+    exec: (
+      cmd: string,
+      _opts: unknown,
+      cb: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+    ) => {
+      const result = mockExecAsync(cmd);
+      if (result instanceof Promise) {
+        result
+          .then((resolved: { stdout: string; stderr: string }) => cb(null, resolved))
+          .catch((error: Error) => cb(error, { stdout: "", stderr: "" }));
+      } else {
+        cb(null, { stdout: "", stderr: "" });
+      }
+    },
+    spawn: (...args: unknown[]) => mockSpawn(...args),
+  }),
+  lazyUtil: () => ({
+    promisify:
+      (fn: Function) =>
+      (...args: unknown[]) =>
+        new Promise((resolve, reject) => {
+          fn(...args, (err: Error | null, result: unknown) => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        }),
+  }),
 }));
 
 import { cliAdapter } from "./cli-adapter";

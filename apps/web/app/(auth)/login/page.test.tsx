@@ -6,6 +6,11 @@ import { vi } from "vitest";
 vi.mock("@/lib/auth", () => ({
   signIn: vi.fn(),
 }));
+vi.mock("next-auth", () => ({
+  AuthError: class AuthError extends Error {
+    type = "CredentialsSignin";
+  },
+}));
 
 import LoginPage from "./page";
 

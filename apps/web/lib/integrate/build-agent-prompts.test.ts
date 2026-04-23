@@ -30,7 +30,7 @@ describe("getBuildPhasePrompt", () => {
     const prompt = await getBuildPhasePrompt("ideate");
     expect(prompt).toContain("start_ideate_research");
     expect(prompt).toContain("suggest_taxonomy_placement");
-    expect(prompt).toContain("create_backlog_item");
+    expect(prompt).toContain("start_scout_research");
   });
   it("returns plan prompt for plan phase", async () => {
     const prompt = await getBuildPhasePrompt("plan");

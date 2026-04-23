@@ -12,7 +12,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("./actions/change-management", () => ({
+vi.mock("../actions/change-management", () => ({
   generateRfcId: vi.fn(() => "RFC-2026-AABBCCDD"),
 }));
 

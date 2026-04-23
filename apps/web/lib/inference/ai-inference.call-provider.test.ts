@@ -41,6 +41,7 @@ vi.mock("@/lib/metrics", () => ({
 
 vi.mock("../routing/execution-adapter-registry", () => ({
   getExecutionAdapter: vi.fn(() => ({ execute: mockAdapterExecute })),
+  registerExecutionAdapter: vi.fn(),
 }));
 
 vi.mock("../routing/chat-adapter", () => ({}));

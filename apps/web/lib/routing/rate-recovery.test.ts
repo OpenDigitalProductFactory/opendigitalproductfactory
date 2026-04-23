@@ -2,7 +2,9 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
 // Mock inngest client
-const mockSend = vi.fn().mockResolvedValue({ ids: [] });
+const { mockSend } = vi.hoisted(() => ({
+  mockSend: vi.fn().mockResolvedValue({ ids: [] }),
+}));
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: { send: mockSend },
 }));
