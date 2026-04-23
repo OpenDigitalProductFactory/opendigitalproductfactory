@@ -2402,6 +2402,7 @@ model FeatureBuild {
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
   uxVerificationStatus  String?           // null | "running" | "complete" | "failed" | "skipped"
+  deliberationSummary   Json?             // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
   buildExecState        Json?
   taxonomyAttribution   Json?
   releaseBundleId       String?
@@ -2533,6 +2534,7 @@ model TaskRun {
   updatedAt          DateTime   @updatedAt
   user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   nodes              TaskNode[]
+  deliberationRuns   DeliberationRun[]
 
   @@index([userId, status])
   @@index([threadId])
@@ -2563,6 +2565,7 @@ model TaskNode {
   outputTokens        Int?
   influenceLevel      String? // none | contextual | material
   supersededByNodeId  String?
+  deliberationRunId   String? // nullable — non-null only when this TaskNode is a deliberation branch
   startedAt           DateTime?
   completedAt         DateTime?
   createdAt           DateTime   @default(now())
@@ -2572,11 +2575,15 @@ model TaskNode {
   childNodes          TaskNode[] @relation("TaskNodeTree")
   incomingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeTo")
   outgoingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeFrom")
+  deliberationRun     DeliberationRun? @relation("DeliberationRunBranchNodes", fields: [deliberationRunId], references: [id])
+  claimRecords        ClaimRecord[]    @relation("ClaimRecordBranchNode")
+  evidenceBundles     EvidenceBundle[] @relation("EvidenceBundleTaskNode")
 
   @@index([taskRunId, status])
   @@index([parentNodeId])
   @@index([nodeType, status])
   @@index([workerRole, status])
+  @@index([deliberationRunId])
 }
 
 model TaskNodeEdge {
@@ -5380,5 +5387,182 @@ model PromptRevision {
 
   @@unique([templateId, version])
   @@index([templateId])
+}
+
+// ─── Deliberation Pattern Framework ────────────────────────────────────────────
+// Reusable multi-agent quality patterns (review, debate, ...) executed over the
+// existing TaskRun/TaskNode/TaskNodeEdge substrate.
+//
+// Spec: docs/superpowers/specs/2026-04-21-deliberation-pattern-framework-design.md
+// Plan: docs/superpowers/plans/2026-04-22-deliberation-pattern-framework-v1.md
+//
+// Canonical enum values for the String columns below are documented inline and
+// live in TypeScript (see apps/web/lib/deliberation/types.ts — arriving Task 3)
+// and in the MCP tool enums. Hyphenated values per CLAUDE.md § "Strongly-Typed
+// String Enums — MANDATORY COMPLIANCE".
+
+model DeliberationPattern {
+  id                     String            @id @default(cuid())
+  slug                   String            @unique // e.g. "review", "debate"
+  name                   String
+  purpose                String            @db.Text
+  defaultRoles           Json              // Array<{ roleId, count, required }>
+  topologyTemplate       Json              // branch + convergence spec consumed by task-graph builder
+  activationPolicyHints  Json              // { stageDefaults, riskEscalation, explicitTriggers } — hints, not authoritative
+  evidenceRequirements   Json              // { retrievalRequired, admissibleSourceTypes, freshness, conflictReconciliationRequired }
+  outputContract         Json              // shape of the DeliberationOutcome produced
+  providerStrategyHints  Json              // preferred diversity mode and strategy profile
+  sourceFile             String?           // path to the seed file under deliberation/
+  status                 String            @default("active") // "active" | "deprecated" | "draft"
+  isOverridden           Boolean           @default(false) // admin edited at runtime — seeder will skip
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  runs                   DeliberationRun[]
+
+  @@index([status])
+}
+
+model DeliberationRoleProfile {
+  id                        String               @id @default(cuid())
+  roleId                    String               @unique // slug: "author" | "reviewer" | "skeptic" | "adjudicator" | "debater" | ...
+  roleName                  String
+  personaGuidance           String               @db.Text // portable persona prompt ({{include:...}} composition allowed)
+  allowedNodeTypes          String[]             @default([]) // which TaskNode.nodeType values this role can occupy
+  sameModelPersonaAllowed   Boolean              @default(true)
+  preferProviderDiversity   Boolean              @default(false)
+  requireProviderDiversity  Boolean              @default(false)
+  evidenceStrictness        String               @default("standard") // "lenient" | "standard" | "strict"
+  sourceFile                String?              // path to the seed file for this persona
+  isOverridden              Boolean              @default(false) // admin edited at runtime — seeder will skip
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  @@index([evidenceStrictness])
+}
+
+model DeliberationRun {
+  id                   String                @id @default(cuid())
+  taskRunId            String                // FK to TaskRun.id — deliberation always parented to a task run
+  patternId            String                // FK to DeliberationPattern.id
+  artifactType         String                // "spec" | "plan" | "code-change" | "architecture-decision" | "policy" | "research-question"
+  triggerSource        String                // "stage" | "risk" | "explicit" | "combined"
+  adjudicationMode     String                // "synthesis" | "majority-vote" | "unanimous" | "no-consensus-ok"
+  activatedRiskLevel   String?               // "low" | "medium" | "high" | "critical"
+  diversityMode        String                // "single-model-multi-persona" | "multi-model-same-provider" | "multi-provider-heterogeneous"
+  strategyProfile      String                // "economy" | "balanced" | "high-assurance" | "document-authority"
+  consensusState       String                @default("pending") // "consensus" | "partial-consensus" | "no-consensus" | "insufficient-evidence" | "pending"
+  maxBranches          Int                   @default(4)
+  budgetUsd            Float?
+  metadata             Json?                 // free-form run metadata: degradation notes, budget-halted flag, etc.
+  startedAt            DateTime              @default(now())
+  completedAt          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  taskRun              TaskRun               @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  pattern              DeliberationPattern   @relation(fields: [patternId], references: [id])
+  outcome              DeliberationOutcome?
+  issueSets            DeliberationIssueSet[]
+  claims               ClaimRecord[]
+  evidenceBundles      EvidenceBundle[]
+  branchNodes          TaskNode[]            @relation("DeliberationRunBranchNodes")
+
+  @@index([taskRunId])
+  @@index([patternId])
+  @@index([consensusState])
+  @@index([artifactType, consensusState])
+}
+
+model DeliberationOutcome {
+  id                    String           @id @default(cuid())
+  deliberationRunId     String           @unique
+  mergedRecommendation  String           @db.Text
+  rationaleSummary      String           @db.Text
+  confidence            Float?
+  consensusState        String           // duplicate of DeliberationRun.consensusState for read-only snapshot at synthesis time
+  evidenceQuality       String?          // "source-backed" | "mixed" | "needs-more-evidence"
+  unresolvedRisks       String[]         @default([])
+  diversityLabel        String?          // UI-friendly summary, e.g. "Multi-provider review"
+  branchRoster          Json?            // [{ branchNodeId, role, status }] — prevents false-success blindness (spec § 13)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  deliberationRun       DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+
+  @@index([consensusState])
+}
+
+model DeliberationIssueSet {
+  id                  String           @id @default(cuid())
+  deliberationRunId   String
+  assertions          Json             @default("[]") // compact list of supported assertions
+  objections          Json             @default("[]") // list of objections raised by branches
+  rebuttals           Json             @default("[]") // rebuttals to objections
+  adjudicationNotes   String?          @db.Text
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  deliberationRun     DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+
+  @@index([deliberationRunId])
+}
+
+model ClaimRecord {
+  id                   String              @id @default(cuid())
+  deliberationRunId    String
+  branchNodeId         String?             // FK to TaskNode.id — the branch that made the claim (nullable for synthesis-level facts)
+  claimText            String              @db.Text
+  claimType            String              // "assertion" | "objection" | "rebuttal" | "synthesis-fact" | "synthesis-inference"
+  status               String              @default("unresolved") // "supported" | "contested" | "unresolved" | "rejected"
+  evidenceGrade        String              // "A" | "B" | "C" | "D"
+  confidence           Float?
+  supportingSourceIds  String[]            @default([]) // EvidenceSource.id references supporting the claim
+  opposingSourceIds    String[]            @default([]) // EvidenceSource.id references opposing the claim
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  deliberationRun      DeliberationRun     @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  branchNode           TaskNode?           @relation("ClaimRecordBranchNode", fields: [branchNodeId], references: [id])
+
+  @@index([deliberationRunId, claimType])
+  @@index([branchNodeId])
+  @@index([status])
+  @@index([evidenceGrade])
+}
+
+model EvidenceBundle {
+  id                   String            @id @default(cuid())
+  deliberationRunId    String
+  taskNodeId           String?           // nullable — bundle may be run-level or branch-level
+  artifactRef          String?           // identifier of the artifact under evaluation (free-form)
+  retrievalContext     Json?             // query string, retrieval tool, filters
+  summary              String?           @db.Text
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  deliberationRun      DeliberationRun   @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  taskNode             TaskNode?         @relation("EvidenceBundleTaskNode", fields: [taskNodeId], references: [id])
+  sources              EvidenceSource[]
+
+  @@index([deliberationRunId])
+  @@index([taskNodeId])
+}
+
+model EvidenceSource {
+  id                  String           @id @default(cuid())
+  evidenceBundleId    String
+  sourceType          String           // "code" | "spec" | "doc" | "paper" | "web" | "db-query" | "tool-output" | "runtime-state"
+  locator             Json             // structured locator (file+line, URL+ts, DOI+page, query+capturedAt, etc.)
+  retrievedBy         String?          // tool or provider used to retrieve
+  excerpt             String?          @db.Text // normalized excerpt/fact text
+  retrievedAt         DateTime?        // retrieval timestamp (freshness tracking)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  evidenceBundle      EvidenceBundle   @relation(fields: [evidenceBundleId], references: [id], onDelete: Cascade)
+
+  @@index([evidenceBundleId])
+  @@index([sourceType])
 }
 
