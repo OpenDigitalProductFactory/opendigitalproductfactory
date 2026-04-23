@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@types/react': ^19
+  '@xmldom/xmldom': 0.8.13
   dompurify: 3.4.0
   node-forge: 1.4.0
 
@@ -3476,16 +3477,6 @@ packages:
 
   '@vitest/utils@4.1.5':
     resolution: {integrity: sha512-76wdkrmfXfqGjueGgnb45ITPyUi1ycZ4IHgC2bhPDUfWHklY/q3MdLOAB+TF1e6xfl8NxNY0ZYaPCFNWSsw3Ug==}
-
-  '@xmldom/xmldom@0.7.13':
-    resolution: {integrity: sha512-lm2GW5PkosIzccsaZIz7tp8cPADSIlIHWDFTR1N0SzfinhhYgeIQjFMz4rYzanCScr3DqQLeomUDArp6MWKm+g==}
-    engines: {node: '>=10.0.0'}
-    deprecated: this version has critical issues, please update to the latest version
-
-  '@xmldom/xmldom@0.8.11':
-    resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
-    engines: {node: '>=10.0.0'}
-    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
@@ -9744,13 +9735,13 @@ snapshots:
 
   '@expo/plist@0.2.2':
     dependencies:
-      '@xmldom/xmldom': 0.7.13
+      '@xmldom/xmldom': 0.8.13
       base64-js: 1.5.1
       xmlbuilder: 14.0.0
 
   '@expo/plist@0.3.5':
     dependencies:
-      '@xmldom/xmldom': 0.8.11
+      '@xmldom/xmldom': 0.8.13
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
 
@@ -12446,10 +12437,6 @@ snapshots:
       '@vitest/pretty-format': 4.1.5
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
-
-  '@xmldom/xmldom@0.7.13': {}
-
-  '@xmldom/xmldom@0.8.11': {}
 
   '@xmldom/xmldom@0.8.13': {}
 
@@ -15500,7 +15487,7 @@ snapshots:
 
   mammoth@1.12.0:
     dependencies:
-      '@xmldom/xmldom': 0.8.11
+      '@xmldom/xmldom': 0.8.13
       argparse: 1.0.10
       base64-js: 1.5.1
       bluebird: 3.4.7
@@ -16505,7 +16492,7 @@ snapshots:
 
   plist@3.1.0:
     dependencies:
-      '@xmldom/xmldom': 0.8.11
+      '@xmldom/xmldom': 0.8.13
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
 
