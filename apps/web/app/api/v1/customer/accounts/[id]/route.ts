@@ -24,6 +24,27 @@ export async function GET(
           include: { contact: true },
           orderBy: [{ isPrimary: "desc" }, { startedAt: "desc" }],
         },
+        customerSites: {
+          include: {
+            primaryAddress: {
+              include: {
+                city: {
+                  include: {
+                    region: {
+                      include: {
+                        country: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            nodes: {
+              orderBy: [{ createdAt: "asc" }],
+            },
+          },
+          orderBy: [{ name: "asc" }],
+        },
         parentAccount: { select: { id: true, accountId: true, name: true } },
         childAccounts: { select: { id: true, accountId: true, name: true, status: true } },
       },

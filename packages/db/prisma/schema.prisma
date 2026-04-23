@@ -9,49 +9,49 @@ datasource db {
 }
 
 model User {
-  id                           String                   @id @default(cuid())
-  email                        String                   @unique
+  id                           String                        @id @default(cuid())
+  email                        String                        @unique
   passwordHash                 String
-  isActive                     Boolean                  @default(true)
-  isSuperuser                  Boolean                  @default(false)
-  createdAt                    DateTime                 @default(now())
-  approvedProposals            AgentActionProposal[]    @relation("ProposalDecisions")
+  isActive                     Boolean                       @default(true)
+  isSuperuser                  Boolean                       @default(false)
+  createdAt                    DateTime                      @default(now())
+  approvedProposals            AgentActionProposal[]         @relation("ProposalDecisions")
   agentThreads                 AgentThread[]
   apiTokens                    ApiToken[]
-  backlogSubmissions           BacklogItem[]            @relation("BacklogSubmissions")
-  customEvalDimsApproved       CustomEvalDimension[]    @relation("CustomEvalDimensionApprover")
-  customEvalDimsCreated        CustomEvalDimension[]    @relation("CustomEvalDimensionCreator")
-  grantedDelegations           DelegationGrant[]        @relation("DelegationGrantGrantor")
+  backlogSubmissions           BacklogItem[]                 @relation("BacklogSubmissions")
+  customEvalDimsApproved       CustomEvalDimension[]         @relation("CustomEvalDimensionApprover")
+  customEvalDimsCreated        CustomEvalDimension[]         @relation("CustomEvalDimensionCreator")
+  grantedDelegations           DelegationGrant[]             @relation("DelegationGrantGrantor")
   employeeProfile              EmployeeProfile?
   authoredEmploymentEvents     EmploymentEvent[]
-  epicSubmissions              Epic[]                   @relation("EpicSubmissions")
+  epicSubmissions              Epic[]                        @relation("EpicSubmissions")
   externalEvidenceRecords      ExternalEvidenceRecord[]
   featureBuilds                FeatureBuild[]
-  improvementReviews           ImprovementProposal[]    @relation("ImprovementReviews")
-  improvementSubmissions       ImprovementProposal[]    @relation("ImprovementSubmissions")
+  improvementReviews           ImprovementProposal[]         @relation("ImprovementReviews")
+  improvementSubmissions       ImprovementProposal[]         @relation("ImprovementSubmissions")
   notifications                Notification[]
-  requestedPasswordResetTokens PasswordResetToken[]     @relation("PasswordResetRequestedBy")
-  passwordResetTokens          PasswordResetToken[]     @relation("PasswordResetForUser")
+  requestedPasswordResetTokens PasswordResetToken[]          @relation("PasswordResetRequestedBy")
+  passwordResetTokens          PasswordResetToken[]          @relation("PasswordResetForUser")
   issueReports                 PlatformIssueReport[]
-  policyRulesCreated           PolicyRule[]             @relation("PolicyRuleCreator")
+  policyRulesCreated           PolicyRule[]                  @relation("PolicyRuleCreator")
   pushDevices                  PushDeviceRegistration[]
-  taskRequirementsApproved     TaskRequirement[]        @relation("TaskRequirementApprover")
-  taskRequirementsCreated      TaskRequirement[]        @relation("TaskRequirementCreator")
+  taskRequirementsApproved     TaskRequirement[]             @relation("TaskRequirementApprover")
+  taskRequirementsCreated      TaskRequirement[]             @relation("TaskRequirementCreator")
   teamMemberships              TeamMembership[]
   groups                       UserGroup[]
-  userSkills                   UserSkill[]              @relation("UserSkillCreator")
-  invoicesCreated              Invoice[]                @relation("InvoiceCreations")
-  paymentsCreated              Payment[]                @relation("PaymentCreations")
-  engagementAssignments        Engagement[]             @relation("EngagementAssignments")
-  opportunityAssignments       Opportunity[]            @relation("OpportunityAssignments")
-  activitiesCreated            Activity[]               @relation("ActivityCreations")
-  quotesCreated                Quote[]                  @relation("QuoteCreations")
-  billsCreated                 Bill[]                   @relation("BillCreations")
-  posCreated                   PurchaseOrder[]          @relation("PurchaseOrderCreations")
-  approvalRules                ApprovalRule[]           @relation("ApprovalRuleApprover")
-  billApprovals                BillApproval[]           @relation("BillApprovalResponses")
-  recurringSchedulesCreated    RecurringSchedule[]      @relation("RecurringScheduleCreations")
-  expenseApprovals             ExpenseClaim[]           @relation("ExpenseApprovals")
+  userSkills                   UserSkill[]                   @relation("UserSkillCreator")
+  invoicesCreated              Invoice[]                     @relation("InvoiceCreations")
+  paymentsCreated              Payment[]                     @relation("PaymentCreations")
+  engagementAssignments        Engagement[]                  @relation("EngagementAssignments")
+  opportunityAssignments       Opportunity[]                 @relation("OpportunityAssignments")
+  activitiesCreated            Activity[]                    @relation("ActivityCreations")
+  quotesCreated                Quote[]                       @relation("QuoteCreations")
+  billsCreated                 Bill[]                        @relation("BillCreations")
+  posCreated                   PurchaseOrder[]               @relation("PurchaseOrderCreations")
+  approvalRules                ApprovalRule[]                @relation("ApprovalRuleApprover")
+  billApprovals                BillApproval[]                @relation("BillApprovalResponses")
+  recurringSchedulesCreated    RecurringSchedule[]           @relation("RecurringScheduleCreations")
+  expenseApprovals             ExpenseClaim[]                @relation("ExpenseApprovals")
   platformSetupProgress        PlatformSetupProgress?        @relation("UserSetupProgress")
   taskRuns                     TaskRun[]
   businessModelRoleAssignments BusinessModelRoleAssignment[]
@@ -398,6 +398,7 @@ model Address {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   city              City              @relation(fields: [cityId], references: [id])
+  customerSites     CustomerSite[]
   employeeAddresses EmployeeAddress[]
   workLocations     WorkLocation[]
 
@@ -454,13 +455,13 @@ model TerminationRecord {
 }
 
 model Portfolio {
-  id                     String                  @id @default(cuid())
-  slug                   String                  @unique
+  id                     String                      @id @default(cuid())
+  slug                   String                      @unique
   name                   String
   description            String?
   rootNodeId             String?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
   budgetKUsd             Int?
   agents                 Agent[]
   products               DigitalProduct[]
@@ -535,10 +536,10 @@ model BusinessModelRole {
 }
 
 model ProductBusinessModel {
-  id              String        @id @default(cuid())
+  id              String         @id @default(cuid())
   productId       String
   businessModelId String
-  assignedAt      DateTime      @default(now())
+  assignedAt      DateTime       @default(now())
   product         DigitalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
   businessModel   BusinessModel  @relation(fields: [businessModelId], references: [id], onDelete: Cascade)
 
@@ -584,20 +585,20 @@ model ProductVersion {
 }
 
 model ChangePromotion {
-  id               String           @id @default(cuid())
-  promotionId      String           @unique
-  productVersionId String
-  status           String           @default("pending")
-  requestedBy      String
-  approvedBy       String?
-  approvedAt       DateTime?
-  rejectedBy       String?
-  rejectedAt       DateTime?
-  rationale        String?
-  deployedAt       DateTime?
-  deploymentLog    String?
-  rolledBackAt     DateTime?
-  rolledBackBy     String?
+  id                      String           @id @default(cuid())
+  promotionId             String           @unique
+  productVersionId        String
+  status                  String           @default("pending")
+  requestedBy             String
+  approvedBy              String?
+  approvedAt              DateTime?
+  rejectedBy              String?
+  rejectedAt              DateTime?
+  rationale               String?
+  deployedAt              DateTime?
+  deploymentLog           String?
+  rolledBackAt            DateTime?
+  rolledBackBy            String?
   rollbackReason          String?
   windowOverrideReason    String?
   destructiveAcknowledged Boolean          @default(false)
@@ -1004,18 +1005,18 @@ model CredentialEntry {
 // Distinct from CredentialEntry, which is OAuth-shaped for LLM providers.
 // fieldsEnc holds a JSON blob encrypted via credential-crypto.ts encryptJson.
 model IntegrationCredential {
-  id             String    @id @default(cuid())
-  integrationId  String    @unique
-  provider       String
-  status         String    @default("unconfigured")
-  fieldsEnc      String    @db.Text
-  tokenCacheEnc  String?   @db.Text
-  lastTestedAt   DateTime?
-  lastErrorAt    DateTime?
-  lastErrorMsg   String?
-  certExpiresAt  DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  integrationId String    @unique
+  provider      String
+  status        String    @default("unconfigured")
+  fieldsEnc     String    @db.Text
+  tokenCacheEnc String?   @db.Text
+  lastTestedAt  DateTime?
+  lastErrorAt   DateTime?
+  lastErrorMsg  String?
+  certExpiresAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([provider, status])
 }
@@ -1025,18 +1026,18 @@ model IntegrationCredential {
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
 // argsHash is sha256 of canonicalized args — raw args are never stored.
 model IntegrationToolCallLog {
-  id            String   @id @default(cuid())
-  calledAt      DateTime @default(now())
-  integration   String
-  coworkerId    String
-  userId        String?
-  toolName      String
-  argsHash      String
-  responseKind  String
-  resultCount   Int?
-  durationMs    Int
-  errorCode     String?
-  errorMessage  String?
+  id           String   @id @default(cuid())
+  calledAt     DateTime @default(now())
+  integration  String
+  coworkerId   String
+  userId       String?
+  toolName     String
+  argsHash     String
+  responseKind String
+  resultCount  Int?
+  durationMs   Int
+  errorCode    String?
+  errorMessage String?
 
   @@index([calledAt])
   @@index([integration, calledAt])
@@ -1061,7 +1062,7 @@ model ModelProvider {
   updatedAt                DateTime       @updatedAt
   authHeader               String?
   computeWatts             Float?
-  cliEngine                String?        // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
+  cliEngine                String? // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
   costModel                String         @default("token")
   electricityRateKwh       Float?
   enabledFamilies          Json           @default("[]")
@@ -1335,43 +1336,43 @@ model CodeGraphFileHash {
 }
 
 model Agent {
-  id                  String                  @id @default(cuid())
-  agentId             String                  @unique
-  slugId              String?                 @unique // backward-compat alias ("coo", "build-specialist")
-  name                String
-  tier                Int
-  type                String
-  description         String?
-  status              String                  @default("active")
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  portfolioId         String?
-  archived            Boolean                 @default(false)
+  id          String   @id @default(cuid())
+  agentId     String   @unique
+  slugId      String?  @unique // backward-compat alias ("coo", "build-specialist")
+  name        String
+  tier        Int
+  type        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  portfolioId String?
+  archived    Boolean  @default(false)
 
   // EP-AI-WORKFORCE-001: Unified agent lifecycle fields
-  valueStream         String?                 // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
-  it4itSections       String[]                @default([])
-  sensitivity         String                  @default("internal") // "public"|"internal"|"confidential"|"restricted"
-  humanSupervisorId   String?                 // "HR-000", "HR-100", etc.
-  hitlTierDefault     Int                     @default(3) // 0=human-only, 1=approve, 2=review, 3=autonomous
-  escalatesTo         String?                 // HR role or agent ID
-  delegatesTo         String[]                @default([])
-  lifecycleStage      String                  @default("production") // "plan"|"design"|"build"|"production"|"retirement"
+  valueStream       String? // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
+  it4itSections     String[] @default([])
+  sensitivity       String   @default("internal") // "public"|"internal"|"confidential"|"restricted"
+  humanSupervisorId String? // "HR-000", "HR-100", etc.
+  hitlTierDefault   Int      @default(3) // 0=human-only, 1=approve, 2=review, 3=autonomous
+  escalatesTo       String? // HR role or agent ID
+  delegatesTo       String[] @default([])
+  lifecycleStage    String   @default("production") // "plan"|"design"|"build"|"production"|"retirement"
 
-  portfolio           Portfolio?              @relation(fields: [portfolioId], references: [id])
-  governanceProfile   AgentGovernanceProfile?
-  ownerships          AgentOwnership[]
-  delegationGrants    DelegationGrant[]
-  executionConfig     AgentExecutionConfig?
-  skills              AgentSkillAssignment[]
-  toolGrants          AgentToolGrant[]
-  performanceProfiles AgentPerformance[]
-  degradationMappings FeatureDegradationMapping[]
-  promptContext       AgentPromptContext?
-  knowledgeArticles      KnowledgeArticle[]            @relation("KnowledgeArticleAgentAuthor")
-  valueStreamTeamRoles   ValueStreamTeamRole[]
-  workItemAssignments    WorkItem[]                    @relation("WorkItemAgent")
-  workSchedule           WorkSchedule?                 @relation("WorkScheduleAgent")
+  portfolio            Portfolio?                  @relation(fields: [portfolioId], references: [id])
+  governanceProfile    AgentGovernanceProfile?
+  ownerships           AgentOwnership[]
+  delegationGrants     DelegationGrant[]
+  executionConfig      AgentExecutionConfig?
+  skills               AgentSkillAssignment[]
+  toolGrants           AgentToolGrant[]
+  performanceProfiles  AgentPerformance[]
+  degradationMappings  FeatureDegradationMapping[]
+  promptContext        AgentPromptContext?
+  knowledgeArticles    KnowledgeArticle[]          @relation("KnowledgeArticleAgentAuthor")
+  valueStreamTeamRoles ValueStreamTeamRole[]
+  workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
+  workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
 }
 
 model AgentOwnership {
@@ -1461,31 +1462,31 @@ model DelegationGrant {
 // EP-AI-WORKFORCE-001: Unified Agent Lifecycle Models
 
 model AgentExecutionConfig {
-  id               String @id @default(cuid())
-  agentId          String @unique
-  defaultModelId   String? // e.g. "claude-sonnet-4-6"
-  temperature      Float  @default(0.3)
-  maxTokens        Int    @default(4096)
-  executionType    String @default("in_process") // "in_process" | "sandbox" | "daemon"
-  timeoutSeconds   Int    @default(120)
-  concurrencyLimit Int    @default(4)
-  dailyTokenLimit  Int    @default(200000)
-  perTaskTokenLimit Int   @default(20000)
-  memoryType       String @default("session") // "none" | "session" | "persistent"
-  memoryBackend    String? // null | "redis" | "postgres"
-  agent            Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  id                String  @id @default(cuid())
+  agentId           String  @unique
+  defaultModelId    String? // e.g. "claude-sonnet-4-6"
+  temperature       Float   @default(0.3)
+  maxTokens         Int     @default(4096)
+  executionType     String  @default("in_process") // "in_process" | "sandbox" | "daemon"
+  timeoutSeconds    Int     @default(120)
+  concurrencyLimit  Int     @default(4)
+  dailyTokenLimit   Int     @default(200000)
+  perTaskTokenLimit Int     @default(20000)
+  memoryType        String  @default("session") // "none" | "session" | "persistent"
+  memoryBackend     String? // null | "redis" | "postgres"
+  agent             Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
 }
 
 model AgentSkillAssignment {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   agentId     String
   label       String
   description String
   capability  String? // permission gate, e.g. "view_portfolio"
   prompt      String
-  taskType    String @default("conversation") // "conversation" | "code_generation" | "analysis"
-  sortOrder   Int    @default(0)
-  agent       Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  taskType    String  @default("conversation") // "conversation" | "code_generation" | "analysis"
+  sortOrder   Int     @default(0)
+  agent       Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, label])
   @@index([agentId])
@@ -1537,13 +1538,13 @@ model FeatureDegradationMapping {
 }
 
 model AgentPromptContext {
-  id               String   @id @default(cuid())
-  agentId          String   @unique
-  perspective      String? // Scott Page: how agent frames problems
-  heuristics       String? // How agent searches for solutions
+  id                String   @id @default(cuid())
+  agentId           String   @unique
+  perspective       String? // Scott Page: how agent frames problems
+  heuristics        String? // How agent searches for solutions
   interpretiveModel String? // What agent optimizes for
-  domainTools      String[] @default([]) // Tool names available to this domain
-  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  domainTools       String[] @default([]) // Tool names available to this domain
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 }
 
 model AuthorizationDecisionLog {
@@ -1572,27 +1573,29 @@ model AuthorizationDecisionLog {
 }
 
 model CustomerAccount {
-  id                 String               @id @default(cuid())
-  accountId          String               @unique
+  id                 String                      @id @default(cuid())
+  accountId          String                      @unique
   name               String
-  status             String               @default("prospect")
+  status             String                      @default("prospect")
   // prospect | qualified | onboarding | active | at_risk | suspended | closed
   website            String?
   industry           String?
   employeeCount      Int?
   annualRevenue      Decimal?
-  currency           String               @default("GBP")
+  currency           String                      @default("GBP")
   notes              String?
   sourceSystem       String?
   sourceId           String?
   parentAccountId    String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
   invites            AccountInvite[]
   contacts           CustomerContact[]
   contactRoles       ContactAccountRole[]
-  parentAccount      CustomerAccount?     @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
-  childAccounts      CustomerAccount[]    @relation("AccountHierarchy")
+  customerSites      CustomerSite[]
+  configurationItems CustomerConfigurationItem[]
+  parentAccount      CustomerAccount?            @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  childAccounts      CustomerAccount[]           @relation("AccountHierarchy")
   invoices           Invoice[]
   engagements        Engagement[]
   opportunities      Opportunity[]
@@ -1603,6 +1606,106 @@ model CustomerAccount {
 
   @@index([status])
   @@index([parentAccountId])
+}
+
+model CustomerSite {
+  id                 String                      @id @default(cuid())
+  siteId             String                      @unique
+  accountId          String
+  name               String
+  siteType           String                      @default("office")
+  status             String                      @default("active")
+  primaryAddressId   String?
+  timezone           String?
+  accessInstructions String?
+  hoursNotes         String?
+  serviceNotes       String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  account            CustomerAccount             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  primaryAddress     Address?                    @relation(fields: [primaryAddressId], references: [id])
+  configurationItems CustomerConfigurationItem[]
+  nodes              CustomerSiteNode[]
+
+  @@index([accountId])
+  @@index([primaryAddressId])
+  @@index([status])
+  @@index([siteType])
+}
+
+model CustomerConfigurationItem {
+  id                    String          @id @default(cuid())
+  customerCiId          String          @unique
+  accountId             String
+  siteId                String?
+  name                  String
+  ciType                String
+  status                String          @default("active")
+  technologySourceType  String          @default("commercial")
+  supportModel          String?
+  manufacturer          String?
+  vendorName            String?
+  productName           String?
+  edition               String?
+  productModel          String?
+  serialNumber          String?
+  assetTag              String?
+  observedVersion       String?
+  normalizedVersion     String?
+  installDate           DateTime?
+  purchaseDate          DateTime?
+  firstSeenAt           DateTime?
+  warrantyStartAt       DateTime?
+  warrantyEndAt         DateTime?
+  endOfSaleAt           DateTime?
+  endOfSupportAt        DateTime?
+  endOfLifeAt           DateTime?
+  renewalDate           DateTime?
+  lifecycleStatus       String          @default("unknown")
+  supportStatus         String          @default("unknown")
+  recommendedAction     String?
+  lifecycleConfidence   Float?
+  lastLifecycleReviewAt DateTime?
+  nextLifecycleReviewAt DateTime?
+  lifecycleEvidence     Json?
+  licenseQuantity       Decimal?        @db.Decimal(12, 2)
+  billingCadence        String?
+  customerChargeModel   String?
+  unitCost              Decimal?        @db.Decimal(12, 2)
+  customerUnitPrice     Decimal?        @db.Decimal(12, 2)
+  currency              String          @default("GBP")
+  properties            Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  account               CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  site                  CustomerSite?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([siteId])
+  @@index([ciType])
+  @@index([status])
+  @@index([technologySourceType])
+}
+
+model CustomerSiteNode {
+  id           String             @id @default(cuid())
+  nodeId       String             @unique
+  siteId       String
+  parentNodeId String?
+  name         String
+  nodeType     String             @default("area")
+  status       String             @default("active")
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  site         CustomerSite       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parentNode   CustomerSiteNode?  @relation("CustomerSiteNodeHierarchy", fields: [parentNodeId], references: [id], onDelete: Cascade)
+  childNodes   CustomerSiteNode[] @relation("CustomerSiteNodeHierarchy")
+
+  @@index([siteId])
+  @@index([parentNodeId])
+  @@index([status])
+  @@index([nodeType])
 }
 
 model ContactAccountRole {
@@ -1859,9 +1962,9 @@ model Organization {
 }
 
 model BusinessContext {
-  id               String       @id @default(cuid())
-  organizationId   String       @unique
-  organization     Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   // What the company does (richer than tagline)
   description      String?
@@ -1872,19 +1975,19 @@ model BusinessContext {
   customerSegments String[]
 
   // Business model
-  revenueModel     String?
-  companyStage     String?
-  companySize      String?
-  geographicScope  String?
+  revenueModel    String?
+  companyStage    String?
+  companySize     String?
+  geographicScope String?
 
   // Derived from archetype (auto-populated)
-  industry         String?
-  ctaType          String?
+  industry    String?
+  ctaType     String?
   /// @deprecated Read StorefrontConfig.archetypeId. Column kept until next migration cycle.
-  archetypeId      String?
+  archetypeId String?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PlatformSetupProgress {
@@ -1950,23 +2053,23 @@ model DiscoveredItem {
 }
 
 model DiscoveredSoftwareEvidence {
-  id                       String           @id @default(cuid())
-  evidenceKey              String           @unique
-  inventoryEntityId        String
-  evidenceSource           String
-  packageManager           String?
-  rawVendor                String?
-  rawProductName           String?
-  rawPackageName           String?
-  rawVersion               String?
-  installLocation          String?
-  rawMetadata              Json?
-  normalizationStatus      String           @default("pending")
-  normalizationConfidence  Float?
-  softwareIdentityId       String?
-  firstSeenAt              DateTime         @default(now())
-  lastSeenAt               DateTime         @default(now())
-  inventoryEntity          InventoryEntity  @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
+  id                      String          @id @default(cuid())
+  evidenceKey             String          @unique
+  inventoryEntityId       String
+  evidenceSource          String
+  packageManager          String?
+  rawVendor               String?
+  rawProductName          String?
+  rawPackageName          String?
+  rawVersion              String?
+  installLocation         String?
+  rawMetadata             Json?
+  normalizationStatus     String          @default("pending")
+  normalizationConfidence Float?
+  softwareIdentityId      String?
+  firstSeenAt             DateTime        @default(now())
+  lastSeenAt              DateTime        @default(now())
+  inventoryEntity         InventoryEntity @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
 
   @@index([inventoryEntityId])
   @@index([normalizationStatus])
@@ -1992,45 +2095,45 @@ model DiscoveredRelationship {
 }
 
 model InventoryEntity {
-  id                    String                  @id @default(cuid())
-  entityKey             String                  @unique
-  entityType            String
-  name                  String
-  technicalClass        String?
-  iconKey               String?
-  manufacturer          String?
-  productModel          String?
-  observedVersion       String?
-  normalizedVersion     String?
-  supportStatus         String                  @default("unknown")
-  status                String                  @default("active")
-  attributionStatus     String                  @default("needs_review")
-  confidence            Float?
-  providerView          String                  @default("foundational")
-  properties            Json                    @default("{}")
-  firstSeenAt           DateTime                @default(now())
-  lastSeenAt            DateTime                @default(now())
-  lastConfirmedRunId    String?
-  portfolioId           String?
-  taxonomyNodeId        String?
-  digitalProductId      String?
-  attributionMethod     String?
-  attributionConfidence Float?
-  attributionEvidence   Json?
-  candidateTaxonomy     Json?
-  discoveredItems       DiscoveredItem[]
-  digitalProduct        DigitalProduct?         @relation(fields: [digitalProductId], references: [id])
-  lastConfirmedRun      DiscoveryRun?           @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
-  portfolio             Portfolio?              @relation(fields: [portfolioId], references: [id])
-  taxonomyNode          TaxonomyNode?           @relation(fields: [taxonomyNodeId], references: [id])
-  fromRelationships     InventoryRelationship[] @relation("InventoryRelationshipFromEntity")
-  toRelationships       InventoryRelationship[] @relation("InventoryRelationshipToEntity")
-  qualityIssues         PortfolioQualityIssue[]
-  changeItems                ChangeItem[]
-  softwareEvidence           DiscoveredSoftwareEvidence[]
-  discoveryConnectionGateways DiscoveryConnection[]  @relation("DiscoveryConnectionGateway")
-  discoveredViaConnectionId  String?
-  discoveredViaConnection    DiscoveryConnection?   @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
+  id                          String                       @id @default(cuid())
+  entityKey                   String                       @unique
+  entityType                  String
+  name                        String
+  technicalClass              String?
+  iconKey                     String?
+  manufacturer                String?
+  productModel                String?
+  observedVersion             String?
+  normalizedVersion           String?
+  supportStatus               String                       @default("unknown")
+  status                      String                       @default("active")
+  attributionStatus           String                       @default("needs_review")
+  confidence                  Float?
+  providerView                String                       @default("foundational")
+  properties                  Json                         @default("{}")
+  firstSeenAt                 DateTime                     @default(now())
+  lastSeenAt                  DateTime                     @default(now())
+  lastConfirmedRunId          String?
+  portfolioId                 String?
+  taxonomyNodeId              String?
+  digitalProductId            String?
+  attributionMethod           String?
+  attributionConfidence       Float?
+  attributionEvidence         Json?
+  candidateTaxonomy           Json?
+  discoveredItems             DiscoveredItem[]
+  digitalProduct              DigitalProduct?              @relation(fields: [digitalProductId], references: [id])
+  lastConfirmedRun            DiscoveryRun?                @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
+  portfolio                   Portfolio?                   @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                TaxonomyNode?                @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships           InventoryRelationship[]      @relation("InventoryRelationshipFromEntity")
+  toRelationships             InventoryRelationship[]      @relation("InventoryRelationshipToEntity")
+  qualityIssues               PortfolioQualityIssue[]
+  changeItems                 ChangeItem[]
+  softwareEvidence            DiscoveredSoftwareEvidence[]
+  discoveryConnectionGateways DiscoveryConnection[]        @relation("DiscoveryConnectionGateway")
+  discoveredViaConnectionId   String?
+  discoveredViaConnection     DiscoveryConnection?         @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
 
   @@index([entityType])
   @@index([attributionStatus])
@@ -2127,20 +2230,20 @@ model AgentMessage {
 }
 
 model UserFact {
-  id              String    @id @default(cuid())
+  id              String     @id @default(cuid())
   userId          String
-  category        String    // preference | decision | constraint | domain_context
+  category        String // preference | decision | constraint | domain_context
   key             String
   value           String
-  confidence      Float     @default(1.0)
+  confidence      Float      @default(1.0)
   sourceRoute     String
   sourceMessageId String?
   supersededAt    DateTime?
   supersededById  String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  supersededBy    UserFact? @relation("FactSupersession", fields: [supersededById], references: [id])
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy    UserFact?  @relation("FactSupersession", fields: [supersededById], references: [id])
   supersedes      UserFact[] @relation("FactSupersession")
 
   @@index([userId, category, key])
@@ -2148,57 +2251,57 @@ model UserFact {
 }
 
 model AgentActionProposal {
-  id             String       @id @default(cuid())
-  proposalId     String       @unique
-  threadId       String
-  messageId      String       @unique
-  agentId        String
-  actionType     String
-  parameters     Json
-  status         String       @default("proposed")
-  proposedAt     DateTime     @default(now())
-  decidedAt      DateTime?
-  decidedById    String?
-  executedAt     DateTime?
-  resultEntityId String?
-  resultError    String?
-  gitCommitHash  String?
+  id               String          @id @default(cuid())
+  proposalId       String          @unique
+  threadId         String
+  messageId        String          @unique
+  agentId          String
+  actionType       String
+  parameters       Json
+  status           String          @default("proposed")
+  proposedAt       DateTime        @default(now())
+  decidedAt        DateTime?
+  decidedById      String?
+  executedAt       DateTime?
+  resultEntityId   String?
+  resultError      String?
+  gitCommitHash    String?
   toolEvaluationId String?
-  decidedBy      User?            @relation("ProposalDecisions", fields: [decidedById], references: [id])
-  message        AgentMessage     @relation(fields: [messageId], references: [id])
-  thread         AgentThread      @relation(fields: [threadId], references: [id])
-  toolEvaluation ToolEvaluation?  @relation(fields: [toolEvaluationId], references: [id])
+  decidedBy        User?           @relation("ProposalDecisions", fields: [decidedById], references: [id])
+  message          AgentMessage    @relation(fields: [messageId], references: [id])
+  thread           AgentThread     @relation(fields: [threadId], references: [id])
+  toolEvaluation   ToolEvaluation? @relation(fields: [toolEvaluationId], references: [id])
 
   @@index([threadId])
   @@index([status])
 }
 
 model ToolEvaluation {
-  id              String    @id @default(cuid())
-  toolName        String
-  toolType        String
-  version         String
-  sourceUrl       String
-  proposedBy      String
-  proposedAt      DateTime  @default(now())
+  id         String   @id @default(cuid())
+  toolName   String
+  toolType   String
+  version    String
+  sourceUrl  String
+  proposedBy String
+  proposedAt DateTime @default(now())
 
-  status          String    @default("proposed")
-  verdict         Json?
-  conditions      Json      @default("[]")
+  status     String @default("proposed")
+  verdict    Json?
+  conditions Json   @default("[]")
 
-  findings        Json      @default("[]")
-  reviewers       Json      @default("[]")
-  approvedBy      String?
-  approvedAt      DateTime?
+  findings   Json      @default("[]")
+  reviewers  Json      @default("[]")
+  approvedBy String?
+  approvedAt DateTime?
 
   reEvaluateAfter DateTime?
   supersedes      String?
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  proposals         AgentActionProposal[]
-  skillDefinitions  SkillDefinition[]
+  proposals        AgentActionProposal[]
+  skillDefinitions SkillDefinition[]
 
   @@index([toolName, status])
   @@index([status])
@@ -2206,15 +2309,15 @@ model ToolEvaluation {
 }
 
 model AdminActivity {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  toolName    String
-  parameters  Json
-  result      String   // "success" | "blocked" | "confirmed" | "denied"
-  summary     String?
-  tier        Int      // 1, 2, or 3
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  toolName   String
+  parameters Json
+  result     String // "success" | "blocked" | "confirmed" | "denied"
+  summary    String?
+  tier       Int // 1, 2, or 3
+  createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([createdAt])
@@ -2222,22 +2325,22 @@ model AdminActivity {
 }
 
 model ToolExecution {
-  id              String    @id @default(cuid())
-  threadId        String
-  agentId         String
-  userId          String
-  toolName        String
-  parameters      Json
-  result          Json
-  success         Boolean
-  executionMode   String
-  routeContext    String?
-  durationMs      Int?
-  createdAt       DateTime  @default(now())
+  id            String   @id @default(cuid())
+  threadId      String
+  agentId       String
+  userId        String
+  toolName      String
+  parameters    Json
+  result        Json
+  success       Boolean
+  executionMode String
+  routeContext  String?
+  durationMs    Int?
+  createdAt     DateTime @default(now())
   // Phase 3: audit enrichment — nullable; backfill via backfill-capability-ids.ts
-  auditClass      String?
-  capabilityId    String?
-  summary         String?
+  auditClass    String?
+  capabilityId  String?
+  summary       String?
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -2377,7 +2480,7 @@ model FeatureBuild {
   phase                 String            @default("ideate")
   sandboxId             String?
   sandboxPort           Int?
-  buildBranch           String?           // git branch in sandbox: "build/<buildId>"
+  buildBranch           String? // git branch in sandbox: "build/<buildId>"
   diffSummary           String?
   diffPatch             String?
   codingProvider        String?
@@ -2401,8 +2504,8 @@ model FeatureBuild {
   claimStatus           String?
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
-  uxVerificationStatus  String?           // null | "running" | "complete" | "failed" | "skipped"
-  deliberationSummary   Json?             // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
+  uxVerificationStatus  String? // null | "running" | "complete" | "failed" | "skipped"
+  deliberationSummary   Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
   buildExecState        Json?
   taxonomyAttribution   Json?
   releaseBundleId       String?
@@ -2439,21 +2542,21 @@ model SandboxSlot {
 }
 
 model ReleaseBundle {
-  id                 String    @id @default(cuid())
-  bundleId           String    @unique
+  id                 String         @id @default(cuid())
+  bundleId           String         @unique
   title              String
-  status             String    @default("assembling")
+  status             String         @default("assembling")
   createdBy          String
-  combinedDiffPatch  String?   @db.Text
+  combinedDiffPatch  String?        @db.Text
   gateCheckResult    Json?
-  promotionId        String?   @unique
+  promotionId        String?        @unique
   rfcId              String?
   calendarEventId    String?
   deploymentWindowId String?
   scheduledAt        DateTime?
   deployedAt         DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
   builds             FeatureBuild[]
 
   @@index([status])
@@ -2473,24 +2576,24 @@ model BuildActivity {
 /// Structured context passed between build phases. Written on phase advance,
 /// read by the next phase's agent as system prompt context instead of raw chat history.
 model PhaseHandoff {
-  id               String   @id @default(cuid())
-  buildId          String
-  fromPhase        String
-  toPhase          String
-  fromAgentId      String
-  toAgentId        String
-  summary          String   /// 2-3 sentence plain language summary of what the phase accomplished
-  decisionsMade    String[] @default([])
-  openIssues       String[] @default([])
-  userPreferences  String[] @default([])
-  evidenceFields   String[] @default([]) /// Which evidence fields were populated (e.g., ["designDoc", "designReview"])
-  evidenceDigest   Json     @default("{}") /// One-line summary per evidence field
-  gateResult       Json     @default("{}") /// The gate check that allowed advancement
-  tokenBudgetUsed  Int      @default(0)
-  toolsUsed        String[] @default([])
-  iterationCount     Int      @default(0)
-  compressedSummary  String?  // EP-INF-UTIL-001: utility-tier generated summary for context budget
-  createdAt          DateTime @default(now())
+  id                String   @id @default(cuid())
+  buildId           String
+  fromPhase         String
+  toPhase           String
+  fromAgentId       String
+  toAgentId         String
+  summary           String /// 2-3 sentence plain language summary of what the phase accomplished
+  decisionsMade     String[] @default([])
+  openIssues        String[] @default([])
+  userPreferences   String[] @default([])
+  evidenceFields    String[] @default([]) /// Which evidence fields were populated (e.g., ["designDoc", "designReview"])
+  evidenceDigest    Json     @default("{}") /// One-line summary per evidence field
+  gateResult        Json     @default("{}") /// The gate check that allowed advancement
+  tokenBudgetUsed   Int      @default(0)
+  toolsUsed         String[] @default([])
+  iterationCount    Int      @default(0)
+  compressedSummary String? // EP-INF-UTIL-001: utility-tier generated summary for context budget
+  createdAt         DateTime @default(now())
 
   build FeatureBuild @relation(fields: [buildId], references: [buildId])
 
@@ -2513,26 +2616,26 @@ model PromotionBackup {
 // ─── Task Governance Runtime ──────────────────────────────────────
 
 model TaskRun {
-  id                 String     @id @default(cuid())
-  taskRunId          String     @unique
+  id                 String            @id @default(cuid())
+  taskRunId          String            @unique
   userId             String
   threadId           String?
   buildId            String?
   routeContext       String?
   title              String
-  objective          String     @db.Text
-  source             String     @default("coworker") // coworker | build | skill | proactive
-  status             String     @default("active") // active | awaiting_human | completed | failed | cancelled | archived
+  objective          String            @db.Text
+  source             String            @default("coworker") // coworker | build | skill | proactive
+  status             String            @default("active") // active | awaiting_human | completed | failed | cancelled | archived
   authorityScope     Json?
   progressPayload    Json?
   repeatedPatternKey String?
   templateId         String?
-  startedAt          DateTime   @default(now())
+  startedAt          DateTime          @default(now())
   completedAt        DateTime?
   archivedAt         DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   nodes              TaskNode[]
   deliberationRuns   DeliberationRun[]
 
@@ -2543,41 +2646,41 @@ model TaskRun {
 }
 
 model TaskNode {
-  id                  String     @id @default(cuid())
-  taskNodeId          String     @unique
-  taskRunId           String
-  parentNodeId        String?
-  nodeType            String // analyze | plan | execute | review | skeptical_review | activation_proposal | approval_gate | verify | summarize
-  title               String
-  objective           String     @db.Text
-  status              String     @default("queued") // queued | ready | running | blocked | awaiting_human | completed | failed | cancelled | superseded
-  workerRole          String // planner | researcher | executor | reviewer | skeptical_reviewer | verifier | activation_analyst | summarizer
-  dependencyMode      String? // all_of | any_of | after_parent
-  authorityEnvelope   Json?
-  evidenceContract    Json?
-  requestContract     Json?
-  routeDecision       Json?
-  inputSnapshot       Json?
-  outputSnapshot      Json?
-  costUsd             Float?
-  latencyMs           Int?
-  inputTokens         Int?
-  outputTokens        Int?
-  influenceLevel      String? // none | contextual | material
-  supersededByNodeId  String?
-  deliberationRunId   String? // nullable — non-null only when this TaskNode is a deliberation branch
-  startedAt           DateTime?
-  completedAt         DateTime?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  taskRun             TaskRun    @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
-  parentNode          TaskNode?  @relation("TaskNodeTree", fields: [parentNodeId], references: [id])
-  childNodes          TaskNode[] @relation("TaskNodeTree")
-  incomingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeTo")
-  outgoingEdges       TaskNodeEdge[] @relation("TaskNodeEdgeFrom")
-  deliberationRun     DeliberationRun? @relation("DeliberationRunBranchNodes", fields: [deliberationRunId], references: [id])
-  claimRecords        ClaimRecord[]    @relation("ClaimRecordBranchNode")
-  evidenceBundles     EvidenceBundle[] @relation("EvidenceBundleTaskNode")
+  id                 String           @id @default(cuid())
+  taskNodeId         String           @unique
+  taskRunId          String
+  parentNodeId       String?
+  nodeType           String // analyze | plan | execute | review | skeptical_review | activation_proposal | approval_gate | verify | summarize
+  title              String
+  objective          String           @db.Text
+  status             String           @default("queued") // queued | ready | running | blocked | awaiting_human | completed | failed | cancelled | superseded
+  workerRole         String // planner | researcher | executor | reviewer | skeptical_reviewer | verifier | activation_analyst | summarizer
+  dependencyMode     String? // all_of | any_of | after_parent
+  authorityEnvelope  Json?
+  evidenceContract   Json?
+  requestContract    Json?
+  routeDecision      Json?
+  inputSnapshot      Json?
+  outputSnapshot     Json?
+  costUsd            Float?
+  latencyMs          Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  influenceLevel     String? // none | contextual | material
+  supersededByNodeId String?
+  deliberationRunId  String? // nullable — non-null only when this TaskNode is a deliberation branch
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  taskRun            TaskRun          @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  parentNode         TaskNode?        @relation("TaskNodeTree", fields: [parentNodeId], references: [id])
+  childNodes         TaskNode[]       @relation("TaskNodeTree")
+  incomingEdges      TaskNodeEdge[]   @relation("TaskNodeEdgeTo")
+  outgoingEdges      TaskNodeEdge[]   @relation("TaskNodeEdgeFrom")
+  deliberationRun    DeliberationRun? @relation("DeliberationRunBranchNodes", fields: [deliberationRunId], references: [id])
+  claimRecords       ClaimRecord[]    @relation("ClaimRecordBranchNode")
+  evidenceBundles    EvidenceBundle[] @relation("EvidenceBundleTaskNode")
 
   @@index([taskRunId, status])
   @@index([parentNodeId])
@@ -2600,29 +2703,29 @@ model TaskNodeEdge {
 }
 
 model FeaturePack {
-  id                  String    @id @default(cuid())
-  packId              String    @unique
-  title               String
-  description         String?
-  portfolioContext    String?
-  version             String    @default("1.0.0")
-  manifest            Json
-  screenshot          String?
-  buildId             String?
-  status              String    @default("local")
+  id               String  @id @default(cuid())
+  packId           String  @unique
+  title            String
+  description      String?
+  portfolioContext String?
+  version          String  @default("1.0.0")
+  manifest         Json
+  screenshot       String?
+  buildId          String?
+  status           String  @default("local")
 
   // Contribution review results (populated by contribution-review pipeline)
-  mergeReadiness      String?   // "ready" | "needs-work" | "blocked"
-  applicableVerticals String[]  // archetype categories, e.g. ["pet-services", "healthcare-wellness"]
-  sourceVertical      String?   // contributing org's industry
-  reusabilityScope    String?   // "one_off" | "parameterizable" | "already_generic"
-  prUrl               String?   // GitHub PR URL
-  prNumber            Int?      // GitHub PR number
-  reviewReport        Json?     // Full structured ContributionReviewResult
+  mergeReadiness      String? // "ready" | "needs-work" | "blocked"
+  applicableVerticals String[] // archetype categories, e.g. ["pet-services", "healthcare-wellness"]
+  sourceVertical      String? // contributing org's industry
+  reusabilityScope    String? // "one_off" | "parameterizable" | "already_generic"
+  prUrl               String? // GitHub PR URL
+  prNumber            Int? // GitHub PR number
+  reviewReport        Json? // Full structured ContributionReviewResult
   reviewedAt          DateTime?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PlatformConfig {
@@ -2633,37 +2736,37 @@ model PlatformConfig {
 }
 
 model PlatformDevConfig {
-  id               String   @id @default("singleton")
-  contributionMode String   @default("selective")
+  id                String    @id @default("singleton")
+  contributionMode  String    @default("selective")
   // Values: "fork_only" | "selective" | "contribute_all"
-  gitRemoteUrl     String?  // Reserved for future git push capability
-  updatePending    Boolean  @default(false)
-  pendingVersion   String?
-  configuredAt     DateTime @default(now())
-  configuredById   String?
-  configuredBy     User?    @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
+  gitRemoteUrl      String? // Reserved for future git push capability
+  updatePending     Boolean   @default(false)
+  pendingVersion    String?
+  configuredAt      DateTime  @default(now())
+  configuredById    String?
+  configuredBy      User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
   dcoAcceptedAt     DateTime?
   dcoAcceptedById   String?
-  dcoAcceptedBy     User?    @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
+  dcoAcceptedBy     User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
   upstreamRemoteUrl String?
   // Client identity — generated once at install, never changes.
   // Used as the git author for all agent commits so contributions are
   // indistinguishable by name but unique and traceable by email hash.
-  clientId         String?  // UUID, generated at first seed
-  gitAgentEmail    String?  // agent-<sha256(clientId)[:16]>@hive.dpf
+  clientId          String? // UUID, generated at first seed
+  gitAgentEmail     String? // agent-<sha256(clientId)[:16]>@hive.dpf
 }
 
 model EaNotation {
-  id               String               @id @default(cuid())
-  slug             String               @unique
-  name             String
-  version          String
-  dqRules          EaDqRule[]
-  elementTypes     EaElementType[]
-  relTypes         EaRelationshipType[]
-  structureRules   EaStructureRule[]
+  id                String               @id @default(cuid())
+  slug              String               @unique
+  name              String
+  version           String
+  dqRules           EaDqRule[]
+  elementTypes      EaElementType[]
+  relTypes          EaRelationshipType[]
+  structureRules    EaStructureRule[]
   traversalPatterns EaTraversalPattern[]
-  views            EaView[]
+  views             EaView[]
 }
 
 model EaReferenceModel {
@@ -3281,25 +3384,25 @@ model CalendarEvent {
 }
 
 model ScheduledAgentTask {
-  id              String    @id @default(cuid())
-  taskId          String    @unique
-  agentId         String
-  title           String
-  prompt          String
-  routeContext    String
-  schedule        String    // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
-  timezone        String    @default("UTC")
-  isActive        Boolean   @default(true)
-  ownerUserId     String
-  lastRunAt       DateTime?
-  nextRunAt       DateTime?
-  lastStatus      String?   // ok | error
-  lastError       String?
-  lastThreadId    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  taskId       String    @unique
+  agentId      String
+  title        String
+  prompt       String
+  routeContext String
+  schedule     String // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
+  timezone     String    @default("UTC")
+  isActive     Boolean   @default(true)
+  ownerUserId  String
+  lastRunAt    DateTime?
+  nextRunAt    DateTime?
+  lastStatus   String? // ok | error
+  lastError    String?
+  lastThreadId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  owner           User      @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  owner User @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
 
   @@index([agentId])
   @@index([ownerUserId])
@@ -3975,17 +4078,17 @@ model CustomEvalDimension {
 }
 
 model StorefrontArchetype {
-  id               String             @id @default(cuid())
-  archetypeId      String             @unique
-  name             String
-  category         String
-  ctaType          String
-  itemTemplates    Json
-  sectionTemplates Json
-  formSchema       Json
-  tags             String[]
-  isActive         Boolean            @default(true)
-  isBuiltIn        Boolean            @default(true)
+  id                  String             @id @default(cuid())
+  archetypeId         String             @unique
+  name                String
+  category            String
+  ctaType             String
+  itemTemplates       Json
+  sectionTemplates    Json
+  formSchema          Json
+  tags                String[]
+  isActive            Boolean            @default(true)
+  isBuiltIn           Boolean            @default(true)
   activationProfile   Json?
   customVocabulary    Json?
   marketingSkillRules Json?
@@ -4864,7 +4967,7 @@ model OrgSettings {
 
 model CourseProduct {
   id                String           @id @default(cuid())
-  courseProductId    String           @unique
+  courseProductId   String           @unique
   name              String
   description       String?
   standardPriceUsd  Decimal
@@ -4882,7 +4985,7 @@ model CourseProduct {
 model CourseInstance {
   id                String               @id @default(cuid())
   jobCode           String               @unique
-  courseProductId    String
+  courseProductId   String
   startDate         DateTime
   endDate           DateTime
   trainerName       String?
@@ -4895,7 +4998,7 @@ model CourseInstance {
   status            String               @default("scheduled")
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
-  courseProduct      CourseProduct        @relation(fields: [courseProductId], references: [id])
+  courseProduct     CourseProduct        @relation(fields: [courseProductId], references: [id])
   registrations     CourseRegistration[]
 
   @@index([courseProductId, status])
@@ -4907,7 +5010,7 @@ model CourseInstance {
 model CourseRegistration {
   id               String         @id @default(cuid())
   registrationId   String         @unique
-  courseInstanceId  String
+  courseInstanceId String
   firstName        String
   lastName         String
   email            String
@@ -4928,7 +5031,7 @@ model CourseRegistration {
   xeroRef          String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-  courseInstance    CourseInstance  @relation(fields: [courseInstanceId], references: [id])
+  courseInstance   CourseInstance @relation(fields: [courseInstanceId], references: [id])
   examVoucher      ExamVoucher?
 
   @@index([courseInstanceId, paymentStatus])
@@ -4938,17 +5041,17 @@ model CourseRegistration {
 }
 
 model ExamVoucher {
-  id                String             @id @default(cuid())
-  registrationId    String             @unique
-  ogId              String?
-  voucherType       String?
-  voucherExpiry1    DateTime?
-  voucherExpiry2    DateTime?
-  ogStoreReference  String?
-  status            String             @default("pending")
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  registration      CourseRegistration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  id               String             @id @default(cuid())
+  registrationId   String             @unique
+  ogId             String?
+  voucherType      String?
+  voucherExpiry1   DateTime?
+  voucherExpiry2   DateTime?
+  ogStoreReference String?
+  status           String             @default("pending")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  registration     CourseRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@index([ogId])
   @@index([status])
@@ -4956,11 +5059,11 @@ model ExamVoucher {
 
 // EP-INF-012: Per-agent model assignment configuration (admin-overridable)
 model AgentModelConfig {
-  agentId          String    @id       // e.g. "build-specialist", "coo"
-  minimumTier      String    @default("adequate") // "frontier" | "strong" | "adequate" | "basic"
-  pinnedProviderId String?
-  pinnedModelId    String?
-  budgetClass      String    @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  agentId              String   @id // e.g. "build-specialist", "coo"
+  minimumTier          String   @default("adequate") // "frontier" | "strong" | "adequate" | "basic"
+  pinnedProviderId     String?
+  pinnedModelId        String?
+  budgetClass          String   @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
   // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
   // Null = system default { "toolUse": true }.
   // {} = passive agent (no capability floor — rare, must be explicit).
@@ -4968,48 +5071,48 @@ model AgentModelConfig {
   // EP-AGENT-CAP-002: Minimum context window tokens for RAG/knowledge retrieval.
   // Null = system default 16000.
   minimumContextTokens Int?
-  configuredAt     DateTime  @default(now())
-  configuredById   String?
-  configuredBy     User?     @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
+  configuredAt         DateTime @default(now())
+  configuredById       String?
+  configuredBy         User?    @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
 }
 
 // EP-SKILL-001: AI Coworker Skills Marketplace
 model SkillDefinition {
-  id              String            @id @default(cuid())
-  skillId         String            @unique // e.g. "code-runner", "pr-summary"
-  name            String
-  description     String
-  version         String            @default("1.0.0")
-  sourceType      String            // "marketplace" | "github" | "internal" | "community"
-  sourceUrl       String?
-  sourceRegistry  String?           // "skillsmp" | "skillsllm" | "anthropics" | "internal"
-  skillMdContent  String            // Full SKILL.md content
-  category        String            // "ai-agents" | "mcp-servers" | "cli-tools" | "portfolio" | "operations" | "universal" | etc.
-  tags            String[]          @default([])
-  author          String?
-  license         String?
-  riskBand        String            @default("low") // "low" | "medium" | "high" | "critical"
-  status          String            @default("discovered") // "discovered" | "evaluated" | "approved" | "installed" | "active" | "deprecated"
+  id             String   @id @default(cuid())
+  skillId        String   @unique // e.g. "code-runner", "pr-summary"
+  name           String
+  description    String
+  version        String   @default("1.0.0")
+  sourceType     String // "marketplace" | "github" | "internal" | "community"
+  sourceUrl      String?
+  sourceRegistry String? // "skillsmp" | "skillsllm" | "anthropics" | "internal"
+  skillMdContent String // Full SKILL.md content
+  category       String // "ai-agents" | "mcp-servers" | "cli-tools" | "portfolio" | "operations" | "universal" | etc.
+  tags           String[] @default([])
+  author         String?
+  license        String?
+  riskBand       String   @default("low") // "low" | "medium" | "high" | "critical"
+  status         String   @default("discovered") // "discovered" | "evaluated" | "approved" | "installed" | "active" | "deprecated"
 
   // --- SKILL.md pattern fields (Phase 2 enrichment) ---
-  triggerPattern      String?           // regex/keywords for auto-suggestion (Anthropic's description-as-trigger)
-  userInvocable       Boolean           @default(true)   // can humans invoke directly?
-  agentInvocable      Boolean           @default(true)   // can other coworkers invoke?
-  allowedTools        String[]          @default([])      // tools this skill may use
-  composesFrom        String[]          @default([])      // other skillIds this skill builds on
-  contextRequirements String[]          @default([])      // what context/data the skill needs
-  capability          String?           // permission gate (e.g. "view_portfolio") — null = ungated
-  taskType            String            @default("conversation") // "conversation" | "code_generation" | "analysis"
+  triggerPattern      String? // regex/keywords for auto-suggestion (Anthropic's description-as-trigger)
+  userInvocable       Boolean  @default(true) // can humans invoke directly?
+  agentInvocable      Boolean  @default(true) // can other coworkers invoke?
+  allowedTools        String[] @default([]) // tools this skill may use
+  composesFrom        String[] @default([]) // other skillIds this skill builds on
+  contextRequirements String[] @default([]) // what context/data the skill needs
+  capability          String? // permission gate (e.g. "view_portfolio") — null = ungated
+  taskType            String   @default("conversation") // "conversation" | "code_generation" | "analysis"
 
-  evaluationId    String?
-  installedAt     DateTime?
-  lastTestedAt    DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  evaluationId String?
+  installedAt  DateTime?
+  lastTestedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  evaluation      ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
-  assignments     SkillAssignment[]
-  metrics         SkillMetric[]
+  evaluation  ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
+  assignments SkillAssignment[]
+  metrics     SkillMetric[]
 
   @@index([status])
   @@index([category])
@@ -5017,37 +5120,37 @@ model SkillDefinition {
 }
 
 model SkillAssignment {
-  id              String            @id @default(cuid())
+  id         String   @id @default(cuid())
   // Business skill identifier (e.g. "code-runner"), references SkillDefinition.skillId.
   // Not the cuid primary key — the column name and every caller treat this as the
   // stable business identifier so it stays legible in logs and cross-install exports.
-  skillId         String
-  agentId         String            // Which coworker gets this skill
-  priority        Int               @default(0) // Higher = loaded first
-  enabled         Boolean           @default(true)
-  assignedBy      String            // User who approved
-  assignedAt      DateTime          @default(now())
+  skillId    String
+  agentId    String // Which coworker gets this skill
+  priority   Int      @default(0) // Higher = loaded first
+  enabled    Boolean  @default(true)
+  assignedBy String // User who approved
+  assignedAt DateTime @default(now())
 
-  skill           SkillDefinition   @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
 
   @@unique([skillId, agentId])
   @@index([agentId])
 }
 
 model SkillMetric {
-  id              String            @id @default(cuid())
-  skillId         String            // Business id; see SkillAssignment.skillId comment
+  id              String   @id @default(cuid())
+  skillId         String // Business id; see SkillAssignment.skillId comment
   agentId         String
-  period          String            // "2026-W13", "2026-03"
-  invocationCount Int               @default(0)
-  successCount    Int               @default(0)
-  userRating      Float?            // 1-5 average
+  period          String // "2026-W13", "2026-03"
+  invocationCount Int      @default(0)
+  successCount    Int      @default(0)
+  userRating      Float? // 1-5 average
   avgLatencyMs    Int?
   feedbackNotes   String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  skill           SkillDefinition   @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
 
   @@unique([skillId, agentId, period])
   @@index([skillId])
@@ -5057,17 +5160,17 @@ model SkillMetric {
 
 model DelegationChain {
   id              String    @id @default(cuid())
-  chainId         String    // UUID grouping all links in one delegation flow
-  depth           Int       // 0 = origin, 1 = first delegate, etc.
-  fromAgentId     String    // delegating coworker
-  toAgentId       String    // receiving coworker
-  skillId         String?   // which skill triggered delegation
-  authorityScope  String[]  // capabilities propagated from origin caller
-  originUserId    String    // human who started the chain
-  originAuthority String[]  // original user's granted capabilities
+  chainId         String // UUID grouping all links in one delegation flow
+  depth           Int // 0 = origin, 1 = first delegate, etc.
+  fromAgentId     String // delegating coworker
+  toAgentId       String // receiving coworker
+  skillId         String? // which skill triggered delegation
+  authorityScope  String[] // capabilities propagated from origin caller
+  originUserId    String // human who started the chain
+  originAuthority String[] // original user's granted capabilities
   status          String    @default("active") // "active" | "completed" | "failed" | "blocked"
-  reason          String?   // why delegation was made or blocked
-  parentLinkId    String?   // previous link in chain (null for origin)
+  reason          String? // why delegation was made or blocked
+  parentLinkId    String? // previous link in chain (null for origin)
   startedAt       DateTime  @default(now())
   completedAt     DateTime?
 
@@ -5093,7 +5196,7 @@ model KnowledgeArticle {
   lastReviewedAt     DateTime?
   valueStreams       String[]                    @default([])
   tags               String[]                    @default([])
-  abstract           String?                     // EP-INF-UTIL-001: one-line abstract generated by utility tier
+  abstract           String? // EP-INF-UTIL-001: one-line abstract generated by utility tier
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   author             User?                       @relation("KnowledgeArticleAuthor", fields: [authorId], references: [id])
@@ -5148,11 +5251,11 @@ model KnowledgeArticlePortfolio {
 model ValueStreamTeam {
   id                  String                @id @default(cuid())
   name                String
-  valueStream         String                // IT4IT value stream slug: evaluate|explore|integrate|deploy|release|consume|operate
-  teamPattern         String                // specialist-dispatch|review-board|pair|swarm|pipeline
-  coordinationPattern Json                  // CoordinationPattern structure
-  eaProcessId         String?               // Link to EaElement (bpmn_process)
-  eaViewId            String?               // Link to EaView
+  valueStream         String // IT4IT value stream slug: evaluate|explore|integrate|deploy|release|consume|operate
+  teamPattern         String // specialist-dispatch|review-board|pair|swarm|pipeline
+  coordinationPattern Json // CoordinationPattern structure
+  eaProcessId         String? // Link to EaElement (bpmn_process)
+  eaViewId            String? // Link to EaView
   portfolioId         String?
   portfolio           Portfolio?            @relation(fields: [portfolioId], references: [id])
   roles               ValueStreamTeamRole[]
@@ -5172,17 +5275,17 @@ model ValueStreamTeamRole {
   teamId            String
   team              ValueStreamTeam @relation(fields: [teamId], references: [id])
   roleName          String
-  workerType        String          // ai-agent|human|either
-  agentId           String?         // References Agent.id (cuid PK), not Agent.agentId
+  workerType        String // ai-agent|human|either
+  agentId           String? // References Agent.id (cuid PK), not Agent.agentId
   agent             Agent?          @relation(fields: [agentId], references: [id])
-  humanRoleId       String?         // PlatformRole reference
-  perspective       String?         // Diversity of Thought: how this role frames problems
-  heuristics        String?         // Diversity of Thought: strategies for finding solutions
-  interpretiveModel String?         // Diversity of Thought: what "good" means to this role
+  humanRoleId       String? // PlatformRole reference
+  perspective       String? // Diversity of Thought: how this role frames problems
+  heuristics        String? // Diversity of Thought: strategies for finding solutions
+  interpretiveModel String? // Diversity of Thought: what "good" means to this role
   priority          Int             @default(0)
   grantScope        String[]        @default([]) // AgentToolGrant keys resolved to tool names at dispatch
-  modelTier         String?         // frontier|strong|adequate|basic
-  bpmnLaneId        String?         // Link to EaElement (bpmn_lane)
+  modelTier         String? // frontier|strong|adequate|basic
+  bpmnLaneId        String? // Link to EaElement (bpmn_lane)
   maxRetries        Int             @default(2)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -5195,14 +5298,14 @@ model ValueStreamHitlGate {
   id                       String          @id @default(cuid())
   teamId                   String
   team                     ValueStreamTeam @relation(fields: [teamId], references: [id])
-  triggerPoint             String          // phase-transition|before-tool|after-evaluation|on-error
-  condition                Json?           // JSON expression evaluating context
-  requiredRole             String          // PlatformRole code (e.g., "HR-500", "HR-000")
+  triggerPoint             String // phase-transition|before-tool|after-evaluation|on-error
+  condition                Json? // JSON expression evaluating context
+  requiredRole             String // PlatformRole code (e.g., "HR-500", "HR-000")
   escalationTimeoutMinutes Int             @default(30)
   escalationPath           String[]        @default([])
   channels                 String[]        @default([]) // in-app|slack|email|sms
   emergencyBypass          Boolean         @default(false)
-  bpmnGatewayId            String?         // Link to EaElement (bpmn_gateway)
+  bpmnGatewayId            String? // Link to EaElement (bpmn_gateway)
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
 
@@ -5216,22 +5319,22 @@ model ValueStreamHitlGate {
 // from the DB and use them to pull rich topology data.
 
 model DiscoveryConnection {
-  id                String              @id @default(cuid())
-  connectionKey     String              @unique          // e.g. "unifi:192.168.0.1"
-  name              String                               // human label
-  collectorType     String                               // "unifi" | future: "meraki", "fortigate", ...
-  status            String              @default("unconfigured") // unconfigured | active | auth_failed | unreachable
-  endpointUrl       String                               // e.g. "https://192.168.0.1"
-  encryptedApiKey   String?                              // AES-256-GCM encrypted via credential-crypto
-  configuration     Json                @default("{}")   // collector-specific config (site, discoverClients, etc.)
+  id                String            @id @default(cuid())
+  connectionKey     String            @unique // e.g. "unifi:192.168.0.1"
+  name              String // human label
+  collectorType     String // "unifi" | future: "meraki", "fortigate", ...
+  status            String            @default("unconfigured") // unconfigured | active | auth_failed | unreachable
+  endpointUrl       String // e.g. "https://192.168.0.1"
+  encryptedApiKey   String? // AES-256-GCM encrypted via credential-crypto
+  configuration     Json              @default("{}") // collector-specific config (site, discoverClients, etc.)
   lastTestedAt      DateTime?
-  lastTestStatus    String?                              // ok | auth_failed | unreachable | tls_error
+  lastTestStatus    String? // ok | auth_failed | unreachable | tls_error
   lastTestMessage   String?
-  gatewayEntityId   String?                              // FK to the InventoryEntity that triggered this connection
-  gatewayEntity     InventoryEntity?    @relation("DiscoveryConnectionGateway", fields: [gatewayEntityId], references: [id])
-  inventoryEntities InventoryEntity[]   @relation("DiscoveredViaConnection")
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  gatewayEntityId   String? // FK to the InventoryEntity that triggered this connection
+  gatewayEntity     InventoryEntity?  @relation("DiscoveryConnectionGateway", fields: [gatewayEntityId], references: [id])
+  inventoryEntities InventoryEntity[] @relation("DiscoveredViaConnection")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([collectorType])
   @@index([status])
@@ -5243,7 +5346,7 @@ model WorkQueue {
   id               String           @id @default(cuid())
   queueId          String           @unique @default(cuid())
   name             String
-  queueType        String           // team | personal | triage | escalation
+  queueType        String // team | personal | triage | escalation
   teamId           String?
   team             ValueStreamTeam? @relation(fields: [teamId], references: [id])
   routingPolicy    Json
@@ -5263,40 +5366,40 @@ model WorkQueue {
 }
 
 model WorkItem {
-  id                String          @id @default(cuid())
-  itemId            String          @unique @default(cuid())
+  id                String            @id @default(cuid())
+  itemId            String            @unique @default(cuid())
   sourceType        String
   sourceId          String?
   title             String
-  description       String          @db.Text
-  urgency           String          @default("routine")
-  effortClass       String          @default("medium")
+  description       String            @db.Text
+  urgency           String            @default("routine")
+  effortClass       String            @default("medium")
   workerConstraint  Json
   teamId            String?
-  team              ValueStreamTeam? @relation(fields: [teamId], references: [id])
+  team              ValueStreamTeam?  @relation(fields: [teamId], references: [id])
   queueId           String
-  queue             WorkQueue       @relation(fields: [queueId], references: [id])
-  status            String          @default("queued")
+  queue             WorkQueue         @relation(fields: [queueId], references: [id])
+  status            String            @default("queued")
   assignedToType    String?
   assignedToUserId  String?
-  assignedToUser    User?           @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
+  assignedToUser    User?             @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
   assignedToAgentId String?
-  assignedToAgent   Agent?          @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
+  assignedToAgent   Agent?            @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
   assignedThreadId  String?
   claimedAt         DateTime?
   dueAt             DateTime?
   calendarEventId   String?
-  calendarEvent     CalendarEvent?  @relation(fields: [calendarEventId], references: [id])
+  calendarEvent     CalendarEvent?    @relation(fields: [calendarEventId], references: [id])
   evidence          Json?
   parentItemId      String?
-  parentItem        WorkItem?       @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
-  childItems        WorkItem[]      @relation("WorkItemHierarchy")
+  parentItem        WorkItem?         @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
+  childItems        WorkItem[]        @relation("WorkItemHierarchy")
   a2aTaskId         String?
   messages          WorkItemMessage[]
   routingDecision   Json?
   completedAt       DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([queueId, status])
   @@index([assignedToUserId, status])
@@ -5331,19 +5434,19 @@ model WorkItemMessage {
 }
 
 model WorkSchedule {
-  id              String   @id @default(cuid())
-  workerType      String
-  userId          String?  @unique
-  user            User?    @relation(fields: [userId], references: [id])
-  agentId         String?  @unique
-  agent           Agent?   @relation("WorkScheduleAgent", fields: [agentId], references: [id])
-  timezone        String   @default("UTC")
-  workingHours    Json
-  maxConcurrent   Int      @default(5)
-  autoAccept      Boolean  @default(false)
+  id                String   @id @default(cuid())
+  workerType        String
+  userId            String?  @unique
+  user              User?    @relation(fields: [userId], references: [id])
+  agentId           String?  @unique
+  agent             Agent?   @relation("WorkScheduleAgent", fields: [agentId], references: [id])
+  timezone          String   @default("UTC")
+  workingHours      Json
+  maxConcurrent     Int      @default(5)
+  autoAccept        Boolean  @default(false)
   notificationPrefs Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
@@ -5351,40 +5454,40 @@ model WorkSchedule {
 // Seeded on deploy, overridable at runtime via Admin > Prompts.
 
 model PromptTemplate {
-  id            String           @id @default(cuid())
-  category      String           // platform-identity | platform-preamble | route-persona | build-phase | specialist | reviewer | context
-  slug          String           // filename stem (e.g. "portfolio-advisor")
-  name          String           // human-readable display name
-  description   String?          // what this prompt does
-  content       String           // the markdown body (below YAML frontmatter)
-  contentFormat String           @default("markdown") // markdown | handlebars
-  composesFrom  String[]         @default([])         // category/slug refs for {{include:...}} resolution
-  variables     Json?            // declared template variables [{name, required}]
-  metadata      Json?            // all other frontmatter (IT4IT, Scott Page, sensitivity)
-  isOverridden  Boolean          @default(false)       // true when admin has edited from seed default
-  enabled       Boolean          @default(true)
-  version       Int              @default(1)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id            String   @id @default(cuid())
+  category      String // platform-identity | platform-preamble | route-persona | build-phase | specialist | reviewer | context
+  slug          String // filename stem (e.g. "portfolio-advisor")
+  name          String // human-readable display name
+  description   String? // what this prompt does
+  content       String // the markdown body (below YAML frontmatter)
+  contentFormat String   @default("markdown") // markdown | handlebars
+  composesFrom  String[] @default([]) // category/slug refs for {{include:...}} resolution
+  variables     Json? // declared template variables [{name, required}]
+  metadata      Json? // all other frontmatter (IT4IT, Scott Page, sensitivity)
+  isOverridden  Boolean  @default(false) // true when admin has edited from seed default
+  enabled       Boolean  @default(true)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   updatedBy     String?
 
-  revisions     PromptRevision[]
+  revisions PromptRevision[]
 
   @@unique([category, slug])
   @@index([category])
 }
 
 model PromptRevision {
-  id           String         @id @default(cuid())
+  id           String   @id @default(cuid())
   templateId   String
   version      Int
-  content      String         // snapshot of content at this version
-  metadata     Json?          // snapshot of metadata
+  content      String // snapshot of content at this version
+  metadata     Json? // snapshot of metadata
   changeReason String?
   changedBy    String?
-  createdAt    DateTime       @default(now())
+  createdAt    DateTime @default(now())
 
-  template     PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@unique([templateId, version])
   @@index([templateId])
@@ -5403,71 +5506,71 @@ model PromptRevision {
 // String Enums — MANDATORY COMPLIANCE".
 
 model DeliberationPattern {
-  id                     String            @id @default(cuid())
-  slug                   String            @unique // e.g. "review", "debate"
-  name                   String
-  purpose                String            @db.Text
-  defaultRoles           Json              // Array<{ roleId, count, required }>
-  topologyTemplate       Json              // branch + convergence spec consumed by task-graph builder
-  activationPolicyHints  Json              // { stageDefaults, riskEscalation, explicitTriggers } — hints, not authoritative
-  evidenceRequirements   Json              // { retrievalRequired, admissibleSourceTypes, freshness, conflictReconciliationRequired }
-  outputContract         Json              // shape of the DeliberationOutcome produced
-  providerStrategyHints  Json              // preferred diversity mode and strategy profile
-  sourceFile             String?           // path to the seed file under deliberation/
-  status                 String            @default("active") // "active" | "deprecated" | "draft"
-  isOverridden           Boolean           @default(false) // admin edited at runtime — seeder will skip
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  id                    String   @id @default(cuid())
+  slug                  String   @unique // e.g. "review", "debate"
+  name                  String
+  purpose               String   @db.Text
+  defaultRoles          Json // Array<{ roleId, count, required }>
+  topologyTemplate      Json // branch + convergence spec consumed by task-graph builder
+  activationPolicyHints Json // { stageDefaults, riskEscalation, explicitTriggers } — hints, not authoritative
+  evidenceRequirements  Json // { retrievalRequired, admissibleSourceTypes, freshness, conflictReconciliationRequired }
+  outputContract        Json // shape of the DeliberationOutcome produced
+  providerStrategyHints Json // preferred diversity mode and strategy profile
+  sourceFile            String? // path to the seed file under deliberation/
+  status                String   @default("active") // "active" | "deprecated" | "draft"
+  isOverridden          Boolean  @default(false) // admin edited at runtime — seeder will skip
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  runs                   DeliberationRun[]
+  runs DeliberationRun[]
 
   @@index([status])
 }
 
 model DeliberationRoleProfile {
-  id                        String               @id @default(cuid())
-  roleId                    String               @unique // slug: "author" | "reviewer" | "skeptic" | "adjudicator" | "debater" | ...
-  roleName                  String
-  personaGuidance           String               @db.Text // portable persona prompt ({{include:...}} composition allowed)
-  allowedNodeTypes          String[]             @default([]) // which TaskNode.nodeType values this role can occupy
-  sameModelPersonaAllowed   Boolean              @default(true)
-  preferProviderDiversity   Boolean              @default(false)
-  requireProviderDiversity  Boolean              @default(false)
-  evidenceStrictness        String               @default("standard") // "lenient" | "standard" | "strict"
-  sourceFile                String?              // path to the seed file for this persona
-  isOverridden              Boolean              @default(false) // admin edited at runtime — seeder will skip
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
+  id                       String   @id @default(cuid())
+  roleId                   String   @unique // slug: "author" | "reviewer" | "skeptic" | "adjudicator" | "debater" | ...
+  roleName                 String
+  personaGuidance          String   @db.Text // portable persona prompt ({{include:...}} composition allowed)
+  allowedNodeTypes         String[] @default([]) // which TaskNode.nodeType values this role can occupy
+  sameModelPersonaAllowed  Boolean  @default(true)
+  preferProviderDiversity  Boolean  @default(false)
+  requireProviderDiversity Boolean  @default(false)
+  evidenceStrictness       String   @default("standard") // "lenient" | "standard" | "strict"
+  sourceFile               String? // path to the seed file for this persona
+  isOverridden             Boolean  @default(false) // admin edited at runtime — seeder will skip
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@index([evidenceStrictness])
 }
 
 model DeliberationRun {
-  id                   String                @id @default(cuid())
-  taskRunId            String                // FK to TaskRun.id — deliberation always parented to a task run
-  patternId            String                // FK to DeliberationPattern.id
-  artifactType         String                // "spec" | "plan" | "code-change" | "architecture-decision" | "policy" | "research-question"
-  triggerSource        String                // "stage" | "risk" | "explicit" | "combined"
-  adjudicationMode     String                // "synthesis" | "majority-vote" | "unanimous" | "no-consensus-ok"
-  activatedRiskLevel   String?               // "low" | "medium" | "high" | "critical"
-  diversityMode        String                // "single-model-multi-persona" | "multi-model-same-provider" | "multi-provider-heterogeneous"
-  strategyProfile      String                // "economy" | "balanced" | "high-assurance" | "document-authority"
-  consensusState       String                @default("pending") // "consensus" | "partial-consensus" | "no-consensus" | "insufficient-evidence" | "pending"
-  maxBranches          Int                   @default(4)
-  budgetUsd            Float?
-  metadata             Json?                 // free-form run metadata: degradation notes, budget-halted flag, etc.
-  startedAt            DateTime              @default(now())
-  completedAt          DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  id                 String    @id @default(cuid())
+  taskRunId          String // FK to TaskRun.id — deliberation always parented to a task run
+  patternId          String // FK to DeliberationPattern.id
+  artifactType       String // "spec" | "plan" | "code-change" | "architecture-decision" | "policy" | "research-question"
+  triggerSource      String // "stage" | "risk" | "explicit" | "combined"
+  adjudicationMode   String // "synthesis" | "majority-vote" | "unanimous" | "no-consensus-ok"
+  activatedRiskLevel String? // "low" | "medium" | "high" | "critical"
+  diversityMode      String // "single-model-multi-persona" | "multi-model-same-provider" | "multi-provider-heterogeneous"
+  strategyProfile    String // "economy" | "balanced" | "high-assurance" | "document-authority"
+  consensusState     String    @default("pending") // "consensus" | "partial-consensus" | "no-consensus" | "insufficient-evidence" | "pending"
+  maxBranches        Int       @default(4)
+  budgetUsd          Float?
+  metadata           Json? // free-form run metadata: degradation notes, budget-halted flag, etc.
+  startedAt          DateTime  @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  taskRun              TaskRun               @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
-  pattern              DeliberationPattern   @relation(fields: [patternId], references: [id])
-  outcome              DeliberationOutcome?
-  issueSets            DeliberationIssueSet[]
-  claims               ClaimRecord[]
-  evidenceBundles      EvidenceBundle[]
-  branchNodes          TaskNode[]            @relation("DeliberationRunBranchNodes")
+  taskRun         TaskRun                @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  pattern         DeliberationPattern    @relation(fields: [patternId], references: [id])
+  outcome         DeliberationOutcome?
+  issueSets       DeliberationIssueSet[]
+  claims          ClaimRecord[]
+  evidenceBundles EvidenceBundle[]
+  branchNodes     TaskNode[]             @relation("DeliberationRunBranchNodes")
 
   @@index([taskRunId])
   @@index([patternId])
@@ -5476,55 +5579,55 @@ model DeliberationRun {
 }
 
 model DeliberationOutcome {
-  id                    String           @id @default(cuid())
-  deliberationRunId     String           @unique
-  mergedRecommendation  String           @db.Text
-  rationaleSummary      String           @db.Text
-  confidence            Float?
-  consensusState        String           // duplicate of DeliberationRun.consensusState for read-only snapshot at synthesis time
-  evidenceQuality       String?          // "source-backed" | "mixed" | "needs-more-evidence"
-  unresolvedRisks       String[]         @default([])
-  diversityLabel        String?          // UI-friendly summary, e.g. "Multi-provider review"
-  branchRoster          Json?            // [{ branchNodeId, role, status }] — prevents false-success blindness (spec § 13)
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  id                   String   @id @default(cuid())
+  deliberationRunId    String   @unique
+  mergedRecommendation String   @db.Text
+  rationaleSummary     String   @db.Text
+  confidence           Float?
+  consensusState       String // duplicate of DeliberationRun.consensusState for read-only snapshot at synthesis time
+  evidenceQuality      String? // "source-backed" | "mixed" | "needs-more-evidence"
+  unresolvedRisks      String[] @default([])
+  diversityLabel       String? // UI-friendly summary, e.g. "Multi-provider review"
+  branchRoster         Json? // [{ branchNodeId, role, status }] — prevents false-success blindness (spec § 13)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  deliberationRun       DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
 
   @@index([consensusState])
 }
 
 model DeliberationIssueSet {
-  id                  String           @id @default(cuid())
-  deliberationRunId   String
-  assertions          Json             @default("[]") // compact list of supported assertions
-  objections          Json             @default("[]") // list of objections raised by branches
-  rebuttals           Json             @default("[]") // rebuttals to objections
-  adjudicationNotes   String?          @db.Text
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  id                String   @id @default(cuid())
+  deliberationRunId String
+  assertions        Json     @default("[]") // compact list of supported assertions
+  objections        Json     @default("[]") // list of objections raised by branches
+  rebuttals         Json     @default("[]") // rebuttals to objections
+  adjudicationNotes String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  deliberationRun     DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
 
   @@index([deliberationRunId])
 }
 
 model ClaimRecord {
-  id                   String              @id @default(cuid())
-  deliberationRunId    String
-  branchNodeId         String?             // FK to TaskNode.id — the branch that made the claim (nullable for synthesis-level facts)
-  claimText            String              @db.Text
-  claimType            String              // "assertion" | "objection" | "rebuttal" | "synthesis-fact" | "synthesis-inference"
-  status               String              @default("unresolved") // "supported" | "contested" | "unresolved" | "rejected"
-  evidenceGrade        String              // "A" | "B" | "C" | "D"
-  confidence           Float?
-  supportingSourceIds  String[]            @default([]) // EvidenceSource.id references supporting the claim
-  opposingSourceIds    String[]            @default([]) // EvidenceSource.id references opposing the claim
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  id                  String   @id @default(cuid())
+  deliberationRunId   String
+  branchNodeId        String? // FK to TaskNode.id — the branch that made the claim (nullable for synthesis-level facts)
+  claimText           String   @db.Text
+  claimType           String // "assertion" | "objection" | "rebuttal" | "synthesis-fact" | "synthesis-inference"
+  status              String   @default("unresolved") // "supported" | "contested" | "unresolved" | "rejected"
+  evidenceGrade       String // "A" | "B" | "C" | "D"
+  confidence          Float?
+  supportingSourceIds String[] @default([]) // EvidenceSource.id references supporting the claim
+  opposingSourceIds   String[] @default([]) // EvidenceSource.id references opposing the claim
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  deliberationRun      DeliberationRun     @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
-  branchNode           TaskNode?           @relation("ClaimRecordBranchNode", fields: [branchNodeId], references: [id])
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  branchNode      TaskNode?       @relation("ClaimRecordBranchNode", fields: [branchNodeId], references: [id])
 
   @@index([deliberationRunId, claimType])
   @@index([branchNodeId])
@@ -5533,37 +5636,36 @@ model ClaimRecord {
 }
 
 model EvidenceBundle {
-  id                   String            @id @default(cuid())
-  deliberationRunId    String
-  taskNodeId           String?           // nullable — bundle may be run-level or branch-level
-  artifactRef          String?           // identifier of the artifact under evaluation (free-form)
-  retrievalContext     Json?             // query string, retrieval tool, filters
-  summary              String?           @db.Text
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  id                String   @id @default(cuid())
+  deliberationRunId String
+  taskNodeId        String? // nullable — bundle may be run-level or branch-level
+  artifactRef       String? // identifier of the artifact under evaluation (free-form)
+  retrievalContext  Json? // query string, retrieval tool, filters
+  summary           String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  deliberationRun      DeliberationRun   @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
-  taskNode             TaskNode?         @relation("EvidenceBundleTaskNode", fields: [taskNodeId], references: [id])
-  sources              EvidenceSource[]
+  deliberationRun DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  taskNode        TaskNode?        @relation("EvidenceBundleTaskNode", fields: [taskNodeId], references: [id])
+  sources         EvidenceSource[]
 
   @@index([deliberationRunId])
   @@index([taskNodeId])
 }
 
 model EvidenceSource {
-  id                  String           @id @default(cuid())
-  evidenceBundleId    String
-  sourceType          String           // "code" | "spec" | "doc" | "paper" | "web" | "db-query" | "tool-output" | "runtime-state"
-  locator             Json             // structured locator (file+line, URL+ts, DOI+page, query+capturedAt, etc.)
-  retrievedBy         String?          // tool or provider used to retrieve
-  excerpt             String?          @db.Text // normalized excerpt/fact text
-  retrievedAt         DateTime?        // retrieval timestamp (freshness tracking)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  id               String    @id @default(cuid())
+  evidenceBundleId String
+  sourceType       String // "code" | "spec" | "doc" | "paper" | "web" | "db-query" | "tool-output" | "runtime-state"
+  locator          Json // structured locator (file+line, URL+ts, DOI+page, query+capturedAt, etc.)
+  retrievedBy      String? // tool or provider used to retrieve
+  excerpt          String?   @db.Text // normalized excerpt/fact text
+  retrievedAt      DateTime? // retrieval timestamp (freshness tracking)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  evidenceBundle      EvidenceBundle   @relation(fields: [evidenceBundleId], references: [id], onDelete: Cascade)
+  evidenceBundle EvidenceBundle @relation(fields: [evidenceBundleId], references: [id], onDelete: Cascade)
 
   @@index([evidenceBundleId])
   @@index([sourceType])
 }
-

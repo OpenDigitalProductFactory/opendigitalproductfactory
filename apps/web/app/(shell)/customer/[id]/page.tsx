@@ -2,6 +2,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
+import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
+import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
 
 const STATUS_COLOURS: Record<string, string> = {
   prospect: "#fbbf24",
@@ -31,7 +34,7 @@ export default async function AccountDetailPage({
 }) {
   const { id } = await params;
 
-  const [account, activities, opportunities, engagements] = await Promise.all([
+  const [account, activities, opportunities, engagements, estateSummary] = await Promise.all([
     prisma.customerAccount.findUnique({
       where: { id },
       include: {
@@ -51,6 +54,27 @@ export default async function AccountDetailPage({
         contactRoles: {
           include: { contact: { select: { id: true, email: true, firstName: true, lastName: true } } },
           orderBy: [{ isPrimary: "desc" }, { startedAt: "desc" }],
+        },
+        customerSites: {
+          include: {
+            primaryAddress: {
+              include: {
+                city: {
+                  include: {
+                    region: {
+                      include: {
+                        country: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            nodes: {
+              orderBy: [{ createdAt: "asc" }],
+            },
+          },
+          orderBy: { name: "asc" },
         },
         parentAccount: { select: { id: true, accountId: true, name: true } },
         childAccounts: { select: { id: true, accountId: true, name: true, status: true } },
@@ -84,6 +108,7 @@ export default async function AccountDetailPage({
       orderBy: { createdAt: "desc" },
       select: { id: true, engagementId: true, title: true, status: true },
     }),
+    loadCustomerEstateSummary(id),
   ]);
 
   if (!account) notFound();
@@ -145,6 +170,20 @@ export default async function AccountDetailPage({
             </p>
           </div>
         )}
+        <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+          <p className="text-[10px] text-[var(--dpf-muted)]">Customer Sites</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{estateSummary.siteCount}</p>
+          <p className="text-[10px] text-[var(--dpf-muted)]">
+            {estateSummary.activeSiteCount} active
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+          <p className="text-[10px] text-[var(--dpf-muted)]">Managed CIs</p>
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">{estateSummary.managedItemCount}</p>
+          <p className="text-[10px] text-[var(--dpf-muted)]">
+            {estateSummary.lifecycleAttentionCount} need review
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -234,6 +273,80 @@ export default async function AccountDetailPage({
             </div>
           </div>
 
+          <div>
+            <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
+              Customer Estate
+            </h2>
+            <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div>
+                  <p className="text-[var(--dpf-muted)]">Commercial</p>
+                  <p className="text-[var(--dpf-text)] font-semibold">{estateSummary.commercialCount}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--dpf-muted)]">Open Source</p>
+                  <p className="text-[var(--dpf-text)] font-semibold">{estateSummary.openSourceCount}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--dpf-muted)]">Hybrid</p>
+                  <p className="text-[var(--dpf-text)] font-semibold">{estateSummary.hybridCount}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--dpf-muted)]">Recurring licensed</p>
+                  <p className="text-[var(--dpf-text)] font-semibold">{estateSummary.recurringLicensedItemCount}</p>
+                </div>
+              </div>
+
+              {account.customerSites.length > 0 ? (
+                <div>
+                  <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider mb-2">Sites</p>
+                  <div className="space-y-1">
+                    {account.customerSites.slice(0, 4).map((site) => (
+                      <div
+                        key={site.id}
+                        className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5"
+                      >
+                        <p className="text-xs text-[var(--dpf-text)]">{site.name}</p>
+                        <p className="text-[9px] text-[var(--dpf-muted)]">
+                          {site.siteType} · {site.status} · {site.siteId}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[var(--dpf-muted)]">
+                  No customer sites have been loaded yet.
+                </p>
+              )}
+
+              {estateSummary.topAttentionItems.length > 0 ? (
+                <div>
+                  <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider mb-2">
+                    Lifecycle Attention
+                  </p>
+                  <div className="space-y-1">
+                    {estateSummary.topAttentionItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5"
+                      >
+                        <p className="text-xs text-[var(--dpf-text)]">{item.name}</p>
+                        <p className="text-[9px] text-[var(--dpf-muted)]">
+                          {item.ciType} · {item.lifecycleStatus} · {item.recommendedAction}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[var(--dpf-muted)]">
+                  No lifecycle attention items are currently flagged.
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Opportunities */}
           {opportunities.length > 0 && (
             <div>
@@ -310,6 +423,23 @@ export default async function AccountDetailPage({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
+              Site Records
+              <span className="ml-2 normal-case font-normal">{account.customerSites.length}</span>
+            </h2>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              Operational customer sites and nested sublocations.
+            </p>
+          </div>
+          <NewCustomerSiteButton accountId={account.id} />
+        </div>
+
+        <CustomerSiteTree accountId={account.id} sites={account.customerSites} />
       </div>
     </div>
   );

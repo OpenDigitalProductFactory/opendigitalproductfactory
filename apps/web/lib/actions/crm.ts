@@ -86,6 +86,77 @@ export async function createCustomerAccount(input: {
   return account;
 }
 
+export async function createCustomerSite(input: {
+  accountId: string;
+  name: string;
+  siteType?: string;
+  status?: string;
+  timezone?: string;
+  accessInstructions?: string;
+  hoursNotes?: string;
+  serviceNotes?: string;
+  primaryAddressId?: string;
+}) {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Site name is required");
+  }
+
+  const site = await prisma.customerSite.create({
+    data: {
+      siteId: `SITE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      accountId: input.accountId,
+      name,
+      siteType: input.siteType?.trim() || "office",
+      status: input.status?.trim() || "active",
+      timezone: input.timezone?.trim() || null,
+      accessInstructions: input.accessInstructions?.trim() || null,
+      hoursNotes: input.hoursNotes?.trim() || null,
+      serviceNotes: input.serviceNotes?.trim() || null,
+      primaryAddressId: input.primaryAddressId || null,
+    },
+  });
+
+  await logSystemActivity(`Customer site "${site.name}" created`, {
+    type: "account_created",
+    accountId: input.accountId,
+  });
+
+  revalidatePath("/customer");
+  revalidatePath(`/customer/${input.accountId}`);
+  return site;
+}
+
+export async function createCustomerSiteNode(input: {
+  accountId: string;
+  siteId: string;
+  parentNodeId?: string;
+  name: string;
+  nodeType?: string;
+  status?: string;
+  notes?: string;
+}) {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Node name is required");
+  }
+
+  const node = await prisma.customerSiteNode.create({
+    data: {
+      nodeId: `SITE-NODE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      siteId: input.siteId,
+      parentNodeId: input.parentNodeId || null,
+      name,
+      nodeType: input.nodeType?.trim() || "area",
+      status: input.status?.trim() || "active",
+      notes: input.notes?.trim() || null,
+    },
+  });
+
+  revalidatePath(`/customer/${input.accountId}`);
+  return node;
+}
+
 // ─── Engagement Actions ─────────────────────────────────────────────────────
 
 export async function createEngagement(input: {

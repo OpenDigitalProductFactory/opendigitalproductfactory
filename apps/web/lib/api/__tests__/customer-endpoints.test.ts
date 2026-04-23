@@ -159,6 +159,38 @@ describe("GET /api/v1/customer/accounts/:id", () => {
     expect(body.contacts.length).toBe(1);
   });
 
+  it("requests customer sites with nested nodes and addresses", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.customerAccount.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "acct-1",
+      accountId: "ACCT-001",
+      name: "Acme Corp",
+      status: "active",
+      contacts: [],
+      customerSites: [],
+    });
+
+    const res = await accountDetailHandler(
+      getRequest("/api/v1/customer/accounts/acct-1"),
+      { params: Promise.resolve({ id: "acct-1" }) },
+    );
+
+    expect(res.status).toBe(200);
+    expect(prisma.customerAccount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "acct-1" },
+        include: expect.objectContaining({
+          customerSites: expect.objectContaining({
+            include: expect.objectContaining({
+              primaryAddress: expect.any(Object),
+              nodes: expect.any(Object),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("returns 404 for nonexistent account", async () => {
     (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
     (prisma.customerAccount.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
