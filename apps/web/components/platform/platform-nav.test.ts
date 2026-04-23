@@ -43,6 +43,15 @@ describe("platform-nav", () => {
     expect(toolsFamily.subItems.some((item) => item.label === "Discovery Operations")).toBe(true);
   });
 
+  it("includes Enterprise Integrations in the tools family", () => {
+    const toolsFamily = getPlatformFamily("/platform/tools/integrations/adp");
+
+    expect(toolsFamily.key).toBe("tools");
+    expect(
+      toolsFamily.subItems.some((item) => item.label === "Enterprise Integrations"),
+    ).toBe(true);
+  });
+
   it("maps audit routes to the Governance & Audit family", () => {
     expect(getPlatformFamily("/platform/audit").key).toBe("audit");
     expect(getPlatformFamily("/platform/audit/ledger").key).toBe("audit");

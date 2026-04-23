@@ -56,6 +56,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Catalog", href: "/platform/tools/catalog" },
       { label: "Discovery Operations", href: "/platform/tools/discovery" },
       { label: "Services", href: "/platform/tools/services" },
+      { label: "Enterprise Integrations", href: "/platform/tools/integrations/adp" },
       { label: "Capability Inventory", href: "/platform/tools/inventory" },
     ],
   },
